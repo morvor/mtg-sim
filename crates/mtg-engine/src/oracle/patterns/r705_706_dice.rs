@@ -273,6 +273,25 @@ fn c_doubles(c: &str) -> Option<Condition> {
     }
     // "the result is 1", "the result is 15 or greater".
     let r = c.strip_prefix("the result is ")?;
+    // "the result is equal to or less than the number of Robots you control" (Clowning
+    // Around): compared with a value determined as the condition is checked.
+    for (p, cmp) in [
+        ("equal to or less than ", Cmp::Le),
+        ("less than or equal to ", Cmp::Le),
+        ("equal to or greater than ", Cmp::Ge),
+        ("greater than or equal to ", Cmp::Ge),
+        ("less than ", Cmp::Lt),
+        ("greater than ", Cmp::Gt),
+        ("equal to ", Cmp::Eq),
+    ] {
+        if let Some(v) = r.strip_prefix(p) {
+            return Some(Condition::Compare(
+                Value::Custom(SmolStr::new(THE_RESULT)),
+                cmp,
+                super::statics::parse_amount(v, None)?,
+            ));
+        }
+    }
     let (n, cmp) = if let Some(n) = r
         .strip_suffix(" or greater")
         .or_else(|| r.strip_suffix(" or higher"))

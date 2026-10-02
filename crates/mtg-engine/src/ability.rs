@@ -222,6 +222,10 @@ pub enum ActivationTiming {
     /// Other combat timing windows: "Activate only before attackers are declared",
     /// "only during combat after blockers are declared", ... (CR 506.8, 506.8g).
     CombatWindow(CombatTiming),
+    /// "Activate only as an instant" (CR 602.5e): only while the player has priority and
+    /// no spell or ability is being cast, activated or paid for, so a mana ability with it
+    /// can't be activated in the middle of a payment (as CR 605.3a would otherwise allow).
+    AsInstant,
 }
 
 /// Where an ability functions (CR 113.6).
@@ -705,6 +709,9 @@ pub mod vars {
     /// Permanents sacrificed to pay the cost of the resolving spell or ability, or by an
     /// earlier instruction of it ("the sacrificed creature", last known information).
     pub const SACRIFICED: Var = 9;
+    /// Permanents the most recent tap instruction tapped ("the number of creatures tapped
+    /// this way"): not those that were already tapped.
+    pub const TAPPED: Var = USER + 3066;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
@@ -855,6 +862,9 @@ pub enum PlayerFilter {
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
+    /// A player whose life total is less than half their own starting life total (CR
+    /// 119.1; "that player has less than half their starting life total").
+    LessThanHalfStartingLife,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
@@ -949,6 +959,12 @@ pub struct SpecialActionDef {
     /// What taking it costs.
     pub cost: Cost,
     pub action: SpecialActionEffect,
+    /// "Any time you could activate a mana ability" (CR 605.3a): besides any time the
+    /// player has priority, it can be taken while a mana payment is being made — as a
+    /// spell is cast or an ability activated, or when an effect asks for one — so mana it
+    /// adds helps pay (see `mana_abilities::mana_sources`).
+    #[serde(default)]
+    pub mana_timing: bool,
 }
 
 /// What a special action does.
@@ -1266,6 +1282,9 @@ pub enum Value {
     /// stack, whether or not they're still there ("you've cast four or more instant and
     /// sorcery spells this turn"). Copies of spells weren't cast.
     SpellsCastThisTurn(PlayerRef, Filter),
+    /// Total mana value of the spells the player has cast this turn that match the filter
+    /// (each as it last existed on the stack); copies weren't cast (CR 707.10).
+    SpellsCastThisTurnManaValue(PlayerRef, Filter),
     /// Number of times this ability has resolved this turn.
     TimesResolvedThisTurn,
     /// Number of distinct card types among cards in graveyards etc.
@@ -1661,6 +1680,13 @@ pub enum Modification {
     ModifyPT(Value, Value),
     /// 7d: switch.
     SwitchPT,
+    /// Behavior implemented in code, applied in `layer`: see
+    /// `KeywordRules::custom_modification` (e.g. a hand-written card's "has the creature
+    /// types of the last creature card exiled with it").
+    Custom {
+        name: SmolStr,
+        layer: Layer,
+    },
 }
 
 impl Modification {
@@ -1704,6 +1730,7 @@ impl Modification {
             SetPT(..) => Layer::L7bSet,
             ModifyPT(..) => Layer::L7cModify,
             SwitchPT => Layer::L7dSwitch,
+            Custom { layer, .. } => *layer,
         }
     }
 }
@@ -1753,6 +1780,11 @@ pub struct TokenSpec {
     pub abilities: Vec<Ability>,
     /// Name of a Scryfall token card to copy characteristics from, when available.
     pub scryfall_name: Option<SmolStr>,
+    /// Power and toughness given by values ("an X/X ... token, where X is ..."): each is
+    /// determined once, as the token is created, and becomes part of the token's
+    /// copiable values in place of `power`/`toughness` (CR 111.3, 107.3, 608.2h).
+    #[serde(default)]
+    pub pt_values: Option<Box<(Value, Value)>>,
 }
 
 /// What mana an effect adds (CR 106).
@@ -2186,6 +2218,63 @@ pub enum CostTarget {
     KeywordAbilitiesOf(KeywordKind, Filter),
     /// Loyalty abilities of sources matching (CR 606.4).
     LoyaltyAbilities(Filter),
+    /// Activated abilities chosen by kind, source, targets and order ("Abilities your
+    /// opponents activate that target a Merfolk you control", "the first equip ability you
+    /// activate each turn"); see `activation_costs.rs`.
+    ActivatedAbilities(Box<AbilityScope>),
+}
+
+/// Which activated abilities a cost change or an activation permission applies to.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AbilityScope {
+    /// The abilities' sources, relative to the effect's source.
+    pub sources: Filter,
+    pub class: AbilityClass,
+    /// "that aren't mana abilities".
+    pub nonmana: bool,
+    /// "that target [filter]": one of the ability's targets matches (CR 601.2f: targets
+    /// are chosen before the total cost is determined).
+    pub targeting: Option<Filter>,
+    /// "the first [such] ability you activate each turn".
+    pub first_each_turn: bool,
+}
+
+impl AbilityScope {
+    pub fn new(sources: Filter, class: AbilityClass) -> Self {
+        AbilityScope {
+            sources,
+            class,
+            nonmana: false,
+            targeting: None,
+            first_each_turn: false,
+        }
+    }
+}
+
+/// A kind of activated ability.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AbilityClass {
+    Any,
+    /// Loyalty abilities (CR 606).
+    Loyalty,
+    /// Abilities a keyword defines ("equip abilities", "cycling costs").
+    Keyword(KeywordKind),
+}
+
+/// "You may activate [abilities] any time you could cast an instant", "... twice each
+/// turn rather than only once", "... as though those creatures had haste": a permission
+/// that relaxes when or how often its controller may activate abilities (CR 602.5d,
+/// 606.3, 302.6 with 609.4); see `activation_costs.rs`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActivationPermission {
+    pub scope: AbilityScope,
+    /// Instant timing instead of sorcery timing (CR 602.5d, 606.3).
+    pub instant_timing: bool,
+    /// How many times each turn the loyalty abilities of each permanent may be activated
+    /// (CR 606.3: once).
+    pub loyalty_per_turn: Option<u32>,
+    /// {T}/{Q} abilities of creatures as though they had haste (CR 302.6, 609.4).
+    pub as_though_haste: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2198,6 +2287,10 @@ pub enum CostChange {
     IncreaseMana(ManaCost),
     /// Costs specific colored mana less.
     ReduceColored(Color, Value),
+    /// Costs {N} less, but "this effect can't reduce the mana in that cost to less than
+    /// one mana" (Training Grounds): never reduces a cost with no generic mana, and never
+    /// adds mana to one.
+    ReduceGenericMinOne(Value),
     /// Costs the given mana symbols less (CR 118.7a–g). `colored_only`: "This effect
     /// reduces only the amount of colored mana you pay."
     ReduceMana { mana: ManaCost, colored_only: bool },
@@ -2216,6 +2309,9 @@ pub enum CostChange {
     /// which one to pay as the spell is cast (CR 601.2b); the chosen option's name is
     /// recorded in the spell's `CastInfo::paid` (see `cost_choices.rs`).
     AdditionalCostChoice(Vec<(SmolStr, Cost)>),
+    /// "You can spend mana of any type to cast creature spells." (CR 609.4b, 118.14): the
+    /// cost doesn't change, but each of its mana symbols can be paid with mana of any type.
+    SpendAnyType,
 }
 
 /// Static abilities (CR 604) and what they do.
@@ -2235,6 +2331,8 @@ pub enum StaticEffect {
     Restriction(Restriction),
     CostModifier(CostModifier),
     Replacement(ReplacementDef),
+    /// A permission that relaxes activation timing or limits (CR 602.5d, 606.3, 302.6).
+    ActivationPermission(ActivationPermission),
     /// Permission to play/cast cards from a zone ("You may play lands from the top of your
     /// library", "You may cast spells from your graveyard").
     PlayPermission(PlayPermission),
@@ -2358,6 +2456,11 @@ pub enum PlayerModification {
     /// your library."). Its `who` is relative to the affected player. Collected with the
     /// static play permissions (see `layers.rs`, `collect_statics`).
     PlayPermission(PlayPermission),
+    /// A permission to activate abilities with other timing or more often, created by a
+    /// resolved effect for a duration ("Until end of turn, you may activate loyalty
+    /// abilities of Jace planeswalkers you control on any player's turn any time you could
+    /// cast an instant."). Collected with the static permissions (`collect_statics`).
+    ActivationPermission(ActivationPermission),
     /// "Spells you cast have ..." etc. are handled elsewhere.
     /// Skip draw step etc. handled via replacements.
     /// "You can't be attacked", etc.
@@ -2762,6 +2865,18 @@ pub enum Effect {
         times: Value,
         effect: Box<Effect>,
     },
+    /// "[instructions]. If [condition], repeat this process." / "You may repeat this
+    /// process any number of times.": the process (`body`) is performed, and performed
+    /// again, with new choices, after each pass in which it performed
+    /// [`Effect::RepeatThisProcess`] — so whether to repeat is decided anew after every
+    /// pass, from that pass's results, and repeating includes the instruction to repeat
+    /// (CR 608.2c). See [`crate::repeat_process`].
+    RepeatProcess {
+        body: Box<Effect>,
+    },
+    /// "repeat this process", inside the body of [`Effect::RepeatProcess`]: once the
+    /// current pass ends, the process is performed again.
+    RepeatThisProcess,
     /// Choose one of several effects at resolution ("choose one —" when not modal on cast,
     /// or "choose one at random").
     ChooseOne {
@@ -2910,14 +3025,18 @@ pub enum Effect {
         tapped: bool,
         attacking: bool,
     },
-    /// "create an X/X green Ooze creature token": the tokens `create` (an
-    /// [`Effect::CreateToken`]) makes, with power and toughness these values, determined
-    /// as the effect is performed (CR 608.2h) and part of the tokens' copiable values (CR
-    /// 111.4, 707.2).
+    /// "Create an X/X [token]": a token whose power and toughness are numbers the effect
+    /// defines (CR 107.3c), determined as the token is created, so they're part of its
+    /// copiable values (CR 707.2); otherwise as [`Effect::CreateToken`] (`spec`'s own power
+    /// and toughness are replaced).
     CreateTokenWithPT {
+        spec: TokenSpec,
         power: Value,
         toughness: Value,
-        create: Box<Effect>,
+        count: Value,
+        controller: PlayerRef,
+        tapped: bool,
+        attacking: bool,
     },
     /// "Create a Monster Role token attached to it": tokens that enter the battlefield
     /// attached to an object or player (CR 111.10j, 303.4f–i, 301.5e). An Aura token that

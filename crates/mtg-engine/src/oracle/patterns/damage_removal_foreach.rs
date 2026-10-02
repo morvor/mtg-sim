@@ -125,13 +125,21 @@ pub(crate) fn multiply(e: Effect, count: Value) -> Option<Effect> {
             }
         }
         Effect::CreateTokenWithPT {
+            spec,
             power,
             toughness,
-            create,
+            count: c,
+            controller,
+            tapped,
+            attacking,
         } => Effect::CreateTokenWithPT {
+            spec,
             power,
             toughness,
-            create: Box::new(multiply(*create, count)?),
+            count: times(&c)?,
+            controller,
+            tapped,
+            attacking,
         },
         // "Exile the top card of your library for each [thing]".
         Effect::Exile {

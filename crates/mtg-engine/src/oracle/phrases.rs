@@ -567,6 +567,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t.strip_prefix("other than ~") {
             // "each Mount and/or Vehicle you control other than ~" (Spire Mechcycle).
             (Filter::Other, r)
+        } else if let Some(r) = t
+            .strip_prefix("other than enchanted creature")
+            .or_else(|| t.strip_prefix("other than equipped creature"))
+        {
+            // "target creature you control other than enchanted creature" (Due Diligence).
+            (Filter::not(Filter::AttachedToSource), r)
+        } else if let Some(r) = t.strip_prefix("that didn't attack this turn") {
+            // "untapped creatures that player controls that didn't attack this turn".
+            (Filter::not(Filter::AttackedThisTurn), r)
+        } else if let Some(r) = t.strip_prefix("that attacked this turn") {
+            (Filter::AttackedThisTurn, r)
         } else if let Some(r) = t.strip_prefix("in exile") {
             (Filter::InZone(ZoneKind::Exile), r)
         } else if let Some(r) = t.strip_prefix("on the battlefield") {
@@ -838,6 +849,30 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
             }
         }
     }
+    // "with corruption counters on them", "with +1/+1 counters on them" (a plural
+    // subject: each one with one or more counters of that kind).
+    if !negate {
+        // "with no counters on them" (Damning Verdict, Hazardous Conditions).
+        if let Some(tail) = rest.strip_prefix("no counters on them") {
+            return Some((Filter::not(Filter::HasCounter(None)), tail));
+        }
+        let (kind, r2) = split_word(rest);
+        if let Some(tail) = r2.strip_prefix("counters on them") {
+            if kind.starts_with('+')
+                || kind.starts_with('-')
+                || (!kind.is_empty()
+                    && kind.chars().all(|c| c.is_alphabetic())
+                    // "with no counters on them" (Damning Verdict), "with two counters
+                    // on them": not a counter kind.
+                    && !matches!(
+                        kind,
+                        "no" | "any" | "some" | "two" | "three" | "four" | "five" | "more"
+                    ))
+            {
+                return Some((Filter::HasCounter(Some(kind.into())), tail));
+            }
+        }
+    }
     // Two-word keywords first ("first strike", "double strike").
     let words: Vec<&str> = rest.splitn(3, ' ').collect();
     for n in [2usize, 1] {
@@ -898,6 +933,42 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
             let v = Value::PowerOf(Box::new(Sel::This));
             return Some((Filter::ManaValue(cmp, Box::new(v)), r));
         }
+    }
+    // "with base power and toughness 2/2", "with base power or toughness 1 [or less]"
+    // (CR 208.4b).
+    if let Some(r) = t
+        .strip_prefix("with base power and toughness ")
+        .or_else(|| t.strip_prefix("each with base power and toughness "))
+    {
+        let end = r
+            .find(|c: char| !(c.is_ascii_digit() || c == '/'))
+            .unwrap_or(r.len());
+        let (pt, rest) = r.split_at(end);
+        let (p, tough) = pt.split_once('/')?;
+        let base = crate::kw::base_pt::base_filter;
+        let f = Filter::and(vec![
+            base(true, Cmp::Eq, p.parse().ok()?),
+            base(false, Cmp::Eq, tough.parse().ok()?),
+        ]);
+        return Some((f, rest));
+    }
+    if let Some(r) = t
+        .strip_prefix("with base power or toughness ")
+        .or_else(|| t.strip_prefix("each with base power or toughness "))
+    {
+        let (n, r) = parse_number(r)?;
+        let n = n.as_const()?;
+        let r = r.trim_start();
+        let (cmp, rest) = if let Some(x) = r.strip_prefix("or less") {
+            (Cmp::Le, x)
+        } else if let Some(x) = r.strip_prefix("or greater") {
+            (Cmp::Ge, x)
+        } else {
+            (Cmp::Eq, r)
+        };
+        let base = crate::kw::base_pt::base_filter;
+        let f = Filter::Or(vec![base(true, cmp, n), base(false, cmp, n)]);
+        return Some((f, rest));
     }
     // "with base power 1" (Zinnia, Valley's Voice; CR 208.4b).
     if let Some(r) = t.strip_prefix("with base power ") {

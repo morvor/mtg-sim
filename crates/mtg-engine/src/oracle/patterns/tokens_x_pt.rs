@@ -46,19 +46,28 @@ fn x_pt_token(l: &str, b: &mut Builder) -> Option<Effect> {
     let (text, power, toughness) = replace_x_pt(l)?;
     // An X that isn't defined (by the cost, the spell's X, or "where X is") can't be
     // read here.
-    let defined = super::value_grammar::x_defined() || (b.ctx.is_spell() && !b.in_trigger);
+    let defined = super::value_grammar::x_defined() || super::tokens_x_x::x_defined(b);
     if !defined {
         return None;
     }
-    let create = parse_clause(&text, b)?;
-    if !matches!(create, Effect::CreateToken { .. }) {
-        return None;
+    match parse_clause(&text, b)? {
+        Effect::CreateToken {
+            spec,
+            count,
+            controller,
+            tapped,
+            attacking,
+        } => Some(Effect::CreateTokenWithPT {
+            spec,
+            power,
+            toughness,
+            count,
+            controller,
+            tapped,
+            attacking,
+        }),
+        _ => None,
     }
-    Some(Effect::CreateTokenWithPT {
-        power,
-        toughness,
-        create: Box::new(create),
-    })
 }
 
 inventory::submit! { EffectPattern { name: "create an X/X token", priority: 60, parse: x_pt_token } }

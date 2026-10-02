@@ -240,6 +240,9 @@ fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
         ("each other player", PlayerRef::EachOtherPlayer),
         ("you", PlayerRef::You),
         ("that player", b.it_player.clone()),
+        // "At the beginning of each player's end step, ... deals damage to the player"
+        // (Angel's Trumpet): the trigger's player.
+        ("the player", b.it_player.clone()),
         ("defending player", PlayerRef::DefendingPlayer),
         ("its controller", PlayerRef::ControllerOf(it())),
         ("their controller", PlayerRef::ControllerOf(it())),
@@ -267,6 +270,9 @@ fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
             }
             // Pronouns whose antecedent wasn't tracked still point at the defaults.
             if p == "that player" && matches!(r, PlayerRef::You) {
+                return None;
+            }
+            if p == "the player" && !matches!(r, PlayerRef::TriggerPlayer) {
                 return None;
             }
             if p.starts_with("that ") && p != "that player" && !it_is_object(b) {
@@ -989,9 +995,7 @@ fn f_delayed_after(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // combat." (Mirror Mockery): the tokens an optional instruction created.
     let mut optional_create = false;
     let var = match last_effect(prev) {
-        Effect::CreateToken { .. }
-        | Effect::CreateTokenCopy { .. }
-        | Effect::CreateTokenWithPT { .. } => vars::CREATED,
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => vars::CREATED,
         Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => vars::IT,
         _ => {
             if super::tokens_copies_create::last_create(prev).is_none() {

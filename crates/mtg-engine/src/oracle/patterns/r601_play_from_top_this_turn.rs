@@ -16,6 +16,7 @@ fn play_from_top_this_turn(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim()).strip_prefix("until end of turn, ")?;
     let (look, rest) = match l
         .strip_prefix("you may look at the top card of your library any time, and ")
+        .or_else(|| l.strip_prefix("you may look at the top card of your library any time and "))
     {
         Some(r) => (true, r),
         None => (false, l),

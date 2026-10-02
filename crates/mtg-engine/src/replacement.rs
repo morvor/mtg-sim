@@ -14,6 +14,7 @@ use crate::game::*;
 use crate::keywords::KeywordKind;
 use crate::object::*;
 use crate::types::*;
+use std::rc::Rc;
 use std::sync::Arc;
 
 /// Modifications to how a permanent enters the battlefield (CR 614.1c–d, 614.12).
@@ -160,6 +161,23 @@ struct Candidate {
     instance: Option<u32>,
 }
 
+/// The replacement effects that would modify how a permanent enters the battlefield,
+/// determined as the event is first proposed (CR 614.12).
+/// They still apply if applying one of them made a permanent leave the battlefield (an
+/// "as this enters, return a permanent you control" choice returning the permanent that
+/// grants riot), as long as the permanent still enters the same way: not once a copy,
+/// control, back-face, or face-down effect has changed what applies (CR 616.1b–d, 616.1f).
+struct EntrySnapshot {
+    obj: ObjectId,
+    copy_of: Option<ObjectId>,
+    controller: Option<PlayerId>,
+    face: Option<FaceState>,
+    transformed: bool,
+    face_down: Option<KeywordKind>,
+    battlefield: Vec<ObjectId>,
+    cands: Vec<Candidate>,
+}
+
 /// Which replacement effects to look for (see [`Game::replacement_candidates`]).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CandScope {
@@ -175,13 +193,13 @@ impl Game {
     /// actually happen.
     pub fn replace(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
         let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
-        self.replace_rec(ev, applied, 0, false)
+        self.replace_rec(ev, applied, 0, false, None)
     }
 
     /// Runs only self-replacement effects on an event that can't happen (CR 614.17c).
     pub fn replace_self_only(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
         let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
-        self.replace_rec(ev, applied, 0, true)
+        self.replace_rec(ev, applied, 0, true, None)
     }
 
     fn replace_rec(
@@ -190,6 +208,7 @@ impl Game {
         applied: Vec<ReplKey>,
         depth: u32,
         self_only: bool,
+        snap: Option<Rc<EntrySnapshot>>,
     ) -> Vec<ReplEvent> {
         if depth > 32 {
             return vec![ev];
@@ -197,6 +216,7 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        let mut snap = snap;
         let mut cands = match &ev {
             // CR 614.12: which effects modify how a permanent enters, and how, is
             // determined from the permanent as it would exist on the battlefield.
@@ -204,9 +224,44 @@ impl Game {
                 let mut v = self.replacement_candidates(&ev, &applied, CandScope::NotEntry);
                 let m = m.clone();
                 let ev2 = ev.clone();
-                v.extend(self.with_hypothetical_entry(&m, |g| {
+                let mut entry = self.with_hypothetical_entry(&m, |g| {
                     g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly)
-                }));
+                });
+                match &snap {
+                    // Effects that applied to the permanent as the event was proposed
+                    // still apply, even if applying another one (an "as this enters,
+                    // return a permanent" choice) removed what generated them (Rhythm of
+                    // the Wild's riot). See [`EntrySnapshot`].
+                    Some(sn)
+                        if sn.obj == m.obj
+                            && sn.copy_of == m.etb.copy_of
+                            && sn.controller == m.etb.controller
+                            && sn.face == m.etb.face
+                            && sn.transformed == m.etb.transformed
+                            && sn.face_down == m.etb.face_down
+                            && sn.battlefield.iter().any(|o| !self.battlefield.contains(o)) =>
+                    {
+                        for c in &sn.cands {
+                            if !applied.contains(&c.key) && !entry.iter().any(|e| e.key == c.key) {
+                                entry.push(c.clone());
+                            }
+                        }
+                    }
+                    Some(sn) if sn.obj == m.obj => {}
+                    _ => {
+                        snap = Some(Rc::new(EntrySnapshot {
+                            obj: m.obj,
+                            copy_of: m.etb.copy_of,
+                            controller: m.etb.controller,
+                            face: m.etb.face,
+                            transformed: m.etb.transformed,
+                            face_down: m.etb.face_down,
+                            battlefield: self.battlefield.clone(),
+                            cands: entry.clone(),
+                        }));
+                    }
+                }
+                v.extend(entry);
                 v
             }
             _ => self.replacement_candidates(&ev, &applied, CandScope::All),
@@ -248,16 +303,19 @@ impl Game {
         if cand.def.optional {
             let who = cand.controller;
             if !self.ask_yes_no(who, cand.source, &format!("Apply: {}?", cand.text), true) {
-                return self.replace_rec(ev, applied, depth + 1, self_only);
+                return self.replace_rec(ev, applied, depth + 1, self_only, snap);
             }
         }
         let mut results = self.apply_replacement(&cand, ev, &applied);
+        if let ReplKey::Static(src, uid) = cand.key {
+            crate::structure::record_replacement(self, src, uid);
+        }
         // CR 801.13a: the parts of the modified event that would have a spell or ability
         // affect objects or players outside its controller's range of influence do nothing.
         results.retain(|r| crate::multiplayer::range::replaced_event_in_range(self, r));
         let mut out = Vec::new();
         for r in results {
-            out.extend(self.replace_rec(r, applied.clone(), depth + 1, self_only));
+            out.extend(self.replace_rec(r, applied.clone(), depth + 1, self_only, snap.clone()));
         }
         out
     }
@@ -339,13 +397,35 @@ impl Game {
                     (Some(f), Some(card)) if f != o.face => Some(card.characteristics(f)),
                     _ => None,
                 };
-                let abilities = match (m.etb.copy_of, &face_chars) {
-                    (Some(c), _) => &self.obj(c).copiable.abilities,
-                    (None, Some(fc)) => &fc.abilities,
-                    (None, None) => &o.chars.abilities,
+                let chars = match (m.etb.copy_of, &face_chars) {
+                    (Some(c), _) => Some(&self.obj(c).copiable),
+                    (None, Some(fc)) => Some(fc),
+                    (None, None) => None,
                 };
-                for a in abilities {
+                // Copiable values and face characteristics hold keywords unexpanded: the
+                // "enters with" abilities a keyword stands for (vanishing, modular, ...)
+                // apply too (CR 702.63a, 707.2).
+                let derived: Vec<Ability> = chars
+                    .map(|c| {
+                        crate::keyword_impls::derived_by_keyword(c)
+                            .into_iter()
+                            .map(|(_, a)| a)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let abilities = chars.map_or(&o.chars.abilities, |c| &c.abilities);
+                let entering_ctx = Ctx::new(Some(m.obj), self.entering_controller(m));
+                for a in abilities.iter().chain(derived.iter()) {
                     if let AbilityKind::Static(s) = &a.kind {
+                        // A conditional one ("If you attacked this turn, you may have ~
+                        // enter as a copy ...") applies only if its condition is true as
+                        // the permanent enters.
+                        if s.condition
+                            .as_ref()
+                            .is_some_and(|c| !self.eval_cond(c, &entering_ctx))
+                        {
+                            continue;
+                        }
                         // CR 614.12: only effects that affect just that permanent apply
                         // from the permanent itself ("Permanents enter tapped" doesn't
                         // affect the permanent that has it).
@@ -782,7 +862,7 @@ impl Game {
                 if *amount == 0 || (*combat_only && !combat) {
                     return false;
                 }
-                if !self.matches(*s, source, ctx) {
+                if !crate::kw::damage_source_matches(self, *s, source, ctx) {
                     return false;
                 }
                 match target {
@@ -1251,7 +1331,7 @@ impl Game {
                 c.event = Some(event_info_of(&original));
                 let more = self.eval_value(&count, &c).max(0) as u32;
                 let plus = TokenCreate {
-                    chars: crate::tokens::token_characteristics(&spec),
+                    chars: crate::tokens::token_characteristics_in(self, &spec, &c),
                     card: crate::tokens::predefined_card(&spec),
                     tapped: false,
                     attacking: None,

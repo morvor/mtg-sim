@@ -95,7 +95,8 @@ fn parse_loyalty(s: &str) -> Option<i32> {
 }
 
 fn split_cost_parts(s: &str) -> Vec<&str> {
-    let mut out = Vec::new();
+    // (start, end) byte ranges of the comma-separated parts.
+    let mut out: Vec<(usize, usize)> = Vec::new();
     let mut start = 0;
     let mut depth = 0;
     for (i, ch) in s.char_indices() {
@@ -103,14 +104,30 @@ fn split_cost_parts(s: &str) -> Vec<&str> {
             '{' => depth += 1,
             '}' => depth -= 1,
             ',' if depth == 0 => {
-                out.push(&s[start..i]);
+                out.push((start, i));
                 start = i + 1;
             }
             _ => {}
         }
     }
-    out.push(&s[start..]);
-    out
+    out.push((start, s.len()));
+    // A comma list inside one part ("Discard an enchantment, instant, or sorcery card"):
+    // a part starting with "or" continues the previous one, and so does each one-word
+    // list item before it.
+    let mut merged: Vec<(usize, usize)> = Vec::new();
+    for (a, b) in out {
+        let part = s[a..b].trim_start().to_lowercase();
+        if part.starts_with("or ") && !merged.is_empty() {
+            let mut first = merged.pop().unwrap();
+            while !s[first.0..first.1].trim().contains(' ') && !merged.is_empty() {
+                first = merged.pop().unwrap();
+            }
+            merged.push((first.0, b));
+        } else {
+            merged.push((a, b));
+        }
+    }
+    merged.into_iter().map(|(a, b)| &s[a..b]).collect()
 }
 
 fn parse_cost_part(p: &str) -> Option<CostPart> {
@@ -332,7 +349,7 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
     let mut any = false;
     loop {
         let lower = text.to_lowercase();
-        let pats: [(&str, u8); 17] = [
+        let pats: [(&str, u8); 18] = [
             ("activate only as a sorcery.", 1),
             ("activate only once each turn.", 2),
             ("activate only during your turn.", 3),
@@ -342,6 +359,8 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
             ("any player may activate this ability.", 7),
             ("activate only as a sorcery and only once each turn.", 8),
             ("activate only during an opponent's turn.", 9),
+            // CR 602.5e.
+            ("activate only as an instant.", 18),
             // Combat timing windows (CR 506.8g).
             ("activate only before attackers are declared.", 10),
             ("activate only after attackers are declared.", 11),
@@ -382,6 +401,7 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
                         timing = ActivationTiming::YourTurn;
                         max = Some(1);
                     }
+                    18 => timing = ActivationTiming::AsInstant,
                     10..=15 | 17 => {
                         let (point, after, during_combat) = match k {
                             10 => (CombatPoint::AttackersDeclared, false, false),

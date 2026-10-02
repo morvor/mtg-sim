@@ -82,6 +82,7 @@ fn controller_chooses_what_a_creature_entering_attacking_attacks() {
                 toughness: Some(1),
                 abilities: vec![],
                 scryfall_name: None,
+                pt_values: None,
             },
             count: Value::c(1),
             controller: PlayerRef::You,

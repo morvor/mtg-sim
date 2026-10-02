@@ -71,6 +71,23 @@ pub trait KeywordRules: Sync + Send {
     ) -> bool {
         false
     }
+    /// Cards `searcher` found searching `owner`'s library, before the searching effect
+    /// puts them anywhere: returns true if this implementation's rule dealt with them
+    /// instead (e.g. "they exile each card they find"), so the effect doesn't move them.
+    fn search_found(
+        &self,
+        g: &mut Game,
+        searcher: PlayerId,
+        owner: PlayerId,
+        found: &[ObjectId],
+    ) -> bool {
+        false
+    }
+    /// Whether a rule this implementation defines prohibits `p` from playing the land
+    /// card `card` (CR 305.2). Called for every registered implementation.
+    fn land_play_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
+        false
+    }
     /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a
     /// foretold card face down in exile (CR 702.143a) or a plotted card (CR 702.170d).
     /// Called for every registered implementation.
@@ -156,8 +173,24 @@ pub trait KeywordRules: Sync + Send {
         x: u32,
     ) {
     }
+    /// Changes to the total cost of `card` cast by `p` applied after every other cost
+    /// increase and reduction (CR 601.2f), e.g. a minimum total cost. Called for every
+    /// registered implementation.
+    fn global_spell_cost(&self, g: &Game, p: PlayerId, card: ObjectId, cost: &mut Cost) {}
     /// Where a resolved instant/sorcery goes, if the keyword changes it.
     fn resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
+    /// Where a resolving permanent spell is put instead of onto the battlefield, if the
+    /// keyword changes it: e.g. a creature spell with rebound cast from its owner's hand
+    /// is exiled (CR 702.88a; Jeskai Baller). [`KeywordRules::after_spell_resolved`] is
+    /// then called as for an instant or sorcery.
+    fn permanent_resolved_destination(
         &self,
         g: &Game,
         spell: ObjectId,
@@ -259,6 +292,24 @@ pub trait KeywordRules: Sync + Send {
     fn combat_damage_assigner(&self, g: &Game, creature: ObjectId) -> Option<PlayerId> {
         None
     }
+    /// Attack requirements this implementation's rules impose on the attacking players'
+    /// creatures (CR 508.1d). Called for every registered implementation.
+    fn attack_requirements(&self, g: &Game) -> Vec<crate::combat::AttackRequirement> {
+        vec![]
+    }
+    /// A way the attacking creature `attacker` may assign its `power` combat damage other
+    /// than the usual one (an exception to CR 510.1b–c), e.g. "divided as you choose among
+    /// defending player and/or any number of creatures they control": the assignment, if
+    /// this implementation's rule applies and its controller chose to use it. Not called
+    /// for a blocked creature whose blockers are all gone (it assigns no damage).
+    fn assign_combat_damage(
+        &self,
+        g: &mut Game,
+        attacker: ObjectId,
+        power: u32,
+    ) -> Option<Vec<(ObjectId, Entity, u32)>> {
+        None
+    }
     /// Other attacking creatures that become blocked by the same blocking creature when
     /// `attacker` becomes blocked by it (or become blocked when an effect blocks it), e.g.
     /// the rest of its band (CR 702.22h–i).
@@ -280,6 +331,52 @@ pub trait KeywordRules: Sync + Send {
         vec![]
     }
     fn day_night_changed(&self, g: &mut Game) {}
+    /// The number damage marked on `creature` is checked against to determine whether
+    /// it's lethal damage (CR 704.5g, 702.19b, 120.4a), if not its toughness: e.g.
+    /// "lethal damage ... is determined by their power rather than their toughness".
+    fn lethal_damage_basis(&self, g: &Game, creature: ObjectId) -> Option<i32> {
+        None
+    }
+    /// Whether `creature`, which has lethal damage marked on it, isn't destroyed by the
+    /// state-based action for lethal damage (an exception to CR 704.5g).
+    fn survives_lethal_damage(&self, g: &Game, creature: ObjectId) -> bool {
+        false
+    }
+    /// Whether damage `source` deals to the player `p` is dealt as though the source had
+    /// infect (CR 120.3b, 702.90b): it results in poison counters, not life loss.
+    fn damage_as_though_infect(&self, g: &Game, source: ObjectId, p: PlayerId) -> bool {
+        false
+    }
+    /// The colors `source` has as a source of damage, if a rule makes them differ from
+    /// its colors (e.g. "black and/or red ... spells are colorless sources of damage").
+    /// Used where effects look at the damage's source: prevention and replacement effects
+    /// and protection (CR 702.16e), not triggered abilities.
+    fn damage_source_colors(&self, g: &Game, source: ObjectId) -> Option<ColorSet> {
+        None
+    }
+    /// Whether a rule this implementation defines forbids `e` as a target of the target
+    /// slot `spec` of the spell or ability `source` (CR 115.4), e.g. "can't be the target
+    /// of spells that can target only Walls". Called for every registered implementation.
+    fn target_forbidden(
+        &self,
+        g: &Game,
+        spec: &TargetSpec,
+        e: Entity,
+        source: Option<ObjectId>,
+    ) -> bool {
+        false
+    }
+    /// Whether the step or phase `step` of `active`'s turn that's about to begin is
+    /// skipped (CR 614.1b, 614.10) because of a rule this implementation defines (for a
+    /// skipped combat phase, each of its steps).
+    fn skips_step(&self, g: &Game, step: crate::turn::Step, active: PlayerId) -> bool {
+        false
+    }
+    /// Whether damage marked on the permanent `id` isn't removed in the cleanup step (an
+    /// exception to CR 514.2).
+    fn keeps_damage_in_cleanup(&self, g: &Game, id: ObjectId) -> bool {
+        false
+    }
     /// A player drew `card` (the `nth` card they drew this turn), as it's drawn: e.g.
     /// "you may reveal this card as you draw it" (CR 121.9, 702.94a).
     fn after_draw(&self, g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {}
@@ -366,6 +463,19 @@ pub trait KeywordRules: Sync + Send {
     /// number of spells cast before a storm spell (CR 702.40a).
     fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
         None
+    }
+    /// Applies a named [`Modification::Custom`] this implementation defines to the
+    /// characteristics `chars` of `target` (in the modification's layer); returns true if
+    /// it was one.
+    fn custom_modification(
+        &self,
+        g: &Game,
+        name: &str,
+        chars: &mut Characteristics,
+        ctx: &Ctx,
+        target: ObjectId,
+    ) -> bool {
+        false
     }
     /// A named object filter (`Filter::Custom(name)`) evaluated by this implementation,
     /// e.g. "creature that convoked it" (CR 702.51c).
@@ -619,6 +729,33 @@ pub fn apply_spell_text_changes(
     }
 }
 
+/// The keywords of `chars` that reduce or otherwise change the cost `cost` of casting
+/// `card` (see [`KeywordRules::cost_reduction`]).
+pub fn cost_changing_keywords(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+    cost: &Cost,
+    x: u32,
+) -> Vec<Keyword> {
+    let mut out = Vec::new();
+    for kw in chars.keywords() {
+        for r in impls_for(kw.kind) {
+            let mut c = cost.clone();
+            r.cost_reduction(g, p, card, kw, &mut c, x);
+            if format!("{c:?}") != format!("{cost:?}")
+                && !out
+                    .iter()
+                    .any(|k: &Keyword| format!("{k:?}") == format!("{kw:?}"))
+            {
+                out.push(kw.clone());
+            }
+        }
+    }
+    out
+}
+
 pub fn cost_reductions(
     g: &Game,
     p: PlayerId,
@@ -632,6 +769,13 @@ pub fn cost_reductions(
         for r in impls_for(kw.kind) {
             r.cost_reduction(g, p, card, kw, cost, x);
         }
+    }
+}
+
+/// See [`KeywordRules::global_spell_cost`].
+pub fn global_spell_cost(g: &Game, p: PlayerId, card: ObjectId, cost: &mut Cost) {
+    for r in registry() {
+        r.global_spell_cost(g, p, card, cost);
     }
 }
 
@@ -686,6 +830,16 @@ pub fn resolved_destinations(
         out.extend(resolved_destination_by(g, spell));
     }
     out
+}
+
+/// See [`KeywordRules::permanent_resolved_destination`].
+pub fn permanent_resolved_destination(
+    g: &Game,
+    spell: ObjectId,
+) -> Option<(Zone, LibraryPosition)> {
+    distinct_kinds(&g.obj(spell).chars).iter().find_map(|kw| {
+        impls_for(kw.kind).find_map(|r| r.permanent_resolved_destination(g, spell, kw))
+    })
 }
 
 pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
@@ -805,6 +959,25 @@ pub fn also_blocked(g: &Game, attacker: ObjectId) -> Vec<ObjectId> {
     out
 }
 
+/// See [`KeywordRules::attack_requirements`].
+pub fn attack_requirements(g: &Game) -> Vec<crate::combat::AttackRequirement> {
+    registry()
+        .iter()
+        .flat_map(|r| r.attack_requirements(g))
+        .collect()
+}
+
+/// See [`KeywordRules::assign_combat_damage`].
+pub fn assign_combat_damage(
+    g: &mut Game,
+    attacker: ObjectId,
+    power: u32,
+) -> Option<Vec<(ObjectId, Entity, u32)>> {
+    registry()
+        .iter()
+        .find_map(|r| r.assign_combat_damage(g, attacker, power))
+}
+
 pub fn combat_damage_assigner(g: &Game, id: ObjectId) -> Option<PlayerId> {
     registry()
         .iter()
@@ -828,6 +1001,76 @@ pub fn damage_prevention(g: &Game, source: ObjectId, target: Entity) -> Vec<Keyw
         .iter()
         .flat_map(|r| r.damage_prevention(g, source, target))
         .collect()
+}
+
+/// The number damage marked on `creature` is checked against for lethal damage: its
+/// toughness unless a rule changes it (see [`KeywordRules::lethal_damage_basis`]).
+pub fn lethal_damage_basis(g: &Game, creature: ObjectId) -> i32 {
+    registry()
+        .iter()
+        .find_map(|r| r.lethal_damage_basis(g, creature))
+        .unwrap_or_else(|| g.obj(creature).toughness())
+}
+
+/// See [`KeywordRules::damage_as_though_infect`].
+pub fn damage_as_though_infect(g: &Game, source: ObjectId, p: PlayerId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.damage_as_though_infect(g, source, p))
+}
+
+/// Whether `source`, as a source of damage, matches `f` (see
+/// [`KeywordRules::damage_source_colors`]).
+pub fn damage_source_matches(g: &Game, source: ObjectId, f: &Filter, ctx: &Ctx) -> bool {
+    match registry()
+        .iter()
+        .find_map(|r| r.damage_source_colors(g, source))
+    {
+        None => g.matches(source, f, ctx),
+        Some(colors) => {
+            let mut chars = g.obj(source).chars.clone();
+            chars.colors = colors;
+            crate::casting::matches_with_chars(g, source, &chars, f, ctx)
+        }
+    }
+}
+
+/// See [`KeywordRules::search_found`].
+pub fn search_found(g: &mut Game, searcher: PlayerId, owner: PlayerId, found: &[ObjectId]) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.search_found(g, searcher, owner, found))
+}
+
+/// See [`KeywordRules::land_play_prohibited`].
+pub fn land_play_prohibited(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.land_play_prohibited(g, p, card))
+}
+
+/// See [`KeywordRules::target_forbidden`].
+pub fn target_forbidden(g: &Game, spec: &TargetSpec, e: Entity, source: Option<ObjectId>) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.target_forbidden(g, spec, e, source))
+}
+
+/// See [`KeywordRules::skips_step`].
+pub fn skips_step(g: &Game, step: crate::turn::Step, active: PlayerId) -> bool {
+    registry().iter().any(|r| r.skips_step(g, step, active))
+}
+
+/// See [`KeywordRules::keeps_damage_in_cleanup`].
+pub fn keeps_damage_in_cleanup(g: &Game, id: ObjectId) -> bool {
+    registry().iter().any(|r| r.keeps_damage_in_cleanup(g, id))
+}
+
+/// See [`KeywordRules::survives_lethal_damage`].
+pub fn survives_lethal_damage(g: &Game, creature: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.survives_lethal_damage(g, creature))
 }
 
 pub fn day_night_changed(g: &mut Game) {
@@ -966,6 +1209,21 @@ pub fn custom_value(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64>
     registry().iter().find_map(|r| r.custom_value(g, name, ctx))
 }
 
+/// See [`KeywordRules::custom_modification`].
+pub fn custom_modification(
+    g: &Game,
+    name: &str,
+    chars: &mut Characteristics,
+    ctx: &Ctx,
+    target: ObjectId,
+) {
+    for r in registry() {
+        if r.custom_modification(g, name, chars, ctx, target) {
+            return;
+        }
+    }
+}
+
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &crate::eval::Ctx) -> Option<bool> {
     registry()
         .iter()
@@ -994,7 +1252,19 @@ pub fn pay_mana_otherwise(
     let kws = distinct_kinds(&g.obj(spell).chars);
     for kw in &kws {
         for r in impls_for(kw.kind) {
+            let before = crate::structure::enabled().then(|| format!("{cost:?}"));
             r.pay_mana_otherwise(g, p, spell, kw, cost)?;
+            if before.is_some_and(|b| b != format!("{cost:?}")) {
+                let c = &g.obj(spell).chars;
+                let want = format!("{kw:?}");
+                if let Some(a) = c
+                    .abilities
+                    .iter()
+                    .find(|a| a.keyword().is_some_and(|k| format!("{k:?}") == want))
+                {
+                    crate::structure::record(a, &c.name, "keyword");
+                }
+            }
         }
     }
     Ok(())

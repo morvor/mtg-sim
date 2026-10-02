@@ -355,6 +355,13 @@ impl Game {
     pub fn lookback_snapshot(&self) -> LookbackSnapshot {
         LookbackSnapshot {
             sources: self.current_trigger_sources(),
+            additional_triggers: self
+                .statics
+                .other
+                .iter()
+                .filter(|(_, _, e)| matches!(e, StaticEffect::AdditionalTrigger { .. }))
+                .cloned()
+                .collect(),
         }
     }
 
@@ -731,6 +738,16 @@ impl Game {
             by: m.by,
             lookback,
         });
+        if m.to == Zone::Battlefield {
+            // A permanent entering the battlefield attached to an object or player becomes
+            // attached to it (CR 303.4a, 603.2e): "whenever an Aura becomes attached"
+            // triggers (Brood Keeper's rulings).
+            if let Some(to) = m.etb.attach_to {
+                if self.obj(new_id).attached_to == Some(to) {
+                    self.emit(Event::Attached { obj: new_id, to });
+                }
+            }
+        }
         if let Some(host) = was_attached_to {
             // CR 603.10c: looks back in time (to the snapshot taken for this move).
             self.emit(Event::Unattached {
@@ -1549,7 +1566,7 @@ impl Game {
         let deathtouch = src.has_keyword(KeywordKind::Deathtouch);
         match target {
             Entity::Player(p) => {
-                if infect {
+                if infect || crate::kw::damage_as_though_infect(self, source, p) {
                     // CR 120.3b; the counters can be modified by replacement effects
                     // (CR 120.4c).
                     self.put_damage_counters(Entity::Player(p), counters::POISON, amount, source);

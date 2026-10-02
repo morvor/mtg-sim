@@ -377,7 +377,22 @@ fn attached_restriction(r: &str, text: &str) -> Option<Vec<Ability>> {
 /// "spells your opponents cast cost {1} more to cast", "creature spells you cast cost {1} less to cast".
 fn parse_cost_modifier(l: &str, text: &str) -> Option<Ability> {
     let (spells, rest) = l.split_once(" cost ")?;
-    let (who, spells) = if let Some(s) = spells.strip_suffix(" you cast") {
+    // "creature spells you cast with power 4 or greater" (Goreclaw): the qualifier
+    // follows the caster; read it as "creature spells with power 4 or greater".
+    let qualified = [
+        (" you cast with ", PlayerRel::You),
+        (" your opponents cast with ", PlayerRel::Opponent),
+    ]
+    .into_iter()
+    .find_map(|(sep, who)| {
+        let (a, b) = spells.split_once(sep)?;
+        Some((who, format!("{a} with {b}")))
+    });
+    let qualified_spells;
+    let (who, spells) = if let Some((who, s)) = qualified {
+        qualified_spells = s;
+        (who, qualified_spells.as_str())
+    } else if let Some(s) = spells.strip_suffix(" you cast") {
         (PlayerRel::You, s)
     } else if let Some(s) = spells.strip_suffix(" your opponents cast") {
         (PlayerRel::Opponent, s)
@@ -571,6 +586,16 @@ pub fn parse_value_phrase_core(s: &str, b: &mut Builder) -> Option<(Value, Strin
             ));
         }
     }
+    // "the amount of life you gained this turn" (CR 119.3: the total of this turn's
+    // life-gain events).
+    for p in [
+        "the amount of life you gained this turn",
+        "the amount of life you've gained this turn",
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            return Some((Value::LifeGainedThisTurn(PlayerRef::You), rest.to_string()));
+        }
+    }
     // CR 903.3e: "your commander's mana value".
     if let Some(rest) = s.strip_prefix("your commander's mana value") {
         return Some((
@@ -740,6 +765,10 @@ pub fn parse_value_phrase_core(s: &str, b: &mut Builder) -> Option<(Value, Strin
         if let Some((v, rest)) = super::patterns::mana_values_among::value(r) {
             return Some((v, rest.to_string()));
         }
+        // "the number of card types among other nonland permanents you control".
+        if let Some((v, rest)) = super::patterns::card_types_among::value(r) {
+            return Some((v, rest.to_string()));
+        }
         let (f, _, rest) = parse_object_phrase(r)?;
         // "the number of creatures blocking it"
         if let Some((f, rest)) = super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {
@@ -750,6 +779,11 @@ pub fn parse_value_phrase_core(s: &str, b: &mut Builder) -> Option<(Value, Strin
         if let Some(rest) = rest.trim_start().strip_prefix("milled this way") {
             let milled = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::IT)))]);
             return Some((Value::Count(milled), rest.to_string()));
+        }
+        // "the number of creatures tapped this way" (Angel's Trumpet).
+        if let Some(rest) = rest.trim_start().strip_prefix("tapped this way") {
+            let tapped = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::TAPPED)))]);
+            return Some((Value::Count(tapped), rest.to_string()));
         }
         return Some((Value::Count(f), rest.to_string()));
     }
@@ -788,6 +822,10 @@ pub fn parse_value_phrase_core(s: &str, b: &mut Builder) -> Option<(Value, Strin
     if let Some(r) = s.strip_prefix("the total power of ") {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::PowerOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
+    if let Some(v) = super::patterns::spells_cast_this_turn::total_mana_value_of_spells_you_cast(s)
+    {
+        return Some(v);
     }
     if let Some(r) = s.strip_prefix("the total toughness of ") {
         let (f, _, rest) = parse_object_phrase(r)?;
