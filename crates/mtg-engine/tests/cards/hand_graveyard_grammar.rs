@@ -1412,3 +1412,73 @@ fn pore_over_the_pages_draws_untaps_discards() {
     assert_eq!(t.hand_size(P0), 2);
     assert_eq!(t.graveyard_size(P0), 2);
 }
+
+#[test]
+fn has_activated_abilities_of_graveyard_cards_compiles() {
+    assert_supported(&[
+        "Necrotic Ooze",
+        "Mirran Safehouse",
+        "Trazyn the Infinite",
+        "Thranduil, the Elvenking",
+    ]);
+}
+
+#[test]
+fn necrotic_ooze_gains_activated_abilities_of_creature_cards_in_graveyards() {
+    cr!("613.1f");
+    ruling!(
+        "Necrotic Ooze",
+        "Necrotic Ooze gains only activated abilities"
+    );
+    let mut t = TestGame::new(2);
+    let ooze = t.battlefield(P0, "Necrotic Ooze");
+    t.g.recompute();
+    let activated = |t: &TestGame| {
+        t.obj_now(ooze)
+            .chars
+            .abilities
+            .iter()
+            .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+            .count()
+    };
+    assert_eq!(activated(&t), 0);
+    // A creature card in an opponent's graveyard: its {T} ability.
+    t.graveyard(P1, "Prodigal Sorcerer");
+    // A noncreature card's abilities aren't gained; nor are triggered/static abilities.
+    t.graveyard(P1, "Sol Ring");
+    t.graveyard(P0, "Wall of Omens");
+    t.g.recompute();
+    assert_eq!(activated(&t), 1);
+    t.activate(P0, ooze, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    // When the card leaves the graveyard, the ability is gone.
+    let mut t = TestGame::new(2);
+    let ooze = t.battlefield(P0, "Necrotic Ooze");
+    let ps = t.graveyard(P1, "Prodigal Sorcerer");
+    t.g.recompute();
+    assert_eq!(activated(&t), 1);
+    t.g.move_object(ps, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.g.recompute();
+    let _ = ooze;
+    assert_eq!(activated(&t), 0);
+}
+
+#[test]
+fn thranduil_only_elf_cards_in_your_graveyard() {
+    cr!("613.1f");
+    let mut t = TestGame::new(2);
+    let th = t.battlefield(P0, "Thranduil, the Elvenking");
+    t.graveyard(P0, "Llanowar Elves");
+    t.graveyard(P1, "Elvish Mystic");
+    t.graveyard(P0, "Prodigal Sorcerer");
+    t.g.recompute();
+    let n = t
+        .obj_now(th)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+        .count();
+    assert_eq!(n, 1);
+}

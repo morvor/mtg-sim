@@ -2134,3 +2134,53 @@ fn p_put_there_this_turn(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: cards put into a graveyard this turn", priority: 960, parse: p_put_there_this_turn } }
+
+/// "~ has all activated abilities of all Elf cards in your graveyard.", "As long as ~ is
+/// on the battlefield, it has all activated abilities of all creature cards in all
+/// graveyards.": the permanent gains those abilities (layer 6, CR 613.1f), as the cards
+/// have them now.
+fn s_activated_abilities_of_graveyard_cards(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    use crate::kw::hand_graveyard_actions::ACTIVATED_ABILITIES_OF_GRAVEYARD;
+    let l = end(l);
+    let r = l
+        .strip_prefix("as long as ~ is on the battlefield, it has all activated abilities of all ")
+        .or_else(|| l.strip_prefix("~ has all activated abilities of all "))?;
+    let (kind, zone) = r.split_once(" cards in ")?;
+    let scope = match zone {
+        "all graveyards" => "all",
+        "your graveyard" => "your",
+        _ => return None,
+    };
+    let known = crate::types::CardType::from_word(kind).is_some()
+        || crate::types::is_creature_type(&kind_title(kind));
+    if !known {
+        return None;
+    }
+    let name = format!("{ACTIVATED_ABILITIES_OF_GRAVEYARD}{scope}:{}", match crate::types::CardType::from_word(kind) {
+        Some(_) => kind.to_string(),
+        None => kind_title(kind),
+    });
+    let st = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: vec![Modification::Custom {
+            name: SmolStr::new(name),
+            layer: Layer::L6Ability,
+        }],
+    });
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+/// "elf" → "Elf".
+fn kind_title(w: &str) -> String {
+    let mut c = w.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => String::new(),
+    }
+}
+
+inventory::submit! { super::StaticPattern { name: "hand/graveyard grammar: has all activated abilities of cards in graveyards", priority: 960, parse: s_activated_abilities_of_graveyard_cards } }

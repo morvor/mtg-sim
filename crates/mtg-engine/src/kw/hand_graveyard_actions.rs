@@ -27,6 +27,11 @@ pub const THAT_MANY: &str = "that many";
 /// the zone it came from ("battlefield", "library") or nothing for anywhere.
 pub const PUT_THERE_THIS_TURN: &str = "put into its graveyard this turn from:";
 
+/// `Modification::Custom` name prefix (layer 6): "has all activated abilities of all
+/// [kind] cards in [all graveyards | your graveyard]" — followed by "all:" or "your:" and
+/// the card type or subtype word.
+pub const ACTIVATED_ABILITIES_OF_GRAVEYARD: &str = "has all activated abilities of cards in graveyards:";
+
 pub struct HandGraveyardActions;
 
 impl KeywordRules for HandGraveyardActions {
@@ -61,6 +66,60 @@ impl KeywordRules for HandGraveyardActions {
             ("library", Some(crate::object::Zone::Library(_))) => true,
             _ => false,
         })
+    }
+
+    fn custom_modification(
+        &self,
+        g: &Game,
+        name: &str,
+        chars: &mut crate::object::Characteristics,
+        ctx: &Ctx,
+        _target: crate::types::ObjectId,
+    ) -> bool {
+        let Some(r) = name.strip_prefix(ACTIVATED_ABILITIES_OF_GRAVEYARD) else {
+            return false;
+        };
+        let Some((scope, kind)) = r.split_once(':') else {
+            return true;
+        };
+        let card_type = crate::types::CardType::from_word(kind);
+        let players: Vec<crate::types::PlayerId> = match scope {
+            "your" => vec![ctx.controller],
+            _ => g.players_in_game(),
+        };
+        let mut gained = Vec::new();
+        for p in players {
+            for c in &g.player(p).graveyard {
+                let o = g.obj(*c);
+                if !o.is_card() {
+                    continue;
+                }
+                let ok = match card_type {
+                    Some(t) => o.chars.card_types.contains(t),
+                    None => o.chars.has_subtype(kind),
+                };
+                if !ok {
+                    continue;
+                }
+                for a in &o.chars.abilities {
+                    match &a.kind {
+                        crate::ability::AbilityKind::Activated(_) => gained.push(a.clone()),
+                        // A keyword that is an activated ability (outlast, reconfigure,
+                        // ...): its activated ability (Necrotic Ooze rulings).
+                        crate::ability::AbilityKind::Keyword(k) => gained.extend(
+                            crate::keyword_impls::derived_abilities(k)
+                                .into_iter()
+                                .filter(|d| {
+                                    matches!(d.kind, crate::ability::AbilityKind::Activated(_))
+                                }),
+                        ),
+                        _ => {}
+                    }
+                }
+            }
+        }
+        chars.abilities.extend(gained);
+        true
     }
 
     fn custom_value(&self, _g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
