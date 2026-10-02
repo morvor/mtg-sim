@@ -510,6 +510,18 @@ fn muldrotha_an_artifact_creature_as_the_artifact_spell_and_another_as_the_creat
         "For example, you may cast an artifact creature spell as your artifact spell and cast another artifact creature spell as your creature spell."
     );
     supported("Muldrotha, the Gravetide");
+    // The slot P0 chooses for the first artifact creature is the one used up.
+    for (i, slot) in [(0, "artifact spell"), (1, "creature spell")] {
+        let mut t = TestGame::new(2);
+        let muldrotha = t.battlefield(P0, "Muldrotha, the Gravetide");
+        let a = t.graveyard(P0, "Ornithopter");
+        use_slot(&mut t, i);
+        t.cast(P0, a).go();
+        assert_eq!(
+            t.g.history.once_permissions_used,
+            vec![(muldrotha, slot.into())]
+        );
+    }
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Muldrotha, the Gravetide");
     let a = t.graveyard(P0, "Ornithopter");
