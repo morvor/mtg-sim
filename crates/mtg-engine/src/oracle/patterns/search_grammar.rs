@@ -1609,22 +1609,6 @@ mod tests {
     use crate::card::CardDb;
     use crate::oracle::CompileContext;
 
-    fn with_builder<T>(f: impl FnOnce(&mut Builder) -> T) -> T {
-        let tl = TypeLine::parse("Sorcery");
-        let ctx = CompileContext {
-            card_name: "Testcard",
-            full_name: "Testcard",
-            type_line: &tl,
-            layout: crate::card::Layout::Normal,
-            face_index: 0,
-            keywords: &[],
-            power: None,
-            toughness: None,
-        };
-        let mut b = Builder::new(&ctx);
-        f(&mut b)
-    }
-
     /// The effect a text compiles to on a sorcery, if every ability is understood.
     fn compiled(text: &str) -> Option<String> {
         let tl = TypeLine::parse("Sorcery");
