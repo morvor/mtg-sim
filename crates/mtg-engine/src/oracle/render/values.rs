@@ -257,6 +257,10 @@ impl Renderer<'_> {
                 let p = self.player(p, Case::Poss);
                 format!("{p} speed")
             }
+            Value::TurnsTaken(p) => {
+                let p = self.player(p, Case::Subj);
+                format!("the number of turns {p} have taken")
+            }
             Value::Sum(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.value(x)).collect();
                 parts.join(" plus ")
@@ -398,6 +402,12 @@ impl Renderer<'_> {
                     && matches!(v[1], Condition::CastFrom(_)) =>
             {
                 self.condition(&v[1])
+            }
+            // "It's your first, second, or third turn of the game".
+            Condition::And(_) if crate::rule_statics::turns_taken::early_turns_n(c).is_some() => {
+                let n = crate::rule_statics::turns_taken::early_turns_n(c).unwrap_or(1);
+                let l = crate::rule_statics::turns_taken::ordinal_list(n);
+                format!("it's your {l} turn of the game")
             }
             Condition::And(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();

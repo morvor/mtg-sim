@@ -292,7 +292,16 @@ impl Renderer<'_> {
             Some(n) => restr.push(format!("{} times each turn", number_word(n as i32))),
         }
         let solved = a.condition.as_ref().is_some_and(super::is_solved);
-        match a.condition.as_ref().filter(|_| !solved && !boast) {
+        // "X can't be 0." (CR 107.3a): the condition on the announced X alone.
+        let x_not_zero = matches!(
+            &a.condition,
+            Some(Condition::Compare(Value::X, Cmp::Ge, Value::Const(1)))
+        );
+        match a
+            .condition
+            .as_ref()
+            .filter(|_| !solved && !boast && !x_not_zero)
+        {
             // "Activate only during your turn before attackers are declared."
             Some(Condition::YourTurn) => {
                 if let ActivationTiming::CombatWindow(_) = a.timing {
@@ -325,6 +334,12 @@ impl Renderer<'_> {
         }
         if a.any_player {
             s.push_str(" Any player may activate this ability.");
+        }
+        match (a.cant_be_copied, x_not_zero) {
+            (true, true) => s.push_str(" This ability can't be copied and X can't be 0."),
+            (true, false) => s.push_str(" This ability can't be copied."),
+            (false, true) => s.push_str(" X can't be 0."),
+            (false, false) => {}
         }
         self.zone = saved;
         let _ = third_person;

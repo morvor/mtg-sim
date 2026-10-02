@@ -68,6 +68,11 @@ pub struct Ctx {
     /// they put aren't put by an effect ([`crate::events::CounterOrigin::Cost`]).
     #[serde(default)]
     pub paying_cost: bool,
+    /// The costs paid with this context are those of casting a spell or activating an
+    /// ability (CR 601.2g–h, 602.2b), not a cost a resolving spell or ability asks for:
+    /// what they're paid for (see `rule_statics::payment`).
+    #[serde(default)]
+    pub cost_of: Option<crate::rule_statics::payment::CostOf>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -1322,6 +1327,9 @@ impl Game {
                 .eval_player(r, ctx)
                 .and_then(|p| self.player(p).speed)
                 .unwrap_or(0) as i64,
+            Value::TurnsTaken(r) => self
+                .eval_player(r, ctx)
+                .map_or(0, |p| self.player(p).turns_taken as i64),
             Value::Aggregate(op, stat, sel) => {
                 crate::aggregates::aggregate(self, *op, stat, sel, ctx)
             }

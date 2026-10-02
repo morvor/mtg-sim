@@ -62,6 +62,12 @@ fn copy_target_ability(l: &str, b: &mut Builder) -> Option<Effect> {
         parts.push(Filter::AbilityFrom(Box::new(source)));
         rest = x;
     }
+    // "... X times" (Gogo, Master of Mimicry): X copies.
+    let mut count = Value::c(1);
+    if let Some(x) = strip(rest, "x times") {
+        count = Value::X;
+        rest = x;
+    }
     if !end(rest).is_empty() {
         return None;
     }
@@ -70,7 +76,7 @@ fn copy_target_ability(l: &str, b: &mut Builder) -> Option<Effect> {
     let slot = b.add_target(spec, &text);
     Some(Effect::CopySpell {
         what: Sel::Target(slot),
-        count: Value::c(1),
+        count,
         new_targets: false,
     })
 }

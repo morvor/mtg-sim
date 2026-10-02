@@ -1076,6 +1076,7 @@ impl Game {
         // A resolving spell or ability performs its own effects (CR 609.1), whatever
         // context created it.
         ctx.paying_cost = false;
+        ctx.cost_of = None;
         ctx.cause = None;
         ctx.x = si.x.unwrap_or(ctx.x);
         ctx.event = si.event.clone().or(ctx.event);

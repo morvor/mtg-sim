@@ -440,6 +440,10 @@ pub struct SpendContext {
     /// The ability being activated is a class level bar's: activating it is gaining a
     /// Class level (CR 716.2c).
     pub class_level: bool,
+    /// What the costs being paid are for: casting a spell or activating an ability, or
+    /// `None` for a cost a resolving spell or ability asks for (CR 118.3; see
+    /// `rule_statics::payment`).
+    pub cost_of: Option<crate::rule_statics::payment::CostOf>,
 }
 
 impl ManaRestriction {

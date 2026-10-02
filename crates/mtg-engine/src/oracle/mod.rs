@@ -488,6 +488,12 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
             Some((head, sentence)) => (head, Some(sentence)),
             None => (eff_text, None),
         };
+    // "This ability can't be copied." (CR 113.6g, 707.10).
+    let (eff_text, cant_be_copied) = match patterns::rule_statics::strip_cant_be_copied(eff_text) {
+        Some(rest) => (rest, true),
+        None => (eff_text.to_string(), false),
+    };
+    let eff_text = eff_text.as_str();
     // "X can't be 0." (CR 107.3a): a condition on the value announced for X in the cost.
     let cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x())
         || cost.parts.iter().any(crate::casting::cost_part_has_x);
@@ -544,6 +550,7 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     act.is_loyalty = loyalty;
     act.is_mana_ability = is_mana;
     act.any_player = any_player;
+    act.cant_be_copied = cant_be_copied;
     act.zone = activated_zone(cost_s, eff_text);
     if let Some((_, Some(c))) = amount_x {
         act.condition = Some(match act.condition.take() {
