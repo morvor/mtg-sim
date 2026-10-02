@@ -90,7 +90,16 @@ pub fn library_shuffled(g: &mut Game, owner: PlayerId) {
 /// library ..."), so they don't shuffle either (CR 701.23, 118.12b).
 pub const ITERATED_CAN_SEARCH: &str = "search: the player can search libraries";
 
+/// `Condition::Custom`: "if you search your library this way" — the resolving spell or
+/// ability had you search your library, and it hasn't been shuffled since.
+pub const YOU_SEARCHED_THIS_WAY: &str = "search: you searched your library this way";
+
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+    if name == YOU_SEARCHED_THIS_WAY {
+        let p = ctx.controller;
+        let key = ctx.stack_obj.or(ctx.source);
+        return Some(g.searches.open.contains(&(p, p, key)));
+    }
     (name == ITERATED_CAN_SEARCH).then(|| {
         ctx.iter_player
             .is_none_or(|p| !g.player_restricted(p, |r| matches!(r, Restriction::CantSearch(_))))
@@ -127,8 +136,9 @@ struct Found {
 /// Performs [`Effect::SearchCards`] (CR 701.23).
 pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
     let mut searchers = g.eval_players(&spec.who, ctx);
-    // The players who chose to search ("each opponent may search") can be no one.
-    if searchers.is_empty() && !matches!(spec.who, PlayerRef::Var(_)) {
+    // The players who chose to search ("each opponent may search") or were chosen ("any
+    // number of target players") can be no one.
+    if searchers.is_empty() && !matches!(spec.who, PlayerRef::Var(_) | PlayerRef::Target(_)) {
         searchers.push(ctx.controller);
     }
     // CR 701.23i: players searching at once look at the cards at the same time and

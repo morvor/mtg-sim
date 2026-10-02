@@ -42,6 +42,46 @@ inventory::submit! {
 inventory::submit! {
     ConditionPattern { name: "search grammar: an opponent controls more lands than you", priority: 100, parse: some_player_condition }
 }
+inventory::submit! {
+    ConditionPattern { name: "search grammar: x is n or more", priority: 100, parse: x_is_at_least }
+}
+inventory::submit! {
+    EffectPattern { name: "search grammar: that player shuffles / if you search your library this way, shuffle", priority: 95, parse: shuffle_after_search }
+}
+
+/// "If X is 10 or more" (the spell's X, CR 107.3).
+fn x_is_at_least(c: &str) -> Option<Condition> {
+    let r = c.strip_prefix("x is ")?;
+    let (n, r) = parse_number(r)?;
+    n.as_const()?;
+    matches!(r.trim(), "or more" | "or greater").then(|| Condition::Compare(Value::X, Cmp::Ge, n))
+}
+
+/// "Then that player shuffles." (their library), and "If you search your library this way,
+/// shuffle." after other instructions: only if the library was searched by this spell or
+/// ability and hasn't been shuffled since (see `search_rules::YOU_SEARCHED_THIS_WAY`).
+fn shuffle_after_search(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if l == "that player shuffles" {
+        if crate::oracle::patterns::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+            return None;
+        }
+        return Some(Effect::Shuffle {
+            who: b.it_player.clone(),
+        });
+    }
+    if l == "if you search your library this way, shuffle" {
+        return Some(Effect::If {
+            cond: Condition::Custom(crate::search_rules::YOU_SEARCHED_THIS_WAY.into()),
+            then: Box::new(Effect::Shuffle {
+                who: PlayerRef::You,
+            }),
+            otherwise: Box::new(Effect::Noop),
+        });
+    }
+    None
+}
 
 /// "an opponent controls more lands than you", "a player controls more creatures than
 /// you": some such player exists.
@@ -209,6 +249,18 @@ fn put_found(l: &str, b: &mut Builder) -> Option<Effect> {
         return Some(mv);
     }
     let c = rest.strip_prefix("if ")?;
+    // "if its mana value is 2 or less".
+    if let Some(q) = c.strip_prefix("its mana value is ") {
+        let (f, tail) = mana_value_qualifier(&format!("with mana value {q}"), b)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        return Some(Effect::If {
+            cond: Condition::SelMatches(Sel::Var(vars::IT), f),
+            then: Box::new(mv),
+            otherwise: Box::new(Effect::Noop),
+        });
+    }
     let cond = match crate::oracle::patterns::statics_conditions::pronoun_state(c) {
         Some(f) if c.starts_with("it") => Condition::SelMatches(Sel::Var(vars::IT), f),
         _ => crate::oracle::statics::parse_condition(c, b.ctx)?,
@@ -255,6 +307,21 @@ fn searcher<'a>(l: &'a str, b: &mut Builder) -> Option<(Searcher, &'a str)> {
         let subject = &l[..at];
         let rest = &l[at + verb.len()..];
         let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        // "Any number of target players may each search their library": each of them
+        // searches their own.
+        if subject == "any number of target players" && verb == " may each search " {
+            let mut spec = TargetSpec::player(PlayerFilter::Any, subject);
+            spec.min = 0;
+            spec.max = Value::c(99);
+            let slot = b.add_target(spec, subject);
+            let s = Searcher {
+                who: PlayerRef::Target(slot),
+                their: PlayerRef::Iterated,
+                optional,
+                third: false,
+            };
+            return Some((s, rest));
+        }
         let parsed = player_ref(subject, b);
         let Some((who, tail)) = parsed.filter(|(_, t)| t.trim().is_empty()) else {
             b.targets.truncate(saved.0);
@@ -828,11 +895,10 @@ fn destination<'a>(s: &'a str, sr: &Searcher, b: &mut Builder) -> Option<(Destin
     let mut r = s.strip_prefix("onto the battlefield")?;
     let mut d = Destination::battlefield();
     // CR 110.2a: a permanent enters under the control of the player who put it there.
-    d.controller = Some(match sr.who {
-        PlayerRef::EachPlayer | PlayerRef::EachOpponent | PlayerRef::EachOtherPlayer => {
-            PlayerRef::Iterated
-        }
-        ref w => w.clone(),
+    d.controller = Some(match (&sr.who, &sr.their) {
+        (PlayerRef::EachPlayer | PlayerRef::EachOpponent | PlayerRef::EachOtherPlayer, _)
+        | (_, PlayerRef::Iterated) => PlayerRef::Iterated,
+        (w, _) => w.clone(),
     });
     loop {
         if let Some(x) = r.strip_prefix(" tapped") {
@@ -1191,12 +1257,8 @@ fn same(a: &PlayerRef, c: &PlayerRef) -> bool {
 
 /// Whether the searcher searches their own zones.
 fn own_library(spec: &SearchSpec) -> bool {
-    same(&spec.whose, &spec.who)
-        || (matches!(spec.whose, PlayerRef::Iterated)
-            && matches!(
-                spec.who,
-                PlayerRef::EachPlayer | PlayerRef::EachOpponent | PlayerRef::EachOtherPlayer
-            ))
+    // `Iterated`: each searcher's own.
+    same(&spec.whose, &spec.who) || matches!(spec.whose, PlayerRef::Iterated)
 }
 
 /// Calls `f` on the search `e` ends with, possibly optional, and on both branches of a
