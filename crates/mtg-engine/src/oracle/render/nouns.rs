@@ -96,8 +96,17 @@ pub(crate) fn supertype_word(s: Supertype) -> &'static str {
     }
 }
 
+/// A number written as such ("3", "X"), which "or less" can follow ("3 or less"); a
+/// number described in words ("the number of lands you control") is compared with "less
+/// than or equal to" instead. ("That much" and "that mana value" keep "or less".)
+pub(crate) fn is_plain_number(v: &str) -> bool {
+    v.parse::<i64>().is_ok() || v == "X" || v.starts_with("that ")
+}
+
 pub(crate) fn cmp_phrase(cmp: Cmp, v: &str) -> String {
     match cmp {
+        Cmp::Le if !is_plain_number(v) => format!("less than or equal to {v}"),
+        Cmp::Ge if !is_plain_number(v) => format!("greater than or equal to {v}"),
         // "with mana value 3" / "with mana value equal to the number of ...".
         Cmp::Eq if v.parse::<i64>().is_ok() || v == "X" => v.to_string(),
         Cmp::Eq => format!("{{opt:equal to}} {v}"),

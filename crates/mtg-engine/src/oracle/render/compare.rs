@@ -161,6 +161,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               of them gets +1/+1\" is \"they get +1/+1\" (CR 611.2c: each affected object).",
     },
     Equivalence {
+        pattern: r"\bat the beginning of the next upkeep\b",
+        replacement: "at the beginning of the next turn's upkeep",
+        why: "Each turn has one upkeep (CR 500.1), and an effect can't be created during \
+              a turn's untap step before its upkeep (no player gets priority then, CR \
+              502.4), so the next upkeep is the next turn's.",
+    },
+    Equivalence {
         pattern: r"\bat the beginning of each of your postcombat main phases\b",
         replacement: "at the beginning of your postcombat main phase",
         why: "CR 505.1a: every main phase of a turn after the first is a postcombat main \
@@ -410,6 +417,14 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
     (
         "\"N damage equal to V\", \"N life for each F\", \"+1/+1 for each F\", \"a card for each F\", ... -> \"X ..., where X is V\"",
         "CR 107.3: X is defined by the text; both describe the same number.",
+    ),
+    (
+        "\"+2/+2 for each F\", \"2 damage to P for each F\", \"two cards for each F\" -> \"X ..., where X is 2 times the number of F\"",
+        "CR 107.3: the same number, as above.",
+    ),
+    (
+        "\"with mana value X or less ..., where X is V\" -> \"with mana value less than or equal to V ...\"",
+        "CR 107.3: the same comparison, with the number X stands for named in place.",
     ),
 ];
 
@@ -842,6 +857,25 @@ fn sentence_rewrites(s: &str) -> String {
     for (re, rep) in where_x_rewrites() {
         s = re.replace_all(&s, *rep).to_string();
     }
+    s = scaled_for_each(&s);
+    s = compared_to_x(&s);
+    // "When ~ blocks, at end of combat, destroy it." / "..., destroy it at end of
+    // combat.": a delayed trigger's time after a trigger condition, too.
+    static DELAYED: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = DELAYED.get_or_init(|| {
+        Regex::new(r#"(, )(at the beginning of the next end step|at the beginning of the next turn's upkeep|at the beginning of the next upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\.(\n|$)"#).ok()
+    }) {
+        // Only a single instruction ending the ability: in "..., at end of combat, exile
+        // it, then return it" or "... exile it. Return it ..." the time applies to more.
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                if c[3].contains(" then ") || c[3].contains(", then") {
+                    return c[0].to_string();
+                }
+                format!("{}{} {}.{}", &c[1], &c[3], &c[2], &c[4])
+            })
+            .to_string();
+    }
     let Some(lead) = lead else {
         return s;
     };
@@ -868,6 +902,99 @@ fn sentence_rewrites(s: &str) -> String {
     s
 }
 
+/// "Gets +2/+2 for each F", "deals 2 damage to you for each F", "draw two cards for each
+/// F" -> "... X ..., where X is 2 times the number of F" (CR 107.3), as
+/// [`where_x_rewrites`] does for one of each.
+fn scaled_for_each(s: &str) -> String {
+    static R: OnceLock<[Option<Regex>; 3]> = OnceLock::new();
+    let [pt, damage, cards] = R.get_or_init(|| {
+        [
+            Regex::new(r"\b(gets?) ([+-])(\d+)/([+-])(\d+) ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)").ok(),
+            Regex::new(r"\b(deals?) (\d+) damage to ([^.]+?) for each ([^.]+?)(\.|$)").ok(),
+            Regex::new(r"\b(draws?|mills?|discards?) (\d+) cards for each ([^.]+?)(\.|$)").ok(),
+        ]
+    });
+    let mut s = s.to_string();
+    if let Some(re) = pt {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                let (p, t) = (&c[3], &c[5]);
+                // One number scales both (or one with the other 0): "+2/+2", "+2/+0".
+                let n = match (p, t) {
+                    (a, b) if a == b => a,
+                    (a, "0") => a,
+                    ("0", b) => b,
+                    _ => return c[0].to_string(),
+                };
+                if n == "1" || n == "0" {
+                    return c[0].to_string();
+                }
+                let x = |v: &str| if v == "0" { "0" } else { "x" };
+                format!(
+                    "{} {}{}/{}{} {}, where x is {n} times the number of {}{}",
+                    &c[1],
+                    &c[2],
+                    x(p),
+                    &c[4],
+                    x(t),
+                    c[6].trim_end(),
+                    &c[7],
+                    &c[8]
+                )
+            })
+            .to_string();
+    }
+    if let Some(re) = damage {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                if &c[2] == "1" {
+                    return c[0].to_string();
+                }
+                format!(
+                    "{} x damage to {}, where x is {} times the number of {}{}",
+                    &c[1], &c[3], &c[2], &c[4], &c[5]
+                )
+            })
+            .to_string();
+    }
+    if let Some(re) = cards {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                if &c[2] == "1" {
+                    return c[0].to_string();
+                }
+                format!(
+                    "{} x cards, where x is {} times the number of {}{}",
+                    &c[1], &c[2], &c[3], &c[4]
+                )
+            })
+            .to_string();
+    }
+    s
+}
+
+/// "With mana value X or less ..., where X is V" -> "with mana value less than or equal to
+/// V ...": the same comparison with the number named in place (CR 107.3).
+fn compared_to_x(s: &str) -> String {
+    static R: OnceLock<Option<(Regex, Regex)>> = OnceLock::new();
+    let Some((re, word)) = R.get_or_init(|| {
+        Some((
+            Regex::new(r"\bx or (less|greater)\b([^.]*?), where x is ([^.]+?)(\.|$)").ok()?,
+            Regex::new(r"\bx\b").ok()?,
+        ))
+    }) else {
+        return s.to_string();
+    };
+    re.replace_all(s, |c: &regex::Captures| {
+        // Only when that X is the only one the definition is for.
+        if word.is_match(&c[2]) {
+            return c[0].to_string();
+        }
+        format!("{} than or equal to {}{}{}", &c[1], &c[3], &c[2], &c[4])
+    })
+    .to_string()
+}
+
 /// Amounts stated as "equal to V" or "for each F" are rewritten to the "X ..., where X is
 /// V" form (CR 107.3: X is defined by the text): both describe the same number.
 fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
@@ -890,6 +1017,8 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
             (r"\b(creates?) an? ([^.]+?) tokens? for each ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is the number of $3$4"),
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
+            (r"\b(creates?) a number of ([^.]+?) tokens? equal to ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is $3$4"),
+            (r"(^|[.:—•] |\n|, )for each ([^,.]+), (creates?) an? ([^.]+?) tokens?(\.|$)", "${1}$3 x $4 tokens, where x is the number of $2$5"),
         ]
         .into_iter()
         .filter_map(|(p, r)| Regex::new(p).ok().map(|re| (re, r)))

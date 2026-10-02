@@ -601,7 +601,12 @@ impl Renderer<'_> {
                         .map_or_else(|| value.clone(), |(_, v, _)| v.clone()),
                     other => other.clone(),
                 };
-                self.stored_values.push((*var, value, false));
+                // A variable stored again (a count set to 0, then to what an instruction
+                // did) holds the later value from here on.
+                match self.stored_values.iter_mut().find(|(x, _, _)| x == var) {
+                    Some(e) => e.1 = value,
+                    None => self.stored_values.push((*var, value, false)),
+                }
                 String::new()
             }
             Effect::Note { value } => {
@@ -714,11 +719,15 @@ impl Renderer<'_> {
                     Some(k) => counter_name(k),
                     None => "counter".into(),
                 };
+                // "Remove all +1/+1 counters from ~": as many as there are on it.
+                let all_of_them = matches!(n, Value::CountersOn(s, k)
+                    if format!("{s:?}") == format!("{what:?}") && k == kind);
                 let t = self.sel(what, Case::Obj);
                 match n {
                     Value::Const(i) if *i >= 1000 => {
                         format!("remove all {} from {t}", plural(&noun))
                     }
+                    _ if all_of_them => format!("remove all {} from {t}", plural(&noun)),
                     _ => {
                         let (c, w) = self.counted(n, &noun);
                         format!("remove {c} from {t}{}", w.unwrap_or_default())
@@ -3267,6 +3276,23 @@ impl Renderer<'_> {
         let mut becomes = Becomes::default();
         let mut where_clauses: Vec<String> = Vec::new();
         for m in mods {
+            // Where the "is a ..." part goes when the parts are written in the order of
+            // the modifications (see `BECOMES`).
+            let contributes = matches!(
+                m,
+                Modification::SetPT(..)
+                    | Modification::CdaPT(..)
+                    | Modification::SetName(_)
+                    | Modification::AddTypes(_)
+                    | Modification::AddSupertypes(_)
+                    | Modification::AddSubtypes(_)
+                    | Modification::SetTypes { .. }
+                    | Modification::SetBasicLandType(_)
+                    | Modification::SetColors(_)
+            );
+            if contributes && !parts.iter().any(|p| p == BECOMES) {
+                parts.push(BECOMES.into());
+            }
             match m {
                 Modification::ModifyPT(p, t) => {
                     let (ps, pw) = self.pt_amount(p);
@@ -3487,6 +3513,67 @@ impl Renderer<'_> {
             }
         }
         let has = if gains { "gains" } else { "has" };
+        // The same modifications written in their order, the granted abilities apart and a
+        // set power and toughness as "with base power and toughness": "gets +2/+2, has
+        // flying, and is an Angel in addition to its other types", "becomes a blue Dragon
+        // with base power and toughness 4/4, loses all abilities, and gains flying".
+        // Cards print either form; the AST is the same.
+        let in_order = if becomes.is_empty() {
+            None
+        } else {
+            let saved_gaps = self.gaps.len();
+            let mut b2 = std::mem::take(&mut becomes);
+            b2.base_form = b2.pt.is_some()
+                && (!b2.subtypes.is_empty() || !b2.add_types.is_empty() || b2.colors.is_some());
+            let r2 = b2.render(self, &[], &[], gains);
+            becomes = b2;
+            becomes.base_form = false;
+            self.gaps.truncate(saved_gaps);
+            r2.map(|(b, still)| {
+                let mut ps = parts.clone();
+                let mut b = b;
+                // "is white in addition to its other colors" joins a type change with no
+                // color of its own: "is a white Angel in addition to its other colors and
+                // types".
+                if becomes.colors.is_none() && becomes.pt.is_none() && becomes.additive {
+                    if let Some(i) = ps.iter().position(|p| {
+                        p.starts_with("is ") && p.ends_with(" in addition to its other colors")
+                    }) {
+                        let colors = ps[i]
+                            .trim_start_matches("is ")
+                            .trim_end_matches(" in addition to its other colors")
+                            .to_string();
+                        if let Some(rest) = b
+                            .strip_prefix("is a ")
+                            .or_else(|| b.strip_prefix("is an "))
+                            .and_then(|r| r.strip_suffix(" in addition to its other types"))
+                        {
+                            b = format!(
+                                "is {} in addition to its other colors and types",
+                                with_article(&format!("{colors} {rest}"))
+                            );
+                            ps.remove(i);
+                        }
+                    }
+                }
+                if let Some(i) = ps.iter().position(|p| p == BECOMES) {
+                    ps[i] = b;
+                }
+                let mut grants = keywords.clone();
+                grants.extend(abilities.iter().cloned());
+                if !grants.is_empty() {
+                    let g = format!("{has} {}", join_list(&grants, "and"));
+                    match ps.iter().position(|p| p == GRANTS) {
+                        Some(i) => ps[i] = g,
+                        None => ps.push(g),
+                    }
+                }
+                ps.retain(|p| p != GRANTS && p != BECOMES);
+                ps.sort_by_key(|p| !p.starts_with("isn't"));
+                (join_list(&ps, "and"), still)
+            })
+        };
+        parts.retain(|p| p != BECOMES);
         if let Some((b, still)) = becomes.render(self, &keywords, &abilities, gains) {
             // Negations come first ("except it isn't legendary and is a 4/4 Hero").
             let at = parts.iter().take_while(|p| p.starts_with("isn't")).count();
@@ -3494,6 +3581,13 @@ impl Renderer<'_> {
             if !still.is_empty() {
                 where_clauses.push(still);
             }
+            parts.retain(|p| p != GRANTS);
+            parts.sort_by_key(|p| !p.starts_with("isn't"));
+            let s = join_list(&parts, "and");
+            return match in_order {
+                Some((s2, _)) if s2 != s => (format!("{{alt:{s}|{s2}}}"), where_clauses.concat()),
+                _ => (s, where_clauses.concat()),
+            };
         } else {
             // "protection from each color" (CR 702.16h).
             let all_colors = ["white", "blue", "black", "red", "green"]
@@ -3676,7 +3770,14 @@ impl Renderer<'_> {
                     }
                     other => {
                         let s = self.value(other);
-                        format!("an amount of {sym} equal to {s}")
+                        // "Add {B} for each charge counter on ~": a count of things.
+                        match s.strip_prefix("the number of ") {
+                            Some(rest) => format!(
+                                "{{alt:{sym} for each {}|an amount of {sym} equal to {s}}}",
+                                singular_head(rest)
+                            ),
+                            None => format!("an amount of {sym} equal to {s}"),
+                        }
                     }
                 }
             }
@@ -4060,6 +4161,9 @@ struct Becomes {
     replaces_creature_types: bool,
     land_type: bool,
     name: Option<String>,
+    /// Write a set power and toughness as "with base power and toughness 4/4" after the
+    /// types (newer Oracle wording) rather than as "a 4/4 ..." before them.
+    base_form: bool,
 }
 
 impl Becomes {
@@ -4119,8 +4223,13 @@ impl Becomes {
             }
         }
         let mut words: Vec<String> = Vec::new();
+        let mut base_pt = None;
         if let Some(pt) = pt {
-            words.push(pt);
+            if self.base_form {
+                base_pt = Some(pt);
+            } else {
+                words.push(pt);
+            }
         }
         words.extend(self.supertypes.iter().cloned());
         if let Some(c) = &self.colors {
@@ -4149,6 +4258,9 @@ impl Becomes {
         }
         if let Some(n) = &self.name {
             s.push_str(&format!(" named {n}"));
+        }
+        if let Some(pt) = base_pt {
+            s.push_str(&format!(" with base power and toughness {pt}"));
         }
         s.push_str(&with);
         let mut still = String::new();
@@ -4195,6 +4307,10 @@ pub(crate) fn strip_controller(f: &Filter) -> Filter {
 
 /// Where the granted keywords and abilities go among the parts of a verb phrase.
 const GRANTS: &str = "\u{1}grants";
+
+/// Where the "is a [types]" part goes among the parts of a verb phrase written in the
+/// order of the modifications.
+const BECOMES: &str = "\u{1}becomes";
 
 fn unreachable_player() -> PlayerRef {
     PlayerRef::You
@@ -4366,4 +4482,31 @@ fn starts_by_sacrificing(e: &Effect, s: &Sel) -> bool {
         },
         e => sacrifices(e),
     }
+}
+
+/// A counted noun phrase in the singular: "charge counters on ~" -> "charge counter on
+/// ~", "creatures in your party" -> "creature in your party" (the head noun is the word
+/// before the first preposition or clause).
+fn singular_head(phrase: &str) -> String {
+    let words: Vec<&str> = phrase.split(' ').collect();
+    let preps = [
+        "on", "in", "you", "your", "among", "that", "with", "attached",
+    ];
+    let head = words
+        .iter()
+        .position(|w| preps.contains(w))
+        .unwrap_or(words.len())
+        .saturating_sub(1);
+    words
+        .iter()
+        .enumerate()
+        .map(|(i, w)| {
+            if i == head && w.ends_with('s') && !w.ends_with("ss") {
+                w[..w.len() - 1].to_string()
+            } else {
+                w.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }

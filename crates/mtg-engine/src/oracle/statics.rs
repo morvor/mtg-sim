@@ -527,11 +527,9 @@ fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
     {
         let (n, rest) = parse_number(r)?;
         let rest = end(rest);
-        let cmp = if let Some(x) = rest
-            .strip_suffix(" or less life")
-            .or_else(|| rest.strip_prefix("or less life"))
-        {
-            let _ = x;
+        // The whole rest: "you have 30 or more life and an opponent has 10 or less life"
+        // is two conditions, not one ending in "or less life".
+        let cmp = if rest == "or less life" {
             Cmp::Le
         } else if rest == "or more life" {
             Cmp::Ge

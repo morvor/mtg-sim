@@ -1054,8 +1054,14 @@ impl Renderer<'_> {
             Cmp::Eq => format!("is {b}"),
             Cmp::Ne => format!("isn't {b}"),
             Cmp::Lt => format!("is less than {b}"),
+            Cmp::Le if !super::nouns::is_plain_number(&b) => {
+                format!("is less than or equal to {b}")
+            }
             Cmp::Le => format!("is {b} or less"),
             Cmp::Gt => format!("is greater than {b}"),
+            Cmp::Ge if !super::nouns::is_plain_number(&b) => {
+                format!("is greater than or equal to {b}")
+            }
             Cmp::Ge => format!("is {b} or greater"),
         };
         format!("{a} {rel}")
