@@ -154,3 +154,43 @@ fn vraska_the_silencer_returns_the_card_as_a_treasure() {
     assert_eq!(mana, 1);
 }
 
+
+#[test]
+fn shallow_grave_returned_creature_gains_haste_and_is_exiled_at_end_step() {
+    cr!("400.7", "603.7");
+    assert_supported(&["Shallow Grave", "Zirilan of the Claw"]);
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Lightning Bolt");
+    t.graveyard(P0, "Hill Giant");
+    t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 2);
+    let s = t.hand(P0, "Shallow Grave");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.cast(P0, s).go();
+    t.resolve();
+    // The top creature card: the Bears (put into the graveyard last).
+    let bears = t.named_on_battlefield("Grizzly Bears")[0];
+    assert!(t.named_on_battlefield("Hill Giant").is_empty());
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Haste));
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.in_exile("Grizzly Bears"));
+}
+
+#[test]
+fn zirilan_found_dragon_gains_haste_and_is_exiled() {
+    cr!("400.7", "603.7");
+    let mut t = TestGame::new(2);
+    let z = t.battlefield(P0, "Zirilan of the Claw");
+    t.library_top(P0, "Shivan Dragon");
+    t.lands(P0, "Mountain", 3);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.activate(P0, z, 0, &[]).unwrap();
+    t.resolve();
+    let d = t.named_on_battlefield("Shivan Dragon")[0];
+    assert!(t.obj_now(d).has_keyword(KeywordKind::Haste));
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(t.in_exile("Shivan Dragon"));
+}

@@ -1032,3 +1032,93 @@ fn each_player_controls_as_long_as(l: &str, text: &str, _ctx: &CompileContext) -
 }
 
 inventory::submit! { StaticPattern { name: "grants: [objects] each player controls have ... as long as that player controls ...", priority: 220, parse: each_player_controls_as_long_as } }
+
+// ---------------------------------------------------------------------------
+// Grants to an object an instruction just put onto the battlefield
+// ---------------------------------------------------------------------------
+
+/// The last instruction of `e` (through sequences).
+fn last_instruction(e: &Effect) -> &Effect {
+    match e {
+        Effect::Seq(v) => v.last().map_or(e, last_instruction),
+        other => other,
+    }
+}
+
+/// "Return the top creature card of your graveyard to the battlefield. That creature
+/// gains haste until end of turn." (Shallow Grave), "... put that card onto the
+/// battlefield, then shuffle. That Dragon gains haste until end of turn." (Zirilan of
+/// the Claw): the pronoun names the permanent the instruction put onto the battlefield
+/// (the new object, CR 400.7), which the zone change records.
+fn grant_to_returned(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let put = match last_instruction(prev) {
+        Effect::Move { to, what } => {
+            to.zone == ZoneKind::Battlefield && !matches!(what, Sel::Target(_) | Sel::This)
+        }
+        Effect::Search { to, count, .. } => {
+            to.zone == ZoneKind::Battlefield && matches!(count, Value::Const(1))
+        }
+        _ => false,
+    };
+    if !put || !matches!(b.it, Sel::Var(vars::IT)) && !super::oracle_hardening_referents::is_no_referent(&b.it) {
+        return false;
+    }
+    let mut words = l.splitn(3, ' ');
+    let (w1, w2) = (words.next().unwrap_or(""), words.next().unwrap_or(""));
+    let rest = match (w1, w2) {
+        ("it", _) => &l[3..],
+        ("that", w) if w == "creature" || crate::oracle::phrases::subtype_word(w).is_some() => {
+            &l[5 + w.len() + 1..]
+        }
+        _ => return false,
+    };
+    if !(rest.starts_with("gains ") || rest.starts_with("gets ")) {
+        return false;
+    }
+    let saved = b.it.clone();
+    b.it = Sel::Var(vars::IT);
+    let Some(e) = crate::oracle::effects::parse_sentence(&format!("it {rest}"), b) else {
+        b.it = saved;
+        return false;
+    };
+    if !matches!(e, Effect::Modify { what: Sel::Var(vars::IT), .. }) {
+        b.it = saved;
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "grants: that creature (just put onto the battlefield) gains ...", priority: 70, apply: grant_to_returned } }
+
+/// "... That Dragon gains haste until end of turn. Exile it at the beginning of the next
+/// end step." (Zirilan of the Claw, Shallow Grave): the object an earlier instruction put
+/// onto the battlefield and the grant was about.
+fn delayed_after_grant(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let var = match last_instruction(prev) {
+        Effect::Modify {
+            what: Sel::Var(v), ..
+        } if (*v == vars::IT || *v == super::oracle_hardening_referents::INTRODUCED)
+            && matches!(b.it, Sel::Var(x) if x == *v) =>
+        {
+            *v
+        }
+        _ => return false,
+    };
+    let Some((verb, r, step)) = super::damage_removal::delayed_parts(l) else {
+        return false;
+    };
+    let tail = match r.strip_prefix("it") {
+        Some(t) if t.is_empty() || t.starts_with(' ') => t.trim(),
+        _ => return false,
+    };
+    let Some(e) = super::damage_removal::delayed_removal(verb, Sel::Var(var), tail, step) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "grants: delayed removal after a grant", priority: 70, apply: delayed_after_grant } }
