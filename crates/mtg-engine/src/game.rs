@@ -641,6 +641,10 @@ pub struct Game {
     /// Multiplayer bookkeeping: ranges of influence, Grand Melee turn markers (CR 800–811).
     pub multiplayer: crate::multiplayer::MultiplayerState,
     pub planechase: crate::planechase::PlanarState,
+    /// Records kept by hand-written card abilities (see `cards/`).
+    pub cards: crate::cards::CardState,
+    /// Every event, for observers outside the engine (off unless enabled).
+    pub event_feed: crate::event_feed::EventFeed,
 }
 
 impl Game {
@@ -747,6 +751,8 @@ impl Game {
             modal_history: Default::default(),
             multiplayer: Default::default(),
             planechase: Default::default(),
+            cards: Default::default(),
+            event_feed: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

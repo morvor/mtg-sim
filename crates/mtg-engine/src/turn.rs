@@ -722,6 +722,10 @@ impl Game {
         if step == Step::Draw && self.first_turn_draw_skipped(active) {
             return true;
         }
+        // Skips that rules of keywords and hand-written abilities define.
+        if crate::kw::skips_step(self, step, active) {
+            return true;
+        }
         let kind = match step {
             Step::Untap => StepKind::Untap,
             Step::Upkeep => StepKind::Upkeep,
@@ -898,6 +902,9 @@ impl Game {
         // CR 514.2: remove damage; end "until end of turn" effects.
         crate::special_actions::end_of_turn(self);
         for id in self.battlefield.clone() {
+            if crate::kw::keeps_damage_in_cleanup(self, id) {
+                continue;
+            }
             let o = &mut self.objects[id.0 as usize];
             o.damage = 0;
             o.deathtouch_damage = false;

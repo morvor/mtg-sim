@@ -355,6 +355,13 @@ impl Game {
     pub fn lookback_snapshot(&self) -> LookbackSnapshot {
         LookbackSnapshot {
             sources: self.current_trigger_sources(),
+            additional_triggers: self
+                .statics
+                .other
+                .iter()
+                .filter(|(_, _, e)| matches!(e, StaticEffect::AdditionalTrigger { .. }))
+                .cloned()
+                .collect(),
         }
     }
 
@@ -1559,7 +1566,7 @@ impl Game {
         let deathtouch = src.has_keyword(KeywordKind::Deathtouch);
         match target {
             Entity::Player(p) => {
-                if infect {
+                if infect || crate::kw::damage_as_though_infect(self, source, p) {
                     // CR 120.3b; the counters can be modified by replacement effects
                     // (CR 120.4c).
                     self.put_damage_counters(Entity::Player(p), counters::POISON, amount, source);
