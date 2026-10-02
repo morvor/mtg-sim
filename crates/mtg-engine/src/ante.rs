@@ -328,6 +328,56 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
             g.move_objects(moves);
             true
         }
+        GAIN_OWNERSHIP => {
+            // CR 407.3: only ante cards change a card's owner.
+            if !ctx.source.is_some_and(|s| object_is_ante_card(g, s)) {
+                return true;
+            }
+            let p = ctx.controller;
+            for o in it_objects(ctx) {
+                let o = g.current(o);
+                if g.is_live(o) {
+                    g.objects[o.0 as usize].owner = p;
+                    g.log(|g| format!("{p} becomes the owner of {}", g.describe(o)));
+                }
+            }
+            g.dirty = true;
+            true
+        }
+        EXCHANGE_WITH_TOP => {
+            let p = ctx.controller;
+            let cards: Vec<ObjectId> = it_objects(ctx)
+                .into_iter()
+                .map(|o| g.current(o))
+                .filter(|o| g.is_live(*o) && g.obj(*o).zone == Zone::Ante)
+                .collect();
+            let Some(card) = cards.first().copied() else {
+                return true;
+            };
+            let Some(top) = g.library_top(p) else {
+                return true;
+            };
+            let base = MoveEv {
+                obj: card,
+                to: Zone::Library(p),
+                pos: LibraryPosition::Top,
+                cause: MoveCause::Effect,
+                by: Some(p),
+                etb: EtbInfo::default(),
+                source: ctx.source,
+            };
+            let to_ante = MoveEv {
+                obj: top,
+                to: Zone::Ante,
+                ..base.clone()
+            };
+            // An exchange of zones happens only if both objects can move (CR 701.12a).
+            if g.move_forbidden(&base) || g.move_forbidden(&to_ante) {
+                return true;
+            }
+            g.move_objects(vec![to_ante, base]);
+            true
+        }
         _ => false,
     }
 }

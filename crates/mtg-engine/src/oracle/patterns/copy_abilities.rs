@@ -47,6 +47,14 @@ fn copy_target_ability(l: &str, b: &mut Builder) -> Option<Effect> {
     if !r.starts_with("target ") {
         return None;
     }
+    // "... twice" (Mister Fantastic), "... X times" (Gogo, Master of Mimicry).
+    let (r, count) = if let Some(r) = r.strip_suffix(" twice") {
+        (r, Value::c(2))
+    } else if let Some(r) = r.strip_suffix(" x times") {
+        (r, Value::X)
+    } else {
+        (r, Value::c(1))
+    };
     let (mut spec, tail) = parse_target(r)?;
     let TargetKind::Ability(f) = &mut spec.what else {
         return None;
@@ -70,7 +78,7 @@ fn copy_target_ability(l: &str, b: &mut Builder) -> Option<Effect> {
     let slot = b.add_target(spec, &text);
     Some(Effect::CopySpell {
         what: Sel::Target(slot),
-        count: Value::c(1),
+        count,
         new_targets: false,
     })
 }
