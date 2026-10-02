@@ -1162,6 +1162,7 @@ impl Game {
                 ctx.prev_value = discarded.len() as i64;
                 ctx.prev_happened = !discarded.is_empty();
                 ctx.prev_affected = discarded.clone();
+                ctx.set_var(crate::discard_rules::DISCARDED, discarded.clone());
                 ctx.set_var(vars::IT, discarded);
             }
             Effect::DiscardHand { who } => {

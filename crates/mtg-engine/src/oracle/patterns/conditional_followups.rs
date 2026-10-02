@@ -41,7 +41,9 @@ fn if_condition_continuation(l: &str, prev: &mut Effect, b: &mut Builder) -> boo
     if x.ends_with(" instead") || x.starts_with("instead ") || matches!(prev, Effect::Noop) {
         return false;
     }
-    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx)
+        .or_else(|| super::conditions_referents::parse_condition_with(c, b))
+    else {
         return false;
     };
     let before = parts(prev);
@@ -155,6 +157,7 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
             otherwise: Box::new(Effect::Noop),
         });
     }
+    let original = c;
     // Where "it" is the ability's source ("Whenever ~ attacks, you win the game if there
     // are twenty or more counters on it"), so is the condition's "it".
     let about_source;
@@ -180,7 +183,38 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
                 })
             })?
         }
-        None => return None,
+        // "Destroy target creature if it's white.", "draw a card if that player has more
+        // cards in hand than each other player": the condition is about what the
+        // instruction (or an earlier one) names, so the instruction is read first.
+        None => {
+            let it_before = b.it.clone();
+            let e = crate::oracle::effects::parse_clause(x, b)?;
+            // The condition is checked before the instruction happens: "it" is what it
+            // was before, or a target the instruction named, not the objects it produced
+            // ("Put target creature card ... onto the battlefield ... if its mana value is
+            // ...").
+            let it_after = b.it.clone();
+            if matches!(it_after, Sel::Var(_)) {
+                let new_object_target = (first_new..b.targets.len())
+                    .rev()
+                    .find(|i| !matches!(b.targets[*i].what, TargetKind::Player(_)));
+                b.it = match new_object_target {
+                    Some(i) => Sel::Target(i as u8),
+                    None => it_before,
+                };
+            }
+            let cond = super::conditions_referents::parse_condition_with(original, b);
+            b.it = it_after;
+            let Some(cond) = cond else {
+                b.targets.truncate(first_new);
+                return None;
+            };
+            return Some(Effect::If {
+                cond,
+                then: Box::new(e),
+                otherwise: Box::new(Effect::Noop),
+            });
+        }
     };
     let e = crate::oracle::effects::parse_clause(x, b)?;
     targets_only_if_paid(&cond, b, first_new);

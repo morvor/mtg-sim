@@ -403,30 +403,10 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         return Some(e);
     }
     (b.targets, b.it, b.it_player, b.group) = saved;
-    // "If it isn't a creature, it becomes ...": a state of the object "it" refers to,
-    // when the patterns didn't understand the sentence as a whole (as they do "If it's a
-    // land card, you may put it onto the battlefield").
-    let r = l.strip_prefix("if ")?;
-    let (c, rest) = r.split_once(", ")?;
-    // "It" must refer to an object an earlier sentence mentioned (a target, the trigger's
-    // object, what an effect moved): not the source by default, when the earlier sentence
-    // didn't say what "it" is ("Target player exiles a card from their graveyard. If it's
-    // a creature card, ..."). An alternative of several words after "or" ("an enchanted
-    // creature or enchantment creature") isn't read as sharing the first one's adjectives.
-    if matches!(b.it, Sel::None | Sel::This)
-        || c.split_once(" or ")
-            .is_some_and(|(_, alt)| alt.contains(' '))
-    {
-        return None;
-    }
-    let f = super::patterns::statics_conditions::pronoun_state(c)?;
-    let cond = Condition::SelMatches(b.it.clone(), f);
-    let e = parse_clause(rest, b)?;
-    Some(Effect::If {
-        cond,
-        then: Box::new(e),
-        otherwise: Box::new(Effect::Noop),
-    })
+    // "If it isn't a creature, it becomes ...", "If that creature was a Human, ...": a
+    // condition about what an earlier part of the text refers to, when the patterns
+    // didn't understand the sentence as a whole (see `patterns::conditions_referents`).
+    super::patterns::conditions_referents::leading_if(l, b)
 }
 
 /// "if [condition], [effect]"

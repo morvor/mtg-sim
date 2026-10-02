@@ -155,10 +155,17 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     else {
         return false;
     };
-    if matches!(prev, Effect::Seq(_) | Effect::Noop) || !pronoun_free(c) {
+    if matches!(prev, Effect::Seq(_) | Effect::Noop) {
         return false;
     }
-    let Some(cond) = parse_condition(c, b.ctx) else {
+    // A condition about what an earlier sentence named ("If that creature is a Human, put
+    // two +1/+1 counters on it instead.") is resolved with the builder's referents.
+    let cond = if pronoun_free(c) {
+        parse_condition(c, b.ctx)
+    } else {
+        super::conditions_referents::parse_condition_with(c, b)
+    };
+    let Some(cond) = cond else {
         return false;
     };
     // "If ~ was bargained, it deals twice X damage to that permanent instead": the subject
