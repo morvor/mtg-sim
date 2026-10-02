@@ -12,6 +12,8 @@
 //!   permission whose spells may be cast any time their player could cast an instant
 //!   (CR 702.8a). (Bolas's Citadel's "... pay life equal to its mana value rather than
 //!   pay its mana cost" is in `r601_play_from_top_paying_life.rs`.)
+//! * "Until end of turn, you may play lands and cast spells from your graveyard."
+//!   (Yawgmoth's Will): a resolved effect's permission for the rest of the turn;
 //! * "During each of your turns, you may play a land and cast a permanent spell of each
 //!   permanent type from your graveyard." (Muldrotha, the Gravetide): one once-each-turn
 //!   permission per permanent type (CR 110.4), each used up by the card played with it
@@ -215,6 +217,38 @@ fn land_and_spell_of_each_permanent_type(
     Some(v)
 }
 
+/// "Until end of turn, you may play lands and cast spells from your graveyard."
+/// (Yawgmoth's Will, Gaea's Will): a permission to play cards from the graveyard given to
+/// the player for the rest of the turn (CR 611.2a), with the usual costs and timing rules
+/// (CR 601.2, 305.1). A player who also has another permission for a card chooses which
+/// one they use (see `permissions.rs`).
+fn play_from_graveyard_this_turn(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l)
+        .strip_prefix("until end of turn, you may ")?
+        .strip_suffix(" from your graveyard")?;
+    let (lands, spells, what) = match r {
+        "play lands and cast spells" => (true, true, Filter::Any),
+        "cast spells" => (false, true, Filter::Any),
+        "play lands" => (true, false, Filter::Type(CardType::Land)),
+        _ => return None,
+    };
+    Some(Effect::AddPlayerEffect {
+        who: PlayerRef::You,
+        effect: PlayerModification::PlayPermission(PlayPermission {
+            who: PlayerRel::You,
+            zone: ZoneKind::Graveyard,
+            top_only: false,
+            what,
+            lands,
+            spells,
+            cost: None,
+            flash: false,
+        }),
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "cast permission terms: until end of turn, you may play lands and cast spells from your graveyard", priority: 90, parse: play_from_graveyard_this_turn } }
 inventory::submit! { FollowupPattern { name: "cast permission terms: if you cast a spell this way, pay life equal to its mana value rather than pay its mana cost", priority: 85, apply: pay_life_instead } }
 inventory::submit! { EffectPattern { name: "cast permission terms: each opponent exiles the top card of their library", priority: 90, parse: each_exiles_top } }
 inventory::submit! { FollowupPattern { name: "cast permission terms: you may cast spells from among those cards this turn", priority: 90, apply: may_cast_spells_from_among } }

@@ -821,3 +821,80 @@ fn hurl_through_hell_the_card_is_cast_with_normal_timing_and_mana_of_any_color()
     t.lands(P0, "Wastes", 1);
     t.cast(P0, card).target(Entity::Player(P1)).go();
 }
+
+#[test]
+fn gaeas_will_lands_and_spells_from_the_graveyard_follow_the_usual_rules() {
+    cr!("305.2", "307.1", "601.3", "601.2f");
+    ruling!(
+        "Gaea's Will",
+        "The lands you play and spells you cast from your graveyard must follow the usual timing restrictions, and you must pay any costs for spells you cast."
+    );
+    supported("Gaea's Will");
+    let mut t = TestGame::new(2);
+    let forest = t.graveyard(P0, "Forest");
+    let island = t.graveyard(P0, "Island");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    assert!(!can_play_land(&mut t, P0, forest));
+    // Gaea's Will has no mana cost: cast it as suspend would, without paying it.
+    let will = t.hand(P0, "Gaea's Will");
+    mtg_engine::casting::cast_during_resolution(&mut t.g, P0, will, CastMethod::Free)
+        .expect("cast Gaea's Will");
+    t.resolve_all();
+    // One land play.
+    assert!(can_play_land(&mut t, P0, forest));
+    t.play_land(P0, forest).expect("play the Forest");
+    assert!(!can_play_land(&mut t, P0, island), "no land play left");
+    // Grizzly Bears: its mana cost is paid, at sorcery speed only.
+    assert!(legal_cast_methods(&mut t, P0, bears).is_empty(), "one land: {{1}}{{G}} unpaid");
+    t.lands(P0, "Forest", 1);
+    t.advance_to_step(Step::BeginningOfCombat);
+    t.g.turn.priority = Some(P0);
+    assert!(legal_cast_methods(&mut t, P0, bears).is_empty(), "not during combat");
+    t.advance_to_step(Step::PostcombatMain);
+    assert_eq!(legal_cast_methods(&mut t, P0, bears), vec![CastMethod::Normal]);
+    t.cast(P0, bears).go();
+    assert_eq!(tapped_lands(&t, P0), 2);
+}
+
+#[test]
+fn karador_with_yawgmoths_will_uses_the_permission_chosen() {
+    cr!("601.2", "601.3");
+    ruling!(
+        "Muldrotha, the Gravetide",
+        "If multiple effects allow you to play a card from your graveyard, you must announce which permission you're using as you begin to play the card."
+    );
+    supported("Karador, Ghost Chieftain");
+    supported("Yawgmoth's Will");
+    for use_karador in [false, true] {
+        let mut t = TestGame::new(2);
+        let karador = t.battlefield(P0, "Karador, Ghost Chieftain");
+        let bears = t.graveyard(P0, "Grizzly Bears");
+        let will = t.hand(P0, "Yawgmoth's Will");
+        add_mana(&mut t, P0, ManaType::B, 3);
+        let will_spell = t.cast(P0, will).go();
+        t.resolve_all();
+        t.lands(P0, "Forest", 2);
+        // By default, the permission that can be used any number of times.
+        if use_karador {
+            t.answer_choose(P0, &[Entity::Object(karador)]);
+        }
+        let from = t.asked().len();
+        t.cast(P0, bears).go();
+        let candidates = t.asked()[from..].iter().find_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        });
+        assert_eq!(
+            candidates.map(|c| c.len()),
+            Some(2),
+            "Karador's or Yawgmoth's Will's ({will_spell:?})"
+        );
+        let used = t
+            .g
+            .history
+            .once_permissions_used
+            .iter()
+            .any(|(o, _)| *o == karador);
+        assert_eq!(used, use_karador);
+    }
+}
