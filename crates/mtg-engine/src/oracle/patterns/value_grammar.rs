@@ -1248,8 +1248,9 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                     && !t.trim_start().starts_with("with ")
                     && !t.trim_start().starts_with("that ")
                 {
+                    // A player who left the game: their hand as last known (CR 800.4i).
                     let v = match (&p, z) {
-                        (PlayerRef::You, ZoneKind::Hand) => Value::HandSize(PlayerRef::You),
+                        (_, ZoneKind::Hand) => Value::HandSize(p.clone()),
                         (_, ZoneKind::Library) => Value::LibrarySize(p.clone()),
                         (p, z) => Value::Count(Filter::and(vec![
                             Filter::Card,

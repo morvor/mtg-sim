@@ -12,41 +12,13 @@ use crate::oracle::CompileContext;
 /// or a value phrase understood by the core compiler. Returns the value and the rest.
 pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim();
-    // "the number of cards in their hand minus 4" (Black Vise).
-    if let Some((a, r)) = s.rsplit_once(" minus ") {
-        if let Some((n @ Value::Const(_), tail)) = parse_number(r) {
-            if end(tail).is_empty() {
-                if let Some((v, _)) = value_phrase(a, b).filter(|(_, r)| end(r).is_empty()) {
-                    return Some((Value::Diff(Box::new(v), Box::new(n)), tail.to_string()));
-                }
-            }
-        }
-    }
     // "the number of times this ability has resolved this turn" (this resolution
     // included; Bronze Cudgels' ruling).
     if let Some(r) = s.strip_prefix("the number of times this ability has resolved this turn") {
         return Some((Value::TimesResolvedThisTurn, r.to_string()));
     }
-    // "the number of cards in their hand": "their" is "that player" (Black Vise).
-    for p in [
-        "the number of cards in their hand",
-        "the number of cards in that player's hand",
-    ] {
-        if let Some(r) = s.strip_prefix(p) {
-            // With no player mentioned before, "their" has no antecedent here.
-            if super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
-                return None;
-            }
-            return Some((Value::HandSize(b.it_player.clone()), r.to_string()));
-        }
-    }
-    // "3 minus the number of cards in their hand" (The Rack).
-    if let Some((n, r)) = parse_number(s) {
-        if let (Value::Const(_), Some(r)) = (&n, r.trim_start().strip_prefix("minus ")) {
-            let (v, rest) = value_phrase(r, b)?;
-            return Some((Value::Diff(Box::new(n), Box::new(v)), rest));
-        }
-    }
+    // "the number of cards in their hand minus 4" (Black Vise), "3 minus the number of
+    // cards in their hand" (The Rack): the value grammar.
     // "the revealed card's mana value", after an instruction revealing a card (which "it"
     // then names, e.g. "Target opponent reveals a card at random from their hand.").
     if let Some(r) = s.strip_prefix("the revealed card's mana value") {
