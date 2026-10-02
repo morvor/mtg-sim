@@ -123,6 +123,7 @@ fn game_rules_still_put_permanents_into_the_graveyard() {
 #[test]
 fn your_triggered_abilities_cant_exile_your_creature_tokens() {
     cr!("701.21a", "702.116a");
+    ruling!("The Master, Multiplied", "the part of myriad that makes you exile the creature tokens at end of combat is a triggered ability");
     let mut t = TestGame::new(3);
     let master = t.battlefield(P0, "The Master, Multiplied");
     t.set_step(P0, Step::BeginningOfCombat);
@@ -161,4 +162,52 @@ fn a_special_action_from_an_opponents_permanent_may_sacrifice() {
     let before = t.graveyard_size(P0);
     t.g.take_action(P0, sa);
     assert_eq!(t.graveyard_size(P0), before + 1);
+}
+
+#[test]
+fn an_opponents_annihilator_trigger_cant_make_you_sacrifice() {
+    cr!("701.21a", "702.86a");
+    ruling!("Tajuru Preserver", "if it would force you to sacrifice a permanent (as the annihilator ability does), you just don't");
+    let run = |with_tajuru: bool| {
+        let mut t = TestGame::new(2);
+        if with_tajuru {
+            t.battlefield(P0, "Tajuru Preserver");
+        }
+        let a = t.battlefield(P0, "Grizzly Bears");
+        let b = t.battlefield(P0, "Forest");
+        let crusher = t.battlefield(P1, "Ulamog's Crusher");
+        t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+        t.set_step(P1, Step::BeginningOfCombat);
+        t.attack(&[(crusher, Entity::Player(P0))], &[]);
+        t.resolve_all();
+        t.on_battlefield(a) as u32 + t.on_battlefield(b) as u32
+    };
+    // Without Tajuru Preserver, annihilator 2 takes both.
+    assert_eq!(run(false), 0);
+    assert_eq!(run(true), 2);
+}
+
+#[test]
+fn an_opponents_sacrifice_all_but_spell_sacrifices_nothing() {
+    cr!("701.21a");
+    ruling!("Sigarda, Host of Herons", "if it would force you to sacrifice a permanent, you just don't");
+    let mut t = TestGame::new(2);
+    let sigarda = t.battlefield(P0, "Sigarda, Host of Herons");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let forests: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Forest")).collect();
+    let theirs = [
+        t.battlefield(P1, "Grizzly Bears"),
+        t.battlefield(P1, "Grizzly Bears"),
+    ];
+    // Cataclysm: "Each player chooses from among the permanents they control an artifact,
+    // a creature, an enchantment, and a land, then sacrifices the rest."
+    t.lands(P1, "Plains", 4);
+    let c = t.hand(P1, "Cataclysm");
+    t.set_step(P1, Step::PrecombatMain);
+    t.cast(P1, c).go();
+    t.resolve();
+    assert!(t.on_battlefield(sigarda) && t.on_battlefield(bears));
+    assert!(forests.iter().all(|f| t.on_battlefield(*f)));
+    // P1's own spell still makes P1 sacrifice theirs.
+    assert_eq!(theirs.iter().filter(|o| t.on_battlefield(**o)).count(), 1);
 }

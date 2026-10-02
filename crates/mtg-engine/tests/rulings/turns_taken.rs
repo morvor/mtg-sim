@@ -47,8 +47,12 @@ fn it_counts_the_turns_you_have_taken_not_the_games_turns() {
     assert_eq!(t.g.turn.number, 6);
     assert_eq!(t.g.player(P1).turns_taken, 3);
     assert!(!try_cast_avenger(&mut t, P1));
-    // An extra turn is one of the turns P0 has taken: after Time Walk on P0's third turn,
-    // the extra turn is P0's fourth.
+    // Jace Reawakened works the same way.
+    t.lands(P1, "Island", 3);
+    let jace = t.hand(P1, "Jace Reawakened");
+    assert!(t.cast(P1, jace).try_go().is_err());
+    // An extra turn is one of the turns P0 has taken: after Time Walk on P0's fourth turn,
+    // the extra turn is P0's fifth.
     next_main(&mut t, P0);
     t.lands(P0, "Island", 2);
     let tw = t.hand(P0, "Time Walk");
@@ -57,7 +61,7 @@ fn it_counts_the_turns_you_have_taken_not_the_games_turns() {
     next_main(&mut t, P0);
     assert_eq!(t.g.turn.number, 8);
     assert_eq!(t.g.player(P0).turns_taken, 5);
-    // Jace Reawakened works the same way.
+    // On P0's turns Jace may be cast.
     t.lands(P0, "Island", 3);
     let jace = t.hand(P0, "Jace Reawakened");
     assert!(t.cast(P0, jace).try_go().is_ok());

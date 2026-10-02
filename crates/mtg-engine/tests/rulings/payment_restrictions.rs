@@ -94,14 +94,25 @@ fn a_resolving_spell_still_makes_players_sacrifice_creatures() {
     cr!("118.3", "701.21a");
     ruling!("Angel of Jubilation", "Other things may still cause players to pay life or sacrifice creatures, such as a resolving spell or ability");
     ruling!("Yasharn, Implacable Earth", "Other things may still cause players to pay life or sacrifice creatures, such as a resolving spell or ability");
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Angel of Jubilation");
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    t.lands(P0, "Swamp", 2);
-    let e = t.hand(P0, "Diabolic Edict");
-    t.cast(P0, e).target(P1).go();
-    t.resolve();
-    assert!(!t.on_battlefield(bears));
+    for card in ["Angel of Jubilation", "Yasharn, Implacable Earth"] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, card);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.lands(P0, "Swamp", 2);
+        let e = t.hand(P0, "Diabolic Edict");
+        t.cast(P0, e).target(P1).go();
+        t.resolve();
+        assert!(!t.on_battlefield(bears), "{card}");
+        // Life paid as an ability resolves (ward) is still paid.
+        let witch = t.battlefield(P1, "Sedgemoor Witch");
+        t.lands(P0, "Mountain", 1);
+        let bolt = t.hand(P0, "Lightning Bolt");
+        t.answer_yes(P0, true);
+        t.cast(P0, bolt).target(witch).go();
+        t.resolve_all();
+        assert_eq!(t.life(P0), 17, "{card}");
+        assert!(!t.on_battlefield(witch), "{card}");
+    }
 }
 
 #[test]

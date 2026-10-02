@@ -581,6 +581,7 @@ pub fn pay_mana_cost_of(
     let spend = SpendContext {
         is_ability: true,
         source: src,
+        cost_of: ctx.cost_of,
         ..Default::default()
     };
     pay_mana(g, p, &m, &spend, None).is_some()

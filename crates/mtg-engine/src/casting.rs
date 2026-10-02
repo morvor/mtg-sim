@@ -3326,6 +3326,7 @@ impl Game {
                 let spend = SpendContext {
                     is_ability: true,
                     source: src,
+                    cost_of: ctx.cost_of,
                     ..Default::default()
                 };
                 let sub = self.pay_total_cost(p, &flat, src, &spend, ctx)?;
