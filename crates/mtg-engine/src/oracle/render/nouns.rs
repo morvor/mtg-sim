@@ -280,9 +280,27 @@ impl Renderer<'_> {
         match f {
             Filter::Any => {}
             Filter::And(v) => {
+                // "a 1/1 creature": power and toughness both exactly given.
+                let pt = v.iter().find_map(|x| match x {
+                    Filter::Power(Cmp::Eq, p) => p.as_const(),
+                    _ => None,
+                });
+                let tt = v.iter().find_map(|x| match x {
+                    Filter::Toughness(Cmp::Eq, t) => t.as_const(),
+                    _ => None,
+                });
+                let both = pt.is_some() && tt.is_some();
+                if let (Some(p), Some(t)) = (pt, tt) {
+                    np.status.push(format!("{p}/{t}"));
+                }
                 // The same quality twice says it once.
                 let mut seen: Vec<String> = Vec::new();
                 for x in v {
+                    if both
+                        && matches!(x, Filter::Power(Cmp::Eq, _) | Filter::Toughness(Cmp::Eq, _))
+                    {
+                        continue;
+                    }
                     let k = format!("{x:?}");
                     if seen.contains(&k) {
                         continue;
@@ -1062,6 +1080,10 @@ impl Renderer<'_> {
             } else if z == "exile" {
                 // "Whenever you cast a spell from exile", "spells cast from exile".
                 "{opt:cast} from exile".to_string()
+            } else if z == "hand" || z == "library" {
+                // A spell cast from a hand or library is cast from its caster's (CR 601.2a:
+                // a player casts the cards they may).
+                format!("{{alt:{{opt:cast}} from your {z}|cast from a {z}}}")
             } else {
                 format!("cast from a {z}")
             };

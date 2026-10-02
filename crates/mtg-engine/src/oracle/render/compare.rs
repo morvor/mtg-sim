@@ -496,6 +496,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               Prevent all damage that would be dealt to him\"): `~it`, the object itself.",
     },
     Equivalence {
+        pattern: r"\bher(\.|,|$| deal\b)",
+        replacement: "~it$1",
+        why: "See \"he\": \"her\" as an object (\"put a +1/+1 counter on her\"), not the \
+              possessive.",
+    },
+    Equivalence {
         pattern: r"\bhis\b",
         replacement: "~it's",
         why: "See \"he\".",

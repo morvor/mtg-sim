@@ -331,7 +331,15 @@ impl Renderer<'_> {
     pub(crate) fn activated(&mut self, a: &ActivatedAbility) -> String {
         let saved = self.zone;
         self.zone = a.zone;
-        let cost = self.cost(&a.cost);
+        let mut cost = self.cost(&a.cost);
+        // CR 606.4: a loyalty ability's "−X" cost removes X loyalty counters.
+        if a.is_loyalty
+            && a.cost.mana.is_none()
+            && matches!(a.cost.parts.as_slice(), [CostPart::RemoveCounters { kind, count: Value::X }]
+                if kind == crate::types::counters::LOYALTY)
+        {
+            cost = "−X".to_string();
+        }
         // CR 716.2a: "[Cost]: Level N" is "[Cost]: This Class's level becomes N. Activate
         // only if this Class is level N-1 and only as a sorcery."
         if let Effect::SetClassLevel { level } = &a.body.effect {

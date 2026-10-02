@@ -2082,11 +2082,13 @@ impl Renderer<'_> {
                     }
                     A::PlusTokens { spec, count } => {
                         let (d, tail) = self.token_desc(spec);
-                        let c = match count {
-                            Value::EventAmount => "that many".to_string(),
-                            other => self.value(other),
+                        let plus = match count {
+                            // "those tokens plus a Food token".
+                            Value::Const(1) => with_article(&format!("{d} token")),
+                            Value::EventAmount => format!("that many {d} tokens"),
+                            other => format!("{} {d} tokens", self.value(other)),
                         };
-                        format!("if one or more tokens would be created under {poss} control, those tokens plus {c} {d} tokens{tail} are created instead")
+                        format!("if one or more tokens would be created under {poss} control, those tokens plus {plus}{tail} are created instead")
                     }
                     other => {
                         let then = self.replacement_then(other, "");
