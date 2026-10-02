@@ -95,7 +95,13 @@ fn choose_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         let text = rest[..rest.len() - tail.len()].trim().to_string();
         let n = noun(&spec, &text);
+        let same_controller = matches!(spec.together, Some(TargetGroup::SameController));
         let slot = b.add_target(spec, &text);
+        // "Choose two target creatures controlled by the same player. That player ...":
+        // their controller.
+        if same_controller {
+            b.it_player = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
+        }
         slots.push((slot, n));
         let t = end(tail);
         if t.is_empty() {

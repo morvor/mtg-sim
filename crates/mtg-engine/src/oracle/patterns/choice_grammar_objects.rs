@@ -217,6 +217,7 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
         restore(b);
         return None;
     };
+    let among = matches!(filter, Filter::In(_));
     let count = if any_number {
         Value::CountSel(Box::new(Sel::All(filter.clone())))
     } else {
@@ -259,6 +260,16 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let chosen = Sel::Var(CHOSEN);
     b.named.push((UNIVERSE.into(), Sel::All(universe.clone())));
+    // "One of them": the other one(s) ("the other").
+    if among {
+        b.named.push((
+            "the other".into(),
+            Sel::All(Filter::and(vec![
+                universe.clone(),
+                Filter::not(Filter::In(Box::new(chosen.clone()))),
+            ])),
+        ));
+    }
     b.named.push((
         "the rest".into(),
         Sel::All(Filter::and(vec![
@@ -440,3 +451,32 @@ fn other_than_the_chosen(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "choice grammar: other [objects] (than the chosen)", priority: 55, apply: other_than_the_chosen } }
+
+/// "That player sacrifices one of them of their choice." / "Their controller chooses and
+/// sacrifices one of them.": the player chooses among the objects named (as "[player]
+/// chooses one of them" reads) and sacrifices the one chosen (CR 701.21a).
+fn chooses_and_sacrifices(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let choice = if let Some((who, what)) = l.split_once(" chooses and sacrifices ") {
+        format!("{who} chooses {what}")
+    } else {
+        let (who, r) = l.split_once(" sacrifices ")?;
+        let what = r.strip_suffix(" of their choice")?;
+        if !what.contains(" of them") && !what.contains(" of those ") {
+            return None;
+        }
+        format!("{who} chooses {what}")
+    };
+    if !choice.contains(" of them") && !choice.contains(" of those ") {
+        return None;
+    }
+    let choose = choose_objects(&choice, b)?;
+    Some(Effect::seq(vec![
+        choose,
+        Effect::SacrificeObjects {
+            what: Sel::Var(CHOSEN),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: [player] chooses and sacrifices one of them", priority: 116, parse: chooses_and_sacrifices } }
