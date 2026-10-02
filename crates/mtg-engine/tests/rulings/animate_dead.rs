@@ -291,3 +291,53 @@ fn necromancy_cast_at_instant_speed_is_sacrificed_at_cleanup() {
     assert!(t.in_graveyard(P0, "Necromancy"));
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }
+
+#[test]
+fn necromancy_makes_the_choices_a_card_needs_as_it_enters() {
+    cr!("614.12", "707.9", "607.2c");
+    ruling!(
+        "Necromancy",
+        "When putting a card onto the battlefield that requires a definition for its value or some other choice, you do what is needed to define the value or make the choice."
+    );
+    let mut t = TestGame::new(2);
+    let serra = t.battlefield(P1, "Serra Angel");
+    let clone = t.graveyard(P1, "Clone");
+    t.lands(P0, "Swamp", 3);
+    let n = t.hand(P0, "Necromancy");
+    t.g.turn.priority = Some(P0);
+    t.cast(P0, n).go();
+    t.resolve();
+    let n = t.g.current(n);
+    // Clone's "you may have it enter as a copy": P0, who puts it onto the battlefield,
+    // makes the choice.
+    t.answer_targets(P0, &[Entity::Object(clone)]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(serra)]);
+    t.resolve_all();
+    let now = t.g.current(clone);
+    assert!(t.on_battlefield(now));
+    assert_eq!(t.obj_now(now).chars.name.as_str(), "Serra Angel");
+    assert_eq!(t.obj_now(now).controller, P0);
+    // It's the creature Necromancy put onto the battlefield: Necromancy enchants it.
+    assert_eq!(t.obj_now(n).attached_to, Some(Entity::Object(now)));
+    t.settle();
+    assert!(t.on_battlefield(n));
+}
+
+#[test]
+fn dance_of_the_dead_untaps_the_creature_if_its_controller_pays() {
+    cr!("502.3", "603.2");
+    let mut t = TestGame::new(2);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    cast_aura_on(&mut t, "Dance of the Dead", 2, bears);
+    t.resolve_all();
+    let now = t.g.current(bears);
+    assert!(t.obj_now(now).tapped);
+    // It doesn't untap during its controller's untap step; paying {1}{B} untaps it.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    assert!(t.obj_now(now).tapped);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(!t.obj_now(now).tapped, "{}", t.dump_log());
+}
