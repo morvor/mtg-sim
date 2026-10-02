@@ -19,6 +19,7 @@ fn artifact(name: &str, subtype: &str, abilities: Vec<Ability>) -> TokenSpec {
         toughness: None,
         abilities,
         scryfall_name: Some(SmolStr::new(name)),
+        pt_values: None,
     }
 }
 
@@ -70,6 +71,7 @@ fn role(name: &str, mods: Vec<Modification>, extra: Vec<Ability>) -> TokenSpec {
         toughness: None,
         abilities,
         scryfall_name: None,
+        pt_values: None,
     }
 }
 
@@ -126,6 +128,7 @@ pub fn predefined(name: &str) -> Option<TokenSpec> {
             toughness: Some(2),
             abilities: vec![],
             scryfall_name: Some(SmolStr::new("Walker")),
+            pt_values: None,
         },
         // 111.10e
         "shard" => {

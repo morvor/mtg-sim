@@ -131,6 +131,7 @@ impl Game {
             self.recompute();
         }
         let events = std::mem::take(&mut self.events);
+        self.event_feed.record(&events);
         // Snapshots taken just before zone changes, for events that follow them and look
         // back in time (sacrifices, countering, becoming unattached).
         let mut recent: Vec<(ObjectId, Arc<LookbackSnapshot>)> = Vec::new();

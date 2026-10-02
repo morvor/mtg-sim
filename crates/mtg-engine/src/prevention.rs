@@ -11,6 +11,14 @@ use crate::object::*;
 use crate::replacement::ReplEvent;
 use crate::types::*;
 
+/// Whether a prevention effect's additional instruction (CR 615.5) is about the object the
+/// damage would have been dealt to ("put a +1/+1 counter on that creature for each 1
+/// damage prevented this way"): applied to simultaneous damage to several objects, it
+/// happens once for each of them, rather than once for all the damage.
+pub fn followup_about_recipient(e: &Effect) -> bool {
+    serde_json::to_string(e).is_ok_and(|s| s.contains("\"TriggerObject\""))
+}
+
 /// Replaces references to chosen objects in a filter (targets, variables, "a source of
 /// your choice") with those objects, so an effect created by a resolving spell or
 /// ability keeps referring to them (CR 609.7b, 611.2c).
@@ -68,19 +76,28 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             kind: kind.clone(),
         },
         ReplacementEvent::Destroy(f) => ReplacementEvent::Destroy(lf(f)),
+        // "If target player would draw a card": the player is locked in too.
+        ReplacementEvent::Draw(PlayerFilter::Ref(r)) => match g.eval_player(r, ctx) {
+            Some(p) => ReplacementEvent::Draw(PlayerFilter::Is(p)),
+            None => d.event.clone(),
+        },
         other => other.clone(),
     };
+    // The object or player damage is redirected to is locked in too.
+    let lock_to = |sel: &Sel| {
+        let to = g.eval_sel(sel, ctx);
+        match to.first() {
+            Some(Entity::Player(p)) => Sel::Players(PlayerRef::Player(*p)),
+            Some(Entity::Object(_)) => Sel::All(Filter::Objects(
+                to.iter().filter_map(|e| e.object()).collect(),
+            )),
+            None => Sel::None,
+        }
+    };
     let action = match &d.action {
-        // The object or player damage is redirected to is locked in too.
-        ReplacementAction::Redirect(sel) => {
-            let to = g.eval_sel(sel, ctx);
-            ReplacementAction::Redirect(match to.first() {
-                Some(Entity::Player(p)) => Sel::Players(PlayerRef::Player(*p)),
-                Some(Entity::Object(_)) => Sel::All(Filter::Objects(
-                    to.iter().filter_map(|e| e.object()).collect(),
-                )),
-                None => Sel::None,
-            })
+        ReplacementAction::Redirect(sel) => ReplacementAction::Redirect(lock_to(sel)),
+        ReplacementAction::RedirectNext(sel, n) => {
+            ReplacementAction::RedirectNext(lock_to(sel), n.clone())
         }
         other => other.clone(),
     };

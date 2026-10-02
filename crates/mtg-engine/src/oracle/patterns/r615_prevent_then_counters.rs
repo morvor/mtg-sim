@@ -1,7 +1,9 @@
 //! "If [noncombat] damage would be dealt to ~, prevent that damage. Put a +1/+1 counter on
 //! ~ for each 1 damage prevented this way." (Stormwild Capridor; Phyrexian Hydra with
-//! -1/-1 counters): a static prevention effect whose second instruction is performed
-//! right after the damage is prevented (CR 615.5), counting the damage prevented.
+//! -1/-1 counters), "If damage would be dealt to another creature you control, prevent
+//! that damage. Put a +1/+1 counter on that creature for each 1 damage prevented this
+//! way." (Vigor): a static prevention effect whose second instruction is performed right
+//! after the damage is prevented (CR 615.5), counting the damage prevented.
 
 use super::StaticPattern;
 use crate::ability::*;
@@ -15,12 +17,26 @@ fn prevent_then_counters(l: &str, text: &str, _ctx: &CompileContext) -> Option<V
         Some(r) => (true, r),
         None => (false, first.strip_prefix("if damage would be dealt to ")?),
     };
-    if r != "~, prevent that damage" {
-        return None;
-    }
+    // The recipients, and how the second sentence refers to the one dealt damage.
+    let (recipients, on, what) = match r {
+        "~, prevent that damage" => (Filter::Source, "~", Sel::This),
+        // "another creature you control" (Vigor): "that creature" is the one the damage
+        // would have been dealt to.
+        "another creature you control, prevent that damage" => (
+            Filter::and(vec![
+                Filter::creature(),
+                Filter::ControlledBy(PlayerRel::You),
+                Filter::Not(Box::new(Filter::Source)),
+            ]),
+            "that creature",
+            Sel::TriggerObject,
+        ),
+        _ => return None,
+    };
     let kind = second
         .strip_prefix("put a ")?
-        .strip_suffix(" counter on ~ for each 1 damage prevented this way")?;
+        .strip_suffix(" for each 1 damage prevented this way")?
+        .strip_suffix(&format!(" counter on {on}"))?;
     if !matches!(kind, "+1/+1" | "-1/-1") {
         return None;
     }
@@ -28,13 +44,13 @@ fn prevent_then_counters(l: &str, text: &str, _ctx: &CompileContext) -> Option<V
         ReplacementEvent::NoncombatDamage {
             source: Filter::Any,
             to_players: None,
-            to_objects: Some(Filter::Source),
+            to_objects: Some(recipients),
         }
     } else {
         ReplacementEvent::Damage {
             source: Filter::Any,
             to_players: None,
-            to_objects: Some(Filter::Source),
+            to_objects: Some(recipients),
             combat_only: false,
         }
     };
@@ -43,7 +59,7 @@ fn prevent_then_counters(l: &str, text: &str, _ctx: &CompileContext) -> Option<V
         action: ReplacementAction::PreventAndThen(
             None,
             Box::new(Effect::AddCounters {
-                what: Sel::This,
+                what,
                 kind: kind.into(),
                 n: Value::EventAmount,
             }),

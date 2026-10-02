@@ -13,6 +13,9 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 - `crates/mtg-data` — loaders: Scryfall cards/rulings/tags, CR parser. Defines the
   `cr!` and `ruling!` citation macros.
 - `crates/mtg-engine` — the engine.
+- `crates/mtg-api` — external decision interface: per-player observations, every legal
+  option for every decision, the JSON agent protocol (`docs/AGENT_PROTOCOL.md`),
+  `ExternalAgent` (child process) and `Session` (pull-style embedding).
 - `crates/mtg-sim` — CLI simulator (`cargo run --release -p mtg-sim -- --games 100`);
   `--random-decks` fuzzes the engine with random decks of fully supported cards.
 - `crates/mtg-tools` — coverage reports (`cr-coverage`, `card-coverage`,
@@ -63,6 +66,11 @@ Key invariants:
 - Decisions go through `game.ask(player, Decision)`; always validate answers and fall back
   to a sensible default on `Answer::Default` or invalid answers.
 
+Out of scope for now: `docs/DEFERRED.md` lists what the project has decided not to support
+yet (Contraptions, host/augment, sticker sheets, digital-only cards, cards not legal in
+any format). Don't implement those;
+note anything new you run into there.
+
 ## Extending — prefer adding files over editing shared code
 
 - **Keywords (CR 702)**: add `src/kw/<keyword>.rs` implementing `KeywordRules` and
@@ -89,6 +97,13 @@ Key invariants:
 - Tests encoding a Scryfall ruling cite it: `ruling!("Card Name", "distinctive substring");`
   — fails if the card has no such ruling (so citations can't be invented). Copy the
   substring from the real ruling text (`zcat data/rulings.jsonl.gz | grep ...`).
+- Rulings coverage counts ruling texts: a text shared by several cards is covered by a
+  test on any card it applies to. Pick a card with typical wording, and when the cards
+  word the relevant ability differently, test each wording (cards worded slightly
+  differently can compile and behave differently). The `ruling!` macro needs literals,
+  so a test looping over cards has one `ruling!("Card", "...")` line per card.
+  `python3 scripts/rulings_batches.py summary|list|show P042|card "Name"` reports every
+  ruling text as CITED, EXEMPT or OPEN and splits them into batches of similar rulings.
 - Use `mtg_engine::testing::TestGame` (see its docs and `tests/smoke.rs`). Use real cards
   via `t.battlefield(P0, "Card Name")` etc. For rules that need a custom object, build a
   `CardDef::custom(...)`.

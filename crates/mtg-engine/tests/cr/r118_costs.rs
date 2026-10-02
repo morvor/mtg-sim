@@ -389,6 +389,24 @@ fn the_player_chooses_a_half_of_a_hybrid_reduction() {
 }
 
 #[test]
+fn a_colored_reduction_reduces_a_hybrid_symbol_paid_with_that_color() {
+    cr!("118.7c", "601.2b", "107.4e");
+    // {1}{G/W} paid as {1}{G} and reduced by {G}: {1}.
+    let mut t = TestGame::new(2);
+    t.custom(P0, reducer("{G}"), Zone::Battlefield);
+    pool(&mut t, P0, &[ManaType::U]);
+    let s = t.custom(P0, gain_spell("Hybrid Sip", "{1}{G/W}"), Zone::Hand(P0));
+    t.cast(P0, s).go();
+    assert_eq!(t.player(P0).mana_pool.total(), 0);
+    // Only one hybrid symbol is reduced: {G/W}{G/W} reduced by {G} still costs {G/W}.
+    let mut t = TestGame::new(2);
+    t.custom(P0, reducer("{G}"), Zone::Battlefield);
+    pool(&mut t, P0, &[ManaType::U, ManaType::U]);
+    let s = t.custom(P0, gain_spell("Hybrid Gulp", "{G/W}{G/W}"), Zone::Hand(P0));
+    assert!(t.cast(P0, s).try_go().is_err());
+}
+
+#[test]
 fn a_phyrexian_reduction_reduces_one_mana_of_its_color() {
     cr!("118.7f");
     let mut t = TestGame::new(2);

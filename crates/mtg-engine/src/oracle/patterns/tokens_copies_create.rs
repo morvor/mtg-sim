@@ -53,10 +53,13 @@ pub(crate) fn token_quote_abilities(
     types: &[CardType],
     ctx: &CompileContext,
 ) -> Option<Vec<Ability>> {
-    let want = q_lower.trim();
+    // A comma before the closing quote may be the sentence's rather than the ability's
+    // (`with "[ability]," where X is ...`): compared without it.
+    let want = q_lower.trim().trim_end_matches(',');
     let orig = normalized_quotes(ctx)
         .into_iter()
-        .find(|q| q.to_lowercase().trim() == want)?;
+        .find(|q| q.to_lowercase().trim().trim_end_matches(',') == want)?;
+    let orig = orig.trim().trim_end_matches(',').to_string();
     if super::statics::quote_names_card(&orig, ctx) {
         return None;
     }
@@ -134,8 +137,10 @@ pub(crate) fn ability_list(
 /// A parsed token description.
 pub(crate) struct TokenDesc {
     pub spec: TokenSpec,
-    /// "that's tapped and attacking".
+    /// "that's tapped and attacking", "that's attacking".
     pub attacking: bool,
+    /// "that's tapped and attacking" (not "that's attacking").
+    pub tapped: bool,
 }
 
 /// Whether an ability is a characteristic-defining ability that sets power and toughness.
@@ -321,6 +326,17 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             attacking = true;
             tapped = true;
             rest = r.trim().to_string();
+        } else if let Some(r) = ["that's attacking", "that are attacking"]
+            .iter()
+            .find_map(|p| rest.strip_prefix(p))
+        {
+            // "a 2/2 white Knight creature token with vigilance that's attacking"
+            // (Sigiled Sword of Valeron): attacking but not tapped (CR 508.4).
+            if attacking {
+                return None;
+            }
+            attacking = true;
+            rest = r.trim().to_string();
         } else {
             return None;
         }
@@ -336,7 +352,6 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
     if attacking && !is_creature {
         return None;
     }
-    let _ = tapped;
     Some(TokenDesc {
         spec: TokenSpec {
             name,
@@ -348,8 +363,10 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             toughness,
             abilities,
             scryfall_name: None,
+            pt_values: None,
         },
         attacking,
+        tapped,
     })
 }
 
@@ -370,7 +387,7 @@ fn one_creation(r: &str, ctx: &CompileContext) -> Option<(TokenSpec, Value, bool
         }
     }
     let d = token_desc(r, ctx)?;
-    Some((d.spec, count, tapped || d.attacking, d.attacking))
+    Some((d.spec, count, tapped || d.tapped, d.attacking))
 }
 
 fn create(spec: TokenSpec, count: Value, tapped: bool, attacking: bool) -> Effect {
@@ -565,8 +582,7 @@ inventory::submit! { FollowupPattern { name: "tokens_copies: the token has", pri
 
 /// Whether an effect refers to the tokens just created.
 fn mentions_created(e: &Effect) -> bool {
-    serde_json::to_string(e)
-        .is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::CREATED)))
+    serde_json::to_string(e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::CREATED)))
 }
 
 /// "It gains haste until end of turn", "They gain haste", "Those tokens gain flying and
@@ -674,12 +690,9 @@ fn f_created_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(tail) = tail else {
         return false;
     };
-    let Some(e) = super::damage_removal::delayed_removal(
-        verb,
-        Sel::Var(vars::CREATED),
-        tail.trim(),
-        step,
-    ) else {
+    let Some(e) =
+        super::damage_removal::delayed_removal(verb, Sel::Var(vars::CREATED), tail.trim(), step)
+    else {
         return false;
     };
     append_after_create(prev, e)
