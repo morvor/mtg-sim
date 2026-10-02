@@ -2045,3 +2045,80 @@ fn nicol_bolas_exiles_all_but_the_bottom_card() {
     assert_eq!(t.library_size(P1), 1);
     assert_eq!(t.g.player(P1).library[0], bottom);
 }
+
+// ---------------------------------------------------------------------------
+// Seventh batch
+// ---------------------------------------------------------------------------
+
+#[test]
+fn seventh_batch_compiles() {
+    assert_supported(&[
+        "Sea Gate Restoration // Sea Gate, Reborn",
+        "Enter the Infinite",
+        "Egon, God of Death // Throne of Death",
+        "Skyfisher Spider",
+    ]);
+}
+
+#[test]
+fn sea_gate_restoration_removes_the_maximum_hand_size() {
+    cr!("402.2");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 7);
+    for _ in 0..7 {
+        t.hand(P0, "Shock");
+    }
+    let s = t.hand(P0, "Sea Gate Restoration // Sea Gate, Reborn");
+    t.cast(P0, s).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 15);
+    // At cleanup nothing is discarded.
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    assert_eq!(t.hand_size(P0), 15);
+}
+
+#[test]
+fn egon_exiles_two_or_sacrifices_and_draws() {
+    cr!("608.2c");
+    ruling!(
+        "Egon, God of Death // Throne of Death",
+        "If there's only one card in your graveyard, you won't exile it."
+    );
+    let mut t = TestGame::new(2);
+    let e = t.battlefield(P0, "Egon, God of Death // Throne of Death");
+    let only = t.graveyard(P0, "Shock");
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.zone(only), Zone::Graveyard(P0));
+    assert!(!t.on_battlefield(e));
+    // Hand: the card drawn by P0's... P0 hasn't drawn yet this turn (upkeep): one card.
+    assert_eq!(t.hand_size(P0), 1);
+    // With two cards: both are exiled; Egon stays.
+    let mut t = TestGame::new(2);
+    let e = t.battlefield(P0, "Egon, God of Death // Throne of Death");
+    let a = t.graveyard(P0, "Shock");
+    let b = t.graveyard(P0, "Grizzly Bears");
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.zone(a), Zone::Exile);
+    assert_eq!(t.zone(b), Zone::Exile);
+    assert!(t.on_battlefield(e));
+}
+
+#[test]
+fn skyfisher_spider_may_exile_itself_from_the_graveyard() {
+    cr!("603.10a");
+    let mut t = TestGame::new(2);
+    let s = t.battlefield(P0, "Skyfisher Spider");
+    t.graveyard(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(s).go();
+    t.resolve_all();
+    // Two creature cards (the Bears and the Spider itself): 2 life.
+    assert_eq!(t.life(P0), 22);
+    assert!(t.in_exile("Skyfisher Spider"));
+}

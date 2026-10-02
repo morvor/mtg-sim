@@ -2721,3 +2721,81 @@ fn p_bottom_card(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: the bottom card of a graveyard or library", priority: 960, parse: p_bottom_card } }
+
+/// "You have no maximum hand size for the rest of the game.", "You have no maximum hand
+/// size until your next turn." (CR 402.2): a player effect for that long.
+fn p_no_max_hand_size(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you have no maximum hand size")?;
+    let duration = match r {
+        " for the rest of the game" => Duration::Permanent,
+        "" => return None,
+        r => match crate::oracle::effects::duration_suffix(&format!("x{r}")) {
+            (d, "x") if !matches!(d, Duration::Permanent) => d,
+            _ => return None,
+        },
+    };
+    Some(Effect::AddPlayerEffect {
+        who: PlayerRef::You,
+        effect: PlayerModification::MaxHandSize(None),
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: you have no maximum hand size for a duration", priority: 960, parse: p_no_max_hand_size } }
+
+/// "Exile two cards from your graveyard. If you can't, sacrifice ~ and draw a card." (Egon
+/// rulings: with fewer cards, none are exiled and the other instruction happens instead).
+fn f_if_you_cant(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if you can't, ") else {
+        return false;
+    };
+    // The previous instruction: exiling an exact number of cards the player chooses.
+    let exile = match &*prev {
+        Effect::Seq(v) => v.first(),
+        e => Some(e),
+    };
+    let Some(Effect::Exile {
+        what:
+            Sel::Choose {
+                filter,
+                count: Value::Const(n),
+                up_to: false,
+                ..
+            },
+        ..
+    }) = exile
+    else {
+        return false;
+    };
+    let (filter, n) = (filter.clone(), *n);
+    let Some(otherwise) = parse_clause(r, b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::If {
+        cond: Condition::Compare(Value::Count(filter), Cmp::Ge, Value::Const(n)),
+        then: Box::new(old),
+        otherwise: Box::new(otherwise),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: if you can't, ...", priority: 960, apply: f_if_you_cant } }
+
+/// "exile ~ from your graveyard" (after it died): only if it's still there.
+fn p_exile_self_from_graveyard(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if end(l) != "exile ~ from your graveyard" {
+        return None;
+    }
+    Some(Effect::Exile {
+        what: Sel::All(Filter::and(vec![
+            Filter::Custom(SmolStr::new(crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT)),
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+        ])),
+        face_down: false,
+        link: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile ~ from your graveyard", priority: 960, parse: p_exile_self_from_graveyard } }

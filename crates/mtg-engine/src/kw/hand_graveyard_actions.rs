@@ -36,6 +36,10 @@ pub const ACTIVATED_ABILITIES_OF_GRAVEYARD: &str = "has all activated abilities 
 /// 404.2).
 pub const BOTTOM_OF_GRAVEYARD: &str = "the bottom card of its graveyard";
 
+/// `Filter::Custom`: the source itself, or the new object it became with its latest zone
+/// change ("exile ~ from your graveyard" after it died, CR 400.7).
+pub const SOURCE_OR_NEXT: &str = "the source or the object it became";
+
 pub struct HandGraveyardActions;
 
 impl KeywordRules for HandGraveyardActions {
@@ -54,7 +58,10 @@ impl KeywordRules for HandGraveyardActions {
         true
     }
 
-    fn custom_filter(&self, g: &Game, name: &str, id: crate::types::ObjectId, _ctx: &Ctx) -> Option<bool> {
+    fn custom_filter(&self, g: &Game, name: &str, id: crate::types::ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == SOURCE_OR_NEXT {
+            return Some(ctx.source.is_some_and(|s| s == id || g.obj(s).next == Some(id)));
+        }
         if name == BOTTOM_OF_GRAVEYARD {
             let o = g.obj(id);
             let crate::object::Zone::Graveyard(p) = o.zone else {
