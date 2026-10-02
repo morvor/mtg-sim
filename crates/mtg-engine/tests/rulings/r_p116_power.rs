@@ -334,3 +334,106 @@ fn evolutionary_leap_without_a_creature_card_puts_everything_back() {
     assert_eq!(t.library_size(P0), lib);
     assert_eq!(t.hand_size(P0), hand);
 }
+
+/// Evolving Adaptive for P0, entering with its oil counter, then `oil - 1` more.
+fn adaptive(t: &mut TestGame, oil: u32) -> ObjectId {
+    supported("Evolving Adaptive");
+    // "This creature enters with an oil counter on it. This creature gets +1/+1 for each
+    // oil counter on it. Whenever another creature you control enters, if that creature
+    // has greater power or toughness than this creature, put an oil counter on this
+    // creature."
+    let a = t.enter(P0, "Evolving Adaptive");
+    t.settle();
+    if oil > 1 {
+        put_counters(t, a, "oil", oil - 1);
+    }
+    assert_eq!(t.pt(a), (oil as i32, oil as i32));
+    a
+}
+
+#[test]
+fn evolving_adaptive_counts_counters_the_creature_enters_with() {
+    cr!("603.4", "614.1c");
+    ruling!(
+        "Evolving Adaptive",
+        "If a creature enters the battlefield with +1/+1 counters on it, consider those counters when determining if Evolving Adaptive's ability will trigger."
+    );
+    // Spike Feeder: a 0/0 that enters with two +1/+1 counters.
+    let mut t = TestGame::new(2);
+    let a = adaptive(&mut t, 1);
+    t.enter(P0, "Spike Feeder");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.counters(a, "oil"), 2);
+    // A 1/1 doesn't make it trigger.
+    let mut t = TestGame::new(2);
+    let a = adaptive(&mut t, 1);
+    t.enter(P0, "Llanowar Elves");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.counters(a, "oil"), 1);
+}
+
+#[test]
+fn evolving_adaptive_compares_again_as_each_trigger_resolves() {
+    cr!("603.4", "603.2");
+    ruling!(
+        "Evolving Adaptive",
+        "If multiple creatures enter the battlefield at the same time, Evolving Adaptive's ability may trigger multiple times, although the stat comparison will take place each time one of those abilities tries to resolve."
+    );
+    supported("Centaur Courser");
+    let mut t = TestGame::new(2);
+    let a = adaptive(&mut t, 2);
+    enter_together(&mut t, P0, &["Centaur Courser", "Centaur Courser"]);
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    t.resolve();
+    assert_eq!(t.pt(a), (3, 3));
+    t.resolve_all();
+    assert_eq!(t.counters(a, "oil"), 3);
+}
+
+#[test]
+fn evolving_adaptive_uses_last_known_stats_of_a_creature_that_left() {
+    cr!("603.4", "608.2h");
+    ruling!(
+        "Evolving Adaptive",
+        "If the ability triggers, the stat comparison will happen again when the ability tries to resolve. If neither stat of the new creature is greater, the ability will do nothing. If the creature that entered the battlefield leaves the battlefield before the ability tries to resolve, use its last known power and toughness to compare the stats."
+    );
+    // Hill Giant (3/3) enters and is destroyed in response: still greater.
+    let mut t = TestGame::new(2);
+    let a = adaptive(&mut t, 1);
+    let giant = t.enter(P0, "Hill Giant");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    destroy(&mut t, giant);
+    t.resolve_all();
+    assert_eq!(t.counters(a, "oil"), 2);
+    // Evolving Adaptive grew in response: neither stat is greater, nothing happens.
+    let mut t = TestGame::new(2);
+    let a = adaptive(&mut t, 1);
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    put_counters(&mut t, a, "oil", 1);
+    t.resolve_all();
+    assert_eq!(t.counters(a, "oil"), 2);
+}
+
+#[test]
+fn hulkling_compares_power_to_power_and_toughness_to_toughness() {
+    cr!("603.4");
+    supported("Hulkling, Burgeoning Bruiser");
+    // A 2/3: Grizzly Bears (2/2) isn't greater; Hill Giant (3/3) is.
+    let mut t = TestGame::new(2);
+    let h = t.battlefield(P0, "Hulkling, Burgeoning Bruiser");
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    t.enter(P0, "Hill Giant");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.pt(h), (3, 4));
+}
