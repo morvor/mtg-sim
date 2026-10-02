@@ -29,6 +29,7 @@ fn remove_all_counters_cards_compile() {
         "Aurification",
         "Blitz Leech",
         "Blood Hound",
+        "Corrosion",
         "Enchanted River's Grasp",
         "Fraying Line",
         "Hapatra's Mark",
@@ -468,4 +469,92 @@ fn witherscale_wurm_grants_wither_and_sheds_minus_counters() {
     assert_eq!(t.life(P1), 13);
     assert_eq!(t.counters(wurm, counters::MINUS1), 0);
     assert_eq!(t.pt(wurm), (9, 9));
+}
+
+// ---------------------------------------------------------------------------------------
+// Corrosion
+// ---------------------------------------------------------------------------------------
+
+/// Advances to P0's next upkeep (from before the last opponent's end step), paying the cumulative upkeep of each Corrosion, with
+/// each Corrosion's rust trigger targeting `target`; everything resolves.
+fn corrosion_upkeep(t: &mut TestGame, target: PlayerId) {
+    let before_p0 = if t.g.players.len() == 3 { P2 } else { P1 };
+    t.advance_to(before_p0, Step::End);
+    t.clear_answers();
+    t.lands(P0, "Wastes", 4);
+    for _ in 0..2 {
+        t.answer_targets(P0, &[Entity::Player(target)]);
+        t.answer_yes(P0, true);
+    }
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+}
+
+#[test]
+fn corrosion_counts_rust_counters_from_other_corrosions() {
+    cr!("603.2", "122.1");
+    ruling!(
+        "Corrosion",
+        "It does count rust counters put on artifacts by other Corrosion cards."
+    );
+    // One Corrosion: a mana value 2 artifact with one rust counter survives.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Corrosion");
+    let stone = t.battlefield(P1, "Mind Stone");
+    corrosion_upkeep(&mut t, P1);
+    assert_eq!(t.named_on_battlefield("Corrosion").len(), 1, "upkeep paid");
+    assert_eq!(t.counters(stone, "rust"), 1);
+    assert!(t.on_battlefield(stone));
+    // Two: the second trigger sees both counters.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Corrosion");
+    t.battlefield(P0, "Corrosion");
+    t.battlefield(P1, "Mind Stone");
+    corrosion_upkeep(&mut t, P1);
+    assert_eq!(t.named_on_battlefield("Corrosion").len(), 2, "upkeep paid");
+    assert!(t.in_graveyard(P1, "Mind Stone"));
+}
+
+#[test]
+fn corrosion_destroys_your_own_rusted_artifacts_and_clears_all_rust() {
+    cr!("603.2", "603.6c");
+    ruling!(
+        "Corrosion",
+        "Only puts rust counters on artifacts your opponents control, but destroys all artifacts with rust counters on them, even your own."
+    );
+    let mut t = TestGame::new(2);
+    let corrosion = t.battlefield(P0, "Corrosion");
+    // P0's own Sol Ring (mana value 1) has a rust counter; its Mind Stone doesn't get one.
+    let ring = t.battlefield(P0, "Sol Ring");
+    let mine = t.battlefield(P0, "Mind Stone");
+    put(&mut t, ring, "rust", 1);
+    let theirs = t.battlefield(P1, "Mind Stone");
+    corrosion_upkeep(&mut t, P1);
+    assert!(t.in_graveyard(P0, "Sol Ring"), "destroyed though P0 controls it");
+    assert_eq!(t.counters(mine, "rust"), 0, "only the opponent's artifacts");
+    assert_eq!(t.counters(theirs, "rust"), 1);
+    // Leaving: every rust counter on every permanent is removed (a creature too).
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    put(&mut t, bears, "rust", 2);
+    destroy(&mut t, corrosion);
+    t.resolve_all();
+    assert_eq!(t.counters(theirs, "rust"), 0);
+    assert_eq!(t.counters(bears, "rust"), 0);
+}
+
+#[test]
+fn corrosion_may_target_a_different_opponent_each_upkeep() {
+    cr!("603.3d", "115.1d");
+    ruling!(
+        "Corrosion",
+        "In multiplayer games, you can choose a new target player each upkeep."
+    );
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Corrosion");
+    let a = t.battlefield(P1, "Mind Stone");
+    let b = t.battlefield(P2, "Mind Stone");
+    corrosion_upkeep(&mut t, P1);
+    assert_eq!((t.counters(a, "rust"), t.counters(b, "rust")), (1, 0));
+    corrosion_upkeep(&mut t, P2);
+    assert_eq!((t.counters(a, "rust"), t.counters(b, "rust")), (1, 1));
 }

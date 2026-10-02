@@ -570,3 +570,43 @@ fn divided_damage_among_any_number_of_targets_may_have_zero_targets() {
         assert_eq!(t.life(P0), 20);
     }
 }
+
+#[test]
+fn spell_dividing_damage_among_zero_targets_still_resolves() {
+    // A spell cast with zero of its "any number of" targets has no targets to become
+    // illegal, so it resolves (it isn't removed for lack of legal targets, CR 608.2b);
+    // a fixed number of targets ("X target creatures") still needs at least one, each
+    // getting at least 1 damage (CR 601.2d).
+    cr!("107.1c", "608.2b");
+    supported("Rolling Thunder");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 5);
+    let thunder = t.hand(P0, "Rolling Thunder");
+    let spell = t.cast(P0, thunder).x(3).targets(&[]).go();
+    let mins: Vec<u32> = t
+        .asked()
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets { min, .. } => Some(*min),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(mins, vec![0]);
+    t.resolve_all();
+    assert!(crate::r_s07_common::resolved(&t, spell));
+    assert!(t.in_graveyard(P0, "Rolling Thunder"));
+    assert_eq!(t.obj_now(bears).damage, 0);
+    assert_eq!(t.life(P1), 20);
+
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 4);
+    let swarm = t.hand(P0, "Meteor Swarm");
+    t.cast(P0, swarm).x(1).targets(&[]).go();
+    let min = t.asked().iter().find_map(|(_, d)| match d {
+        mtg_engine::decision::Decision::ChooseTargets { min, .. } => Some(*min),
+        _ => None,
+    });
+    assert_eq!(min, Some(1), "X target creatures: at least one");
+}

@@ -365,6 +365,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 &mut introduced,
             );
             super::patterns::oracle_hardening_referents::note_player_mention(&s, b);
+            super::patterns::oracle_hardening_referents::note_counters_on_source(&mut e, b);
             effects.push(e);
             b.sentences += 1;
         }
@@ -532,6 +533,8 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
             let saved_player = b.it_player.clone();
             let saved_group = b.group.clone();
             if let Some(mut ea) = parse_simple(a, b) {
+                // "put a +1/+1 counter on ~, then it deals damage ..."
+                super::patterns::oracle_hardening_referents::note_counters_on_source(&mut ea, b);
                 // "untap all creatures and gain control of them": the group the first
                 // half affected.
                 let store = super::patterns::pronoun_groups::note(&mut ea, b);
@@ -977,19 +980,7 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         // "Each creature you control deals damage equal to its power": "its" is each of
         // the sources in turn (the executor binds `vars::AFFECTED` to each).
         let multi = matches!(src, Sel::All(_) | Sel::Union(_));
-        // "Whenever you cast a spell, you may put a charge counter on ~. If you do, ~
-        // deals damage equal to the number of charge counters on it": a spell on the
-        // stack has no counters, so "it" is the subject, not the triggering spell.
-        let counters_on_subject = matches!(src, Sel::This)
-            && matches!(b.it, Sel::TriggerSpell)
-            && r.contains(" counters on it ");
-        let saved_it = if multi {
-            Some(std::mem::replace(&mut b.it, Sel::Var(vars::AFFECTED)))
-        } else if counters_on_subject {
-            Some(std::mem::replace(&mut b.it, Sel::This))
-        } else {
-            None
-        };
+        let saved_it = multi.then(|| std::mem::replace(&mut b.it, Sel::Var(vars::AFFECTED)));
         let parsed = super::statics::parse_value_phrase(r, b);
         if let Some(it) = saved_it {
             b.it = it;
@@ -1008,8 +999,13 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
             if !end(&tail).is_empty() {
                 return None;
             }
-            // "Any number of targets" may be zero targets (CR 107.1c).
-            spec.min = 0;
+            // "Any number of targets" may be zero targets (CR 107.1c); otherwise each
+            // target gets at least 1 (CR 601.2d).
+            spec.min = if r2.starts_with("any number of ") {
+                0
+            } else {
+                1
+            };
             spec.max = n.clone();
             spec.divide = Some(n);
             let slot = b.add_target(spec, "targets (divided)");
