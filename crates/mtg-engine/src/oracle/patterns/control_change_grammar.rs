@@ -272,7 +272,7 @@ fn f_if_they_gain_control(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     }
     let l = end(l);
     let then = if let Some(r) = l.strip_prefix("if they do, ") {
-        match parse_clause(r, b) {
+        match parse_clause(r, b).or_else(|| amount_list(r, b)) {
             Some(e) => e,
             None => return false,
         }
@@ -296,6 +296,30 @@ fn f_if_they_gain_control(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         },
     ]);
     true
+}
+
+/// "If they do, you draw that many cards, create that many tapped Treasure tokens, then
+/// lose that much life." (Kain, Traitorous Dragoon, after "Whenever ~ deals combat damage
+/// to a player, that player gains control of ~."): a list of instructions where "that
+/// many" / "that much" is the amount of the triggering event.
+fn amount_list(r: &str, b: &mut Builder) -> Option<Effect> {
+    if !b.in_trigger
+        || !(r.contains("that many") || r.contains("that much"))
+        || r.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x")
+    {
+        return None;
+    }
+    let rewritten = r.replace("that many", "x").replace("that much", "x");
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let e = super::value_grammar::with_x_defined(true, || {
+        crate::oracle::effects::parse_sentence(&rewritten, b)
+    });
+    let Some(e) = e else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    super::r107_numbers::substitute_x(&e, &Value::EventAmount)
 }
 
 inventory::submit! { super::FollowupPattern { name: "control grammar: if/when they do (gained control)", priority: 110, apply: f_if_they_gain_control } }

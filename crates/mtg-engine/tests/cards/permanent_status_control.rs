@@ -635,3 +635,32 @@ fn preacher_untapped_before_the_ability_resolves_does_nothing() {
     t.resolve_all();
     assert_eq!(controller(&t, elf), P1);
 }
+
+#[test]
+fn kain_the_damaged_player_gains_control_and_you_draw_that_many() {
+    cr!("510.2", "603.2");
+    assert_compiles(&["Kain, Traitorous Dragoon"]);
+    let mut t = TestGame::new(2);
+    let kain = t.battlefield(P0, "Kain, Traitorous Dragoon");
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let hand = t.hand_size(P0);
+    let life = t.life(P0);
+    t.set_step(P0, Step::PrecombatMain);
+    t.attack(&[(kain, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(controller(&t, kain), P1);
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.life(P0), life - 2);
+    let treasures: Vec<ObjectId> = t
+        .g
+        .permanents_controlled_by(P0)
+        .into_iter()
+        .filter(|o| t.obj_now(*o).chars.has_subtype("Treasure"))
+        .collect();
+    assert_eq!(treasures.len(), 2);
+    assert!(treasures
+        .iter()
+        .all(|o| t.obj_now(*o).tapped && t.obj_now(*o).controller == P0));
+}
