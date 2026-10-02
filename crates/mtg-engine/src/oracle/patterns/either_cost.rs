@@ -94,3 +94,31 @@ fn either_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 }
 
 inventory::submit! { AbilityPattern { name: "either of two activation costs", priority: 0, parse: either_cost } }
+
+#[cfg(test)]
+mod tests {
+    use super::either_last_part;
+
+    #[test]
+    fn splits_the_last_part_into_two_costs() {
+        assert_eq!(
+            either_last_part("{3}, {T}, Sacrifice an artifact or discard a nonland card"),
+            Some((
+                "{3}, {T}, Sacrifice an artifact".to_string(),
+                "{3}, {T}, Discard a nonland card".to_string()
+            ))
+        );
+        assert_eq!(
+            either_last_part(
+                "{1}{R}, Remove a +1/+1 counter or a charge counter from a permanent you control"
+            ),
+            Some((
+                "{1}{R}, Remove a +1/+1 counter from a permanent you control".to_string(),
+                "{1}{R}, Remove a charge counter from a permanent you control".to_string()
+            ))
+        );
+        // One cost part that mentions "or".
+        assert_eq!(either_last_part("Sacrifice another creature or an artifact"), None);
+        assert_eq!(either_last_part("{3}, {T} or {U}, {T}"), None);
+    }
+}

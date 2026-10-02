@@ -388,3 +388,32 @@ fn radiant_lotus_adds_three_mana_per_artifact_sacrificed() {
     t.resolve();
     assert_eq!(t.g.player(P0).mana_pool.total(), 6);
 }
+
+#[test]
+fn a_long_flavor_word_before_an_activated_ability() {
+    cr!("207.2d", "602.2b");
+    compiles("Ignis Scientia");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Island", 1);
+    let ignis = t.battlefield(P0, "Ignis Scientia");
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    let idx = t
+        .g
+        .obj(ignis)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+        .position(|a| a.text.contains("Exile target card"))
+        .unwrap();
+    t.activate(P0, ignis, idx, &[Entity::Object(bears)]).unwrap();
+    t.resolve();
+    assert_eq!(t.zone(bears), Zone::Exile);
+    assert_eq!(
+        t.g.permanents().filter(|o| o.is_token()).count(),
+        1,
+        "a Food token"
+    );
+}

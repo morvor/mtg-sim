@@ -651,3 +651,103 @@ fn compared_with_amount(eff: &str) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::oracle::costs::parse_cost;
+
+    fn parts(s: &str) -> Vec<CostPart> {
+        parse_cost(s).unwrap_or_else(|| panic!("{s:?}")).0.parts
+    }
+
+    #[test]
+    fn verb_and_object_cost_parts() {
+        // Counters from another permanent, any kind or one kind.
+        assert!(matches!(
+            parts("{2}, Remove a +1/+1 counter from a creature you control").as_slice(),
+            [CostPart::RemoveCountersFromAmong { kind: Some(k), count: Value::Const(1), .. }] if k == "+1/+1"
+        ));
+        assert!(matches!(
+            parts("{T}, Remove a counter from another permanent you control").as_slice(),
+            [CostPart::Tap, CostPart::RemoveCountersFromAmong { kind: None, .. }]
+        ));
+        assert!(matches!(
+            parts("Remove two counters from ~").as_slice(),
+            [CostPart::RemoveCountersFromAmong { kind: None, filter: Filter::Source, count: Value::Const(2) }]
+        ));
+        // "... from ~ and sacrifice it": two parts.
+        assert!(matches!(
+            parts("Remove four quest counters from ~ and sacrifice it").as_slice(),
+            [CostPart::RemoveCounters { count: Value::Const(4), .. }, CostPart::SacrificeSelf]
+        ));
+        // Sacrifices: alternatives, several objects, ~ first.
+        assert!(matches!(
+            parts("{1}, Sacrifice another creature or an artifact").as_slice(),
+            [CostPart::Sacrifice { filter: Filter::And(_), count: Value::Const(1) }]
+        ));
+        assert_eq!(
+            parts("{3}{B}, {T}, Sacrifice a blue creature, a black creature, and a red creature")
+                .iter()
+                .filter(|p| matches!(p, CostPart::Sacrifice { .. }))
+                .count(),
+            3
+        );
+        assert!(matches!(
+            parts("{T}, Sacrifice two lands and ~").as_slice(),
+            [CostPart::Tap, CostPart::SacrificeSelf, CostPart::Sacrifice { count: Value::Const(2), .. }]
+        ));
+        // Exile from the top of a library, from a graveyard, a spell from the stack.
+        assert!(matches!(
+            parts("{2}, Exile the top card of your library").as_slice(),
+            [CostPart::Effect(_)]
+        ));
+        assert!(matches!(
+            parts("{4}{B}, Exile another creature card from your graveyard").as_slice(),
+            [CostPart::Exile { zone: ZoneKind::Graveyard, .. }]
+        ));
+        assert!(matches!(
+            parts("Exile an instant or sorcery spell you control").as_slice(),
+            [CostPart::Exile { zone: ZoneKind::Stack, .. }]
+        ));
+        // Tapping several untapped creatures; putting a card from hand on top.
+        assert!(matches!(
+            parts("Tap three untapped Advisors, Artificers, and/or Monks you control").as_slice(),
+            [CostPart::TapUntapped { count: Value::Const(3), .. }]
+        ));
+        assert!(matches!(
+            parts("Put a card from your hand on top of your library").as_slice(),
+            [CostPart::PutFromHandOnLibrary { top: true, .. }]
+        ));
+        // Not a cost this grammar knows.
+        assert!(parse_cost("Exile the top creature card of your graveyard").is_none());
+    }
+
+    #[test]
+    fn chosen_amounts_become_x() {
+        let (c, cond) = amount_as_x("{T}, Remove one or more +1/+1 counters from ~").unwrap();
+        assert_eq!(c, "{t}, remove x +1/+1 counters from ~");
+        assert!(matches!(cond, Some(Condition::Compare(Value::X, Cmp::Ge, _))));
+        let (c, cond) = amount_as_x("Remove all charge counters from ~").unwrap();
+        assert_eq!(c, "remove x charge counters from ~");
+        assert!(matches!(cond, Some(Condition::Compare(Value::X, Cmp::Eq, _))));
+        assert!(amount_as_x("{T}, Sacrifice one or more artifacts").is_some());
+        assert!(amount_as_x("{X}, Remove X +1/+1 counters from ~").is_none());
+        assert_eq!(
+            effect_with_amount("It deals that much damage to any target.").as_deref(),
+            Some("It deals X damage to any target.")
+        );
+        assert_eq!(
+            effect_with_amount("Create that many 1/1 green Insect creature tokens.").as_deref(),
+            Some("Create X 1/1 green Insect creature tokens.")
+        );
+        assert_eq!(
+            effect_with_amount(
+                "Gain control of target creature with power less than or equal to the number of +1/+1 counters removed this way."
+            )
+            .as_deref(),
+            Some("Gain control of target creature with power X or less.")
+        );
+        assert_eq!(effect_with_amount("Draw a card."), None);
+    }
+}
