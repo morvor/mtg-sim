@@ -440,6 +440,9 @@ fn pronoun_player(eff: &str, b: &Builder, first_new: usize) -> Option<PlayerRef>
 
 /// "[effect] unless [player] [action]".
 fn split_unless(eff: &str, rest: &str, b: &mut Builder) -> Option<Effect> {
+    if joins_steps(eff) {
+        return None;
+    }
     let phrase = payer_phrase(rest)?;
     // "Each opponent loses 3 life unless that player sacrifices ...": the player grammar
     // performs the instruction as each of them; "they" in its action is that player.
@@ -472,6 +475,14 @@ fn split_unless(eff: &str, rest: &str, b: &mut Builder) -> Option<Effect> {
     };
     let pays = payments(action, b)?;
     Some(unless_paid(who, pays, effect))
+}
+
+/// "Draw a card, then discard a card unless ...": "unless" belongs to the last step only,
+/// which the clause splitter parses on its own.
+fn joins_steps(eff: &str) -> bool {
+    [", then ", " and then ", ". then "]
+        .iter()
+        .any(|s| eff.contains(s))
 }
 
 fn unless_player_does(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -620,7 +631,7 @@ fn they_as_that_player(c: &str) -> String {
 fn unless_state(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (eff, c) = l.rsplit_once(" unless ")?;
-    if eff.contains(" unless ") || eff.ends_with(',') || eff.is_empty() {
+    if eff.contains(" unless ") || eff.ends_with(',') || eff.is_empty() || joins_steps(eff) {
         return None;
     }
     // "Each opponent loses 1 life unless they control an Island": "they" is each of
@@ -648,11 +659,26 @@ fn unless_state(l: &str, b: &mut Builder) -> Option<Effect> {
                 if !matches!(b.it, Sel::This) {
                     return None;
                 }
+                // "unless her additional cost was paid": a character's pronouns.
                 let words: Vec<&str> = c
                     .split(' ')
-                    .map(|w| if w == "it" { "~" } else { w })
+                    .map(|w| match w {
+                        "it" | "he" | "she" => "~",
+                        "his" | "her" => "~'s",
+                        _ => w,
+                    })
                     .collect();
                 crate::oracle::statics::parse_condition(&words.join(" "), b.ctx)
+            })
+            .or_else(|| {
+                // "Then discard a card unless five or more mana was spent to cast that
+                // spell" (opus): "that spell" is the spell that caused the trigger.
+                if !b.in_trigger
+                    || !crate::oracle::patterns::opus::refers_to_the_trigger_spell(&c)
+                {
+                    return None;
+                }
+                crate::oracle::statics::parse_condition(&c, b.ctx)
             })
             .or_else(|| {
                 // "unless they control a commander", "unless they have exactly three or
