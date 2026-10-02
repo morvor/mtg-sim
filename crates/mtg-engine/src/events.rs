@@ -178,6 +178,11 @@ pub enum Event {
         /// Whether they were put by an effect, as a cost, as the result of damage, or by
         /// a game rule.
         origin: CounterOrigin,
+        /// What the permanent was as they were put on it, for conditions about this
+        /// turn's events (`None` for a player, a card in another zone, or counters a
+        /// permanent entered with: what it was as it entered applies).
+        #[serde(skip)]
+        as_put: Option<Arc<crate::event_causes::AsPut>>,
     },
     CountersRemoved {
         target: Entity,

@@ -132,6 +132,122 @@ impl CounterPut {
     }
 }
 
+/// What a permanent was as counters were put on it: its characteristics, controller and
+/// whether it was face down. Conditions about this turn's events look at that, not at what
+/// it is later ("a +1/+1 counter was placed on a permanent that you controlled as the
+/// counter was placed. It doesn't matter whether you still control the permanent").
+#[derive(Clone, Debug)]
+pub struct AsPut {
+    pub chars: crate::object::Characteristics,
+    pub controller: PlayerId,
+    pub face_down: bool,
+}
+
+impl AsPut {
+    /// `id` as it is now, if it's a permanent.
+    pub fn of(g: &Game, id: ObjectId) -> Option<std::sync::Arc<AsPut>> {
+        let o = g.obj(id);
+        (o.zone == crate::object::Zone::Battlefield).then(|| {
+            std::sync::Arc::new(AsPut {
+                chars: o.chars.clone(),
+                controller: o.controller,
+                face_down: o.face_down,
+            })
+        })
+    }
+}
+
+/// Sees one permanent as it was ([`AsPut`]) and everything else as it is.
+struct AsPutView<'a> {
+    id: ObjectId,
+    chars: &'a crate::object::Characteristics,
+    controller: PlayerId,
+    face_down: bool,
+}
+
+impl crate::eval::View for AsPutView<'_> {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a crate::object::Characteristics {
+        if id == self.id {
+            self.chars
+        } else {
+            &g.obj(id).chars
+        }
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.id {
+            self.controller
+        } else {
+            g.obj(id).controller
+        }
+    }
+    fn face_down(&self, g: &Game, id: ObjectId) -> bool {
+        if id == self.id {
+            self.face_down
+        } else {
+            g.obj(id).face_down
+        }
+    }
+}
+
+/// Whether `cond`, a condition about counters being put on a permanent, matches the
+/// earlier event `ev` of this turn as it happened: the permanent is matched as it was as
+/// they were put on it (as it entered, for counters it entered with), whatever it is now
+/// ("Sigardian Paladin's first ability applies as long as you put a +1/+1 counter on a
+/// permanent this turn and that permanent was a creature at the time you put the counter
+/// on"). `None` if `cond` or `ev` isn't about that, or nothing was recorded.
+pub fn happened_this_turn(g: &Game, cond: &TriggerCond, ctx: &Ctx, ev: &Event) -> Option<bool> {
+    let Event::CountersAdded {
+        target: Entity::Object(o),
+        kind: k,
+        n,
+        by,
+        as_put,
+        ..
+    } = ev
+    else {
+        return None;
+    };
+    let (filter, kind, who) = match cond {
+        TriggerCond::CountersPut { filter, kind, .. } => (filter, kind, None),
+        TriggerCond::CountersPutBy {
+            who,
+            on_objects: Some(filter),
+            kind,
+            ..
+        } => (filter, kind, Some(*who)),
+        _ => return None,
+    };
+    let view = match as_put {
+        Some(a) => AsPutView {
+            id: *o,
+            chars: &a.chars,
+            controller: a.controller,
+            face_down: a.face_down,
+        },
+        None => {
+            let e = g
+                .history
+                .permanents_entered
+                .iter()
+                .rev()
+                .find(|e| e.id == *o)?;
+            let (chars, face_down) = e.as_entered.as_ref()?;
+            AsPutView {
+                id: *o,
+                chars,
+                controller: e.controller,
+                face_down: *face_down,
+            }
+        }
+    };
+    Some(
+        *n > 0
+            && kind.as_ref().is_none_or(|x| x == k)
+            && who.is_none_or(|w| by.is_some_and(|p| g.player_rel_matches(w, p, ctx)))
+            && g.matches_view(&view, *o, filter, ctx),
+    )
+}
+
 /// Matches the trigger conditions about who put counters or what destroyed or countered
 /// something. `None` if `cond` isn't one of them.
 pub fn trigger_matches(

@@ -90,28 +90,53 @@ fn put_by_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "r122 [player] puts counters on [object]", priority: 100, parse: put_by_trigger } }
 
+/// "~" (this object, CR 400.7: not an earlier object it was), "a creature", "a permanent
+/// under your control", "a creature you control": the permanent counters were put on.
+fn put_on(s: &str) -> Option<Filter> {
+    if s == "~" {
+        return Some(Filter::Source);
+    }
+    let (s, yours) = match s.strip_suffix(" under your control") {
+        Some(s) => (s, true),
+        None => (s, false),
+    };
+    let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    let (f, plural, tail) = parse_object_phrase(s)?;
+    if plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some(if yours {
+        Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)])
+    } else {
+        f
+    })
+}
+
 /// "if you put a counter on ~ this turn", "as long as you've put one or more +1/+1
-/// counters on ~ this turn", "if a counter was put on ~ this turn": such an event happened
-/// this turn to this object (CR 400.7: not to an earlier object it was).
-fn put_on_this_this_turn(c: &str) -> Option<Condition> {
-    let c = end(c).strip_suffix(" on ~ this turn")?;
-    let trigger = if let Some(r) = c
+/// counters on a creature this turn", "if a +1/+1 counter was put on a permanent under
+/// your control this turn": such an event happened this turn, to the permanent as it was
+/// then ([`crate::event_causes::happened_this_turn`]).
+fn put_on_this_turn(c: &str) -> Option<Condition> {
+    let c = end(c).strip_suffix(" this turn")?;
+    let (head, on) = c.split_once(" on ")?;
+    let filter = put_on(on)?;
+    let trigger = if let Some(r) = head
         .strip_prefix("you've put ")
-        .or_else(|| c.strip_prefix("you put "))
+        .or_else(|| head.strip_prefix("you put "))
     {
         let (kind, each, _) = counters_on(&format!("{r} on "))?;
         TriggerCond::CountersPutBy {
             who: PlayerRel::You,
-            on_objects: Some(Filter::Source),
+            on_objects: Some(filter),
             on_players: None,
             kind,
             each,
         }
     } else {
-        let r = match c.strip_suffix(" counters were put") {
+        let r = match head.strip_suffix(" counters were put") {
             Some(r) => r.strip_prefix("one or more")?,
             None => {
-                let r = c.strip_suffix(" counter was put")?;
+                let r = head.strip_suffix(" counter was put")?;
                 r.strip_prefix("an").or_else(|| r.strip_prefix("a"))?
             }
         };
@@ -124,7 +149,7 @@ fn put_on_this_this_turn(c: &str) -> Option<Condition> {
             ),
         };
         TriggerCond::CountersPut {
-            filter: Filter::Source,
+            filter,
             kind,
             each: false,
         }
@@ -132,7 +157,7 @@ fn put_on_this_this_turn(c: &str) -> Option<Condition> {
     Some(Condition::AllTriggerConditionsThisTurn(vec![trigger]))
 }
 
-inventory::submit! { super::ConditionPattern { name: "r122 (you put) counters (were put) on ~ this turn", priority: 100, parse: put_on_this_this_turn } }
+inventory::submit! { super::ConditionPattern { name: "r122 (you put) counters (were put) on [permanent] this turn", priority: 100, parse: put_on_this_turn } }
 
 /// "a permanent you control", "a creature or planeswalker you control or on yourself",
 /// "a permanent or player": (objects, players).
@@ -263,9 +288,13 @@ mod tests {
             "you've put one or more +1/+1 counters on ~ this turn",
             "a counter was put on ~ this turn",
             "a +1/+1 counter was put on ~ this turn",
+            "you put a counter on a creature this turn",
+            "you've put one or more +1/+1 counters on a creature this turn",
+            "a +1/+1 counter was put on a permanent under your control this turn",
         ] {
-            assert!(put_on_this_this_turn(c).is_some(), "{c}");
+            assert!(put_on_this_turn(c).is_some(), "{c}");
         }
+        assert!(put_on_this_turn("you put a counter on two creatures this turn").is_none());
     }
 
     #[test]

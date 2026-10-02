@@ -656,6 +656,7 @@ impl Game {
                                         n,
                                         by,
                                         origin,
+                                        as_put: None,
                                     });
                                 }
                             }
@@ -1343,11 +1344,13 @@ impl Game {
         if n == 0 {
             return;
         }
+        let mut as_put = None;
         match target {
             Entity::Object(o) => {
                 if !self.is_live(o) {
                     return;
                 }
+                as_put = crate::event_causes::AsPut::of(self, o);
                 // CR 613.7c: every counter of this kind gets the new counter's timestamp.
                 let ts = self.new_timestamp();
                 let ob = &mut self.objects[o.0 as usize];
@@ -1369,6 +1372,7 @@ impl Game {
             n,
             by,
             origin,
+            as_put,
         });
     }
 

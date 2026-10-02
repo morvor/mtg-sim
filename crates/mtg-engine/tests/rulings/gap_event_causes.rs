@@ -730,3 +730,170 @@ fn lullmage_mentors_counter_ability_triggers_its_first_ability() {
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
     assert_eq!(with_subtype(&t, P0, "Merfolk").len(), 8, "a Merfolk token");
 }
+
+// ---------------------------------------------------------------------------------------
+// Counters put this turn, on a permanent as it was then
+// ---------------------------------------------------------------------------------------
+
+/// `p` puts `n` +1/+1 counters on `on` with a resolving ability of `source` (a permanent
+/// `p` controls).
+fn put_plus1(t: &mut TestGame, source: ObjectId, on: ObjectId, n: u32) {
+    t.g.add_counters(Entity::Object(on), counters::PLUS1, n, Some(source));
+    t.g.flush_events();
+    t.resolve_all();
+    t.g.recompute();
+}
+
+/// Whether `id` has the keyword now.
+fn has(t: &TestGame, id: ObjectId, kw: mtg_engine::keywords::KeywordKind) -> bool {
+    t.obj_now(id).has_keyword(kw)
+}
+
+#[test]
+fn sigardian_paladin_looks_at_what_the_permanent_was_when_the_counter_was_put_on() {
+    use mtg_engine::keywords::KeywordKind;
+    cr!("122.6", "611.3a");
+    ruling!(
+        "Sigardian Paladin",
+        "Sigardian Paladin's first ability applies as long as you put a +1/+1 counter on a permanent this turn and that permanent was a creature at the time you put the counter on. It doesn't matter if that creature later left the battlefield, lost its counters, or somehow stopped being a creature."
+    );
+    supported("Sigardian Paladin");
+    supported("Mutavault");
+    let mut t = TestGame::new(2);
+    let paladin = t.battlefield(P0, "Sigardian Paladin");
+    assert!(!has(&t, paladin, KeywordKind::Trample));
+    // A +1/+1 counter on a land that isn't a creature, which then becomes one: no.
+    let vault = t.battlefield(P0, "Mutavault");
+    put_plus1(&mut t, paladin, vault, 1);
+    t.lands(P0, "Wastes", 1);
+    crate::r_s06_common::activate_containing(&mut t, P0, vault, "becomes").unwrap();
+    t.resolve_all();
+    assert!(t.obj_now(vault).is(CardType::Creature));
+    assert!(!has(&t, paladin, KeywordKind::Trample));
+    // An opponent putting one on P0's creature: no.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    put_plus1(&mut t, theirs, bears, 1);
+    assert!(!has(&t, paladin, KeywordKind::Lifelink));
+    // P0 puts one on a creature, which then leaves the battlefield and loses its counters:
+    // yes.
+    put_plus1(&mut t, paladin, bears, 1);
+    assert!(has(&t, paladin, KeywordKind::Trample));
+    assert!(has(&t, paladin, KeywordKind::Lifelink));
+    t.g.destroy(bears, None);
+    t.settle();
+    t.g.recompute();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(has(&t, paladin, KeywordKind::Trample));
+    // Next turn, it no longer applies.
+    t.g.turn.number += 1;
+    t.g.turn_events.clear();
+    t.g.recompute();
+    assert!(!has(&t, paladin, KeywordKind::Trample));
+}
+
+/// Advances to the end step of `active`'s turn and puts the triggered abilities on the
+/// stack; returns how many are Fairgrounds Trumpeter's.
+fn trumpeter_triggers_at_end_step(t: &mut TestGame, active: PlayerId) -> usize {
+    t.advance_to(active, Step::End);
+    t.settle();
+    triggers_on_stack(t, "if a +1/+1 counter was put on a permanent under your control")
+}
+
+#[test]
+fn fairgrounds_trumpeter_counts_permanents_you_controlled_as_the_counter_was_placed() {
+    cr!("122.6", "603.4");
+    ruling!(
+        "Fairgrounds Trumpeter",
+        "Fairgrounds Trumpeter's ability triggers if, at any point during this turn, a +1/+1 counter was placed on a permanent that you controlled as the counter was placed. It doesn't matter whether you still control the permanent or whether it still has a counter."
+    );
+    supported("Fairgrounds Trumpeter");
+    // A counter on P0's Bears, which P1 then gains control of: triggers.
+    let mut t = TestGame::new(2);
+    let trumpeter = t.battlefield(P0, "Fairgrounds Trumpeter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    put_plus1(&mut t, trumpeter, bears, 1);
+    crate::r_s06_common::give_control(&mut t, bears, P1);
+    assert_eq!(t.obj_now(bears).controller, P1);
+    assert_eq!(trumpeter_triggers_at_end_step(&mut t, P0), 1);
+    t.resolve_all();
+    assert_eq!(t.counters(trumpeter, counters::PLUS1), 1);
+    // A counter on P1's Bears, which P0 then gains control of: doesn't.
+    let mut t = TestGame::new(2);
+    let trumpeter = t.battlefield(P0, "Fairgrounds Trumpeter");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    put_plus1(&mut t, trumpeter, bears, 1);
+    crate::r_s06_common::give_control(&mut t, bears, P0);
+    assert_eq!(trumpeter_triggers_at_end_step(&mut t, P0), 0);
+}
+
+#[test]
+fn fairgrounds_trumpeter_doesnt_see_counters_put_during_the_end_step() {
+    cr!("603.4", "513.1a");
+    ruling!(
+        "Fairgrounds Trumpeter",
+        "If a +1/+1 counter hasn't been placed yet at the moment an end step begins, Fairgrounds Trumpeter's ability doesn't trigger at all. If another ability triggers during the end step and puts a +1/+1 counter on a permanent you control, you won't put an additional +1/+1 counter on Fairgrounds Trumpeter."
+    );
+    let mut t = TestGame::new(2);
+    let trumpeter = t.battlefield(P0, "Fairgrounds Trumpeter");
+    // "At the beginning of your end step, put a +1/+1 counter on target creature you
+    // control."
+    let def = custom_card(
+        "End Step Grower",
+        "Enchantment",
+        "{0}",
+        None,
+        "At the beginning of your end step, put a +1/+1 counter on target creature you control.",
+    );
+    t.custom(P0, def, Zone::Battlefield);
+    t.answer_targets(P0, &[Entity::Object(trumpeter)]);
+    assert_eq!(trumpeter_triggers_at_end_step(&mut t, P0), 0);
+    t.resolve_all();
+    assert_eq!(t.counters(trumpeter, counters::PLUS1), 1);
+    assert_eq!(triggers_on_stack(&t, "if a +1/+1 counter was put"), 0);
+}
+
+#[test]
+fn lord_jyscal_guado_and_lasting_tarfire_check_as_the_end_step_begins() {
+    cr!("603.4", "513.1a");
+    ruling!(
+        "Lord Jyscal Guado",
+        "Lord Jyscal Guado's last ability checks at the moment it would trigger to see if you put a counter on a creature this turn. If you didn't, the ability won't trigger at all. Once your end step begins, it's too late to put a counter on a creature in order to cause this ability to trigger."
+    );
+    ruling!(
+        "Lasting Tarfire",
+        "Lasting Tarfire's ability will check as your end step starts to see if you put a counter on a creature this turn. If you didn't, the ability won't trigger at all. Putting a counter on a creature during your end step won't cause the ability to trigger."
+    );
+    supported("Lord Jyscal Guado");
+    supported("Lasting Tarfire");
+    // No counter put this turn: neither triggers.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lord Jyscal Guado");
+    t.battlefield(P0, "Lasting Tarfire");
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    // A counter put on any creature (even an opponent's) during the turn: both trigger.
+    let mut t = TestGame::new(2);
+    let lord = t.battlefield(P0, "Lord Jyscal Guado");
+    t.battlefield(P0, "Lasting Tarfire");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(theirs), counters::MINUS1, 1, Some(lord));
+    t.g.flush_events();
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(with_subtype(&t, P0, "Clue").len(), 1);
+    // A counter P1 put: no.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lord Jyscal Guado");
+    t.battlefield(P0, "Lasting Tarfire");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(theirs), counters::PLUS1, 1, Some(theirs));
+    t.g.flush_events();
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+}

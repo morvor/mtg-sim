@@ -1396,10 +1396,11 @@ impl Game {
                 .and_then(|c| c.text.as_deref())
                 .is_some_and(|t| t == w.as_str()),
             Condition::AllTriggerConditionsThisTurn(conds) => conds.iter().all(|c| {
-                self.turn_events
-                    .iter()
-                    .chain(self.events.iter())
-                    .any(|ev| !self.trigger_matches_ctx(c, ctx, ev).is_empty())
+                self.turn_events.iter().chain(self.events.iter()).any(|ev| {
+                    // Counters put on a permanent: as it was then.
+                    crate::event_causes::happened_this_turn(self, c, ctx, ev)
+                        .unwrap_or_else(|| !self.trigger_matches_ctx(c, ctx, ev).is_empty())
+                })
             }),
             // CR 702.131: including a blessing a permanent's ascend ability gives now.
             Condition::CitysBlessing => crate::kw::ascend::has_citys_blessing(self, ctx.controller),
