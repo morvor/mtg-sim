@@ -339,12 +339,23 @@ impl Game {
                     (Some(f), Some(card)) if f != o.face => Some(card.characteristics(f)),
                     _ => None,
                 };
-                let abilities = match (m.etb.copy_of, &face_chars) {
-                    (Some(c), _) => &self.obj(c).copiable.abilities,
-                    (None, Some(fc)) => &fc.abilities,
-                    (None, None) => &o.chars.abilities,
+                // Copiable values and a face's characteristics don't list the abilities
+                // their keywords stand for (e.g. vanishing's "enters with"): add them.
+                let with_derived = |ch: &crate::object::Characteristics| {
+                    let mut v = ch.abilities.clone();
+                    for (_, d) in crate::keyword_impls::derived_by_keyword(ch) {
+                        if !v.iter().any(|x| x.uid == d.uid) {
+                            v.push(d);
+                        }
+                    }
+                    v
                 };
-                for a in abilities {
+                let abilities = match (m.etb.copy_of, &face_chars) {
+                    (Some(c), _) => with_derived(&self.obj(c).copiable),
+                    (None, Some(fc)) => with_derived(fc),
+                    (None, None) => o.chars.abilities.clone(),
+                };
+                for a in &abilities {
                     if let AbilityKind::Static(s) = &a.kind {
                         // CR 614.12: only effects that affect just that permanent apply
                         // from the permanent itself ("Permanents enter tapped" doesn't
