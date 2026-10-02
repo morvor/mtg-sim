@@ -472,3 +472,40 @@ fn lynde_attaches_a_curse_attached_to_you_to_an_opponent() {
     assert_eq!(attached(&t, curse), Some(Entity::Player(P1)));
     assert_eq!(t.hand_size(P0), hand + 2);
 }
+
+#[test]
+fn thorin_attached_equipment_lets_the_creature_deal_damage() {
+    cr!("603.12", "701.3a");
+    assert_compiles(&["Thorin, Mountain-king"]);
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let blade = t.battlefield(P0, "Bonesplitter");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(blade)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.enter(P0, "Thorin, Mountain-king");
+    t.resolve_all();
+    assert_eq!(attached(&t, blade), Some(Entity::Object(bears)));
+    // The equipped Bears (4/2) dealt 4 damage to the Hill Giant.
+    assert!(!t.on_battlefield(giant));
+}
+
+#[test]
+fn thorin_no_trigger_if_nothing_became_attached() {
+    cr!("603.12", "701.3b");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let blade = t.battlefield(P0, "Bonesplitter");
+    assert!(t.g.attach(blade, Entity::Object(bears)));
+    let giant = t.battlefield(P1, "Hill Giant");
+    // The Bonesplitter is already attached to the Bears: nothing becomes attached.
+    t.answer_targets(P0, &[Entity::Object(blade)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.enter(P0, "Thorin, Mountain-king");
+    t.resolve_all();
+    assert_eq!(attached(&t, blade), Some(Entity::Object(bears)));
+    assert!(t.on_battlefield(giant));
+    assert_eq!(t.obj_now(giant).damage, 0);
+}

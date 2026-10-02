@@ -1131,3 +1131,57 @@ fn f_if_put_this_way_attach(l: &str, prev: &mut Effect, b: &mut Builder) -> bool
 }
 
 inventory::submit! { super::FollowupPattern { name: "attach grammar: if an Equipment is put onto the battlefield this way, attach it", priority: 95, apply: f_if_put_this_way_attach } }
+
+/// "When one or more Equipment become attached to that creature this way, that creature
+/// deals damage equal to its power to up to one target creature." (Thorin, Mountain-king)
+/// after attaching to a target: a reflexive triggered ability (CR 603.12) that triggers
+/// if anything became attached; "that creature" is the target.
+fn f_when_attached_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if super::zz_probe_ps::disabled() {
+        return false;
+    }
+    let l = end(l);
+    let Some(r) = l.strip_prefix("when one or more ") else {
+        return false;
+    };
+    let Some((noun, body)) = r.split_once(" become attached to that creature this way, ") else {
+        return false;
+    };
+    // "Equipment" is its own plural.
+    let Some((_, _, tail)) = parse_object_phrase(noun) else {
+        return false;
+    };
+    if !end(tail).is_empty() {
+        return false;
+    }
+    let Effect::Attach {
+        to: Sel::Target(slot),
+        ..
+    } = &*prev
+    else {
+        return false;
+    };
+    let slot = *slot;
+    let Some(body) = super::r600_triggers::reflexive_body(body, b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::Seq(vec![
+        old,
+        // "That creature" in the reflexive ability.
+        Effect::Store {
+            var: vars::IT,
+            sel: Sel::Target(slot),
+        },
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(Effect::Reflexive {
+                body: Box::new(body),
+            }),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "attach grammar: when one or more [attachments] become attached to that creature this way", priority: 95, apply: f_when_attached_this_way } }
