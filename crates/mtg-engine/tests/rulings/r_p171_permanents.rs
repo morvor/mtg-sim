@@ -515,3 +515,46 @@ fn wandering_champion_checks_right_after_damage_and_again_on_resolution() {
     assert!(t.in_graveyard(P0, "Lightning Bolt"));
     assert_eq!(t.hand_size(P0), 1);
 }
+
+// ---------------------------------------------------------------------------------
+// Nightscape Familiar: "{1}{B}: Regenerate this creature."
+// ---------------------------------------------------------------------------------
+
+#[test]
+fn nightscape_familiar_regeneration_shield_replaces_the_next_destruction() {
+    cr!("701.19a", "614.8");
+    ruling!(
+        "Nightscape Familiar",
+        "Activating the ability creates a replacement effect that acts like a shield, replacing the next time Nightscape Familiar would be destroyed that turn. This shield works against effects that try to destroy Nightscape Familiar or lethal damage that would be dealt to Nightscape Familiar."
+    );
+    ruling!(
+        "Nightscape Familiar",
+        "You can activate the regeneration ability even if Nightscape Familiar isn’t at risk of being destroyed."
+    );
+    supported("Murder");
+    let mut t = TestGame::new(2);
+    let fam = t.battlefield(P0, "Nightscape Familiar");
+    let regen = |t: &mut TestGame| {
+        t.activate(P0, fam, 0, &[]).expect("regenerate");
+        t.resolve_all();
+    };
+    t.lands(P0, "Swamp", 4);
+    // Nothing threatens it: the ability can still be activated, and the shield lasts.
+    assert!(can_activate(&mut t, P0, fam));
+    regen(&mut t);
+    // Lethal damage: regenerated (tapped, damage removed).
+    cast_targeting(&mut t, P1, "Lightning Bolt", &[obj(fam)]);
+    t.resolve_all();
+    assert!(t.on_battlefield(fam));
+    assert!(tapped(&t, fam));
+    assert_eq!(damage_on(&t, fam), 0);
+    // A destroy effect: a new shield regenerates it.
+    regen(&mut t);
+    cast_targeting(&mut t, P1, "Murder", &[obj(fam)]);
+    t.resolve_all();
+    assert!(t.on_battlefield(fam));
+    // The shield was used: the next destruction isn't replaced.
+    cast_targeting(&mut t, P1, "Murder", &[obj(fam)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Nightscape Familiar"));
+}

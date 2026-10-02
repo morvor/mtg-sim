@@ -280,3 +280,21 @@ fn two_headed_giant_each_opponent_triggers_hit_the_team_twice() {
         assert_eq!(t.life(P0), 30, "{name}");
     }
 }
+
+#[test]
+fn chandra_flames_catalyst_plus_one_in_two_headed_giant() {
+    cr!("810.9", "810.4");
+    ruling!(
+        "Chandra, Flame's Catalyst",
+        "In a Two-Headed Giant game, Chandra's first ability causes the opposing team to lose 6 life."
+    );
+    // "+1: Chandra deals 3 damage to each opponent." (Her other abilities aren't
+    // compiled; this one is.)
+    let mut t = two_headed_giant();
+    let chandra = t.battlefield(P0, "Chandra, Flame's Catalyst");
+    crate::r_s06_common::activate_containing(&mut t, P0, chandra, "each opponent").expect("+1");
+    t.resolve_all();
+    assert_eq!(t.life(P2), 24);
+    assert_eq!(t.life(P3), 24);
+    assert_eq!(t.life(P0), 30);
+}

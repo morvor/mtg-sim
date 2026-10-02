@@ -399,3 +399,97 @@ fn ghostly_flame_doesnt_change_the_sources_color() {
     t.settle();
     assert_eq!(damage_on(&t, paladin), 1);
 }
+
+// ---------------------------------------------------------------------------------
+// Pyromancer's Gauntlet: "If a red instant or sorcery spell you control or a red
+// planeswalker you control would deal damage to a permanent or player, it deals that much
+// damage plus 2 to that permanent or player instead."
+// ---------------------------------------------------------------------------------
+
+#[test]
+fn pyromancers_gauntlet_adds_2_for_red_spells_and_planeswalkers_only() {
+    cr!("614.1a", "614.2");
+    ruling!(
+        "Pyromancer's Gauntlet",
+        "Pyromancer’s Gauntlet doesn’t change the source or recipient of the damage."
+    );
+    supported("Pyromancer's Gauntlet");
+    supported("Chandra Nalaar");
+    let mut t = TestGame::new(2);
+    let gauntlet = t.battlefield(P0, "Pyromancer's Gauntlet");
+    let bolt = cast_targeting(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(damage_events(&t), vec![(bolt, Entity::Player(P1), 5)]);
+    assert!(damage_events(&t).iter().all(|(s, _, _)| *s != gauntlet));
+    assert_eq!(t.life(P1), 15);
+    // A red planeswalker: Chandra Nalaar's +1 ("deals 1 damage to target player or
+    // planeswalker") deals 3.
+    let chandra = t.battlefield(P0, "Chandra Nalaar");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    crate::r_s06_common::activate_containing(&mut t, P0, chandra, "deals 1 damage").expect("+1");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 12);
+    // A red creature isn't affected; neither is an opponent's red spell.
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.g.deal_damage(giant, Entity::Player(P1), 3, false);
+    assert_eq!(t.life(P1), 9);
+    cast_targeting(&mut t, P1, "Shock", &[Entity::Player(P0)]);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn pyromancers_gauntlet_adds_2_to_each_recipient() {
+    cr!("614.1a");
+    ruling!(
+        "Pyromancer's Gauntlet",
+        "If damage is being dealt to multiple players and/or permanents at the same time, the damage being dealt to each one is increased by 2."
+    );
+    supported("Pyroclasm");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Pyromancer's Gauntlet");
+    let a = t.battlefield(P1, "Indomitable Ancients");
+    let b = t.battlefield(P0, "Indomitable Ancients");
+    cast_card(&mut t, P0, "Pyroclasm");
+    t.resolve_all();
+    assert_eq!(damage_on(&t, a), 4);
+    assert_eq!(damage_on(&t, b), 4);
+}
+
+#[test]
+fn pyromancers_gauntlet_doesnt_apply_to_prevented_or_zero_damage() {
+    cr!("614.1a", "615.1a", "616.1", "120.8");
+    ruling!(
+        "Pyromancer's Gauntlet",
+        "If all damage from a source is prevented (because of Pay No Heed, for example) or if a source would deal 0 damage, the effect of Pyromancer’s Gauntlet will not apply as that source is no longer dealing damage."
+    );
+    supported("Blaze");
+    // Blaze for X = 0: no damage, not 2.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Pyromancer's Gauntlet");
+    t.lands(P0, "Mountain", 1);
+    let blaze = t.hand(P0, "Blaze");
+    t.cast(P0, blaze).x(0).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    // P1 prevents the next 3 damage to P1 (Remedy, 2 to the Bears), then applies the
+    // prevention first to Lightning Bolt's 3 damage: all of it is prevented, and the
+    // Gauntlet no longer applies. Applying the Gauntlet first: 5 − 3 = 2.
+    type Choice = fn(&mtg_engine::game::Game, &Decision) -> Option<Answer>;
+    let cases: [(Choice, i32); 2] = [(remedy_first, 20), (bonus_first, 18)];
+    for (choice, life) in cases {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Pyromancer's Gauntlet");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        give_mana_for(&mut t, P1, "Remedy");
+        let card = t.hand(P1, "Remedy");
+        t.answer_targets(P1, &[Entity::Player(P1), obj(bears)]);
+        t.answer(P1, DecisionKind::Divide, Answer::Numbers(vec![3, 2]));
+        t.cast_with(P1, card, &[]).unwrap();
+        t.resolve_all();
+        respond(&mut t, P1, choice);
+        cast_targeting(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+        t.resolve_all();
+        assert_eq!(t.life(P1), life);
+    }
+}
