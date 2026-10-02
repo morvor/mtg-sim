@@ -19,15 +19,28 @@ use crate::keywords::KeywordKind;
 use crate::types::{Entity, ObjectId};
 
 const PREFIX: &str = "search graveyard hand library same name:";
+/// "for any number of cards with the same name": the searcher may leave cards in the
+/// graveyard too.
+const PREFIX_ANY: &str = "search graveyard hand library any same name:";
 
 /// The instruction finding the cards named like the target in `slot`, stored in `var`.
 pub fn search_effect(slot: u8, var: Var) -> crate::ability::Effect {
     crate::ability::Effect::Custom(format!("{PREFIX}{slot}:{var}").into())
 }
 
-/// The target slot and variable of a [`search_effect`] instruction.
+/// Like [`search_effect`], for "any number of cards with the same name": the searching
+/// player chooses which of the cards in the graveyard to find as well.
+pub fn search_any_effect(slot: u8, var: Var) -> crate::ability::Effect {
+    crate::ability::Effect::Custom(format!("{PREFIX_ANY}{slot}:{var}").into())
+}
+
+/// The target slot and variable of a [`search_effect`] or [`search_any_effect`]
+/// instruction.
 pub fn parse_search(name: &str) -> Option<(u8, Var)> {
-    let (slot, var) = name.strip_prefix(PREFIX)?.split_once(':')?;
+    let (slot, var) = name
+        .strip_prefix(PREFIX)
+        .or_else(|| name.strip_prefix(PREFIX_ANY))?
+        .split_once(':')?;
     Some((slot.parse().ok()?, var.parse().ok()?))
 }
 
@@ -42,6 +55,7 @@ impl KeywordRules for SearchSameName {
         let Some((slot, var)) = parse_search(name) else {
             return false;
         };
+        let any_number = name.starts_with(PREFIX_ANY);
         let searcher = ctx.controller;
         let target = Sel::Target(slot);
         let Some(owner) = g.eval_player(&PlayerRef::ControllerOf(Box::new(target.clone())), ctx)
@@ -56,19 +70,32 @@ impl KeywordRules for SearchSameName {
                 .filter(|c| g.matches(*c, &filter, ctx))
                 .collect()
         };
-        // The graveyard: every such card.
-        let mut found = named(g, &g.player(owner).graveyard.clone(), ctx);
-        // The hand: the searcher chooses which to find (all by default).
+        // The graveyard: every such card ("all cards"), or those the searcher chooses
+        // ("any number of cards").
+        let in_graveyard = named(g, &g.player(owner).graveyard.clone(), ctx);
+        let mut found = if any_number {
+            vec![]
+        } else {
+            in_graveyard.clone()
+        };
+        // The hand (and the graveyard for "any number"): the searcher chooses which to
+        // find (all by default).
         let in_hand = named(g, &g.player(owner).hand.clone(), ctx);
-        if !in_hand.is_empty() {
+        for cands in [
+            if any_number { in_graveyard } else { vec![] },
+            in_hand,
+        ] {
+            if cands.is_empty() {
+                continue;
+            }
             let ans = g.ask(
                 searcher,
                 Decision::ChooseEntities {
                     source: ctx.source,
                     prompt: "Search: choose cards".into(),
-                    candidates: in_hand.iter().map(|c| Entity::Object(*c)).collect(),
+                    candidates: cands.iter().map(|c| Entity::Object(*c)).collect(),
                     min: 0,
-                    max: in_hand.len() as u32,
+                    max: cands.len() as u32,
                 },
             );
             let chosen: Option<Vec<ObjectId>> = match ans {
@@ -79,7 +106,7 @@ impl KeywordRules for SearchSameName {
                     uniq.dedup();
                     (objs.len() == v.len()
                         && uniq.len() == objs.len()
-                        && objs.iter().all(|o| in_hand.contains(o)))
+                        && objs.iter().all(|o| cands.contains(o)))
                     .then_some(objs)
                 }
                 _ => None,
@@ -87,7 +114,7 @@ impl KeywordRules for SearchSameName {
             found.extend(match chosen {
                 Some(v) => v,
                 // Default (or invalid) answers: automated agents prefer finding cards.
-                None if g.search_finds_by_default => in_hand,
+                None if g.search_finds_by_default => cands,
                 None => vec![],
             });
         }

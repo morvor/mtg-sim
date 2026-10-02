@@ -17,6 +17,8 @@ use crate::types::CardType;
 fn graveyard_owner(s: &str, b: &Builder) -> Option<PlayerRel> {
     match s {
         "your graveyard" => Some(PlayerRel::You),
+        // Any player's (Spectral Arcanist).
+        "a graveyard" => Some(PlayerRel::Any),
         "that player's graveyard" => match &b.it_player {
             PlayerRef::Target(n) => Some(PlayerRel::Target(*n)),
             PlayerRef::TriggerPlayer => Some(PlayerRel::TriggerPlayer),

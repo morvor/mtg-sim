@@ -16,7 +16,10 @@ fn cast_free_from_hand(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
         Filter::Any
     } else {
         let (f, _, tail) = parse_object_phrase(kind)?;
-        if !end(tail).is_empty() || !kind.ends_with(" spells") {
+        // "instant spells", "spells with mana value less than or equal to the number of
+        // creatures you control" (Omnipresence).
+        if !end(tail).is_empty() || !(kind.ends_with(" spells") || kind.starts_with("spells with "))
+        {
             return None;
         }
         f

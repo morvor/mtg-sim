@@ -956,3 +956,235 @@ fn return_to_destination_first(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "relational: return to [destination] [objects]", priority: 100, parse: return_to_destination_first } }
+
+/// "Enchanted creature and other creatures that share a creature type with it get +1/+1
+/// until end of turn", "~ and each other creature with the same name as it get +3/+3 until
+/// end of turn", "it and other creatures you control that share a creature type with it
+/// each get +1/+1 ...": the subject and the other objects related to it as the
+/// instruction is carried out (CR 608.2c).
+fn subject_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
+    use crate::oracle::effects::{object_ref, parse_clause};
+    let l = end(l);
+    let (head, after) = [" and each other ", " and all other ", " and other "]
+        .iter()
+        .find_map(|sep| l.split_once(sep))?;
+    if head.contains("target") {
+        return None;
+    }
+    let before = b.targets.len();
+    let saved_it = b.it.clone();
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(before);
+        b.it = saved_it.clone();
+    };
+    let Some((x, hrest)) = object_ref(head, b) else {
+        restore(b);
+        return None;
+    };
+    if !hrest.trim().is_empty()
+        || b.targets.len() != before
+        || matches!(x, Sel::All(_) | Sel::Choose { .. } | Sel::Union(_))
+        || crate::oracle::patterns::oracle_hardening_referents::is_no_referent(&x)
+    {
+        restore(b);
+        return None;
+    }
+    let parsed = (|| {
+        let (f, _plural, rest) = parse_object_phrase(after)?;
+        if !mentions_referent(&f) {
+            return None;
+        }
+        let f = substitute(&other_than_it(f, &x), &x)?;
+        // "other" relative to it even when written without a qualifier on "other".
+        let f = if serde_json::to_string(&f)
+            .is_ok_and(|j| j.contains(&serde_json::to_string(&Filter::not(Filter::In(Box::new(x.clone())))).unwrap_or_default()))
+        {
+            f
+        } else {
+            Filter::and(vec![f, Filter::not(Filter::In(Box::new(x.clone())))])
+        };
+        if !crate::relational::groups_of(&f).is_empty() || crate::relational::has_nested_group(&f)
+        {
+            return None;
+        }
+        // The rest of the instruction, said of the subject alone.
+        let tail = rest.trim_start();
+        let tail = tail.strip_prefix("each ").unwrap_or(tail);
+        let mut tail = tail.to_string();
+        for (p, s) in [("get ", "gets "), ("gain ", "gains "), ("have ", "has ")] {
+            if let Some(r) = tail.strip_prefix(p) {
+                tail = format!("{s}{r}");
+            }
+        }
+        let tail = tail.replace(" and gain ", " and gains ");
+        let rewritten = format!("{head} {tail}");
+        let e = parse_clause(&rewritten, b)?;
+        if b.targets.len() != before {
+            return None;
+        }
+        let group = Sel::Union(vec![x.clone(), Sel::All(f)]);
+        let json = serde_json::to_string(&e).ok()?;
+        let needle = serde_json::to_string(&x).ok()?;
+        if json.matches(&needle).count() != 1 {
+            return None;
+        }
+        let group = serde_json::to_string(&group).ok()?;
+        serde_json::from_str::<Effect>(&json.replace(&needle, &group)).ok()
+    })();
+    if parsed.is_none() {
+        restore(b);
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "relational: [subject] and other [objects] related to it", priority: 90, parse: subject_and_others } }
+
+/// "Return any number of permanent cards with different names from your graveyard to the
+/// battlefield", "return any number of artifact creature cards with total mana value 6 or
+/// less from your graveyard to the battlefield": the controller chooses the cards as the
+/// instruction is carried out, as a group meeting the requirement.
+fn return_any_number(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("return any number of ")?;
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    if !plural {
+        return None;
+    }
+    let f = resolve_referent(f, b)?;
+    let rest = rest.trim_start();
+    let (to, tail) = if let Some(t) = rest.strip_prefix("to the battlefield") {
+        (Destination::battlefield().under_your_control(), t)
+    } else if let Some(t) = rest.strip_prefix("to your hand") {
+        (Destination::zone(ZoneKind::Hand), t)
+    } else {
+        return None;
+    };
+    let (to, tail) = match tail.strip_prefix(" tapped") {
+        Some(t) => (to.tapped(), t),
+        None => (to, tail),
+    };
+    if !tail.trim().is_empty() || f.zone() != Some(ZoneKind::Graveyard) {
+        return None;
+    }
+    if crate::relational::has_nested_group(&f) {
+        return None;
+    }
+    Some(Effect::Move {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: f,
+            count: Value::c(999),
+            up_to: true,
+            store: None,
+        },
+        to,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "relational: return any number of [cards] to ...", priority: 100, parse: return_any_number } }
+
+// ---------------------------------------------------------------------------
+// Values of groups of objects
+// ---------------------------------------------------------------------------
+
+/// Objects a value is about: a description ("creatures you control", "other creatures
+/// you control"), a reference ("those creatures", "the exiled cards"), or two
+/// descriptions joined by "and" ("noncreature permanents you control and noncreature
+/// cards in your graveyard").
+fn objects_for_value(t: &str, b: &mut Builder) -> Option<(Sel, String)> {
+    use crate::oracle::effects::object_ref;
+    let t = t.trim_start();
+    let t2 = t.strip_prefix("all ").unwrap_or(t);
+    if let Some((f, plural, rest)) = parse_object_phrase(t2) {
+        if plural {
+            let f = resolve_referent(f, b)?;
+            // "... and [another description]"
+            if let Some(r2) = rest.trim_start().strip_prefix("and ") {
+                if let Some((f2, true, rest2)) = parse_object_phrase(r2) {
+                    if f2.zone() != f.zone() {
+                        return Some((
+                            Sel::Union(vec![Sel::All(f), Sel::All(f2)]),
+                            rest2.to_string(),
+                        ));
+                    }
+                }
+            }
+            return Some((Sel::All(f), rest.to_string()));
+        }
+    }
+    for (p, sel) in [
+        ("the exiled cards", Sel::All(exiled_with_source())),
+        ("cards exiled with ~", Sel::All(exiled_with_source())),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            if word_end(r) {
+                return Some((sel, r.to_string()));
+            }
+        }
+    }
+    let before = b.targets.len();
+    let (sel, rest) = object_ref(t, b)?;
+    if b.targets.len() != before {
+        b.targets.truncate(before);
+        return None;
+    }
+    Some((sel, rest))
+}
+
+/// "the total power of those creatures", "their total power", "the total mana value of
+/// cards you own in exile", "the greatest mana value among noncreature permanents you
+/// control and noncreature cards in your graveyard", "the least power among creatures you
+/// control". None for forms the core value parser reads (a plain description after "the
+/// total power of" / "the greatest power among").
+pub fn value_of_objects(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let s = s.trim_start();
+    // "their total power" / "their total toughness" / "their total mana value"
+    if let Some(r) = s.strip_prefix("their total ") {
+        let (stat, rest) = stat_word(r)?;
+        let (sel, _) = crate::oracle::effects::object_ref("them", b)?;
+        return Some((stat_of(stat, sel), rest.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("the total ") {
+        let (stat, r) = stat_word(r)?;
+        let r = r.trim_start().strip_prefix("of ")?;
+        // The core reads a plain description for power and toughness.
+        if stat != Stat::ManaValue
+            && parse_object_phrase(r).is_some_and(|(_, plural, rest)| {
+                plural && !rest.trim_start().starts_with("and ")
+            })
+        {
+            return None;
+        }
+        let (sel, rest) = objects_for_value(r, b)?;
+        return Some((stat_of(stat, sel), rest));
+    }
+    let r = s.strip_prefix("the ")?;
+    let (greatest, r) = if let Some(x) = r
+        .strip_prefix("greatest ")
+        .or_else(|| r.strip_prefix("highest "))
+    {
+        (true, x)
+    } else if let Some(x) = r
+        .strip_prefix("least ")
+        .or_else(|| r.strip_prefix("lowest "))
+    {
+        (false, x)
+    } else {
+        return None;
+    };
+    let (stat, r) = stat_word(r)?;
+    let r = r.trim_start().strip_prefix("among ")?;
+    // The core reads "the greatest power/mana value among [a description]".
+    if greatest
+        && stat != Stat::Toughness
+        && parse_object_phrase(r).is_some_and(|(_, plural, rest)| {
+            plural && !rest.trim_start().starts_with("and ")
+        })
+    {
+        return None;
+    }
+    let (sel, rest) = objects_for_value(r, b)?;
+    Some((
+        Value::Extreme(Box::new(tested(stat)), Box::new(sel), greatest),
+        rest,
+    ))
+}

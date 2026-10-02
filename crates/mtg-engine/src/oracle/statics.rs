@@ -783,6 +783,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         }
         return Some((Value::Devotion(set), rest.to_string()));
     }
+    // Totals and extremes of objects named by reference ("the total power of those
+    // creatures", "the greatest mana value among [two groups]").
+    if let Some(v) = super::patterns::filters_relational::value_of_objects(s, b) {
+        return Some(v);
+    }
     if let Some(r) = s.strip_prefix("the greatest power among ") {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::GreatestPower(f), rest.to_string()));
