@@ -472,14 +472,27 @@ impl Game {
             }
             Effect::Fight { a, b } => {
                 // CR 701.14
-                let a = self
-                    .resolve_objects(a, ctx)
-                    .into_iter()
-                    .find(|o| self.is_live(*o) && self.obj(*o).is_creature());
-                let b = self
-                    .resolve_objects(b, ctx)
-                    .into_iter()
-                    .find(|o| self.is_live(*o) && self.obj(*o).is_creature());
+                let fighters = |g: &mut Game, s: &Sel, ctx: &mut Ctx| -> Vec<ObjectId> {
+                    let v = g.resolve_objects(s, ctx);
+                    v.into_iter()
+                        .filter(|o| g.is_live(*o) && g.obj(*o).is_creature())
+                        .collect()
+                };
+                let (a, b) = match (a, b) {
+                    // "Choose two target creatures ... Those creatures fight each other."
+                    // (one instance of the word "target"): the two fight each other; if
+                    // either is an illegal target, no damage is dealt (CR 701.14b).
+                    (Sel::Target(x), Sel::Target(y)) if x == y => {
+                        match fighters(self, a, ctx).as_slice() {
+                            [a, b] => (Some(*a), Some(*b)),
+                            _ => (None, None),
+                        }
+                    }
+                    _ => (
+                        fighters(self, a, ctx).first().copied(),
+                        fighters(self, b, ctx).first().copied(),
+                    ),
+                };
                 if let (Some(a), Some(b)) = (a, b) {
                     let pa = self.obj(a).power().max(0) as u32;
                     let pb = self.obj(b).power().max(0) as u32;

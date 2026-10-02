@@ -1367,6 +1367,14 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
         t.what = TargetKind::AnyTarget;
         return Some((t, r));
     }
+    // "1 damage to any target and 2 damage to another target" (Cone of Flame): any target
+    // other than the earlier ones (the text "another target" makes it so, see
+    // `Builder::add_target`).
+    if let Some(r) = s.trim_start().strip_prefix("another target") {
+        if r.is_empty() || r.starts_with(',') || r.starts_with('.') || r.starts_with(" and ") {
+            return Some((TargetSpec::any_target(), r));
+        }
+    }
     parse_target(s)
 }
 

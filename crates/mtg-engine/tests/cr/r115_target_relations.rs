@@ -396,3 +396,137 @@ fn a_target_related_to_an_earlier_target() {
     assert_eq!(choices[1].0, vec![other]);
     assert_eq!(chosen, vec![first, other]);
 }
+
+/// A sorcery compiled from oracle text with the real compiler.
+fn sorcery(name: &str, text: &str) -> mtg_engine::card::CardDef {
+    use mtg_engine::oracle::{self, CompileContext};
+    let tl = TypeLine::parse("Sorcery");
+    let ctx = CompileContext {
+        card_name: name,
+        full_name: name,
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let compiled = oracle::compile(text, &ctx);
+    assert!(compiled.unsupported.is_empty(), "{:?}", compiled.unsupported);
+    mtg_engine::card::CardDef::custom(mtg_engine::object::Characteristics {
+        name: smol_str::SmolStr::new(name),
+        mana_cost: mtg_engine::mana::ManaCost::parse("{0}"),
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        rules_text: std::sync::Arc::from(text),
+        ..Default::default()
+    })
+}
+
+fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
+    t.g.turn.priority = Some(p);
+    t.g.recompute();
+    t.g.legal_actions(p).iter().any(
+        |a| matches!(a, mtg_engine::decision::Action::Cast { card: c, .. } if *c == card),
+    )
+}
+
+#[test]
+fn another_target_must_be_a_different_object() {
+    cr!("115.3", "601.2c");
+    // "Put a +1/+1 counter on target creature, two +1/+1 counters on another target
+    // creature, and three +1/+1 counters on a third target creature." (Incremental
+    // Growth): three different creatures are needed; with two, the spell can't be cast.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let spell = t.hand(P0, "Incremental Growth");
+    t.lands(P0, "Forest", 5);
+    assert!(!castable(&mut t, P0, spell));
+    assert!(t.cast(P0, spell).try_go().is_err());
+    let c = t.battlefield(P1, "Llanowar Elves");
+    assert!(castable(&mut t, P0, spell));
+    // The same creature can't be chosen again: answering an earlier target again is
+    // ignored, and a different creature is chosen.
+    let from = t.asked().len();
+    let id = t.cast(P0, spell).target(b).target(b).target(b).go();
+    let choices = target_choices(&t, from);
+    assert_eq!(choices.len(), 3);
+    assert!(!choices[1].0.contains(&Entity::Object(b)));
+    let chosen = targets_of(&t, id);
+    assert_eq!(chosen.len(), 3);
+    assert_eq!(chosen[0], Entity::Object(b));
+    assert!(!choices[2].0.contains(&chosen[0]) && !choices[2].0.contains(&chosen[1]));
+    assert!([a, b, c].iter().all(|x| chosen.contains(&Entity::Object(*x))));
+    t.resolve();
+    let n = |e: Entity| t.counters(e.object().unwrap(), "+1/+1");
+    assert_eq!((n(chosen[0]), n(chosen[1]), n(chosen[2])), (1, 2, 3));
+}
+
+#[test]
+fn a_target_that_would_leave_another_target_without_a_choice_isnt_offered() {
+    cr!("115.3", "601.2c");
+    // "another target creature you control" must be a different creature from the first
+    // target: P0's only creature is needed for it, so the first target is P1's.
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    let spell = t.custom(
+        P0,
+        sorcery(
+            "Probe",
+            "Put a +1/+1 counter on target creature and two +1/+1 counters on another target creature you control.",
+        ),
+        Zone::Hand(P0),
+    );
+    assert!(castable(&mut t, P0, spell));
+    let from = t.asked().len();
+    let id = t.cast(P0, spell).target(mine).target(mine).go();
+    let choices = target_choices(&t, from);
+    assert_eq!(choices[0].0, vec![Entity::Object(theirs)]);
+    assert_eq!(
+        targets_of(&t, id),
+        vec![Entity::Object(theirs), Entity::Object(mine)]
+    );
+    t.resolve();
+    assert_eq!(t.counters(theirs, "+1/+1"), 1);
+    assert_eq!(t.counters(mine, "+1/+1"), 2);
+
+    // With only P0's creature, there's no second creature for it: can't be cast.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    let spell = t.custom(
+        P0,
+        sorcery(
+            "Probe",
+            "Put a +1/+1 counter on target creature and two +1/+1 counters on another target creature you control.",
+        ),
+        Zone::Hand(P0),
+    );
+    assert!(!castable(&mut t, P0, spell));
+}
+
+#[test]
+fn two_targets_of_one_instance_fight_each_other() {
+    cr!("701.14a", "701.14b", "608.2b", "115.1");
+    // Rivals' Duel: "Choose two target creatures that share no creature types. Those
+    // creatures fight each other."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    mana(&mut t, P0, ManaType::R, 4);
+    let spell = t.hand(P0, "Rivals' Duel");
+    let id = t
+        .cast(P0, spell)
+        .targets(&[Entity::Object(bears), Entity::Object(giant)])
+        .go();
+    assert_eq!(
+        targets_of(&t, id),
+        vec![Entity::Object(bears), Entity::Object(giant)]
+    );
+    t.resolve();
+    assert_eq!(t.zone(bears), Zone::Graveyard(P0));
+    assert_eq!(t.obj_now(giant).damage, 2);
+    assert_eq!(t.obj_now(elves).damage, 0);
+}

@@ -1292,3 +1292,400 @@ fn rods_of_absorption_track_their_own_cards() {
     let new_rod = new_rod.unwrap();
     assert_eq!(linked(&t, new_rod), 0);
 }
+
+fn bounce(t: &mut TestGame, id: ObjectId) {
+    let owner = t.obj(id).owner;
+    t.g.move_object(
+        id,
+        Zone::Hand(owner),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+    t.g.flush_events();
+}
+
+#[test]
+fn three_different_targets_are_needed_to_cast() {
+    cr!("115.3", "601.2c");
+    ruling!(
+        "Incremental Growth",
+        "You must choose three different targets in order to cast Incremental Growth. You decide how many +1/+1 counters each creature will get as part of casting the spell."
+    );
+    ruling!(
+        "Incremental Blight",
+        "You must target three different creatures. If you can't, you can't cast Incremental Blight."
+    );
+    ruling!(
+        "Serpentine Spike",
+        "Each target must be a different creature. You can’t cast Serpentine Spike without three different creatures available."
+    );
+    ruling!(
+        "Cone of Flame",
+        "Each of the three targets must be different. If there aren’t three different legal targets available, you can’t cast the spell."
+    );
+    use crate::r_s21_common::castable;
+    for (name, color) in [
+        ("Incremental Growth", ManaType::G),
+        ("Incremental Blight", ManaType::B),
+        ("Serpentine Spike", ManaType::R),
+    ] {
+        supported(name);
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Grizzly Bears");
+        t.battlefield(P1, "Hill Giant");
+        let spell = t.hand(P0, name);
+        add_mana(&mut t, P0, color, 7);
+        assert!(!castable(&mut t, P0, spell), "{name}");
+        t.battlefield(P1, "Craw Wurm");
+        assert!(castable(&mut t, P0, spell), "{name}");
+    }
+    // Cone of Flame: any target, so the two players count; with no creatures there are
+    // only two different targets.
+    supported("Cone of Flame");
+    let mut t = TestGame::new(2);
+    let spell = t.hand(P0, "Cone of Flame");
+    add_mana(&mut t, P0, ManaType::R, 5);
+    assert!(!castable(&mut t, P0, spell));
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    assert!(castable(&mut t, P0, spell));
+    // Who gets how much is decided by which target is which, as the spell is cast.
+    let id = t
+        .cast(P0, spell)
+        .target(Entity::Player(P1))
+        .target(wurm)
+        .target(Entity::Player(P0))
+        .go();
+    assert_eq!(
+        stack_targets(&t, id),
+        vec![
+            Entity::Player(P1),
+            Entity::Object(wurm),
+            Entity::Player(P0)
+        ]
+    );
+    t.resolve();
+    assert_eq!((t.life(P1), t.obj_now(wurm).damage, t.life(P0)), (19, 2, 17));
+}
+
+#[test]
+fn incremental_growth_remaining_targets_get_their_counters() {
+    cr!("608.2b", "115.3");
+    ruling!(
+        "Incremental Growth",
+        "If some of the creatures are illegal targets as Incremental Growth tries to resolve, the remaining legal targets still get the appropriate number of +1/+1 counters. If all targets are illegal, Incremental Growth doesn’t resolve."
+    );
+    let setup = || {
+        let mut t = TestGame::new(2);
+        let a = t.battlefield(P0, "Grizzly Bears");
+        let b = t.battlefield(P0, "Hill Giant");
+        let c = t.battlefield(P0, "Llanowar Elves");
+        let spell = t.hand(P0, "Incremental Growth");
+        add_mana(&mut t, P0, ManaType::G, 5);
+        let id = t.cast(P0, spell).target(a).target(b).target(c).go();
+        (t, id, a, b, c)
+    };
+    // The second target leaves: the first still gets one counter and the third three.
+    let (mut t, _, a, b, c) = setup();
+    bounce(&mut t, b);
+    t.resolve();
+    assert_eq!(t.counters(a, "+1/+1"), 1);
+    assert_eq!(t.counters(c, "+1/+1"), 3);
+    assert!(t.in_graveyard(P0, "Incremental Growth"));
+    // All three leave: the spell doesn't resolve (it's put into the graveyard without
+    // doing anything).
+    let (mut t, id, a, b, c) = setup();
+    for x in [a, b, c] {
+        bounce(&mut t, x);
+    }
+    t.resolve();
+    assert!(!t.g.is_live(id));
+    assert!(t.in_graveyard(P0, "Incremental Growth"));
+    assert!(t.g.battlefield.iter().all(|o| t.counters(*o, "+1/+1") == 0));
+}
+
+#[test]
+fn three_targets_damage_isnt_changed_when_some_are_illegal() {
+    cr!("608.2b", "601.2c");
+    ruling!(
+        "Cone of Flame",
+        "If one or two of Cone of Flame’s targets are illegal when it resolves, you can’t change how much damage will be dealt to the remaining legal targets."
+    );
+    ruling!(
+        "Serpentine Spike",
+        "If one or two of those targets become illegal by the time Serpentine Spike resolves, you can’t change how much damage will be dealt to the remaining legal targets."
+    );
+    // Cone of Flame: 1 to the Bears, 2 to the Wurm, 3 to P1; the Wurm leaves.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let spell = t.hand(P0, "Cone of Flame");
+    add_mana(&mut t, P0, ManaType::R, 5);
+    t.cast(P0, spell)
+        .target(bears)
+        .target(wurm)
+        .target(Entity::Player(P1))
+        .go();
+    bounce(&mut t, wurm);
+    t.resolve();
+    assert_eq!(t.obj_now(bears).damage, 1);
+    assert_eq!(t.life(P1), 17);
+
+    // Serpentine Spike: 2, 3 and 4 damage; the first target leaves.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let c = t.battlefield(P1, "Craw Wurm");
+    let spell = t.hand(P0, "Serpentine Spike");
+    add_mana(&mut t, P0, ManaType::R, 7);
+    t.cast(P0, spell).target(a).target(b).target(c).go();
+    bounce(&mut t, a);
+    t.resolve();
+    // Hill Giant (3/3) is dealt 3 and dies (exiled instead); Craw Wurm (6/4) is dealt 4
+    // and dies too.
+    assert!(t.in_exile("Hill Giant"));
+    assert!(t.in_exile("Craw Wurm"));
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn serpentine_spike_exiles_a_creature_it_damaged_that_dies_later() {
+    cr!("614.1a", "608.2b");
+    ruling!(
+        "Serpentine Spike",
+        "A creature doesn’t necessarily have to be dealt lethal damage by Serpentine Spike to be exiled. After being dealt damage, if it would die for any reason that turn, it’ll be exiled instead."
+    );
+    // The Wurm (6/4) is dealt 2 damage by the first part and survives; destroyed later
+    // that turn, it's exiled. A creature the spell didn't damage isn't.
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let other = t.battlefield(P1, "Llanowar Elves");
+    let spell = t.hand(P0, "Serpentine Spike");
+    add_mana(&mut t, P0, ManaType::R, 7);
+    t.cast(P0, spell).target(wurm).target(giant).target(bears).go();
+    t.resolve();
+    assert_eq!(t.obj_now(wurm).damage, 2);
+    assert!(t.in_exile("Hill Giant"));
+    assert!(t.in_exile("Grizzly Bears"));
+    let wurm = t.g.current(wurm);
+    t.g.destroy(wurm, None);
+    t.g.destroy(other, None);
+    t.settle();
+    assert!(t.in_exile("Craw Wurm"));
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+}
+
+#[test]
+fn ravens_run_chaos_needs_three_different_creatures() {
+    cr!("115.3", "603.3d");
+    ruling!(
+        "Raven's Run",
+        "You must target three different creatures when the chaos ability triggers, even if that means you have to target creatures you control. If you can't target three creatures (because there are just two creatures on the battlefield, perhaps), the ability is removed from the stack and does nothing."
+    );
+    use crate::r_s19_common::{chaos, planechase_game, start_planar_deck};
+    supported("Raven's Run");
+    // Two creatures: the chaos ability is removed from the stack.
+    let mut t = planechase_game(2);
+    start_planar_deck(&mut t, P0, &["Raven's Run"]);
+    let a = t.battlefield(P0, "Craw Wurm");
+    let b = t.battlefield(P1, "Craw Wurm");
+    chaos(&mut t, P0);
+    assert_eq!(t.stack_len(), 0);
+    t.resolve_all();
+    assert_eq!(t.counters(a, "-1/-1") + t.counters(b, "-1/-1"), 0);
+    // Three creatures, one of them P0's own: all three are targeted.
+    let c = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(b)]);
+    t.answer_targets(P0, &[Entity::Object(c)]);
+    t.answer_targets(P0, &[Entity::Object(a)]);
+    chaos(&mut t, P0);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(
+        (
+            t.counters(b, "-1/-1"),
+            t.counters(c, "-1/-1"),
+            t.counters(a, "-1/-1")
+        ),
+        (1, 2, 3)
+    );
+}
+
+#[test]
+fn violent_ultimatum_three_different_permanents() {
+    cr!("115.3", "608.2b");
+    ruling!(
+        "Violent Ultimatum",
+        "You must target three different permanents. If some of the permanents become illegal targets before the spell resolves, Violent Ultimatum will still destroy the rest of them."
+    );
+    ruling!(
+        "Bounty of Might",
+        "You may choose the same creature as a target multiple times since Bounty of Might says “target creature” multiple times. You may give three different creatures +3/+3 each, one creature +6/+6 and another creature +3/+3, or a single creature +9/+9."
+    );
+    use crate::r_s21_common::castable;
+    supported("Violent Ultimatum");
+    supported("Bounty of Might");
+    // "Destroy three target permanents": one instance of "target", three different
+    // permanents.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let spell = t.hand(P0, "Violent Ultimatum");
+    for c in [ManaType::B, ManaType::R, ManaType::G] {
+        add_mana(&mut t, P0, c, 3);
+    }
+    assert!(!castable(&mut t, P0, spell));
+    let c = t.battlefield(P1, "Craw Wurm");
+    let id = t
+        .cast(P0, spell)
+        .targets(&[Entity::Object(a), Entity::Object(b), Entity::Object(c)])
+        .go();
+    assert_eq!(stack_targets(&t, id).len(), 3);
+    bounce(&mut t, b);
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.in_graveyard(P1, "Craw Wurm"));
+    assert!(t.in_hand(P1, "Hill Giant"));
+
+    // Bounty of Might: three instances of "target creature": the same creature can be
+    // each of them.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let spell = t.hand(P0, "Bounty of Might");
+    add_mana(&mut t, P0, ManaType::G, 6);
+    assert!(castable(&mut t, P0, spell));
+    t.cast(P0, spell)
+        .target(bears)
+        .target(bears)
+        .target(bears)
+        .go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (11, 11));
+}
+
+#[test]
+fn rivals_duel_targets_share_no_creature_types() {
+    cr!("115.1", "608.2b", "701.14b");
+    ruling!("Rivals' Duel", "The two creatures may be controlled by the same player.");
+    ruling!(
+        "Rivals' Duel",
+        "If, by the time Rivals’ Duel resolves, an effect has caused the two target creatures to share a creature type, Rivals’ Duel doesn’t resolve for having no legal targets."
+    );
+    ruling!(
+        "Rivals' Duel",
+        "If either one of the creatures leaves the battlefield before Rivals’ Duel resolves, no damage is dealt to or by the remaining creature. If both creatures leave the battlefield before Rivals’ Duel resolves, the spell doesn’t resolve for having no legal targets."
+    );
+    use crate::r_s21_common::castable;
+    supported("Rivals' Duel");
+    // Two Bears share a creature type: not two legal targets together.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    let spell = t.hand(P0, "Rivals' Duel");
+    add_mana(&mut t, P0, ManaType::R, 4);
+    assert!(!castable(&mut t, P0, spell));
+    // Two creatures P1 controls (a Giant and an Elf Druid) can fight each other.
+    let giant = t.battlefield(P1, "Hill Giant");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    assert!(castable(&mut t, P0, spell));
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(giant), Entity::Object(elves)])
+        .go();
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+    assert_eq!(t.obj_now(giant).damage, 1);
+
+    // The two come to share a creature type: neither is a legal target, and the spell
+    // doesn't resolve.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let spell = t.hand(P0, "Rivals' Duel");
+    add_mana(&mut t, P0, ManaType::R, 4);
+    let id = t
+        .cast(P0, spell)
+        .targets(&[Entity::Object(giant), Entity::Object(bears)])
+        .go();
+    run(
+        &mut t,
+        P0,
+        Effect::Modify {
+            what: Sel::All(Filter::Objects(vec![bears])),
+            mods: vec![Modification::AddSubtypes(vec!["Giant".into()])],
+            duration: Duration::EndOfTurn,
+        },
+        &[],
+    );
+    t.resolve();
+    assert!(!t.g.is_live(id));
+    assert_eq!(t.obj_now(giant).damage, 0);
+    assert_eq!(t.obj_now(bears).damage, 0);
+
+    // One leaves: no damage is dealt to or by the other.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let spell = t.hand(P0, "Rivals' Duel");
+    add_mana(&mut t, P0, ManaType::R, 4);
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(giant), Entity::Object(bears)])
+        .go();
+    bounce(&mut t, bears);
+    t.resolve();
+    assert_eq!(t.obj_now(giant).damage, 0);
+    assert!(t.in_graveyard(P0, "Rivals' Duel"));
+}
+
+#[test]
+fn magma_burst_kicked_second_target_is_a_different_one() {
+    cr!("115.3", "601.2c");
+    ruling!(
+        "Magma Burst",
+        "The second target must be different from the first one."
+    );
+    ruling!(
+        "Magma Burst",
+        "You choose a second target only if you choose to pay the Kicker cost."
+    );
+    supported("Magma Burst");
+    // Kicked (sacrificing two lands): P1 is the first target; answering P1 again for the
+    // second isn't allowed, so another target is chosen.
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let lands = t.lands(P0, "Mountain", 6);
+    let spell = t.hand(P0, "Magma Burst");
+    t.answer_choose(P0, &[Entity::Object(lands[4]), Entity::Object(lands[5])]);
+    let from = t.asked().len();
+    let id = t
+        .cast(P0, spell)
+        .kicked(true)
+        .target(Entity::Player(P1))
+        .target(Entity::Player(P1))
+        .go();
+    let chosen = stack_targets(&t, id);
+    assert_eq!(chosen.len(), 2);
+    assert_eq!(chosen[0], Entity::Player(P1));
+    assert_ne!(chosen[1], Entity::Player(P1));
+    let second: Vec<Vec<Entity>> = asked_since(&t, from)
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(!second[1].contains(&Entity::Player(P1)));
+    assert!(second[1].contains(&Entity::Object(wurm)));
+    // Not kicked: one target.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 4);
+    let spell = t.hand(P0, "Magma Burst");
+    let id = t
+        .cast(P0, spell)
+        .kicked(false)
+        .target(Entity::Player(P1))
+        .go();
+    assert_eq!(stack_targets(&t, id), vec![Entity::Player(P1)]);
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+}

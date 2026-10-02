@@ -290,6 +290,90 @@ pub fn related_ok(
 }
 
 // ---------------------------------------------------------------------------
+// Different instances of the word "target" that must be different objects
+// ---------------------------------------------------------------------------
+
+/// Whether slots `i` and `j` must have different targets ("another target creature", "a
+/// third target creature", `TargetSpec::distinct_from`).
+fn must_differ(specs: &[TargetSpec], i: usize, j: usize) -> bool {
+    specs[i].distinct_from.contains(&(j as u8)) || specs[j].distinct_from.contains(&(i as u8))
+}
+
+/// Whether targets can be chosen for every slot in `slots`, `mins[i]` of `cands[i]` for
+/// slot `i`, with no object or player chosen for two slots that must have different
+/// targets ("put a +1/+1 counter on target creature, two +1/+1 counters on another
+/// target creature, and three +1/+1 counters on a third target creature" needs three
+/// different creatures, CR 115.3, 601.2c). `chosen` are the targets already chosen for
+/// other slots. The search gives up (answering yes) after a bounded number of steps.
+pub fn distinct_targets_possible(
+    specs: &[TargetSpec],
+    slots: &[usize],
+    cands: &[Vec<Entity>],
+    mins: &[usize],
+    chosen: &[Vec<Entity>],
+) -> bool {
+    if !slots
+        .iter()
+        .any(|i| (0..specs.len()).any(|j| j != *i && must_differ(specs, *i, j)))
+    {
+        return true;
+    }
+    let mut assigned: Vec<Vec<Entity>> = (0..specs.len())
+        .map(|i| chosen.get(i).cloned().unwrap_or_default())
+        .collect();
+    let mut budget = 10_000u32;
+    assign(specs, slots, cands, mins, &mut assigned, &mut budget)
+}
+
+fn assign(
+    specs: &[TargetSpec],
+    slots: &[usize],
+    cands: &[Vec<Entity>],
+    mins: &[usize],
+    assigned: &mut Vec<Vec<Entity>>,
+    budget: &mut u32,
+) -> bool {
+    let Some((&i, rest)) = slots.split_first() else {
+        return true;
+    };
+    let banned: Vec<Entity> = (0..specs.len())
+        .filter(|j| *j != i && must_differ(specs, i, *j))
+        .flat_map(|j| assigned[j].iter().copied())
+        .collect();
+    let avail: Vec<Entity> = cands[i]
+        .iter()
+        .copied()
+        .filter(|c| !banned.contains(c))
+        .collect();
+    let n = mins[i];
+    if avail.len() < n {
+        return false;
+    }
+    // Each combination of `n` of the available candidates, in order.
+    let mut idx: Vec<usize> = (0..n).collect();
+    loop {
+        if *budget == 0 {
+            return true;
+        }
+        *budget -= 1;
+        assigned[i] = idx.iter().map(|k| avail[*k]).collect();
+        if assign(specs, rest, cands, mins, assigned, budget) {
+            return true;
+        }
+        // The next combination.
+        let Some(k) = (0..n).rev().find(|k| idx[*k] < avail.len() - n + k) else {
+            break;
+        };
+        idx[k] += 1;
+        for m in k + 1..n {
+            idx[m] = idx[m - 1] + 1;
+        }
+    }
+    assigned[i].clear();
+    false
+}
+
+// ---------------------------------------------------------------------------
 // Choices of several objects that aren't targets (`Filter::Together`)
 // ---------------------------------------------------------------------------
 

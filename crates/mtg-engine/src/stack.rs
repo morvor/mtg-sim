@@ -319,6 +319,55 @@ impl Game {
     /// Whether every required target slot has enough legal choices. Slots required only
     /// if some choice is made (e.g. a kicker cost is paid, CR 601.2c) are optional here.
     pub fn targets_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
+        self.each_slot_possible(specs, ctx, stack_obj)
+            && self.distinct_slots_possible(
+                specs,
+                &(0..specs.len()).collect::<Vec<_>>(),
+                &[],
+                ctx,
+                stack_obj,
+            )
+    }
+
+    /// The slots among `slots` whose targets are required as they're chosen (a minimum
+    /// above zero, not depending on a choice, not chosen per player).
+    fn required_slots(&self, specs: &[TargetSpec], slots: &[usize], ctx: &Ctx) -> Vec<usize> {
+        slots
+            .iter()
+            .copied()
+            .filter(|i| {
+                let s = &specs[*i];
+                s.condition.is_none() && s.per_player.is_none() && self.target_min(s, ctx) > 0
+            })
+            .collect()
+    }
+
+    /// Whether the required slots among `slots` can all get their minimum number of
+    /// targets with different instances of "target" that must be different objects
+    /// ("another target", "a third target") getting different ones (CR 115.3), given the
+    /// targets already `chosen` for other slots.
+    fn distinct_slots_possible(
+        &self,
+        specs: &[TargetSpec],
+        slots: &[usize],
+        chosen: &[Vec<Entity>],
+        ctx: &Ctx,
+        stack_obj: ObjectId,
+    ) -> bool {
+        if specs.iter().all(|s| s.distinct_from.is_empty()) {
+            return true;
+        }
+        let slots = self.required_slots(specs, slots, ctx);
+        let mut cands = vec![vec![]; specs.len()];
+        let mut mins = vec![0; specs.len()];
+        for i in &slots {
+            cands[*i] = self.legal_target_candidates(&specs[*i], ctx, stack_obj);
+            mins[*i] = self.target_min(&specs[*i], ctx);
+        }
+        crate::target_groups::distinct_targets_possible(specs, &slots, &cands, &mins, chosen)
+    }
+
+    fn each_slot_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
         specs.iter().all(|s| {
             let min = self.target_min(s, ctx);
             // Targets chosen for each player: a player with no legal choice gets none.
@@ -709,7 +758,7 @@ impl Game {
             .filter(|i| !specs[*i].chosen_by_opponent)
             .chain((0..specs.len()).filter(|i| specs[*i].chosen_by_opponent))
             .collect();
-        for i in order {
+        for (pos, &i) in order.iter().enumerate() {
             let spec = &specs[i];
             ctx.targets = out.clone();
             // CR 601.2c: a target required only if some choice was made (e.g. a kicker
@@ -759,6 +808,22 @@ impl Game {
             // CR 601.2c: the number of targets is announced, then they're chosen: "X
             // target creatures" is exactly X of them, never more than the maximum.
             let min = self.target_min(spec, ctx) as u32;
+            // A target that would leave a later instance of "target" that must be a
+            // different object without enough choices isn't one to choose (CR 115.3).
+            if spec_max == 1 {
+                let later: Vec<usize> = order[pos + 1..].to_vec();
+                if later.iter().any(|k| {
+                    specs[*k].distinct_from.contains(&(i as u8))
+                        || spec.distinct_from.contains(&(*k as u8))
+                }) {
+                    let base = out.clone();
+                    cands.retain(|c| {
+                        let mut chosen = base.clone();
+                        chosen[i] = vec![*c];
+                        self.distinct_slots_possible(specs, &later, &chosen, ctx, stack_obj)
+                    });
+                }
+            }
             // A later slot whose targets must be related to this one's needs one to go
             // with each target chosen here.
             let partners: Vec<usize> = (0..specs.len())
