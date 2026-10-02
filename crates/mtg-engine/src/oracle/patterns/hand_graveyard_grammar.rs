@@ -30,7 +30,7 @@ pub const CHOSEN: Var = vars::USER + 6100;
 /// The cards the most recent action of this grammar affected ("[cards] exiled this way").
 pub const AFFECTED: Var = vars::USER + 6101;
 /// The number of cards it affected ("that many").
-pub const THAT_MANY: Var = vars::USER + 6102;
+pub const THAT_MANY: Var = crate::kw::hand_graveyard_actions::THAT_MANY_VAR;
 
 /// Marks, in [`Builder::named`], that an action of this grammar happened earlier in the
 /// text, so "that many" and "this way" have an antecedent.
@@ -408,6 +408,10 @@ fn record(e: Effect, b: &mut Builder) -> Effect {
             var: THAT_MANY,
             value: Value::CountSel(Box::new(Sel::Var(vars::IT))),
         },
+        // Each of several players acting in turn: each one's own number.
+        Effect::Custom(SmolStr::new(
+            crate::kw::hand_graveyard_actions::RECORD_THAT_MANY,
+        )),
         Effect::Store {
             var: AFFECTED,
             sel: Sel::Var(vars::IT),
@@ -719,10 +723,11 @@ fn p_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
         (b.it, b.it_player) = (saved.1, saved.2);
         return None;
     };
+    let that_many = Value::Custom(SmolStr::new(crate::kw::hand_graveyard_actions::THAT_MANY));
     let v = if plus == 0 {
-        Value::Var(THAT_MANY)
+        that_many
     } else {
-        Value::Sum(vec![Value::Var(THAT_MANY), Value::Const(plus)])
+        Value::Sum(vec![that_many, Value::Const(plus)])
     };
     super::r107_numbers::substitute_x(&e, &v)
 }
