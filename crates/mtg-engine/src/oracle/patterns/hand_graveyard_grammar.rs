@@ -501,7 +501,7 @@ fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(record(e, b))
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: discard cards", priority: 300, parse: p_discard } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: discard cards", priority: 960, parse: p_discard } }
 
 // ---------------------------------------------------------------------------
 // Exile
@@ -528,7 +528,7 @@ fn p_exile(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(record(e, b))
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile cards", priority: 300, parse: p_exile } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile cards", priority: 960, parse: p_exile } }
 
 // ---------------------------------------------------------------------------
 // Reveal
@@ -566,7 +566,7 @@ fn p_reveal(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(record(e, b))
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal cards from hand", priority: 300, parse: p_reveal } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal cards from hand", priority: 960, parse: p_reveal } }
 
 // ---------------------------------------------------------------------------
 // Put / shuffle
@@ -575,6 +575,19 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal cards
 /// The destination after the cards: "on top of your library", "on the bottom of their
 /// library in any order", "into your hand", "into that player's graveyard".
 fn destination<'a>(s: &'a str, b: &mut Builder, subject: &PlayerRef) -> Option<(Destination, &'a str)> {
+    destination_of(s, b, subject, false)
+}
+
+/// [`destination`]; `owner_implied`: the zone is the moved object's owner's whatever the
+/// text calls it ("its owner's library", "their library" after "target card from an
+/// opponent's graveyard"), as objects only ever go to their owner's hand, library or
+/// graveyard (CR 400.3).
+fn destination_of<'a>(
+    s: &'a str,
+    b: &mut Builder,
+    subject: &PlayerRef,
+    owner_implied: bool,
+) -> Option<(Destination, &'a str)> {
     let s = s.trim_start();
     let (to, r) = if let Some(r) = s.strip_prefix("on top of ") {
         (Destination::library_top(), r)
@@ -585,7 +598,18 @@ fn destination<'a>(s: &'a str, b: &mut Builder, subject: &PlayerRef) -> Option<(
     } else {
         return None;
     };
-    let (_, _, r) = owner_phrase(r, b, Some(subject))?;
+    let implied = ["its owner's ", "their owner's ", "their owners' ", "its owners' "]
+        .iter()
+        .find_map(|p| r.strip_prefix(p))
+        .or_else(|| {
+            owner_implied
+                .then(|| r.strip_prefix("their ").or_else(|| r.strip_prefix("his or her ")))
+                .flatten()
+        });
+    let r = match implied {
+        Some(r) => r,
+        None => owner_phrase(r, b, Some(subject))?.2,
+    };
     let (zones, mut rest) = zone_word(r)?;
     let [zone] = zones[..] else { return None };
     let mut to = to;
@@ -626,7 +650,7 @@ fn p_put(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(record(e, b))
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: put cards", priority: 300, parse: p_put } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: put cards", priority: 960, parse: p_put } }
 
 /// "shuffle a card from your hand into your library", "shuffle any number of cards from
 /// your hand into your library", "shuffle all creature cards from target player's
@@ -658,7 +682,7 @@ fn p_shuffle(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(record(e, b))
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: shuffle cards into library", priority: 300, parse: p_shuffle } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: shuffle cards into library", priority: 960, parse: p_shuffle } }
 
 // ---------------------------------------------------------------------------
 // "that many"
@@ -701,7 +725,7 @@ fn p_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
     super::r107_numbers::substitute_x(&e, &v)
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: that many", priority: 300, parse: p_that_many } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: that many", priority: 960, parse: p_that_many } }
 
 // ---------------------------------------------------------------------------
 // "this way"
@@ -754,7 +778,7 @@ fn p_for_each_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
     super::damage_removal_foreach::multiply(e, count)
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: for each card [verb] this way", priority: 300, parse: p_for_each_this_way } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: for each card [verb] this way", priority: 960, parse: p_for_each_this_way } }
 
 // ---------------------------------------------------------------------------
 // "A or B"
@@ -797,7 +821,7 @@ fn p_either_or(l: &str, b: &mut Builder) -> Option<Effect> {
     None
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: [instruction] or [instruction]", priority: 300, parse: p_either_or } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: [instruction] or [instruction]", priority: 960, parse: p_either_or } }
 
 /// Whether `e` ends with an exile instruction (possibly optional or conditional).
 fn ends_with_exile(e: &Effect) -> bool {
@@ -837,7 +861,7 @@ fn f_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     true
 }
 
-inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: [cards] exiled this way", priority: 300, apply: f_exiled_this_way } }
+inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: [cards] exiled this way", priority: 960, apply: f_exiled_this_way } }
 
 // ---------------------------------------------------------------------------
 // Objects the text named earlier: "put that card into their graveyard", "put one of
@@ -877,29 +901,90 @@ fn p_put_object(l: &str, b: &mut Builder) -> Option<Effect> {
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let (what, rest) = match some_of_them(&r, b, &who) {
         Some((sel, rest)) => (sel, rest.to_string()),
-        None => {
-            let (sel, rest) = crate::oracle::effects::object_ref(&r, b)?;
-            // Only what the text already named: a new target is another construct.
-            if b.targets.len() != saved.0 {
-                b.targets.truncate(saved.0);
-                (b.it, b.it_player) = (saved.1, saved.2);
-                return None;
-            }
-            (sel, rest)
-        }
+        None => match chosen_permanent(&r, &who) {
+            Some(x) => x,
+            None => crate::oracle::effects::object_ref(&r, b)?,
+        },
     };
-    let Some((to, tail)) = destination(&rest, b, &who) else {
+    let Some((to, tail)) = destination_of(&rest, b, &who, true) else {
+        b.targets.truncate(saved.0);
         (b.it, b.it_player) = (saved.1, saved.2);
         return None;
     };
     if !end(tail).is_empty() || to.zone == ZoneKind::Battlefield {
+        b.targets.truncate(saved.0);
         (b.it, b.it_player) = (saved.1, saved.2);
         return None;
     }
     Some(Effect::Move { what, to })
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: put [object] into [zone]", priority: 300, parse: p_put_object } }
+/// "a creature you control", "two lands you control": permanents the player chooses.
+fn chosen_permanent(s: &str, who: &PlayerRef) -> Option<(Sel, String)> {
+    let (n, r) = parse_number(s)?;
+    n.as_const()?;
+    let (f, _, rest) = parse_object_phrase(r)?;
+    if super::statics::mentions_other_zones(&f)
+        || !super::statics::filter_mentions(&f, &|x| {
+            matches!(x, Filter::ControlledBy(PlayerRel::You))
+        })
+        || !matches!(who, PlayerRef::You)
+    {
+        return None;
+    }
+    Some((
+        Sel::Choose {
+            chooser: who.clone(),
+            filter: f,
+            count: n,
+            up_to: false,
+            store: None,
+        },
+        rest.to_string(),
+    ))
+}
+
+/// "shuffle target nontoken permanent you control into its owner's library", "shuffle
+/// enchanted creature into its owner's library", "that creature's owner shuffles it into
+/// their library".
+fn p_shuffle_object(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let (what, rest) = if let Some(r) = l.strip_prefix("shuffle ") {
+        crate::oracle::effects::object_ref(r, b)?
+    } else {
+        // "[the object's] owner shuffles it into their library".
+        let (owner_of, r) = l.split_once("'s owner shuffles ")?;
+        let (sel, t) = crate::oracle::effects::object_ref(owner_of, b)?;
+        let (sel2, rest) = crate::oracle::effects::object_ref(r, b)?;
+        if !t.trim().is_empty() || format!("{sel:?}") != format!("{sel2:?}") {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            return None;
+        }
+        let rest = rest.trim_start().strip_prefix("into their library")?;
+        return end(rest).is_empty().then(|| Effect::ShuffleIntoLibrary {
+            what: sel.clone(),
+            library: PlayerRef::OwnerOf(Box::new(sel)),
+        });
+    };
+    let ok = ["into its owner's library", "into their owner's library", "into their owners' libraries"]
+        .iter()
+        .any(|p| rest.trim() == *p);
+    if !ok || matches!(what, Sel::Choose { .. }) {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    Some(Effect::ShuffleIntoLibrary {
+        library: PlayerRef::OwnerOf(Box::new(what.clone())),
+        what,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: shuffle [object] into its owner's library", priority: 960, parse: p_shuffle_object } }
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: put [object] into [zone]", priority: 960, parse: p_put_object } }
 
 /// "reveal it and put it into your hand", "reveal that card and put it into your hand":
 /// the card is revealed (CR 701.20a), then moved.
@@ -932,7 +1017,7 @@ fn p_reveal_and_put(l: &str, b: &mut Builder) -> Option<Effect> {
     ]))
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal it and put it into your hand", priority: 300, parse: p_reveal_and_put } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal it and put it into your hand", priority: 960, parse: p_reveal_and_put } }
 
 // ---------------------------------------------------------------------------
 // Statics granting keywords to cards in a hand or graveyard
@@ -1039,7 +1124,7 @@ fn s_zone_keyword_grant(
     Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
 }
 
-inventory::submit! { super::StaticPattern { name: "hand/graveyard grammar: cards in a zone have [keyword]", priority: 300, parse: s_zone_keyword_grant } }
+inventory::submit! { super::StaticPattern { name: "hand/graveyard grammar: cards in a zone have [keyword]", priority: 960, parse: s_zone_keyword_grant } }
 
 // ---------------------------------------------------------------------------
 // Whole zones and lists: "exile your hand", "exile all creatures and graveyards",
@@ -1180,7 +1265,7 @@ fn p_exile_list(l: &str, b: &mut Builder) -> Option<Effect> {
     ))
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile zones and lists", priority: 310, parse: p_exile_list } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile zones and lists", priority: 970, parse: p_exile_list } }
 
 /// "sacrifice any number of permanents you control", "sacrifice any number of other
 /// permanents": the player chooses which (CR 701.21a); "that many" afterwards is the
@@ -1210,7 +1295,7 @@ fn p_sacrifice_any(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(record(e, b))
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: sacrifice any number", priority: 300, parse: p_sacrifice_any } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: sacrifice any number", priority: 960, parse: p_sacrifice_any } }
 
 /// "draw three cards, then discard one of them", "draw two cards, then put one of them
 /// on the bottom of your library": "them" are the cards drawn.
@@ -1236,4 +1321,4 @@ fn p_draw_then_of_them(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(Effect::seq(vec![draw, then]))
 }
 
-inventory::submit! { EffectPattern { name: "hand/graveyard grammar: draw, then [verb] N of them", priority: 300, parse: p_draw_then_of_them } }
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: draw, then [verb] N of them", priority: 960, parse: p_draw_then_of_them } }
