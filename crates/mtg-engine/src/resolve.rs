@@ -2350,9 +2350,12 @@ impl Game {
         }
         // "That permanent's activated abilities can't be activated this turn": the
         // permanent named as the effect began.
-        if let Restriction::CantActivate { sources, .. } = &mut r {
-            if filter_references_specific(sources) {
-                *sources = Filter::Objects(self.named_objects(sources, ctx));
+        // "That creature can block up to two additional creatures this turn."
+        if let Restriction::CantActivate { sources: f, .. }
+        | Restriction::ExtraBlocks { blocker: f, .. } = &mut r
+        {
+            if filter_references_specific(f) {
+                *f = Filter::Objects(self.named_objects(f, ctx));
             }
         }
         // A restriction on a referenced player ("target player can't play lands this
