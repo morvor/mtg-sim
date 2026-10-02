@@ -685,7 +685,7 @@ fn simic_guildmage_moves_a_counter_between_creatures_with_the_same_controller() 
 
 #[test]
 fn simic_guildmage_moves_an_aura_to_a_permanent_with_the_same_controller() {
-    cr!("701.3a", "303.4d", "115.10");
+    cr!("701.3a", "303.4j", "115.10");
     ruling!(
         "Simic Guildmage",
         "For the second ability, only the Aura is targeted. When the ability resolves, you choose a permanent to move the Aura onto."
@@ -797,7 +797,7 @@ fn bioshift_any_number_between_creatures_with_the_same_controller() {
 
 #[test]
 fn glamer_spinners_moves_all_auras_to_a_permanent_with_the_same_controller() {
-    cr!("701.3a", "303.4d", "603.3d");
+    cr!("701.3a", "303.4j", "603.3d");
     ruling!(
         "Glamer Spinners",
         "When Glamer Spinners enters, you target only one permanent: the one that will be losing its Auras."
@@ -951,7 +951,7 @@ fn transmutation_font_sacrifices_tokens_with_different_names() {
 
 #[test]
 fn ormos_discards_cards_with_different_names() {
-    cr!("118.3", "201.2b", "602.2b");
+    cr!("118.3", "201.2b");
     // Ormos's "Discard three cards with different names" (its other lines aren't
     // supported, so the ability is checked directly): two Bears and an Elves can't be
     // discarded for it.
@@ -1696,7 +1696,7 @@ fn magma_burst_kicked_second_target_is_a_different_one() {
 
 #[test]
 fn blood_feud_two_creatures_with_the_same_controller() {
-    cr!("115.3", "701.14a");
+    cr!("701.14a");
     ruling!(
         "Blood Feud",
         "Blood Feud can target two creatures with the same controller."

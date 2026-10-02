@@ -233,7 +233,7 @@ fn seasons_past_returns_cards_with_different_mana_values() {
 
 #[test]
 fn eerie_ultimatum_returns_permanent_cards_with_different_names() {
-    cr!("201.2", "608.2c");
+    cr!("201.2b", "608.2c");
     ruling!(
         "Eerie Ultimatum",
         "You may choose to return just one permanent card, regardless of its name."
@@ -720,7 +720,7 @@ fn in_the_darkness_bind_them_chapter_four() {
 
 #[test]
 fn hideous_taskmaster_cast_trigger_resolves_first() {
-    cr!("603.3", "405.5", "608.2b");
+    cr!("603.3", "405.5");
     ruling!(
         "Hideous Taskmaster",
         "Hideous Taskmaster's second ability will resolve before Hideous Taskmaster does. If Hideous Taskmaster is countered or otherwise leaves the stack in response to that triggered ability, the triggered ability will still resolve as normal."
@@ -749,7 +749,7 @@ fn hideous_taskmaster_cast_trigger_resolves_first() {
 
 #[test]
 fn exiled_until_it_leaves_if_it_left_before_the_ability_resolved() {
-    cr!("610.3b", "610.3c");
+    cr!("610.3b");
     ruling!(
         "Bronzebeak Foragers",
         "If Bronzebeak Foragers leaves the battlefield before its first ability resolves, none of the target permanents will be exiled."
@@ -807,7 +807,7 @@ fn exiled_until_it_leaves_if_it_left_before_the_ability_resolved() {
 
 #[test]
 fn shadrix_silverquill_zero_or_two_modes_each_a_different_player() {
-    cr!("700.2", "700.2d", "603.3c");
+    cr!("700.2", "700.2b", "603.3c");
     ruling!(
         "Shadrix Silverquill",
         "You may choose exactly zero modes or two modes. You can't choose only one mode. If you choose two modes, you choose which two and the target players as you put the triggered ability on the stack."
@@ -1044,7 +1044,7 @@ fn tocasia_returns_artifacts_with_total_mana_value_10_or_less() {
 
 #[test]
 fn balor_each_mode_targets_a_different_opponent() {
-    cr!("700.2", "700.2d", "603.3c");
+    cr!("700.2", "700.2b", "603.3c");
     supported("Balor");
     let balor_dies = |t: &mut TestGame| {
         let balor = t.battlefield(P0, "Balor");
@@ -1082,7 +1082,7 @@ fn balor_each_mode_targets_a_different_opponent() {
 
 #[test]
 fn splinter_and_leo_each_mode_a_different_player() {
-    cr!("700.2", "700.2d", "603.3c");
+    cr!("700.2", "700.2b", "603.3c");
     supported("Splinter & Leo, Father & Son");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -1186,4 +1186,147 @@ fn nils_a_target_for_each_player_is_optional() {
     assert_eq!(t.counters(p1, "+1/+1"), 1);
     assert_eq!(t.counters(mine, "+1/+1"), 0);
     assert_eq!(t.counters(p2, "+1/+1"), 0);
+}
+
+#[test]
+fn sigardas_vanguard_chooses_creatures_with_different_powers_as_it_resolves() {
+    cr!("201.2b", "603.3d", "115.10");
+    ruling!(
+        "Sigarda's Vanguard",
+        "No creatures are targeted by Sigarda's Vanguard's ability. The set of creatures is chosen as the ability resolves. You may choose a single creature as a valid set."
+    );
+    ruling!(
+        "Sigarda's Vanguard",
+        "A set of creatures has different powers if every creature's power is a different value."
+    );
+    supported("Sigarda's Vanguard");
+    use mtg_engine::keywords::KeywordKind;
+    let ds = |t: &TestGame, id: ObjectId| t.obj_now(id).has_keyword(KeywordKind::DoubleStrike);
+    // Hill Giant (3), the Vanguard (3), Grizzly Bears (2) and Llanowar Elves (1): the
+    // Vanguard has the Giant's power, so it isn't part of the set.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let from = t.asked().len();
+    let vanguard = crate::r_s05_common::enter(&mut t, P0, "Sigarda's Vanguard");
+    // Nothing is targeted as the ability is put on the stack.
+    assert_eq!(t.stack_len(), 1);
+    assert!(asked_since(&t, from).iter().all(|(_, d)| !matches!(
+        d,
+        mtg_engine::decision::Decision::ChooseTargets { .. }
+    )));
+    t.answer_choose(
+        P0,
+        &[giant, vanguard, bears, elves].map(Entity::Object),
+    );
+    t.resolve_all();
+    assert!(ds(&t, giant) && ds(&t, bears) && ds(&t, elves));
+    assert!(!ds(&t, vanguard));
+
+    // A single creature is a valid set.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let vanguard = crate::r_s05_common::enter(&mut t, P0, "Sigarda's Vanguard");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert!(ds(&t, bears));
+    assert!(!ds(&t, vanguard));
+}
+
+#[test]
+fn elminsters_simulacrum_copies_one_creature_of_each_opponent() {
+    cr!("601.2c", "115.1", "707.2");
+    supported("Elminster's Simulacrum");
+    // "For each opponent, you create a token that's a copy of up to one target creature
+    // that player controls." P1's Bears and P2's Giant are copied for P0; P2's Elves
+    // aren't (one target for each opponent).
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P2, "Hill Giant");
+    let elves = t.battlefield(P2, "Llanowar Elves");
+    let spell = t.hand(P0, "Elminster's Simulacrum");
+    add_mana(&mut t, P0, ManaType::U, 6);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(giant), Entity::Object(elves)]);
+    let id = t.cast(P0, spell).go();
+    // Two of P2's creatures aren't one per opponent: only the Bears are a target.
+    assert_eq!(chosen_targets(&t, id), vec![Entity::Object(bears)]);
+    t.resolve();
+    let mine = |name: &str| {
+        t.g.permanents()
+            .filter(|o| o.controller == P0 && o.is_token() && o.name() == name)
+            .count()
+    };
+    assert_eq!(mine("Grizzly Bears"), 1);
+    assert_eq!(mine("Hill Giant"), 0);
+    assert_eq!(mine("Llanowar Elves"), 0);
+
+    // One for each opponent.
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P2, "Hill Giant");
+    let spell = t.hand(P0, "Elminster's Simulacrum");
+    add_mana(&mut t, P0, ManaType::U, 6);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.cast(P0, spell).go();
+    t.resolve();
+    let tokens: Vec<String> = t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P0 && o.is_token())
+        .map(|o| o.name().to_string())
+        .collect();
+    assert_eq!(sorted(&tokens.iter().map(|s| s.as_str()).collect::<Vec<_>>()), sorted(&["Grizzly Bears", "Hill Giant"]));
+}
+
+#[test]
+fn afterlife_from_the_loam_one_creature_card_from_each_graveyard() {
+    cr!("601.2c", "115.1", "608.2b");
+    supported("Afterlife from the Loam");
+    // "For each player, choose up to one target creature card in that player's
+    // graveyard. Put those cards onto the battlefield under your control. They're Zombies
+    // in addition to their other types." The targets are chosen player by player, in
+    // turn order from P0: P0's Craw Wurm, P1's Bears, P2's Giant (not also its Elves).
+    let mut t = TestGame::new(3);
+    let wurm = t.graveyard(P0, "Craw Wurm");
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    let giant = t.graveyard(P2, "Hill Giant");
+    t.graveyard(P2, "Llanowar Elves");
+    let spell = t.hand(P0, "Afterlife from the Loam");
+    add_mana(&mut t, P0, ManaType::B, 8);
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let from = t.asked().len();
+    let id = t.cast(P0, spell).go();
+    let offered: Vec<Vec<Entity>> = asked_since(&t, from)
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets { candidates, .. } => {
+                Some(candidates.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered.len(), 3);
+    assert_eq!(offered[1], vec![Entity::Object(bears)]);
+    assert_eq!(offered[2].len(), 2);
+    assert_eq!(
+        chosen_targets(&t, id),
+        [wurm, bears, giant].map(Entity::Object).to_vec()
+    );
+    // P1's Bears leave the graveyard first: the other two still come back.
+    move_to(&mut t, bears, Zone::Exile);
+    t.resolve();
+    for name in ["Craw Wurm", "Hill Giant"] {
+        let o = t.named_on_battlefield(name);
+        assert_eq!(o.len(), 1, "{name}");
+        let o = t.obj(o[0]);
+        assert_eq!(o.controller, P0, "{name}");
+        assert!(o.chars.has_subtype("Zombie"), "{name}");
+    }
+    assert!(t.in_exile("Grizzly Bears"));
+    assert!(t.in_graveyard(P2, "Llanowar Elves"));
 }

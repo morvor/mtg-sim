@@ -58,7 +58,7 @@ fn tap(t: &mut TestGame, id: ObjectId) {
 
 #[test]
 fn targets_chosen_for_each_opponent() {
-    cr!("601.2c", "115.1", "115.3");
+    cr!("601.2c", "115.1");
     // Mass Mutiny with two opponents: one choice for each, of up to one creature that
     // opponent controls.
     let mut t = TestGame::new(3);
@@ -189,7 +189,7 @@ fn targets_with_different_controllers() {
 
 #[test]
 fn targets_with_equal_toughness() {
-    cr!("601.2c", "608.2b");
+    cr!("601.2c", "115.1");
     // V.A.T.S.: "Choose any number of target creatures with equal toughness." Of a 2/2,
     // a 3/3 and another 2/2, the 3/3 is dropped.
     let mut t = TestGame::new(2);
@@ -332,7 +332,7 @@ fn each_mode_must_target_a_different_player() {
 
 #[test]
 fn changing_a_target_keeps_the_player_it_was_chosen_for() {
-    cr!("115.7", "115.7a", "608.2b");
+    cr!("115.7", "115.7a");
     // Mass Mutiny targets P1's Bears; its target may be changed only to another creature
     // P1 controls, not to P2's Giant.
     let mut t = TestGame::new(3);
@@ -529,6 +529,29 @@ fn two_targets_of_one_instance_fight_each_other() {
     assert_eq!(t.zone(bears), Zone::Graveyard(P0));
     assert_eq!(t.obj_now(giant).damage, 2);
     assert_eq!(t.obj_now(elves).damage, 0);
+
+    // One of them leaves the battlefield before the spell resolves: it's an illegal
+    // target, so neither fights; the other is dealt no damage (CR 701.14b).
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    mana(&mut t, P0, ManaType::R, 4);
+    let spell = t.hand(P0, "Rivals' Duel");
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(bears), Entity::Object(giant)])
+        .go();
+    let bears_now = t.g.current(bears);
+    t.g.move_object(
+        bears_now,
+        Zone::Hand(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+    t.g.flush_events();
+    t.resolve();
+    assert_eq!(t.obj_now(giant).damage, 0);
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert!(t.in_graveyard(P0, "Rivals' Duel"));
 }
 
 #[test]

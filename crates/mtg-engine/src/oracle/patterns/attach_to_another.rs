@@ -18,6 +18,12 @@ use crate::oracle::phrases::{end, parse_object_phrase};
 /// Auras move to, relative to `host` (where they are now).
 fn destination(r: &str, host: &Sel, auras: &Sel) -> Option<Filter> {
     let r = r.strip_prefix("another ")?;
+    // "another permanent of that type" (Enchantment Alteration): the type of the
+    // permanent the Aura is attached to, which no filter here describes ("that type"
+    // would read as a type chosen earlier). Not understood.
+    if r.contains(" of that ") {
+        return None;
+    }
     let (r, same_controller) = match r.strip_suffix(" with the same controller") {
         Some(r) => (r, true),
         None => (r, false),
