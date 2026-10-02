@@ -19,6 +19,22 @@ pub fn followup_about_recipient(e: &Effect) -> bool {
     serde_json::to_string(e).is_ok_and(|s| s.contains("\"TriggerObject\""))
 }
 
+/// Whether a prevention effect's additional instruction (CR 615.5) happens for each damage
+/// event it prevents, rather than once for all simultaneous damage: putting a fixed
+/// number of counters ("prevent that damage and put a +1/+1 counter on ~": one counter
+/// for each creature whose damage is prevented, Ironscale Hydra's and Nine Lives's
+/// rulings). Other instructions happen once ("Remove a +1/+1 counter from ~": only one
+/// is removed for damage from several sources at once, Phantom Tiger's ruling).
+pub fn followup_each_event(e: &Effect) -> bool {
+    matches!(
+        e,
+        Effect::AddCounters {
+            n: Value::Const(_),
+            ..
+        }
+    )
+}
+
 /// Replaces references to chosen objects in a filter (targets, variables, "a source of
 /// your choice") with those objects, so an effect created by a resolving spell or
 /// ability keeps referring to them (CR 609.7b, 611.2c).

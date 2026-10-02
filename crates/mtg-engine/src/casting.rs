@@ -2601,7 +2601,11 @@ impl Game {
                 !(o.is_creature()
                     && o.summoning_sick
                     && !o.has_keyword(KeywordKind::Haste)
-                    && !crate::activation_costs::as_though_haste(self, p, o.id))
+                    && !crate::as_though::as_though_haste(
+                        self,
+                        o.id,
+                        crate::as_though::HasteUse::Activate(p),
+                    ))
             }
             CostPart::PayLife(v) => self.can_pay_life(p, self.eval_value(v, ctx).max(0) as u32),
             CostPart::Loyalty(n) => {

@@ -109,12 +109,33 @@ pub fn attached_to_nothing(g: &Game, obj: ObjectId) -> bool {
     if g.is_live(obj) {
         o.zone == Zone::Battlefield
             && match to {
-                Entity::Object(x) => !(g.is_live(x) && g.obj(x).zone == Zone::Battlefield),
+                Entity::Object(x) => !(g.is_live(x) && can_be_attached_where_it_is(g, obj, x)),
                 Entity::Player(_) => false,
             }
     } else {
         o.left_battlefield.as_ref().is_some_and(|l| !l.attached)
     }
+}
+
+/// The zone other than the battlefield whose cards the Aura's enchant ability lets it
+/// enchant ("Enchant creature card in a graveyard", "Enchant instant card in a graveyard":
+/// CR 303.4a, 702.5a), if any.
+pub fn enchant_zone_outside_battlefield(chars: &Characteristics) -> Option<ZoneKind> {
+    if !chars.has_subtype("Aura") {
+        return None;
+    }
+    enchant_filter(chars)?
+        .zone()
+        .filter(|z| *z != ZoneKind::Battlefield)
+}
+
+/// Whether `x` is somewhere `obj` can be attached to it: on the battlefield, or in the zone
+/// an Aura's enchant ability names (the Aura is then on the battlefield attached to a card
+/// in another zone, Spellweaver Volute's rulings).
+pub fn can_be_attached_where_it_is(g: &Game, obj: ObjectId, x: ObjectId) -> bool {
+    let z = g.obj(x).zone;
+    z == Zone::Battlefield
+        || enchant_zone_outside_battlefield(&g.obj(obj).chars).is_some_and(|k| z.kind() == Some(k))
 }
 
 pub fn can_attach(g: &Game, obj: ObjectId, to: Entity) -> bool {
@@ -167,10 +188,12 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
             }
         }
         Entity::Object(t) => {
-            if !g.is_live(t) || g.obj(t).zone != Zone::Battlefield {
+            // A permanent, or a card in the zone the Aura's enchant ability names.
+            if !g.is_live(t) || !can_be_attached_where_it_is(g, obj, t) {
                 return false;
             }
             let target = g.obj(t);
+            let on_battlefield = target.zone == Zone::Battlefield;
             if target.phased_out && !o.phased_out {
                 return false;
             }
@@ -185,8 +208,11 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
                 if !g.matches(t, &f, &Ctx::new(Some(obj), o.controller)) {
                     return false;
                 }
-                // CR 702.16c: can't be enchanted by Auras with the protected quality.
-                !aura_protection_applies(g, t, obj)
+                // CR 702.16c: can't be enchanted by Auras with the protected quality —
+                // protection functions only on the battlefield (Animate Dead's rulings).
+                !(on_battlefield && aura_protection_applies(g, t, obj))
+            } else if !on_battlefield {
+                false
             } else if chars.has_subtype("Equipment") {
                 // CR 301.5c: Equipment can be attached only to creatures, and an Equipment
                 // that's also a creature can't equip one unless it has reconfigure;
@@ -265,8 +291,15 @@ pub(crate) fn entry_attachment(g: &mut Game, mv: &mut MoveEv) -> bool {
         };
         let legal = target.is_some_and(|t| can_attach(g, id, t));
         let candidates: Vec<Entity> = if kind == EntryKind::Aura && !specified {
+            // Permanents, and the cards in the zone its enchant ability names.
+            let elsewhere: Vec<ObjectId> = match enchant_zone_outside_battlefield(&g.obj(id).chars)
+            {
+                Some(z) => g.objects_in_zone_kind(z),
+                None => vec![],
+            };
             g.permanent_ids()
                 .into_iter()
+                .chain(elsewhere)
                 .map(Entity::Object)
                 .chain(g.players_in_game().into_iter().map(Entity::Player))
                 .filter(|e| can_attach(g, id, *e))

@@ -990,6 +990,31 @@ impl Renderer<'_> {
                 "{} can attack as though it didn't have defender",
                 subj(self, f)
             ),
+            Restriction::AttackAsThoughHaste {
+                attackers,
+                defender,
+            } => {
+                let a = if matches!(attackers, Filter::Type(CardType::Creature)) {
+                    "all creatures".to_string()
+                } else {
+                    subj(self, attackers)
+                };
+                match defender {
+                    None => format!("{a} can attack as though it had haste"),
+                    Some(d) => {
+                        let d = match d {
+                            PlayerFilter::Opponent => "your opponents".to_string(),
+                            d => self.player_filter_object(d),
+                        };
+                        format!(
+                            "{a} can attack {d} and planeswalkers {d} control as though those creatures had haste"
+                        )
+                    }
+                }
+            }
+            Restriction::BlockAsThoughUntapped(f) => {
+                format!("{} can block as though it were untapped", subj(self, f))
+            }
             Restriction::CantAttackAlone(f) => format!("{} can't attack alone", subj(self, f)),
             Restriction::CantBlockAlone(f) => format!("{} can't block alone", subj(self, f)),
             Restriction::MaxAttackers(n) => format!(
@@ -1407,6 +1432,22 @@ impl Renderer<'_> {
                 let w = self.player_filter_subject(p);
                 let v = self.value(v);
                 format!("damage that would reduce {} life total to less than {v} reduces it to {v} instead", nouns::possessive(&w))
+            }
+            // "Creatures your opponents control can't have +1/+1 counters put on them."
+            (
+                E::PutCounters {
+                    on_objects: Some(f),
+                    on_players: None,
+                    kind,
+                },
+                A::Prevent,
+            ) if !matches!(f, Filter::Source) => {
+                let k = match kind {
+                    Some(k) => plural(&counter_name(k)),
+                    None => "counters".into(),
+                };
+                let subj = self.affected_subject(f);
+                format!("{subj} can't have {k} put on them")
             }
             (
                 E::PutCounters {

@@ -19,6 +19,9 @@ fn f_those_dont_untap(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let Some(subject) = [
         " don't untap during their controllers' next untap steps",
         " don't untap during their controller's next untap step",
+        // "Tap all creatures target player controls. Those creatures don't untap during
+        // that player's next untap step." (Sleep): the creatures it tapped.
+        " don't untap during that player's next untap step",
     ]
     .iter()
     .find_map(|s| l.strip_suffix(s)) else {
