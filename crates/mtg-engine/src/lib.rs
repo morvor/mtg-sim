@@ -45,6 +45,7 @@ pub mod commander_rules;
 pub mod copy;
 pub mod copy_rules;
 pub mod cost_choices;
+pub mod cost_effects;
 pub mod cost_rules;
 pub mod counter_rules;
 pub mod create_rules;

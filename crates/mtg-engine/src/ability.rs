@@ -187,6 +187,19 @@ pub struct ActivatedAbility {
     pub zone: FunctionZone,
     /// "Any player may activate this ability."
     pub any_player: bool,
+    /// "This ability costs {1} less to activate for each ...": changes to this ability's
+    /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
+    #[serde(default)]
+    pub own_cost_changes: Vec<OwnCostChange>,
+}
+
+/// A change an activated ability makes to its own total cost, applying while its condition
+/// holds ("This ability costs {2} less to activate if you control a legendary creature").
+/// Values and conditions are evaluated with the ability's targets once they're chosen.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OwnCostChange {
+    pub change: CostChange,
+    pub condition: Option<Condition>,
 }
 
 impl ActivatedAbility {
@@ -201,6 +214,7 @@ impl ActivatedAbility {
             condition: None,
             zone: FunctionZone::Battlefield,
             any_player: false,
+            own_cost_changes: Vec::new(),
         }
     }
 }
@@ -2262,6 +2276,8 @@ pub enum AbilityClass {
     Any,
     /// Loyalty abilities (CR 606).
     Loyalty,
+    /// Mana abilities (CR 605).
+    Mana,
     /// Abilities a keyword defines ("equip abilities", "cycling costs").
     Keyword(KeywordKind),
 }

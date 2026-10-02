@@ -1946,7 +1946,8 @@ impl Game {
             if !self.eval_cond(c, &ctx) {
                 let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
                     || act.cost.parts.iter().any(cost_part_has_x);
-                let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+                let max_x = crate::activation_costs::x_bound(self, p, act) as u32
+                    + o.counter(counters::LOYALTY);
                 least_x = has_x
                     .then(|| {
                         (1..=max_x as i32).find(|x| {
@@ -1978,7 +1979,8 @@ impl Game {
             // possible if they are for some value the player could choose.
             let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
                 || act.cost.parts.iter().any(cost_part_has_x);
-            let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+            let max_x = crate::activation_costs::x_bound(self, p, act) as u32
+                + o.counter(counters::LOYALTY);
             let for_some_x = has_x
                 && (1..=max_x as i32).any(|x| {
                     let mut c = ctx.clone();
@@ -2083,9 +2085,29 @@ impl Game {
         for (s, ctl, cm) in &self.statics.cost_modifiers {
             let ctx = Ctx::new(Some(*s), *ctl);
             if crate::activation_costs::modifier_applies(self, cm, p, src, a, act, stack, &ctx) {
-                changes.add(self, &mut cost, &cm.change, &ctx);
+                // Its amount may depend on the ability's targets ("{X} less, where X is
+                // the power of the creature it targets").
+                crate::activation_costs::add_change_for_targets(
+                    self,
+                    act,
+                    ctx,
+                    stack,
+                    None,
+                    &cm.change,
+                    &mut cost,
+                    &mut changes,
+                );
             }
         }
+        crate::activation_costs::add_own_cost_changes(
+            self,
+            p,
+            src,
+            act,
+            stack,
+            &mut cost,
+            &mut changes,
+        );
         changes.apply(&mut cost, |_, cur, s| {
             crate::cost_rules::default_half(cur, s)
         });
@@ -2175,7 +2197,7 @@ impl Game {
             || act.cost.parts.iter().any(|c| cost_part_has_x(c));
         let mut x = 0i64;
         if has_x {
-            let max = self.max_mana_available(p) as i64;
+            let max = crate::activation_costs::x_bound(self, p, act);
             x = match self.ask(p, Decision::ChooseX { source: src, max }) {
                 Answer::Number(n) if n >= 0 => n,
                 _ => 0,
@@ -2738,7 +2760,8 @@ impl Game {
                 // The player paying the cost performs the action ("you" is that player).
                 let mut c = ctx.clone();
                 c.controller = p;
-                crate::draw_rules::can_choose(self, e, &c)
+                crate::cost_effects::payable(self, e, &c).unwrap_or(true)
+                    && crate::draw_rules::can_choose(self, e, &c)
                     && crate::life_totals::cost_life_gain_possible(self, e, &c)
             }
             CostPart::PayManaCostOf(s) => {
@@ -2762,6 +2785,13 @@ impl Game {
             ZoneKind::Hand => self.player(p).hand.clone(),
             ZoneKind::Library => self.player(p).library.clone(),
             ZoneKind::Battlefield => self.permanents_controlled_by(p),
+            // "Exile a spell you control".
+            ZoneKind::Stack => self
+                .stack
+                .iter()
+                .copied()
+                .filter(|o| self.obj(*o).controller == p)
+                .collect(),
             ZoneKind::Exile => self
                 .exile
                 .iter()
@@ -3005,22 +3035,52 @@ impl Game {
                 filter,
                 count,
             } => {
-                let mut n = self.eval_value(count, ctx).max(0) as u32;
-                for o in self.objects_matching(filter, ctx) {
-                    if n == 0 {
-                        break;
-                    }
-                    let kinds: Vec<CounterKind> = match kind {
-                        Some(k) => vec![k.clone()],
-                        None => self.obj(o).counters.keys().cloned().collect(),
+                // The player chooses each counter: which permanent, then which kind
+                // (CR 118.3).
+                let n = self.eval_value(count, ctx).max(0) as u32;
+                for _ in 0..n {
+                    let kinds_on = |g: &Game, o: ObjectId| -> Vec<CounterKind> {
+                        let ob = g.obj(o);
+                        match kind {
+                            Some(k) => (ob.counter(k) > 0).then(|| k.clone()).into_iter().collect(),
+                            None => ob
+                                .counters
+                                .iter()
+                                .filter(|(_, n)| **n > 0)
+                                .map(|(k, _)| k.clone())
+                                .collect(),
+                        }
                     };
-                    for k in kinds {
-                        let r = self.remove_counters_by(Entity::Object(o), &k, n, Some(p));
-                        n -= r;
+                    let cands: Vec<ObjectId> = self
+                        .objects_matching(filter, ctx)
+                        .into_iter()
+                        .filter(|o| !kinds_on(self, *o).is_empty())
+                        .collect();
+                    if cands.is_empty() {
+                        return bad("not enough counters");
                     }
-                }
-                if n > 0 {
-                    return bad("not enough counters");
+                    let Some(o) = self
+                        .ask_objects(
+                            p,
+                            src,
+                            "Choose a permanent to remove a counter from (cost)",
+                            cands,
+                            1,
+                            1,
+                        )
+                        .into_iter()
+                        .next()
+                    else {
+                        return bad("not enough counters");
+                    };
+                    let kinds = kinds_on(self, o);
+                    let names = kinds.iter().map(|k| k.to_string()).collect();
+                    let i =
+                        self.ask_option(p, src, "Choose a kind of counter to remove (cost)", names);
+                    let k = kinds[i.min(kinds.len() - 1)].clone();
+                    if self.remove_counters_by(Entity::Object(o), &k, 1, Some(p)) < 1 {
+                        return bad("not enough counters");
+                    }
                 }
             }
             CostPart::AddCounters { kind, count } => {
@@ -3297,7 +3357,7 @@ fn cost_part_pays_last(c: &CostPart) -> bool {
                 zone: ZoneKind::Library,
                 ..
             }
-    )
+    ) || matches!(c, CostPart::Effect(e) if matches!(&**e, Effect::Move { what: Sel::TopOfLibrary(..), .. }))
 }
 
 pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {

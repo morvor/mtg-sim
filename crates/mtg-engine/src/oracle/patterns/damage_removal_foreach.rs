@@ -195,7 +195,10 @@ fn p_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
     // "for each creature card milled this way" counts the cards the preceding mill
     // instruction milled (CR 701.17c); other "this way" counts are handled elsewhere.
     if thing.ends_with("destroyed this way")
-        || (thing.contains(" this way") && !end(thing).ends_with(" milled this way"))
+        || (thing.contains(" this way")
+            && !end(thing).ends_with(" milled this way")
+            // An amount chosen for the cost ("for each counter removed this way").
+            && super::cost_parts::paid_this_way(thing).is_none())
     {
         return None;
     }
