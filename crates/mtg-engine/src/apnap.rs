@@ -50,7 +50,7 @@ impl Game {
 
     /// APNAP order for simultaneous choices: with shared team turns the active team's
     /// players first, then each other team in turn order (CR 805.6).
-    fn pregame_order_or_apnap(&self) -> Vec<PlayerId> {
+    pub(crate) fn pregame_order_or_apnap(&self) -> Vec<PlayerId> {
         let mut order = self.pregame_order();
         // Players who have left the game make no choices, but keep them last so a request
         // for them is still handled.
@@ -199,6 +199,9 @@ pub fn keep_and_sacrifice_rest(
         );
         vec![]
     });
+    // What makes them sacrifice (CR 701.21; see `rule_statics::sacrifice_causes`).
+    let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
+    sacrifice.retain(|(o, _)| !g.sacrifice_forbidden(*o, cause.as_ref()));
     let res = g.sacrifice_simultaneously(&sacrifice);
     g.end_apnap_choices(round);
     ctx.prev_value = res.len() as i64;

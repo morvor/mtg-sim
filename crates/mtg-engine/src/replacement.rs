@@ -828,6 +828,26 @@ impl Game {
     /// Whether a "can't enter the battlefield" effect stops this move (CR 614.17d),
     /// checking the object as it would exist on the battlefield.
     pub(crate) fn cant_enter(&mut self, m: &MoveEv) -> bool {
+        // "[cards] in [zones] can't enter the battlefield": checked against the card in its
+        // zone. A card put onto the battlefield face down (manifested, cloaked) is turned
+        // face down first, so it's checked as the face-down 2/2 creature card (CR 701.40a,
+        // 701.58a, 708.3; Grafdigger's Cage makes manifesting from a library impossible).
+        if m.to == Zone::Battlefield {
+            if m.etb.face_down.is_none() {
+                if self.cant_enter_from_its_zone(m.obj) {
+                    return true;
+                }
+            } else if let Some(zone) = self.obj(m.obj).zone.kind() {
+                let any = self.statics.restrictions.iter().any(
+                    |(_, _, r)| matches!(r, Restriction::CantEnterFrom { zones, .. } if zones.contains(&zone)),
+                ) || self.rule_effects.iter().any(
+                    |e| matches!(&e.restriction, Restriction::CantEnterFrom { zones, .. } if zones.contains(&zone)),
+                );
+                if any && self.with_hypothetical_entry(m, |g| g.cant_enter_from(m.obj, zone)) {
+                    return true;
+                }
+            }
+        }
         let any = self.statics.restrictions.iter().any(|(_, _, r)| {
             matches!(
                 r,
@@ -1317,7 +1337,11 @@ impl Game {
                     .into_iter()
                     .filter(|o| *o != m.obj)
                     .collect();
-                let chooser = m.by.unwrap_or(cand.controller);
+                // "You may have ~ enter as a copy": "you" is the player it enters under
+                // the control of (CR 109.5), who chooses before it enters (CR 614.12a),
+                // e.g. each player for their own card put onto the battlefield by Show
+                // and Tell.
+                let chooser = m.etb.controller.or(m.by).unwrap_or(cand.controller);
                 let min = if optional { 0 } else { 1 };
                 let chosen = self.ask_objects(
                     chooser,

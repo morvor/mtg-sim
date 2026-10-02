@@ -154,11 +154,34 @@ impl Game {
         // back in time (sacrifices, countering, becoming unattached).
         let mut recent: Vec<(ObjectId, Arc<LookbackSnapshot>)> = Vec::new();
         let mut once_delayed: Vec<(u32, EventInfo)> = Vec::new();
+        // CR 603.2: an ability triggers when its event occurs. Objects that came into
+        // their zone in a later batch of these events (a card put into a graveyard after a
+        // land entered) didn't exist then, so they can't trigger on earlier events.
+        let mut born_later: BTreeSet<ObjectId> = BTreeSet::new();
+        let mut batch_of_event = 0;
+        for ev in &events {
+            match ev {
+                Event::BatchBoundary => batch_of_event += 1,
+                Event::ZoneChange { new, .. } if batch_of_event > 0 => {
+                    born_later.insert(*new);
+                }
+                _ => {}
+            }
+        }
         let mut batch_start = 0;
         for (i, ev) in events.iter().enumerate() {
             if matches!(ev, Event::BatchBoundary) {
-                self.check_batch_triggers(&events[batch_start..i]);
+                self.check_batch_triggers(&events[batch_start..i], &born_later);
                 batch_start = i + 1;
+                // The next batch's objects exist from now on.
+                for e in events[batch_start..]
+                    .iter()
+                    .take_while(|e| !matches!(e, Event::BatchBoundary))
+                {
+                    if let Event::ZoneChange { new, .. } = e {
+                        born_later.remove(new);
+                    }
+                }
                 continue;
             }
             self.record_history(ev);
@@ -176,9 +199,9 @@ impl Game {
             if let Some(f) = self.observer.as_ref().map(|o| o.on_event.clone()) {
                 f(self, ev);
             }
-            once_delayed.extend(self.detect_triggers(ev, &recent));
+            once_delayed.extend(self.detect_triggers(ev, &recent, &born_later));
         }
-        self.check_batch_triggers(&events[batch_start..]);
+        self.check_batch_triggers(&events[batch_start..], &born_later);
         self.fire_once_delayed(once_delayed);
         // Static abilities' conditions can depend on what happened this turn ("as long as
         // you've cast two or more spells this turn"): characteristics must be computed
@@ -202,7 +225,9 @@ impl Game {
 
     /// Detects "whenever one or more …" triggers for a batch of simultaneous events
     /// (CR 603.2c): each such ability triggers once per batch (or once per player involved).
-    fn check_batch_triggers(&mut self, batch: &[Event]) {
+    fn check_batch_triggers(&mut self, batch: &[Event], born_later: &BTreeSet<ObjectId>) {
+        // This turn's events before the batch (its own events are the last ones recorded).
+        let before_batch = self.turn_events.len().saturating_sub(batch.len());
         // Permanents whose entering triggers nothing (Torpor Orb) aren't part of it.
         let kept: Vec<Event>;
         let batch = if batch
@@ -225,6 +250,7 @@ impl Game {
         // damage to the player who has the initiative" (CR 726.2).
         crate::monarch_initiative::detect_batch(self, batch);
         let mut sources = self.current_trigger_sources();
+        sources.retain(|(id, _, _)| !born_later.contains(id));
         // Leaves-the-battlefield look back in time (CR 603.10a): permanents that left in
         // this batch still see the batch's events that look back. (A permanent that left
         // keeps its last known information, zone included, under its old id; it's no
@@ -253,8 +279,37 @@ impl Game {
             let AbilityKind::Triggered(t) = &a.kind else {
                 continue;
             };
-            let TriggerCond::Batched { trigger, per } = &t.trigger else {
-                continue;
+            // A condition on a whole batch ("whenever ~ is dealt 3 or more damage": the
+            // damage dealt to it at once, in total) is checked with the batch's totals.
+            let (batched, batch_cond) = match &t.trigger {
+                TriggerCond::Where { trigger, cond }
+                    if matches!(**trigger, TriggerCond::Batched { .. }) =>
+                {
+                    (&**trigger, Some(cond))
+                }
+                other => (other, None),
+            };
+            let (trigger, per) = match batched {
+                TriggerCond::Batched { trigger, per } => (trigger, per),
+                // A batched alternative of a trigger with several conditions ("when
+                // enchanted creature becomes tapped or is dealt damage"); the other
+                // alternatives trigger per event.
+                TriggerCond::AnyOf(v) => {
+                    match v.iter().find_map(|c| match c {
+                        TriggerCond::Batched { trigger, per } => Some((trigger, per)),
+                        _ => None,
+                    }) {
+                        Some(x) => x,
+                        None => continue,
+                    }
+                }
+                _ => continue,
+            };
+            // "… for the first time each turn": the first batch this turn with a matching
+            // event (its events are matched without the qualifier, see below).
+            let (trigger, first_time) = match &**trigger {
+                TriggerCond::FirstTimeEachTurn(inner) => (&**inner, true),
+                other => (other, false),
             };
             // Filters like "the chosen color" refer to the ability's linked choices.
             let mut base = Ctx::new(Some(src), ctl);
@@ -284,6 +339,16 @@ impl Game {
                     None => groups.push(vec![info]),
                 }
             }
+            if first_time {
+                // Not if an earlier event this turn matched (for the same player, when
+                // grouped by player).
+                let earlier: Vec<Option<Entity>> = self.turn_events[..before_batch]
+                    .iter()
+                    .flat_map(|e| self.trigger_matches_ctx(trigger, &base, e))
+                    .map(|i| key(&i))
+                    .collect();
+                groups.retain(|g| !earlier.iter().any(|k| k.is_none() || *k == key(&g[0])));
+            }
             for g in groups {
                 let mut info = g[0].clone();
                 // "That much"/"that many": the total amount (damage, life, ...), or the
@@ -291,14 +356,14 @@ impl Game {
                 info.amount = g.iter().map(|i| i.amount).sum();
                 // Die rolls always have an amount: their result, which a planar die roll
                 // doesn't have (CR 706.7).
-                let die_roll = matches!(**trigger, TriggerCond::RollDie(_));
+                let die_roll = matches!(trigger, TriggerCond::RollDie(_));
                 if !die_roll && g.iter().all(|i| i.amount == 0) {
                     info.amount = g.len() as i32;
                 }
                 // Each attack event reports the size of the whole declaration; "whenever
                 // one or more creatures you control attack, add that much mana" counts the
                 // matching attackers (one event each).
-                if matches!(**trigger, TriggerCond::Attacks(_)) {
+                if matches!(trigger, TriggerCond::Attacks(_)) {
                     info.amount = g.len() as i32;
                 }
                 info.objects = Vec::new();
@@ -311,6 +376,9 @@ impl Game {
                 }
                 let mut ctx = base.clone();
                 ctx.event = Some(info.clone());
+                if batch_cond.is_some_and(|c| !self.eval_cond(c, &ctx)) {
+                    continue;
+                }
                 if let Some(c) = &t.intervening_if {
                     if !self.eval_cond(c, &ctx) {
                         continue;
@@ -430,7 +498,7 @@ impl Game {
 
     /// Detects triggered abilities for one event (CR 603.2).
     pub fn check_triggers(&mut self, ev: &Event) {
-        let once = self.detect_triggers(ev, &[]);
+        let once = self.detect_triggers(ev, &[], &BTreeSet::new());
         self.fire_once_delayed(once);
     }
 
@@ -441,6 +509,7 @@ impl Game {
         &mut self,
         ev: &Event,
         recent: &[(ObjectId, Arc<LookbackSnapshot>)],
+        born_later: &BTreeSet<ObjectId>,
     ) -> Vec<(u32, EventInfo)> {
         // "Creatures entering don't cause abilities to trigger" (Torpor Orb).
         if crate::kw::torpor::entering_triggers_nothing(self, ev) {
@@ -469,6 +538,9 @@ impl Game {
             let AbilityKind::Triggered(t) = &a.kind else {
                 continue;
             };
+            if born_later.contains(&id) {
+                continue;
+            }
             if lookback.is_some() && looks_back(&t.trigger, ev) {
                 continue;
             }
@@ -513,7 +585,13 @@ impl Game {
             for s in sources.iter_mut() {
                 if s.0 == *obj {
                     if let AbilityKind::Triggered(t) = &s.2.kind {
-                        if matches!(t.trigger, TriggerCond::LoseControl(_)) {
+                        // (Also qualified: "whenever an opponent gains control of a
+                        // permanent from you".)
+                        let lose_control = match &t.trigger {
+                            TriggerCond::Where { trigger, .. } => &**trigger,
+                            other => other,
+                        };
+                        if matches!(lose_control, TriggerCond::LoseControl(_)) {
                             s.1 = *from;
                         }
                     }
@@ -596,10 +674,19 @@ impl Game {
         let turn = self.turn.number;
         // CR 603.7b: a delayed trigger that can trigger more than once has a stated
         // duration ("this turn"); it ends with the turn.
+        // In Grand Melee, "this turn" is the turn it was created during, among those
+        // being taken at the same time (CR 807.4).
+        let in_progress: Vec<u32> = self
+            .delayed_triggers
+            .iter()
+            .map(|d| d.created_turn)
+            .filter(|n| crate::multiplayer::grand_melee::turn_in_progress(self, *n))
+            .collect();
         self.delayed_triggers.retain(|d| {
             d.once
                 || d.for_rest_of_game
                 || d.created_turn == turn
+                || in_progress.contains(&d.created_turn)
                 || matches!(d.trigger, TriggerCond::UntilYourNextTurn(_))
         });
         let mut once_matches: Vec<(u32, EventInfo)> = Vec::new();
@@ -628,7 +715,12 @@ impl Game {
             base.controller = d.performer.unwrap_or(d.controller);
             for info in self.trigger_matches_ctx(&d.trigger, &base, ev) {
                 if d.once {
-                    once_matches.push((d.id, info));
+                    // CR 801.7: an event outside its controller's range of influence
+                    // doesn't trigger it; it waits for the next one.
+                    let pending = self.delayed_pending(&d, info.clone());
+                    if crate::multiplayer::range::trigger_in_range(self, &pending) {
+                        once_matches.push((d.id, info));
+                    }
                 } else {
                     self.trigger_order += 1;
                     found.push(self.delayed_pending(&d, info));
@@ -794,6 +886,7 @@ impl Game {
                 Event::ZoneChange {
                     new,
                     to: Zone::Battlefield,
+                    cause,
                     ..
                 },
             ) => {
@@ -801,6 +894,7 @@ impl Game {
                     one(EventInfo {
                         object: Some(*new),
                         player: Some(self.obj(*new).controller),
+                        cause: Some(*cause),
                         ..Default::default()
                     })
                 } else {
@@ -814,6 +908,7 @@ impl Game {
                     new,
                     from: Zone::Battlefield,
                     to,
+                    cause,
                     ..
                 },
             ) if *to != Zone::Battlefield => {
@@ -822,6 +917,7 @@ impl Game {
                         object: Some(*new),
                         lki: Some(*old),
                         player: Some(self.obj(*old).controller),
+                        cause: Some(*cause),
                         ..Default::default()
                     })
                 } else {
@@ -835,6 +931,7 @@ impl Game {
                     new,
                     from: Zone::Battlefield,
                     to: Zone::Graveyard(_),
+                    cause,
                     ..
                 },
             ) => {
@@ -844,6 +941,7 @@ impl Game {
                         object: Some(*new),
                         lki: Some(*old),
                         player: Some(self.obj(*old).controller),
+                        cause: Some(*cause),
                         ..Default::default()
                     })
                 } else {
@@ -857,6 +955,7 @@ impl Game {
                     new,
                     from: zf,
                     to: zt,
+                    cause,
                     ..
                 },
             ) => {
@@ -881,6 +980,7 @@ impl Game {
                         object: Some(*new),
                         lki: Some(*old),
                         player: Some(self.obj(*old).owner),
+                        cause: Some(*cause),
                         ..Default::default()
                     })
                 } else {
@@ -1783,7 +1883,7 @@ impl Game {
                 none()
             }
             (TriggerCond::Where { trigger, cond }, ev) => self
-                .trigger_matches(trigger, src, ctl, ev)
+                .trigger_matches_ctx(trigger, base, ev)
                 .into_iter()
                 .filter(|info| {
                     let mut c = base.clone();
@@ -2063,7 +2163,25 @@ impl Game {
             }
             _ => None,
         };
-        if let Some(x) = cycled_x.or_else(|| etb_cast.as_ref().and_then(|ci| ci.x)) {
+        // CR 107.3i: "When you cast this spell, ... X ..." uses the spell's X.
+        let cast_self_x = match &t.ability.kind {
+            AbilityKind::Triggered(tr)
+                if matches!(
+                    tr.trigger,
+                    TriggerCond::CastSpell {
+                        filter: Filter::Source,
+                        ..
+                    }
+                ) =>
+            {
+                self.obj(t.source).stack.as_deref().and_then(|si| si.x)
+            }
+            _ => None,
+        };
+        if let Some(x) = cycled_x
+            .or_else(|| etb_cast.as_ref().and_then(|ci| ci.x))
+            .or(cast_self_x)
+        {
             ctx.x = x;
         }
         let id = crate::stack::create_stack_ability(
@@ -2091,7 +2209,7 @@ impl Game {
                 si.x = Some(saved.x);
             }
             self.saved_ctx.insert(id, saved);
-        } else if let Some(x) = cycled_x {
+        } else if let Some(x) = cycled_x.or(cast_self_x) {
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
                 si.x = Some(x);
             }
