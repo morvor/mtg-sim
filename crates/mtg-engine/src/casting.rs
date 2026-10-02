@@ -1194,11 +1194,16 @@ impl Game {
                 .iter()
                 .map(|o| {
                     let way = match (&o.tag, &o.alt_cost, &o.alt_source) {
-                        (Some(t), _, _) => t.to_string(),
-                        // An alternative cost another object offers, named with it.
-                        (None, Some(c), Some(s)) => {
-                            crate::kw::offered_costs::label(self, &o.method, c, s)
+                        // An alternative cost another object offers, named with it (and
+                        // with the way it's combined with, e.g. "prototype").
+                        (t, Some(c), Some(s)) => {
+                            let l = crate::kw::offered_costs::label(self, &o.method, c, s);
+                            match t {
+                                Some(t) => format!("{t}, {l}"),
+                                None => l,
+                            }
                         }
+                        (Some(t), _, _) => t.to_string(),
                         (None, Some(c), None) => format!("{c:?}"),
                         (None, None, _) => format!("{:?}", o.method),
                     };
@@ -2781,10 +2786,13 @@ impl Game {
             }
             CostPart::ExertSelf => so.is_some(),
             CostPart::CollectEvidence(n) => {
+                // Not the card being cast: it's on the stack by the time costs are paid
+                // (CR 601.2a; Conspiracy Unraveler ruling).
                 let total: u32 = self
                     .player(p)
                     .graveyard
                     .iter()
+                    .filter(|c| Some(**c) != src)
                     .map(|c| self.mana_value_of(*c))
                     .sum();
                 total >= *n

@@ -866,6 +866,20 @@ impl Renderer<'_> {
             // "You may cast creature spells with mana value 3 or less by paying {E} rather
             // than paying their mana costs. If you cast a spell this way, you may cast it as
             // though it had flash."
+            // "Any player may cast creature spells with mana value 3 or less without paying
+            // their mana costs and as though they had flash." (Aluren)
+            CostChange::AlternativeCostWithFlash(c)
+                if c.is_free() && matches!(cm.applies_to, CostTarget::Spells(_)) =>
+            {
+                let subject = if cm.who == PlayerRel::Any {
+                    "any player"
+                } else {
+                    "you"
+                };
+                format!(
+                    "{subject} may cast {target} without paying their mana costs and as though they had flash"
+                )
+            }
             CostChange::AlternativeCostWithFlash(c) => {
                 let c = self.cost_as_payment(c);
                 let c = c.strip_prefix("pay ").unwrap_or(&c);

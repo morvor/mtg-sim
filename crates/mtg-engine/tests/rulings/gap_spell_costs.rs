@@ -455,6 +455,157 @@ fn dream_halls_replaces_only_the_mana_cost() {
     assert!(t.in_hand(P0, "Whispers of the Muse"));
 }
 
+#[test]
+fn conspiracy_unraveler_cost_keeps_mandatory_additional_costs_and_no_other_alternative() {
+    cr!("118.9a", "118.9d", "601.2b");
+    ruling!(
+        "Conspiracy Unraveler",
+        "If you cast a spell for another cost \"rather than pay its mana cost\", you can't choose to cast it for any alternative costs. You can, however, pay additional costs. If the spell has any mandatory additional costs, such as that of Demand Answers, those must be paid to cast the card."
+    );
+    supported("Conspiracy Unraveler");
+    supported("Demand Answers");
+    // Conspiracy Unraveler: "You may collect evidence 10 rather than pay the mana cost for
+    // spells you cast." Demand Answers {1}{R}: "As an additional cost to cast this spell,
+    // sacrifice an artifact or discard a card. Draw two cards."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Conspiracy Unraveler");
+    let dragons = [
+        t.graveyard(P0, "Shivan Dragon"),
+        t.graveyard(P0, "Shivan Dragon"),
+    ];
+    let demand = t.hand(P0, "Demand Answers");
+    // No artifact to sacrifice and no other card to discard: it can't be cast, even with
+    // enough evidence.
+    assert_eq!(offered(&mut t, P0, demand).len(), 1);
+    assert!(t.cast(P0, demand).method(OFFERED).try_go().is_err());
+    assert!(dragons.iter().all(|d| t.zone(*d) == Zone::Graveyard(P0)));
+    // With a card to discard: the evidence is collected and the card discarded, no mana.
+    let fodder = t.hand(P0, "Grizzly Bears");
+    assert!(can_cast(&mut t, P0, demand, OFFERED));
+    t.answer_choose(P0, &[Entity::Object(fodder)]);
+    t.cast(P0, demand).method(OFFERED).go();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(dragons.iter().all(|d| t.zone(t.g.current(*d)) == Zone::Exile));
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 2);
+    // Think Twice in the graveyard is cast with flashback (an alternative cost of its
+    // own): not for the Unraveler's cost too.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Conspiracy Unraveler");
+    t.graveyard(P0, "Shivan Dragon");
+    t.graveyard(P0, "Shivan Dragon");
+    let tt = t.graveyard(P0, "Think Twice");
+    t.g.recompute();
+    assert!(t
+        .g
+        .cast_options(P0, tt)
+        .iter()
+        .any(|o| o.method == CastMethod::Keyword(keywords::KeywordKind::Flashback)));
+    assert!(offered(&mut t, P0, tt).is_empty());
+}
+
+#[test]
+fn conspiracy_unraveler_evidence_cant_include_the_card_being_cast() {
+    cr!("601.2a", "601.2h", "701.59a");
+    ruling!(
+        "Conspiracy Unraveler",
+        "If you are casting a spell from your graveyard (for example, a spell with flashback) you can't also exile that card to pay the alternative collect evidence cost offered by Conspiracy Unraveler."
+    );
+    // Radical Idea {1}{U}, jump-start, cast from the graveyard for collect evidence 10: it
+    // is on the stack as the cost is paid, so its own mana value (2) can't count.
+    let setup = |t: &mut TestGame| -> (ObjectId, ObjectId) {
+        t.battlefield(P0, "Conspiracy Unraveler");
+        let idea = t.graveyard(P0, "Radical Idea");
+        t.graveyard(P0, "Shivan Dragon");
+        t.graveyard(P0, "Gray Ogre");
+        let fodder = t.hand(P0, "Grizzly Bears");
+        (idea, fodder)
+    };
+    let jump = CastMethod::Keyword(keywords::KeywordKind::JumpStart);
+    // 6 + 3 other than Radical Idea: not enough, and not offered as a legal action.
+    let mut t = TestGame::new(2);
+    let (idea, fodder) = setup(&mut t);
+    assert_eq!(
+        offered(&mut t, P0, idea)
+            .iter()
+            .filter(|o| o.method == jump)
+            .count(),
+        1
+    );
+    assert!(!can_cast(&mut t, P0, idea, jump.clone()));
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer_choose(P0, &[Entity::Object(fodder)]);
+    assert!(t.cast(P0, idea).method(jump.clone()).try_go().is_err());
+    assert_eq!(t.zone(t.g.current(idea)), Zone::Graveyard(P0));
+    // With Llanowar Elves (1) too, the other cards total 10: it's cast, and Radical Idea
+    // is exiled by jump-start as it resolves, not as evidence.
+    let mut t = TestGame::new(2);
+    let (idea, fodder) = setup(&mut t);
+    t.graveyard(P0, "Llanowar Elves");
+    assert!(can_cast(&mut t, P0, idea, jump.clone()));
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer_choose(P0, &[Entity::Object(fodder)]);
+    let spell = t.cast(P0, idea).method(jump).go();
+    assert_eq!(t.zone(spell), Zone::Stack);
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    t.resolve_all();
+    assert!(t.in_exile("Radical Idea"));
+}
+
+#[test]
+fn aluren_casts_cheap_creatures_free_with_flash_for_any_player() {
+    cr!("118.9", "118.9a", "118.9c", "601.3c", "107.3b");
+    ruling!(
+        "Aluren",
+        "You can't choose to cast a creature as though it had flash via Aluren and still pay the mana cost. You either cast the creature normally, or via Aluren without paying the mana cost."
+    );
+    ruling!(
+        "Aluren",
+        "The mana cost of the creatures being cast is still the stated cost on the card, even though you did not pay the cost."
+    );
+    ruling!("Aluren", "If creature with X in its cost is cast this way, X can only be 0.");
+    ruling!(
+        "Aluren",
+        "Aluren checks the actual printed cost on the creature card, and is not affected by things which allow you to cast the spell for less."
+    );
+    ruling!(
+        "Aluren",
+        "You can't use Aluren when casting a creature using another alternate means, such as the Morph ability."
+    );
+    supported("Aluren");
+    // "Any player may cast creature spells with mana value 3 or less without paying their
+    // mana costs and as though they had flash." P0 controls it; P1 uses it on P0's turn.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Aluren");
+    let bears = t.hand(P1, "Grizzly Bears");
+    add_mana(&mut t, P1, ManaType::G, 2);
+    // During P0's turn: for nothing, as though it had flash — but not for its mana cost.
+    assert!(can_cast(&mut t, P1, bears, CastMethod::Free));
+    assert!(!can_cast(&mut t, P1, bears, CastMethod::Normal));
+    let spell = t.cast(P1, bears).method(CastMethod::Free).go();
+    assert_eq!(t.g.mana_value_of(spell), 2);
+    assert_eq!(t.player(P1).mana_pool.count(ManaType::G), 2);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // Mana value 4 isn't 3 or less, even when a reduction makes it cost {3}: Juggernaut
+    // with Etherium Sculptor ("Artifact spells you cast cost {1} less to cast.").
+    t.battlefield(P0, "Etherium Sculptor");
+    let jug = t.hand(P0, "Juggernaut");
+    assert!(offered(&mut t, P0, jug).is_empty());
+    // Endless One {X}: X is 0, a 0/0 that dies.
+    let one = t.hand(P0, "Endless One");
+    t.cast(P0, one).method(CastMethod::Free).x(3).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Endless One"));
+    // Fathom Seer (morph): cast face down for {3} (an alternative way of its own), not
+    // also for nothing.
+    let seer = t.hand(P0, "Fathom Seer");
+    let ways = offered(&mut t, P0, seer);
+    assert_eq!(ways.len(), 1);
+    assert_eq!(ways[0].method, CastMethod::Free);
+    assert_eq!(ways[0].face, FaceState::Front);
+}
+
 fn energy(t: &TestGame) -> u32 {
     t.player(P0).counters.get("energy").copied().unwrap_or(0)
 }

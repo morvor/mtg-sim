@@ -195,7 +195,7 @@ fn a_mandatory_additional_cost_is_still_paid() {
 
 #[test]
 fn x_is_zero_for_an_offered_cost_without_x() {
-    cr!("107.3", "118.9", "601.2b");
+    cr!("107.3b", "118.9", "601.2b");
     ruling!(
         "Fist of Suns",
         "If you apply Fist of Suns's alternative cost to a spell with {X} in its mana cost, X is 0."

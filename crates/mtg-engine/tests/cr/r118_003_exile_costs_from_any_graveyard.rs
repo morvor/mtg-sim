@@ -1,4 +1,4 @@
-//! CR 118.3, 602.2b, 601.2h, 404.1: a cost to exile cards "from a graveyard" may use any
+//! CR 118.3, 602.2b, 601.2h: a cost to exile cards "from a graveyard" may use any
 //! player's graveyard; "from a single graveyard" needs all of them from the same one; "from
 //! your graveyard" only the payer's.
 
@@ -24,7 +24,7 @@ fn add_mana(t: &mut TestGame, p: PlayerId, ty: ManaType, n: u32) {
 
 #[test]
 fn a_card_may_be_exiled_from_any_graveyard() {
-    cr!("118.3", "602.2b", "404.1");
+    cr!("118.3", "602.2b");
     supported("Thelon of Havenwood");
     let mut t = TestGame::new(2);
     // Thelon of Havenwood: "{B}{G}, Exile a Fungus card from a graveyard: Put a spore
