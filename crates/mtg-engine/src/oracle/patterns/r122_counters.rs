@@ -9,7 +9,7 @@ use crate::oracle::effects::Builder;
 use crate::oracle::phrases::{end, parse_number, parse_target, split_word, strip};
 use crate::oracle::CompileContext;
 
-/// "first", "second", ..., "tenth".
+/// "first", "second", ..., "twelfth".
 fn ordinal(w: &str) -> Option<u32> {
     Some(match w {
         "first" => 1,
@@ -22,6 +22,8 @@ fn ordinal(w: &str) -> Option<u32> {
         "eighth" => 8,
         "ninth" => 9,
         "tenth" => 10,
+        "eleventh" => 11,
+        "twelfth" => 12,
         _ => return None,
     })
 }

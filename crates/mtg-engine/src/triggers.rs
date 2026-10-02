@@ -203,6 +203,8 @@ impl Game {
     /// Detects "whenever one or more …" triggers for a batch of simultaneous events
     /// (CR 603.2c): each such ability triggers once per batch (or once per player involved).
     fn check_batch_triggers(&mut self, batch: &[Event]) {
+        // This turn's events before the batch (its own events are the last ones recorded).
+        let before_batch = self.turn_events.len().saturating_sub(batch.len());
         // Permanents whose entering triggers nothing (Torpor Orb) aren't part of it.
         let kept: Vec<Event>;
         let batch = if batch
@@ -256,6 +258,12 @@ impl Game {
             let TriggerCond::Batched { trigger, per } = &t.trigger else {
                 continue;
             };
+            // "… for the first time each turn": the first batch this turn with a matching
+            // event (its events are matched without the qualifier, see below).
+            let (trigger, first_time) = match &**trigger {
+                TriggerCond::FirstTimeEachTurn(inner) => (&**inner, true),
+                other => (other, false),
+            };
             // Filters like "the chosen color" refer to the ability's linked choices.
             let mut base = Ctx::new(Some(src), ctl);
             base.link = a.link;
@@ -284,6 +292,16 @@ impl Game {
                     None => groups.push(vec![info]),
                 }
             }
+            if first_time {
+                // Not if an earlier event this turn matched (for the same player, when
+                // grouped by player).
+                let earlier: Vec<Option<Entity>> = self.turn_events[..before_batch]
+                    .iter()
+                    .flat_map(|e| self.trigger_matches_ctx(trigger, &base, e))
+                    .map(|i| key(&i))
+                    .collect();
+                groups.retain(|g| !earlier.iter().any(|k| k.is_none() || *k == key(&g[0])));
+            }
             for g in groups {
                 let mut info = g[0].clone();
                 // "That much"/"that many": the total amount (damage, life, ...), or the
@@ -291,14 +309,14 @@ impl Game {
                 info.amount = g.iter().map(|i| i.amount).sum();
                 // Die rolls always have an amount: their result, which a planar die roll
                 // doesn't have (CR 706.7).
-                let die_roll = matches!(**trigger, TriggerCond::RollDie(_));
+                let die_roll = matches!(trigger, TriggerCond::RollDie(_));
                 if !die_roll && g.iter().all(|i| i.amount == 0) {
                     info.amount = g.len() as i32;
                 }
                 // Each attack event reports the size of the whole declaration; "whenever
                 // one or more creatures you control attack, add that much mana" counts the
                 // matching attackers (one event each).
-                if matches!(**trigger, TriggerCond::Attacks(_)) {
+                if matches!(trigger, TriggerCond::Attacks(_)) {
                     info.amount = g.len() as i32;
                 }
                 info.objects = Vec::new();
@@ -794,6 +812,7 @@ impl Game {
                 Event::ZoneChange {
                     new,
                     to: Zone::Battlefield,
+                    cause,
                     ..
                 },
             ) => {
@@ -801,6 +820,7 @@ impl Game {
                     one(EventInfo {
                         object: Some(*new),
                         player: Some(self.obj(*new).controller),
+                        cause: Some(*cause),
                         ..Default::default()
                     })
                 } else {
@@ -814,6 +834,7 @@ impl Game {
                     new,
                     from: Zone::Battlefield,
                     to,
+                    cause,
                     ..
                 },
             ) if *to != Zone::Battlefield => {
@@ -822,6 +843,7 @@ impl Game {
                         object: Some(*new),
                         lki: Some(*old),
                         player: Some(self.obj(*old).controller),
+                        cause: Some(*cause),
                         ..Default::default()
                     })
                 } else {
@@ -835,6 +857,7 @@ impl Game {
                     new,
                     from: Zone::Battlefield,
                     to: Zone::Graveyard(_),
+                    cause,
                     ..
                 },
             ) => {
@@ -844,6 +867,7 @@ impl Game {
                         object: Some(*new),
                         lki: Some(*old),
                         player: Some(self.obj(*old).controller),
+                        cause: Some(*cause),
                         ..Default::default()
                     })
                 } else {
@@ -857,6 +881,7 @@ impl Game {
                     new,
                     from: zf,
                     to: zt,
+                    cause,
                     ..
                 },
             ) => {
@@ -881,6 +906,7 @@ impl Game {
                         object: Some(*new),
                         lki: Some(*old),
                         player: Some(self.obj(*old).owner),
+                        cause: Some(*cause),
                         ..Default::default()
                     })
                 } else {
@@ -1783,7 +1809,7 @@ impl Game {
                 none()
             }
             (TriggerCond::Where { trigger, cond }, ev) => self
-                .trigger_matches(trigger, src, ctl, ev)
+                .trigger_matches_ctx(trigger, base, ev)
                 .into_iter()
                 .filter(|info| {
                     let mut c = base.clone();

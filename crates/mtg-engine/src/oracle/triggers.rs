@@ -186,6 +186,10 @@ fn parse_triggered_at(
 /// ~ from your graveyard to your hand") and the trigger condition doesn't put it there
 /// (CR 113.6m).
 pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
+    // "Whenever a creature you control dies while ~ is in your graveyard" (CR 113.6).
+    if super::patterns::trigger_grammar_events::requires_source_in_graveyard(trigger) {
+        return FunctionZone::Graveyard;
+    }
     match trigger {
         TriggerCond::CastSpell {
             filter: Filter::Source,
