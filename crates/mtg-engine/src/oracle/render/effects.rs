@@ -1242,7 +1242,16 @@ impl Renderer<'_> {
                 effect,
                 duration,
             } => {
-                let s = self.player_modification(who, effect);
+                let mut s = self.player_modification(who, effect);
+                // A player "gains" hexproof, shroud, or protection for a duration.
+                if matches!(
+                    effect,
+                    PlayerModification::Hexproof
+                        | PlayerModification::Shroud
+                        | PlayerModification::ProtectionFrom(_)
+                ) {
+                    s = s.replacen(" have ", if s.starts_with("you ") || s.starts_with("{alt:your opponents") { " gain " } else { " gains " }, 1);
+                }
                 let d = self.duration(duration);
                 join_words(&[s, d])
             }
@@ -4544,6 +4553,9 @@ impl Renderer<'_> {
                     let w: Vec<String> = color_words(*cs);
                     becomes.colors = Some(if w.is_empty() {
                         "colorless".into()
+                    } else if w.len() == 5 {
+                        // "~ is all colors" (CR 105.1: the five colors).
+                        format!("{{alt:{}|all colors}}", join_list(&w, "and"))
                     } else {
                         join_list(&w, "and")
                     });
@@ -4673,6 +4685,8 @@ impl Renderer<'_> {
             ChoiceKind::Color => "a color".into(),
             ChoiceKind::ColorOtherThan(c) => format!("a color other than {}", c.word()),
             ChoiceKind::Colors => "one or more colors".into(),
+            // CR 205.3i: every land type.
+            ChoiceKind::OneOf(v) if *v == crate::types::land_types() => "a land type".into(),
             ChoiceKind::OneOf(v) => join_list(v, "or"),
             ChoiceKind::CreatureType => "a creature type".into(),
             ChoiceKind::CardName => "a card name".into(),
@@ -5266,10 +5280,19 @@ impl Becomes {
             _ => 4,
         });
         words.extend(types.iter().map(|t| t.word().to_string()));
-        let phrase = words.join(" ");
+        let mut phrase = words.join(" ");
+        // "is every basic land type" (CR 305.6: the five basic land types).
+        let mut basic = self.subtypes.clone();
+        basic.sort();
+        if basic == ["Forest", "Island", "Mountain", "Plains", "Swamp"]
+            && words.len() == 5
+            && self.additive
+        {
+            phrase = format!("{{alt:{}|every basic land type}}", with_article(&phrase));
+        }
         let is_adjective_only =
             self.add_types.is_empty() && self.subtypes.is_empty() && self.pt.is_none();
-        let mut s = if is_adjective_only {
+        let mut s = if is_adjective_only || phrase.starts_with("{alt:") {
             format!("is {phrase}")
         } else {
             format!("is {}", with_article(&phrase))

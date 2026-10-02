@@ -28,6 +28,17 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"\b(cards? (?:you|they|that player|an opponent|your opponents))(?:'ve| have| has)? drawn this turn\b",
+        replacement: "$1 drew this turn",
+        why: "\"Cards you've drawn this turn\" and \"cards you drew this turn\" are the \
+              same cards (present perfect and past tense of the same draws, CR 121.1).",
+    },
+    Equivalence {
+        pattern: r"\bat least (\d+|x|one|two|three|four|five|six|seven|eight|nine|ten)\b",
+        replacement: "$1 or more",
+        why: "\"At least N\" is \"N or more\".",
+    },
+    Equivalence {
         pattern: r"(^|\n)it (has|have) ([^.\n]*) as long as ~ is on the battlefield\b",
         replacement: "$1~ $2 $3",
         why: "\"As long as ~ is on the battlefield, it has ...\" is \"~ has ...\": the \

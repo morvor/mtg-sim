@@ -1196,6 +1196,32 @@ pub fn plural(phrase: &str) -> String {
     format!("{head}{p}")
 }
 
+/// The singular of a plural phrase made by [`plural`] ("Heroes" → "Hero", "sorceries"
+/// → "sorcery").
+pub fn singular(phrase: &str) -> String {
+    let (head, last) = match phrase.rsplit_once(' ') {
+        Some((h, l)) => (format!("{h} "), l),
+        None => (String::new(), phrase),
+    };
+    let mut cands: Vec<String> = Vec::new();
+    if let Some(r) = last.strip_suffix("ies") {
+        cands.push(format!("{r}y"));
+    }
+    if let Some(r) = last.strip_suffix("es") {
+        cands.push(r.to_string());
+    }
+    if let Some(r) = last.strip_suffix('s') {
+        cands.push(r.to_string());
+    }
+    cands.push(last.to_string());
+    let one = cands
+        .iter()
+        .find(|c| plural_word(c) == last)
+        .cloned()
+        .unwrap_or_else(|| last.trim_end_matches('s').to_string());
+    format!("{head}{one}")
+}
+
 fn plural_word(w: &str) -> String {
     let irregular = [
         ("Elf", "Elves"),
@@ -1227,6 +1253,8 @@ fn plural_word(w: &str) -> String {
         ("Ninja", "Ninjas"),
         ("Thopter", "Thopters"),
         ("Homunculus", "Homunculi"),
+        ("Aurochs", "Aurochs"),
+        ("Hero", "Heroes"),
     ];
     for (s, p) in irregular {
         if w == s {

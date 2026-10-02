@@ -713,10 +713,7 @@ impl Renderer<'_> {
             format!("spells {r}")
         } else {
             // "sorcery spells" (not "sorcerie spells").
-            let one = match n.strip_suffix("ies") {
-                Some(r) => format!("{r}y"),
-                None => n.trim_end_matches('s').to_string(),
-            };
+            let one = super::singular(&n);
             format!("{one} spells")
         }
     }

@@ -319,6 +319,10 @@ impl Renderer<'_> {
             // CR 700.12: an outlaw is an object with the Assassin, Mercenary, Pirate,
             // Rogue, and/or Warlock creature types.
             Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),
+            // "a land card with a basic land type" (CR 305.6: the five basic land types).
+            Filter::Or(v) if is_basic_land_types(v) && np.types.contains(&CardType::Land) => {
+                np.post.push("with a basic land type".into())
+            }
             // "artifact, enchantment, or tapped creature": one list.
             Filter::Or(v) if v.iter().any(|x| matches!(x, Filter::Or(_))) => {
                 let flat = flatten_or(f);
@@ -1505,6 +1509,18 @@ fn keyword_alternatives(v: &[Filter]) -> Option<(Filter, Vec<crate::keywords::Ke
 }
 
 /// The creature types an outlaw has one of (CR 700.12).
+fn is_basic_land_types(v: &[Filter]) -> bool {
+    let mut names: Vec<&str> = v
+        .iter()
+        .filter_map(|x| match x {
+            Filter::Subtype(s) => Some(s.as_ref()),
+            _ => None,
+        })
+        .collect();
+    names.sort();
+    v.len() == 5 && names == ["Forest", "Island", "Mountain", "Plains", "Swamp"]
+}
+
 fn is_outlaw(v: &[Filter]) -> bool {
     let mut names: Vec<&str> = v
         .iter()
