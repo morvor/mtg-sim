@@ -378,7 +378,21 @@ impl Game {
             let min = self.target_min(s, ctx);
             // Targets chosen for each player: a player with no legal choice gets none.
             min == 0 || s.condition.is_some() || s.per_player.is_some() || {
-                let cands = self.legal_target_candidates(s, ctx, stack_obj);
+                let cands = if s.chosen_by_opponent && ctx.chosen_player.is_none() {
+                    // The opponent who'll choose isn't chosen yet ("target creature of an
+                    // opponent's choice they control"): possible with some opponent.
+                    crate::multiplayer::range::opponents_to_choose(self, ctx.controller)
+                        .into_iter()
+                        .map(|o| {
+                            let mut c = ctx.clone();
+                            c.chosen_player = Some(o);
+                            self.legal_target_candidates(s, &c, stack_obj)
+                        })
+                        .max_by_key(|v| v.len())
+                        .unwrap_or_default()
+                } else {
+                    self.legal_target_candidates(s, ctx, stack_obj)
+                };
                 cands.len() >= min
                     && s.together.as_ref().is_none_or(|grp| {
                         crate::target_groups::find_group(self, grp, &cands, min, ctx).is_some()
@@ -787,7 +801,12 @@ impl Game {
                 }
             }
             let chooser = if spec.chosen_by_opponent {
-                self.deciding_opponent(ctx.controller, stack_obj, ctx)
+                let o = self.deciding_opponent(ctx.controller, stack_obj, ctx);
+                // Kept for the targets' legality as it resolves (CR 608.2b).
+                if let Some(si) = self.objects[stack_obj.0 as usize].stack.as_mut() {
+                    si.chosen_values.insert(CHOOSER_KEY, o.0 as i64);
+                }
+                o
             } else {
                 ctx.controller
             };

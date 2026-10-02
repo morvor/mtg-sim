@@ -474,3 +474,164 @@ fn captivating_glance_the_clash_winner_gains_control() {
         assert_eq!(controller(&t, giant), winner);
     }
 }
+
+/// The players asked to choose targets, in order, with the candidates offered.
+fn target_choices(t: &TestGame) -> Vec<(PlayerId, Vec<Entity>)> {
+    t.asked()
+        .into_iter()
+        .filter_map(|(p, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets { candidates, .. } => {
+                Some((p, candidates))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn evangelize_the_chosen_opponent_chooses_one_of_their_creatures() {
+    cr!("601.2c", "115.1");
+    ruling!(
+        "Evangelize",
+        "When you put the spell on the stack, you choose an opponent, then that opponent chooses the target."
+    );
+    assert_compiles(&["Evangelize", "Arena", "Magus of the Arena", "Preacher"]);
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let elf = t.battlefield(P1, "Llanowar Elves");
+    let spell = t.hand(P0, "Evangelize");
+    t.lands(P0, "Plains", 5);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P1, &[Entity::Object(elf)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(controller(&t, elf), P0);
+    assert_eq!(controller(&t, giant), P1);
+    let choices = target_choices(&t);
+    assert_eq!(choices.len(), 1);
+    let (who, offered) = &choices[0];
+    assert_eq!(*who, P1);
+    assert!(offered.contains(&Entity::Object(giant)));
+    assert!(!offered.contains(&Entity::Object(bears)));
+}
+
+#[test]
+fn evangelize_doesnt_resolve_if_the_chosen_opponent_lost_control_of_the_target() {
+    cr!("608.2b");
+    ruling!(
+        "Evangelize",
+        "if the target isn’t a creature controlled by the chosen opponent, Evangelize won’t resolve."
+    );
+    let mut t = TestGame::new(3);
+    let elf = t.battlefield(P1, "Llanowar Elves");
+    t.battlefield(P2, "Hill Giant");
+    let spell = t.hand(P0, "Evangelize");
+    t.lands(P0, "Plains", 5);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P1, &[Entity::Object(elf)]);
+    t.cast(P0, spell).go();
+    // Another opponent gains control of it before Evangelize resolves.
+    give_control(&mut t, elf, P2);
+    t.resolve_all();
+    assert_eq!(controller(&t, elf), P2);
+    assert!(t.in_graveyard(P0, "Evangelize"));
+}
+
+#[test]
+fn magus_of_the_arena_your_creature_is_chosen_first_and_they_fight() {
+    cr!("601.2c", "701.14a");
+    ruling!(
+        "Magus of the Arena",
+        "Magus of the Arena's controller always chooses their creature first."
+    );
+    ruling!(
+        "Magus of the Arena",
+        "Tapped creatures can be targeted. Tapping them again will do nothing, but they'll still deal damage."
+    );
+    let mut t = TestGame::new(2);
+    let magus = t.battlefield(P0, "Magus of the Arena");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let giant = t.battlefield(P1, "Hill Giant");
+    assert!(t.g.tap(giant));
+    t.lands(P0, "Mountain", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    t.answer_targets(P1, &[Entity::Object(giant)]);
+    t.activate(P0, magus, 0, &[]).unwrap();
+    t.resolve_all();
+    let order: Vec<PlayerId> = target_choices(&t).into_iter().map(|(p, _)| p).collect();
+    assert_eq!(order, vec![P0, P1]);
+    assert!(t.obj_now(wurm).tapped);
+    // Craw Wurm (6/4) and the tapped Hill Giant (3/3) fought.
+    assert!(!t.on_battlefield(giant));
+    assert_eq!(t.obj_now(wurm).damage, 3);
+}
+
+#[test]
+fn arena_can_choose_a_different_opponent_each_time() {
+    cr!("601.2c", "701.14a");
+    ruling!(
+        "Arena",
+        "In multiplayer games, you can choose a different opposing player each time it the ability is activated."
+    );
+    let mut t = TestGame::new(3);
+    let arena = t.battlefield(P0, "Arena");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let elf1 = t.battlefield(P1, "Llanowar Elves");
+    let elf2 = t.battlefield(P2, "Llanowar Elves");
+    t.lands(P0, "Mountain", 6);
+    t.set_step(P0, Step::PrecombatMain);
+    for (opp, elf) in [(P1, elf1), (P2, elf2)] {
+        t.answer_targets(P0, &[Entity::Object(wurm)]);
+        t.answer_choose(P0, &[Entity::Player(opp)]);
+        t.answer_targets(opp, &[Entity::Object(elf)]);
+        t.activate(P0, arena, 0, &[]).unwrap();
+        t.resolve_all();
+        assert!(!t.on_battlefield(elf));
+        assert!(t.g.untap(arena));
+        assert!(t.g.untap(wurm));
+    }
+    assert_eq!(t.obj_now(wurm).damage, 2);
+}
+
+#[test]
+fn preacher_controls_the_creature_while_it_remains_tapped() {
+    cr!("611.2b", "613.1b");
+    ruling!(
+        "Preacher",
+        "When you activate the ability, you choose an opponent, then that opponent chooses the target."
+    );
+    let mut t = TestGame::new(2);
+    let preacher = t.battlefield(P0, "Preacher");
+    let elf = t.battlefield(P1, "Llanowar Elves");
+    t.battlefield(P1, "Hill Giant");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P1, &[Entity::Object(elf)]);
+    t.activate(P0, preacher, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(controller(&t, elf), P0);
+    assert!(t.g.untap(preacher));
+    t.g.recompute();
+    assert_eq!(controller(&t, elf), P1);
+}
+
+#[test]
+fn preacher_untapped_before_the_ability_resolves_does_nothing() {
+    cr!("611.2b");
+    ruling!(
+        "Preacher",
+        "If, before the ability resolves, there’s any point at which Preacher is untapped, the ability has no effect"
+    );
+    let mut t = TestGame::new(2);
+    let preacher = t.battlefield(P0, "Preacher");
+    let elf = t.battlefield(P1, "Llanowar Elves");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P1, &[Entity::Object(elf)]);
+    t.activate(P0, preacher, 0, &[]).unwrap();
+    assert!(t.g.untap(preacher));
+    assert!(t.g.tap(preacher));
+    t.resolve_all();
+    assert_eq!(controller(&t, elf), P1);
+}

@@ -179,6 +179,28 @@ fn has_end_of_turn(e: &Effect) -> bool {
 
 inventory::submit! { EffectPattern { name: "control grammar: until end of turn, [instruction] and [instruction]", priority: 110, parse: p_leading_until_end_of_turn } }
 
+/// "For as long as ~ remains tapped, gain control of target creature of an opponent's
+/// choice they control." (Preacher): the duration, read as if it followed the
+/// instruction.
+fn p_leading_for_as_long_as(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for as long as ")?;
+    let (cond, instr) = r.split_once(", ")?;
+    if !instr.starts_with("gain control of ") || instr.contains(" for as long as ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    match parse_clause(&format!("{instr} for as long as {cond}"), b) {
+        Some(e @ Effect::GainControl { .. }) => Some(e),
+        _ => {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            None
+        }
+    }
+}
+
+inventory::submit! { EffectPattern { name: "control grammar: for as long as [condition], gain control of [objects]", priority: 110, parse: p_leading_for_as_long_as } }
+
 /// "Gain control of that creature until end of turn, untap it, and it gains haste until
 /// end of turn": a list of three instructions, performed in order.
 fn p_three_instructions(l: &str, b: &mut Builder) -> Option<Effect> {
