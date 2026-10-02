@@ -19,6 +19,10 @@
 //! - "All combat damage that would be dealt to you this turn is dealt to target attacking
 //!   creature instead." (Turn the Tables)
 //!
+//! - "{0}: The next 1 damage that would be dealt to ~ this turn is dealt to target
+//!   creature you control instead." (Nomads en-Kor): a redirection shield of N that is
+//!   used up (`ReplacementAction::RedirectNext`).
+//!
 //! The recipient of a static redirection is determined as the damage would be dealt; a
 //! one-shot effect's recipient is locked in as the effect is created
 //! (`prevention::lock_def`). Damage isn't redirected to something that's no longer a
@@ -124,3 +128,32 @@ fn p_redirect(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "replacements: all damage that would be dealt this turn is dealt to Y instead", priority: 70, parse: p_redirect } }
+
+/// "the next N damage that would be dealt to X this turn is dealt to Y instead".
+fn p_redirect_next(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("the next ")?;
+    let (n, r) = parse_number(r)?;
+    if !matches!(n, Value::Const(_)) {
+        return None;
+    }
+    let (left, right) = r.trim_start().split_once(" is dealt to ")?;
+    let mut t = Targets {
+        base: Some(b.targets.len()),
+        specs: vec![],
+    };
+    let c = damage_clause(left, &mut t)?;
+    if !c.this_turn || c.during_your_turn || !groups_only(&c) {
+        return None;
+    }
+    let d = destination(right.strip_suffix(" instead")?, &c, &mut t)?;
+    for (spec, text) in t.specs {
+        b.add_target(spec, &text);
+    }
+    Some(Effect::AddReplacement {
+        def: def(&c, ReplacementAction::RedirectNext(d, n)),
+        duration: Duration::EndOfTurn,
+        uses: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "replacements: the next N damage that would be dealt to X this turn is dealt to Y instead", priority: 70, parse: p_redirect_next } }

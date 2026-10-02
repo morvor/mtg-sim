@@ -34,6 +34,7 @@ fn conjugate(verb: &str) -> Option<&'static str> {
         "untap" => "untaps",
         "reveal" => "reveals",
         "phase" => "phases",
+        "block" => "blocks",
         _ => return None,
     })
 }

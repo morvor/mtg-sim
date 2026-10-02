@@ -52,6 +52,22 @@ pub fn token_characteristics(spec: &TokenSpec) -> Characteristics {
     }
 }
 
+/// Characteristics of a token the resolving effect `ctx` creates from `spec`: a P/T given
+/// by values ("an X/X ... token, where X is ...") is determined now, once, and is part of
+/// the token's characteristics as created — its copiable values (CR 111.3, 107.3, 608.2h).
+pub fn token_characteristics_in(
+    g: &Game,
+    spec: &TokenSpec,
+    ctx: &crate::eval::Ctx,
+) -> Characteristics {
+    let mut chars = token_characteristics(spec);
+    if let Some(pt) = &spec.pt_values {
+        chars.power = Some(g.eval_value(&pt.0, ctx) as i32);
+        chars.toughness = Some(g.eval_value(&pt.1, ctx) as i32);
+    }
+    chars
+}
+
 /// Creates an emblem in the command zone, owned and controlled by `owner` (CR 114.1,
 /// 114.2). It has no characteristics other than its abilities: no name, types, mana cost
 /// or color (CR 114.3).

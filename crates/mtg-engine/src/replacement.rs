@@ -339,13 +339,35 @@ impl Game {
                     (Some(f), Some(card)) if f != o.face => Some(card.characteristics(f)),
                     _ => None,
                 };
-                let abilities = match (m.etb.copy_of, &face_chars) {
-                    (Some(c), _) => &self.obj(c).copiable.abilities,
-                    (None, Some(fc)) => &fc.abilities,
-                    (None, None) => &o.chars.abilities,
+                let chars = match (m.etb.copy_of, &face_chars) {
+                    (Some(c), _) => Some(&self.obj(c).copiable),
+                    (None, Some(fc)) => Some(fc),
+                    (None, None) => None,
                 };
-                for a in abilities {
+                // Copiable values and face characteristics hold keywords unexpanded: the
+                // "enters with" abilities a keyword stands for (vanishing, modular, ...)
+                // apply too (CR 702.63a, 707.2).
+                let derived: Vec<Ability> = chars
+                    .map(|c| {
+                        crate::keyword_impls::derived_by_keyword(c)
+                            .into_iter()
+                            .map(|(_, a)| a)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let abilities = chars.map_or(&o.chars.abilities, |c| &c.abilities);
+                let entering_ctx = Ctx::new(Some(m.obj), self.entering_controller(m));
+                for a in abilities.iter().chain(derived.iter()) {
                     if let AbilityKind::Static(s) = &a.kind {
+                        // A conditional one ("If you attacked this turn, you may have ~
+                        // enter as a copy ...") applies only if its condition is true as
+                        // the permanent enters.
+                        if s.condition
+                            .as_ref()
+                            .is_some_and(|c| !self.eval_cond(c, &entering_ctx))
+                        {
+                            continue;
+                        }
                         // CR 614.12: only effects that affect just that permanent apply
                         // from the permanent itself ("Permanents enter tapped" doesn't
                         // affect the permanent that has it).
@@ -417,7 +439,12 @@ impl Game {
                     link: 0,
                     controller: inst.controller,
                     class: repl_class(&inst.def, ev),
-                    text: format!("effect #{}", inst.id),
+                    // Named after the object that created it, so a player choosing the
+                    // order (CR 616.1) can tell the effects apart.
+                    text: match inst.source {
+                        Some(s) => format!("{} (effect #{})", self.obj(s).chars.name, inst.id),
+                        None => format!("effect #{}", inst.id),
+                    },
                     def: inst.def.clone(),
                     instance: Some(inst.id),
                 });
@@ -1021,9 +1048,15 @@ impl Game {
                     info.amount = prevented as i32;
                     c.event = Some(info);
                     // Applied to simultaneous damage events, a prevention effect is
-                    // applied once: its instruction happens once, for all the damage.
+                    // applied once: its instruction happens once, for all the damage
+                    // (once for each recipient if it's about the recipient).
+                    let per_recipient = crate::prevention::followup_about_recipient(&e);
+                    let recipient = |c: &Ctx| c.event.as_ref().map(|i| (i.object, i.player));
+                    let this = recipient(&c);
                     match self.prevention_followups.as_mut() {
-                        Some(list) => match list.iter_mut().find(|(k, _, _)| *k == key) {
+                        Some(list) => match list.iter_mut().find(|(k, c0, _)| {
+                            *k == key && (!per_recipient || recipient(c0) == this)
+                        }) {
                             Some((_, first, _)) => {
                                 if let Some(ev) = first.event.as_mut() {
                                     ev.amount += prevented as i32;
@@ -1240,7 +1273,7 @@ impl Game {
                 c.event = Some(event_info_of(&original));
                 let more = self.eval_value(&count, &c).max(0) as u32;
                 let plus = TokenCreate {
-                    chars: crate::tokens::token_characteristics(&spec),
+                    chars: crate::tokens::token_characteristics_in(self, &spec, &c),
                     card: crate::tokens::predefined_card(&spec),
                     tapped: false,
                     attacking: None,
@@ -1298,6 +1331,65 @@ impl Game {
                         combat,
                     }],
                 }
+            }
+            (
+                ReplacementAction::RedirectNext(sel, n),
+                ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                },
+            ) => {
+                let original = ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                };
+                // CR 614.9: redirection to something no longer valid does nothing (and
+                // doesn't use up the shield).
+                let Some(to) = self
+                    .eval_sel(&sel, &ctx)
+                    .into_iter()
+                    .next()
+                    .filter(|t| self.valid_damage_recipient(*t))
+                else {
+                    return vec![original];
+                };
+                let inst = cand
+                    .instance
+                    .and_then(|id| self.replacements.iter().position(|r| r.id == id));
+                let shield = match inst.and_then(|i| self.replacements[i].remaining) {
+                    Some(r) => r,
+                    None => self.eval_value(&n, &ctx).max(0) as u32,
+                };
+                let moved = shield.min(amount);
+                if let Some(i) = inst {
+                    let rem = shield - moved;
+                    self.replacements[i].remaining = Some(rem);
+                    if rem == 0 {
+                        self.replacements.remove(i);
+                    }
+                }
+                let mut out = Vec::new();
+                if moved > 0 {
+                    out.push(ReplEvent::Damage {
+                        source,
+                        target: to,
+                        amount: moved,
+                        combat,
+                    });
+                }
+                if amount > moved {
+                    out.push(ReplEvent::Damage {
+                        source,
+                        target,
+                        amount: amount - moved,
+                        combat,
+                    });
+                }
+                out
             }
             (ReplacementAction::Instead(effect), ev) => {
                 let mut c = ctx.clone();

@@ -62,6 +62,8 @@ fn as_enters_choose(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
         "a creature type" => ChoiceKind::CreatureType,
         "a card type" => ChoiceKind::CardType,
         "a basic land type" => ChoiceKind::BasicLandType,
+        // Any existing land type, basic or not (CR 205.3i).
+        "a land type" => ChoiceKind::OneOf(crate::types::land_types()),
         "an opponent" => ChoiceKind::Opponent,
         "a player" => ChoiceKind::Player,
         "odd or even" => ChoiceKind::OddOrEven,

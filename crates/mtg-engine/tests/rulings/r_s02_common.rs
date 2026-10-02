@@ -82,6 +82,7 @@ pub fn create_token(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
         toughness: Some(1),
         abilities: vec![],
         scryfall_name: None,
+        pt_values: None,
     });
     let before = t.g.battlefield.clone();
     let mut ctx = mtg_engine::eval::Ctx::new(None, p);
