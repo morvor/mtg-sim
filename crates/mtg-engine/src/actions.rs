@@ -1297,6 +1297,9 @@ impl Game {
             return k;
         }
         let have = match target {
+            // An object that has left its zone is a new object (CR 400.7); counters can't
+            // be removed from its last known information.
+            Entity::Object(o) if !self.is_live(o) => 0,
             Entity::Object(o) => self.obj(o).counter(kind),
             Entity::Player(p) => self.player(p).counter(kind),
         };

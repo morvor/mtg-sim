@@ -1,6 +1,7 @@
 //! One-shot effects that last "until" an event (CR 610.3, 610.4): "exile target creature
 //! until this creature leaves the battlefield", "target creature phases out until this
-//! leaves the battlefield".
+//! leaves the battlefield", "exile target creature an opponent controls until an opponent
+//! becomes the monarch".
 //!
 //! The initial one-shot effect exiles (or phases out) the objects and records what's
 //! waiting. Immediately after the specified event, a second one-shot effect returns them
@@ -37,12 +38,19 @@ pub struct UntilEffect {
 
 /// Whether the event an "until" effect waits for has happened (or had already happened
 /// when the effect would start, CR 610.3a–b, 610.4b–c).
-fn ended(g: &Game, source: Option<ObjectId>, until: &UntilEvent) -> bool {
+fn ended(g: &Game, source: Option<ObjectId>, controller: PlayerId, until: &UntilEvent) -> bool {
     match until {
         UntilEvent::SourceLeavesBattlefield => source.is_none_or(|s| {
             let o = g.obj(s);
             !g.is_live(s) || o.zone != Zone::Battlefield
         }),
+        // The events not yet processed (`check_untils` runs as they're flushed).
+        UntilEvent::OpponentBecomesMonarch => {
+            let opponents = g.opponents(controller);
+            g.events.iter().any(|e| {
+                matches!(e, crate::events::Event::BecameMonarch { player } if opponents.contains(player))
+            })
+        }
     }
 }
 
@@ -50,7 +58,7 @@ fn ended(g: &Game, source: Option<ObjectId>, until: &UntilEvent) -> bool {
 /// spell or ability was put on the stack (or triggered), nothing is exiled
 /// (CR 610.3a–b).
 pub fn exec_exile_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEvent, ctx: &mut Ctx) {
-    if ended(g, ctx.source, until) {
+    if ended(g, ctx.source, ctx.controller, until) {
         ctx.prev_affected.clear();
         return;
     }
@@ -97,7 +105,7 @@ pub fn exec_exile_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEvent, c
 
 /// "[Permanents] phase out until [event]" (CR 610.4).
 pub fn exec_phase_out_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEvent, ctx: &mut Ctx) {
-    if ended(g, ctx.source, until) {
+    if ended(g, ctx.source, ctx.controller, until) {
         return;
     }
     let objs: Vec<ObjectId> = objs
@@ -147,7 +155,7 @@ pub fn check_untils(g: &mut Game) {
     }
     let (done, keep): (Vec<UntilEffect>, Vec<UntilEffect>) = std::mem::take(&mut g.untils)
         .into_iter()
-        .partition(|u| ended(g, Some(u.source), &u.until));
+        .partition(|u| ended(g, Some(u.source), u.controller, &u.until));
     g.untils = keep;
     if done.is_empty() {
         return;

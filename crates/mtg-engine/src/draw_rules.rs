@@ -124,6 +124,18 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                 },
             ..
         } => g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx),
+        // Putting counters on N objects the player chooses ("put a -1/-1 counter on a
+        // creature you control" as a cost) needs N to choose from (CR 118.3).
+        Effect::AddCounters {
+            what:
+                Sel::Choose {
+                    filter,
+                    count,
+                    up_to: false,
+                    ..
+                },
+            ..
+        } => g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx),
         // Named effects a keyword implements (e.g. exiling craft materials, CR 702.167a).
         Effect::Custom(name) => crate::kw::custom_effect_possible(g, name, ctx).unwrap_or(true),
         // "You may search ...": a player who can't search libraries can't choose to (so

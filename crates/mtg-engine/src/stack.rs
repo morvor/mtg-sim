@@ -279,12 +279,12 @@ impl Game {
     /// if some choice is made (e.g. a kicker cost is paid, CR 601.2c) are optional here.
     pub fn targets_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
         specs.iter().all(|s| {
-            s.min == 0 || s.condition.is_some() || {
+            let min = s.min.min(self.eval_value(&s.max, ctx).max(0) as u32);
+            min == 0 || s.condition.is_some() || {
                 let cands = self.legal_target_candidates(s, ctx, stack_obj);
-                cands.len() as u32 >= s.min
+                cands.len() as u32 >= min
                     && s.together.is_none_or(|grp| {
-                        crate::target_groups::find_group(self, grp, &cands, s.min as usize)
-                            .is_some()
+                        crate::target_groups::find_group(self, grp, &cands, min as usize).is_some()
                     })
             }
         })
@@ -634,14 +634,18 @@ impl Game {
                     cands.retain(|c| !prev.contains(c));
                 }
             }
-            let max = (self.eval_value(&spec.max, ctx).max(0) as u32).min(cands.len() as u32);
-            if (cands.len() as u32) < spec.min {
+            let spec_max = self.eval_value(&spec.max, ctx).max(0) as u32;
+            let max = spec_max.min(cands.len() as u32);
+            // A slot never requires more targets than its maximum: "X target creatures"
+            // with X = 0 has no targets (CR 601.2c).
+            let min = spec.min.min(spec_max);
+            if (cands.len() as u32) < min {
                 return None;
             }
             // Targets that must have a relationship with each other: a group of the
             // required size must exist (CR 601.2c).
             if let Some(grp) = spec.together {
-                crate::target_groups::find_group(self, grp, &cands, spec.min as usize)?;
+                crate::target_groups::find_group(self, grp, &cands, min as usize)?;
             }
             slot_cands[i] = cands.clone();
             slot_max[i] = max;
@@ -659,12 +663,12 @@ impl Game {
                         source: stack_obj,
                         text: spec.text.clone(),
                         candidates: cands.clone(),
-                        min: spec.min,
+                        min,
                         max,
                     },
                 ) {
                     Answer::Entities(v)
-                        if v.len() as u32 >= spec.min
+                        if v.len() as u32 >= min
                             && v.len() as u32 <= max
                             && v.iter().all(|e| cands.contains(e))
                             && distinct(&v) =>
@@ -674,14 +678,12 @@ impl Game {
                     _ => cands
                         .iter()
                         .copied()
-                        .take(spec.min.max(if spec.min == 0 { 0 } else { 1 }) as usize)
+                        .take(min.max(if min == 0 { 0 } else { 1 }) as usize)
                         .collect(),
                 }
             };
             out[i] = match spec.together {
-                Some(grp) => {
-                    crate::target_groups::fit(self, grp, picked, &cands, spec.min as usize)?
-                }
+                Some(grp) => crate::target_groups::fit(self, grp, picked, &cands, min as usize)?,
                 None => picked,
             };
         }
@@ -1068,7 +1070,9 @@ impl Game {
                 ctx,
                 created_turn: self.turn.number,
                 created_step: Some(self.turn.step),
+                created_steps: self.turn.step_log.len(),
                 for_rest_of_game: false,
+                performer: None,
             });
         }
     }

@@ -24,6 +24,7 @@ pub mod actions;
 pub mod activation_costs;
 pub mod adventure;
 pub mod agents;
+pub mod aggregates;
 pub mod ante;
 pub mod apnap;
 pub mod as_though;

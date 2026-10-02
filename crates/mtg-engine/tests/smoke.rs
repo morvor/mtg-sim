@@ -142,3 +142,51 @@ fn random_agents_pass_after_acting_repeatedly_in_a_step() {
     // With a constant 0.8 it would act about 160 times.
     assert!(acted < 40, "acted {acted} times in one step");
 }
+
+#[test]
+fn an_event_observer_sees_every_event_without_changing_the_game() {
+    use mtg_engine::events::Event;
+    use mtg_engine::game::EventObserver;
+    use std::sync::{Arc, Mutex};
+    let mut t = TestGame::new(2);
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen2 = seen.clone();
+    t.g.observer = Some(EventObserver::new(move |g, ev| {
+        let what = match ev {
+            Event::SpellCast { spell, .. } => format!("cast {}", g.obj(*spell).chars.name),
+            Event::Damage { amount, .. } => format!("damage {amount}"),
+            Event::SpellResolved { .. } => "resolved".to_string(),
+            _ => return,
+        };
+        seen2.lock().unwrap().push(what);
+    }));
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        ["cast Lightning Bolt", "damage 3", "resolved"]
+    );
+}
+
+#[test]
+fn an_event_observer_is_told_when_an_illegal_action_is_reversed() {
+    cr!("733.1");
+    use mtg_engine::game::EventObserver;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
+    let mut t = TestGame::new(2);
+    let rollbacks = Arc::new(AtomicU32::new(0));
+    let r2 = rollbacks.clone();
+    t.g.observer = Some(EventObserver::new(|_, _| {}).with_rollback(move |g| {
+        // The game is back as it was: the spell is in its owner's hand.
+        assert!(g.stack.is_empty());
+        r2.fetch_add(1, Ordering::Relaxed);
+    }));
+    let bolt = t.hand(P0, "Lightning Bolt");
+    assert!(t.cast(P0, bolt).target(P1).try_go().is_err());
+    assert_eq!(rollbacks.load(Ordering::Relaxed), 1);
+    assert!(t.in_hand(P0, "Lightning Bolt"));
+}

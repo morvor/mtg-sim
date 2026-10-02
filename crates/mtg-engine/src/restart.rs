@@ -91,10 +91,12 @@ fn restart_game(g: &mut Game, req: RestartRequest) {
     let config = GameConfig {
         starting_player: Some(req.controller),
         first_turn_chooser: None,
+        top_of_library: vec![],
         ..g.config.clone()
     };
     let mut new = Game::new(config, decks, vec![]);
     new.agents = g.agents.clone();
+    new.observer = g.observer.clone();
     new.rng = g.rng.clone();
     new.logging = g.logging;
     new.log = std::mem::take(&mut g.log);

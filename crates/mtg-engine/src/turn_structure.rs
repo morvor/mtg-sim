@@ -10,6 +10,9 @@ use crate::turn::Step;
 pub const MAIN_PHASE: &str = "main_phase:";
 /// `Condition::Custom` name prefix: "it's the Nth upkeep step of this turn" (CR 503.2).
 pub const UPKEEP: &str = "upkeep:";
+/// `Condition::Custom` name prefix: "it's the Nth end step of this turn" (CR 500.8:
+/// additional end steps).
+pub const END_STEP: &str = "end_step:";
 /// `Condition::Custom` name: the first upkeep step of this turn has ended (CR 503.2).
 pub const AFTER_UPKEEP: &str = "after_first_upkeep";
 
@@ -24,6 +27,11 @@ pub fn custom_condition(g: &Game, name: &str, _ctx: &Ctx) -> Option<bool> {
     if let Some(n) = name.strip_prefix(UPKEEP) {
         let n: u32 = n.parse().ok()?;
         return Some(g.turn.step == Step::Upkeep && g.turn.upkeeps == n);
+    }
+    if let Some(n) = name.strip_prefix(END_STEP) {
+        let n: usize = n.parse().ok()?;
+        let seen = g.turn.step_log.iter().filter(|s| **s == Step::End).count();
+        return Some(g.turn.step == Step::End && seen == n);
     }
     if name == AFTER_UPKEEP {
         return Some(after_first_upkeep(g));
