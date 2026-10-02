@@ -61,9 +61,17 @@ fn from_hand(r: &str, hand: &str, who: PlayerRef, b: &mut Builder) -> Option<Eff
     let rel = owner_rel(&who)?;
     let (count, up_to, r) = hand_count(r, &who)?;
     let (desc, tail) = r.split_once(&format!(" from {hand} hand onto the battlefield"))?;
-    // "a creature card and/or a land card" (one of each) is a different instruction.
-    if desc.contains(" and/or ") {
-        return None;
+    // "a creature card and/or a land card" (one of each) is a different instruction;
+    // "any number of artifact, creature, enchantment, and/or land cards" is one list of
+    // card types.
+    if let Some((a, c)) = desc.split_once(" and/or ") {
+        let separate = a.ends_with(" card")
+            || a.ends_with(" cards")
+            || c.starts_with("a ")
+            || c.starts_with("an ");
+        if separate {
+            return None;
+        }
     }
     let filter = card_filter(desc, b)?;
     let mut to = Destination::battlefield();
