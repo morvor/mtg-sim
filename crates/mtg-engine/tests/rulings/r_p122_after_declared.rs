@@ -33,7 +33,7 @@ fn activate_on_blocker(source_name: &str, who: PlayerId, idx: usize, pool: &[(Ma
 
 #[test]
 fn chainwhip_cyclops_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Chainwhip Cyclops",
         "Activating Chainwhip Cyclops’s ability after a creature has blocked won’t remove the blocking creature from combat"
@@ -43,7 +43,7 @@ fn chainwhip_cyclops_after_blocks() {
 
 #[test]
 fn clan_guildmage_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Clan Guildmage",
         "Activating Clan Guildmage’s first ability after a creature has blocked won’t remove the blocking creature from combat"
@@ -53,7 +53,7 @@ fn clan_guildmage_after_blocks() {
 
 #[test]
 fn siegebreaker_giant_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Siegebreaker Giant",
         "Activating Siegebreaker Giant’s last ability after a creature has blocked won’t remove the blocking creature from combat"
@@ -63,7 +63,7 @@ fn siegebreaker_giant_after_blocks() {
 
 #[test]
 fn zirda_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Zirda, the Dawnwaker",
         "Activating Zirda's last ability after a creature has blocked won't remove the blocking creature from combat"
@@ -73,7 +73,7 @@ fn zirda_after_blocks() {
 
 #[test]
 fn lambholt_harrier_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Lambholt Harrier",
         "Activating it after a creature has been declared as a blocker will not remove that creature from combat."
@@ -103,7 +103,7 @@ fn lambholt_harrier_before_blocks() {
 
 #[test]
 fn sower_of_chaos_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Sower of Chaos",
         "Once a creature has been declared as a blocker, activating Sower of Chaos's last ability targeting that creature won't cause that creature to stop blocking."
@@ -113,7 +113,7 @@ fn sower_of_chaos_after_blocks() {
 
 #[test]
 fn merciless_javelineer_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Merciless Javelineer",
         "Once a creature has blocked, Merciless Javelineer’s ability can’t undo that block."
@@ -123,7 +123,7 @@ fn merciless_javelineer_after_blocks() {
 
 #[test]
 fn endbringer_after_blocks_and_attacks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Endbringer",
         "Activating the second activated ability after a creature has legally been declared as an attacker or blocker won't change or undo that attack or block."
@@ -142,7 +142,7 @@ fn endbringer_after_blocks_and_attacks() {
 
 #[test]
 fn bribers_purse_after_attacks_and_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Briber's Purse",
         "Activating the ability targeting a creature that’s already attacking or blocking won’t remove it from combat or affect that attack or block."
@@ -169,7 +169,7 @@ fn bribers_purse_after_attacks_and_blocks() {
 
 #[test]
 fn fifty_feet_of_rope_climb_over_after_a_wall_blocked() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Fifty Feet of Rope",
         "Activating the Climb Over ability after a Wall has blocked won't change or undo that block."
@@ -188,7 +188,7 @@ fn fifty_feet_of_rope_climb_over_after_a_wall_blocked() {
 
 #[test]
 fn kozileks_pathfinder_after_blocked() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Kozilek's Pathfinder",
         "Activating the ability once Kozilek’s Pathfinder has been legally blocked won’t change or undo that block."
@@ -205,7 +205,7 @@ fn kozileks_pathfinder_after_blocked() {
 
 #[test]
 fn sly_instigator_after_blocked() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Sly Instigator",
         "Once a creature an opponent controls has been legally blocked, activating Sly Instigator's ability won't change or undo that block."
@@ -223,7 +223,7 @@ fn sly_instigator_after_blocked() {
 
 #[test]
 fn malicious_intent_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Malicious Intent",
         "Once a creature has been declared as a blocking creature, making it unable to block will have no effect."
@@ -242,7 +242,7 @@ fn malicious_intent_after_blocks() {
 
 #[test]
 fn fearsome_temper_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Fearsome Temper",
         "The activated ability granted by Fearsome Temper can’t change or undo a block that’s already happened."
@@ -260,7 +260,7 @@ fn fearsome_temper_after_blocks() {
 
 #[test]
 fn fearsome_temper_in_the_declare_attackers_step() {
-    cr!("509.1b", "506.4");
+    cr!("509.1b", "506.4a");
     ruling!(
         "Fearsome Temper",
         "For it to have an effect, you must activate it no later than the declare attackers step."
@@ -307,7 +307,7 @@ fn spell_on_blocker(name: &str, modes: Option<&[usize]>, blocker: &str) -> TestG
 
 #[test]
 fn blindblast_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Blindblast",
         "Casting Blindblast after a creature has blocked won’t remove the blocking creature from combat unless the damage Blindblast deals causes that creature to die."
@@ -321,7 +321,7 @@ fn blindblast_after_blocks() {
 
 #[test]
 fn gnoll_camp_intimidate_them_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "You Come to the Gnoll Camp",
         "Casting this spell and choosing the Intimidate Them mode after blockers have been declared won't change or undo any blocks."
@@ -331,7 +331,7 @@ fn gnoll_camp_intimidate_them_after_blocks() {
 
 #[test]
 fn untimely_malfunction_last_mode_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Untimely Malfunction",
         "The effect of Untimely Malfunction's last mode won't cause creatures that are already blocking to stop blocking."
@@ -341,7 +341,7 @@ fn untimely_malfunction_last_mode_after_blocks() {
 
 #[test]
 fn off_balance_before_and_after_declarations() {
-    cr!("506.4", "508.1c", "509.1b");
+    cr!("506.4a", "508.1c", "509.1b");
     ruling!(
         "Off Balance",
         "The ability only does something if used before attackers or blockers (as appropriate) are declared during a turn."
@@ -377,7 +377,7 @@ fn off_balance_before_and_after_declarations() {
 
 #[test]
 fn lawmages_binding_after_attacks_blocks_and_activations() {
-    cr!("506.4", "509.1h", "113.7a");
+    cr!("506.4a", "509.1h", "113.7a");
     ruling!(
         "Lawmage's Binding",
         "Once a creature has attacked or blocked, casting Lawmage’s Binding won’t remove that creature from combat. Similarly, once a creature’s ability has been activated, casting Lawmage’s Binding won’t counter that ability."
@@ -403,7 +403,7 @@ fn lawmages_binding_after_attacks_blocks_and_activations() {
 
 #[test]
 fn arena_athlete_heroic_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Arena Athlete",
         "Resolving Arena Athlete's ability after a creature has blocked won't remove the blocking creature from combat"
@@ -424,7 +424,7 @@ fn arena_athlete_heroic_after_blocks() {
 
 #[test]
 fn smelt_ward_minotaur_after_blocks() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Smelt-Ward Minotaur",
         "Resolving Smelt-Ward Minotaur’s triggered ability after a creature has blocked won’t remove the blocking creature from combat"
@@ -445,7 +445,7 @@ fn smelt_ward_minotaur_after_blocks() {
 
 #[test]
 fn burden_of_proof_on_a_detectives_blocker() {
-    cr!("506.4", "509.1h");
+    cr!("506.4a", "509.1h");
     ruling!(
         "Burden of Proof",
         "Once a Detective has been blocked, attaching Burden of Proof to a creature blocking it won't cause that Detective to become unblocked."
@@ -464,7 +464,7 @@ fn burden_of_proof_on_a_detectives_blocker() {
 
 #[test]
 fn intimidation_bolt_after_attacks() {
-    cr!("506.4", "508.1c");
+    cr!("506.4a", "508.1c");
     ruling!(
         "Intimidation Bolt",
         "For the second part of Intimidation Bolt's effect to do anything, it must be cast before attackers are declared."
@@ -490,7 +490,7 @@ fn intimidation_bolt_after_attacks() {
 
 #[test]
 fn change_of_heart_after_attacks() {
-    cr!("506.4", "508.1c");
+    cr!("506.4a", "508.1c");
     ruling!(
         "Change of Heart",
         "Change of Heart will not remove an already attacking creature from combat. It must be cast before attackers are declared"
@@ -513,7 +513,7 @@ fn change_of_heart_after_attacks() {
 
 #[test]
 fn netter_en_dal_before_and_after_attacks() {
-    cr!("506.4", "508.1c");
+    cr!("506.4a", "508.1c");
     ruling!(
         "Netter en-Dal",
         "The ability only does something if used before attackers are declared during a turn. If used after the creature is declared as an attacker, nothing happens."
@@ -540,7 +540,7 @@ fn netter_en_dal_before_and_after_attacks() {
 
 #[test]
 fn orims_chant_kicked_after_attacks() {
-    cr!("506.4", "508.1c");
+    cr!("506.4a", "508.1c");
     ruling!(
         "Orim's Chant",
         "Orim's Chant also won't affect creatures that are already attacking. It does not remove them from combat."
@@ -558,7 +558,7 @@ fn orims_chant_kicked_after_attacks() {
 
 #[test]
 fn arachnus_web_attached_to_an_attacker() {
-    cr!("506.4", "508.1c");
+    cr!("506.4a", "508.1c");
     ruling!(
         "Arachnus Web",
         "If Arachnus Web enters the battlefield attached to an attacking or blocking creature (due to Arachnus Spinner's ability, for example), that creature will continue to attack or block."
@@ -579,7 +579,7 @@ fn arachnus_web_attached_to_an_attacker() {
 
 #[test]
 fn bound_in_silence_attached_to_an_attacker() {
-    cr!("506.4", "508.1c");
+    cr!("506.4a", "508.1c");
     ruling!(
         "Bound in Silence",
         "If Bound in Silence becomes attached to a creature that's already attacking or blocking, the creature continues to attack or block as normal."

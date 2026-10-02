@@ -1589,7 +1589,20 @@ fn p_scry_surveil_mill(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "target creature can't block this turn", "~ can't be blocked this turn".
 fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (dur, l) = duration_suffix(l);
+    let (mut dur, mut l) = duration_suffix(l);
+    // "That creature can't block this combat" (Forgestoker Dragon): until the combat
+    // phase ends.
+    if matches!(dur, Duration::Permanent) {
+        if let Some(r) = l.trim().strip_suffix(" this combat") {
+            (dur, l) = (Duration::EndOfCombat, r);
+        }
+    }
+    // "Until your next turn, creatures can't attack you" (Chronomantic Escape).
+    if matches!(dur, Duration::Permanent) {
+        if let Some(r) = l.trim().strip_prefix("until your next turn, ") {
+            (dur, l) = (Duration::UntilYourNextTurn, r);
+        }
+    }
     if matches!(dur, Duration::Permanent) {
         return None;
     }
@@ -1607,6 +1620,14 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
         "can't block" => Restriction::CantBlock(f),
         "can't attack" => Restriction::CantAttack(f),
         "can't attack or block" => Restriction::CantAttackOrBlock(f),
+        "can't attack you" | "can't attack you or planeswalkers you control" => {
+            Restriction::CantAttackPlayer {
+                attackers: f,
+                defender: PlayerFilter::You,
+                planeswalkers: rest.ends_with("planeswalkers you control"),
+                battles: false,
+            }
+        }
         "can't be blocked" => Restriction::CantBeBlocked(f),
         "attacks this combat if able" | "attacks if able" => Restriction::MustAttack(f),
         _ => return None,
