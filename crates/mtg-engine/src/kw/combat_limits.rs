@@ -10,11 +10,29 @@ use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::types::*;
 
+/// `Filter::Custom`: the creature is goaded (CR 701.15).
+pub const GOADED: &str = "restrictions:goaded";
+
+/// `Filter::Custom`: the object's mana value is even / odd (CR 202.3).
+pub const EVEN_MANA_VALUE: &str = "restrictions:even_mana_value";
+pub const ODD_MANA_VALUE: &str = "restrictions:odd_mana_value";
+
 pub struct CombatLimits;
 
 impl KeywordRules for CombatLimits {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+        match name {
+            GOADED => Some(!g.goaders(id).is_empty()),
+            EVEN_MANA_VALUE | ODD_MANA_VALUE => {
+                let even = g.mana_value_of(id) % 2 == 0;
+                Some(even == (name == EVEN_MANA_VALUE))
+            }
+            _ => None,
+        }
     }
 
     fn attack_declaration_ok(&self, g: &Game, decl: &[(ObjectId, Entity)]) -> bool {

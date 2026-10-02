@@ -20,7 +20,7 @@
 //!   spell can't be countered", "[objects] can't be the target of ... this turn", and
 //!   combat restrictions with leading durations ("Until your next turn, ...").
 
-use super::{EffectPattern, StaticPattern};
+use super::{EffectPattern, FilterSuffixPattern, StaticPattern};
 use crate::ability::*;
 use crate::oracle::effects::{duration_suffix, Builder};
 use crate::oracle::patterns::statics::{
@@ -192,6 +192,17 @@ pub(crate) fn object_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> 
             what: fc,
             by: opponents_targeting(x)?,
         }]);
+    }
+    // "can't attack or block, and its activated abilities can't be activated".
+    for sep in [", and ", " and "] {
+        for poss in ["its activated abilities ", "their activated abilities "] {
+            let key = format!("{sep}{poss}");
+            if let Some(i) = p.find(&key) {
+                let mut a = restriction_predicate(&p[..i], f)?;
+                a.extend(restriction_predicate(&p[i + sep.len()..], f)?);
+                return Some(a);
+            }
+        }
     }
     if let Some(x) = p.strip_prefix("can't ") {
         if let Some(action) = object_action(x) {
@@ -538,8 +549,15 @@ fn spells_cant_be_countered_effect(l: &str, b: &mut Builder) -> Option<Effect> {
             expires: Duration::EndOfTurn,
         });
     }
-    let (dur, main) = effect_duration(l).unwrap_or((Duration::Permanent, l));
-    let subject = main.strip_suffix(" can't be countered")?;
+    let (mut dur, main) = effect_duration(l).unwrap_or((Duration::Permanent, l));
+    let mut subject = main.strip_suffix(" can't be countered")?;
+    // "Creature spells you cast this turn can't be countered."
+    if let Some(s) = subject.strip_suffix(" this turn") {
+        if !matches!(dur, Duration::Permanent) {
+            return None;
+        }
+        (dur, subject) = (Duration::EndOfTurn, s);
+    }
     // "Target spell can't be countered": that spell, for as long as it's on the stack.
     if subject == "target spell" {
         let (what, rest) = crate::oracle::effects::object_ref(subject, b)?;
@@ -616,14 +634,21 @@ fn objects_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     if matches!(dur, Duration::Permanent) {
         return None;
     }
-    let (what, rest) = crate::oracle::effects::object_ref(main, b)?;
-    let subject = main.strip_suffix(rest.as_str()).unwrap_or(main).trim();
-    let f = match &what {
-        Sel::All(f) if crate::oracle::effects::is_class_filter(f) => f.clone(),
-        Sel::All(_) | Sel::None | Sel::Players(_) => return None,
-        Sel::This if !(subject.starts_with('~') || subject == "it") => return None,
-        _ => Filter::In(Box::new(what.clone())),
+    // "Its activated abilities can't be activated this turn": the object "it" names.
+    let (main, possessive) = match main
+        .strip_prefix("its activated abilities ")
+        .map(|r| ("it", "its", r))
+        .or_else(|| {
+            main.strip_prefix("their activated abilities ")
+                .map(|r| ("they", "their", r))
+        }) {
+        Some((pronoun, poss, r)) => (pronoun.to_string(), Some(format!("{poss} activated abilities {r}"))),
+        None => (main.to_string(), None),
     };
+    let (what, rest) = crate::oracle::effects::object_ref(&main, b)?;
+    let rest = possessive.unwrap_or(rest);
+    let subject = main.strip_suffix(rest.as_str()).unwrap_or(&main).trim();
+    let f = subject_filter(&what, subject)?;
     let rs = restriction_predicate(end(&rest), &f)?;
     // Only restrictions a resolving effect can lock onto the objects it names.
     let ok = rs.iter().all(|r| {
@@ -653,6 +678,208 @@ fn objects_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "restriction grammar: objects [restriction] for a duration", priority: 120, parse: objects_restriction_effect } }
+
+/// Whether a filter describes a class of objects a rule-modifying effect can keep
+/// applying to (CR 611.2c): qualities, and players fixed as the effect begins
+/// ("creatures target player controls", "creatures the active player controls", see
+/// `bind_target_players` in `resolve.rs`).
+fn restriction_class(f: &Filter) -> bool {
+    match f {
+        Filter::And(v) | Filter::Or(v) => v.iter().all(restriction_class),
+        Filter::Not(x) => restriction_class(x),
+        Filter::ControlledBy(PlayerRel::Target(_))
+        | Filter::ControlledByPlayer(_)
+        | Filter::Named(_)
+        | Filter::Other => true,
+        other => crate::oracle::effects::is_class_filter(other),
+    }
+}
+
+/// The filter of a restriction's subject: a class of objects, or the specific objects
+/// named (locked in as the effect begins).
+fn subject_filter(what: &Sel, subject: &str) -> Option<Filter> {
+    Some(match what {
+        Sel::All(f) if restriction_class(f) => f.clone(),
+        Sel::All(_) | Sel::None | Sel::Players(_) => return None,
+        // A pronoun with nothing else to refer to falls back to the source.
+        Sel::This if !(subject.starts_with('~') || subject == "it") => return None,
+        _ => Filter::In(Box::new(what.clone())),
+    })
+}
+
+/// Requirements with a player or object: "[objects] attack(s) [player] [this turn / each
+/// combat] if able", "[creature] blocks [creature] this turn if able", "[creature]
+/// attacks or blocks this turn if able" (CR 508.1d, 509.1c).
+fn requirement_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (lead, l) = leading_duration(l);
+    let (body, dur) = if let Some(r) = l.strip_suffix(" this turn if able") {
+        (r, Duration::EndOfTurn)
+    } else if let Some(r) = l.strip_suffix(" this combat if able") {
+        (r, Duration::EndOfCombat)
+    } else if let Some(r) = l.strip_suffix(" each combat if able") {
+        (r, lead.clone()?)
+    } else {
+        return None;
+    };
+    let dur = match (&lead, dur) {
+        (Some(d), Duration::EndOfTurn) if l.ends_with(" each combat if able") => d.clone(),
+        (Some(_), _) if !l.ends_with(" each combat if able") => return None,
+        (_, d) => d,
+    };
+    let (what, rest) = crate::oracle::effects::object_ref(body, b)?;
+    let subject = body.strip_suffix(rest.as_str()).unwrap_or(body).trim();
+    let f = subject_filter(&what, subject)?;
+    let rest = rest.trim();
+    let rs = if matches!(rest, "attacks or blocks" | "attack or block") {
+        vec![Restriction::MustAttack(f.clone()), Restriction::MustBlock(f)]
+    } else if let Some(p) = rest
+        .strip_prefix("attacks ")
+        .or_else(|| rest.strip_prefix("attack "))
+    {
+        let defender = match p {
+            "you" => PlayerFilter::You,
+            "a player" => PlayerFilter::Any,
+            _ => {
+                let (r, tail) = crate::oracle::effects::player_ref(p, b)?;
+                if !end(&tail).is_empty() {
+                    return None;
+                }
+                match r {
+                    PlayerRef::You => PlayerFilter::You,
+                    PlayerRef::Target(_) | PlayerRef::TriggerPlayer | PlayerRef::ControllerOf(_) => {
+                        PlayerFilter::Ref(Box::new(r))
+                    }
+                    _ => return None,
+                }
+            }
+        };
+        vec![Restriction::MustAttackPlayer {
+            attackers: f,
+            defender,
+        }]
+    } else if let Some(p) = rest
+        .strip_prefix("blocks ")
+        .or_else(|| rest.strip_prefix("block "))
+    {
+        if !p.starts_with("target ") {
+            return None;
+        }
+        let (a, tail) = crate::oracle::effects::object_ref(p, b)?;
+        if !end(&tail).is_empty() || !matches!(a, Sel::Target(_)) {
+            return None;
+        }
+        vec![Restriction::MustBlockAttacker {
+            blocker: f,
+            attacker: Filter::In(Box::new(a)),
+        }]
+    } else {
+        return None;
+    };
+    Some(add(rs, dur))
+}
+
+inventory::submit! { EffectPattern { name: "restriction grammar: requirements with a player or object", priority: 110, parse: requirement_effect } }
+
+/// A list of whole groups as a subject: "Green creatures and white creatures", "White
+/// creatures and blue creatures".
+fn group_list(s: &str) -> Option<Filter> {
+    let parts: Vec<&str> = s.split(" and ").collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let mut v = Vec::new();
+    for p in parts {
+        let (f, plural) = whole_object_phrase(p)?;
+        if !plural {
+            return None;
+        }
+        v.push(f);
+    }
+    Some(Filter::Or(v))
+}
+
+/// Subjects the core group parser doesn't know: "creatures named Lightning Rager",
+/// "goaded creatures your opponents control", lists of whole groups.
+fn extra_subject(s: &str) -> Option<Filter> {
+    if let Some(f) = group_list(s) {
+        return Some(f);
+    }
+    if let Some(r) = s.strip_prefix("goaded ") {
+        let (f, plural) = whole_object_phrase(r)?;
+        return plural.then(|| {
+            Filter::and(vec![
+                f,
+                Filter::Custom(crate::kw::combat_limits::GOADED.into()),
+            ])
+        });
+    }
+    let (noun, name) = s.split_once(" named ")?;
+    let (f, plural) = whole_object_phrase(noun)?;
+    if !plural || name.is_empty() {
+        return None;
+    }
+    Some(Filter::and(vec![f, Filter::Named(name.into())]))
+}
+
+/// "[extra subject] [restriction]" as a static ability, and with a duration as an effect.
+fn extra_subject_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if ctx.is_spell() {
+        return None;
+    }
+    let l = end(l.trim());
+    for (i, _) in l.match_indices(" can") {
+        let (subj, pred) = (&l[..i], l[i + 1..].trim());
+        let subj = subj.replace('~', ctx.card_name);
+        let Some(f) = extra_subject(&subj.to_lowercase()) else {
+            continue;
+        };
+        let rs = restriction_predicate(pred, &f)?;
+        return Some(static_restrictions(rs, text));
+    }
+    None
+}
+
+inventory::submit! { StaticPattern { name: "restriction grammar: named, goaded and listed subjects", priority: 105, parse: extra_subject_static } }
+
+fn extra_subject_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (dur, main) = effect_duration(l)?;
+    if matches!(dur, Duration::Permanent) {
+        return None;
+    }
+    for (i, _) in main.match_indices(" can") {
+        let (subj, pred) = (&main[..i], main[i + 1..].trim());
+        let subj = subj.replace('~', b.ctx.card_name);
+        let Some(f) = extra_subject(&subj.to_lowercase()) else {
+            continue;
+        };
+        let rs = restriction_predicate(pred, &f)?;
+        return Some(add(rs, dur));
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "restriction grammar: named and listed subjects for a duration", priority: 110, parse: extra_subject_effect } }
+
+/// "with even mana values", "with an odd mana value" (CR 202.3).
+fn even_odd_mana_value<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    for (p, name) in [
+        ("with even mana values", crate::kw::combat_limits::EVEN_MANA_VALUE),
+        ("with an even mana value", crate::kw::combat_limits::EVEN_MANA_VALUE),
+        ("with odd mana values", crate::kw::combat_limits::ODD_MANA_VALUE),
+        ("with an odd mana value", crate::kw::combat_limits::ODD_MANA_VALUE),
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if rest.is_empty() || rest.starts_with(' ') {
+                return Some((Filter::Custom(name.into()), rest));
+            }
+        }
+    }
+    None
+}
+
+inventory::submit! { FilterSuffixPattern { name: "restriction grammar: with even/odd mana values", priority: 100, parse: even_odd_mana_value } }
 
 #[cfg(test)]
 mod tests {

@@ -2030,7 +2030,11 @@ impl Game {
     }
 
     pub(crate) fn activation_prohibited(&self, p: PlayerId, src: ObjectId, is_mana: bool) -> bool {
-        let check = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| -> bool {
+        let check = |r: &Restriction,
+                     s: Option<ObjectId>,
+                     c: PlayerId,
+                     locked: &Option<Vec<ObjectId>>|
+         -> bool {
             if let Restriction::CantActivate {
                 who,
                 sources,
@@ -2040,7 +2044,7 @@ impl Game {
                 let ctx = Ctx::new(s, c);
                 (!is_mana || *include_mana)
                     && self.player_filter_matches(who, p, &ctx)
-                    && self.matches(src, sources, &ctx)
+                    && self.restriction_applies(src, sources, &ctx, locked)
             } else {
                 false
             }
@@ -2048,11 +2052,11 @@ impl Game {
         self.statics
             .restrictions
             .iter()
-            .any(|(s, c, r)| check(r, Some(*s), *c))
+            .any(|(s, c, r)| check(r, Some(*s), *c, &None))
             || self
                 .rule_effects
                 .iter()
-                .any(|e| check(&e.restriction, e.source, e.controller))
+                .any(|e| check(&e.restriction, e.source, e.controller, &e.objects))
     }
 
     /// Total cost of an activated ability including modifiers (CR 602.2b, 601.2f).
