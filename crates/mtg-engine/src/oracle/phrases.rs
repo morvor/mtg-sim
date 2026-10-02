@@ -48,6 +48,17 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "thirty" => 30,
         "fifty" | "50" => 50,
         "x" => return Some((Value::X, rest)),
+        // "mills twice X cards", "exile up to twice X target cards".
+        "twice" => {
+            let (w2, rest2) = split_word(rest);
+            if w2 != "x" {
+                return None;
+            }
+            return Some((
+                Value::Mul(Box::new(Value::Const(2)), Box::new(Value::X)),
+                rest2,
+            ));
+        }
         other => {
             if let Ok(n) = other.parse::<i32>() {
                 n
@@ -244,6 +255,15 @@ pub fn adjective(w: &str) -> Option<Filter> {
 
 /// Parses an object description like "nontoken creature you control with flying".
 /// Returns (filter, plural?, rest).
+/// Whether a filter is about cards (has a `Filter::Card` part).
+fn names_cards(f: &Filter) -> bool {
+    match f {
+        Filter::Card => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(names_cards),
+        _ => false,
+    }
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     let mut s = s.trim_start();
     let mut parts: Vec<Filter> = Vec::new();
@@ -538,6 +558,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t.strip_prefix("not named ~") {
             // "a legendary permanent card not named ~" (Staff of Eden, Vault's Key).
             (Filter::not(Filter::SameNameAs(Box::new(Sel::This))), r)
+        } else if let Some(r) = t
+            .strip_prefix("named ~")
+            .filter(|_| !parts.iter().any(names_cards))
+        {
+            // "each creature you control named ~" (Gary Clone). ("card named ~" is the
+            // card's printed name, see `card_flow_search`.)
+            (Filter::SameNameAs(Box::new(Sel::This)), r)
         } else if let Some(r) = t.strip_prefix("with the same name as ~") {
             // "target creature with the same name as this creature" (Evil Twin, CR 201.2a).
             (Filter::SameNameAs(Box::new(Sel::This)), r)
@@ -581,8 +608,21 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t
             .strip_prefix("in a graveyard")
             .or_else(|| t.strip_prefix("from a graveyard"))
+            .or_else(|| t.strip_prefix("from graveyards"))
+            .or_else(|| t.strip_prefix("in graveyards"))
         {
             (Filter::InZone(ZoneKind::Graveyard), r)
+        } else if let Some(r) = t
+            .strip_prefix("in defending player's graveyard")
+            .or_else(|| t.strip_prefix("from defending player's graveyard"))
+        {
+            (
+                Filter::and(vec![
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedBy(PlayerRel::Defending),
+                ]),
+                r,
+            )
         } else if let Some(r) = t
             .strip_prefix("from the iterated player's graveyard")
             .or_else(|| t.strip_prefix("in the iterated player's graveyard"))
@@ -1043,6 +1083,19 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         let consumed: usize = words[..n].iter().map(|w| w.len()).sum::<usize>() + (n - 1);
         let tail = &rest[consumed.min(rest.len())..];
         let f = Filter::HasKeyword(k);
+        // "with flash or haste": either keyword. (A landwalk keyword names one kind of
+        // landwalk, which `HasKeyword` doesn't.)
+        if !negate && k != KeywordKind::Landwalk {
+            if let Some((g, t)) = tail
+                .strip_prefix(" or ")
+                .and_then(|t| parse_with_suffix(&format!("with {t}")).map(|(g, r)| (g, r.len())))
+                .filter(
+                    |(g, _)| matches!(g, Filter::HasKeyword(k2) if *k2 != KeywordKind::Landwalk),
+                )
+            {
+                return Some((Filter::Or(vec![f, g]), &tail[tail.len() - t..]));
+            }
+        }
         return Some((if negate { Filter::not(f) } else { f }, tail));
     }
     None
