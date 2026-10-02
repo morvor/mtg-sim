@@ -2809,6 +2809,9 @@ impl Renderer<'_> {
             }
             if !to.with_mods.is_empty() {
                 let vp = self.mods_vp(&to.with_mods, true);
+                // It enters that way: "It's a 1/1 Spirit creature with flying in addition
+                // to its other types."
+                let vp = vp.replace("becomes ", "{alt:becomes|is} ");
                 s.push_str(&format!(". It {vp}"));
             }
         }

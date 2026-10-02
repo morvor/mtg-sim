@@ -907,7 +907,23 @@ impl Renderer<'_> {
         if let Some(f) = &np.fixed {
             let mut s = f.clone();
             // The qualities the alternatives share: "artifact, enchantment, or nonbasic land
-            // an opponent controls".
+            // an opponent controls", "artifact or non-Aura enchantment card in your
+            // graveyard".
+            let in_zone = np
+                .zone
+                .is_some_and(|z| !matches!(z, ZoneKind::Battlefield | ZoneKind::Stack));
+            if in_zone && np.kind == Some("card") && !s.contains("card") && !s.contains('~') {
+                s.push_str(match num {
+                    Num::One => " card",
+                    Num::Many => " cards",
+                });
+            }
+            if let (Some(z), true) = (np.zone, in_zone) {
+                if !s.contains(" in ") && !s.contains(" from ") {
+                    s.push(' ');
+                    s.push_str(&self.zone_phrase(z, np.owner, num));
+                }
+            }
             if let Some(c) = np.controller {
                 s.push(' ');
                 s.push_str(&self.controls_phrase(c, num));
