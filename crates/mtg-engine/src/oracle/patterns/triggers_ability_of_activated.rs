@@ -74,3 +74,27 @@ fn loyalty_ability_of_activated(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)
 }
 
 inventory::submit! { TriggerPattern { name: "you activate a loyalty ability of [permanent]", priority: 100, parse: loyalty_ability_of_activated } }
+
+/// "Whenever you activate an ability of an Elemental, ..." (Ceaseless Searblades),
+/// "Whenever you activate an ability of a creature, ..." (Elrond, Moon-Reader): any
+/// activated ability, mana abilities included (CR 602.1, 605.1a), of a permanent with
+/// that quality — not of a card in another zone, such as cycling from a hand.
+fn ability_of_permanent_activated(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let x = end(r).strip_prefix("you activate an ability of ")?;
+    let x = x.strip_prefix("a ").or_else(|| x.strip_prefix("an "))?;
+    let (f, plural, tail) = parse_object_phrase(x)?;
+    if plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some((
+        TriggerCond::AbilityActivated {
+            who: PlayerRel::You,
+            source: Filter::and(vec![Filter::Permanent, f]),
+            include_mana: true,
+        },
+        Sel::TriggerSpell,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "you activate an ability of [permanent]", priority: 110, parse: ability_of_permanent_activated } }

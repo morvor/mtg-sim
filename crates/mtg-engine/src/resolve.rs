@@ -472,6 +472,8 @@ impl Game {
                     }
                 }
                 ctx.prev_value = total as i64;
+                // "Remove a counter from it. If you do, …" (CR 608.2c).
+                ctx.prev_happened = total > 0;
             }
             Effect::MoveCounters { from, to, kind, n } => {
                 let from = self.resolve_objects(from, ctx).into_iter().next();
@@ -1580,6 +1582,7 @@ impl Game {
                     ctx: saved,
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
+                    created_steps: self.turn.step_log.len(),
                     for_rest_of_game: false,
                     performer,
                 });
@@ -1641,6 +1644,7 @@ impl Game {
                     ctx: saved,
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
+                    created_steps: self.turn.step_log.len(),
                     for_rest_of_game: false,
                     performer,
                 });

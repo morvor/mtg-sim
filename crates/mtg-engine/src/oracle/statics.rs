@@ -543,13 +543,28 @@ fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
     None
 }
 
-/// Value phrases: "the number of creatures you control", "its power", "X", "twice X".
+/// Value phrases: "the number of creatures you control", "its power", "X", "twice X",
+/// read by the value grammar (`patterns::value_grammar`).
 pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    super::patterns::value_grammar::parse_value(s, b)
+}
+
+/// The value grammar's fixed phrases (see `patterns::value_grammar`).
+pub fn parse_value_phrase_core(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim();
     // "twice the number of profit votes" (Emissary Green).
     if let Some(r) = s.strip_prefix("twice the number of ") {
         let (v, rest) = parse_value_phrase(&format!("the number of {r}"), b)?;
         return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
+    }
+    // Skemfar Shadowsage.
+    if let Some(rest) = s.strip_prefix(
+        "the greatest number of creatures you control that have a creature type in common",
+    ) {
+        return Some((
+            Value::Custom("greatest_creatures_you_control_sharing_a_type".into()),
+            rest.to_string(),
+        ));
     }
     // CR 702.167c: "the total power of the exiled cards used to craft it".
     if let Some(v) = crate::oracle::patterns::craft::used_to_craft_value(s) {
