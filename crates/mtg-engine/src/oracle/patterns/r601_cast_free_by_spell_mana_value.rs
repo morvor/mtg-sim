@@ -70,7 +70,7 @@ fn look_at_top_x_spell_mana_value(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-inventory::submit! { EffectPattern { name: "r601 look at the top X cards of your library, where X is that spell's mana value", priority: 100, parse: look_at_top_x_spell_mana_value } }
+inventory::submit! { EffectPattern { name: "r601 look at the top X cards of your library, where X is that spell's mana value", priority: 60, parse: look_at_top_x_spell_mana_value } }
 
 /// "You may cast a spell with mana value less than X from among them without paying its
 /// mana cost." after looking at the top X cards.

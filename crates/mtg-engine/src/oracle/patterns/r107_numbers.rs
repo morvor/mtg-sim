@@ -12,62 +12,13 @@ use crate::oracle::CompileContext;
 /// or a value phrase understood by the core compiler. Returns the value and the rest.
 pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim();
-    if let Some(r) = s.strip_prefix("half ") {
-        let (inner, rest) = if let Some(x) = r.strip_prefix("the number of ") {
-            let (f, _, tail) = parse_object_phrase(x)?;
-            (Value::Count(f), tail.to_string())
-        } else if let Some(x) = r.strip_prefix("your life total") {
-            (Value::LifeTotal(PlayerRef::You), x.to_string())
-        } else {
-            let (v, tail) = crate::oracle::statics::parse_value_phrase(r, b)?;
-            (v, tail)
-        };
-        let rest = rest.trim_start();
-        let (up, rest) = if let Some(x) = rest.strip_prefix(", rounded up") {
-            (true, x)
-        } else if let Some(x) = rest.strip_prefix(", rounded down") {
-            (false, x)
-        } else {
-            // CR 107.1a: the text says how to round.
-            return None;
-        };
-        return Some((Value::Div(Box::new(inner), 2, up), rest.to_string()));
-    }
-    // "the number of cards in their hand minus 4" (Black Vise).
-    if let Some((a, r)) = s.rsplit_once(" minus ") {
-        if let Some((n @ Value::Const(_), tail)) = parse_number(r) {
-            if end(tail).is_empty() {
-                if let Some((v, _)) = value_phrase(a, b).filter(|(_, r)| end(r).is_empty()) {
-                    return Some((Value::Diff(Box::new(v), Box::new(n)), tail.to_string()));
-                }
-            }
-        }
-    }
     // "the number of times this ability has resolved this turn" (this resolution
     // included; Bronze Cudgels' ruling).
     if let Some(r) = s.strip_prefix("the number of times this ability has resolved this turn") {
         return Some((Value::TimesResolvedThisTurn, r.to_string()));
     }
-    // "the number of cards in their hand": "their" is "that player" (Black Vise).
-    for p in [
-        "the number of cards in their hand",
-        "the number of cards in that player's hand",
-    ] {
-        if let Some(r) = s.strip_prefix(p) {
-            // With no player mentioned before, "their" has no antecedent here.
-            if super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
-                return None;
-            }
-            return Some((Value::HandSize(b.it_player.clone()), r.to_string()));
-        }
-    }
-    // "3 minus the number of cards in their hand" (The Rack).
-    if let Some((n, r)) = parse_number(s) {
-        if let (Value::Const(_), Some(r)) = (&n, r.trim_start().strip_prefix("minus ")) {
-            let (v, rest) = value_phrase(r, b)?;
-            return Some((Value::Diff(Box::new(n), Box::new(v)), rest));
-        }
-    }
+    // "the number of cards in their hand minus 4" (Black Vise), "3 minus the number of
+    // cards in their hand" (The Rack): the value grammar.
     // "the revealed card's mana value", after an instruction revealing a card (which "it"
     // then names, e.g. "Target opponent reveals a card at random from their hand.").
     if let Some(r) = s.strip_prefix("the revealed card's mana value") {
@@ -75,7 +26,7 @@ pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             return Some((Value::ManaValueOf(Box::new(b.it.clone())), r.to_string()));
         }
     }
-    crate::oracle::statics::parse_value_phrase(s, b)
+    super::value_grammar::parse_value(s, b)
 }
 
 /// CR 107.1b: a calculation that determines the result of an effect uses 0 instead of a
@@ -119,6 +70,55 @@ pub(crate) fn uses_x(e: &Effect) -> bool {
 /// effect.
 pub(crate) fn substitute_x(e: &Effect, x: &Value) -> Option<Effect> {
     substitute_x_in(e, x)
+}
+
+/// Replaces `Value::X` in a target's number or division ("each of up to X targets, where
+/// X is ...").
+pub(crate) fn substitute_x_in_target(t: &TargetSpec, x: &Value) -> Option<TargetSpec> {
+    substitute_x_in(t, x)
+}
+
+/// The numeric variable holding a defined X used by several instructions of one sentence.
+const SENTENCE_X: Var = u16::MAX - 1074;
+
+/// Replaces X in an effect with its defined value. An X several instructions use ("you
+/// gain X life and draw X cards") is determined once, before the first of them (CR
+/// 608.2h), unless it depends on each player or object in turn.
+fn bind_x(e: &Effect, x: &Value) -> Option<Effect> {
+    let uses = serde_json::to_string(e)
+        .map(|j| j.matches("\"X\"").count())
+        .unwrap_or(0);
+    let xj = serde_json::to_string(x).unwrap_or_default();
+    let per_each = xj.contains("Iterated") || xj.contains(&format!("{{\"Var\":{}}}", vars::AFFECTED));
+    if uses < 2 || x.as_const().is_some() || per_each {
+        return substitute_x(e, x);
+    }
+    let store = Effect::StoreValue {
+        var: SENTENCE_X,
+        value: x.clone(),
+    };
+    let e = substitute_x(e, &Value::Var(SENTENCE_X))?;
+    Some(store_before_first_use(e, store))
+}
+
+/// Puts `store` right before the first instruction of `e` that uses [`SENTENCE_X`] (the
+/// value is determined as that instruction is performed: "mill two cards, then ~ gets
+/// +X/+X ..., where X is the number of creature cards in your graveyard").
+fn store_before_first_use(e: Effect, store: Effect) -> Effect {
+    let uses = |e: &Effect| {
+        serde_json::to_string(e).is_ok_and(|j| j.contains(&format!("{{\"Var\":{SENTENCE_X}}}")))
+    };
+    match e {
+        Effect::Seq(mut v) => match v.iter().position(uses) {
+            Some(i) => {
+                let first = std::mem::take(&mut v[i]);
+                v[i] = store_before_first_use(first, store);
+                Effect::Seq(v)
+            }
+            None => Effect::Seq(v),
+        },
+        e => Effect::Seq(vec![store, e]),
+    }
 }
 
 /// Replaces `Value::X` in any part of an ability (an effect, a target's number or
@@ -175,7 +175,14 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
         .strip_suffix(" as you cast ~")
         .or_else(|| value_s.strip_suffix(" as you cast this spell"))
     {
-        let (x, tail) = value_phrase(v, b)?;
+        // Read the value only to compare it below: its targets ("target opponent
+        // controls") are added when `where_x_is_parts` reads it again.
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let read = value_phrase(v, b);
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        b.it_player = saved.2;
+        let (x, tail) = read?;
         if !end(&tail).is_empty() {
             return None;
         }
@@ -189,15 +196,88 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
 /// ("that spell's mana value"); then "it" in the clause names `it` (e.g. a token the
 /// previous instruction created: "Put X +1/+1 counters on it, where X is ...").
 pub fn where_x_is_parts(clause: &str, value_s: &str, b: &mut Builder, it: Sel) -> Option<Effect> {
+    // "where X is the number of creatures on the battlefield as you cast ~", "... you
+    // controlled as you cast ~", "... as you activate this ability": the value as the
+    // spell or ability is put on the stack. That's when the number of targets and the
+    // division of damage or counters among them are chosen (CR 601.2c-d, 602.2b); the
+    // value isn't remembered for its resolution, so the X may only be used for those.
+    let value_s = end(value_s);
+    let as_cast = [" as you cast ~", " as you cast this spell", " as you activate this ability"]
+        .iter()
+        .find_map(|p| value_s.strip_suffix(p));
+    let owned;
+    let value_s = match as_cast {
+        Some(v) => {
+            owned = v.replace(" you controlled", " you control");
+            owned.as_str()
+        }
+        None => value_s,
+    };
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    if let Some((v, tail)) = value_phrase(value_s, b) {
+        if end(&tail).is_empty() {
+            return where_x_is_value_inner(clause, v, b, it, as_cast.is_some());
+        }
+    }
+    b.targets.truncate(saved.0);
+    b.it = saved.1;
+    b.it_player = saved.2;
+    // The value may refer to what the instruction names ("Target player draws X cards,
+    // where X is the number of cards in their graveyard"): read the instruction first.
+    where_x_is_clause_first(clause, value_s, b, it, as_cast.is_some())
+}
+
+/// "[clause], where X is [value]" with the value read after the clause, so that its
+/// pronouns can refer to the clause's targets.
+fn where_x_is_clause_first(
+    clause: &str,
+    value_s: &str,
+    b: &mut Builder,
+    it: Sel,
+    targets_only: bool,
+) -> Option<Effect> {
+    let first_target = b.targets.len();
+    b.it = it;
+    let e = super::value_grammar::with_x_defined(true, || {
+        crate::oracle::effects::parse_clause(clause, b)
+    })?;
     let (v, tail) = value_phrase(value_s, b)?;
     if !end(&tail).is_empty() {
         return None;
     }
-    where_x_is_value(clause, v, b, it)
+    let x = nonnegative(v);
+    let mentions_x =
+        |j: Result<String, serde_json::Error>| j.is_ok_and(|j| j.contains("\"X\""));
+    let clause_targets = first_target..b.targets.len();
+    if targets_only
+        && (mentions_x(serde_json::to_string(&e))
+            || !b.targets[clause_targets.clone()]
+                .iter()
+                .any(|t| mentions_x(serde_json::to_string(t))))
+    {
+        return None;
+    }
+    for i in clause_targets {
+        b.targets[i] = substitute_x_in(&b.targets[i], &x)?;
+    }
+    bind_x(&e, &x)
 }
 
 /// "[clause], where X is [value]" with the value already read.
 pub fn where_x_is_value(clause: &str, v: Value, b: &mut Builder, it: Sel) -> Option<Effect> {
+    where_x_is_value_inner(clause, v, b, it, false)
+}
+
+/// [`where_x_is_value`]; with `targets_only`, X may only be the number of targets or the
+/// amount divided among them (a value determined as the spell or ability is put on the
+/// stack).
+fn where_x_is_value_inner(
+    clause: &str,
+    v: Value,
+    b: &mut Builder,
+    it: Sel,
+    targets_only: bool,
+) -> Option<Effect> {
     // An object the value named ("cards equal to the sacrificed creature's power") is
     // what a later "its" refers to, unless the clause names another.
     let value_it = std::mem::replace(&mut b.it, it.clone());
@@ -208,7 +288,9 @@ pub fn where_x_is_value(clause: &str, v: Value, b: &mut Builder, it: Sel) -> Opt
     if marked {
         b.named.push((marker.to_string(), Sel::None));
     }
-    let e = crate::oracle::effects::parse_clause(clause, b);
+    let e = super::value_grammar::with_x_defined(true, || {
+        crate::oracle::effects::parse_clause(clause, b)
+    });
     if marked {
         b.named.retain(|(n, _)| n != marker);
     }
@@ -217,20 +299,30 @@ pub fn where_x_is_value(clause: &str, v: Value, b: &mut Builder, it: Sel) -> Opt
         b.it = value_it;
     }
     let x = nonnegative(v);
+    if targets_only {
+        let mentions_x = |j: Result<String, serde_json::Error>| j.is_ok_and(|j| j.contains("\"X\""));
+        if mentions_x(serde_json::to_string(&e))
+            || !b.targets[first_target..]
+                .iter()
+                .any(|t| mentions_x(serde_json::to_string(t)))
+        {
+            return None;
+        }
+    }
     // "Return up to X target permanents ..., where X is ...": the defined X is also the
     // number of targets (or the amount divided among them).
     for i in first_target..b.targets.len() {
         b.targets[i] = substitute_x_in(&b.targets[i], &x)?;
     }
-    let e = substitute_x(&e, &x)?;
     // "Create an X/X ... token, where X is .... It deals X damage to you.": the token's X
     // is the X of the following instructions too.
     if matches!(e, Effect::CreateTokenWithPT { .. }) {
+        let e = substitute_x(&e, &x)?;
         b.named
             .push((super::tokens_x_x::X_DEFINED.to_string(), Sel::None));
         return Some(Effect::seq(vec![Effect::SetX { value: x }, e]));
     }
-    Some(e)
+    bind_x(&e, &x)
 }
 
 inventory::submit! { EffectPattern { name: "r107 where x is", priority: 70, parse: where_x_is } }
@@ -268,12 +360,9 @@ fn cast_x_spell_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
             ..first
         }
     } else {
-        let body = crate::oracle::effects::parse_trigger_body(
-            eff,
-            ctx,
-            Sel::TriggerSpell,
-            PlayerRef::You,
-        )?;
+        let body = super::value_grammar::with_x_defined(true, || {
+            crate::oracle::effects::parse_trigger_body(eff, ctx, Sel::TriggerSpell, PlayerRef::You)
+        })?;
         let effect = substitute_x(&body.effect, &x)?;
         Body { effect, ..body }
     };
@@ -400,6 +489,13 @@ fn loses_half_life(l: &str, b: &mut Builder) -> Option<Effect> {
         (s, true)
     } else if let Some(s) = l.strip_suffix(" lose half your life, rounded down") {
         (s, false)
+    } else if let (Some(s), Some(up)) = (
+        l.strip_suffix(" loses half their life")
+            .or_else(|| l.strip_suffix(" lose half your life")),
+        super::value_grammar::half_rounding(),
+    ) {
+        // "Round up each time." after the instructions (CR 107.1a).
+        (s, up)
     } else {
         return None;
     };
@@ -487,3 +583,28 @@ fn enchanted_gets_xy_block(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
 }
 
 inventory::submit! { AbilityPattern { name: "r107 gets +x/+y", priority: 70, parse: enchanted_gets_xy_block } }
+
+/// "[instructions with "half ..."]. Round up each time." / "Round down each time." (CR
+/// 107.1a: the text says how to round, once for every "half" in the ability).
+fn round_each_time(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let (body, up) = if let Some(b) = t.strip_suffix(" Round up each time.") {
+        (b, true)
+    } else if let Some(b) = t.strip_suffix(" Round down each time.") {
+        (b, false)
+    } else {
+        return None;
+    };
+    if !body.to_lowercase().contains("half ") {
+        return None;
+    }
+    let mut abilities = super::value_grammar::with_half_rounding(up, || {
+        crate::oracle::parse_ability(body, ctx)
+    })?;
+    for a in &mut abilities {
+        std::sync::Arc::make_mut(a).text = block.to_string();
+    }
+    Some(abilities)
+}
+
+inventory::submit! { AbilityPattern { name: "r107 round up each time", priority: 70, parse: round_each_time } }

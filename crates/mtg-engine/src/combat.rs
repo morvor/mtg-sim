@@ -1016,9 +1016,7 @@ pub fn declare_attackers_step(g: &mut Game) {
         let Some(snapshot) = snapshot else { return };
         // CR 508.1j / 733: the costs couldn't be paid; return to the moment before the
         // declaration and declare a legal attack that needs no payment.
-        let agents = g.agents.clone();
-        *g = snapshot;
-        g.agents = agents;
+        g.roll_back(snapshot);
         perform_attack_declaration(g, ap, best, &had_to, false);
     }
 }
@@ -1674,9 +1672,7 @@ pub fn declare_blockers_step(g: &mut Game) {
             if ok {
                 blocks
             } else {
-                let agents = g.agents.clone();
-                *g = snapshot;
-                g.agents = agents;
+                g.roll_back(snapshot);
                 best
             }
         };

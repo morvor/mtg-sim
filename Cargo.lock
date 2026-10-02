@@ -186,6 +186,7 @@ dependencies = [
  "mtg-data",
  "mtg-engine",
  "rand",
+ "smol_str",
 ]
 
 [[package]]

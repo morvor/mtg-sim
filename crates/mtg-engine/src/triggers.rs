@@ -155,10 +155,17 @@ impl Game {
             // Recorded before detection so "for the first time each turn" can see which
             // events of this turn precede this one.
             self.turn_events.push(ev.clone());
+            if let Some(f) = self.observer.as_ref().map(|o| o.on_event.clone()) {
+                f(self, ev);
+            }
             once_delayed.extend(self.detect_triggers(ev, &recent));
         }
         self.check_batch_triggers(&events[batch_start..]);
         self.fire_once_delayed(once_delayed);
+        // Static abilities' conditions can depend on what happened this turn ("as long as
+        // you've cast two or more spells this turn"): characteristics must be computed
+        // again (CR 611.3a, 613.1).
+        self.dirty = true;
         // Events emitted while detecting triggers (rare) are handled on the next flush.
     }
 
@@ -596,7 +603,8 @@ impl Game {
             // effect that created it.
             let mut base = d.ctx.clone();
             base.source = d.source;
-            base.controller = d.controller;
+            // "you" in its trigger condition is the player who performs it.
+            base.controller = d.performer.unwrap_or(d.controller);
             for info in self.trigger_matches_ctx(&d.trigger, &base, ev) {
                 if d.once {
                     once_matches.push((d.id, info));
@@ -620,7 +628,11 @@ impl Game {
     }
 
     fn delayed_pending(&self, d: &DelayedTrigger, info: EventInfo) -> PendingTrigger {
-        let mut tr = TriggeredAbility::new(d.trigger.clone(), d.body.clone());
+        let body = match d.performer {
+            Some(p) => crate::resolve::performed_by(d.body.clone(), p),
+            None => d.body.clone(),
+        };
+        let mut tr = TriggeredAbility::new(d.trigger.clone(), body.clone());
         // "Until end of turn, whenever a player taps an Island for mana, that player adds
         // an additional {U}" is a mana ability too (CR 605.1b).
         tr.is_mana_ability = is_triggered_mana_ability(&d.trigger, &d.body);
@@ -632,7 +644,7 @@ impl Game {
             event: info,
             source_lki: None,
             saved: Some(d.ctx.clone()),
-            body: Some(d.body.clone()),
+            body: Some(body),
             order: self.trigger_order,
         }
     }
@@ -2080,6 +2092,12 @@ impl Game {
         ctx.source = Some(t.source);
         ctx.controller = t.controller;
         ctx.event = Some(t.event.clone());
+        // CR 605.4a: it resolves now; count it like a resolution from the stack.
+        if let Some(o) = self.objects.get_mut(t.source.0 as usize) {
+            *o.triggers_this_turn
+                .entry(t.ability.uid | turn_keys::RESOLVED)
+                .or_insert(0) += 1;
+        }
         self.exec(&body.effect, &mut ctx);
         crate::structure::record(&t.ability, &self.obj(t.source).chars.name, "resolved");
     }

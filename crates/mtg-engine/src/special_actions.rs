@@ -302,9 +302,7 @@ pub fn pay(g: &mut Game, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &
     match g.pay_total_cost(p, &cost, src, &spend, ctx) {
         Ok(_) => true,
         Err(_) => {
-            let agents = g.agents.clone();
-            *g = snapshot;
-            g.agents = agents;
+            g.roll_back(snapshot);
             false
         }
     }
