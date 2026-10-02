@@ -221,3 +221,47 @@ fn the_final_chapter_ability_of_a_saga_resolves() {
     assert_eq!(t.life(P1), 17);
     assert_eq!(t.life(P0), 23);
 }
+
+#[test]
+fn is_dealt_three_or_more_damage_at_once() {
+    cr!("120.3", "603.2c");
+    supported("Innocent Bystander");
+    ruling!(
+        "Innocent Bystander",
+        "triggers only if it's dealt 3 or more damage all at once"
+    );
+    let clues = |t: &TestGame| {
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).chars.has_subtype("Clue"))
+            .count()
+    };
+    // Two Glorious Anthems make it a 4/3, so it survives 2 damage.
+    let setup = || {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Glorious Anthem");
+        t.battlefield(P0, "Glorious Anthem");
+        let bystander = t.battlefield(P0, "Innocent Bystander");
+        let a = t.battlefield(P1, "Grizzly Bears");
+        let b = t.battlefield(P1, "Grizzly Bears");
+        (t, bystander, a, b)
+    };
+    // 2 and then 1: no.
+    let (mut t, bystander, a, b) = setup();
+    t.g.deal_damage(a, Entity::Object(bystander), 2, false);
+    t.resolve_all();
+    t.g.deal_damage(b, Entity::Object(bystander), 1, false);
+    t.resolve_all();
+    assert_eq!(clues(&t), 0);
+    // 2 and 1 from two sources at once: 3 at once.
+    let (mut t, bystander, a, b) = setup();
+    t.g.deal_damage_batch(
+        vec![
+            (a, Entity::Object(bystander), 2),
+            (b, Entity::Object(bystander), 1),
+        ],
+        true,
+    );
+    t.resolve_all();
+    assert_eq!(clues(&t), 1);
+}

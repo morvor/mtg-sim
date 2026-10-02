@@ -637,6 +637,19 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             return Some((sel, rest.to_string()));
         }
     }
+    // "enchanted Forest" (the Genjus: "Enchant Forest"): the permanent it's attached to.
+    if let Some(r) = s.strip_prefix("enchanted ") {
+        let w = r.split(' ').next().unwrap_or("");
+        let rest = &r[w.len()..];
+        if super::phrases::subtype_word(w).is_some() && !w.ends_with(',') {
+            if matches!(b.it, Sel::This)
+                || super::patterns::oracle_hardening_referents::is_no_referent(&b.it)
+            {
+                b.it = Sel::AttachedTo;
+            }
+            return Some((Sel::AttachedTo, rest.to_string()));
+        }
+    }
     // The longest phrase that names the object ("the creature an opponent controls"
     // before "the creature").
     let named = b

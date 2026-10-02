@@ -635,14 +635,19 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             if !end(tail).is_empty() {
                 return None;
             }
+            // "Whenever a nonland permanent an opponent owns enters under your control,
+            // they lose life ...": "they" is the owner the subject names.
+            let who = if suffix.contains("under your control")
+                && super::patterns::trigger_grammar_filters::names_other_owner(&f)
+            {
+                PlayerRef::OwnerOf(Box::new(Sel::TriggerObject))
+            } else {
+                PlayerRef::ControllerOf(Box::new(Sel::TriggerObject))
+            };
             if suffix.contains("under your control") {
                 f = Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]);
             }
-            return Some((
-                TriggerCond::EntersBattlefield(f),
-                obj(),
-                PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
-            ));
+            return Some((TriggerCond::EntersBattlefield(f), obj(), who));
         }
     }
     // "[filter] dies"

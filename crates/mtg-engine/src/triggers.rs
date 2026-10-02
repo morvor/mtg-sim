@@ -255,7 +255,17 @@ impl Game {
             let AbilityKind::Triggered(t) = &a.kind else {
                 continue;
             };
-            let TriggerCond::Batched { trigger, per } = &t.trigger else {
+            // A condition on a whole batch ("whenever ~ is dealt 3 or more damage": the
+            // damage dealt to it at once, in total) is checked with the batch's totals.
+            let (batched, batch_cond) = match &t.trigger {
+                TriggerCond::Where { trigger, cond }
+                    if matches!(**trigger, TriggerCond::Batched { .. }) =>
+                {
+                    (&**trigger, Some(cond))
+                }
+                other => (other, None),
+            };
+            let TriggerCond::Batched { trigger, per } = batched else {
                 continue;
             };
             // "… for the first time each turn": the first batch this turn with a matching
@@ -329,6 +339,9 @@ impl Game {
                 }
                 let mut ctx = base.clone();
                 ctx.event = Some(info.clone());
+                if batch_cond.is_some_and(|c| !self.eval_cond(c, &ctx)) {
+                    continue;
+                }
                 if let Some(c) = &t.intervening_if {
                     if !self.eval_cond(c, &ctx) {
                         continue;

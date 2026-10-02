@@ -607,7 +607,13 @@ mod tests {
         let (c, it, _) = p("whenever a permanent you control is put into a graveyard");
         assert!(matches!(c, TriggerCond::Dies(_)), "{c:?}");
         assert!(matches!(it, Sel::TriggerLki));
-        // A card put into a graveyard has to say from where.
-        assert!(zone_event("a creature card is put into a graveyard").is_none());
+        // A card put into a graveyard without "from": from anywhere; ~ itself needs it.
+        let (c, it, _) = zone_event("a creature card is put into a graveyard").unwrap();
+        assert!(
+            matches!(c, TriggerCond::ZoneChange { from: None, .. }),
+            "{c:?}"
+        );
+        assert!(matches!(it, Sel::TriggerObject));
+        assert!(zone_event("~ is put into a graveyard").is_none());
     }
 }

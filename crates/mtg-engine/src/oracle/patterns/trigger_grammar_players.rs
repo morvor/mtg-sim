@@ -25,7 +25,7 @@
 
 use super::TriggerPattern;
 use crate::ability::*;
-use crate::oracle::patterns::trigger_grammar_events::where_events;
+use crate::oracle::patterns::trigger_grammar_events::{is_batched, where_events};
 use crate::oracle::patterns::triggers::{player_subject, verb};
 use crate::oracle::phrases::*;
 use crate::types::counters;
@@ -384,9 +384,7 @@ fn either_events(r: &str) -> Option<Parsed> {
             else {
                 continue;
             };
-            if matches!(pa.0, TriggerCond::Batched { .. })
-                || matches!(pb.0, TriggerCond::Batched { .. })
-            {
+            if is_batched(&pa.0) || is_batched(&pb.0) {
                 return None;
             }
             let same = |x: &dyn std::fmt::Debug, y: &dyn std::fmt::Debug| {

@@ -237,7 +237,7 @@ fn parse_conjunction(r: &str) -> Option<Parsed> {
 }
 
 fn is_batch(c: &TriggerCond) -> bool {
-    matches!(c, TriggerCond::Batched { .. })
+    super::trigger_grammar_events::is_batched(c)
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +291,8 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
         ("each ", Whose::Rel(PlayerRel::Any)),
         // "the chosen player's upkeep" (Black Vise; CR 607.2d)
         ("the chosen player's ", Whose::Rel(PlayerRel::Chosen)),
+        // (Before "the ": "the monarch's end step".)
+        ("the monarch's ", Whose::Player(PlayerRef::Monarch)),
         ("the ", Whose::Rel(PlayerRel::Any)),
         (
             "enchanted player's ",
@@ -300,7 +302,6 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
             "enchanted opponent's ",
             Whose::Player(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo))),
         ),
-        ("the monarch's ", Whose::Player(PlayerRef::Monarch)),
     ] {
         if let Some(r) = s.strip_prefix(p) {
             return Some((w, r));
@@ -613,7 +614,11 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
         if cond.is_some() {
             return None;
         }
-        return Some((TriggerCond::SpellCopied { who, filter }, Sel::TriggerSpell, tp()));
+        return Some((
+            TriggerCond::SpellCopied { who, filter },
+            Sel::TriggerSpell,
+            tp(),
+        ));
     }
     // Casting spells.
     if let Some(t) = verb(rest, "cast") {
@@ -920,7 +925,9 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
     // is ~, the object the spell targets (Fabled Hero, Favored Hoplite's "prevent all
     // damage that would be dealt to it").
     let targets_source = match &filter {
-        Filter::And(v) => v.iter().any(|f| matches!(f, Filter::Targets(t) if matches!(**t, Filter::Source))),
+        Filter::And(v) => v
+            .iter()
+            .any(|f| matches!(f, Filter::Targets(t) if matches!(**t, Filter::Source))),
         _ => false,
     };
     let base = TriggerCond::CastSpell { who, filter };

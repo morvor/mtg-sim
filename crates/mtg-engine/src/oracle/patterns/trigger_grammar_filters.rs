@@ -74,10 +74,11 @@ fn with_keyword_or_keyword<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, 
     ))
 }
 
-/// "named ~": with this card's name.
+/// "named ~": with this card's name (CR 201.2), as the rest of the compiler reads it.
 fn named_self<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     let r = t.strip_prefix("named ~")?;
-    word_end(r).then(|| (Filter::SameNameAs(Box::new(Sel::This)), r))
+    let name = crate::oracle::card_name();
+    (word_end(r) && !name.is_empty()).then(|| (Filter::Named(name.into()), r))
 }
 
 /// "owned by another player", "owned by an opponent", "an opponent owns".
@@ -124,7 +125,6 @@ mod tests {
             "creature you control with one or more counters on it",
             "creature you control with power or toughness 1 or less",
             "creature you control with flash or haste",
-            "creature you control named ~",
             "permanent owned by another player",
             "nonland permanent an opponent owns",
         ] {

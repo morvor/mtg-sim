@@ -35,6 +35,14 @@ pub(crate) fn where_events(c: TriggerCond, cond: Condition) -> TriggerCond {
             trigger: Box::new(where_events(*trigger, cond)),
             per,
         },
+        // A condition on the whole batch stays outside.
+        TriggerCond::Where {
+            trigger,
+            cond: batch_cond,
+        } if matches!(*trigger, TriggerCond::Batched { .. }) => TriggerCond::Where {
+            trigger: Box::new(where_events(*trigger, cond)),
+            cond: batch_cond,
+        },
         c => TriggerCond::Where {
             trigger: Box::new(c),
             cond,
@@ -50,6 +58,12 @@ pub(crate) fn first_time(c: TriggerCond) -> TriggerCond {
             trigger: Box::new(TriggerCond::FirstTimeEachTurn(trigger)),
             per,
         },
+        TriggerCond::Where { trigger, cond } if matches!(*trigger, TriggerCond::Batched { .. }) => {
+            TriggerCond::Where {
+                trigger: Box::new(first_time(*trigger)),
+                cond,
+            }
+        }
         c => TriggerCond::FirstTimeEachTurn(Box::new(c)),
     }
 }
@@ -275,9 +289,25 @@ fn damage_amount(r: &str) -> Option<Parsed> {
             return Some((c, Sel::TriggerOtherObject, PlayerRef::TriggerPlayer));
         }
     }
+    // "~ is dealt 3 or more damage": the damage dealt to it at once, in total (Innocent
+    // Bystander's ruling).
+    if let Some(i) = r.find(" is dealt ") {
+        let (subj, x) = (&r[..i], &r[i + " is dealt ".len()..]);
+        let (cmp, n, x) = amount(x)?;
+        if x != "damage" {
+            return None;
+        }
+        let (c, it, p) = reparse(&format!("{subj} is dealt damage"))?;
+        return batch_total(c, cmp, n).map(|c| (c, it, p));
+    }
     let i = r.find(" deals ")?;
     let (subj, x) = (&r[..i], &r[i + " deals ".len()..]);
     let (cmp, n, x) = amount(x)?;
+    // "~ deals 4 or more damage": the damage it deals at once, in total.
+    if x == "damage" {
+        let (c, it, p) = reparse(&format!("{subj} deals damage"))?;
+        return batch_total(c, cmp, n).map(|c| (c, it, p));
+    }
     let rest = x.strip_prefix("damage to ")?;
     let (c, it, p) = reparse(&format!("{subj} deals damage to {rest}"))?;
     // One source dealing damage to one recipient (not a batch's total).
@@ -289,6 +319,28 @@ fn damage_amount(r: &str) -> Option<Parsed> {
         cond: Condition::Compare(Value::EventAmount, cmp, Value::c(n)),
     };
     Some((c, it, p))
+}
+
+/// A batch of damage events whose total must be at least / exactly N: the condition is on
+/// the batch (`Where` around `Batched`, see `Game::check_batch_triggers`).
+fn batch_total(c: TriggerCond, cmp: Cmp, n: i32) -> Option<TriggerCond> {
+    if !matches!(c, TriggerCond::Batched { .. }) {
+        return None;
+    }
+    Some(TriggerCond::Where {
+        trigger: Box::new(c),
+        cond: Condition::Compare(Value::EventAmount, cmp, Value::c(n)),
+    })
+}
+
+/// Whether a trigger condition is a "one or more" batch (CR 603.2c), possibly with a
+/// condition on the whole batch.
+pub(crate) fn is_batched(c: &TriggerCond) -> bool {
+    match c {
+        TriggerCond::Batched { .. } => true,
+        TriggerCond::Where { trigger, .. } => matches!(**trigger, TriggerCond::Batched { .. }),
+        _ => false,
+    }
 }
 
 /// "N or more ", "exactly N ": (comparison, N, rest).
@@ -574,5 +626,45 @@ mod tests {
         ] {
             assert!(matches!(p(s).0, TriggerCond::State(_)), "{s}");
         }
+        // Event phrasing isn't a state.
+        assert!(state_trigger("you control a creature that becomes tapped").is_none());
+    }
+
+    #[test]
+    fn damage_amounts() {
+        // One source, one recipient: a condition on the event.
+        let (c, _, _) = p("whenever ~ deals 6 or more damage to an opponent");
+        assert!(
+            matches!(&c, TriggerCond::Where { trigger, .. } if matches!(**trigger, TriggerCond::DealsDamage { .. })),
+            "{c:?}"
+        );
+        // Damage dealt to it at once, in total: a condition on the batch.
+        for s in [
+            "whenever ~ is dealt 3 or more damage",
+            "whenever ~ deals 4 or more damage",
+        ] {
+            let (c, _, _) = p(s);
+            assert!(
+                is_batched(&c) && matches!(c, TriggerCond::Where { .. }),
+                "{s}: {c:?}"
+            );
+        }
+        let (c, _, pl) = p("whenever an opponent is dealt 3 or more damage by a single source");
+        assert!(matches!(c, TriggerCond::Where { .. }));
+        assert!(matches!(pl, PlayerRef::TriggerPlayer));
+    }
+
+    #[test]
+    fn qualifiers_inside_batches() {
+        let (c, _, _) = p("whenever one or more cards leave your graveyard during your turn");
+        let TriggerCond::Batched { trigger, .. } = c else {
+            panic!("{c:?}");
+        };
+        assert!(matches!(*trigger, TriggerCond::Where { .. }));
+        let (c, _, _) = p("whenever you discard one or more cards for the first time each turn");
+        let TriggerCond::Batched { trigger, .. } = c else {
+            panic!("{c:?}");
+        };
+        assert!(matches!(*trigger, TriggerCond::FirstTimeEachTurn(_)));
     }
 }

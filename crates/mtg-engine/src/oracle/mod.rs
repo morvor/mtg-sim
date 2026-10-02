@@ -59,6 +59,14 @@ pub struct Compiled {
 thread_local! {
     static NO_MANUAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static RAW_TEXT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    static CARD_NAME: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// The name of the card (face) being compiled on this thread, for phrases that name it
+/// ("a creature named ~", CR 201.2) parsed where the compile context isn't at hand
+/// (`FilterSuffixPattern`s). Empty when unknown.
+pub fn card_name() -> String {
+    CARD_NAME.with(|r| r.borrow().clone())
 }
 
 /// The raw (un-normalized) oracle text of the face being compiled on this thread.
@@ -81,6 +89,7 @@ pub fn without_manual<T>(f: impl FnOnce() -> T) -> T {
 /// Compiles a face's oracle text.
 pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     RAW_TEXT.with(|r| *r.borrow_mut() = text.to_string());
+    let prev_name = CARD_NAME.with(|r| r.replace(ctx.card_name.to_string()));
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
     let manual_ok = !NO_MANUAL.with(|c| c.get());
@@ -119,6 +128,7 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
         // Replace an unsupported CDA line if the star P/T was handled.
         out.abilities.push(cda);
     }
+    CARD_NAME.with(|r| *r.borrow_mut() = prev_name);
     out
 }
 
