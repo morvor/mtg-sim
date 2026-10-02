@@ -321,6 +321,11 @@ fn plural_to_singular(r: &str) -> Option<String> {
     Some(format!("{s} {rest}").trim_end().to_string())
 }
 
+/// [`as_you`] for a predicate whose verb is already in the base form (after "may").
+fn as_you_base(r: &str) -> Option<String> {
+    as_you(&plural_to_singular(r)?)
+}
+
 /// Parses predicate `pred` (third person, after the subject) as an instruction for
 /// "you". `may`: whether it's optional ("may [instruction]"), which is returned
 /// separately so the caller can wrap it.
@@ -329,7 +334,11 @@ fn predicate(pred: &str, b: &mut Builder) -> Option<(bool, Effect)> {
         Some(r) => (true, r),
         None => (false, pred),
     };
-    let text = as_you(pred)?;
+    let text = if may {
+        as_you_base(pred)?
+    } else {
+        as_you(pred)?
+    };
     let e = if may {
         // "you may pay {2}" (an optional cost, CR 118.12) and "you may [instruction]".
         let e = parse_sentence(&format!("you may {text}"), b)?;
@@ -372,7 +381,7 @@ fn player_subject(l: &str, b: &mut Builder) -> Option<Effect> {
             }
             Subject::Each(who, cond) => {
                 let (may, e) = if let Some(r) = pred.strip_prefix("may ") {
-                    (true, parse_clause(&as_you(r)?, b)?)
+                    (true, parse_clause(&as_you_base(r)?, b)?)
                 } else {
                     (false, parse_clause(&as_you(&pred)?, b)?)
                 };
@@ -552,5 +561,32 @@ mod tests {
             plural_to_singular("discard their hands, then draw seven cards").as_deref(),
             Some("discards their hands, then draw seven cards")
         );
+    }
+}
+
+#[cfg(test)]
+mod probe {
+    use crate::card::Layout;
+    use crate::oracle::{compile, CompileContext};
+    use crate::types::TypeLine;
+
+    #[test]
+    fn probe() {
+        let Ok(texts) = std::env::var("PS_PROBE") else { return };
+        let tl = TypeLine::parse("Sorcery");
+        let ctx = CompileContext {
+            card_name: "Test Card",
+            full_name: "Test Card",
+            type_line: &tl,
+            layout: Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        for t in texts.split('|') {
+            let r = compile(t, &ctx);
+            println!("== {t}\n   unsupported: {:?}\n   {:?}", r.unsupported, r.abilities.iter().map(|a| format!("{:?}", a.kind)).collect::<Vec<_>>());
+        }
     }
 }
