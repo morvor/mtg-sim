@@ -783,6 +783,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::PowerOf(Box::new(Sel::All(f))), rest.to_string()));
     }
+    if let Some(r) = s.strip_prefix("the total toughness of ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Value::ToughnessOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
     if let Some(r) = s.strip_prefix("the mana value of ") {
         let (f, _, rest) = parse_object_phrase(r.strip_prefix("the ").unwrap_or(r))?;
         return Some((Value::ManaValueOf(Box::new(Sel::All(f))), rest.to_string()));

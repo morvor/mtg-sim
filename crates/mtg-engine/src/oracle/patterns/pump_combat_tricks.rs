@@ -161,6 +161,10 @@ enum Verb {
     Gain,
     /// "has base power and toughness N/N"
     BasePt,
+    /// "has base power N" (layer 7b, setting only the power)
+    BasePower,
+    /// "becomes a Dinosaur in addition to its other creature types" (layer 4)
+    BecomesCreatureType,
     /// "loses all abilities"
     LoseAll,
     /// "loses all creature types" (layer 4, CR 613.1d)
@@ -176,6 +180,11 @@ fn verb_at(s: &str) -> Option<(Verb, &str)> {
         ("gain ", Verb::Gain),
         ("has base power and toughness ", Verb::BasePt),
         ("have base power and toughness ", Verb::BasePt),
+        ("has base power ", Verb::BasePower),
+        ("have base power ", Verb::BasePower),
+        ("becomes a ", Verb::BecomesCreatureType),
+        ("becomes an ", Verb::BecomesCreatureType),
+        ("become ", Verb::BecomesCreatureType),
         ("loses all abilities", Verb::LoseAll),
         ("lose all abilities", Verb::LoseAll),
         ("loses all creature types", Verb::LoseCreatureTypes),
@@ -183,6 +192,12 @@ fn verb_at(s: &str) -> Option<(Verb, &str)> {
     ] {
         if let Some(r) = s.strip_prefix(p) {
             if v == Verb::Get && !r.starts_with(['+', '-']) {
+                return None;
+            }
+            if v == Verb::BecomesCreatureType
+                && !r.contains(" in addition to its other creature types")
+                && !r.contains(" in addition to their other creature types")
+            {
                 return None;
             }
             if matches!(v, Verb::LoseAll | Verb::LoseCreatureTypes)
@@ -490,6 +505,37 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
                 let pv = val(p)?;
                 let tv = val(t)?;
                 mods.push(Modification::SetPT(Some(pv), Some(tv)));
+            }
+            Verb::BasePower => {
+                // Layer 7b (CR 613.4b): only the power is set.
+                let pv = if body == "x" {
+                    used_x = true;
+                    x.clone().unwrap_or(Value::X)
+                } else {
+                    Value::c(body.parse().ok()?)
+                };
+                mods.push(Modification::SetPT(Some(pv), None));
+            }
+            Verb::BecomesCreatureType => {
+                // Layer 4 (CR 613.1d): one creature type added.
+                let t = body
+                    .strip_suffix(" in addition to its other creature types")
+                    .or_else(|| body.strip_suffix(" in addition to their other creature types"))?;
+                // (The text may be lowercased here: "dinosaur" names the Dinosaur type.)
+                let t = t.trim();
+                let t = t
+                    .strip_prefix("a ")
+                    .or_else(|| t.strip_prefix("an "))
+                    .unwrap_or(t);
+                let mut c = t.chars();
+                let t: String = match c.next() {
+                    Some(f) => f.to_uppercase().chain(c).collect(),
+                    None => return None,
+                };
+                if !crate::types::is_creature_type(&t) {
+                    return None;
+                }
+                mods.push(Modification::AddSubtypes(vec![t.into()]));
             }
             Verb::LoseAll => {
                 if !body.is_empty() {

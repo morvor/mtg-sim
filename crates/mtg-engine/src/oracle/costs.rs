@@ -141,6 +141,14 @@ fn parse_cost_part(p: &str) -> Option<CostPart> {
         return Some(CostPart::DiscardHand);
     }
     if let Some(r) = strip(p, "discard") {
+        // Grandeur (CR 207.2c): "Discard another card named ~".
+        if r.trim() == "another card named ~" {
+            return Some(CostPart::Discard {
+                filter: Filter::and(vec![Filter::SameNameAs(Box::new(Sel::This)), Filter::Other]),
+                count: Value::c(1),
+                random: false,
+            });
+        }
         let (n, r2) = parse_number(r)?;
         let random = r2.contains("at random");
         let r2 = r2.replace(" at random", "");
