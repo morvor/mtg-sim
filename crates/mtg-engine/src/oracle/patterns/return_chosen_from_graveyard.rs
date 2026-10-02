@@ -2,6 +2,9 @@
 //! (CR 608.2c; no target is chosen as the spell is cast, CR 115.10):
 //!
 //! * "Then return a creature card from your graveyard to the battlefield." (Summon Undead)
+//! * "Then you may return a land card from your graveyard to the battlefield tapped."
+//!   (Deeproot Wayfinder); "... to the battlefield with a finality counter on it."
+//!   (Charnel Serenade)
 //! * "Then return up to two creature cards from your graveyard to your hand." (Another
 //!   Chance)
 //! * "Then return up to one creature card and up to one land card from your graveyard to
@@ -32,6 +35,23 @@ fn quantity(s: &str) -> Option<(Value, bool, &str)> {
     Some((n, up_to, r.trim()))
 }
 
+/// "the battlefield", "the battlefield tapped" (Deeproot Wayfinder), "the battlefield
+/// with a finality counter on it" (Charnel Serenade): the cards enter with those counters
+/// (CR 122.6).
+fn battlefield(dest: &str) -> Option<Destination> {
+    let mut d = Destination::zone(ZoneKind::Battlefield);
+    let mut r = dest.strip_prefix("the battlefield")?;
+    if let Some(x) = r.strip_prefix(" tapped") {
+        d.tapped = true;
+        r = x;
+    }
+    if let Some(x) = r.strip_prefix(" with ") {
+        d.with_counters = super::levels_classes_sagas_transformed::with_counters_on_it(x)?;
+        r = "";
+    }
+    r.is_empty().then_some(d)
+}
+
 fn return_chosen_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("return ")?;
     if r.contains("target") {
@@ -40,8 +60,7 @@ fn return_chosen_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
     let (objs, dest) = r.split_once(" from your graveyard to ")?;
     let to = match dest {
         "your hand" => Destination::zone(ZoneKind::Hand),
-        "the battlefield" => Destination::zone(ZoneKind::Battlefield),
-        _ => return None,
+        _ => battlefield(dest)?,
     };
     let mut moves = Vec::new();
     for part in objs.split(" and ") {

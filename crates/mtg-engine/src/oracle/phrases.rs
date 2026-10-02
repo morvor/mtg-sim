@@ -244,6 +244,15 @@ pub fn adjective(w: &str) -> Option<Filter> {
 
 /// Parses an object description like "nontoken creature you control with flying".
 /// Returns (filter, plural?, rest).
+/// Whether a filter is about cards (has a `Filter::Card` part).
+fn names_cards(f: &Filter) -> bool {
+    match f {
+        Filter::Card => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(names_cards),
+        _ => false,
+    }
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     let mut s = s.trim_start();
     let mut parts: Vec<Filter> = Vec::new();
@@ -538,6 +547,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t.strip_prefix("not named ~") {
             // "a legendary permanent card not named ~" (Staff of Eden, Vault's Key).
             (Filter::not(Filter::SameNameAs(Box::new(Sel::This))), r)
+        } else if let Some(r) = t
+            .strip_prefix("named ~")
+            .filter(|_| !parts.iter().any(names_cards))
+        {
+            // "each creature you control named ~" (Gary Clone). ("card named ~" is the
+            // card's printed name, see `card_flow_search`.)
+            (Filter::SameNameAs(Box::new(Sel::This)), r)
         } else if let Some(r) = t.strip_prefix("with the same name as ~") {
             // "target creature with the same name as this creature" (Evil Twin, CR 201.2a).
             (Filter::SameNameAs(Box::new(Sel::This)), r)
