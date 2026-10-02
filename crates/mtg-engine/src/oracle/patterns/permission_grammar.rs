@@ -97,6 +97,14 @@ pub struct Perm {
     /// "... if [condition]": a condition on playing the card (or, "if it's an instant or
     /// sorcery spell", a quality of the spell).
     pub cond_text: Option<String>,
+    /// "from among cards you own in exile with dream counters on them": which cards in the
+    /// zone.
+    pub zone_filter: Option<Filter>,
+    /// "from your hand or the top of your library", "from your graveyard or from exile":
+    /// a second zone.
+    pub also_from: Option<From>,
+    /// "You may cast any number of spells from among them".
+    pub any_number: bool,
 }
 
 impl Perm {
@@ -135,6 +143,17 @@ fn strip_lead(s: &str, p: &mut Perm) -> Option<String> {
     let mut s = s.to_string();
     loop {
         let before = s.len();
+        // "During any turn you attacked with ~, you may play that card": a condition on
+        // playing it ("you attacked with ~ this turn").
+        if let Some(r) = s.strip_prefix("during any turn ") {
+            let (c, rest) = r.split_once(", ")?;
+            if p.cond_text.is_some() {
+                return None;
+            }
+            p.cond_text = Some(format!("{c} this turn"));
+            s = rest.to_string();
+            continue;
+        }
         for (lead, f) in LEADS {
             if let Some(r) = s.strip_prefix(lead) {
                 if !f(p) {
@@ -415,9 +434,21 @@ fn linked_cards(s: &str) -> Option<(Filter, bool, bool, &str)> {
 }
 
 /// The zone after the object.
-fn strip_from(s: &str) -> Option<(From, &str)> {
+fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
     if let Some(r) = among_referent(s) {
         return Some((From::AmongReferent, r));
+    }
+    // "from among cards you own in exile with dream counters on them", "from among cards
+    // in exile with page counters on them".
+    if let Some((d, rest)) = s
+        .strip_prefix(" from among cards ")
+        .and_then(|r| r.split_once(" on them"))
+        .filter(|(d, _)| d.contains(" in exile "))
+    {
+        let desc = format!("cards {} on them", d.replacen(" in exile", "", 1));
+        let f = object_filter(&desc)?;
+        p.zone_filter = Some(f);
+        return Some((From::Exile, rest));
     }
     for (p, z) in [
         (" from your graveyard", From::Graveyard),
@@ -648,7 +679,12 @@ fn strip_spend(s: &str, p: &mut Perm) -> String {
 pub fn parse(l: &str) -> Option<Perm> {
     let mut p = Perm::default();
     let s = strip_lead(end(l).trim(), &mut p)?;
-    let (who, s) = strip_subject(&s)?;
+    // "Cast any number of red instant and/or sorcery cards from your graveyard without
+    // paying their mana costs.": an instruction (the player chooses which, if any).
+    let (who, s) = match s.strip_prefix("cast any number of ") {
+        Some(_) => (Who::You, s.as_str()),
+        None => strip_subject(&s)?,
+    };
     p.who = who;
     let s = strip_spend(s, &mut p);
     let mut r: &str = &s;
@@ -668,8 +704,36 @@ pub fn parse(l: &str) -> Option<Perm> {
     } else {
         return None;
     }
+    if let Some(x) = r.strip_prefix("any number of ") {
+        p.any_number = true;
+        r = x;
+    }
     let rest: &str;
-    if let Some((limit, x)) = referent(r) {
+    if let Some(x) = r.strip_prefix("the top card of your library") {
+        // "you may play the top card of your library" (The Lunar Whale).
+        p.obj = Obj::Class {
+            what: Filter::Card,
+            single: false,
+        };
+        p.from = Some(From::LibraryTop);
+        rest = x;
+    } else if p.any_number && p.spells && !p.lands && !r.contains(" spell") {
+        // "cast any number of red instant and/or sorcery cards from your graveyard",
+        // "cast any number of cards exiled with ~".
+        if let Some((f, single, owned, x)) = linked_cards(r) {
+            p.obj = Obj::Class { what: f, single };
+            p.from = Some(From::Linked { owned });
+            rest = x;
+        } else {
+            let (head, _) = r.split_once(" from ")?;
+            let f = object_filter(head)?;
+            p.obj = Obj::Class {
+                what: Filter::and(vec![Filter::Not(Box::new(Filter::Type(CardType::Land))), f]),
+                single: false,
+            };
+            rest = &r[head.len()..];
+        }
+    } else if let Some((limit, x)) = referent(r) {
         p.obj = Obj::Referent { limit };
         rest = x;
     } else if let Some((_, x)) = r
@@ -743,9 +807,23 @@ pub fn parse(l: &str) -> Option<Perm> {
     }
     let mut rest = rest;
     if p.from.is_none() {
-        if let Some((z, x)) = strip_from(rest) {
+        if let Some((z, x)) = strip_from(rest, &mut p) {
             p.from = Some(z);
             rest = x;
+            // "from your graveyard or from exile", "from your hand or the top of your
+            // library".
+            for (w, z2) in [
+                (" or from exile", From::Exile),
+                (" or from your graveyard", From::Graveyard),
+                (" or the top of your library", From::LibraryTop),
+                (" or from the top of your library", From::LibraryTop),
+            ] {
+                if let Some(x2) = rest.strip_prefix(w) {
+                    p.also_from = Some(z2);
+                    rest = x2;
+                    break;
+                }
+            }
         }
     } else if let Some(x) = rest.strip_prefix(" from exile") {
         rest = x;
@@ -780,6 +858,8 @@ pub fn moved(e: &Effect) -> Moved {
             Moved::Cards(ZoneKind::Exile)
         }
         Effect::Mill { .. } => Moved::Cards(ZoneKind::Graveyard),
+        // "Exile another target creature or artifact until ~ leaves the battlefield."
+        Effect::ExileUntil { .. } => Moved::Cards(ZoneKind::Exile),
         Effect::Move { to, .. } => match to.zone {
             ZoneKind::Exile | ZoneKind::Graveyard | ZoneKind::Hand => Moved::Cards(to.zone),
             _ => Moved::Other,
@@ -887,7 +967,9 @@ fn mentions_x<T: serde::Serialize>(t: &T) -> bool {
 /// The permission as an effect: for the cards an earlier instruction moved to `zone`
 /// (`None`: no such cards), or for cards with qualities in a zone for a while.
 pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Option<Effect> {
-    if p.once_each_turn {
+    // A second zone is a static permission's; "any number of" is chosen as the effect
+    // resolves.
+    if p.once_each_turn || p.also_from.is_some() || (p.any_number && p.duration.is_some()) {
         return None;
     }
     let it = Sel::Var(vars::IT);
@@ -1030,8 +1112,16 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
             }
             Filter::and(v)
         }
+        // "from among cards you own in exile with dream counters on them".
+        From::Exile => Filter::and(vec![
+            Filter::InZone(ZoneKind::Exile),
+            p.zone_filter.clone()?,
+        ]),
         _ => return None,
     };
+    if p.from != Some(From::Exile) && p.zone_filter.is_some() {
+        return None;
+    }
     Some(Effect::CastCard {
         who: PlayerRef::You,
         what: Sel::Choose {
@@ -1173,7 +1263,24 @@ fn referent_effect(
 
 /// A permission to play cards with the qualities `what` from the phrase's zone.
 fn class_permission(p: &Perm, what: Filter, terms: PlayTerms) -> Option<PlayPermission> {
-    let (zone, top_only, what) = match p.from? {
+    let from = p.from?;
+    class_permission_from(p, from, what, terms)
+}
+
+/// A permission to play cards with the qualities `what` from the zone `from`.
+fn class_permission_from(
+    p: &Perm,
+    from: From,
+    what: Filter,
+    terms: PlayTerms,
+) -> Option<PlayPermission> {
+    // "from among cards you own in exile with croak counters on them".
+    let what = match (&p.zone_filter, from) {
+        (Some(f), From::Exile) => Filter::and(vec![f.clone(), what]),
+        (Some(_), _) => return None,
+        (None, _) => what,
+    };
+    let (zone, top_only, what) = match from {
         From::Graveyard => (ZoneKind::Graveyard, false, what),
         From::Exile => (ZoneKind::Exile, false, what),
         From::LibraryTop => (ZoneKind::Library, true, what),
@@ -1214,8 +1321,29 @@ fn class_permission(p: &Perm, what: Filter, terms: PlayTerms) -> Option<PlayPerm
 
 /// The permission as static abilities (`text` is the ability's text).
 pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    if p.who != Who::You || p.duration.is_some() || p.look {
+    if p.who != Who::You || p.duration.is_some() || p.look || p.any_number {
         return None;
+    }
+    // "You may cast ~ as though it had flash by tapping three untapped creatures you
+    // control with flying in addition to paying its other costs." (CR 601.3c): flash for
+    // an additional cost, as "... if you pay {2} more to cast it".
+    if let (Obj::SelfCard, None, true, Some(extra)) =
+        (&p.obj, p.from, p.terms.flash, p.terms.extra_cost.as_ref())
+    {
+        let mut rest = p.terms.clone();
+        rest.flash = false;
+        rest.extra_cost = None;
+        let plain = format!("{:?}", PlayTerms::default()) == format!("{:?}", rest);
+        if !plain || p.free || p.cond_text.is_some() || p.your_turn || p.once_each_turn {
+            return None;
+        }
+        let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+            applies_to: CostTarget::ThisSpell,
+            who: PlayerRel::You,
+            change: CostChange::FlashForAdditionalCost(extra.clone()),
+        }));
+        s.zone = FunctionZone::Anywhere;
+        return Some(vec![AbilityDef::new(AbilityKind::Static(s), text)]);
     }
     let mut terms = p.terms_with_condition(ctx)?;
     if terms.limit.is_some() || terms.until_another || terms.later_turn {
@@ -1279,7 +1407,7 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
                     spells: p.spells,
                     cost: p.free.then(Cost::free),
                     flash: false,
-                    terms,
+                    terms: terms.clone(),
                 },
                 fz,
             )
@@ -1289,7 +1417,7 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
                 return None;
             }
             (
-                class_permission(p, what.clone(), terms)?,
+                class_permission(p, what.clone(), terms.clone())?,
                 FunctionZone::Battlefield,
             )
         }
@@ -1298,10 +1426,42 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
     if mentions_x(&pp) {
         return None;
     }
-    let mut s = StaticAbility::new(StaticEffect::PlayPermission(pp));
-    s.zone = zone;
-    s.condition = condition;
-    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+    let mut perms = vec![pp];
+    // "from your hand or the top of your library", "from your graveyard or from exile":
+    // a permission for each zone (sharing a once-each-turn use, see `once_each_turn_cast`).
+    if let Some(z2) = p.also_from {
+        let second = match &p.obj {
+            Obj::SelfCard => {
+                let mut pp2 = perms[0].clone();
+                pp2.zone = match z2 {
+                    From::Graveyard => ZoneKind::Graveyard,
+                    From::Exile => ZoneKind::Exile,
+                    _ => return None,
+                };
+                pp2
+            }
+            Obj::Class { what, .. } => class_permission_from(p, z2, what.clone(), terms)?,
+            _ => return None,
+        };
+        perms.push(second);
+    }
+    let fzone = |pp: &PlayPermission| match (&p.obj, pp.zone) {
+        (Obj::SelfCard, ZoneKind::Graveyard) => FunctionZone::Graveyard,
+        (Obj::SelfCard, ZoneKind::Exile) => FunctionZone::Exile,
+        (Obj::SelfCard, ZoneKind::Library) => FunctionZone::Library,
+        _ => zone,
+    };
+    Some(
+        perms
+            .into_iter()
+            .map(|pp| {
+                let mut s = StaticAbility::new(StaticEffect::PlayPermission(pp.clone()));
+                s.zone = fzone(&pp);
+                s.condition = condition.clone();
+                AbilityDef::new(AbilityKind::Static(s), text)
+            })
+            .collect(),
+    )
 }
 
 /// A permission sentence after the instruction that moved the cards it's about ("Exile
@@ -1478,13 +1638,33 @@ fn ends_casting(e: &Effect) -> bool {
 /// the effect resolves, for that spell (see `spell_cast_this_way_exiled`).
 fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let l = end(l).trim();
-    let Some(r) = [
+    // "If an instant or sorcery spell cast this way would be put into your graveyard,
+    // exile it instead." (Bilbo, Thief in the Night): only those spells.
+    let mut quality = None;
+    let r = if let Some(r) = [
         "if that spell would be put into ",
         "if a spell cast this way would be put into ",
     ]
     .iter()
-    .find_map(|p| l.strip_prefix(p)) else {
-        return false;
+    .find_map(|p| l.strip_prefix(p))
+    {
+        r
+    } else {
+        let Some((q, r)) = l
+            .strip_prefix("if an ")
+            .or_else(|| l.strip_prefix("if a "))
+            .and_then(|r| r.split_once(" cast this way would be put into "))
+        else {
+            return false;
+        };
+        let Some((f, _, rest)) = class_phrase(q) else {
+            return false;
+        };
+        if !rest.trim().is_empty() {
+            return false;
+        }
+        quality = Some(f);
+        r
     };
     if !matches!(
         r,
@@ -1493,15 +1673,21 @@ fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         return false;
     }
     // (A permission to play lands as well: only its spells are cast.)
-    if let Some(terms) = last_terms(prev) {
-        terms.exile_instead = true;
-        return true;
+    if quality.is_none() {
+        if let Some(terms) = last_terms(prev) {
+            terms.exile_instead = true;
+            return true;
+        }
     }
     if ends_casting(prev) {
+        let mut filter = Filter::In(Box::new(Sel::Var(vars::IT)));
+        if let Some(q) = quality {
+            filter = Filter::and(vec![filter, crate::casting::as_spell_filter(&q)]);
+        }
         let replacement = Effect::AddReplacement {
             def: ReplacementDef {
                 event: ReplacementEvent::ZoneChange {
-                    filter: Filter::In(Box::new(Sel::Var(vars::IT))),
+                    filter,
                     from: None,
                     to: Some(ZoneKind::Graveyard),
                 },
@@ -1533,6 +1719,12 @@ fn static_rider(s: &str, p: &mut Perm) -> bool {
         {
             p.terms.exile_instead = true;
         }
+        "mana of any type can be spent to cast those spells"
+        | "mana of any type can be spent to cast them"
+            if p.spells =>
+        {
+            p.terms.spend_any_type = true;
+        }
         "if you cast a spell this way, you may spend mana as though it were mana of any color to cast it"
         | "if you cast a spell this way, you may spend mana as though it were mana of any color to cast that spell" => {
             p.terms.spend_as_any_color = true;
@@ -1557,6 +1749,27 @@ fn statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if let Some(r) = l.strip_prefix("if ") {
         let (c, rest) = r.split_once(", ")?;
         let mut p = parse(rest)?;
+        if p.cond_text.is_some() {
+            return None;
+        }
+        p.cond_text = Some(c.to_string());
+        return to_statics(&p, text, ctx);
+    }
+    // "During your turn, if an opponent lost life this turn, you may play lands and cast
+    // spells from among cards exiled with ~.", "During your turn, as long as you've
+    // sacrificed a nontoken permanent this turn, you may play cards exiled with ~."
+    for lead in ["during your turn, ", "during each of your turns, "] {
+        let Some(r) = l.strip_prefix(lead) else {
+            continue;
+        };
+        let Some(r) = r
+            .strip_prefix("if ")
+            .or_else(|| r.strip_prefix("as long as "))
+        else {
+            continue;
+        };
+        let (c, rest) = r.split_once(", ")?;
+        let mut p = parse(&format!("{lead}{rest}"))?;
         if p.cond_text.is_some() {
             return None;
         }
