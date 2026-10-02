@@ -566,6 +566,20 @@ impl Game {
         self.rule_effects.retain(|e| !rm.contains(&e.id));
         self.player_effects.retain(|e| !pm.contains(&e.id));
         self.replacements.retain(|e| !rp.contains(&e.id));
+        // "You may play that card for as long as you control ~": once over, it's over,
+        // even if that player controls it again.
+        let ended: Vec<bool> = self
+            .play_grants
+            .iter()
+            .map(|g| self.effect_expired(&g.duration, g.source, g.player))
+            .collect();
+        if ended.contains(&true) {
+            let mut i = 0;
+            self.play_grants.retain(|_| {
+                i += 1;
+                !ended[i - 1]
+            });
+        }
     }
 
     pub(crate) fn effect_expired(

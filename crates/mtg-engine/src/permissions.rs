@@ -235,7 +235,7 @@ pub fn allowing(
             free,
             terms,
             once: once.clone().map(|slot| (*src, slot)),
-            qualities: Some((f, Some(*src), *ctl)),
+            qualities: Some((spell_qualities(&f), Some(*src), *ctl)),
         });
     }
     out.sort_by_key(|c| {
@@ -246,6 +246,17 @@ pub fn allowing(
         )
     });
     out
+}
+
+/// The qualities of a permission's filter a spell must still have once its proposal is
+/// complete (CR 601.2e, 601.3e): not where the card was ("cards exiled with ~", "in your
+/// graveyard"), which was judged as it began to be cast, before it moved to the stack.
+fn spell_qualities(f: &Filter) -> Filter {
+    match f {
+        Filter::In(_) | Filter::InZone(_) => Filter::Any,
+        Filter::And(v) => Filter::And(v.iter().map(spell_qualities).collect()),
+        other => other.clone(),
+    }
 }
 
 /// Whether an effect's permission (not a rule's) may let `p` play `card` from where it is,
@@ -569,18 +580,25 @@ pub fn record_use(g: &mut Game, perm: Option<&CastPermission>) {
         g.dirty = true;
     }
     if let Some(CastPermission {
-        kind: PermissionKind::Grant(i),
+        kind: PermissionKind::Grant(_),
+        terms,
         ..
     }) = perm
     {
-        let Some(gr) = g.play_grants.get(*i) else {
-            return;
-        };
-        let group = gr.terms.group;
+        let group = terms.group;
         if group == 0 {
             return;
         }
-        let left = gr.terms.limit.unwrap_or(1).saturating_sub(1);
+        // How many more of those cards may still be played (the group's current count).
+        let Some(now) = g
+            .play_grants
+            .iter()
+            .find(|x| x.terms.group == group)
+            .map(|x| x.terms.limit.unwrap_or(1))
+        else {
+            return;
+        };
+        let left = now.saturating_sub(1);
         if left == 0 {
             g.play_grants.retain(|x| x.terms.group != group);
         } else {
