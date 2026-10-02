@@ -37,6 +37,24 @@ any panic, any hang, and any rules violation its checks find (a player getting p
 while a state-based action is pending, CR 117.5; zone lists that don't match their
 objects), each with a command that replays that game (`--only G --log`).
 
+## Agents outside the engine
+
+Any seat can be played by a program outside the engine, through a JSON protocol: at each
+decision the program receives what its player can see of the game (hidden information
+stays hidden), what happened since its last decision, and the complete list of legal
+options, and answers by picking among them. See `docs/AGENT_PROTOCOL.md`;
+`examples/random_client.py` is a minimal Python client.
+
+```sh
+cargo run --release -p mtg-sim -- --games 10 \
+    --agent 0=random --agent 1=cmd:'python3 examples/random_client.py'
+```
+
+The `mtg-api` crate provides the protocol for Rust programs too: `ExternalAgent` (a child
+process), and `Session`, a pull-style API that runs a game on its own thread while the
+caller answers the decisions of one or more seats (`session.next()`,
+`session.answer(seat, answer)`).
+
 ## Data
 
 | File | Source |
@@ -58,6 +76,7 @@ Oracle wording shows up as failing citations and unsupported abilities.
 |---|---|
 | `crates/mtg-data` | Loads the data files; parses the Comprehensive Rules; defines the `cr!` and `ruling!` citation macros |
 | `crates/mtg-engine` | The engine |
+| `crates/mtg-api` | External decision interface: observations, legal options, the JSON agent protocol |
 | `crates/mtg-sim` | Command-line simulator and fuzzer |
 | `crates/mtg-tools` | Coverage reports: `cr-coverage`, `card-coverage`, `rulings-coverage`, `unsupported` |
 

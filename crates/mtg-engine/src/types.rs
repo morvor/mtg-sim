@@ -560,6 +560,14 @@ pub fn subtype_lists() -> &'static SubtypeLists {
                 }
             }
             v.push("Time Lord".to_string());
+            // Creature types printed on cards in the bundled Scryfall data but missing
+            // from this CR text's 205.3m list: "Athlete" appears only on playtest and
+            // Un- cards (Mystery Booster 2 playtest cards, Unknown Event).
+            for extra in ["Athlete"] {
+                if !v.iter().any(|t| t == extra) {
+                    v.push(extra.to_string());
+                }
+            }
             v
         };
         SubtypeLists {
@@ -584,6 +592,19 @@ pub fn is_creature_type(s: &str) -> bool {
 
 pub fn is_basic_land_type(s: &str) -> bool {
     matches!(s, "Plains" | "Island" | "Swamp" | "Mountain" | "Forest")
+}
+
+/// A land type (CR 205.3i), basic or not.
+pub fn is_land_type(s: &str) -> bool {
+    is_basic_land_type(s) || subtype_lists().land.contains(s)
+}
+
+/// Every land type (CR 205.3i), in alphabetical order: the choices for "choose a land
+/// type".
+pub fn land_types() -> Vec<String> {
+    let mut v: Vec<String> = subtype_lists().land.iter().cloned().collect();
+    v.sort();
+    v
 }
 
 /// Classifies a subtype by the card type it's correlated with.

@@ -18,10 +18,14 @@ fn becomes_copy(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     // "..., except those creatures aren't legendary" (Echoing Equation).
     let (l, exceptions) = match l.split_once(", except ") {
-        Some((head, except)) => (
-            head,
-            super::tokens_copies_copy::copy_exceptions(except, &[], b.ctx)?,
-        ),
+        Some((head, except)) => {
+            // Quoted abilities ("it has this ability and \"...\"", Aurora Shifter).
+            let (masked, quotes) = super::statics::mask_quotes(except)?;
+            (
+                head,
+                super::tokens_copies_copy::copy_exceptions(&masked, &quotes, b.ctx)?,
+            )
+        }
         None => (l, vec![]),
     };
     let (duration, l) = match l.strip_prefix("until end of turn, ") {

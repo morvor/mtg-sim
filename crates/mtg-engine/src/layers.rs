@@ -299,10 +299,12 @@ impl Game {
                 let ctx = Ctx::new(eff.source, eff.controller);
                 for t in targets {
                     if self.is_live(*t) {
-                        let mut c = self.objects[t.0 as usize].chars.clone();
+                        let before = self.objects[t.0 as usize].chars.clone();
+                        let mut c = before.clone();
                         for m in mods {
                             apply_mod(&mut c, m, self, &ctx, *t);
                         }
+                        drop_ungainable_subtypes(&mut c, &before);
                         self.objects[t.0 as usize].chars = c;
                     }
                 }
@@ -326,6 +328,7 @@ impl Game {
                 for m in exceptions {
                     apply_mod(&mut v, m, self, &ctx, *t);
                 }
+                drop_ungainable_subtypes(&mut v, values);
                 self.objects[t.0 as usize].chars = v;
             }
         }
@@ -972,6 +975,9 @@ impl Game {
                         v
                     }
                 };
+                if !trial && !affected_now.is_empty() {
+                    crate::structure::record(&a, &self.obj(*src).chars.name, "static");
+                }
                 for t in affected_now {
                     self.apply_mods_to(t, mods, layer, &ctx, e.ts.0, st, trial);
                 }
@@ -1187,6 +1193,12 @@ impl Game {
                     }
                 }
                 let ctl = o.controller;
+                if !matches!(
+                    s.effect,
+                    StaticEffect::Continuous { .. } | StaticEffect::Replacement(_)
+                ) {
+                    crate::structure::record(a, &o.chars.name, "static");
+                }
                 match &s.effect {
                     StaticEffect::Continuous { .. } => {}
                     StaticEffect::Restriction(r) => st.restrictions.push((id, ctl, r.clone())),
@@ -1228,6 +1240,14 @@ impl Game {
                     for p in &e.players {
                         st.flash_permissions
                             .push((src, *p, PlayerRel::You, f.clone()));
+                    }
+                }
+                // "Until end of turn, you may activate loyalty abilities of Jace
+                // planeswalkers you control ... any time you could cast an instant."
+                (PlayerModification::ActivationPermission(perm), Some(src)) => {
+                    for p in &e.players {
+                        st.other
+                            .push((src, *p, StaticEffect::ActivationPermission(perm.clone())));
                     }
                 }
                 _ => {}
@@ -1751,6 +1771,23 @@ fn copied_ability(a: &Ability, effect: u32) -> Ability {
 /// effect `effect` (see [`copied_ability`]).
 pub(crate) fn copied_link(link: u16, effect: u32) -> u16 {
     0x4000 | ((link as u32 * 131 + effect * 37) % 0x3fff) as u16
+}
+
+/// CR 205.3d: an object can't gain a subtype that doesn't correspond to one of its types.
+/// Removes the subtypes (and "every creature type") that a copy effect's exceptions added
+/// to `c` (compared to the values `orig` it applied to) but that don't correspond to any
+/// of its card types — e.g. "it's a Pirate in addition to its other types" on a copy of
+/// a noncreature. They stay gone even if it becomes a creature later (in layer 4).
+fn drop_ungainable_subtypes(c: &mut Characteristics, orig: &Characteristics) {
+    let types = c.card_types;
+    c.subtypes
+        .retain(|s| orig.subtypes.contains(s) || subtype_still_valid(s, types));
+    if c.all_creature_types
+        && !orig.all_creature_types
+        && !(types.contains(CardType::Creature) || types.contains(CardType::Kindred))
+    {
+        c.all_creature_types = false;
+    }
 }
 
 fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {

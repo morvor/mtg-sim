@@ -295,29 +295,96 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
     let outer_group = b.group.take();
     let mut introduced = super::patterns::oracle_hardening_referents::Introduced::default();
     let mut effects = Vec::new();
+    // An X an earlier sentence defined ("..., where X is ..."): where that sentence's
+    // effect is in `effects`, and its value, if it could be read.
+    let mut x_defined: Option<(usize, Option<Value>)> = None;
+    let mut x_stored = false;
     for s in split_sentences(t) {
         // "~ deals 1 damage to each creature. If it was kicked, it deals 2 damage to each
         // creature instead.": a spell that is the subject of an instruction is what a
         // later "it" refers to, until something else is mentioned.
         super::patterns::oracle_hardening_referents::note_subject(&s, b);
+        let defines_x = s.to_lowercase().contains(", where x is ");
+        // Read before the sentence is parsed, with pronouns as the sentence reads them.
+        let defined_value = if defines_x {
+            super::patterns::r107_numbers::defined_x(&s, b)
+        } else {
+            None
+        };
         // Sentences that modify the previous one ("It can't be regenerated.").
-        if let Some(prev) = effects.last_mut() {
-            if crate::oracle_ext::apply_followup_ext(&s, prev, b) {
-                b.sentences += 1;
-                continue;
+        let followed_up = match effects.last_mut() {
+            Some(prev) => crate::oracle_ext::apply_followup_ext(&s, prev, b),
+            None => false,
+        };
+        if followed_up {
+            b.sentences += 1;
+        } else {
+            let Some(mut e) = parse_sentence(&s, b) else {
+                super::patterns::oracle_hardening_referents::abandon_introduced(b, introduced);
+                groups::abandon(b, outer_group);
+                return None;
+            };
+            // "Untap all creatures you control. They gain haste until end of turn."
+            effects.extend(groups::note(&mut e, b));
+            super::patterns::oracle_hardening_referents::note_introduced(
+                &mut e,
+                b,
+                &mut introduced,
+            );
+            super::patterns::oracle_hardening_referents::note_player_mention(&s, b);
+            effects.push(e);
+            b.sentences += 1;
+        }
+        // "Create an X/X ... token, where X is half your life total, rounded up. It deals X
+        // damage to you.": an X the text defined in an earlier sentence is that value, not
+        // the X chosen for the spell or ability. It's determined once (CR 608.2h), as the
+        // defining instruction is performed, and kept for the later ones.
+        if let Some((at, value)) = &x_defined {
+            if !defines_x
+                && effects
+                    .last()
+                    .is_some_and(super::patterns::r107_numbers::uses_x)
+            {
+                let stored = Value::Var(super::patterns::r107_numbers::DEFINED_X);
+                let substituted = match (value, effects.last()) {
+                    (Some(_), Some(last)) => {
+                        super::patterns::r107_numbers::substitute_x(last, &stored)
+                    }
+                    _ => None,
+                };
+                let Some(e) = substituted else {
+                    super::patterns::oracle_hardening_referents::abandon_introduced(b, introduced);
+                    groups::abandon(b, outer_group);
+                    return None;
+                };
+                *effects.last_mut().expect("checked above") = e;
+                if !x_stored {
+                    let at = (*at).min(effects.len() - 1);
+                    effects.insert(
+                        at,
+                        Effect::StoreValue {
+                            var: super::patterns::r107_numbers::DEFINED_X,
+                            value: value.clone().expect("checked above"),
+                        },
+                    );
+                    x_stored = true;
+                }
             }
         }
-        let Some(mut e) = parse_sentence(&s, b) else {
-            super::patterns::oracle_hardening_referents::abandon_introduced(b, introduced);
-            groups::abandon(b, outer_group);
-            return None;
-        };
-        // "Untap all creatures you control. They gain haste until end of turn."
-        effects.extend(groups::note(&mut e, b));
-        super::patterns::oracle_hardening_referents::note_introduced(&mut e, b, &mut introduced);
-        super::patterns::oracle_hardening_referents::note_player_mention(&s, b);
-        effects.push(e);
-        b.sentences += 1;
+        if defines_x {
+            x_defined = Some((effects.len().saturating_sub(1), defined_value));
+            x_stored = false;
+        }
+        // "If you do, repeat this process.": the instructions so far are the process.
+        if effects
+            .last()
+            .is_some_and(crate::repeat_process::has_open_repeat)
+        {
+            let body = Effect::seq(std::mem::take(&mut effects));
+            effects.push(Effect::RepeatProcess {
+                body: Box::new(body),
+            });
+        }
     }
     let e = super::patterns::oracle_hardening_referents::finish_introduced(
         Effect::seq(effects),
@@ -1109,6 +1176,9 @@ fn p_return(l: &str, b: &mut Builder) -> Option<Effect> {
         || t == "to their owners' hands"
         || t == "to your hand"
         || t == "to their owner's hand"
+        // "two target cards from an opponent's graveyard to their hand": a card goes to
+        // its owner's hand (CR 400.3).
+        || t == "to their hand"
     {
         Destination::zone(ZoneKind::Hand)
     } else if t == "to the battlefield" || t == "to the battlefield under your control" {
@@ -1228,6 +1298,27 @@ fn p_add_mana(l: &str, _b: &mut Builder) -> Option<Effect> {
             return None;
         }
         ManaProduction::ChosenColor(Value::c(1))
+    } else if r.contains(" or ") && r.contains("}{") {
+        // "{W}{W}, {W}{B}, or {B}{B}" (CR 106.1): one of several combinations of mana.
+        let options: Option<Vec<(String, Effect)>> = r
+            .split([',', ' '])
+            .filter(|w| w.starts_with('{'))
+            .map(|w| {
+                let w = w.trim_end_matches('.');
+                match p_add_mana(&format!("add {w}"), _b)? {
+                    e @ Effect::AddMana {
+                        mana: ManaProduction::Fixed(_),
+                        ..
+                    } => Some((format!("Add {}", w.to_uppercase()), e)),
+                    _ => None,
+                }
+            })
+            .collect();
+        let options = options.filter(|o| o.len() >= 2)?;
+        return Some(Effect::ChooseOne {
+            who: PlayerRef::You,
+            options,
+        });
     } else if r.contains(" or ") {
         // "{R} or {G}", "{W}, {U}, or {B}"
         let opts: Vec<ManaType> = r
@@ -1378,6 +1469,7 @@ pub fn parse_token_description(s: &str) -> Option<TokenSpec> {
         toughness: Some(toughness),
         abilities,
         scryfall_name: None,
+        pt_values: None,
     })
 }
 
@@ -1421,6 +1513,9 @@ fn p_tap_untap(l: &str, b: &mut Builder) -> Option<Effect> {
 /// "search your library for a basic land card, put it onto the battlefield tapped, then shuffle".
 fn p_search(l: &str, _b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("search your library for ")?;
+    // "search your library for any card" (Demonic Counsel) is "a card".
+    let any = r.strip_prefix("any card").map(|x| format!("a card{x}"));
+    let r = any.as_deref().unwrap_or(r);
     let (count, r) = if let Some(r2) = r.strip_prefix("up to ") {
         let (n, r3) = parse_number(r2)?;
         (n, r3)

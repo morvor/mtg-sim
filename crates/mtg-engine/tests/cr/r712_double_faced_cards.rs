@@ -599,11 +599,13 @@ fn an_as_this_transforms_ability_applies_while_it_transforms() {
     // Transforming back to the front face (which doesn't have it) does nothing more.
     transform(&mut t, seph);
     assert_eq!(emblems(&t), 1);
-    // The emblem works.
+    // The emblem works (and so does the front face's own "Whenever another creature
+    // dies, target opponent loses 1 life and you gain 1 life. ...": two triggers).
     let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.g.move_object(bears, Zone::Graveyard(P1), MoveCause::Destroy, None);
     t.resolve_all();
-    assert_eq!(t.life(P1), 19);
-    assert_eq!(t.life(P0), 21);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 22);
 }

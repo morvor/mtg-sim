@@ -13,6 +13,9 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 - `crates/mtg-data` — loaders: Scryfall cards/rulings/tags, CR parser. Defines the
   `cr!` and `ruling!` citation macros.
 - `crates/mtg-engine` — the engine.
+- `crates/mtg-api` — external decision interface: per-player observations, every legal
+  option for every decision, the JSON agent protocol (`docs/AGENT_PROTOCOL.md`),
+  `ExternalAgent` (child process) and `Session` (pull-style embedding).
 - `crates/mtg-sim` — CLI simulator (`cargo run --release -p mtg-sim -- --games 100`);
   `--random-decks` fuzzes the engine with random decks of fully supported cards.
 - `crates/mtg-tools` — coverage reports (`cr-coverage`, `card-coverage`,
@@ -52,6 +55,7 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 | Game flow | `start.rs`, `opening_hand.rs`, `mulligan.rs` (103), `game_end.rs` (104), `restart.rs` (727), `turn_structure.rs` (500–505), `untap_choice.rs`, `untap_limits.rs` (502.3), `end_turn.rs` (724), `player_control.rs` (723), `subgame.rs` (729), `library.rs`, `choices.rs` |
 | Formats and variants | `deck.rs` (100.2), `match_play.rs` (100.6), `ante.rs` (407), `multiplayer/` (800–811), `teams.rs` (805), `casual.rs` (900–905), `planechase.rs` (901), `commander_rules.rs` (903), `draft.rs` (905), `variants.rs` |
 | Extension points | `custom.rs` (named custom behaviors), `oracle_ext.rs` (pattern registry dispatch) |
+| Tooling | `structure.rs`: structural fingerprints of abilities (AST with literal parameters abstracted) and the structure log written when `MTG_STRUCTURE_LOG=<dir>` is set (abilities exercised in games), read by `mtg-tools structure-coverage` |
 
 Key invariants:
 - Every zone change creates a new `ObjectId` (CR 400.7); the old object keeps its last
@@ -62,6 +66,11 @@ Key invariants:
   `Event`; `flush_events()` detects triggers; `settle()` runs SBAs + puts triggers on the stack.
 - Decisions go through `game.ask(player, Decision)`; always validate answers and fall back
   to a sensible default on `Answer::Default` or invalid answers.
+
+Out of scope for now: `docs/DEFERRED.md` lists what the project has decided not to support
+yet (Contraptions, host/augment, sticker sheets, digital-only cards, cards not legal in
+any format). Don't implement those;
+note anything new you run into there.
 
 ## Extending — prefer adding files over editing shared code
 
@@ -89,6 +98,13 @@ Key invariants:
 - Tests encoding a Scryfall ruling cite it: `ruling!("Card Name", "distinctive substring");`
   — fails if the card has no such ruling (so citations can't be invented). Copy the
   substring from the real ruling text (`zcat data/rulings.jsonl.gz | grep ...`).
+- Rulings coverage counts ruling texts: a text shared by several cards is covered by a
+  test on any card it applies to. Pick a card with typical wording, and when the cards
+  word the relevant ability differently, test each wording (cards worded slightly
+  differently can compile and behave differently). The `ruling!` macro needs literals,
+  so a test looping over cards has one `ruling!("Card", "...")` line per card.
+  `python3 scripts/rulings_batches.py summary|list|show P042|card "Name"` reports every
+  ruling text as CITED, EXEMPT or OPEN and splits them into batches of similar rulings.
 - Use `mtg_engine::testing::TestGame` (see its docs and `tests/smoke.rs`). Use real cards
   via `t.battlefield(P0, "Card Name")` etc. For rules that need a custom object, build a
   `CardDef::custom(...)`.
@@ -110,6 +126,9 @@ cargo run --release -p mtg-tools -- cr-coverage
 cargo run --release -p mtg-tools -- card-coverage
 cargo run --release -p mtg-tools -- rulings-coverage --card "Tarmogoyf"
 cargo run --release -p mtg-tools -- unsupported --limit 50 --filter "enters"
+rm -rf target/structlog && MTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace
+cargo run --release -p mtg-tools -- structure-coverage --write docs/STRUCTURE_COVERAGE.md   # structures no test exercises
+cargo run --release -p mtg-tools -- structure-coverage --card "Fetid Heath" --show-fingerprints
 cargo run --release -p mtg-sim -- --games 200
 cargo run --release -p mtg-sim -- --random-decks --games 1000   # fuzz: random decks; panics/hangs print a repro command
 ```
