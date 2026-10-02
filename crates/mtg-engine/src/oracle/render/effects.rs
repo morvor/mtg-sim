@@ -1677,6 +1677,65 @@ impl Renderer<'_> {
         let mut parts: Vec<String> = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Discard any number of cards.", "Tap any number of untapped Gates you
+            // control.": a choice of objects remembered for the one instruction that acts
+            // on all of them right away.
+            if let (
+                Some(Effect::Store {
+                    sel:
+                        Sel::Choose {
+                            chooser: PlayerRef::You,
+                            ..
+                        },
+                    var,
+                }),
+                Some(next),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                let uses_var = format!("{next:?}").contains(&format!("{:?}", Sel::Var(*var)));
+                if uses_var {
+                    let saved = (self.var_defs.len(), self.gaps.len());
+                    let chosen = self.effect(&v[i]);
+                    let act = self.effect(next);
+                    let simple = act
+                        .split_once(' ')
+                        .filter(|(verb, rest)| {
+                            matches!(*rest, "it" | "them")
+                                && verb.chars().all(|c| c.is_ascii_lowercase())
+                        })
+                        .map(|(verb, _)| verb.to_string());
+                    let what = chosen
+                        .strip_prefix("choose ")
+                        .filter(|w| w.starts_with("any number of ") || w.starts_with("up to "));
+                    match (what, simple) {
+                        (Some(what), Some(verb)) => {
+                            // A player discards cards from their own hand (CR 701.9a).
+                            let mut what = what.to_string();
+                            if verb == "discard" || verb == "discards" {
+                                for h in [
+                                    " in your hand",
+                                    " you own in hands",
+                                    " in their hand",
+                                    " they own in hands",
+                                ] {
+                                    what = what.replace(h, "");
+                                }
+                            }
+                            parts.push(format!("{verb} {what}"));
+                            i += 2;
+                            continue;
+                        }
+                        _ => {
+                            self.var_defs.truncate(saved.0);
+                            self.gaps.truncate(saved.1);
+                            parts.push(chosen);
+                            parts.push(act);
+                            i += 2;
+                            continue;
+                        }
+                    }
+                }
+            }
             // "Put a +1/+1 counter on each other creature you control. You gain 1 life for
             // each of those creatures.": the group is remembered silently, so the next
             // instruction must name it, either as the same group or as the remembered one

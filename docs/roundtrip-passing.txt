@@ -2752,6 +2752,7 @@ Cathar's Shield
 Cathars' Crusade
 Cathartic Adept
 Cathartic Parting
+Cathartic Pyre
 Cathartic Reunion
 Cathedral Acolyte
 Cathedral Sanctifier
@@ -2770,6 +2771,7 @@ Caustic Tar
 Caustic Wasps
 Cautious Survivor
 Cavalier of Dawn
+Cavalier of Flame
 Cavalier of Gales
 Cavalier of Night
 Cavalry Drillmaster
@@ -7746,6 +7748,7 @@ Grazilaxx, Illithid Scholar
 Grazing Gladehart
 Grazing Kelpie
 Grazing Whiptail
+Greasewrench Goblin
 Great Arashin City
 Great Defender
 Great Desert Prospector
@@ -8868,6 +8871,7 @@ Illicit Masquerade
 Illicit Shipment
 Illness in the Ranks
 Illuminate
+Illuminate History
 Illuminated Wings
 Illumination
 Illuminator Virtuoso
@@ -9777,6 +9781,7 @@ Kindly Customer
 Kindly Stranger // Demon-Possessed Witch
 Kindred Boon
 Kindred Discovery
+Kinetic Augur
 King Cheetah
 King Crab
 King Macar, the Gold-Cursed
@@ -10223,6 +10228,7 @@ Leaping Master
 Learn from the Past
 Leatherback Baloth
 Leatherhead, Iron Gator
+Leave // Chance
 Leave No Trace
 Leave in the Dust
 Leaves from the Vine
@@ -11284,6 +11290,7 @@ Metrognome
 Metropolis Angel
 Metropolis Reformer
 Metropolis Sprite
+Miasma Demon
 Miasmic Mummy
 Mica, Reader of Ruins
 Michelangelo, Game Master
@@ -11933,6 +11940,7 @@ Nagao, Bound by Honor
 Nagging Thoughts
 Nahiri's Binding
 Nahiri's Machinations
+Nahiri's Resolve
 Nahiri's Sacrifice
 Nahiri's Stoneblades
 Nakia, Wakandan Operative
@@ -12407,6 +12415,7 @@ Obscuring Aether
 Obscuring Haze
 Observant Alseid
 Observed Stasis
+Obsessive Astronomer
 Obsessive Search
 Obsessive Skinner
 Obsessive Stitcher
@@ -14618,6 +14627,7 @@ Rite of the Dragoncaller
 Rite of the Moth
 Rites of Flourishing
 Rites of Reaping
+Rites of Spring
 Rith's Attendant
 Rith's Grove
 Ritual Guardian
@@ -16557,6 +16567,7 @@ Sokenzan, Crucible of Defiance
 Sokka's Charge
 Sokka's Haiku
 Sokka's Sword Training
+Sokka, Bold Boomeranger
 Sokka, Lateral Strategist
 Sokka, Tenacious Tactician
 Sokka, Wolf Cove's Protector
@@ -18283,6 +18294,7 @@ The Dross Pits
 The Duke, Rebel Sentry
 The Earth Crystal
 The Echoverse Fulcrum
+The Elder Dragon War
 The Eldest Reborn
 The Fabulous Frog-Man
 The Fair Basilica

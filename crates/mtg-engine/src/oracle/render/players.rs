@@ -842,6 +842,13 @@ fn unbounded_choice(filter: &Filter, count: &Value) -> bool {
             let f = conj(filter);
             conj(g).iter().all(|c| f.contains(c))
         }
+        Value::CountSel(s) => match s.as_ref() {
+            Sel::All(g) => {
+                let f = conj(filter);
+                conj(g).iter().all(|c| f.contains(c))
+            }
+            _ => false,
+        },
         // "any number of cards from your hand"
         Value::HandSize(PlayerRef::You) => {
             let f = conj(filter);
