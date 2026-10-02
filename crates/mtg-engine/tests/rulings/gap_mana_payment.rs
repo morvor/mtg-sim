@@ -558,3 +558,154 @@ fn sunken_palace_copies_the_spell_its_mana_is_spent_to_cast() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand - 1 + 2);
 }
+
+// ---------------------------------------------------------------------------------------
+// Thieving Skydiver: "Kicker {X}. X can't be 0."
+// ---------------------------------------------------------------------------------------
+
+/// P0 casts Thieving Skydiver ({1}{U}) kicked with X = 1 from three Islands, its enters
+/// trigger targeting `artifact`; returns the Skydiver.
+fn kicked_skydiver(t: &mut TestGame, artifact: ObjectId) -> ObjectId {
+    t.lands(P0, "Island", 3);
+    let diver = t.hand(P0, "Thieving Skydiver");
+    t.answer_targets(P0, &[Entity::Object(artifact)]);
+    t.cast(P0, diver).kicked(true).x(1).go();
+    // Kicker {X}: X can't be 0.
+    assert!(t.asked().iter().any(|(p, d)| *p == P0
+        && matches!(d, mtg_engine::decision::Decision::ChooseX { min: 1, .. })));
+    t.resolve();
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    diver
+}
+
+#[test]
+fn thieving_skydiver_takes_an_equipment_and_attaches_it() {
+    cr!("107.3a", "702.33a", "701.3a");
+    ruling!(
+        "Thieving Skydiver",
+        "Thieving Skydiver's ability can target an artifact you already control. You'll attach it to Thieving Skydiver if it's an Equipment."
+    );
+    supported("Thieving Skydiver");
+    // P0's own Bonesplitter, unattached.
+    let mut t = TestGame::new(2);
+    let splitter = t.battlefield(P0, "Bonesplitter");
+    let diver = kicked_skydiver(&mut t, splitter);
+    t.resolve();
+    assert_eq!(t.obj_now(splitter).controller, P0);
+    assert_eq!(
+        t.obj_now(splitter).attached_to,
+        Some(Entity::Object(t.g.current(diver)))
+    );
+    assert_eq!(t.pt(diver), (4, 1));
+    // Not kicked: no X is announced and nothing triggers.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    let diver = t.hand(P0, "Thieving Skydiver");
+    t.cast(P0, diver).kicked(false).go();
+    t.resolve();
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseX { .. })));
+}
+
+#[test]
+fn thieving_skydiver_gone_leaves_the_equipment_where_it_was_but_stolen() {
+    cr!("701.3b", "611.2b");
+    ruling!(
+        "Thieving Skydiver",
+        "If the Equipment can't be attached to Thieving Skydiver, most likely because Thieving Skydiver has left the battlefield before its triggered ability resolves, the Equipment remains attached to whatever it's currently attached to or remains unattached if attached to nothing."
+    );
+    ruling!(
+        "Thieving Skydiver",
+        "The control-change effect of Thieving Skydiver lasts indefinitely. It doesn't wear off during the cleanup step, and it doesn't expire if Thieving Skydiver leaves the battlefield."
+    );
+    supported("Thieving Skydiver");
+    // P1's Bonesplitter is attached to P1's Grizzly Bears. With the trigger on the stack,
+    // P1 kills the Skydiver with Lightning Bolt.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let splitter = t.battlefield(P1, "Bonesplitter");
+    assert!(t.g.attach(splitter, Entity::Object(bears)));
+    let diver = kicked_skydiver(&mut t, splitter);
+    let diver = t.g.current(diver);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.lands(P1, "Mountain", 1);
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, bolt).target(diver).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Thieving Skydiver"));
+    t.resolve();
+    assert_eq!(t.obj_now(splitter).controller, P0);
+    assert_eq!(t.obj_now(splitter).attached_to, Some(Entity::Object(bears)));
+    // It lasts beyond the turn.
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    assert_eq!(t.obj_now(splitter).controller, P0);
+}
+
+#[test]
+fn sunken_palace_copies_a_keyword_s_activated_ability() {
+    cr!("106.6", "702.29a", "707.10");
+    ruling!(
+        "Sunken Palace",
+        "Activated abilities contain a colon. They're generally written \"[Cost]: [Effect].\" Some keyword abilities are activated abilities and will have a colon in their reminder text."
+    );
+    supported("Sunken Palace");
+    supported("Lonely Sandbar");
+    // Lonely Sandbar's cycling ({U}, discard this card: draw a card) is an activated
+    // ability: paid with the Palace's {U}, it's copied.
+    let mut t = TestGame::new(2);
+    palace_mana(&mut t);
+    let sandbar = t.hand(P0, "Lonely Sandbar");
+    let hand = t.hand_size(P0);
+    let cycling = t
+        .obj_now(sandbar)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+        .count()
+        - 1;
+    t.activate(P0, sandbar, cycling, &[]).unwrap();
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand - 1 + 2);
+}
+
+#[test]
+fn sunken_palace_copy_may_have_new_targets() {
+    cr!("707.10c", "115.7d");
+    ruling!(
+        "Sunken Palace",
+        "The copy will have the same targets as the spell or ability it's copying unless you choose new ones. You may change any number of the targets, including all of them or none of them."
+    );
+    supported("Sunken Palace");
+    // Unsummon ({U}) targeting one of P1's Grizzly Bears, cast with the Palace's {U}: the
+    // copy targets the other one.
+    let mut t = TestGame::new(2);
+    palace_mana(&mut t);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    let unsummon = t.hand(P0, "Unsummon");
+    t.cast(P0, unsummon).target(a).go();
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(b)]);
+    t.resolve_all();
+    assert_eq!(t.zone(a), mtg_engine::object::Zone::Hand(P1));
+    assert_eq!(t.zone(b), mtg_engine::object::Zone::Hand(P1));
+    // Keeping the targets: the copy returns the same Bears, and Unsummon then does nothing.
+    let mut t = TestGame::new(2);
+    palace_mana(&mut t);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    let unsummon = t.hand(P0, "Unsummon");
+    t.cast(P0, unsummon).target(a).go();
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert_eq!(t.zone(a), mtg_engine::object::Zone::Hand(P1));
+    assert!(t.on_battlefield(b));
+}
