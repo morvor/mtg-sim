@@ -24,33 +24,39 @@ fn library(t: &mut TestGame, p: PlayerId, names: &[&str]) -> Vec<ObjectId> {
     names.iter().map(|n| t.library_top(p, n)).collect()
 }
 
-/// Answers `p`'s choices of cards with the candidate named `name` (cards that changed
-/// zones have ids the test can't know in advance).
+/// Answers `p`'s choices of cards with the candidates named, one name per choice in order
+/// ("" chooses none); later choices go to the scripted agent. (Cards that changed zones
+/// have ids the test can't know in advance.)
 struct PickByName {
     inner: Box<dyn Agent>,
-    name: &'static str,
+    names: std::collections::VecDeque<&'static str>,
 }
 
 impl Agent for PickByName {
     fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
         if let Decision::ChooseEntities { candidates, .. } = d {
-            let pick: Vec<Entity> = candidates
-                .iter()
-                .copied()
-                .filter(|e| e.object().is_some_and(|o| g.obj(o).chars.name == self.name))
-                .take(1)
-                .collect();
-            let _ = self.inner.decide(g, p, d);
-            return Answer::Entities(pick);
+            if let Some(name) = self.names.pop_front() {
+                let pick: Vec<Entity> = candidates
+                    .iter()
+                    .copied()
+                    .filter(|e| e.object().is_some_and(|o| g.obj(o).chars.name == name))
+                    .take(1)
+                    .collect();
+                let _ = self.inner.decide(g, p, d);
+                return Answer::Entities(pick);
+            }
         }
         self.inner.decide(g, p, d)
     }
 }
 
-fn pick_by_name(t: &mut TestGame, p: PlayerId, name: &'static str) {
+fn pick_by_name(t: &mut TestGame, p: PlayerId, names: &[&'static str]) {
     let mut agents = t.g.agents.0.lock().unwrap();
     let inner = std::mem::replace(&mut agents[p.idx()], Box::new(PassiveAgent));
-    agents[p.idx()] = Box::new(PickByName { inner, name });
+    agents[p.idx()] = Box::new(PickByName {
+        inner,
+        names: names.iter().copied().collect(),
+    });
 }
 
 #[test]
@@ -273,7 +279,7 @@ fn avatar_destiny_returns_itself_and_a_milled_creature_card() {
     assert_eq!(t.pt(bears), (2, 2));
     let bolt = t.hand(P0, "Lightning Bolt");
     t.cast(P0, bolt).target(bears).go();
-    pick_by_name(&mut t, P0, "Serra Angel");
+    pick_by_name(&mut t, P0, &["Serra Angel"]);
     t.resolve();
     t.settle();
     t.resolve();
@@ -457,4 +463,57 @@ fn knight_errant_of_eos_reveals_creatures_up_to_the_number_that_convoked_it() {
     t.settle();
     t.resolve();
     assert!(!t.in_hand(P0, "Hill Giant"));
+}
+
+#[test]
+fn invasion_of_alara_casts_one_of_the_two_cards_and_keeps_the_other() {
+    cr!("701.20a", "608.2c");
+    ruling!(
+        "Invasion of Alara // Awaken the Maelstrom",
+        "the one you don't put into your hand will remain in exile"
+    );
+    // The front face (the back face, Awaken the Maelstrom, is another item's).
+    assert!(card("Invasion of Alara // Awaken the Maelstrom")
+        .unsupported_text()
+        .iter()
+        .all(|u| !u.contains("exile cards from the top")));
+    // Top first: Forest, Grizzly Bears, Island, Llanowar Elves, Shock.
+    let setup = |t: &mut TestGame| {
+        library(
+            t,
+            P0,
+            &[
+                "Shock",
+                "Llanowar Elves",
+                "Island",
+                "Grizzly Bears",
+                "Forest",
+            ],
+        );
+    };
+    // Cast Grizzly Bears for free: Llanowar Elves goes to hand, the lands to the bottom.
+    let mut t = TestGame::new(2);
+    setup(&mut t);
+    // The first choice is the battle's protector (the default).
+    pick_by_name(&mut t, P0, &["", "Grizzly Bears", "Llanowar Elves"]);
+    t.enter(P0, "Invasion of Alara // Awaken the Maelstrom");
+    t.settle();
+    t.resolve();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert!(t.in_hand(P0, "Llanowar Elves"));
+    assert_eq!(t.library_size(P0), 3);
+    let lib = &t.g.player(P0).library;
+    assert_eq!(t.g.obj(*lib.last().unwrap()).chars.name, "Shock");
+
+    // Nothing cast: one of them to hand, the other stays in exile.
+    let mut t = TestGame::new(2);
+    setup(&mut t);
+    pick_by_name(&mut t, P0, &["", "", "Llanowar Elves"]);
+    t.enter(P0, "Invasion of Alara // Awaken the Maelstrom");
+    t.settle();
+    t.resolve();
+    assert!(t.in_hand(P0, "Llanowar Elves"));
+    assert!(t.in_exile("Grizzly Bears"));
+    assert_eq!(t.library_size(P0), 3);
 }

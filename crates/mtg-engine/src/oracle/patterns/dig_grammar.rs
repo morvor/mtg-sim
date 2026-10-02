@@ -243,6 +243,78 @@ fn return_two_ways(l: &str, b: &mut Builder) -> Option<Effect> {
     None
 }
 
+inventory::submit! {
+    FollowupPattern { name: "dig: put [N] of them [somewhere] after casting one of the cards found", priority: 300, apply: take_after_cast }
+}
+
+/// "Exile cards from the top of your library until you exile two nonland cards .... You
+/// may cast one of those two cards without paying its mana cost. Put one of them into your
+/// hand." (Invasion of Alara): "them" are the cards found that are still exiled (casting
+/// one changed what the last instruction affected).
+fn take_after_cast(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        e => Some(e),
+    };
+    if !dug(b) || !matches!(last, Some(Effect::CastCard { .. })) {
+        return false;
+    }
+    let l = end(l);
+    if !(l.starts_with("put ") && l.contains(" of them ")) {
+        return false;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let Some(v) = parse_take(l, b) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    };
+    let mut out = Vec::new();
+    for e in v {
+        match e {
+            Effect::DigStep(step) => match *step {
+                DigStep::Take {
+                    chooser,
+                    filter,
+                    each_of,
+                    count,
+                    up_to,
+                    random,
+                    reveal,
+                    to,
+                    ..
+                } => out.push(Effect::DigStep(Box::new(DigStep::Take {
+                    from: Sel::Var(vars::DUG_FOUND),
+                    chooser,
+                    filter,
+                    each_of,
+                    count,
+                    up_to,
+                    random,
+                    reveal,
+                    to,
+                }))),
+                _ => {
+                    b.targets.truncate(saved.0);
+                    b.it = saved.1;
+                    return false;
+                }
+            },
+            _ => {
+                b.targets.truncate(saved.0);
+                b.it = saved.1;
+                return false;
+            }
+        }
+    }
+    let old = std::mem::take(prev);
+    let mut all = vec![old];
+    all.extend(out);
+    *prev = Effect::seq(all);
+    b.it = Sel::Var(vars::IT);
+    true
+}
+
 const DRAWN_MARK: &str = "\u{1}drawn and revealed";
 
 inventory::submit! {
@@ -1284,7 +1356,14 @@ fn counted_of_them(s: &str, may: bool) -> Option<(Counted, &str)> {
         .strip_prefix("of them")
         .or_else(|| r.strip_prefix("of those cards"))
         .or_else(|| r.strip_prefix("of the revealed cards"))
-    {
+        // "one of those two cards" (the cards a "reveal until" found).
+        .or_else(|| {
+            ["two", "three", "four", "five"].iter().find_map(|n| {
+                r.strip_prefix("of those ")?
+                    .strip_prefix(n)?
+                    .strip_prefix(" cards")
+            })
+        }) {
         Some(x) => x,
         // "Put one into your hand and exile the rest", "Put one back": a number word.
         None if !s.starts_with("a ") && !s.starts_with("an ") && !s.starts_with("any ") => {
