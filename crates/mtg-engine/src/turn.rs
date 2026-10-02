@@ -524,18 +524,14 @@ impl Game {
                 }
             }
             other => {
-                let uses_stack = matches!(other, Action::Cast { .. } | Action::Activate { .. });
-                let top_before = self.stack.last().copied();
-                if self.perform_action(p, other).is_ok() {
-                    // CR 807.5b: with priority for several stacks, the player chooses one.
-                    if let Some(new) = self
-                        .stack
-                        .last()
-                        .copied()
-                        .filter(|t| uses_stack && Some(*t) != top_before)
-                    {
-                        crate::multiplayer::grand_melee::choose_stack(self, p, new);
-                    }
+                // CR 807.5b: with priority for several stacks, the player specifies the
+                // stack as they announce the spell or ability.
+                let chosen = crate::multiplayer::grand_melee::announce_stack(self, p, &other);
+                let done = self.perform_action(p, other).is_ok();
+                if let Some(c) = chosen {
+                    crate::multiplayer::grand_melee::finish_announced(self, p, c, done);
+                }
+                if done {
                     // CR 117.3c: the player who acted receives priority again.
                     self.turn.passes = 0;
                     self.turn.priority = Some(p);

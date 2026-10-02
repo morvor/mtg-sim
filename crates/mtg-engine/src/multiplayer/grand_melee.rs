@@ -903,32 +903,57 @@ pub fn expire_this_turns(g: &mut Game, pred: impl Fn(&Duration) -> bool) -> bool
     true
 }
 
+/// Where a spell or ability a player announces with priority for several stacks goes
+/// (see [`announce_stack`]).
+pub struct ChosenStack {
+    /// The marker whose turn was being played, to switch back to.
+    back: usize,
+    /// Who had priority for the chosen stack before.
+    priority: Option<PlayerId>,
+}
+
 /// CR 807.5b: a player who has priority for several stacks and casts a spell or activates
-/// an ability chooses the stack it's put on. `id` is the new spell or ability, on the
-/// stack being played. It must stay there if it targets an object on that stack, or if
-/// it could be cast or activated only because that stack is empty in its controller's
-/// main phase (sorcery timing). Otherwise the player may choose the stack of another
-/// marker whose turn is at a point where players have priority and for which they have
-/// priority (CR 807.5a); they then have priority for that stack (CR 117.3c).
-pub fn choose_stack(g: &mut Game, p: PlayerId, id: ObjectId) {
-    if !several_turns(g) || g.stack.last() != Some(&id) {
-        return;
-    }
-    if targets_stack_object(g, id) || !instant_speed(g, id) {
-        return;
+/// an ability specifies the stack it's put on, as it's announced (CR 601.2a, 602.2a). The
+/// options are the stacks of the markers whose turns are at a point where players have
+/// priority, for which the player has priority (CR 807.5a), and on which the action is
+/// possible (a sorcery-speed spell only on the stack of its controller's own turn). With
+/// another stack chosen, its marker's turn becomes the one being played while the spell
+/// or ability is cast or activated: its targets can then be only objects on that stack
+/// (or not on a stack), as the stack of the turn being played is the only one whose
+/// objects are offered and accepted as targets. Call [`finish_announced`] afterwards.
+pub fn announce_stack(
+    g: &mut Game,
+    p: PlayerId,
+    action: &crate::decision::Action,
+) -> Option<ChosenStack> {
+    use crate::decision::Action;
+    if !several_turns(g) || !matches!(action, Action::Cast { .. } | Action::Activate { .. }) {
+        return None;
     }
     let cur = gm(g).current;
     let n = gm(g).markers.len();
-    let options: Vec<usize> = (0..n)
+    let candidates: Vec<usize> = (0..n)
         .filter(|j| {
-            *j == cur
-                || (gm(g).markers[*j].ctx.as_ref().is_some_and(|c| {
+            *j != cur
+                && gm(g).markers[*j].ctx.as_ref().is_some_and(|c| {
                     c.turn.stage == crate::turn::Stage::Priority && c.turn.priority.is_some()
-                }) && gets_priority_for(g, p, *j))
+                })
+                && gets_priority_for(g, p, *j)
         })
         .collect();
+    let mut options = vec![cur];
+    for j in candidates {
+        switch_to(g, j);
+        let before = g.turn.priority.replace(p);
+        let legal = g.legal_actions(p).contains(action);
+        g.turn.priority = before;
+        switch_to(g, cur);
+        if legal {
+            options.push(j);
+        }
+    }
     if options.len() < 2 {
-        return;
+        return None;
     }
     let labels: Vec<String> = options
         .iter()
@@ -937,11 +962,16 @@ pub fn choose_stack(g: &mut Game, p: PlayerId, id: ObjectId) {
             format!("the stack of turn marker {} ({})", m.number, m.holder)
         })
         .collect();
+    let what = match action {
+        Action::Cast { card, .. } => g.describe(*card),
+        Action::Activate { source, .. } => format!("an ability of {}", g.describe(*source)),
+        _ => String::new(),
+    };
     let pick = match g.ask(
         p,
         crate::decision::Decision::ChooseOption {
-            source: Some(id),
-            prompt: format!("Choose the stack to put {} on", g.describe(id)),
+            source: None,
+            prompt: format!("Choose the stack to put {what} on"),
             options: labels,
         },
     ) {
@@ -949,50 +979,27 @@ pub fn choose_stack(g: &mut Game, p: PlayerId, id: ObjectId) {
         _ => cur,
     };
     if pick == cur {
-        return;
+        return None;
     }
-    g.stack.retain(|x| *x != id);
     switch_to(g, pick);
-    g.stack.push(id);
-    // CR 117.3c: the player receives priority for that stack, and the other players must
-    // pass in succession again.
-    g.turn.priority = Some(p);
-    g.turn.passes = 0;
-    g.log(|g| format!("{p} puts {} on this stack", g.describe(id)));
-    switch_to(g, cur);
-}
-
-/// Whether the spell or ability `id` targets an object on a stack.
-fn targets_stack_object(g: &Game, id: ObjectId) -> bool {
-    g.obj(id).stack.as_deref().is_some_and(|si| {
-        si.chosen.iter().any(|m| {
-            m.targets.iter().flatten().any(|e| {
-                e.object()
-                    .is_some_and(|o| g.obj(o).zone == crate::object::Zone::Stack)
-            })
-        })
+    let priority = g.turn.priority.replace(p);
+    Some(ChosenStack {
+        back: cur,
+        priority,
     })
 }
 
-/// Whether the spell or ability `id` could have been cast or activated while its stack
-/// wasn't empty (rather than only with sorcery timing, CR 307.1, 602.5d).
-fn instant_speed(g: &Game, id: ObjectId) -> bool {
-    use crate::object::StackKind;
-    let o = g.obj(id);
-    let Some(si) = o.stack.as_deref() else {
-        return false;
-    };
-    match &si.kind {
-        StackKind::Activated { ability, .. } => matches!(
-            &ability.kind,
-            crate::ability::AbilityKind::Activated(a)
-                if a.timing == crate::ability::ActivationTiming::Instant
-        ),
-        StackKind::Triggered { .. } => false,
-        _ => {
-            si.cast.instant_timing
-                || o.chars.is(CardType::Instant)
-                || o.chars.has_keyword(crate::keywords::KeywordKind::Flash)
-        }
+/// After a spell or ability was announced on another stack ([`announce_stack`]): if it
+/// was put on that stack, the player receives priority for it and the other players must
+/// pass in succession again (CR 117.3c); otherwise whoever had priority for it keeps it.
+/// The turn that was being played becomes current again.
+pub fn finish_announced(g: &mut Game, p: PlayerId, chosen: ChosenStack, done: bool) {
+    if done {
+        g.turn.priority = Some(p);
+        g.turn.passes = 0;
+        g.log(|_| format!("{p} acts on the stack of another turn"));
+    } else {
+        g.turn.priority = chosen.priority;
     }
+    switch_to(g, chosen.back);
 }

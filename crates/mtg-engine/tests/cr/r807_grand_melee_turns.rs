@@ -275,21 +275,85 @@ fn a_player_with_priority_for_several_stacks_chooses_the_stack_for_a_spell() {
     assert_eq!(t.g.turn.passes, 0);
 }
 
+/// The target candidates P2 was offered for Counterspell.
+fn counterspell_candidates(t: &TestGame) -> Vec<Entity> {
+    t.asked()
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseTargets { candidates, .. } if *p == P2 => Some(candidates.clone()),
+            _ => None,
+        })
+        .next_back()
+        .expect("asked for targets")
+}
+
 #[test]
-fn a_spell_targeting_a_spell_stays_on_its_stack() {
+fn a_spell_targets_only_objects_on_the_stack_chosen_for_it() {
     cr!("807.5b");
-    let mut t = two_stacks();
-    t.lands(P2, "Island", 2);
-    let cs = t.hand(P2, "Counterspell");
-    let target = t.g.stack[0];
-    t.answer_targets(P2, &[Entity::Object(target)]);
-    t.g.take_action(
-        P2,
-        Action::Cast {
-            card: cs,
-            method: CastMethod::Normal,
-        },
-    );
-    assert!(!chose_stack(&t));
-    assert_eq!(t.g.stack.last(), Some(&t.g.current(cs)));
+    // The stack is chosen as Counterspell is announced, before its target: on the first
+    // marker's stack it can target only Quick Thought, on the second's only Slow Thought.
+    for (stack, on) in [(0usize, "Quick Thought"), (1, "Slow Thought")] {
+        let mut t = two_stacks();
+        let mine = t.g.stack[0];
+        grand_melee::switch_to(&mut t.g, 1);
+        let other = t.g.stack[0];
+        grand_melee::switch_to(&mut t.g, 0);
+        t.lands(P2, "Island", 2);
+        let cs = t.hand(P2, "Counterspell");
+        t.answer(P2, DecisionKind::Option, Answer::Index(stack));
+        // P2 tries to target the spell on the first marker's stack either way.
+        t.answer_targets(P2, &[Entity::Object(mine)]);
+        t.g.take_action(
+            P2,
+            Action::Cast {
+                card: cs,
+                method: CastMethod::Normal,
+            },
+        );
+        assert!(chose_stack(&t));
+        let target = if stack == 0 { mine } else { other };
+        assert_eq!(t.g.obj(target).name(), on);
+        assert_eq!(counterspell_candidates(&t), vec![Entity::Object(target)]);
+        grand_melee::switch_to(&mut t.g, stack);
+        let spell = t.g.current(cs);
+        assert_eq!(t.g.stack.last(), Some(&spell));
+        // On the second stack that answer isn't legal: it targets Slow Thought.
+        let chosen = &t.g.obj(spell).stack.as_ref().unwrap().chosen[0].targets;
+        assert_eq!(chosen, &vec![vec![Entity::Object(target)]]);
+    }
+}
+
+#[test]
+fn a_sorcery_speed_spell_is_offered_only_its_own_turns_stack() {
+    cr!("807.5b", "307.1");
+    // P0, on their own turn with an empty first stack, casts a spell. P0 has priority for
+    // the second marker's stack too, being within range of P1's spell on it (CR 807.5a):
+    // an instant may go on either stack, a sorcery only on the stack of P0's own turn.
+    for (card, asked) in [("Opt", true), ("Lay of the Land", false)] {
+        let mut t = gm(10);
+        grand_melee::switch_to(&mut t.g, 1);
+        t.g.turn.step = Step::PrecombatMain;
+        t.g.turn.stage = Stage::Priority;
+        let b = t.custom(P1, super::r114_common::free_instant("Slow Thought"), Zone::Hand(P1));
+        t.cast(P1, b).go();
+        t.g.turn.priority = Some(P4);
+        grand_melee::switch_to(&mut t.g, 0);
+        t.g.turn.stage = Stage::Priority;
+        t.g.turn.priority = Some(P0);
+        t.lands(P0, "Forest", 1);
+        t.lands(P0, "Island", 1);
+        let s = t.hand(P0, card);
+        t.g.take_action(
+            P0,
+            Action::Cast {
+                card: s,
+                method: CastMethod::Normal,
+            },
+        );
+        let was_asked = t.asked().iter().any(|(p, d)| {
+            *p == P0 && matches!(d, Decision::ChooseOption { prompt, .. } if prompt.contains("stack"))
+        });
+        assert_eq!(was_asked, asked, "{card}");
+        assert_eq!(t.g.stack.last(), Some(&t.g.current(s)), "{card}");
+    }
 }
