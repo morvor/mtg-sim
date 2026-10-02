@@ -147,6 +147,18 @@ fn parse_triggered_at(
     if matches!(it_player, PlayerRef::Iterated) && eff.to_lowercase().contains("that player") {
         return None;
     }
+    // "Whenever ~ becomes blocked by a creature, the blocking creature gets -1/-1 until
+    // end of turn." (Order of the Mirror): the blocker is the creature the trigger is
+    // about.
+    let blocking_named;
+    let eff = if matches!(trigger, TriggerCond::BlockedByCreature { .. })
+        && eff.contains("the blocking creature")
+    {
+        blocking_named = eff.replace("the blocking creature", "that creature");
+        blocking_named.as_str()
+    } else {
+        eff
+    };
     let mut body = parse_trigger_body(eff, ctx, it, it_player)?;
     // "Whenever you cast your first spell with {X} in its mana cost each turn, put X +1/+1
     // counters on ~": a triggered ability has no X of its own; X is the spell's (CR 107.3e).

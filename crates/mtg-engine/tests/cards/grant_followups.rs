@@ -232,3 +232,68 @@ fn broodwarden_pumps_only_eldrazi_spawn_creatures() {
     assert_eq!(t.pt(spawn), (2, 2));
     assert_eq!(t.pt(eldrazi), (3, 3));
 }
+
+#[test]
+fn zurgo_warrior_tokens_cant_be_sacrificed_during_your_end_step() {
+    cr!("702.181a", "611.3a");
+    assert_supported(&["Zurgo, Thunder's Decree"]);
+    let mut t = TestGame::new(2);
+    let z = t.battlefield(P0, "Zurgo, Thunder's Decree");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(z, Entity::Player(P1))], &[]);
+    let warriors = |t: &TestGame| {
+        t.g.permanents()
+            .filter(|o| o.is_token() && o.chars.has_subtype("Warrior"))
+            .count()
+    };
+    assert_eq!(warriors(&t), 2);
+    // Mobilize's "sacrifice them at the beginning of the next end step" does nothing.
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(warriors(&t), 2);
+}
+
+#[test]
+fn henrika_pumps_creatures_with_any_of_the_keywords() {
+    cr!("702.9a", "611.2c");
+    assert_supported(&["Henrika Domnathi // Henrika, Infernal Seer"]);
+    let mut t = TestGame::new(2);
+    let h = t.battlefield(P0, "Henrika Domnathi // Henrika, Infernal Seer");
+    assert!(mtg_engine::dfc::transform(&mut t.g, h));
+    let h = t.g.current(h);
+    let drake = t.battlefield(P0, "Wind Drake");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Wind Drake");
+    t.lands(P0, "Swamp", 3);
+    t.settle();
+    let idx = t
+        .obj_now(h)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+        .position(|a| a.text.contains("and/or"))
+        .unwrap();
+    t.activate(P0, h, idx, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.pt(h), (4, 4));
+    assert_eq!(t.pt(drake), (3, 2));
+    assert_eq!(t.pt(bears), (2, 2));
+    assert_eq!(t.pt(theirs), (2, 2));
+}
+
+#[test]
+fn order_of_the_alabaster_host_shrinks_the_blocking_creature() {
+    cr!("509.3d");
+    assert_supported(&["Order of the Mirror // Order of the Alabaster Host"]);
+    let mut t = TestGame::new(2);
+    let o = t.battlefield(P0, "Order of the Mirror // Order of the Alabaster Host");
+    assert!(mtg_engine::dfc::transform(&mut t.g, o));
+    let o = t.g.current(o);
+    let blocker = t.battlefield(P1, "Colossal Dreadmaw");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(o, Entity::Player(P1))], &[(blocker, o)]);
+    assert_eq!(t.pt(blocker), (5, 5));
+    assert_eq!(t.pt(other), (2, 2));
+}
