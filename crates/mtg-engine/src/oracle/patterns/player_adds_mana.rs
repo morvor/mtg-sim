@@ -1,7 +1,8 @@
 //! "Target player adds [mana]" (Jetfire, Ingenious Scientist: "Target player adds that
 //! much {C}."; Radiant Lotus: "Target player adds three mana of the chosen color for each
 //! artifact sacrificed this way."): mana added to another player's mana pool (CR 106.4).
-//! An ability with a target isn't a mana ability (CR 605.1a), so it uses the stack.
+//! An ability with a target isn't a mana ability (CR 605.1a), so it uses the stack. The
+//! ability's controller chooses the color of mana "of any color" (CR 608.2d).
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -20,7 +21,11 @@ fn player_adds(l: &str, b: &mut Builder) -> Option<Effect> {
         let add = match &mut e {
             Effect::AddMana { who: w, .. } => w,
             Effect::Seq(v) => match v.as_mut_slice() {
-                [Effect::Choose { .. }, Effect::AddMana { who: w, .. }] => w,
+                [Effect::Choose { .. }, Effect::AddMana {
+                    who: w,
+                    mana: ManaProduction::ChosenColor(_),
+                    ..
+                }] => w,
                 _ => return None,
             },
             _ => return None,
@@ -28,8 +33,35 @@ fn player_adds(l: &str, b: &mut Builder) -> Option<Effect> {
         if !matches!(add, PlayerRef::You) {
             return None;
         }
-        *add = who;
-        Some(e)
+        *add = who.clone();
+        // A choice the mana offers is made by the ability's controller (CR 608.2d), not
+        // the player adding it ("that player adds one mana of any color they choose" says
+        // otherwise): "one mana of any color" is a color they choose, then that mana.
+        match e {
+            Effect::AddMana {
+                mana: ManaProduction::AnyOneColor(n),
+                restriction,
+                ..
+            } => Some(Effect::Seq(vec![
+                Effect::Choose {
+                    who: PlayerRef::You,
+                    kind: ChoiceKind::Color,
+                },
+                Effect::AddMana {
+                    who,
+                    mana: ManaProduction::ChosenColor(n),
+                    restriction,
+                },
+            ])),
+            Effect::AddMana {
+                mana:
+                    ManaProduction::Fixed(_) | ManaProduction::Amount(..) | ManaProduction::ChosenColor(_),
+                ..
+            } => Some(e),
+            // After "Choose a color.": that color.
+            Effect::Seq(_) => Some(e),
+            _ => None,
+        }
     })();
     if parsed.is_none() {
         b.targets.truncate(before);

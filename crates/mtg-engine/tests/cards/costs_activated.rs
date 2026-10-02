@@ -251,7 +251,7 @@ fn ion_storm_removes_either_kind_of_counter() {
 
 #[test]
 fn costs_less_if_an_opponent_controls_four_nonbasic_lands() {
-    cr!("601.2f", "602.2b", "113.6j");
+    cr!("601.2f", "602.2b", "113.6m");
     compiles("Razorlash Transmogrant");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -269,6 +269,20 @@ fn costs_less_if_an_opponent_controls_four_nonbasic_lands() {
     let on = t.named_on_battlefield("Razorlash Transmogrant");
     assert_eq!(on.len(), 1);
     assert_eq!(t.counters(on[0], "+1/+1"), 1);
+
+    // One opponent must control all four: two opponents with two each don't count.
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Swamp", 2);
+    let razorlash = t.graveyard(P0, "Razorlash Transmogrant");
+    for _ in 0..2 {
+        t.battlefield(P1, "Ancient Tomb");
+        t.battlefield(P2, "Ancient Tomb");
+    }
+    assert!(t.activate(P0, razorlash, 0, &[]).is_err());
+    t.battlefield(P2, "Ancient Tomb");
+    t.battlefield(P2, "Ancient Tomb");
+    t.activate(P0, razorlash, 0, &[]).unwrap();
 }
 
 #[test]
@@ -292,15 +306,53 @@ fn suppression_field_taxes_activated_abilities_but_not_mana_abilities() {
 
 #[test]
 fn thran_portal_mana_costs_a_life() {
-    cr!("602.2b", "605.1a", "118.8a");
+    cr!("602.2b", "605.1a", "118.8", "118.3");
+    ruling!("Thran Portal", "You still have to pay that mana ability's other costs");
+    ruling!("Thran Portal", "the last ability of each of them applies only to itself");
     compiles("Thran Portal");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     // As it enters, it becomes a Plains (the first basic land type offered).
     let portal = t.enter(P0, "Thran Portal");
+    let other = t.enter(P0, "Thran Portal");
     t.activate(P0, portal, 0, &[]).unwrap();
+    // One life (not two for two Portals), and the land is tapped.
     assert_eq!(t.life(P0), 19);
-    assert!(t.g.player(P0).mana_pool.total() >= 1);
+    assert!(t.obj_now(portal).tapped);
+    assert!(!t.obj_now(other).tapped);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 1);
+    // Tapped: the other cost can't be paid again.
+    assert!(t.activate(P0, portal, 0, &[]).is_err());
+    assert_eq!(t.life(P0), 19);
+}
+
+#[test]
+fn automatic_payment_counts_the_life_a_mana_ability_costs() {
+    cr!("601.2g", "118.3", "119.4");
+    // A Plains pays {W} rather than the Portal, whose mana costs a life.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let portal = t.enter(P0, "Thran Portal");
+    let plains = t.lands(P0, "Plains", 1);
+    let lions = t.hand(P0, "Savannah Lions");
+    t.cast(P0, lions).go();
+    assert_eq!(t.life(P0), 20);
+    assert!(!t.obj_now(portal).tapped);
+    assert!(t.obj_now(plains[0]).tapped);
+    // With no life to pay (at 0 life under Platinum Angel), the Portal can't help pay, and
+    // the Plains still does.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Platinum Angel");
+    t.g.players[P0.idx()].life = 0;
+    let portal = t.enter(P0, "Thran Portal");
+    t.lands(P0, "Plains", 1);
+    let lions = t.hand(P0, "Savannah Lions");
+    t.cast(P0, lions).go();
+    assert!(!t.obj_now(portal).tapped);
+    let lions2 = t.hand(P0, "Savannah Lions");
+    assert!(t.cast(P0, lions2).try_go().is_err());
+    assert_eq!(t.life(P0), 0);
 }
 
 #[test]
@@ -343,7 +395,7 @@ fn danitha_reduces_aura_and_equipment_spells() {
 
 #[test]
 fn gallia_returns_with_a_counter_on_her() {
-    cr!("602.2b", "113.6j");
+    cr!("602.2b", "113.6m");
     compiles("Gallia, Tragic Host");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -383,6 +435,9 @@ fn radiant_lotus_adds_three_mana_per_artifact_sacrificed() {
     t.answer(P0, DecisionKind::X, Answer::Number(2));
     t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
     t.activate(P0, lotus, 0, &[Entity::Player(P0)]).unwrap();
+    // It targets, so it isn't a mana ability: it waits on the stack.
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
     assert_eq!(t.zone(a), Zone::Graveyard(P0));
     assert_eq!(t.zone(b), Zone::Graveyard(P0));
     t.resolve();
@@ -416,4 +471,83 @@ fn a_long_flavor_word_before_an_activated_ability() {
         1,
         "a Food token"
     );
+}
+
+
+#[test]
+fn target_player_adds_mana_of_a_color_its_controller_chooses() {
+    cr!("605.1a", "608.2d", "106.4");
+    ruling!("The Warring Triad", "last ability isn't a mana ability");
+    compiles("The Warring Triad");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    // Fewer than eight cards in the graveyard: not a creature, so {T} can be paid.
+    let triad = t.battlefield(P0, "The Warring Triad");
+    t.library_top(P0, "Shock");
+    t.activate(P0, triad, 0, &[Entity::Player(P1)]).unwrap();
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(t.g.player(P1).mana_pool.total(), 0);
+    // The controller picks black (W, U, B, R, G); P1's answer is never asked for.
+    t.answer(P0, DecisionKind::Option, Answer::Index(2));
+    t.answer(P1, DecisionKind::Option, Answer::Index(4));
+    t.resolve();
+    assert_eq!(t.g.player(P1).mana_pool.count(ManaType::B), 1);
+    assert_eq!(t.g.player(P1).mana_pool.total(), 1);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+}
+
+#[test]
+fn x_counters_removed_is_bounded_by_the_counters_not_the_mana() {
+    cr!("107.3a", "602.2b", "118.3");
+    compiles("Retribution of the Ancients");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Swamp", 1);
+    let retribution = t.battlefield(P0, "Retribution of the Ancients");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    counters(&mut t, bears, "+1/+1", 3);
+    let wurm = t.battlefield(P1, "Craw Wurm"); // 6/4
+    // One mana, but three counters: X can be 3.
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    t.activate(P0, retribution, 0, &[Entity::Object(wurm)]).unwrap();
+    let max = t
+        .asked()
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseX { max, .. } => Some(max),
+            _ => None,
+        })
+        .unwrap();
+    assert!(max >= 3, "X offered up to {max}");
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+    t.resolve();
+    assert_eq!(t.pt(wurm), (3, 1));
+}
+
+#[test]
+fn corpseweft_token_is_twice_the_cards_exiled() {
+    cr!("107.3a", "602.2b");
+    compiles("Corpseweft");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Swamp", 2);
+    let weft = t.battlefield(P0, "Corpseweft");
+    let a = t.graveyard(P0, "Grizzly Bears");
+    let b = t.graveyard(P0, "Craw Wurm");
+    t.graveyard(P0, "Shock");
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.activate(P0, weft, 0, &[]).unwrap();
+    assert_eq!(t.zone(a), Zone::Exile);
+    assert_eq!(t.zone(b), Zone::Exile);
+    t.resolve();
+    let tokens: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.is_token())
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(t.pt(tokens[0]), (4, 4));
+    assert!(t.obj_now(tokens[0]).tapped);
 }
