@@ -139,6 +139,12 @@ fn becomes(l: &str, b: &mut Builder) -> Option<Effect> {
         Some((p, k)) => (p, crate::oracle::effects::keyword_mods(k)?),
         None => (pred, vec![]),
     };
+    // "becomes a Bird with base power and toughness 1/1 and flying until end of turn":
+    // keywords it has for the same duration.
+    let (pred, gained) = match gained.is_empty().then(|| pt_and_keywords(pred)).flatten() {
+        Some(x) => x,
+        None => (pred, gained),
+    };
     // "becomes a blue Dragon Illusion with base power and toughness 4/4, loses all
     // abilities, and gains flying": the abilities it had are removed before the keywords
     // are gained (one effect, applied in the order written within layer 6, CR 613.1f).
@@ -237,6 +243,20 @@ fn becomes(l: &str, b: &mut Builder) -> Option<Effect> {
         mods,
         duration,
     })
+}
+
+/// "[type words] with base power and toughness N/N and [keywords]": the type words with
+/// the power and toughness, and the keywords.
+fn pt_and_keywords(pred: &str) -> Option<(&str, Vec<Modification>)> {
+    const BASE: &str = " with base power and toughness ";
+    let i = pred.find(BASE)?;
+    let after = &pred[i + BASE.len()..];
+    let (pt, rest) = after.split_once(' ')?;
+    let (p, t) = pt.split_once('/')?;
+    p.parse::<i32>().ok()?;
+    t.parse::<i32>().ok()?;
+    let keywords = crate::oracle::effects::keyword_mods(rest.strip_prefix("and ")?)?;
+    Some((&pred[..i + BASE.len() + pt.len()], keywords))
 }
 
 inventory::submit! { EffectPattern { name: "becomes [type words]", priority: 100, parse: becomes } }

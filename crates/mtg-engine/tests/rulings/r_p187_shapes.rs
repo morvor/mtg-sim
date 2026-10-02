@@ -322,3 +322,142 @@ fn septic_rats_gets_at_most_plus_one_regardless_of_poison() {
     t.resolve_all();
     assert_eq!(t.pt(rats), (3, 3));
 }
+
+// ---------------------------------------------------------------------------------------
+// "becomes a [type] with base power and toughness N/N and [keyword]"
+// ---------------------------------------------------------------------------------------
+
+/// P0 owns Lost Mine of Phandelver and ventures through it until it's completed (none of
+/// its rooms touch creatures).
+fn complete_dungeon(t: &mut TestGame) {
+    use mtg_engine::ability::{Effect, KeywordAction, PlayerRef, Sel, Value};
+    use mtg_engine::decision::Answer;
+    t.custom(
+        P0,
+        (*mtg_engine::card::card("Lost Mine of Phandelver")).clone(),
+        mtg_engine::object::Zone::Outside(P0),
+    );
+    for choice in [None, Some(1), Some(0), None] {
+        if let Some(i) = choice {
+            t.answer(P0, DecisionKind::Option, Answer::Index(i));
+        }
+        let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+        t.g.exec(
+            &Effect::KeywordAction {
+                action: KeywordAction::Venture,
+                who: PlayerRef::You,
+                what: Sel::None,
+                n: Value::c(1),
+            },
+            &mut ctx,
+        );
+        t.g.flush_events();
+        t.resolve_all();
+    }
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.g.player(P0).dungeons_completed, 1);
+}
+
+#[test]
+fn eccentric_apprentice_works_for_a_dungeon_completed_earlier() {
+    cr!("309.7", "603.4");
+    ruling!(
+        "Eccentric Apprentice",
+        "Eccentric Apprentice's last ability works even if it wasn't on the battlefield when you completed a dungeon and even if the dungeon was completed on a previous turn."
+    );
+    supported("Eccentric Apprentice");
+    // No dungeon completed: no trigger.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Eccentric Apprentice");
+    t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    // A dungeon completed on an earlier turn, before the Apprentice was there.
+    let mut t = TestGame::new(2);
+    complete_dungeon(&mut t);
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.advance_to(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.battlefield(P0, "Eccentric Apprentice");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[o(giant)]);
+    t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.pt(giant), (1, 1));
+    assert!(has_kw(&t, giant, KeywordKind::Flying));
+}
+
+#[test]
+fn eccentric_apprentice_makes_a_bird_that_keeps_its_abilities() {
+    cr!("205.1a", "613.1d", "613.4b");
+    ruling!(
+        "Eccentric Apprentice",
+        "A creature that becomes a Bird this way loses all other creature types but does not lose any of its abilities."
+    );
+    let mut t = TestGame::new(2);
+    complete_dungeon(&mut t);
+    t.battlefield(P0, "Eccentric Apprentice");
+    let angel = t.battlefield(P1, "Serra Angel");
+    t.answer_targets(P0, &[o(angel)]);
+    t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.resolve_all();
+    let a = t.obj_now(angel);
+    assert!(a.chars.has_subtype("Bird") && !a.chars.has_subtype("Angel"));
+    assert!(a.has_keyword(KeywordKind::Vigilance));
+    assert!(a.has_keyword(KeywordKind::Flying));
+    assert_eq!(t.pt(angel), (1, 1));
+    // Until end of turn.
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    assert!(t.obj_now(angel).chars.has_subtype("Angel"));
+    assert_eq!(t.pt(angel), (4, 4));
+}
+
+#[test]
+fn figure_of_fable_levels_up_through_permanent_becomes_effects() {
+    cr!("611.2a", "613.1d", "613.4b", "702.16k");
+    supported("Figure of Fable");
+    // "{G/W}: This creature becomes a Kithkin Scout with base power and toughness 2/3."
+    // "{1}{G/W}{G/W}: If this creature is a Scout, it becomes a Kithkin Soldier with base
+    // power and toughness 4/5." "{3}{G/W}{G/W}{G/W}: If this creature is a Soldier, it
+    // becomes a Kithkin Avatar with base power and toughness 7/8 and protection from each
+    // of your opponents."
+    let mut t = TestGame::new(2);
+    let fig = t.battlefield(P0, "Figure of Fable");
+    // Not a Soldier yet: the last ability does nothing.
+    t.lands(P0, "Plains", 6);
+    t.activate(P0, fig, 2, &[]).expect("avatar");
+    t.resolve_all();
+    assert_eq!(t.pt(fig), (1, 1));
+    t.lands(P0, "Plains", 1);
+    t.activate(P0, fig, 0, &[]).expect("scout");
+    t.resolve_all();
+    assert_eq!(t.pt(fig), (2, 3));
+    assert!(t.obj_now(fig).chars.has_subtype("Scout"));
+    t.lands(P0, "Plains", 3);
+    t.activate(P0, fig, 1, &[]).expect("soldier");
+    t.resolve_all();
+    let f = t.obj_now(fig);
+    assert!(f.chars.has_subtype("Soldier") && !f.chars.has_subtype("Scout"));
+    assert!(f.chars.has_subtype("Kithkin"));
+    assert_eq!(t.pt(fig), (4, 5));
+    t.lands(P0, "Plains", 6);
+    t.activate(P0, fig, 2, &[]).expect("avatar");
+    t.resolve_all();
+    assert!(t.obj_now(fig).chars.has_subtype("Avatar"));
+    assert!(has_kw(&t, fig, KeywordKind::Protection));
+    assert_eq!(t.pt(fig), (7, 8));
+    // No duration: it lasts into later turns. An opponent's spell can't target it.
+    t.advance_to(P1, mtg_engine::turn::Step::PrecombatMain);
+    assert_eq!(t.pt(fig), (7, 8));
+    assert!(t.obj_now(fig).chars.has_subtype("Avatar"));
+    let from = t.asked().len();
+    crate::r_s25_common::lands_for_cost(&mut t, P1, "Lightning Bolt");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let _ = t.cast(P1, bolt).try_go();
+    let cands = crate::r_s02_common::target_candidates(&t, P1, from);
+    assert!(cands.iter().all(|c| !c.contains(&o(fig))));
+}
