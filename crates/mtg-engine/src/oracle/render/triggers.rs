@@ -90,8 +90,17 @@ impl Renderer<'_> {
         let saved_salient = self.self_salient;
         // "You may exert ~ as it attacks. When you do, it gets ...": the object was just
         // named.
-        self.self_salient = trig.contains('~')
+        // When the trigger condition also names another object ("Whenever ~ becomes
+        // blocked by a creature", "Whenever ~ or another creature enters"), a later "it"
+        // could be that object, so the object itself isn't "it" there.
+        let saved_other = self.other_salient;
+        let saved_named = std::mem::replace(&mut self.self_named_in_clause, false);
+        self.other_salient = names_another_object(&trig);
+        self.self_salient = (trig.contains('~') && !self.other_salient)
             || matches!(&t.trigger, TriggerCond::Custom(n) if n == crate::kw::exert::EXERTED);
+        // The event is about the object itself ("Whenever ~ attacks"): the triggering
+        // object is the object itself.
+        let saved_is_self = std::mem::replace(&mut self.trigger_is_self, self.self_salient);
         let mut s = trig;
         if let Some(c) = &t.intervening_if {
             let c = self.condition(c);
@@ -99,6 +108,9 @@ impl Renderer<'_> {
         }
         let body = self.body(&t.body);
         self.self_salient = saved_salient;
+        self.other_salient = saved_other;
+        self.self_named_in_clause = saved_named;
+        self.trigger_is_self = saved_is_self;
         self.zone = saved_zone;
         s = format!("{s}, {}", lower_first(&body));
         if t.once_per_turn {
@@ -361,6 +373,9 @@ impl Renderer<'_> {
                     }
                     (TriggerStep::BeginningOfCombat, PlayerRel::Any) => {
                         "the beginning of each combat".into()
+                    }
+                    (TriggerStep::BeginningOfCombat, PlayerRel::Opponent) => {
+                        "the beginning of combat on each opponent's turn".into()
                     }
                     (TriggerStep::BeginningOfCombat, r) => {
                         let p = self.rel_possessive(*r, Num::One);
@@ -902,4 +917,60 @@ fn plural_verb(vp: &str) -> String {
         other => other.to_string(),
     };
     format!("{base}{rest}")
+}
+
+/// Whether a rendered trigger condition names an object besides the source itself that a
+/// later "it" could refer to ("by a creature", "or another Spirit you control", "to a
+/// Spider"). Players ("a player", "an opponent"), counters, and spells or abilities
+/// ("becomes the target of a spell") don't count, nor does a "while" condition.
+fn names_another_object(trig: &str) -> bool {
+    let t = trig.to_lowercase();
+    let t = t
+        .split(" while ")
+        .next()
+        .and_then(|t| t.split(" {alt:while|if} ").next())
+        .unwrap_or(&t);
+    let words: Vec<&str> = t
+        .split(|c: char| c.is_whitespace() || c == ',' || c == '.')
+        .filter(|w| !w.is_empty())
+        .collect();
+    const DETERMINERS: &[&str] = &["a", "an", "another", "equipped", "enchanted", "fortified"];
+    const NOT_OBJECTS: &[&str] = &[
+        "player",
+        "players",
+        "opponent",
+        "opponents",
+        "spell",
+        "spells",
+        "ability",
+        "abilities",
+        "counter",
+        "counters",
+        "source",
+        "sources",
+        "time",
+        "turn",
+    ];
+    for (i, w) in words.iter().enumerate() {
+        let quantity = (*w == "more" && i >= 2 && words[i - 1] == "or")
+            && matches!(words[i - 2], "one" | "two" | "three");
+        if !DETERMINERS.contains(w) && !quantity {
+            continue;
+        }
+        // The noun: skip modifiers ("a +1/+1 counter", "a nontoken creature").
+        let noun = words[i + 1..]
+            .iter()
+            .find(|n| !n.starts_with(['+', '-']) && !n.ends_with("/+1"));
+        let Some(noun) = noun else {
+            continue;
+        };
+        let next_is_counter = words
+            .get(i + 2)
+            .is_some_and(|n| matches!(*n, "counter" | "counters"));
+        if NOT_OBJECTS.contains(noun) || next_is_counter {
+            continue;
+        }
+        return true;
+    }
+    false
 }

@@ -62,6 +62,49 @@ pub fn note_subject(sentence: &str, b: &mut Builder) {
     }
 }
 
+/// Before a sentence of a triggered ability's text is parsed: when the previous sentence
+/// ended by naming the object itself ("Whenever a land you control enters, put a +1/+1
+/// counter on this creature. It gains flying until end of turn."), or named only it
+/// ("Whenever you cast an instant or sorcery spell, ~ gets +1/+1 until end of turn. Untap
+/// it."), "it" refers to that object, the latest one named, not to the object or spell
+/// the trigger condition named, unless the sentence says "that creature", "that spell",
+/// or "that [another object]".
+/// The same holds for the second half of "[...] ~, then it [...]", and for "he"/"she" on
+/// cards naming a character.
+pub fn note_object_last(prev: Option<&str>, sentence: &str, b: &mut Builder) {
+    let Some(prev) = prev else {
+        return;
+    };
+    let prev = prev.trim().trim_end_matches('.').trim_end();
+    let lower = prev.to_lowercase();
+    // "... put a +1/+1 counter on ~", or "~ gets +1/+1 until end of turn" naming nothing
+    // else.
+    let names_self_last = (prev.ends_with(" ~") && !prev.contains(" or ~"))
+        || (prev.starts_with("~ ")
+            && !lower.contains(" it")
+            && !lower.contains("that ")
+            && !lower.contains("target"));
+    let next = sentence.to_lowercase();
+    // "That creature" / "that spell" / "that scheme" still means the object the trigger
+    // condition named.
+    const NOT_OBJECTS: &[&str] = &[
+        "player", "player's", "much", "many", "opponent", "opponent's", "way", "mana",
+        "amount", "damage", "life", "number", "turn", "step", "phase", "combat", "time",
+        "color", "type", "name", "choice", "mode", "counter", "counters",
+    ];
+    let words: Vec<&str> = next.split_whitespace().collect();
+    let names_trigger_object = words.windows(2).any(|w| {
+        w[0] == "that"
+            && !NOT_OBJECTS.contains(&w[1].trim_end_matches([',', '.', ';']))
+    }) || next.contains("the copy");
+    if names_self_last
+        && !names_trigger_object
+        && matches!(b.it, Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell)
+    {
+        b.it = Sel::This;
+    }
+}
+
 /// The cards the latest search found (see [`note_introduced`]).
 pub const INTRODUCED: Var = vars::USER + 1101;
 

@@ -28,6 +28,15 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|defending player|its controller|its owner|an opponent|a player|\{alt:[^}]*player[^}]*\}) ([a-z]+s) ([^.;",{]*?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
+        replacement: "$1$2 $3 $4$5 $2 $6",
+        why: "A clause without a subject after \"and\", \"then\", or a comma shares the \
+              subject of the clause before it: \"each opponent sacrifices a creature and loses 3 life\" is \
+              \"each opponent sacrifices a creature and each opponent loses 3 life\". \
+              Written out, so that the subject isn't mistaken for the controller's \
+              (see the next entry).",
+    },
+    Equivalence {
         pattern: r"\b(?:is|are) put into your graveyard from the battlefield\b",
         replacement: "you own dies",
         why: "A card goes to its owner's graveyard (CR 400.3), so a permanent put into your \
@@ -83,7 +92,9 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         pattern: r"\byou (draw|discard|mill|scry|surveil|sacrifice|create|put|return|exile|search|reveal|look|shuffle|tap|untap|destroy|investigate|proliferate|seek|conjure|venture|explore|amass|populate|manifest|cloak|choose|add|counter|attach|transform|gain|lose|get|become|take|may|cast|pay|play|win|skip)\b",
         replacement: "$1",
         why: "An instruction without a subject is performed by the ability's controller \
-              (CR 608.2c, 113.8): \"draw a card\" and \"you draw a card\" mean the same.",
+              (CR 608.2c, 113.8): \"draw a card\" and \"you draw a card\" mean the same. \
+              (A subject another player shares with an earlier clause is written out \
+              first, see above.)",
     },
     Equivalence {
         pattern: r"(sacrifices? [^.]*?) of (their|his or her|your) choice\b",
@@ -103,9 +114,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     },
     Equivalence {
         pattern: r"\bthat (creature|permanent|card|spell|land|artifact|enchantment|planeswalker|token|aura|equipment|vehicle|battle|ability|object|source)s?'s\b",
-        replacement: "its",
+        replacement: "thatit's",
         why: "Anaphora: \"that creature's\" and \"its\" both refer back to the object the \
-              text already named; the renderer always uses the pronoun.",
+              text already named; the renderer always uses the pronoun. Kept apart from a \
+              plain \"its\" as `thatit`, which doesn't match the object itself (see \
+              [`token_eq`]).",
     },
     Equivalence {
         pattern: r"\bthat (creature or planeswalker|creature or vehicle|artifact or creature|spell or ability)\b",
@@ -115,8 +128,9 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     },
     Equivalence {
         pattern: r"\b(that|the) (creature|permanent|card|spell|land|artifact|enchantment|planeswalker|token|aura|equipment|vehicle|battle|ability|object|source|copy)\b",
-        replacement: "it",
-        why: "Anaphora: \"that creature\" and \"it\" refer back to the object already named.",
+        replacement: "thatit",
+        why: "Anaphora: \"that creature\" and \"it\" refer back to the object already named \
+              (`thatit` matches \"it\", see [`token_eq`]).",
     },
     Equivalence {
         pattern: r"\b(those|the) (creatures|permanents|cards|spells|lands|artifacts|tokens|objects)\b",
@@ -130,7 +144,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 514.2).",
     },
     Equivalence {
-        pattern: r#"\. (it has|they have|it gains|they gain) ""#,
+        pattern: r#"\. (it has|thatit has|they have|it gains|thatit gains|they gain) ""#,
         replacement: " with \"",
         why: "A token created \"with\" an ability and one that \"has\" it (a following \
               sentence) are the same token (CR 111.1).",
@@ -338,18 +352,29 @@ pub const IGNORED_WORDS: &[(&str, &str)] = &[
         "then",
         "Sequencing word: CR 608.2c, instructions are followed in the order written.",
     ),
+];
+
+/// Quantifier words that may be left out, but never stand for one another: "each X",
+/// "all Xs" and a bare plural ("creatures you control get +1/+1") all mean every object
+/// that matches; "a"/"an" vs none is grammatical number ("put a +1/+1 counter on each
+/// creature" / "creatures with +1/+1 counters on them"). Normalized to `each` and `a`.
+/// A side may leave one out where the other has a word that isn't a quantifier, but "a"
+/// and "each" in the same place mismatch: "sacrifice a creature" isn't "sacrifice all
+/// creatures", nor "if an opponent has ..." "if each opponent has ...".
+pub const OPTIONAL_QUANTIFIERS: &[(&str, &str)] = &[
     (
         "each",
-        "Universal quantification is written \"each X\", \"all Xs\", or a bare plural \
-         (\"creatures you control get +1/+1\"); all mean every object that matches.",
+        "Universal quantification: \"each\", \"all\", or a bare plural.",
     ),
-    ("all", "See \"each\"."),
     (
         "a",
-        "Indefinite article: \"a\"/\"an\" vs none (\"put a +1/+1 counter\" vs \"put \
-         +1/+1 counters\"); counts are always explicit (one, two, X).",
+        "Indefinite article \"a\"/\"an\", or none with a plural.",
     ),
 ];
+
+fn is_quantifier(t: &str) -> bool {
+    t == "a" || t == "each"
+}
 
 /// Self-reference shorthand used on cards (CR 201.5a).
 const SELF_REFS: &[&str] = &[
@@ -527,7 +552,15 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
         let Some(re) = re else {
             continue;
         };
-        s = re.replace_all(&s, e.replacement).to_string();
+        // Until nothing changes (a few rounds): "each player draws two cards, then
+        // discards three cards, then loses 4 life" names the subject once per clause.
+        for _ in 0..6 {
+            let n = re.replace_all(&s, e.replacement).to_string();
+            if n == s {
+                break;
+            }
+            s = n;
+        }
     }
     // Tokenize: keep {..} symbols, +1/+1, ~, words with apostrophes and hyphens.
     let mut tokens = Vec::new();
@@ -588,6 +621,8 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
         for part in parts {
             let p = if part == "an" {
                 "a".to_string()
+            } else if part == "all" {
+                "each".to_string()
             } else {
                 singular(part)
             };
@@ -1182,18 +1217,25 @@ fn seq_match(r: &[String], o: &[String]) -> bool {
         failed: &mut std::collections::HashSet<(usize, usize)>,
     ) -> bool {
         if i == r.len() {
-            return j == o.len();
+            return o[j..].iter().all(|t| is_quantifier(t));
         }
         if failed.contains(&(i, j)) {
             return false;
+        }
+        // A quantifier one side leaves out (see `OPTIONAL_QUANTIFIERS`).
+        let r_q = is_quantifier(&r[i]);
+        let o_q = o.get(j).is_some_and(|t| is_quantifier(t));
+        if (r_q && !o_q && go(r, o, i + 1, j, failed))
+            || (o_q && !r_q && go(r, o, i, j + 1, failed))
+        {
+            return true;
         }
         let ok = match special_token(&r[i]) {
             Some((optional, alts)) => {
                 (optional && go(r, o, i + 1, j, failed))
                     || alts.iter().any(|alt| {
-                        j + alt.len() <= o.len()
-                            && alt.iter().zip(&o[j..]).all(|(x, y)| token_eq(x, y))
-                            && go(r, o, i + 1, j + alt.len(), failed)
+                        (j..=o.len())
+                            .any(|k| seq_match(alt, &o[j..k]) && go(r, o, i + 1, k, failed))
                     })
             }
             None => j < o.len() && token_eq(&r[i], &o[j]) && go(r, o, i + 1, j + 1, failed),
@@ -1203,10 +1245,11 @@ fn seq_match(r: &[String], o: &[String]) -> bool {
         }
         ok
     }
-    // Fast path: no special tokens.
+    // Fast path: no special tokens or quantifiers.
     if !r
         .iter()
-        .any(|t| t.starts_with("{opt:") || t.starts_with("{alt:"))
+        .chain(o)
+        .any(|t| t.starts_with("{opt:") || t.starts_with("{alt:") || is_quantifier(t))
     {
         return r.len() == o.len() && r.iter().zip(o).all(|(x, y)| token_eq(x, y));
     }
@@ -1214,8 +1257,20 @@ fn seq_match(r: &[String], o: &[String]) -> bool {
 }
 
 /// Token equality for [`tokens_match`].
+///
+/// "That creature" (normalized to `thatit`) matches "it", but not the object itself
+/// (`~it`): once a card has named itself again, it calls another object "that creature"
+/// precisely because "it" would now be itself ("Whenever another creature enters,
+/// sacrifice ~. If you do, destroy that creature."). The renderer says `that-object` for
+/// such an object, which matches only "that creature".
 pub fn token_eq(x: &str, y: &str) -> bool {
-    x == y || (x == "~it" && (y == "~" || y == "it")) || (y == "~it" && (x == "~" || x == "it"))
+    x == y
+        || (x == "~it" && (y == "~" || y == "it"))
+        || (y == "~it" && (x == "~" || x == "it"))
+        || (x == "thatit" && y == "it")
+        || (y == "thatit" && x == "it")
+        || (x == "that-object" && y == "thatit")
+        || (y == "that-object" && x == "thatit")
 }
 
 /// Whether the rendered units, in order, spell the Oracle tokens when a unit may drop
@@ -1225,33 +1280,116 @@ pub fn token_eq(x: &str, y: &str) -> bool {
 /// `starts` are the positions where Oracle units (lines) begin: the shared subject is
 /// left out only inside an Oracle line, never at the start of one.
 fn shared_subject_match(oracle: &[String], starts: &[usize], units: &[Vec<String>]) -> bool {
-    let mut pos = 0;
+    // Where a unit can end when it starts at `pos`: a quantifier left out on one side
+    // (`OPTIONAL_QUANTIFIERS`) changes the length.
+    let ends = |t: &[String], pos: usize| -> Vec<usize> {
+        (t.len().saturating_sub(4)..=t.len() + 4)
+            .filter(|n| pos + n <= oracle.len() && tokens_match(&oracle[pos..pos + n], t))
+            .map(|n| pos + n)
+            .collect()
+    };
+    let mut positions = std::collections::BTreeSet::from([0usize]);
     for (i, u) in units.iter().enumerate() {
-        let fits = |t: &[String], pos: usize| {
-            pos + t.len() <= oracle.len() && tokens_match(&oracle[pos..pos + t.len()], t)
-        };
-        if fits(u, pos) {
-            pos += u.len();
-            continue;
-        }
-        let prev = if i > 0 { &units[i - 1] } else { return false };
-        if starts.contains(&pos) {
-            return false;
-        }
-        let lcp = prev.iter().zip(u).take_while(|(a, b)| a == b).count();
-        let mut ok = false;
-        for k in (1..=lcp.min(6)).rev() {
-            if fits(&u[k..], pos) {
-                pos += u.len() - k;
-                ok = true;
-                break;
+        let mut next = std::collections::BTreeSet::new();
+        for &pos in &positions {
+            next.extend(ends(u, pos));
+            if i == 0 || starts.contains(&pos) {
+                continue;
+            }
+            let prev = &units[i - 1];
+            let lcp = prev.iter().zip(u).take_while(|(a, b)| a == b).count();
+            for k in (1..=lcp.min(6)).rev() {
+                // The dropped words must be the whole subject of both units: a predicate
+                // starts right after them in each ("creatures you control have haste and
+                // attack ..." can't drop just "creatures" of "creatures attack ..."), or
+                // they end with a shared verb ("~ enters tapped and with ... counters").
+                let verb_shared = starts_predicate(&u[k - 1..]);
+                if !verb_shared && (!starts_predicate(&prev[k..]) || !starts_predicate(&u[k..])) {
+                    continue;
+                }
+                next.extend(ends(&u[k..], pos));
             }
         }
-        if !ok {
+        if next.is_empty() {
             return false;
         }
+        positions = next;
     }
-    pos == oracle.len()
+    positions.contains(&oracle.len())
+}
+
+/// Whether normalized tokens begin with a verb (the predicate after a subject).
+fn starts_predicate(t: &[String]) -> bool {
+    const VERBS: &[&str] = &[
+        "have",
+        "get",
+        "gain",
+        "lose",
+        "is",
+        "was",
+        "can't",
+        "can",
+        "cannot",
+        "attack",
+        "block",
+        "deal",
+        "don't",
+        "enter",
+        "become",
+        "must",
+        "cost",
+        "untap",
+        "tap",
+        "may",
+        "phase",
+        "fight",
+        "explore",
+        "connive",
+        "put",
+        "draw",
+        "discard",
+        "create",
+        "return",
+        "sacrifice",
+        "exile",
+        "destroy",
+        "add",
+        "gets",
+        "assign",
+        "skip",
+        "play",
+        "cast",
+        "look",
+        "reveal",
+        "search",
+        "shuffle",
+        "mill",
+        "scry",
+        "surveil",
+        "win",
+        "transform",
+        "perpetually",
+        "also",
+        "isn't",
+        "wasn't",
+        "do",
+        "remain",
+        "count",
+        "loses",
+        "deals",
+        "would",
+        "copy",
+        "counter",
+        "choose",
+        "pay",
+        "planeswalk",
+        "venture",
+        "investigate",
+        "proliferate",
+        "regenerate",
+        "mutate",
+    ];
+    t.first().is_some_and(|w| VERBS.contains(&w.as_str()))
 }
 
 /// Multiset difference of units by normalized tokens.

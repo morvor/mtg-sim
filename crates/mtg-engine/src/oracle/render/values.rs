@@ -317,8 +317,20 @@ impl Renderer<'_> {
         }
     }
 
+    /// The subject of [`Condition::PlayerMatches`], which holds if any of the players
+    /// matches: "an opponent has 10 or less life", not "each opponent".
+    pub(crate) fn some_player(&mut self, p: &PlayerRef) -> String {
+        match p {
+            PlayerRef::EachOpponent => "an opponent".into(),
+            PlayerRef::EachPlayer => "a player".into(),
+            PlayerRef::EachOtherPlayer => "another player".into(),
+            other => self.player(other, Case::Subj),
+        }
+    }
+
     /// A condition as a clause ("you control an artifact").
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
+        self.new_clause();
         match c {
             Condition::Always => self.gap("Condition::Always"),
             Condition::Never => self.gap("Condition::Never"),
@@ -351,7 +363,7 @@ impl Renderer<'_> {
                 format!("{subj} {pred}")
             }
             Condition::PlayerMatches(p, pf) => {
-                let subj = self.player(p, Case::Subj);
+                let subj = self.some_player(p);
                 let pred = self.player_predicate(pf, &subj, false);
                 format!("{subj} {pred}")
             }
@@ -425,7 +437,7 @@ impl Renderer<'_> {
                 format!("{subj} {pred}")
             }
             Condition::PlayerMatches(p, pf) => {
-                let subj = self.player(p, Case::Subj);
+                let subj = self.some_player(p);
                 let pred = self.player_predicate(pf, &subj, true);
                 format!("{subj} {pred}")
             }
@@ -815,7 +827,14 @@ impl Renderer<'_> {
             Cmp::Gt => n + 1,
             _ => return None,
         };
-        let you = |r: &mut Self, p: &PlayerRef| -> String { r.player(p, Case::Subj) };
+        // These values look at one player; a group ("each opponent") counts only its
+        // first player, which no wording says.
+        let you = |r: &mut Self, p: &PlayerRef| -> String {
+            if is_player_group(p) {
+                return r.gap("a one-player count of a group of players");
+            }
+            r.player(p, Case::Subj)
+        };
         Some(match a {
             Value::LifeGainedThisTurn(p) => {
                 let w = you(self, p);
@@ -863,7 +882,12 @@ impl Renderer<'_> {
                 format!("{have} drawn {c} this turn")
             }
             Value::SpellsCastThisTurn(p, f) => {
-                let w = you(self, p);
+                // Spells the players cast, together: "an opponent has cast a spell".
+                let w = match (is_player_group(p), min) {
+                    (true, 1) => self.some_player(p),
+                    (true, _) => self.gap("spells several players cast, together"),
+                    (false, _) => you(self, p),
+                };
                 let have = if w == "you" {
                     "you've".to_string()
                 } else {
@@ -944,6 +968,7 @@ impl Renderer<'_> {
             Duration::UntilHostLeaves => String::new(),
             Duration::ThisTurn => "this turn".into(),
             Duration::ThroughNextUntapStep => "during its controller's next untap step".into(),
+            Duration::ThroughYourNextUntapStep => "during your next untap step".into(),
             Duration::UntilYourNextStep(s) => {
                 let s = self.step_name(*s);
                 format!("until your next {s}")
@@ -1008,4 +1033,12 @@ pub(crate) fn split_controller(f: &Filter) -> (Option<PlayerRel>, Filter) {
         }
         other => (None, other.clone()),
     }
+}
+
+/// A reference to several players ("each opponent").
+fn is_player_group(p: &PlayerRef) -> bool {
+    matches!(
+        p,
+        PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
+    )
 }

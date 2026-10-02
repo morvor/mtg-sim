@@ -28,11 +28,13 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"[trigger], you may pay [cost]. If you do, return this card from your graveyard ...\" functioned from the battlefield, so it never triggered | Punishing Fire, Akoum Firebird, Asgardian Inspiration (about 150) | `trigger_zone` for may-pay triggers (also fixed upstream the same way) |\n\
 | \"... deals damage to any other target\" with no earlier target lost \"other\": the object dealing the damage could be the target | Pain for All, Black Panther, Most Dangerous, Red Hulk | `damage_removal::any_other_than` |\n\
 | \"with a single target\" swallowed the rest of the sentence: \"unless its controller pays {2}\" was dropped | Divert | qualifier only at the end; new pattern \"[effect] unless its controller pays [cost]\" (5 more cards supported) |\n\
-| \"Equip ... Activate only once each turn.\" wasn't enforced (it was for crew) | Dark Knight's Greatsword and 3 others | `kw/equip.rs` |\n\n\
-Known approximations the comparison accepts (same meaning in practice, listed here because \
-the AST can't tell the wordings apart): \"doesn't untap during your next untap step\" on an \
-object you control is compiled as \"during its controller's next untap step\"; \"cycle or \
-discard\" triggers are compiled as discard triggers (CR 702.29d).\n\n";
+| \"Equip ... Activate only once each turn.\" wasn't enforced (it was for crew) | Dark Knight's Greatsword and 3 others | `kw/equip.rs` |\n\
+| \"[...] doesn't untap during your next untap step\" was compiled as its controller's next untap step, so a permanent another player gained control of stayed tapped in that player's untap step | Mogg Hollows, Arbalest Elite, Rhonas's Last Stand | `Duration::ThroughYourNextUntapStep` |\n\
+| \"it\" after the card names itself (\"put a +1/+1 counter on ~. It gains flying\", \"sacrifice ~ and it deals 3 damage\", \"~ gets +1/+1 ... Untap it.\") was the triggering object or spell | Mogg Bombers, Machine Man, Model X-51, Blistercoil Weird, Aria of Flame, Vivi Ornitier (about 20) | `oracle_hardening_referents::note_object_last` |\n\
+| \"another target creature\" after an earlier target object also excluded the source, which may be that other target | Itzquinth, Firstborn of Gishath, Rhino, Terrible Trampler (about 30) | `Builder::add_target` |\n\n\
+Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
+triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
+cycled card (CR 702.29d), so the two are the same.\n\n";
 
 /// Cards the coverage reports count: playable paper cards legal somewhere.
 pub fn counted(c: &mtg_data::scryfall::ScryfallCard) -> bool {
@@ -363,6 +365,13 @@ fn report(
     }
     md.push_str("\nIgnored words (`IGNORED_WORDS`):\n\n");
     for (w, why) in IGNORED_WORDS {
+        md.push_str(&format!("- `{w}`: {}\n", squash(why)));
+    }
+    md.push_str(
+        "\nQuantifiers that may be left out but never stand for one another \
+         (`OPTIONAL_QUANTIFIERS`):\n\n",
+    );
+    for (w, why) in mtg_engine::oracle::render::compare::OPTIONAL_QUANTIFIERS {
         md.push_str(&format!("- `{w}`: {}\n", squash(why)));
     }
     md.push_str("\n## Mismatch clusters\n\n| Cards | Difference | Examples |\n|---:|---|---|\n");

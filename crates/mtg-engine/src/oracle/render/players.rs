@@ -162,10 +162,20 @@ impl Renderer<'_> {
             }
         };
         // "another target creature" when the filter says "other" is in `core` already.
-        let (core, other) = if let Some(rest) = core.strip_prefix("other ") {
-            (rest.to_string(), true)
-        } else {
-            (core, other)
+        // After an earlier target object, "other" means other than that object; a filter
+        // also excluding the source says something the text can't, and is left as is
+        // ("other target other creature").
+        let other_than_object = t.distinct_from.iter().any(|j| {
+            self.targets.get(*j as usize).is_some_and(|e| {
+                matches!(
+                    e.what,
+                    TargetKind::Object(_) | TargetKind::ObjectOrPlayer(..) | TargetKind::AnyTarget
+                )
+            })
+        });
+        let (core, other) = match core.strip_prefix("other ") {
+            Some(rest) if !(other && other_than_object) => (rest.to_string(), true),
+            _ => (core, other),
         };
         let mut s = match count {
             None if other => format!("another target {core}"),
@@ -330,8 +340,28 @@ impl Renderer<'_> {
                 vars::CREATED => it(case),
                 _ => it(case),
             },
+            Sel::TriggerObject
+            | Sel::TriggerLki
+            | Sel::TriggerSpell
+            | Sel::TriggerOtherObject
+            | Sel::TriggerObjects
+            | Sel::TriggerPlayer
+                if !self.event_scope =>
+            {
+                self.gap("the triggering object outside a triggered ability")
+            }
+            // Another object while "it" is the object itself (named again since the
+            // trigger condition): cards say "that creature" (`that-object`, which matches
+            // only that wording, see `compare::token_eq`).
+            Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell
+                if self.self_salient && !self.other_salient && !self.trigger_is_self =>
+            {
+                decline("that-object".into(), case)
+            }
             Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell => {
                 self.self_salient = false;
+                self.other_salient = true;
+                self.self_named_in_clause = false;
                 it(case)
             }
             Sel::TriggerOtherObject => it(case),

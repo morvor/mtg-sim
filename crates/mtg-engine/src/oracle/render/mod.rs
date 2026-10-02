@@ -442,6 +442,20 @@ pub struct Renderer<'a> {
     /// cards refer to it as "it": rendered as `~it`, which the comparison matches with
     /// either "~" or "it".
     pub(crate) self_salient: bool,
+    /// Another object (one the trigger condition named, "it" for the triggering object)
+    /// is what "it" refers to: the object itself is "~" until it's named again.
+    pub(crate) other_salient: bool,
+    /// The object itself was named in the clause being rendered while another object
+    /// was "it" (see [`Renderer::me`]).
+    pub(crate) self_named_in_clause: bool,
+    /// Rendering a triggered ability, a replacement effect, or a delayed or reflexive
+    /// trigger: an event is in scope, so "it" can be the object the event names. Outside
+    /// one, a selection of the triggering object finds nothing (`Ctx::event` is unset),
+    /// so it's a gap, not "it".
+    pub(crate) event_scope: bool,
+    /// The trigger condition is about the object itself ("Whenever ~ attacks"), so the
+    /// triggering object is the object itself.
+    pub(crate) trigger_is_self: bool,
     /// Card types of the subject of a "becomes" effect, when known ("It's still a land").
     pub(crate) subject_types: Vec<CardType>,
     /// Rendering an "each [noun]" phrase: "each creature your opponents control".
@@ -483,6 +497,10 @@ impl<'a> Renderer<'a> {
             quote_depth: 0,
             zone: FunctionZone::Battlefield,
             self_salient: false,
+            other_salient: false,
+            self_named_in_clause: false,
+            event_scope: false,
+            trigger_is_self: false,
             subject_types: Vec::new(),
             each_mode: false,
             alt_and: false,
@@ -531,13 +549,30 @@ impl<'a> Renderer<'a> {
     }
 
     /// The self-reference.
-    /// The first mention in an ability is "~"; later ones may be "it" (`~it`).
+    /// The first mention in an ability is "~"; later ones may be "it" (`~it`). While
+    /// another object is "it" (the trigger condition named one, or the triggering object
+    /// was just called "it"), the object itself is "~"; naming it makes it "it" again from
+    /// the next clause on ("Whenever a land enters, put a counter on ~. It gains
+    /// flying."), but not in the rest of the same clause ("~ deals 2 damage to it": "it"
+    /// is the other object).
     pub(crate) fn me(&mut self) -> String {
-        if self.self_salient {
+        if self.self_salient && !self.other_salient {
             "~it".to_string()
         } else {
             self.self_salient = true;
+            if self.other_salient {
+                self.self_named_in_clause = true;
+            }
             "~".to_string()
+        }
+    }
+
+    /// Starts rendering a new clause (an instruction or a condition): the object itself,
+    /// if the previous clause named it, is now what "it" refers to.
+    pub(crate) fn new_clause(&mut self) {
+        if self.self_named_in_clause {
+            self.self_named_in_clause = false;
+            self.other_salient = false;
         }
     }
 
@@ -547,6 +582,9 @@ impl<'a> Renderer<'a> {
         let saved_t = std::mem::take(&mut self.targets);
         let saved_i = std::mem::take(&mut self.introduced);
         let saved_s = self.self_salient;
+        let saved_o = std::mem::replace(&mut self.other_salient, false);
+        let saved_n = std::mem::replace(&mut self.self_named_in_clause, false);
+        let saved_ts = std::mem::replace(&mut self.trigger_is_self, false);
         let saved_v = std::mem::take(&mut self.var_defs);
         self.quote_depth += 1;
         let s = self.ability(a);
@@ -555,6 +593,9 @@ impl<'a> Renderer<'a> {
         self.targets = saved_t;
         self.introduced = saved_i;
         self.self_salient = saved_s;
+        self.other_salient = saved_o;
+        self.self_named_in_clause = saved_n;
+        self.trigger_is_self = saved_ts;
         s
     }
 
@@ -568,6 +609,18 @@ impl<'a> Renderer<'a> {
         self.sacrificed = None;
         self.last_group = None;
         self.trigger_names_opponent = false;
+        let saved_scope = std::mem::replace(
+            &mut self.event_scope,
+            // A step trigger ("at the beginning of your upkeep") has no event object.
+            matches!(&a.kind, AbilityKind::Triggered(t)
+                if !matches!(t.trigger, TriggerCond::BeginningOf { .. })),
+        );
+        let s = self.ability_kind(a);
+        self.event_scope = saved_scope;
+        s
+    }
+
+    fn ability_kind(&mut self, a: &Ability) -> String {
         match &a.kind {
             AbilityKind::Spell(s) => self.body(&s.body),
             AbilityKind::Activated(act) => {
@@ -903,4 +956,14 @@ pub fn zone_word(z: ZoneKind) -> &'static str {
 /// A counter kind as printed: "+1/+1 counter", "loyalty counter".
 pub fn counter_name(k: &str) -> String {
     format!("{k} counter")
+}
+
+impl Renderer<'_> {
+    /// Renders `f` with an event in scope (see [`Renderer::event_scope`]).
+    pub(crate) fn in_event_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = std::mem::replace(&mut self.event_scope, true);
+        let r = f(self);
+        self.event_scope = saved;
+        r
+    }
 }

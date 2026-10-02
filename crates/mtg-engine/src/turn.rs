@@ -826,6 +826,10 @@ impl Game {
                 v.retain(|o| battlefield.contains(o) && objects[o.0 as usize].controller != active);
             }
         }
+        // "During your next untap step": the effect's controller's untap step has passed.
+        self.rule_effects.retain(|e| {
+            !matches!(e.duration, Duration::ThroughYourNextUntapStep) || e.controller != active
+        });
         self.rule_effects.retain(|e| {
             !matches!(e.duration, Duration::ThroughNextUntapStep)
                 || match &e.objects {

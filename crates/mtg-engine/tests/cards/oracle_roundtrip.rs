@@ -166,6 +166,20 @@ fn equivalent_wordings_compare_equal() {
         "You gain life equal to its power.",
         "You gain X life, where X is its power."
     ));
+    // A clause without a subject shares the subject of the clause before it.
+    assert!(same(
+        "Each opponent sacrifices a creature and loses 3 life.",
+        "Each opponent sacrifices a creature. Each opponent loses 3 life."
+    ));
+    // Universal quantification: "each", "all", and an article left out with a plural.
+    assert!(same(
+        "Put a +1/+1 counter on each creature you control.",
+        "Put a +1/+1 counter on all creatures you control."
+    ));
+    assert!(same(
+        "Prevent all damage that would be dealt to creatures you control.",
+        "Prevent all damage that would be dealt to each creature you control."
+    ));
 }
 
 #[test]
@@ -190,6 +204,27 @@ fn different_meanings_compare_different() {
     assert!(!same("Draw a card.", "Target player draws a card."));
     assert!(!same("Return it to its owner's hand.", "Return ~ to its owner's hand."));
     assert!(!same("Tap up to two target creatures.", "Tap two target creatures."));
+    // "a" and "each"/"all" are never the same quantifier.
+    assert!(!same("Sacrifice a creature.", "Sacrifice all creatures."));
+    assert!(!same(
+        "~ enters tapped unless a player has 13 or less life.",
+        "~ enters tapped unless each player has 13 or less life."
+    ));
+    assert!(!same(
+        "Put a +1/+1 counter on each creature you control.",
+        "Put a +1/+1 counter on a creature you control."
+    ));
+    // A shared subject isn't the controller.
+    assert!(!same(
+        "Each opponent sacrifices a creature and loses 3 life.",
+        "Each opponent sacrifices a creature. You lose 3 life."
+    ));
+    // Once the card names itself again, "that creature" is the other object, not "it"
+    // (the renderer's `~it`).
+    assert!(!same(
+        "Sacrifice ~. If you do, destroy that creature.",
+        "Sacrifice ~. If you do, destroy ~it."
+    ));
 }
 
 #[test]
@@ -218,21 +253,37 @@ fn cards_that_round_trip_keep_round_tripping() {
         .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
         .collect();
     assert!(names.len() > 15_000, "the list has {} cards", names.len());
-    // A sample keeps the test fast; `mtg-tools roundtrip --check` checks them all.
-    let mut failed = Vec::new();
-    for name in names.iter().step_by(7) {
-        let Some(c) = mtg_engine::card::CardDb::global().get(name) else {
-            failed.push(format!("{name}: unknown card"));
-            continue;
-        };
-        let r = check_card(&c);
-        if !r.pass {
-            failed.push(format!(
-                "{name}: oracle {:?} rendered {:?} gaps {:?}",
-                r.unmatched_oracle, r.unmatched_rendered, r.gaps
-            ));
-        }
-    }
+    // Every listed card, on all cores (`mtg-tools roundtrip --check` does the same).
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let chunk = names.len().div_ceil(threads);
+    let failed: Vec<String> = std::thread::scope(|s| {
+        let handles: Vec<_> = names
+            .chunks(chunk)
+            .map(|part| {
+                s.spawn(move || {
+                    let mut failed = Vec::new();
+                    for name in part {
+                        let Some(c) = mtg_engine::card::CardDb::global().get(name) else {
+                            failed.push(format!("{name}: unknown card"));
+                            continue;
+                        };
+                        let r = check_card(&c);
+                        if !r.pass {
+                            failed.push(format!(
+                                "{name}: oracle {:?} rendered {:?} gaps {:?}",
+                                r.unmatched_oracle, r.unmatched_rendered, r.gaps
+                            ));
+                        }
+                    }
+                    failed
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().expect("round trip thread"))
+            .collect()
+    });
     assert!(failed.is_empty(), "no longer round-trip:\n{}", failed.join("\n"));
 }
 
@@ -397,4 +448,129 @@ fn equip_activate_only_once_each_turn() {
         "only once each turn"
     );
     assert_eq!(t.life(P0), 17);
+}
+
+/// "Target Dinosaur you control deals damage equal to its power to another target
+/// creature": "another" is other than the first target, so Itzquinth itself can be the
+/// second target when another Dinosaur is the first. The compiled filter used to also
+/// exclude the source.
+#[test]
+fn another_target_after_a_target_object_can_be_the_source() {
+    cr!("115.3", "601.2c");
+    assert_round_trips("Itzquinth, Firstborn of Gishath");
+    let mut t = TestGame::new(2);
+    let dreadmaw = t.battlefield(P0, "Colossal Dreadmaw");
+    t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Forest", 2);
+    t.set_step(P0, Step::PrecombatMain);
+    let itz = t.hand(P0, "Itzquinth, Firstborn of Gishath");
+    let from = t.asked().len();
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(dreadmaw)]);
+    t.cast(P0, itz).go();
+    t.resolve_all();
+    let offered: Vec<Vec<Entity>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets { candidates, .. } => {
+                Some(candidates.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered.len(), 2, "the Dinosaur, then the creature: {offered:?}");
+    assert!(!offered[1].contains(&Entity::Object(dreadmaw)), "another target");
+    let names: Vec<String> = offered[1]
+        .iter()
+        .filter_map(|e| match e {
+            Entity::Object(o) => Some(t.g.obj(*o).name().to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        names.iter().any(|n| n == "Itzquinth, Firstborn of Gishath"),
+        "Itzquinth itself may be the other target: {names:?}"
+    );
+    assert!(names.iter().any(|n| n == "Grizzly Bears"));
+}
+
+/// "This land doesn't untap during your next untap step" is about the untap step of the
+/// ability's controller, not of the land's controller: once another player gains control
+/// of it, it untaps during that player's untap step as usual. It used to be compiled as
+/// "its controller's next untap step", so it stayed tapped there.
+#[test]
+fn doesnt_untap_during_your_next_untap_step_is_your_untap_step() {
+    cr!("502.3");
+    assert_round_trips("Mogg Hollows");
+    for stolen in [true, false] {
+        let mut t = TestGame::new(2);
+        let land = t.battlefield(P0, "Mogg Hollows");
+        t.set_step(P0, Step::PrecombatMain);
+        t.activate(P0, land, 1, &[]).unwrap();
+        t.resolve_all();
+        assert!(t.g.obj(land).tapped);
+        if stolen {
+            // P1 gains control of it before P0's next untap step.
+            t.g.objects[land.0 as usize].base_controller = P1;
+            t.g.recompute();
+            assert_eq!(t.obj_now(land).controller, P1);
+            t.advance_to(P1, Step::Upkeep);
+            assert!(
+                !t.g.obj(land).tapped,
+                "P1's untap step isn't P0's next untap step"
+            );
+        } else {
+            t.advance_to(P1, Step::Upkeep);
+            assert!(t.g.obj(land).tapped);
+            t.advance_to(P0, Step::Upkeep);
+            assert!(t.g.obj(land).tapped, "P0's next untap step");
+            t.advance_to(P1, Step::Upkeep);
+            t.advance_to(P0, Step::Upkeep);
+            assert!(!t.g.obj(land).tapped);
+        }
+    }
+}
+
+/// "When another creature enters, sacrifice this creature and it deals 3 damage to target
+/// player or planeswalker.": "it" is the creature just named (Mogg Bombers), not the one
+/// that entered. It used to be the entering creature, so a lifelink creature entering
+/// dealt the damage and its controller gained life.
+#[test]
+fn it_after_the_card_names_itself_is_itself() {
+    cr!("608.2c", "702.15b");
+    assert_round_trips("Mogg Bombers");
+    let mut t = TestGame::new(2);
+    let bombers = t.battlefield(P0, "Mogg Bombers");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Vampire Nighthawk");
+    t.resolve_all();
+    assert!(!t.on_battlefield(bombers), "sacrificed");
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 20, "Mogg Bombers dealt the damage, not the Nighthawk");
+}
+
+/// "Whenever you cast a noncreature spell, put a +1/+1 counter on Machine Man. It gains
+/// flying until end of turn." and "Whenever you cast an instant or sorcery spell, this
+/// creature gets +1/+1 until end of turn. Untap it.": "it" is the creature just named,
+/// not the spell that triggered the ability (the spell gained flying, or was "untapped").
+#[test]
+fn it_after_naming_itself_is_not_the_triggering_spell() {
+    cr!("608.2c", "603.2");
+    assert_round_trips("Machine Man, Model X-51");
+    assert_round_trips("Blistercoil Weird");
+    let mut t = TestGame::new(2);
+    let mm = t.battlefield(P0, "Machine Man, Model X-51");
+    let weird = t.battlefield(P0, "Blistercoil Weird");
+    t.g.objects[weird.0 as usize].tapped = true;
+    t.lands(P0, "Island", 1);
+    t.set_step(P0, Step::PrecombatMain);
+    let opt = t.hand(P0, "Opt");
+    t.cast(P0, opt).go();
+    t.resolve_all();
+    assert!(t
+        .obj_now(mm)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert!(!t.g.obj(weird).tapped, "Blistercoil Weird untapped");
 }

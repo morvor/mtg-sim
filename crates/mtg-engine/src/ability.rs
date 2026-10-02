@@ -1476,6 +1476,11 @@ pub enum Duration {
     /// "[doesn't untap] during its controller's next untap step": for each affected
     /// object, until its controller's next untap step has passed (CR 502.3).
     ThroughNextUntapStep,
+    /// "[doesn't untap] during your next untap step": until the next untap step of the
+    /// effect's controller has passed; it applies only during that player's untap steps,
+    /// so an affected permanent another player gains control of untaps as usual during
+    /// that player's untap step (CR 502.3).
+    ThroughYourNextUntapStep,
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),

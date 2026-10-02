@@ -1045,6 +1045,9 @@ impl Game {
         }) || self.rule_effects.iter().any(|e| match &e.restriction {
             Restriction::DoesntUntap(f) => {
                 e.objects.as_ref().is_none_or(|v| v.contains(&obj))
+                    // "During your next untap step": only in its controller's untap step.
+                    && (!matches!(e.duration, Duration::ThroughYourNextUntapStep)
+                        || self.obj(obj).controller == e.controller)
                     && self.matches(obj, f, &Ctx::new(e.source, e.controller))
             }
             _ => false,

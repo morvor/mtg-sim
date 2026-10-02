@@ -290,9 +290,9 @@ impl Renderer<'_> {
             }
         };
         Some(match name {
-            n2 if n2.starts_with("mana_spent_of:") => {
+            n2 if n2.starts_with("mana_spent_of:") && min >= 1 => {
                 let l = &n2["mana_spent_of:".len()..];
-                if min <= 1 {
+                if min == 1 {
                     format!("{{{l}}} was spent to cast {}", self.me())
                 } else {
                     let c = color_of_letter(l).unwrap_or(l);
@@ -310,8 +310,8 @@ impl Renderer<'_> {
             "spells_you_cast_this_turn" => {
                 format!("you've cast {} this turn", at_least(min, "spell"))
             }
-            "dungeons completed" if min <= 1 => "you've completed a dungeon".into(),
-            "devour:number devoured" if min <= 1 => "it devoured a creature".into(),
+            "dungeons completed" if min == 1 => "you've completed a dungeon".into(),
+            "devour:number devoured" if min == 1 => "it devoured a creature".into(),
             "max_opponent_counters:poison" => format!(
                 "an opponent has {} or more poison counters",
                 number_word(min)
@@ -324,7 +324,7 @@ impl Renderer<'_> {
                 "you attacked with {} or more creatures this turn",
                 number_word(min)
             ),
-            "party_size" if min >= 4 => "you have a full party".to_string(),
+            "party_size" if min == 4 => "you have a full party".to_string(),
             "turn:sources you controlled dealt damage" => format!(
                 "{} or more sources you controlled dealt damage this turn",
                 number_word(min)

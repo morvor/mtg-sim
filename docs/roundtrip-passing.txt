@@ -4899,7 +4899,6 @@ Earth Tremor
 Earth Village Ruffians
 Earth-Cult Elemental
 Earth-Origin Yak
-Earthbender Ascension
 Earthbending Lesson
 Earthbending Student
 Earthblighter
@@ -9176,6 +9175,7 @@ Kin-Tree Nurturer
 Kin-Tree Severance
 Kin-Tree Warden
 Kindercatch
+Kindle the Inner Flame
 Kindled Fury
 Kindled Heroism
 Kindlespark Duo
@@ -15190,6 +15190,7 @@ Siren Lookout
 Siren Reaver
 Siren Song Lyre
 Siren of the Fanged Coast
+Siren of the Silent Song
 Sisay's Ingenuity
 Sisay's Ring
 Sisay, Weatherlight Captain

@@ -346,7 +346,7 @@ impl Renderer<'_> {
                 body,
             } => {
                 let t = self.trigger_text(trigger);
-                let b = self.body(body);
+                let b = self.in_event_scope(|r| r.body(body));
                 match condition {
                     Some(c) => {
                         let c = self.condition(c);
@@ -1225,7 +1225,7 @@ impl Renderer<'_> {
 
     /// A replacement or prevention effect.
     pub(crate) fn replacement(&mut self, def: &ReplacementDef, uses: Option<u32>) -> String {
-        let s = self.replacement_inner(def, uses);
+        let s = self.in_event_scope(|r| r.replacement_inner(def, uses));
         if def.optional && !s.contains(" may ") {
             format!("optionally, {s}")
         } else {

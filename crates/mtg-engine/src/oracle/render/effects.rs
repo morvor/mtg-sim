@@ -239,6 +239,7 @@ impl Renderer<'_> {
 
     /// An effect as text (sentences separated by ". ").
     pub(crate) fn effect(&mut self, e: &Effect) -> String {
+        self.new_clause();
         if let Some((who, vp, keep)) = self.actor_vp(e) {
             return self.with_subject(&who, &vp, keep);
         }
@@ -416,7 +417,24 @@ impl Renderer<'_> {
                         format!("{c} chooses {s}")
                     }
                 }
-                _ => String::new(),
+                // Remembering something already named (a target, the object itself, an
+                // earlier remembered group): bookkeeping that later mentions refer to as
+                // "it"/"them".
+                Sel::None
+                | Sel::This
+                | Sel::Target(_)
+                | Sel::AllTargets
+                | Sel::Var(_)
+                | Sel::TriggerObject
+                | Sel::TriggerLki
+                | Sel::TriggerOtherObject
+                | Sel::TriggerObjects
+                | Sel::TriggerSpell
+                | Sel::AttachedTo
+                | Sel::AttachedToThis
+                | Sel::Linked
+                | Sel::CreatorLinked => String::new(),
+                other => self.gap(format!("remembering {other:?}")),
             },
             Effect::StoreValue { .. } => String::new(),
             Effect::Note { value } => {
@@ -570,31 +588,19 @@ impl Renderer<'_> {
                 restriction,
                 duration,
             } => {
-                if let (Restriction::DoesntUntap(f), Duration::ThroughNextUntapStep) =
-                    (restriction, duration)
-                {
-                    let s = self.restriction_subject(f);
-                    // An object you control: its controller's next untap step is yours.
-                    let yours_now = match f {
-                        Filter::Source => true,
-                        Filter::In(sel) => match sel.as_ref() {
-                            Sel::This => true,
-                            Sel::Target(i) => self.targets.get(*i as usize).is_some_and(|t| {
-                                matches!(&t.what, TargetKind::Object(tf)
-                                    if values::split_controller(tf).0 == Some(PlayerRel::You))
-                            }),
-                            _ => false,
-                        },
-                        _ => false,
+                if let Restriction::DoesntUntap(f) = restriction {
+                    // "Its controller's next untap step" and "your next untap step" are
+                    // different durations (they differ once the permanent changes
+                    // control), compiled as different `Duration`s.
+                    let whose = match duration {
+                        Duration::ThroughNextUntapStep => Some("its controller's"),
+                        Duration::ThroughYourNextUntapStep => Some("your"),
+                        _ => None,
                     };
-                    let whose = if values::split_controller(f).0 == Some(PlayerRel::You) {
-                        "your"
-                    } else if yours_now {
-                        "{alt:its controller's|your}"
-                    } else {
-                        "its controller's"
-                    };
-                    return format!("{s} doesn't untap during {whose} next untap step");
+                    if let Some(whose) = whose {
+                        let s = self.restriction_subject(f);
+                        return format!("{s} doesn't untap during {whose} next untap step");
+                    }
                 }
                 let r = self.restriction(restriction);
                 let d = self.restriction_duration(duration);
@@ -804,14 +810,13 @@ impl Renderer<'_> {
                     (TargetChange::Any, None) => format!("change any targets of {w}"),
                     (TargetChange::ChooseNew, None) => format!("choose new targets for {w}"),
                 };
-                // CR 115.7: changing targets is something the player is allowed to do, so
-                // "Change the target of ..." and "You may change the target of ..." are
-                // the same instruction.
+                // "Change the target of ..." is mandatory if a legal new target exists
+                // (CR 115.7a; the rulings on Willbender and Ricochet Trap); "you may
+                // change ..." is `Effect::May` around it.
                 if matches!(who, PlayerRef::You) {
-                    return format!("{{opt:you may}} {vp}");
+                    return vp;
                 }
-                let p = self.player(who, Case::Subj);
-                format!("{p} may {vp}")
+                self.gap("targets changed by a player other than you")
             }
             Effect::BecomeCopy { what, of, duration } => {
                 let w = self.sel(what, Case::Subj);
@@ -981,7 +986,7 @@ impl Renderer<'_> {
                 } else {
                     format!("{f} spell")
                 };
-                let b = self.body(body);
+                let b = self.in_event_scope(|r| r.body(body));
                 format!("{a}. When that mana is spent to cast {f}, {b}")
             }
             Effect::PersistentMana(e) => {
@@ -1147,11 +1152,18 @@ impl Renderer<'_> {
                     }
                     other => self.trigger_text(other),
                 };
-                let b = self.body(body);
+                // Its own trigger condition: "When you next cast an instant spell this
+                // turn, copy it" (it: that spell).
+                let saved = (self.self_salient, self.other_salient, self.trigger_is_self);
+                self.self_salient = false;
+                self.other_salient = false;
+                self.trigger_is_self = false;
+                let b = self.in_event_scope(|r| r.body(body));
+                (self.self_salient, self.other_salient, self.trigger_is_self) = saved;
                 format!("{t}, {}", lower_first(&b))
             }
             Effect::Reflexive { body } => {
-                let b = self.body(body);
+                let b = self.in_event_scope(|r| r.body(body));
                 format!("when you do, {}", lower_first(&b))
             }
             Effect::AtNext { step, effect } => {
@@ -1434,6 +1446,27 @@ impl Renderer<'_> {
         let mut parts: Vec<String> = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Put a +1/+1 counter on each other creature you control. You gain 1 life for
+            // each of those creatures.": the group is remembered silently, so the next
+            // instruction must name it, either as the same group or as the remembered one
+            // (whose first mention then spells it out).
+            if let (
+                Some(Effect::Store {
+                    sel: all @ Sel::All(_),
+                    var,
+                }),
+                next,
+            ) = (v.get(i), v.get(i + 1))
+            {
+                let named = format!("{all:?}");
+                let var = format!("{:?}", Sel::Var(*var));
+                if !next.is_some_and(|n| {
+                    let n = format!("{n:?}");
+                    n.contains(&named) || n.contains(&var)
+                }) {
+                    parts.push(self.gap("a remembered group no instruction names"));
+                }
+            }
             // "Create a Treasure token and a 2/2 blue Bird creature token with flying."
             if let (
                 Some(Effect::CreateToken { controller: c1, .. }),
@@ -1808,10 +1841,6 @@ impl Renderer<'_> {
     }
 
     fn may(&mut self, who: &PlayerRef, effect: &Effect) -> String {
-        // Changing targets is already optional ("you may change the target").
-        if matches!(effect, Effect::ChangeTargets { .. }) {
-            return self.effect(effect);
-        }
         if let Some((w, vp, _)) = self.actor_vp(effect) {
             if same_player(&w, who) {
                 let p = self.player(who, Case::Subj);
@@ -3186,6 +3215,16 @@ impl Renderer<'_> {
                         return self.gap(format!("keyword action {other:?}"));
                     }
                 };
+                // "Behold a Kithkin", "behold two Elves": chosen from those the filter
+                // describes.
+                if let (K::Behold, Sel::All(f), Value::Const(c)) = (other, what, n) {
+                    let w = if *c == 1 {
+                        self.noun_det(f, Det::A)
+                    } else {
+                        format!("{} {}", number_word(*c), self.noun(f, Num::Many))
+                    };
+                    return self.with_subject(who, &format!("behold {w}"), false);
+                }
                 if has_what {
                     let w = self.sel(what, Case::Obj);
                     if matches!(n, Value::Const(1)) || matches!(n, Value::Const(0)) {
