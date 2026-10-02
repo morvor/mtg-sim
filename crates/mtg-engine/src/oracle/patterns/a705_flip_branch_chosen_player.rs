@@ -41,10 +41,11 @@ fn flip_branch_chosen_player(l: &str, prev: &mut Effect, b: &mut Builder) -> boo
     } else {
         return false;
     };
-    let old_player = b.it_player.clone();
-    b.it_player = PlayerRef::ChosenOpponent;
-    let Some(e) = parse_sentence(l, b) else {
-        b.it_player = old_player;
+    // "That player" is the chosen player only in this sentence.
+    let old_player = std::mem::replace(&mut b.it_player, PlayerRef::ChosenOpponent);
+    let parsed = parse_sentence(l, b);
+    b.it_player = old_player;
+    let Some(e) = parsed else {
         return false;
     };
     let old = std::mem::replace(branch, Effect::Noop);

@@ -444,3 +444,39 @@ fn goblin_festival_gives_it_to_an_opponent_of_the_abilitys_controller() {
         .collect::<Vec<_>>();
     assert!(chooser.iter().all(|p| *p == P0), "{chooser:?}");
 }
+
+#[test]
+fn goblin_festival_stays_with_its_controller_if_the_flip_is_won() {
+    cr!("705.2", "608.2c");
+    supported("Goblin Festival");
+    let mut t = TestGame::new(2);
+    let festival = t.battlefield(P0, "Goblin Festival");
+    festival_ping(&mut t, festival);
+    // P0 calls heads and wins: no opponent is chosen, and no one gains control.
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    load_coins(&mut t, &[true]);
+    t.resolve_all();
+    assert_eq!(flip_results(&t), vec![true]);
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.obj_now(festival).controller, P0);
+}
+
+#[test]
+fn jinxed_idol_target_opponent_gains_control_of_it() {
+    cr!("613.1b", "611.2a");
+    supported("Jinxed Idol");
+    let mut t = TestGame::new(2);
+    let idol = t.battlefield(P0, "Jinxed Idol");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.activate(P0, idol, 0, &[Entity::Player(P1)])
+        .expect("activate");
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(t.obj_now(idol).controller, P1);
+    // With no stated duration, the control change lasts.
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.obj_now(idol).controller, P1);
+    assert_eq!(t.life(P1), 18);
+}

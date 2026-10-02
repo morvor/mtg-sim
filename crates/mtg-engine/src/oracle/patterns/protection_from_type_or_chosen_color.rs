@@ -23,20 +23,26 @@ fn protection_from_type_or_color(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let mut options = vec![ty.word().to_string()];
     options.extend(Color::ALL.iter().map(|c| c.word().to_string()));
-    let mut kw = Keyword::new(KeywordKind::Protection);
-    kw.filter = Some(Filter::Or(vec![
-        Filter::ChosenCardType,
-        Filter::ChosenColor,
-    ]));
+    let protection = |f: Filter| {
+        let mut kw = Keyword::new(KeywordKind::Protection);
+        kw.filter = Some(f);
+        Effect::Modify {
+            what: what.clone(),
+            mods: vec![Modification::AddKeyword(kw)],
+            duration: Duration::EndOfTurn,
+        }
+    };
+    // Only the quality chosen now counts: a color chosen by an earlier resolution of
+    // the same ability doesn't linger alongside a chosen card type.
     Some(Effect::Seq(vec![
         Effect::Choose {
             who: PlayerRef::You,
             kind: ChoiceKind::OneOf(options),
         },
-        Effect::Modify {
-            what,
-            mods: vec![Modification::AddKeyword(kw)],
-            duration: Duration::EndOfTurn,
+        Effect::If {
+            cond: Condition::ChosenWord(ty.word().to_string()),
+            then: Box::new(protection(Filter::Type(ty))),
+            otherwise: Box::new(protection(Filter::ChosenColor)),
         },
     ]))
 }

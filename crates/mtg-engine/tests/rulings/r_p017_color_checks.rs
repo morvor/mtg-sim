@@ -372,8 +372,8 @@ fn pearl_ear_affinity_counts_auras_on_opponents_permanents_and_stacks() {
         t.named_on_battlefield("Pearl-Ear, Imperial Advisor").len(),
         2
     );
-    // Pacifism ({1}{W}) costs nothing; Sigil of the Empty Throne-like costs aside, a
-    // {4}{W}{W} enchantment costs {W}{W}.
+    // Two instances of affinity for Auras, two Auras: Sigil of the Empty Throne
+    // ({4}{W}{W}) costs {W}{W}.
     t.lands(P0, "Plains", 2);
     let big = t.hand(P0, "Sigil of the Empty Throne");
     assert!(t.cast(P0, big).try_go().is_ok());
@@ -686,6 +686,17 @@ fn seedtime_counts_blue_spells_an_opponent_cast_even_if_unresolved() {
     t.cast(P0, seed).go();
     t.resolve_all();
     assert!(t.g.extra_turns.is_empty());
+    // With several opponents, a blue spell cast by any of them counts.
+    let mut t = TestGame::new(3);
+    t.lands(P2, "Island", 1);
+    let opt = t.hand(P2, "Opt");
+    t.cast(P2, opt).go();
+    t.resolve_all();
+    t.lands(P0, "Forest", 2);
+    let seed = t.hand(P0, "Seedtime");
+    t.cast(P0, seed).go();
+    t.resolve_all();
+    assert_eq!(t.g.extra_turns, vec![P0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -849,4 +860,34 @@ fn apostles_blessing_targets_on_casting_and_chooses_the_quality_on_resolution() 
     t.g.deal_damage(elves, Entity::Object(bears), 1, false);
     t.settle();
     assert_eq!(t.obj_now(bears).damage, 1);
+}
+
+#[test]
+fn jeweled_spirit_protection_is_only_from_the_quality_chosen_this_time() {
+    cr!("702.16a", "702.16e", "608.2h");
+    supported("Jeweled Spirit");
+    let mut t = TestGame::new(2);
+    let spirit = t.battlefield(P0, "Jeweled Spirit");
+    t.lands(P0, "Forest", 4);
+    // This turn: protection from red (the fifth option).
+    t.answer(P0, DecisionKind::Option, Answer::Index(4));
+    t.activate(P0, spirit, 0, &[]).expect("activate");
+    t.resolve_all();
+    let goblin = t.battlefield(P1, "Raging Goblin");
+    t.g.deal_damage(goblin, Entity::Object(spirit), 1, false);
+    t.settle();
+    assert_eq!(t.obj_now(spirit).damage, 0);
+    // Next turn: protection from artifacts. Red damage isn't prevented any more.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.activate(P0, spirit, 0, &[]).expect("activate");
+    t.resolve_all();
+    let ornithopter = t.battlefield(P1, "Ornithopter");
+    t.g.deal_damage(ornithopter, Entity::Object(spirit), 1, false);
+    t.settle();
+    assert_eq!(t.obj_now(spirit).damage, 0, "artifact damage is prevented");
+    t.g.deal_damage(goblin, Entity::Object(spirit), 1, false);
+    t.settle();
+    assert_eq!(t.obj_now(spirit).damage, 1, "red damage isn't");
 }

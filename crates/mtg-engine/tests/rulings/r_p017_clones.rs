@@ -267,10 +267,17 @@ fn copies_the_tokens_original_characteristics(
     supported(name);
     let mut t = TestGame::new(2);
     let token = create_token(&mut t, P1, tok);
+    modify_until_eot(
+        &mut t,
+        token,
+        vec![Modification::SetColors(ColorSet::single(Color::Red))],
+    );
+    assert_eq!(t.obj_now(token).chars.colors, ColorSet::single(Color::Red));
     let c = enter_copying(&mut t, P0, name, Some(token));
     let o = t.obj_now(c);
     assert!(!o.is_token(), "{name} became a token");
     assert_eq!(o.chars.name, t.obj_now(token).chars.name);
+    assert!(o.chars.colors.is_colorless(), "{name} copied a non-copy effect");
     check(&t, c);
 }
 
