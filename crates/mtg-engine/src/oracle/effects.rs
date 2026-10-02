@@ -365,6 +365,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 &mut introduced,
             );
             super::patterns::oracle_hardening_referents::note_player_mention(&s, b);
+            super::patterns::oracle_hardening_referents::note_counters_on_source(&mut e, b);
             effects.push(e);
             b.sentences += 1;
         }
@@ -532,6 +533,8 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
             let saved_player = b.it_player.clone();
             let saved_group = b.group.clone();
             if let Some(mut ea) = parse_simple(a, b) {
+                // "put a +1/+1 counter on ~, then it deals damage ..."
+                super::patterns::oracle_hardening_referents::note_counters_on_source(&mut ea, b);
                 // "untap all creatures and gain control of them": the group the first
                 // half affected.
                 let store = super::patterns::pronoun_groups::note(&mut ea, b);
@@ -996,7 +999,13 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
             if !end(&tail).is_empty() {
                 return None;
             }
-            spec.min = 1;
+            // "Any number of targets" may be zero targets (CR 107.1c); otherwise each
+            // target gets at least 1 (CR 601.2d).
+            spec.min = if r2.starts_with("any number of ") {
+                0
+            } else {
+                1
+            };
             spec.max = n.clone();
             spec.divide = Some(n);
             let slot = b.add_target(spec, "targets (divided)");
