@@ -2,7 +2,9 @@
 //! to pay the object's total cost (CR 601.2h; the Lorwyn Eclipsed Incarnations, e.g.
 //! Wistfulness: "When this creature enters, if {G}{G} was spent to cast it, ..."). The
 //! amount is counted by the `mana_spent_of:X` value, which a copy of a spell, or a
-//! permanent that wasn't cast, sees as zero (CR 707.10).
+//! permanent that wasn't cast, sees as zero (CR 707.10). "{S}" is mana from a snow source
+//! (CR 107.4h; Berg Strider: "If {S} was spent to cast this spell, ..."), counted by the
+//! snow mana spent value (`kw/snow_mana.rs`).
 
 use super::ConditionPattern;
 use crate::ability::*;
@@ -24,7 +26,7 @@ fn symbols_spent(c: &str) -> Option<Condition> {
     for sym in inner.split("}{") {
         let mut chars = sym.chars();
         let letter = chars.next()?.to_ascii_uppercase();
-        if chars.next().is_some() || !"WUBRGC".contains(letter) {
+        if chars.next().is_some() || !"WUBRGCS".contains(letter) {
             return None;
         }
         match counts.iter_mut().find(|(l, _)| *l == letter) {
@@ -35,11 +37,11 @@ fn symbols_spent(c: &str) -> Option<Condition> {
     let mut conds: Vec<Condition> = counts
         .into_iter()
         .map(|(l, n)| {
-            Condition::Compare(
-                Value::Custom(format!("mana_spent_of:{l}").into()),
-                Cmp::Ge,
-                Value::c(n),
-            )
+            let spent = match l {
+                'S' => crate::kw::snow_mana::SNOW_MANA_SPENT.to_string(),
+                _ => format!("mana_spent_of:{l}"),
+            };
+            Condition::Compare(Value::Custom(spent.into()), Cmp::Ge, Value::c(n))
         })
         .collect();
     Some(if conds.len() == 1 {
