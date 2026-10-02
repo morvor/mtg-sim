@@ -485,6 +485,214 @@ fn if_its_not_their_turn() {
 }
 
 #[test]
+fn if_you_control_the_creature_with_the_greatest_power() {
+    cr!("603.4", "608.2c");
+    ruling!(
+        "Triumph of Ferocity",
+        "The ability checks whether you'll draw a card when it resolves."
+    );
+    // Triumph of Ferocity: "At the beginning of your upkeep, draw a card if you control the
+    // creature with the greatest power or tied for the greatest power."
+    assert_supported(&["Triumph of Ferocity"]);
+    for (mine, theirs, draws) in [
+        ("Craw Wurm", "Grizzly Bears", true),
+        ("Grizzly Bears", "Craw Wurm", false),
+        ("Grizzly Bears", "Grizzly Bears", true),
+    ] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Triumph of Ferocity");
+        t.battlefield(P0, mine);
+        t.battlefield(P1, theirs);
+        t.advance_to(P1, Step::Upkeep);
+        let before = t.hand_size(P0);
+        t.advance_to(P0, Step::Draw);
+        // The turn's draw happens after the upkeep: count only the trigger's card.
+        let drawn = t.hand_size(P0) - before;
+        assert_eq!(drawn, 1 + usize::from(draws), "{mine} vs {theirs}");
+    }
+    // No creatures at all: no card.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Triumph of Ferocity");
+    t.advance_to(P1, Step::Upkeep);
+    let before = t.hand_size(P0);
+    t.advance_to(P0, Step::Draw);
+    assert_eq!(t.hand_size(P0) - before, 1);
+}
+
+#[test]
+fn if_you_dont_control_a_creature_named() {
+    cr!("201.2", "608.2c");
+    // Jiang Yanggu: "-1: If you don't control a creature named Mowu, create Mowu, a
+    // legendary 3/3 green Dog creature token."
+    assert_supported(&["Jiang Yanggu"]);
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let jiang = t.battlefield(P0, "Jiang Yanggu");
+    t.activate(P0, jiang, 1, &[]).unwrap();
+    t.resolve_all();
+    let mowus = |t: &TestGame| {
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).chars.has_name("Mowu"))
+            .count()
+    };
+    assert_eq!(mowus(&t), 1);
+    // Next turn: Mowu is still there, so no second one.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.activate(P0, jiang, 1, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(mowus(&t), 1);
+}
+
+#[test]
+fn counter_if_you_control_more_creatures_than_its_controller() {
+    cr!("608.2c");
+    ruling!(
+        "Unified Will",
+        "is checked only as Unified Will resolves"
+    );
+    // Unified Will: "Counter target spell if you control more creatures than that spell's
+    // controller."
+    assert_supported(&["Unified Will"]);
+    for (mine, countered) in [(1, false), (2, true)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P1, Step::PrecombatMain);
+        for _ in 0..mine {
+            t.battlefield(P0, "Grizzly Bears");
+        }
+        t.battlefield(P1, "Grizzly Bears");
+        t.lands(P1, "Forest", 2);
+        t.lands(P0, "Island", 2);
+        let bears = t.hand(P1, "Grizzly Bears");
+        let spell = t.cast(P1, bears).go();
+        let uw = t.hand(P0, "Unified Will");
+        t.cast(P0, uw).target(spell).go();
+        t.resolve_all();
+        let p1_bears = t
+            .g
+            .battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).controller == P1)
+            .filter(|id| t.g.obj(**id).chars.has_name("Grizzly Bears"))
+            .count();
+        assert_eq!(p1_bears, if countered { 1 } else { 2 }, "{mine} creatures");
+    }
+}
+
+#[test]
+fn if_a_graveyard_has_twenty_or_more_cards_draw_three_instead() {
+    cr!("608.2c");
+    ruling!(
+        "Visions of Beyond",
+        "You determine whether you'll draw one or three cards as Visions of Beyond begins to resolve"
+    );
+    // Visions of Beyond: "Draw a card. If a graveyard has twenty or more cards in it, draw
+    // three cards instead."
+    assert_supported(&["Visions of Beyond"]);
+    for (cards, drawn) in [(19, 1), (20, 3)] {
+        let mut t = TestGame::new(2);
+        for _ in 0..cards {
+            t.graveyard(P1, "Forest");
+        }
+        t.lands(P0, "Island", 1);
+        let v = t.hand(P0, "Visions of Beyond");
+        let before = t.hand_size(P0);
+        t.cast(P0, v).go();
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0) + 1 - before, drawn, "{cards} cards");
+    }
+}
+
+#[test]
+fn if_equipped_creature_is_a_vampire_two_counters_on_it_instead() {
+    cr!("608.2c", "614.1a");
+    // Blade of the Bloodchief: "Whenever a creature dies, put a +1/+1 counter on equipped
+    // creature. If equipped creature is a Vampire, put two +1/+1 counters on it instead."
+    assert_supported(&["Blade of the Bloodchief"]);
+    for (holder, n) in [("Vampire Nighthawk", 2), ("Grizzly Bears", 1)] {
+        let mut t = TestGame::new(2);
+        let c = t.battlefield(P0, holder);
+        let blade = t.battlefield(P0, "Blade of the Bloodchief");
+        assert!(t.g.attach(blade, Entity::Object(c)));
+        let victim = t.battlefield(P1, "Savannah Lions");
+        destroy(&mut t, victim);
+        t.resolve_all();
+        assert_eq!(t.counters(c, "+1/+1"), n, "{holder}");
+    }
+}
+
+#[test]
+fn counter_that_spell_instead_if_its_controller_has_three_poison_counters() {
+    cr!("608.2c", "122.1f");
+    // Bring the Ending: "Counter target spell unless its controller pays {2}. Corrupted —
+    // Counter that spell instead if its controller has three or more poison counters."
+    assert_supported(&["Bring the Ending"]);
+    for poison in [0, 3] {
+        let mut t = TestGame::new(2);
+        t.set_step(P1, Step::PrecombatMain);
+        t.g.add_counters(Entity::Player(P1), "poison", poison, None);
+        t.lands(P1, "Forest", 4);
+        t.lands(P0, "Island", 2);
+        let bears = t.hand(P1, "Grizzly Bears");
+        let spell = t.cast(P1, bears).go();
+        let s = t.hand(P0, "Bring the Ending");
+        t.cast(P0, s).target(spell).go();
+        // P1 would pay {2} if asked.
+        t.answer_yes(P1, true);
+        t.resolve_all();
+        assert_eq!(
+            t.named_on_battlefield("Grizzly Bears").len(),
+            usize::from(poison == 0),
+            "{poison} poison counters"
+        );
+    }
+}
+
+#[test]
+fn if_you_return_a_nonland_card_this_way() {
+    cr!("608.2c");
+    // Vengeful Rebirth: "Return target card from your graveyard to your hand. If you
+    // return a nonland card to your hand this way, ~ deals damage equal to that card's
+    // mana value to any target."
+    assert_supported(&["Vengeful Rebirth"]);
+    for (card_back, damage) in [("Craw Wurm", 6), ("Forest", 0)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Forest", 5);
+        t.lands(P0, "Mountain", 1);
+        let c = t.graveyard(P0, card_back);
+        let s = t.hand(P0, "Vengeful Rebirth");
+        t.cast(P0, s).target(c).target(P1).go();
+        t.resolve_all();
+        assert!(t.in_hand(P0, card_back));
+        assert_eq!(t.life(P1), 20 - damage, "{card_back}");
+    }
+}
+
+#[test]
+fn if_the_sacrificed_creatures_toughness_was_four_two_food_instead() {
+    cr!("601.2h", "608.2c");
+    // Witch's Oven: "{T}, Sacrifice a creature: Create a Food token. If the sacrificed
+    // creature's toughness was 4 or greater, create two Food tokens instead."
+    assert_supported(&["Witch's Oven"]);
+    for (victim, food) in [("Craw Wurm", 2), ("Grizzly Bears", 1)] {
+        let mut t = TestGame::new(2);
+        let oven = t.battlefield(P0, "Witch's Oven");
+        let c = t.battlefield(P0, victim);
+        t.answer_choose(P0, &[Entity::Object(c)]);
+        t.activate(P0, oven, 0, &[]).unwrap();
+        t.resolve_all();
+        let foods = t
+            .g
+            .battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).chars.has_subtype("Food"))
+            .count();
+        assert_eq!(foods, food, "{victim}");
+    }
+}
+
+#[test]
 fn unused_effect_import() {
     // Keeps the `Effect` import used by helpers in this file.
     let _ = std::mem::size_of::<Effect>();

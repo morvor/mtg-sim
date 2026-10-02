@@ -42,7 +42,9 @@ use crate::discard_rules::DISCARDED;
 pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
     let c = end(c.trim());
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let r = referent_condition(c, b).or_else(|| joined(c, b));
+    let r = referent_condition(c, b)
+        .or_else(|| joined(c, b))
+        .or_else(|| referent_free(c, b));
     // Resolving a subject never changes what later pronouns mean, nor adds targets.
     b.targets.truncate(saved.0);
     b.it = saved.1;
@@ -86,6 +88,11 @@ pub fn leading_if(l: &str, b: &mut Builder) -> Option<Effect> {
     // a following "it" refers to, when nothing more specific is.
     if let Some(sel) = condition_subject(c, b) {
         if matches!(b.it, Sel::This) || is_no_referent(&b.it) {
+            b.it = sel;
+        }
+    }
+    if rest.split(' ').any(|w| matches!(w, "it" | "its")) {
+        if let Some(sel) = named_subject(c, b) {
             b.it = sel;
         }
     }
@@ -156,6 +163,31 @@ pub fn condition_subject(c: &str, b: &mut Builder) -> Option<Sel> {
     r
 }
 
+/// The object a condition names explicitly as its subject ("equipped creature is a
+/// Vampire", "that creature was a Human", "the sacrificed creature was legendary"), not by
+/// a pronoun: what a following "it" refers to ("If equipped creature is a Vampire, put two
+/// +1/+1 counters on it instead.").
+pub fn named_subject(c: &str, b: &mut Builder) -> Option<Sel> {
+    let first = split_word(c.trim()).0;
+    if matches!(
+        first,
+        "it" | "its" | "it's" | "he" | "she" | "he's" | "she's" | "his" | "her" | "~" | "~'s"
+    ) {
+        return None;
+    }
+    condition_subject(c, b).filter(|s| !matches!(s, Sel::This))
+}
+
+/// Whether "it" in a trailing condition is ambiguous: after an earlier sentence, in a
+/// triggered ability whose "it" is the trigger's object, it may as well mean an object
+/// that sentence named ("Whenever a creature you control dies, put a phyresis counter on
+/// ~. Then draw a card if it has seven or more phyresis counters on it.").
+pub fn ambiguous_it(c: &str, b: &Builder) -> bool {
+    b.sentences > 0
+        && matches!(b.it, Sel::TriggerObject | Sel::TriggerLki)
+        && c.split(' ').any(|w| matches!(w, "it" | "its" | "it's"))
+}
+
 /// An intervening-if clause of a triggered ability (CR 603.4) whose pronouns refer to the
 /// trigger's object and player (`it`, `it_player`): "Whenever a creature dies, if it had
 /// a +1/+1 counter on it, ...", "At the beginning of each opponent's upkeep, if that
@@ -181,6 +213,21 @@ pub fn intervening(
     let cond = parse_condition_with(c, &mut b)?;
     let subject = condition_subject(c, &mut b);
     Some((cond, subject))
+}
+
+/// A condition whose only pronouns are inside an object phrase ("you control a creature
+/// with a counter on it"), or none: the referent-free parser's.
+fn referent_free(c: &str, b: &Builder) -> Option<Condition> {
+    let words = c.replace(" on it", " ").replace(" on them", " ");
+    if words.split(' ').any(|w| {
+        matches!(
+            w,
+            "it" | "its" | "it's" | "that" | "they" | "their" | "them" | "those" | "he" | "she"
+        )
+    }) {
+        return None;
+    }
+    crate::oracle::statics::parse_condition(c, b.ctx)
 }
 
 /// Either a referent condition or one without referents.
@@ -406,7 +453,11 @@ fn referent_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     }
     let (subj, rest) = subject(c, b)?;
     match subj {
-        Subject::Object(sel) => object_predicate(&sel, &rest, b),
+        Subject::Object(sel) => object_predicate(&sel, &rest, b).or_else(|| {
+            // The static-condition grammar's states of "it".
+            let f = super::statics_conditions::pronoun_state(c)?;
+            Some(Condition::SelMatches(sel, f))
+        }),
         Subject::Player(p) => player_condition(&p, rest.trim(), b),
     }
 }
@@ -414,6 +465,9 @@ fn referent_condition(c: &str, b: &mut Builder) -> Option<Condition> {
 /// Conditions whose subject isn't the referent: "you control that creature", "an
 /// opponent controls it", "it's not their turn", "X is 5 or more".
 fn special(c: &str, b: &mut Builder) -> Option<Condition> {
+    if let Some(cond) = game_state(c, b) {
+        return Some(cond);
+    }
     for (p, rel, neg) in [
         ("you control ", PlayerRel::You, false),
         ("you don't control ", PlayerRel::You, true),
@@ -467,6 +521,168 @@ fn special(c: &str, b: &mut Builder) -> Option<Condition> {
     None
 }
 
+/// Conditions about the game whose wording has a dummy "it" or names objects by
+/// description: "it's night", "it's your main phase", "it's an opponent's turn", "you
+/// don't control a creature named Keimi", "a graveyard has twenty or more cards in it",
+/// "you control the creature with the greatest power or tied for the greatest power",
+/// "you control more creatures than that spell's controller", "two or more permanents you
+/// don't control have an aim counter on them", "there are no echo counters on ~", "no
+/// opponent has more life than that player".
+fn game_state(c: &str, b: &mut Builder) -> Option<Condition> {
+    let cond = match c {
+        "it's night" => Condition::IsNight,
+        "it's day" => Condition::IsDay,
+        "it's your turn" => Condition::YourTurn,
+        "it's not your turn" => Condition::NotYourTurn,
+        "it's your main phase" => {
+            Condition::And(vec![Condition::YourTurn, Condition::Phase(PhaseCond::MainPhase)])
+        }
+        "it's an opponent's turn" => {
+            Condition::PlayerMatches(PlayerRef::ActivePlayer, PlayerFilter::Opponent)
+        }
+        "a graveyard has twenty or more cards in it" => Condition::PlayerMatches(
+            PlayerRef::EachPlayer,
+            PlayerFilter::GraveyardSize(Cmp::Ge, Box::new(Value::c(20))),
+        ),
+        // Some creature you control has power at least as great as any creature's.
+        "you control the creature with the greatest power or tied for the greatest power" => {
+            Condition::And(vec![
+                Condition::Exists(Filter::creature().you_control()),
+                Condition::Compare(
+                    Value::GreatestPower(Filter::creature().you_control()),
+                    Cmp::Ge,
+                    Value::GreatestPower(Filter::creature()),
+                ),
+            ])
+        }
+        _ => return game_state_phrases(c, b),
+    };
+    Some(cond)
+}
+
+fn game_state_phrases(c: &str, b: &mut Builder) -> Option<Condition> {
+    // "you don't control a creature named Keimi", "you don't control a Pest creature token"
+    for (p, neg) in [("you don't control ", true), ("you control no ", true)] {
+        if let Some(r) = c.strip_prefix(p) {
+            let f = named_phrase(r, b)?;
+            let cond = Condition::Exists(f.you_control());
+            return Some(if neg {
+                Condition::Not(Box::new(cond))
+            } else {
+                cond
+            });
+        }
+    }
+    // "you control more creatures than that spell's controller"
+    if let Some(r) = c.strip_prefix("you control more ") {
+        let (noun, who) = r.split_once(" than ")?;
+        let f = color_or_phrase(noun)?;
+        let (p, rest) = player_subject(who, b)?;
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        let theirs = Filter::and(vec![
+            f.clone(),
+            Filter::ControllerMatches(Box::new(PlayerFilter::Ref(Box::new(p)))),
+        ]);
+        return Some(Condition::Compare(
+            Value::Count(f.you_control()),
+            Cmp::Gt,
+            Value::Count(theirs),
+        ));
+    }
+    // "no opponent has more life than that player"
+    if let Some(r) = c.strip_prefix("no opponent has more life than ") {
+        let (p, rest) = player_subject(r, b)?;
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        return Some(Condition::Not(Box::new(Condition::PlayerMatches(
+            PlayerRef::EachOpponent,
+            PlayerFilter::Life(Cmp::Gt, Box::new(Value::LifeTotal(p))),
+        ))));
+    }
+    // "that opponent has more life than another of your opponents"
+    if let Some(r) = c.strip_suffix(" has more life than another of your opponents") {
+        let (p, rest) = player_subject(r, b)?;
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        let others = PlayerRef::Each(PlayerFilter::And(vec![
+            PlayerFilter::Opponent,
+            PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(p.clone())))),
+        ]));
+        return Some(Condition::PlayerMatches(
+            others,
+            PlayerFilter::Life(Cmp::Lt, Box::new(Value::LifeTotal(p))),
+        ));
+    }
+    // "there are no echo counters on ~", "there are three or more counters on it"
+    if let Some(r) = c.strip_prefix("there are ").or_else(|| c.strip_prefix("there is ")) {
+        let (body, on) = r.rsplit_once(" on ")?;
+        let (s, rest) = subject(on, b)?;
+        let Subject::Object(sel) = s else {
+            return None;
+        };
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        return counters(&sel, &format!("{body} on it"));
+    }
+    // "two or more permanents you don't control have an aim counter on them"
+    if let Some((cmp, n, rest)) = amount_cmp(c) {
+        let (phrase, counter) = rest.split_once(" have ")?;
+        let f = color_or_phrase(phrase.trim())?;
+        let body = counter.strip_suffix(" on them")?;
+        let kind = body
+            .strip_prefix("a ")
+            .or_else(|| body.strip_prefix("an "))
+            .and_then(|k| k.strip_suffix(" counter"))
+            .or_else(|| {
+                body.strip_prefix("one or more ")
+                    .and_then(|k| k.strip_suffix(" counters"))
+            })?;
+        let f = Filter::and(vec![f, Filter::HasCounter(Some(kind.into()))]);
+        return Some(Condition::Compare(Value::Count(f), cmp, n));
+    }
+    None
+}
+
+/// An object phrase that may end with "named [name]": "a creature named Keimi", "a Pest
+/// creature token", "a creature named Keeper of ~".
+fn named_phrase(r: &str, b: &Builder) -> Option<Filter> {
+    let r = r
+        .strip_prefix("a ")
+        .or_else(|| r.strip_prefix("an "))
+        .unwrap_or(r);
+    if let Some((phrase, name)) = r.split_once(" named ") {
+        let (f, _, tail) = parse_object_phrase(phrase)?;
+        if !end(tail).is_empty() || name.is_empty() {
+            return None;
+        }
+        let name = name.replace('~', b.ctx.card_name);
+        return Some(Filter::and(vec![f, Filter::Named(name.into())]));
+    }
+    color_or_phrase(r)
+}
+
+/// A player named in a condition: "that player", "that spell's controller", "its
+/// controller", "you".
+fn player_subject(r: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
+    if let Some(rest) = r.strip_prefix("you") {
+        if rest.is_empty() || rest.starts_with(' ') {
+            return Some((PlayerRef::You, rest.to_string()));
+        }
+    }
+    match subject(r, b)? {
+        (Subject::Player(p), rest) => Some((p, rest)),
+        (Subject::Object(sel), rest) => {
+            let rest = rest.strip_prefix("'s controller")?;
+            Some((PlayerRef::ControllerOf(Box::new(sel)), rest.to_string()))
+        }
+    }
+}
+
 /// Predicates of an object subject. `r` is the rest after the subject: "'s [stat] is
 /// ...", " 's-contracted [state]" (after "it's"), or " [verb] ...".
 fn object_predicate(sel: &Sel, r: &str, b: &mut Builder) -> Option<Condition> {
@@ -517,6 +733,27 @@ fn is_state(sel: &Sel, s: &str, neg: bool, b: &mut Builder) -> Option<Condition>
     let s = end(s);
     let cond = if let Some(f) = object_state(s) {
         Condition::SelMatches(sel.clone(), f)
+    } else if let Some(r) = s.strip_prefix("exiled with ") {
+        // "~ is exiled with an egg counter on it"
+        Condition::And(vec![
+            Condition::SelMatches(sel.clone(), Filter::InZone(ZoneKind::Exile)),
+            counters(sel, r)?,
+        ])
+    } else if let Some(r) = s.strip_prefix("enchanted by ") {
+        // "~ is enchanted by two or more Auras"
+        if !matches!(sel, Sel::This) {
+            return None;
+        }
+        let (cmp, n, rest) = amount_cmp(r)?;
+        let (f, _, tail) = parse_object_phrase(rest.trim())?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        Condition::Compare(
+            Value::Count(Filter::and(vec![f, Filter::AttachedToSource])),
+            cmp,
+            n,
+        )
     } else if let Some(p) = s.strip_prefix("attacking ") {
         // "it's attacking a battle", "it's attacking you".
         let f = match p {
@@ -548,6 +785,21 @@ pub(crate) fn object_state(s: &str) -> Option<Filter> {
         "a card" => return Some(Filter::Card),
         "blocked" => return Some(Filter::Blocked),
         "unblocked" => return Some(Filter::Unblocked),
+        // "it was dealt [noncombat] damage this turn" (Grisly Sigil).
+        "dealt damage this turn" => return Some(Filter::DealtDamageThisTurn),
+        "dealt noncombat damage this turn" => {
+            return Some(Filter::Custom(
+                crate::kw::noncombat_damage::DEALT_NONCOMBAT_DAMAGE_THIS_TURN.into(),
+            ))
+        }
+        "on the battlefield" => return Some(Filter::InZone(ZoneKind::Battlefield)),
+        "exiled" | "in exile" => return Some(Filter::InZone(ZoneKind::Exile)),
+        "in your graveyard" => {
+            return Some(Filter::and(vec![
+                Filter::InZone(ZoneKind::Graveyard),
+                Filter::OwnedBy(PlayerRel::You),
+            ]))
+        }
         "all colors" => {
             return Some(Filter::and(
                 Color::ALL.iter().map(|c| Filter::Color(*c)).collect(),
@@ -566,6 +818,14 @@ pub(crate) fn object_state(s: &str) -> Option<Filter> {
                 Filter::Power(Cmp::Eq, Box::new(Value::c(p))),
                 Filter::Toughness(Cmp::Eq, Box::new(Value::c(t))),
             ]));
+        }
+    }
+    // A single adjective ("nonbasic", "suspected").
+    if !s.contains(' ') {
+        if let Some(f) = crate::oracle::phrases::adjective(s) {
+            if crate::oracle::phrases::head_noun(s).is_none() {
+                return Some(f);
+            }
         }
     }
     // "an enchanted creature or enchantment creature": alternatives of several words each
@@ -613,6 +873,9 @@ fn has(sel: &Sel, h: &str, b: &mut Builder) -> Option<Condition> {
     let h = end(h);
     if let Some(c) = counters(sel, h) {
         return Some(c);
+    }
+    if h == "the chosen name" {
+        return Some(Condition::SelMatches(sel.clone(), Filter::ChosenName));
     }
     if let Some(k) = KeywordKind::from_name(h) {
         return Some(Condition::SelMatches(sel.clone(), Filter::HasKeyword(k)));
@@ -885,6 +1148,49 @@ fn player_condition(p: &PlayerRef, r: &str, b: &mut Builder) -> Option<Condition
             Cmp::Ge,
             Box::new(Value::c(1)),
         )))));
+    }
+    // "has three or more poison counters", "doesn't have any rad counters".
+    for (pre, neg) in [
+        ("has ", false),
+        ("have ", false),
+        ("don't have ", true),
+        ("doesn't have ", true),
+    ] {
+        let Some(x) = r.strip_prefix(pre) else {
+            continue;
+        };
+        let (cmp, n, rest) = if let Some(k) = x.strip_prefix("any ") {
+            (Cmp::Ge, Value::c(1), k)
+        } else if let Some(k) = x.strip_prefix("no ") {
+            (Cmp::Eq, Value::c(0), k)
+        } else {
+            match amount_cmp(x) {
+                Some(v) => v,
+                None => continue,
+            }
+        };
+        let Some(kind) = rest.trim().strip_suffix(" counters").or_else(|| rest.trim().strip_suffix(" counter")) else {
+            continue;
+        };
+        if kind.contains(' ') || kind == "cards" {
+            continue;
+        }
+        let f = PlayerFilter::Counters(kind.into(), cmp, Box::new(n));
+        return Some(if neg {
+            Condition::Not(Box::new(m(f)))
+        } else {
+            m(f)
+        });
+    }
+    // "has more cards in hand than each other player"
+    if r == "has more cards in hand than each other player" {
+        let others = PlayerRef::Each(PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+            p.clone(),
+        )))));
+        return Some(Condition::Not(Box::new(Condition::PlayerMatches(
+            others,
+            PlayerFilter::HandSize(Cmp::Ge, Box::new(Value::HandSize(p.clone()))),
+        ))));
     }
     // "has N or less life" (also "has N life or less").
     if let Some(x) = r.strip_prefix("has ") {

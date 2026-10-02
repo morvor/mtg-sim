@@ -245,6 +245,11 @@ fn verb(v: &str) -> Option<Verb> {
             var: vars::SACRIFICED,
             back: true,
         },
+        "return" | "returned" => Verb {
+            kind: |e| matches!(e, Effect::Move { .. }),
+            var: vars::IT,
+            back: false,
+        },
         "dealt damage" => Verb {
             kind: |e| matches!(e, Effect::DealDamage { .. }),
             var: vars::DAMAGED,
@@ -281,7 +286,8 @@ fn this_way_condition(c: &str) -> Option<(Filter, Verb, &str, bool)> {
             let (v, r) = split_word(r);
             let verb_ = verb(v)?;
             let (f, rest) = quantified(r)?;
-            if !rest.is_empty() {
+            // "you return a nonland card to your hand this way"
+            if !matches!(rest, "" | "to your hand" | "to the battlefield") {
                 return None;
             }
             return Some((f, verb_, v, false));
@@ -456,3 +462,84 @@ fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "if [objects] [verb] this way, [effect]", priority: 150, apply: if_this_way } }
+
+/// "If it doesn't, [effect]." after "[effect] if it [has ...]": what happens if the
+/// condition doesn't hold ("Draw a card if that creature has a +1/+1 counter on it. If it
+/// doesn't, put a +1/+1 counter on it.").
+fn if_it_doesnt(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(x) = ["if it doesn't, ", "if it isn't, ", "if that creature doesn't, "]
+        .iter()
+        .find_map(|p| l.strip_prefix(p))
+    else {
+        return false;
+    };
+    let last = match prev {
+        Effect::Seq(v) => v.last_mut(),
+        other => Some(other),
+    };
+    let Some(Effect::If {
+        cond, otherwise, ..
+    }) = last
+    else {
+        return false;
+    };
+    // About an object (not "if you do").
+    if !matches!(cond, Condition::SelMatches(..) | Condition::Compare(..)) {
+        return false;
+    }
+    if !matches!(**otherwise, Effect::Noop) {
+        return false;
+    }
+    let Some(e) = crate::oracle::effects::parse_clause(x, b) else {
+        return false;
+    };
+    **otherwise = e;
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "if it doesn't, [effect]", priority: 150, apply: if_it_doesnt } }
+
+/// "If you search your library this way, ...", "If you draw one or more cards this way,
+/// ..." after "you may [search/draw]": whether you did.
+fn if_you_did_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, x)) = r.split_once(", ") else {
+        return false;
+    };
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        other => Some(other),
+    };
+    let Some(Effect::May { who: PlayerRef::You, effect }) = last else {
+        return false;
+    };
+    let cond = match (c, &**effect) {
+        ("you search your library this way", Effect::Search { .. }) => Condition::PrevHappened,
+        ("you draw one or more cards this way", Effect::Draw { n, .. }) => Condition::And(vec![
+            Condition::PrevHappened,
+            Condition::Compare(n.clone(), Cmp::Ge, Value::c(1)),
+        ]),
+        _ => return false,
+    };
+    let Some(e) = crate::oracle::effects::parse_clause(x, b) else {
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    let mut v = match old {
+        Effect::Seq(v) => v,
+        other => vec![other],
+    };
+    v.push(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    });
+    *prev = Effect::Seq(v);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "if you search/draw this way, [effect]", priority: 150, apply: if_you_did_this_way } }

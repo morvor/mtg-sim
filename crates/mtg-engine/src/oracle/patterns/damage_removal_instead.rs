@@ -162,12 +162,21 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // two +1/+1 counters on it instead.") is resolved with the builder's referents.
     let cond = if pronoun_free(c) {
         parse_condition(c, b.ctx)
+            .or_else(|| super::conditions_referents::parse_condition_with(c, b))
     } else {
         super::conditions_referents::parse_condition_with(c, b)
     };
     let Some(cond) = cond else {
         return false;
     };
+    // "If equipped creature is a Vampire, put two +1/+1 counters on it instead.": the
+    // object the condition names is what "it" refers to.
+    let it_before = b.it.clone();
+    if x.split(' ').any(|w| matches!(w, "it" | "its")) {
+        if let Some(sel) = super::conditions_referents::named_subject(c, b) {
+            b.it = sel;
+        }
+    }
     // "If ~ was bargained, it deals twice X damage to that permanent instead": the subject
     // "it" is the condition's (the source), not the object the previous sentence affects.
     // Likewise "~ deals 2 damage to target creature. It deals 4 damage to that creature
@@ -188,7 +197,9 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         _ => x,
     };
     let targets = b.targets.len();
-    let replacement = match parse_clause(x, b) {
+    let parsed = parse_clause(x, b);
+    b.it = it_before;
+    let replacement = match parsed {
         Some(e) if b.targets.len() == targets => Some(e),
         _ => {
             b.targets.truncate(targets);

@@ -171,8 +171,8 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         c
     };
-    let cond = match that_player_life(c, b) {
-        Some(c) => c,
+    let simple = match that_player_life(c, b) {
+        Some(c) => Some(c),
         None if pronoun_free(c) => {
             let parse = |c: &str| crate::oracle::statics::parse_condition(c, b.ctx);
             // "if there are twenty or more counters on ~ or you have twenty or more cards
@@ -181,12 +181,19 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
                 c.match_indices(" or ").find_map(|(i, _)| {
                     Some(Condition::Or(vec![parse(&c[..i])?, parse(&c[i + 4..])?]))
                 })
-            })?
+            })
         }
+        None => None,
+    };
+    let cond = match simple {
+        Some(c) => c,
         // "Destroy target creature if it's white.", "draw a card if that player has more
         // cards in hand than each other player": the condition is about what the
         // instruction (or an earlier one) names, so the instruction is read first.
         None => {
+            if super::conditions_referents::ambiguous_it(original, b) {
+                return None;
+            }
             let it_before = b.it.clone();
             let e = crate::oracle::effects::parse_clause(x, b)?;
             // The condition is checked before the instruction happens: "it" is what it
