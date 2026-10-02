@@ -2847,9 +2847,51 @@ impl Game {
         spend: &SpendContext,
         ctx: &Ctx,
     ) -> Result<PaidCost, Illegal> {
+        // CR 601.2h: the costs may be paid in any order. If paying the mana tapped
+        // permanents a "Tap an untapped [permanent] you control" part needs (a single
+        // Desert can't pay both {1} and "Tap an untapped Desert you control"), choose
+        // the permanents to tap first, then pay the mana with the others.
+        let has_tap_untapped = cost.mana.is_some()
+            && cost
+                .parts
+                .iter()
+                .any(|c| matches!(c, CostPart::TapUntapped { .. }));
+        if !has_tap_untapped {
+            return self.pay_total_cost_ordered(p, cost, src, spend, ctx, false);
+        }
+        let snapshot = self.clone();
+        match self.pay_total_cost_ordered(p, cost, src, spend, ctx, false) {
+            Ok(paid) => Ok(paid),
+            Err(_) => {
+                self.roll_back(snapshot);
+                self.pay_total_cost_ordered(p, cost, src, spend, ctx, true)
+            }
+        }
+    }
+
+    /// [`Self::pay_total_cost`] with the "Tap an untapped [permanent] you control" parts
+    /// paid before the mana (`taps_first`) or after it.
+    fn pay_total_cost_ordered(
+        &mut self,
+        p: PlayerId,
+        cost: &Cost,
+        src: Option<ObjectId>,
+        spend: &SpendContext,
+        ctx: &Ctx,
+        taps_first: bool,
+    ) -> Result<PaidCost, Illegal> {
         let mut paid = PaidCost::default();
         // CR 702.24a: a repeated cost's total is determined as it's paid.
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
+        let first = |c: &CostPart| taps_first && matches!(c, CostPart::TapUntapped { .. });
+        if taps_first {
+            for part in cost.parts.iter().filter(|c| first(c)) {
+                if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx) {
+                    return Err(Illegal(format!("can't pay {part:?}")));
+                }
+                self.pay_cost_part(p, part, src, cost.has_untap(), ctx, &mut paid)?;
+            }
+        }
         // Mana first (mana abilities must be activated before costs are paid, 601.2g),
         // but tapping the source for {T} must not be used for mana: reserve it.
         if let Some(m) = &cost.mana {
@@ -2869,15 +2911,18 @@ impl Game {
         // Check all other parts are payable before paying any of them. (Mana abilities
         // activated above may have changed what's available, CR 121.8; callers roll back
         // a failed payment.)
-        for part in &cost.parts {
+        for part in cost.parts.iter().filter(|c| !first(c)) {
             if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx) {
                 return Err(Illegal(format!("can't pay {part:?}")));
             }
         }
         // CR 601.2h: costs that involve random elements or moving objects from a library
         // to a public zone are paid after all other costs.
-        let (late, early): (Vec<&CostPart>, Vec<&CostPart>) =
-            cost.parts.iter().partition(|c| cost_part_pays_last(c));
+        let (late, early): (Vec<&CostPart>, Vec<&CostPart>) = cost
+            .parts
+            .iter()
+            .filter(|c| !first(c))
+            .partition(|c| cost_part_pays_last(c));
         let untaps_src = cost.has_untap();
         for part in early.into_iter().chain(late) {
             self.pay_cost_part(p, part, src, untaps_src, ctx, &mut paid)?;

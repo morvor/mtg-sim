@@ -1146,11 +1146,14 @@ impl Game {
                 }
             }
             Effect::TurnFaceDown { what } => {
-                let mut any = false;
+                let mut turned = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
-                    any |= crate::facedown::turn_face_down(self, o);
+                    if crate::facedown::turn_face_down(self, o) {
+                        turned.push(Entity::Object(o));
+                    }
                 }
-                ctx.prev_happened = any;
+                ctx.prev_happened = !turned.is_empty();
+                ctx.set_var(vars::TURNED_FACE_DOWN, turned);
             }
             Effect::RemoveFromCombat { what } => {
                 for o in self.resolve_objects(what, ctx) {

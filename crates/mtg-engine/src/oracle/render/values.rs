@@ -1031,7 +1031,7 @@ impl Renderer<'_> {
                 format!("for as long as {c}")
             }
             Duration::Permanent => String::new(),
-            Duration::UntilHostLeaves => String::new(),
+            Duration::UntilHostLeaves | Duration::WhileFaceDown => String::new(),
             Duration::WhileAffectedHasCounter(k) => format!(
                 "for as long as it has {} on it",
                 with_article(&counter_name(k))
