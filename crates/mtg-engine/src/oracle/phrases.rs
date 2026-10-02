@@ -12,6 +12,22 @@ use smol_str::SmolStr;
 /// Parses a number word or digits at the start of `s`. Returns (value, rest).
 pub fn parse_number(s: &str) -> Option<(Value, &str)> {
     let s = s.trim_start();
+    // "twice X", "three times X" (CR 107.3a: X is the value chosen or defined for it).
+    for (p, k) in [("twice x", 2), ("three times x", 3)] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if rest.is_empty() || rest.starts_with(' ') {
+                let v = Value::Mul(Box::new(Value::Const(k)), Box::new(Value::X));
+                return Some((v, rest.trim_start()));
+            }
+        }
+    }
+    // "X plus 3"
+    if let Some(r) = s.strip_prefix("x plus ") {
+        let (w, rest) = split_word(r);
+        if let Ok(n) = w.parse::<i32>() {
+            return Some((Value::Sum(vec![Value::X, Value::Const(n)]), rest));
+        }
+    }
     let (w, rest) = split_word(s);
     let n = match w {
         "a" | "an" | "one" | "1" => 1,

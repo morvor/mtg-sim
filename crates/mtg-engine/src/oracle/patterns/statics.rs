@@ -222,6 +222,25 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
         ("that are attacking", Filter::Attacking),
         ("that are modified", Filter::Modified),
         ("that's modified", Filter::Modified),
+        (
+            "attacking you",
+            Filter::Custom(crate::kw::grant_filters::ATTACKING_YOU.into()),
+        ),
+        (
+            "attacking your opponents",
+            Filter::Custom(crate::kw::grant_filters::ATTACKING_OPPONENT.into()),
+        ),
+        (
+            "attacking enchanted player",
+            Filter::Custom(crate::kw::grant_filters::ATTACKING_ENCHANTED_PLAYER.into()),
+        ),
+        // An Aura attached to a player (CR 303.4).
+        (
+            "enchanted player controls",
+            Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(Box::new(
+                Sel::AttachedTo,
+            )))),
+        ),
     ] {
         if let Some(r) = t.strip_prefix(p) {
             if r.is_empty() || r.starts_with([' ', ',']) {

@@ -395,3 +395,259 @@ fn becomes_and_more(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "grants: becomes ..., gets ..., and gains ...", priority: 89, parse: becomes_and_more } }
+
+// ---------------------------------------------------------------------------
+// Compound subjects
+// ---------------------------------------------------------------------------
+
+/// Splits a subject list ("you, planeswalkers you control, and other creatures you
+/// control", "green creatures and white creatures") into its parts. A controller written
+/// once after the last part applies to each part ("Auras, Equipment, and modified
+/// creatures you control", "Treefolk and Forests you control").
+fn subject_parts(s: &str) -> Vec<String> {
+    let mut v: Vec<&str> = vec![s];
+    for sep in [", and ", ", ", " and "] {
+        v = v
+            .into_iter()
+            .flat_map(|p| p.split(sep))
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .collect();
+    }
+    let mut out: Vec<String> = v.iter().map(|p| p.to_string()).collect();
+    const OWNERS: &[&str] = &[" you control", " your opponents control"];
+    if let Some(suffix) = v.last().and_then(|l| OWNERS.iter().find(|o| l.ends_with(**o))) {
+        for p in out.iter_mut() {
+            let lone = matches!(p.as_str(), "you" | "~" | "it" | "they" | "them");
+            if !lone && !p.contains("control") && !p.contains("target ") {
+                p.push_str(suffix);
+            }
+        }
+    }
+    out
+}
+
+const STATIC_VERBS: &[(&str, &str, &str)] = &[
+    // (verb found, plural form, singular form)
+    (" have ", "have", "has"),
+    (" has ", "have", "has"),
+    (" get ", "get", "gets"),
+    (" gets ", "get", "gets"),
+];
+
+/// The earliest grant verb outside quotes: (index, plural, singular, length).
+fn find_verb(masked: &str, verbs: &[(&str, &'static str, &'static str)]) -> Option<(usize, &'static str, &'static str, usize)> {
+    verbs
+        .iter()
+        .filter_map(|(v, pl, sg)| masked.find(v).map(|i| (i, *pl, *sg, v.len())))
+        .min_by_key(|x| x.0)
+}
+
+/// "You and Humans you control have hexproof." (Sigarda, Heron's Grace), "Green creatures
+/// and white creatures have protection from Gorgons.", "Saproling creatures and other
+/// Treefolk creatures get +1/+1.", "During your turn, you and ~ have hexproof.": the
+/// predicate applies to each part of the subject. The objects are one group, so an object
+/// that fits two parts is affected once; a player part is a player ability.
+fn compound_subject_static(_l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = text.trim().trim_end_matches('.');
+    let lower = t.to_lowercase();
+    if lower.len() != t.len() {
+        return None;
+    }
+    let body_start = if lower.starts_with("during your turn, ") {
+        "during your turn, ".len()
+    } else {
+        0
+    };
+    let body = &lower[body_start..];
+    let (masked, _) = mask_quotes(body)?;
+    let (i, plural, singular, vlen) = find_verb(&masked, STATIC_VERBS)?;
+    // The subject comes before any quote, so the masked and plain texts agree there.
+    if masked[..i].contains('"') {
+        return None;
+    }
+    let parts = subject_parts(&body[..i]);
+    if parts.len() < 2 {
+        return None;
+    }
+    let prefix = &t[..body_start];
+    let pred = &t[body_start + i + vlen..];
+    let mut out: Vec<Ability> = Vec::new();
+    let mut group: Option<(StaticAbility, Vec<Filter>, String)> = None;
+    for part in parts {
+        // The parts are lowercase: subjects have no quotes, and case doesn't matter
+        // to the subject grammar.
+        let part = part.as_str();
+        let orig_part = part;
+        let forms: &[&str] = match part {
+            "you" => &[plural],
+            "~" => &[singular],
+            _ => &[plural, singular],
+        };
+        let v = forms.iter().find_map(|verb| {
+            crate::oracle::statics::parse_static(&format!("{prefix}{orig_part} {verb} {pred}."), ctx)
+        })?;
+        let [a] = v.as_slice() else {
+            return None;
+        };
+        let AbilityKind::Static(st) = &a.kind else {
+            return None;
+        };
+        match &st.effect {
+            StaticEffect::PlayerEffect { .. } if part == "you" => out.push(a.clone()),
+            StaticEffect::Continuous { affected, mods } if part != "you" => {
+                let key = format!("{mods:?}{:?}{:?}", st.condition, st.zone);
+                match &mut group {
+                    None => group = Some((st.clone(), vec![affected.clone()], key)),
+                    Some((_, filters, k)) if *k == key => filters.push(affected.clone()),
+                    Some(_) => return None,
+                }
+            }
+            _ => return None,
+        }
+    }
+    if let Some((mut st, filters, _)) = group {
+        if let StaticEffect::Continuous { affected, .. } = &mut st.effect {
+            *affected = if filters.len() == 1 {
+                filters.into_iter().next()?
+            } else {
+                Filter::Or(filters)
+            };
+        }
+        out.push(AbilityDef::new(AbilityKind::Static(st), t));
+    }
+    Some(out)
+}
+
+inventory::submit! { StaticPattern { name: "grants: compound subjects", priority: 210, parse: compound_subject_static } }
+
+const EFFECT_VERBS: &[(&str, &str, &str)] = &[
+    (" each gain ", "gain", "gains"),
+    (" each get ", "get", "gets"),
+    (" both gain ", "gain", "gains"),
+    (" both get ", "get", "gets"),
+    (" gain ", "gain", "gains"),
+    (" gains ", "gain", "gains"),
+    (" get ", "get", "gets"),
+    (" gets ", "get", "gets"),
+];
+
+/// "Auras, Equipment, and modified creatures you control gain hexproof until end of
+/// turn." (Silkguard), "Target creature you control and target creature an opponent
+/// controls each gain indestructible until end of turn." (Fated Clash), "~ and up to one
+/// other target creature each get +3/+3 until end of turn.", "it and Zombies you control
+/// gain deathtouch until end of turn.": one effect on the union of the parts, each read
+/// as the sentence it would be on its own (an object in two parts is affected once).
+fn compound_subject_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let (lead, body) = match l.strip_prefix("until end of turn, ") {
+        Some(r) => (" until end of turn", r),
+        None => ("", l),
+    };
+    let (masked, _) = mask_quotes(body)?;
+    let (i, plural, singular, vlen) = find_verb(&masked, EFFECT_VERBS)?;
+    if masked[..i].contains('"') {
+        return None;
+    }
+    let parts = subject_parts(&body[..i]);
+    if parts.len() < 2 {
+        return None;
+    }
+    let pred = &body[i + vlen..];
+    let saved = (b.targets.len(), b.it.clone());
+    let mut sels = Vec::new();
+    let mut key: Option<(String, Duration, Vec<Modification>)> = None;
+    for part in parts {
+        let part = part.as_str();
+        let forms: &[&str] = if part == "~" || part.starts_with("target ") || part == "it" {
+            &[singular, plural]
+        } else {
+            &[plural, singular]
+        };
+        let e = forms.iter().find_map(|verb| {
+            let n = b.targets.len();
+            let r = crate::oracle::effects::parse_sentence(&format!("{part} {verb} {pred}{lead}"), b);
+            if r.is_none() {
+                b.targets.truncate(n);
+            }
+            r
+        });
+        let Some(Effect::Modify {
+            what,
+            mods,
+            duration,
+        }) = e
+        else {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            return None;
+        };
+        let k = format!("{mods:?}{duration:?}");
+        match &key {
+            None => key = Some((k, duration, mods)),
+            Some((k0, _, _)) if *k0 == k => {}
+            Some(_) => {
+                b.targets.truncate(saved.0);
+                b.it = saved.1;
+                return None;
+            }
+        }
+        sels.push(what);
+    }
+    let (_, duration, mods) = key?;
+    Some(Effect::Modify {
+        what: Sel::Union(sels),
+        mods,
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "grants: compound subjects", priority: 210, parse: compound_subject_effect } }
+
+/// "Each creature you control that's a Fungus or a Saproling gets +1/+1 until end of
+/// turn.", "Each creature you control with flying, deathtouch, and/or lifelink gets +1/+0
+/// until end of turn.", "Equipment you control gain hexproof until end of turn.": a group
+/// subject read by the static subject grammar (relative clauses, nouns whose plural is
+/// the singular), and the predicate read as it would be about one object of the group.
+/// The group is determined as the effect begins (CR 611.2c).
+fn group_subject_effect(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let (lead, body) = match l.strip_prefix("until end of turn, ") {
+        Some(r) => (" until end of turn", r),
+        None => ("", l),
+    };
+    let (masked, _) = mask_quotes(body)?;
+    let (i, plural, singular, vlen) = find_verb(&masked, &EFFECT_VERBS[4..])?;
+    let subject = &body[..i];
+    if subject.contains('"') {
+        return None;
+    }
+    let verb = body[i..i + vlen].trim();
+    let phrase = match subject
+        .strip_prefix("each ")
+        .or_else(|| subject.strip_prefix("all "))
+    {
+        Some(p) => p,
+        // A bare noun phrase with a plural verb: "Equipment you control gain ...".
+        None if verb == plural => subject,
+        None => return None,
+    };
+    if phrase.starts_with("other ") && !phrase.contains(' ') {
+        return None;
+    }
+    let (f, _, rest) = super::statics::object_phrase(phrase)?;
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    let pred = &body[i + vlen..];
+    let saved = b.it.clone();
+    b.it = Sel::All(f);
+    let e = crate::oracle::effects::parse_sentence(&format!("it {singular} {pred}{lead}"), b);
+    b.it = saved;
+    match e? {
+        e @ Effect::Modify { what: Sel::All(_), .. } => Some(e),
+        _ => None,
+    }
+}
+
+inventory::submit! { EffectPattern { name: "grants: group subjects", priority: 220, parse: group_subject_effect } }
