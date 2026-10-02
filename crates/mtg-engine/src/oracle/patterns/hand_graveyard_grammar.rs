@@ -826,3 +826,98 @@ fn f_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: [cards] exiled this way", priority: 300, apply: f_exiled_this_way } }
+
+// ---------------------------------------------------------------------------
+// Objects the text named earlier: "put that card into their graveyard", "put one of
+// them into your graveyard", "reveal it and put it into your hand".
+// ---------------------------------------------------------------------------
+
+/// "one of them", "two of those cards", "one of them": a choice among the cards the text
+/// is about (the looked-at or revealed cards), made by `chooser`.
+fn some_of_them<'a>(s: &'a str, b: &mut Builder, chooser: &PlayerRef) -> Option<(Sel, &'a str)> {
+    let (n, r) = parse_number(s)?;
+    n.as_const()?;
+    let r = r.trim_start().strip_prefix("of ")?;
+    let group = ["them", "those cards"]
+        .iter()
+        .find_map(|p| r.strip_prefix(p).filter(|x| word_end(x)).map(|x| (*p, x)))?;
+    let (sel, _) = super::pronoun_groups::plural_object_ref(group.0, b)??;
+    Some((
+        Sel::Choose {
+            chooser: chooser.clone(),
+            filter: Filter::In(Box::new(sel)),
+            count: n,
+            up_to: false,
+            store: None,
+        },
+        group.1,
+    ))
+}
+
+/// "put that card into their graveyard", "put it on the bottom of that player's
+/// library", "put one of them into your graveyard".
+fn p_put_object(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (who, _third, r) = subject_verb(l, b, "put")?;
+    if !is_single_player(&who) {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let (what, rest) = match some_of_them(&r, b, &who) {
+        Some((sel, rest)) => (sel, rest.to_string()),
+        None => {
+            let (sel, rest) = crate::oracle::effects::object_ref(&r, b)?;
+            // Only what the text already named: a new target is another construct.
+            if b.targets.len() != saved.0 {
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1, saved.2);
+                return None;
+            }
+            (sel, rest)
+        }
+    };
+    let Some((to, tail)) = destination(&rest, b, &who) else {
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    if !end(tail).is_empty() || to.zone == ZoneKind::Battlefield {
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    Some(Effect::Move { what, to })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: put [object] into [zone]", priority: 300, parse: p_put_object } }
+
+/// "reveal it and put it into your hand", "reveal that card and put it into your hand":
+/// the card is revealed (CR 701.20a), then moved.
+fn p_reveal_and_put(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("reveal ")?;
+    let (obj, put) = r.split_once(" and put ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let (sel, tail) = crate::oracle::effects::object_ref(obj, b)?;
+    if !tail.trim().is_empty() || b.targets.len() != saved.0 {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    let put = put
+        .strip_prefix("it ")
+        .or_else(|| put.strip_prefix("that card "))
+        .or_else(|| put.strip_prefix("them "))?;
+    let (to, tail) = destination(put, b, &PlayerRef::You)?;
+    if !end(tail).is_empty() || to.zone != ZoneKind::Hand {
+        return None;
+    }
+    use crate::kw::reveal_from_hand::{REVEALED, REVEAL_CHOSEN};
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: REVEALED,
+            sel: sel.clone(),
+        },
+        Effect::Custom(SmolStr::new(REVEAL_CHOSEN)),
+        Effect::Move { what: sel, to },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal it and put it into your hand", priority: 300, parse: p_reveal_and_put } }
