@@ -179,11 +179,27 @@ pub fn search(
             }
             _ => None,
         };
-        match chosen {
+        // Cards found together must meet the search's group requirements ("up to four
+        // cards with different names"; see `relational.rs`).
+        let chosen = chosen.filter(|v| {
+            let ents: Vec<Entity> = v.iter().map(|o| Entity::Object(*o)).collect();
+            crate::relational::selection_ok(g, filter, &ents, ctx)
+        });
+        let found: Vec<ObjectId> = match chosen {
             Some(v) => v,
             // Default (or invalid) answers: automated agents prefer finding cards.
             None if g.search_finds_by_default => cands.iter().copied().take(n as usize).collect(),
             None => cands.iter().copied().take(min as usize).collect(),
+        };
+        if crate::relational::groups_of(filter).is_empty() {
+            found
+        } else {
+            let ents: Vec<Entity> = cands.iter().map(|o| Entity::Object(*o)).collect();
+            let picked = found.into_iter().map(Entity::Object).collect();
+            crate::relational::fit_selection(g, filter, picked, &ents, min as usize, ctx)
+                .into_iter()
+                .filter_map(|e| e.object())
+                .collect()
         }
     };
     // CR 701.23h: searching a library again before it's shuffled is the same search.
