@@ -306,6 +306,9 @@ impl Game {
             ),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
             PlayerFilter::Active => self.turn.active == p,
+            PlayerFilter::AttackedThisTurn => {
+                self.turn.active == p && !self.history.attackers.is_empty()
+            }
             // CR 810.10d: poisoned if the team has a poison counter.
             PlayerFilter::Poisoned => {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0

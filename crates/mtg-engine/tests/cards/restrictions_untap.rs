@@ -427,6 +427,7 @@ fn you_may_tap_or_untap_target_permanent() {
     t.activate(P0, kami, 0, &[bears.into()]).unwrap();
     t.resolve();
     assert!(tapped(&t, bears));
-    // "Another target" after an earlier target (Hidden Strings) isn't handled.
-    assert!(!card("Hidden Strings").unsupported_text().is_empty());
+    // "Another target" after an earlier target (Hidden Strings): see
+    // `basic_effects_targets.rs`.
+    assert!(card("Hidden Strings").unsupported_text().is_empty());
 }

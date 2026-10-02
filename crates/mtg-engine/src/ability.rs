@@ -744,7 +744,8 @@ pub enum TargetGroup {
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
-    /// No two of them are controlled by the same player ("with different controllers").
+    /// No two of them are controlled by the same player ("with different controllers",
+    /// "up to two target artifacts controlled by different players").
     DifferentControllers,
     /// No two of them have the same name ("with different names", CR 201.2).
     DifferentNames,
@@ -1021,6 +1022,9 @@ pub enum PlayerFilter {
     Defending,
     /// The active player.
     Active,
+    /// A player who attacked with creatures this turn ("target player who attacked this
+    /// turn"): only the active player declares attackers (CR 508.1).
+    AttackedThisTurn,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
@@ -2585,6 +2589,11 @@ pub enum CostChange {
     AdditionalCost(Cost),
     /// "You may pay X rather than pay this spell's mana cost."
     AlternativeCost(Cost),
+    /// An alternative cost that also lets the spell be cast as though it had flash: "You
+    /// may cast creature spells with mana value 3 or less by paying {E} rather than paying
+    /// their mana costs. If you cast a spell this way, you may cast it as though it had
+    /// flash." (CR 118.9, 601.3c; see `kw/offered_costs.rs`).
+    AlternativeCostWithFlash(Cost),
     /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
     /// (CR 601.3c).
     FlashForAdditionalCost(Cost),

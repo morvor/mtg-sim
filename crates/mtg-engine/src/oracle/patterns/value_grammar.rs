@@ -556,6 +556,12 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     if let Some(r) = t.strip_prefix("with the same name as ") {
         let (sel, rest) = referent(r, b)?;
         let n = rest.len();
+        // "with the same name as another permanent": another than the object itself
+        // (CR 201.2), not than the source.
+        if r.trim_start().starts_with("another ") {
+            let f = crate::kw::basic_effects::same_name_as_another(&sel)?;
+            return Some((f, &t[t.len() - n..]));
+        }
         return Some((Filter::SameNameAs(Box::new(sel)), &t[t.len() - n..]));
     }
     if let Some(r) = t.strip_prefix("on the battlefield") {

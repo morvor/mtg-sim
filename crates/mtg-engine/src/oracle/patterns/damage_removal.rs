@@ -1051,27 +1051,56 @@ pub(crate) fn delayed_removal(
 /// beginning of the next end step" (CR 603.7).
 fn p_delayed_removal(l: &str, b: &mut Builder) -> Option<Effect> {
     let (verb, r, step) = delayed_parts(l)?;
+    // "destroy that Wall at end of combat": the creature the trigger is about, by its
+    // subtype.
+    let renamed = super::basic_effects_targets::that_subtype_as_creature(r);
+    let r = renamed.as_deref().unwrap_or(r);
     let n_targets = b.targets.len();
-    let (what, tail) = object_ref(r, b)?;
-    // Only an object named earlier (no new targets for a delayed effect), and only one
-    // that can't have changed zones since: the source or trigger object in the first
-    // sentence of a triggered ability, or a targeted permanent. (A pronoun after "create
-    // a token" or "return ... to the battlefield" is handled by `f_delayed_after`.)
+    let (first, tail) = object_ref(r, b)?;
+    // "destroy it and ~ at end of combat", "destroy it and all creatures it blocked this
+    // turn": both objects.
+    let mut sels = vec![first];
+    let mut tail = tail;
+    if let Some(x) = tail.trim_start().strip_prefix("and ") {
+        let x = match x.strip_suffix(" it blocked this turn") {
+            Some(h) if matches!(b.it, Sel::This) || sels.iter().any(|s| matches!(s, Sel::This)) => {
+                format!("{h} ~ blocked this turn")
+            }
+            _ => x.to_string(),
+        };
+        let (second, t2) = object_ref(&x, b)?;
+        sels.push(second);
+        tail = t2;
+    }
+    // Only objects named earlier (no new targets for a delayed effect), and only ones that
+    // can't have changed zones since: the source or trigger object in the first sentence
+    // of a triggered ability, or a targeted permanent. (A pronoun after "create a token"
+    // or "return ... to the battlefield" is handled by `f_delayed_after`.) A group of
+    // creatures ("all creatures it blocked this turn") is the group at that time.
     if b.targets.len() != n_targets {
         return None;
     }
-    let safe = match &what {
-        Sel::This | Sel::TriggerObject | Sel::TriggerLki => b.in_trigger && b.sentences == 0,
+    let several = sels.len() > 1;
+    let safe = |what: &Sel| match what {
+        Sel::This | Sel::TriggerObject | Sel::TriggerLki => {
+            (b.in_trigger && b.sentences == 0) || (several && matches!(what, Sel::This))
+        }
         Sel::AttachedTo => true,
         Sel::Target(n) => matches!(
             &b.targets[*n as usize].what,
             TargetKind::Object(f) if f.zone().is_none_or(|z| z == ZoneKind::Battlefield)
         ),
+        Sel::All(_) => several,
         _ => false,
     };
-    if !safe {
+    if !sels.iter().all(safe) {
         return None;
     }
+    let what = if several {
+        Sel::Union(sels)
+    } else {
+        sels.pop()?
+    };
     delayed_removal(verb, what, tail.trim(), step)
 }
 
@@ -1229,7 +1258,7 @@ fn last_effect(e: &Effect) -> &Effect {
 
 /// "to the battlefield [tapped] [transformed] under its owner's control" etc. `owned`
 /// is the selection whose owners control the returned objects.
-fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
+pub(crate) fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
     let mut r = s.strip_prefix("to the battlefield")?.trim_start();
     let mut d = Destination::battlefield();
     let mut owner = false;
