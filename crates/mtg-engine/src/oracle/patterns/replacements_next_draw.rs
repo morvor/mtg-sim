@@ -50,7 +50,7 @@ fn until_eot_draw_instead(l: &str, b: &mut Builder) -> Option<Effect> {
         let (spec, rest) = parse_target(who)?;
         if !rest.trim().is_empty()
             || !matches!(spec.what, TargetKind::Player(_))
-            || spec.min != 1
+            || spec.fixed_min() != Some(1)
             || !matches!(spec.max, Value::Const(1))
         {
             return None;

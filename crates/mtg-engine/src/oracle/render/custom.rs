@@ -664,7 +664,10 @@ impl Renderer<'_> {
         match name {
             "players can't cycle cards" => "players can't cycle cards".into(),
             "combat: controller chooses how creatures block" => {
-                "you choose which creatures block this combat and how those creatures block".into()
+                "you choose which creatures block and how those creatures block".into()
+            }
+            "combat: controller chooses which creatures attack" => {
+                "you choose which creatures attack".into()
             }
             "combat: controller chooses how opponents' creatures block" => {
                 "you choose how those creatures block".into()

@@ -149,7 +149,7 @@ fn two_targets_each(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let spec = b.targets.last_mut()?;
-    spec.min = 2;
+    spec.min = Value::c(2);
     spec.max = Value::Const(2);
     spec.text = subject.to_string();
     Some(e)
@@ -196,7 +196,7 @@ fn divided_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         TargetSpec::object(f, rest)
     };
-    spec.min = 1;
+    spec.min = Value::c(1);
     spec.max = Value::Const(max);
     spec.divide = Some(amount);
     let slot = b.add_target(spec, "targets (divided)");
