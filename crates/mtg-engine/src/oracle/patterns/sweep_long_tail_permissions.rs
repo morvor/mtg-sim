@@ -27,6 +27,7 @@ fn play_lands_from_graveyard(l: &str, text: &str, ctx: &CompileContext) -> Optio
                 lands: true,
                 spells: false,
                 cost: None,
+                flash: false,
             },
         ))),
         text,

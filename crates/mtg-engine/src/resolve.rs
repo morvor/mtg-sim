@@ -21,15 +21,25 @@ impl Game {
         if self.result.is_some() || self.end.restart.is_some() {
             return;
         }
+        // Each instruction is a separate action: events it causes form their own batch for
+        // "one or more" triggers (CR 603.2c, 608.2c), and those of the instructions before
+        // it are checked for triggers before it happens (CR 603.2, 603.10).
+        self.action_boundary();
         if self.dirty {
             self.recompute();
         }
-        // Each instruction is a separate action: events it causes form their own batch for
-        // "one or more" triggers (CR 603.2c, 608.2c).
-        self.end_event_batch();
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
+        if crate::trigger_timing::is_sequencing(e) {
+            self.exec_effect(e, ctx);
+        } else {
+            self.atomically(|g| g.exec_effect(e, ctx));
+        }
+    }
+
+    /// Performs one effect (see [`Game::exec`]).
+    fn exec_effect(&mut self, e: &Effect, ctx: &mut Ctx) {
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {
@@ -39,7 +49,9 @@ impl Game {
                 // creation sentences ("Create A. Then create B.") the same shape, but no
                 // card prints creation sentences with nothing else between or around them,
                 // and a sequence with any other instruction keeps one batch per element.
-                let together = v.len() > 1 && v.iter().all(is_token_creation);
+                // Being one event, it's also checked for triggers as a whole (`exec` runs
+                // it atomically, see `trigger_timing`).
+                let together = crate::trigger_timing::creates_tokens_together(v);
                 if together {
                     self.end_event_batch();
                     self.batch_hold += 1;
@@ -1049,11 +1061,15 @@ impl Game {
             }
             Effect::Attach { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
+                // "Attach ~ to a creature you control. If you do, ...": whether anything
+                // became attached.
+                let mut any = false;
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
                     for o in objs {
-                        self.attach(o, t);
+                        any |= self.attach(o, t);
                     }
                 }
+                ctx.prev_happened = any;
             }
             Effect::AttachAsCreature { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
@@ -1819,6 +1835,14 @@ impl Game {
                     ctx.source,
                 );
             }
+            Effect::WithPlayTerms { terms, effect } => {
+                // The permissions the effect gives come with the terms.
+                let before = self.play_grants.len();
+                self.exec(effect, ctx);
+                for g in self.play_grants.iter_mut().skip(before) {
+                    g.terms.merge(terms);
+                }
+            }
             Effect::PreventDamage {
                 to,
                 amount,
@@ -1964,6 +1988,9 @@ impl Game {
             Effect::Exchange(spec) => crate::exchange::perform(self, spec, ctx),
             Effect::FlipCoins(spec) => crate::dice::flip(self, spec, ctx),
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
+            Effect::TokensEnterWithCounters { counters, effect } => {
+                crate::tokens::enter_with_counters(self, counters, effect, ctx)
+            }
         }
     }
 
@@ -1991,11 +2018,19 @@ impl Game {
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 // CR 406.4: face-down exiled cards the player can't look at are chosen by
                 // pile.
+                let all: Vec<Entity> = cands.iter().map(|o| Entity::Object(*o)).collect();
                 let picked: Vec<Entity> =
                     crate::zones::choose_objects(self, p, ctx.source, "Choose", cands, min, n)
                         .into_iter()
                         .map(Entity::Object)
                         .collect();
+                // Objects chosen together must meet the group requirements ("any number
+                // of cards with different names"; see `relational.rs`).
+                let picked = if crate::relational::groups_of(filter).is_empty() {
+                    picked
+                } else {
+                    crate::relational::fit_selection(self, filter, picked, &all, min as usize, ctx)
+                };
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }
@@ -2874,15 +2909,4 @@ pub(crate) fn performed_by(mut body: Body, p: PlayerId) -> Body {
         }
     }
     body
-}
-
-/// Whether `e` only creates tokens (of one kind).
-fn is_token_creation(e: &Effect) -> bool {
-    matches!(
-        e,
-        Effect::CreateToken { .. }
-            | Effect::CreateTokenWithPT { .. }
-            | Effect::CreateTokenCopy { .. }
-            | Effect::CreateTokenAttached { .. }
-    )
 }

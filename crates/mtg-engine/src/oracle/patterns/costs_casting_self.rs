@@ -79,11 +79,15 @@ pub(crate) fn cost_condition(c: &str, ctx: &CompileContext) -> Option<Condition>
         }
         _ => {}
     }
-    parse_condition(c, ctx)
+    parse_condition(c, ctx).or_else(|| {
+        // The static-condition grammar ("an opponent controls four or more nonbasic
+        // lands"), without a referent for "it".
+        super::statics_conditions::parse_static_condition(c, None, ctx).map(|(c, _)| c)
+    })
 }
 
 /// "{2}{U}" at the start of `s`: the mana and the rest.
-fn leading_mana(s: &str) -> Option<(ManaCost, &str)> {
+pub(crate) fn leading_mana(s: &str) -> Option<(ManaCost, &str)> {
     let mut i = 0;
     let b = s.as_bytes();
     while i < b.len() && b[i] == b'{' {
@@ -96,7 +100,7 @@ fn leading_mana(s: &str) -> Option<(ManaCost, &str)> {
 }
 
 /// What's counted by "for each [...]" in a spell's own cost change.
-fn for_each_value(s: &str) -> Option<Value> {
+pub(crate) fn for_each_value(s: &str) -> Option<Value> {
     let s = end(s);
     match s {
         // Strive (an ability word, CR 207.2c): counted once targets are chosen.
@@ -124,7 +128,7 @@ fn for_each_value(s: &str) -> Option<Value> {
 }
 
 /// The change "{amount} less/more", repeated `times` when given.
-fn cost_change(mana: ManaCost, more: bool, times: Option<Value>) -> Option<CostChange> {
+pub(crate) fn cost_change(mana: ManaCost, more: bool, times: Option<Value>) -> Option<CostChange> {
     let generic_only = mana
         .symbols
         .iter()

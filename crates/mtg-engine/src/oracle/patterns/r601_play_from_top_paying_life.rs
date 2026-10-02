@@ -4,7 +4,7 @@
 //! top of your library" (Gwenom, Remorseless): the permission to cast spells comes with an
 //! alternative cost (CR 118.9) — such spells can be cast that way only, following their
 //! normal timing (CR 601.3); lands are played normally, with an available land play
-//! (CR 305.2). See `Game::permission_cost_options`.
+//! (CR 305.2). See `permissions.rs` (the permission's terms).
 
 use super::{FollowupPattern, StaticPattern};
 use crate::ability::*;

@@ -193,7 +193,9 @@ impl Game {
     /// actually happen.
     pub fn replace(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
         let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
-        self.replace_rec(ev, applied, 0, false, None)
+        // What replacement effects do is part of the event they modify: no trigger check
+        // happens in the middle (see `trigger_timing`).
+        self.atomically(|g| g.replace_rec(ev, applied, 0, false, None))
     }
 
     /// Runs only self-replacement effects on an event that can't happen (CR 614.17c).
@@ -461,10 +463,43 @@ impl Game {
                 }
             }
         }
+        // CR 614.12: the counters a permanent enters with are modified only by replacement
+        // effects that already exist, or that come from that permanent itself and affect
+        // only it — not by the effects of the permanents entering at the same time.
+        let entering_now = |g: &Self, id: ObjectId| g.entering.iter().any(|e| g.current(*e) == id);
+        let entering_target = match ev {
+            ReplEvent::AddCounters {
+                target: Entity::Object(t),
+                ..
+            } if entering_now(self, *t) => Some(*t),
+            _ => None,
+        };
         for (src, ctl, a, d) in sources {
             let key = ReplKey::Static(src, a.uid);
             if applied.contains(&key) || !in_scope(&d) {
                 continue;
+            }
+            if let Some(t) = entering_target {
+                // Only the source itself: "Source", or a conjunction including it
+                // (compleated: "Source and entering").
+                fn only_source(f: &Filter) -> bool {
+                    match f {
+                        Filter::Source => true,
+                        Filter::And(v) => v.iter().any(only_source),
+                        _ => false,
+                    }
+                }
+                let only_itself = src == t
+                    && matches!(
+                        &d.event,
+                        ReplacementEvent::PutCounters {
+                            on_objects: Some(f),
+                            ..
+                        } if only_source(f)
+                    );
+                if entering_now(self, src) && !only_itself {
+                    continue;
+                }
             }
             let mut ctx = Ctx::new(Some(src), ctl);
             ctx.link = a.link;

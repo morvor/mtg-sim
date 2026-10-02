@@ -37,19 +37,34 @@ impl KeywordRules for Echo {
         &[KeywordKind::Echo]
     }
 
+    /// "Echo {X}, where X is ..." granted by an effect (Volcano Hellion): the cost is
+    /// determined as the echo ability resolves (CR 608.2h), see [`Keyword::x`].
+    fn x_determined_on_resolution(&self) -> bool {
+        true
+    }
+
     fn derived(&self, kw: &Keyword) -> Option<Vec<Ability>> {
-        let cost = kw.cost.clone().unwrap_or_default();
+        let cost = match (&kw.x, kw.costs.first()) {
+            // The cost with X, as granted; `cost` shows its current value (CR 702.1b).
+            (Some(_), Some(c)) => c.clone(),
+            _ => kw.cost.clone().unwrap_or_default(),
+        };
+        let pay = Effect::PayOptional {
+            who: PlayerRef::You,
+            cost,
+            then: Box::new(Effect::Noop),
+            otherwise: Box::new(Effect::SacrificeObjects { what: Sel::This }),
+        };
+        let effect = match &kw.x {
+            Some(x) => Effect::Seq(vec![Effect::SetX { value: x.clone() }, pay]),
+            None => pay,
+        };
         let mut t = TriggeredAbility::new(
             TriggerCond::BeginningOf {
                 step: TriggerStep::Upkeep,
                 whose: PlayerRel::You,
             },
-            Body::effect(Effect::PayOptional {
-                who: PlayerRef::You,
-                cost,
-                then: Box::new(Effect::Noop),
-                otherwise: Box::new(Effect::SacrificeObjects { what: Sel::This }),
-            }),
+            Body::effect(effect),
         );
         t.intervening_if = Some(Condition::Custom(CAME_UNDER_CONTROL.into()));
         Some(vec![AbilityDef::new(

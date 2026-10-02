@@ -178,6 +178,25 @@ impl Game {
                 _ => None,
             })
             .collect();
+        // Attachments leaving the battlefield while still attached to something (an object
+        // leaving at the same time counts): their last known information.
+        let still_attached: Vec<ObjectId> = finals
+            .iter()
+            .filter_map(|(_, e)| match e {
+                ReplEvent::Move(m) if m.to != Zone::Battlefield => Some(m.obj),
+                _ => None,
+            })
+            .filter(|o| {
+                let o = self.obj(*o);
+                o.zone == Zone::Battlefield
+                    && o.attached_to.is_some_and(|a| match a {
+                        Entity::Player(_) => true,
+                        Entity::Object(x) => {
+                            self.is_live(x) && self.obj(x).zone == Zone::Battlefield
+                        }
+                    })
+            })
+            .collect();
         for (i, e) in finals {
             match e {
                 ReplEvent::Move(m) => {
@@ -190,6 +209,11 @@ impl Game {
             }
         }
         self.entering = prev_entering;
+        for o in still_attached {
+            if let Some(lb) = self.objects[o.0 as usize].left_battlefield.as_mut() {
+                lb.attached = true;
+            }
+        }
         crate::zones::face_down_exiled(
             self,
             face_down_exiles
@@ -371,6 +395,16 @@ impl Game {
         m: MoveEv,
         lookback: Option<Arc<LookbackSnapshot>>,
     ) -> Option<ObjectId> {
+        // "As this enters" choices are part of the move: no trigger check happens in the
+        // middle of it (see `trigger_timing`).
+        self.atomically(|g| g.perform_move_now(m, lookback))
+    }
+
+    fn perform_move_now(
+        &mut self,
+        m: MoveEv,
+        lookback: Option<Arc<LookbackSnapshot>>,
+    ) -> Option<ObjectId> {
         let old_id = m.obj;
         if !self.can_move(old_id) {
             return None;
@@ -402,6 +436,7 @@ impl Game {
                 blocked: self.combat.as_ref().is_some_and(|c| c.is_blocked(old_id)),
                 enchanted: has(self, "Aura"),
                 equipped: has(self, "Equipment"),
+                attached: false,
             };
             self.objects[old_id.0 as usize].left_battlefield = Some(Box::new(status));
             crate::combat::remove_from_combat(self, old_id);
