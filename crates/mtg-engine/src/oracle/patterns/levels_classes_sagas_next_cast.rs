@@ -14,14 +14,28 @@ use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 
-/// Splits "when you next cast [spell] this turn, [effect]" into the spell phrase and the
-/// effect text.
-fn next_cast_parts(l: &str) -> Option<(&str, &str)> {
-    let r = l.strip_prefix("when you next cast ")?;
+/// Splits "when you next cast [a spell] this turn, [effect]" (or "when you cast your next
+/// [spell] this turn, [effect]") into the spell phrase (with its article) and the effect
+/// text.
+fn next_cast_parts(l: &str) -> Option<(String, &str)> {
+    let (r, your_next) = match l.strip_prefix("when you next cast ") {
+        Some(r) => (r, false),
+        None => (l.strip_prefix("when you cast your next ")?, true),
+    };
     let (spell, eff) = r.split_once(" this turn, ")?;
     if spell.contains(" or activate ") || spell.contains(", cast ") {
         return None;
     }
+    let spell = if your_next {
+        let article = if spell.starts_with(['a', 'e', 'i', 'o', 'u']) {
+            "an"
+        } else {
+            "a"
+        };
+        format!("{article} {spell}")
+    } else {
+        spell.to_string()
+    };
     Some((spell, eff))
 }
 
@@ -60,6 +74,30 @@ fn p_next_cast(l: &str, b: &mut Builder) -> Option<Effect> {
 // After the narrower "..., that spell gains [keyword]" pattern (`k702_038_051.rs`).
 inventory::submit! { EffectPattern { name: "levels_classes_sagas: when you next cast", priority: 110, parse: p_next_cast } }
 
+/// "copy the next spell you cast this turn when you cast it" (Flamehold Grappler): a
+/// delayed triggered ability that copies the next spell its controller casts this turn
+/// (CR 603.7b, 707.10). A following "You may choose new targets for the copy." is applied
+/// by the follow-up pattern below.
+fn p_copy_next_spell(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if l != "copy the next spell you cast this turn when you cast it" {
+        return None;
+    }
+    let (trigger, _, _) =
+        crate::oracle::triggers::parse_trigger_condition("whenever you cast a spell")?;
+    Some(Effect::DelayedTrigger {
+        trigger: TriggerCond::ThisTurn(Box::new(trigger)),
+        body: Box::new(Body::effect(Effect::CopySpell {
+            what: Sel::TriggerSpell,
+            count: Value::c(1),
+            new_targets: false,
+        })),
+        once: true,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "levels_classes_sagas: copy the next spell you cast this turn", priority: 110, parse: p_copy_next_spell } }
+
 /// An instant or sorcery whose text begins "When you next cast ...": a spell ability that
 /// creates the delayed trigger, not a triggered ability of the card.
 fn spell_next_cast_line(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
@@ -67,7 +105,9 @@ fn spell_next_cast_line(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
         return None;
     }
     let text = block.trim();
-    if !text.to_lowercase().starts_with("when you next cast ") {
+    let lower = text.to_lowercase();
+    if !lower.starts_with("when you next cast ") && !lower.starts_with("when you cast your next ")
+    {
         return None;
     }
     let body = crate::oracle::effects::parse_body(text, ctx)?;

@@ -114,6 +114,7 @@ pub mod shortcuts;
 pub mod shuffle_rules;
 pub mod skip;
 pub mod special_actions;
+pub mod spell_choice;
 pub mod spell_costs;
 pub mod spells_cast_before;
 pub mod splice;

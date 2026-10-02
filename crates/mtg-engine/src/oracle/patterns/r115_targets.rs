@@ -109,6 +109,11 @@ fn change_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         ("it", Sel::Target(n)) if is_stack_target(b, *n) => Sel::Target(*n),
         _ => stack_target(what, b)?,
     };
+    // "You may choose new targets for target instant or sorcery spell. Then copy that
+    // spell." (Wild Ricochet): later sentences' "that spell" is the target spell.
+    if matches!(what, Sel::Target(_)) {
+        b.it = what.clone();
+    }
     Some(Effect::ChangeTargets {
         what,
         who: PlayerRef::You,
