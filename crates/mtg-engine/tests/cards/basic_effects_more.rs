@@ -364,3 +364,56 @@ fn nissas_defeat_draws_only_for_a_destroyed_nissa() {
         assert_eq!(t.hand_size(P0), hand - 1 + draws as usize, "{name}");
     }
 }
+
+#[test]
+fn faerie_fencing_the_faerie_needs_only_be_there_as_you_finish_casting() {
+    cr!("601.2i");
+    ruling!(
+        "Faerie Fencing",
+        "If you controlled a Faerie as you finished casting Faerie Fencing, it doesn't matter whether you still control one as the spell resolves."
+    );
+    let mut t = TestGame::new(2);
+    let sprite = t.battlefield(P0, "Spellstutter Sprite");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 2);
+    let s = t.hand(P0, "Faerie Fencing");
+    t.cast(P0, s).x(1).target(giant).go();
+    t.g.destroy(sprite, None);
+    t.resolve();
+    assert!(!t.on_battlefield(giant));
+
+    // A Faerie arriving after the spell was cast doesn't count.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 2);
+    let s = t.hand(P0, "Faerie Fencing");
+    t.cast(P0, s).x(1).target(giant).go();
+    t.battlefield(P0, "Spellstutter Sprite");
+    t.resolve();
+    assert!(t.on_battlefield(giant));
+}
+
+#[test]
+fn steer_clear_checks_for_a_mount_as_you_cast_it() {
+    cr!("601.2i");
+    ruling!(
+        "Steer Clear",
+        "If you controlled a Mount as you finished casting Steer Clear, it doesn’t matter whether you still control one as the spell resolves."
+    );
+    assert_supported("Steer Clear");
+    for mount in [false, true] {
+        let mut t = TestGame::new(2);
+        let m = mount.then(|| t.battlefield(P0, "Giant Beaver"));
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.advance_to(P1, Step::BeginningOfCombat);
+        t.attack(&[(giant, Entity::Player(P0))], &[]);
+        t.lands(P0, "Plains", 1);
+        let s = t.hand(P0, "Steer Clear");
+        t.cast(P0, s).target(giant).go();
+        if let Some(m) = m {
+            t.g.destroy(m, None);
+        }
+        t.resolve();
+        assert_eq!(t.on_battlefield(giant), !mount, "mount: {mount}");
+    }
+}

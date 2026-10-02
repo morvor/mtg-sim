@@ -30,6 +30,15 @@ fn rust_counters_an_activated_ability_from_an_artifact_source() {
     t.cast(P1, rust).target(ab).go();
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
+
+    // A mana ability of an artifact never is on the stack: nothing to target.
+    let mut t = TestGame::new(2);
+    let stone = t.battlefield(P0, "Mind Stone");
+    assert_eq!(t.activate(P0, stone, 0, &[]).unwrap(), None);
+    assert!(t.g.stack.is_empty());
+    t.lands(P1, "Forest", 1);
+    let rust = t.hand(P1, "Rust");
+    assert!(t.cast(P1, rust).try_go().is_err());
 }
 
 #[test]
@@ -46,6 +55,9 @@ fn an_ability_from_a_creature_source_isnt_an_artifact_sources() {
     assert_supported("Brown Ouphe");
     // The only ability on the stack isn't from an artifact source: no legal target.
     assert!(t.activate(P1, ouphe, 0, &[Entity::Object(ab)]).is_err());
+    // An artifact's ability is.
+    let (rod_ab, _) = rod_ability(&mut t);
+    assert!(t.activate(P1, ouphe, 0, &[Entity::Object(rod_ab)]).is_ok());
 }
 
 #[test]
@@ -141,6 +153,18 @@ fn tales_end_counters_a_triggered_ability_or_a_legendary_spell_only() {
     t.lands(P1, "Island", 2);
     let te = t.hand(P1, "Tale's End");
     assert!(t.cast(P1, te).target(bears).try_go().is_err());
+
+    // A triggered ability ("When this creature enters, draw a card") is a legal target.
+    let mut t = TestGame::new(2);
+    let hand = t.hand_size(P0);
+    t.enter(P0, "Elvish Visionary");
+    t.settle();
+    let trigger = *t.g.stack.last().expect("the enters trigger");
+    t.lands(P1, "Island", 2);
+    let te = t.hand(P1, "Tale's End");
+    t.cast(P1, te).target(trigger).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
 }
 
 #[test]
@@ -228,15 +252,19 @@ fn summary_dismissal_exiles_other_spells_and_counters_abilities() {
     assert_supported("Summary Dismissal");
     let mut t = TestGame::new(2);
     let (_ab, _) = rod_ability(&mut t);
-    t.lands(P0, "Mountain", 1);
-    let shock = t.hand(P0, "Shock");
-    t.cast(P0, shock).target(P1).go();
+    // A spell that can't be countered is exiled all the same.
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Forest", 1);
+    let decay = t.hand(P0, "Abrupt Decay");
+    t.cast(P0, decay).target(bears).go();
     t.lands(P1, "Island", 4);
     let sd = t.hand(P1, "Summary Dismissal");
     t.cast(P1, sd).go();
     t.resolve();
     assert!(t.g.stack.is_empty());
-    assert!(t.in_exile("Shock"));
+    assert!(t.in_exile("Abrupt Decay"));
+    assert!(t.on_battlefield(bears));
     assert_eq!(t.life(P1), 20);
     assert!(t.in_graveyard(P1, "Summary Dismissal"));
 }
