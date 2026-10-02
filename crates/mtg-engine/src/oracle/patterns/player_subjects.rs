@@ -19,6 +19,7 @@ use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::{parse_clause, parse_sentence, player_ref, Builder};
 use crate::oracle::phrases::*;
+use crate::kw::each_player_collect::{COLLECT, COLLECTED, PICK};
 use crate::scry_rules::{OPTED, OPT_IN};
 
 /// The players who accepted the most recent "each [player] may [instruction]".
@@ -93,6 +94,15 @@ fn as_you(r: &str) -> Option<String> {
             Some(at) => (&w[..at], &w[at..]),
             None => (w.as_str(), ""),
         };
+        // "discard their hands" (several players, one hand each).
+        if core == "their" && next_clean == "hands" {
+            out.push("your".to_string());
+            continue;
+        }
+        if core == "hands" && i > 0 && words[i - 1] == "their" {
+            out.push(format!("hand{punct}"));
+            continue;
+        }
         let replaced = match core {
             "their" if !KEEP.contains(&next_clean) => Some("your"),
             "theirs" => Some("yours"),
@@ -304,8 +314,10 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
 fn plural_to_singular(r: &str) -> Option<String> {
     let (first, rest) = split_word(r);
     if first == "may" {
-        let inner = plural_to_singular(rest.trim_start())?;
-        return Some(format!("may {inner}"));
+        // "may" takes the base form either way.
+        let (verb, _) = split_word(rest);
+        VERBS.iter().find(|v| **v == verb)?;
+        return Some(format!("may {}", rest.trim_start()));
     }
     let v = VERBS.iter().copied().find(|v| *v == first)?;
     let s = match v {
@@ -425,7 +437,10 @@ fn instruction(text: &str, orig: Option<&str>, b: &mut Builder) -> Option<Effect
         return None;
     }
     b.it_player = PlayerRef::You;
-    let e = parse_clause(&format!("that player {orig}"), b);
+    let e = parse_clause(&format!("that player {orig}"), b)
+        // A pattern that read "that player" as the trigger's player isn't about the
+        // player performing it.
+        .filter(|e| !format!("{e:?}").contains("TriggerPlayer"));
     b.it_player = saved.2.clone();
     if e.is_none() {
         restore(b);
@@ -523,6 +538,87 @@ fn with_outer_x(e: Effect, wrap: impl FnOnce(Effect) -> Effect) -> Option<Effect
     ]))
 }
 
+/// The players' choices of "each [player] may [instruction]", in APNAP order (CR 101.4),
+/// stored in [`ACCEPTED`].
+fn opt_in(who: PlayerRef, guard: &dyn Fn(Effect) -> Effect) -> Vec<Effect> {
+    vec![
+        Effect::Store {
+            var: OPTED,
+            sel: Sel::None,
+        },
+        Effect::ForEachPlayer {
+            who,
+            effect: Box::new(Effect::AsPlayer {
+                who: PlayerRef::Iterated,
+                effect: Box::new(guard(Effect::May {
+                    who: PlayerRef::Iterated,
+                    effect: Box::new(Effect::Custom(OPT_IN.into())),
+                })),
+            }),
+        },
+        Effect::Store {
+            var: ACCEPTED,
+            sel: Sel::Var(OPTED),
+        },
+    ]
+}
+
+/// "put a card from your hand onto the battlefield" (a choice, then a move) split into the
+/// choice, which adds to [`COLLECTED`], and one move of all the players' choices (for the
+/// players' own cards, under their own control).
+fn split_choice_move(e: &Effect) -> Option<(Effect, Effect)> {
+    let (mv, rest): (&Effect, &[Effect]) = match e {
+        Effect::Seq(v) => (v.first()?, &v[1..]),
+        e => (e, &[]),
+    };
+    let Effect::Move {
+        what:
+            Sel::Choose {
+                chooser: PlayerRef::You,
+                filter,
+                count,
+                up_to,
+                store: None,
+            },
+        to,
+    } = mv
+    else {
+        return None;
+    };
+    if to.zone != ZoneKind::Battlefield
+        || !format!("{filter:?}").contains("OwnedBy(You)")
+        || !matches!(to.controller, None | Some(PlayerRef::You))
+        || rest.iter().any(|r| !matches!(r, Effect::Store { .. }))
+    {
+        return None;
+    }
+    let choose = Effect::seq(vec![
+        Effect::Store {
+            var: PICK,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: filter.clone(),
+                count: count.clone(),
+                up_to: *up_to,
+                store: None,
+            },
+        },
+        Effect::Custom(COLLECT.into()),
+    ]);
+    let mut to = to.clone();
+    // Each card enters under its owner's control: the player who put it there.
+    to.controller = Some(PlayerRef::OwnerOf(Box::new(Sel::Var(COLLECTED))));
+    let put = Effect::seq(
+        std::iter::once(Effect::Move {
+            what: Sel::Var(COLLECTED),
+            to,
+        })
+        .chain(rest.iter().cloned())
+        .collect(),
+    );
+    Some((choose, put))
+}
+
 /// The instruction `pred` performed by `subj`.
 fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> {
     let with_hoisted = |e: Effect, hoisted: Option<Value>| match hoisted {
@@ -571,7 +667,13 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
             })
         }
         Subject::Each(who, cond) => {
-            let (may, e, hoisted) = predicate(pred, false, b)?;
+            // "Any number of target opponents each sacrifice a creature with the greatest
+            // power among creatures that player controls": "that player" is each of them
+            // in turn ("you" as each performs it).
+            let outer_player = std::mem::replace(&mut b.it_player, PlayerRef::You);
+            let parsed = predicate(pred, false, b);
+            b.it_player = outer_player;
+            let (may, e, hoisted) = parsed?;
             let guard = |e: Effect| match &cond {
                 Some(c) => Effect::If {
                     cond: c.clone(),
@@ -580,6 +682,31 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
                 },
                 None => e,
             };
+            // "Each player may put a creature card from their hand onto the battlefield":
+            // the players choose in APNAP order, then the cards are put onto the
+            // battlefield at the same time (CR 101.4).
+            if let Some((choose, put)) = split_choice_move(&e) {
+                let players = if may { PlayerRef::Var(ACCEPTED) } else { who.clone() };
+                let mut v = Vec::new();
+                if may {
+                    v.extend(opt_in(who, &guard));
+                    b.named
+                        .push((ACCEPTED_NAME.to_string(), Sel::Var(ACCEPTED)));
+                }
+                v.push(Effect::Store {
+                    var: COLLECTED,
+                    sel: Sel::None,
+                });
+                v.push(Effect::ForEachPlayer {
+                    who: players,
+                    effect: Box::new(Effect::AsPlayer {
+                        who: PlayerRef::Iterated,
+                        effect: Box::new(if may { choose } else { guard(choose) }),
+                    }),
+                });
+                v.push(put);
+                return with_outer_x(Effect::seq(v), |e| e).map(|e| with_hoisted(e, hoisted));
+            }
             // "Each player chooses six lands they control, then sacrifices the rest": the
             // players choose in APNAP order, then all the rest are sacrificed at once
             // (CR 101.4).
@@ -737,6 +864,95 @@ fn if_they_do(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "if they do, [instruction]", priority: 900, apply: if_they_do } }
 
+/// The last instruction of `e` if another player performs it (`Effect::AsPlayer`).
+fn last_as_player(e: &mut Effect) -> Option<(&PlayerRef, &mut Effect)> {
+    match e {
+        Effect::Seq(v) => v.last_mut().and_then(last_as_player),
+        Effect::AsPlayer { who, effect } => Some((&*who, &mut **effect)),
+        _ => None,
+    }
+}
+
+/// A later sentence about the player who performed the previous instruction ("Target
+/// player reveals the top card of their library. If it's a land card, that player puts
+/// it into their hand."; "... Otherwise, the player casts it without paying its mana cost
+/// if able."): reworded for "you" and read as part of what that player does, so the
+/// patterns that join such sentences for "you" apply.
+fn same_player_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    use super::oracle_hardening_referents::is_no_player_referent;
+    let l = end(l);
+    let (prefix, rest) = if let Some(r) = l.strip_prefix("otherwise, ") {
+        ("otherwise, ".to_string(), r)
+    } else if let Some(r) = l.strip_prefix("if ") {
+        let Some((c, r)) = r.split_once(", ") else {
+            return false;
+        };
+        if mentions_you(c) {
+            return false;
+        }
+        (format!("if {c}, "), r)
+    } else {
+        (String::new(), l)
+    };
+    let rest = rest.strip_prefix("then ").unwrap_or(rest);
+    let (pred, plural) = if let Some(r) = rest.strip_prefix("that player ") {
+        (r, false)
+    } else if let Some(r) = rest.strip_prefix("the player ") {
+        (r, false)
+    } else if let Some(r) = rest.strip_prefix("that opponent ") {
+        (r, false)
+    } else if let Some(r) = rest.strip_prefix("they ") {
+        (r, true)
+    } else {
+        return false;
+    };
+    if matches!(b.it_player, PlayerRef::You) || is_no_player_referent(&b.it_player) {
+        return false;
+    }
+    let it_player = format!("{:?}", b.it_player);
+    let Some((who, inner)) = last_as_player(prev) else {
+        return false;
+    };
+    if format!("{who:?}") != it_player {
+        return false;
+    }
+    let reworded = if plural {
+        plural_to_singular(pred).and_then(|p| as_you(&p))
+    } else {
+        as_you(pred)
+    };
+    let Some(text) = reworded else {
+        return false;
+    };
+    // The condition is reworded too ("if they do" → "if you do").
+    let prefix = prefix
+        .replace("if they do,", "if you do,")
+        .replace("if they don't,", "if you don't,");
+    let sentence = format!("{prefix}{text}");
+    let saved_player = std::mem::replace(&mut b.it_player, PlayerRef::You);
+    let saved_inner = inner.clone();
+    let done = if crate::oracle_ext::apply_followup_ext(&sentence, inner, b) {
+        true
+    } else {
+        *inner = saved_inner.clone();
+        match parse_sentence(&sentence, b) {
+            Some(e) if !format!("{e:?}").contains("TriggerPlayer") => {
+                let old = std::mem::replace(inner, Effect::Noop);
+                *inner = Effect::seq(vec![old, e]);
+                true
+            }
+            _ => false,
+        }
+    };
+    b.it_player = saved_player;
+    if !done {
+        *inner = saved_inner;
+    }
+    done
+}
+
+inventory::submit! { FollowupPattern { name: "a later sentence about the player performing the previous one", priority: 950, apply: same_player_followup } }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -779,7 +995,7 @@ mod probe {
     #[test]
     fn probe() {
         let Ok(texts) = std::env::var("PS_PROBE") else { return };
-        let tl = TypeLine::parse("Sorcery");
+        let tl = TypeLine::parse(&std::env::var("PS_TYPE").unwrap_or("Sorcery".into()));
         let ctx = CompileContext {
             card_name: "Test Card",
             full_name: "Test Card",

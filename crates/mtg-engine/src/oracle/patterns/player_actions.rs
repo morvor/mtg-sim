@@ -30,9 +30,9 @@ fn rounded(s: &str) -> Option<(&str, bool)> {
 
 /// "half"/"a third" → the divisor.
 fn fraction(s: &str) -> Option<(i32, &str)> {
-    if let Some(r) = s.strip_prefix("half ") {
+    if let Some(r) = s.strip_prefix("half of ") {
         Some((2, r))
-    } else if let Some(r) = s.strip_prefix("half of ") {
+    } else if let Some(r) = s.strip_prefix("half ") {
         Some((2, r))
     } else if let Some(r) = s.strip_prefix("a third of ") {
         Some((3, r))
@@ -385,3 +385,82 @@ fn reveal_your_hand(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "player actions: reveal your hand", priority: 400, parse: reveal_your_hand } }
 
+
+/// "put a rope counter on a creature you control" (not targeted: chosen as it resolves).
+fn counter_on_one(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    let r = l.strip_prefix("put ")?;
+    let (n, r) = parse_number(r)?;
+    let (kind, rest) = crate::oracle::costs::counter_kind(r)?;
+    let rest = rest
+        .trim_start()
+        .strip_prefix("counters on ")
+        .or_else(|| rest.trim_start().strip_prefix("counter on "))?;
+    let one = rest.strip_prefix("a ").or_else(|| rest.strip_prefix("an "))?;
+    let f = permanents_you_control(one)?;
+    Some(Effect::AddCounters {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![Filter::Permanent, f]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        kind,
+        n,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "player actions: put a counter on a [permanent] you control", priority: 400, parse: counter_on_one } }
+
+/// "mill cards equal to [amount]", "discard cards equal to [amount]".
+fn cards_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    let (verb, r) = split_word(l);
+    let r = r.strip_prefix("cards equal to ")?;
+    let (n, tail) = crate::oracle::statics::parse_value_phrase(r, b)?;
+    if !end(&tail).is_empty() {
+        return None;
+    }
+    match verb {
+        "mill" => Some(Effect::Mill {
+            who: PlayerRef::You,
+            n,
+        }),
+        "discard" => Some(Effect::Discard {
+            who: PlayerRef::You,
+            n,
+            random: false,
+            filter: Filter::Any,
+        }),
+        _ => None,
+    }
+}
+
+inventory::submit! { EffectPattern { name: "player actions: mill/discard cards equal to [amount]", priority: 400, parse: cards_equal_to } }
+
+/// "draw up to three cards": the player chooses how many, then draws that many.
+fn draw_up_to(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    let r = l.strip_prefix("draw up to ")?;
+    let (n, rest) = parse_card_count(r)?;
+    let n = n.as_const()?;
+    if !end(rest).is_empty() {
+        return None;
+    }
+    Some(Effect::seq(vec![
+        Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::Number { min: 0, max: n },
+        },
+        Effect::Draw {
+            who: PlayerRef::You,
+            n: Value::Chosen,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "player actions: draw up to N cards", priority: 400, parse: draw_up_to } }
