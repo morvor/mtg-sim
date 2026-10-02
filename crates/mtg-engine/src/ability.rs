@@ -2423,7 +2423,7 @@ pub struct PlayTerms {
     /// "A spell cast this way costs {N} more to cast" (CR 601.2f).
     #[serde(default)]
     pub cost_increase: u32,
-    /// "Each land played this way enters tapped" (CR 614.1c).
+    /// "Each land played this way enters tapped" (CR 614.1d).
     #[serde(default)]
     pub lands_enter_tapped: bool,
 }

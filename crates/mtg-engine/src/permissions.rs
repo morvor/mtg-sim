@@ -16,7 +16,7 @@
 //! playing it as a land; a required alternative cost ("If you cast a spell this way, pay
 //! life equal to its mana value rather than pay its mana cost", CR 118.9b) replaces the mana
 //! cost and can't be combined with another alternative cost (CR 118.9a); "as though it had
-//! flash" (CR 702.8a); "costs {2} more" (CR 601.2f); "enters tapped" (CR 614.1c) — and uses
+//! flash" (CR 702.8a); "costs {2} more" (CR 601.2f); "enters tapped" (CR 614.1d) — and uses
 //! up exactly that permission if it can be used only once each turn
 //! (`kw/once_each_turn_cast.rs`).
 //!

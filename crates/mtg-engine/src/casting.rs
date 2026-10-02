@@ -1071,7 +1071,7 @@ impl Game {
             FaceState::Back
         };
         self.players[p.idx()].lands_played_this_turn += 1;
-        // "Each land played this way enters tapped" (CR 614.1c).
+        // "Each land played this way enters tapped" (CR 614.1d).
         let tapped = permission.is_some_and(|c| c.terms.lands_enter_tapped);
         crate::permissions::record_use(self, permission);
         self.play_grants.retain(|g| g.object != card);
