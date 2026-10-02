@@ -142,3 +142,23 @@ fn your_triggered_abilities_cant_exile_your_creature_tokens() {
     edict(&mut t, P1, P0);
     assert!(!t.on_battlefield(tokens[0]));
 }
+
+#[test]
+fn a_special_action_from_an_opponents_permanent_may_sacrifice() {
+    cr!("701.21a", "116.2d");
+    ruling!("Tajuru Preserver", "You may sacrifice a permanent as a special action");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tajuru Preserver");
+    t.battlefield(P1, "Damping Engine");
+    t.lands(P0, "Forest", 2);
+    t.g.turn.priority = Some(P0);
+    let sa = t
+        .g
+        .legal_actions(P0)
+        .into_iter()
+        .find(|a| matches!(a, Action::Special(_)))
+        .expect("Damping Engine's special action");
+    let before = t.graveyard_size(P0);
+    t.g.take_action(P0, sa);
+    assert_eq!(t.graveyard_size(P0), before + 1);
+}

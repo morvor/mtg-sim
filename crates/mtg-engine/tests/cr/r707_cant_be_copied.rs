@@ -109,3 +109,48 @@ fn x_copies_with_x_of_two() {
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn gogo_copies_abilities_without_targets_with_the_same_source() {
+    cr!("707.10", "707.10b");
+    ruling!("Gogo, Master of Mimicry", "can copy any activated or triggered ability on the stack, not just one with targets");
+    ruling!("Gogo, Master of Mimicry", "The source of the copy from Gogo's ability is the same as the source of the original ability");
+    let mut t = TestGame::new(2);
+    let warden = t.battlefield(P0, "Soul Warden");
+    let gogo = t.battlefield(P0, "Gogo, Master of Mimicry");
+    t.enter(P1, "Grizzly Bears");
+    t.settle();
+    let trig = *t.g.stack.last().expect("Soul Warden's trigger");
+    t.lands(P0, "Island", 2);
+    t.answer(P0, DecisionKind::X, Answer::Number(1));
+    t.activate(P0, gogo, 0, &[Entity::Object(trig)]).unwrap();
+    t.resolve();
+    // Gogo's ability resolved: a copy of the trigger with the same source is on top.
+    let copy = *t.g.stack.last().unwrap();
+    assert_ne!(copy, trig);
+    match t.g.obj(copy).stack.as_deref().map(|s| &s.kind) {
+        Some(object::StackKind::Triggered { source, .. }) => assert_eq!(*source, warden),
+        other => panic!("not a triggered ability copy: {other:?}"),
+    }
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+}
+
+#[test]
+fn a_card_that_cant_be_copied_on_the_stack_can_be_copied_elsewhere() {
+    cr!("113.6g", "707.12");
+    ruling!("Display of Power", "only functions on the stack. It can still be copied from your graveyard");
+    let mut t = TestGame::new(2);
+    let dop = t.graveyard(P0, "Display of Power");
+    t.lands(P0, "Mountain", 4);
+    let mm = t.hand(P0, "Mizzix's Mastery");
+    t.answer_yes(P0, true);
+    t.cast(P0, mm).target(dop).go();
+    t.resolve();
+    // The copy of the exiled card was cast.
+    assert!(t
+        .g
+        .stack
+        .iter()
+        .any(|s| t.g.obj(*s).chars.name.as_str() == "Display of Power"));
+}

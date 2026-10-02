@@ -121,3 +121,36 @@ fn all_kinds_of_counters_remain() {
     assert_eq!(t.counters(ex, "-1/-1"), 1);
     assert!(t.obj_now(ex).has_keyword(keywords::KeywordKind::Menace));
 }
+
+#[test]
+fn a_copy_keeps_its_counters_only_while_its_a_copy() {
+    cr!("122.2", "707.2");
+    ruling!("Skullbriar, the Walking Grave", "If a card becomes a copy of Skullbriar, counters will remain on that card");
+    ruling!("Me, the Immortal", "If a card becomes a copy of Me, counters will remain on that card");
+    let mut t = TestGame::new(2);
+    let sk = t.battlefield(P0, "Skullbriar, the Walking Grave");
+    // P1's Clone copies it (another player's, so the legend rule doesn't apply).
+    t.lands(P1, "Island", 4);
+    let clone = t.hand(P1, "Clone");
+    t.answer_choose(P1, &[Entity::Object(sk)]);
+    t.set_step(P1, turn::Step::PrecombatMain);
+    t.cast(P1, clone).go();
+    t.resolve();
+    let clone = t.g.current(clone);
+    assert_eq!(t.obj_now(clone).chars.name.as_str(), "Skullbriar, the Walking Grave");
+    t.g.add_counters(Entity::Object(clone), "+1/+1", 2, None);
+    // It leaves the battlefield as a copy of Skullbriar: the counters remain on the card.
+    let in_gy = t
+        .g
+        .move_object(clone, Zone::Graveyard(P1), events::MoveCause::Effect, None)
+        .unwrap();
+    t.g.recompute();
+    assert_eq!(t.obj_now(in_gy).chars.name.as_str(), "Clone");
+    assert_eq!(t.counters(in_gy, "+1/+1"), 2);
+    // In the graveyard it's Clone, without the ability: they cease to exist as it moves.
+    let ex = t
+        .g
+        .move_object(in_gy, Zone::Exile, events::MoveCause::Effect, None)
+        .unwrap();
+    assert_eq!(t.counters(ex, "+1/+1"), 0);
+}
