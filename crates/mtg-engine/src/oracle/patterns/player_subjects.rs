@@ -70,11 +70,36 @@ fn mentions_you(t: &str) -> bool {
         .any(|w| matches!(w, "you" | "your" | "yours" | "yourself" | "you're" | "you've"))
 }
 
+/// Whether predicate `r` joins a clause with another player as its subject ("loses the
+/// game, then each player gains 1 life"): that clause isn't part of what the subject
+/// does, so the predicate isn't one instruction for the subject.
+fn joins_another_subject(r: &str) -> bool {
+    const SUBJECTS: &[&str] = &[
+        "each player",
+        "each opponent",
+        "each other player",
+        "target player",
+        "target opponent",
+        "that player",
+        "the player",
+        "that opponent",
+        "defending player",
+        "enchanted player",
+        "its controller",
+        "its owner",
+        "any number of target",
+    ];
+    [", then ", " then ", ", and ", " and ", ", "].iter().any(|sep| {
+        r.match_indices(sep)
+            .any(|(at, _)| SUBJECTS.iter().any(|s| r[at + sep.len()..].starts_with(s)))
+    })
+}
+
 /// The predicate `r` (after a third-person subject, lowercase) worded for "you": the
 /// first word must be a third-person verb; verbs starting the later joined clauses are
 /// put in the base form too, and the subject's "their"/"they" become "your"/"you".
 fn as_you(r: &str) -> Option<String> {
-    if mentions_you(r) {
+    if mentions_you(r) || joins_another_subject(r) {
         return None;
     }
     let (first, rest) = split_word(r);
@@ -1038,6 +1063,9 @@ mod tests {
         );
         // "you" in the predicate is the controller, not the subject.
         assert_eq!(as_you("mills cards equal to the number of cards in your hand"), None);
+        // A joined clause with another subject isn't part of the subject's instruction.
+        assert_eq!(as_you("loses the game, then each player gains 1 life"), None);
+        assert_eq!(as_you("draws a card and target player mills a card"), None);
         // Not a verb.
         assert_eq!(as_you("cards equal to"), None);
         assert_eq!(
