@@ -489,6 +489,16 @@ impl Renderer<'_> {
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
                 np.post.push("dealt damage this way".into())
             }
+            // "for each creature card exiled this way": the cards the instruction before
+            // exiled.
+            Filter::In(s)
+                if self.after_exile
+                    && matches!(s.as_ref(), Sel::Var(v)
+                        if *v == crate::oracle::patterns::hand_graveyard_grammar::AFFECTED) =>
+            {
+                np.post.push("exiled this way".into());
+                np.kind.get_or_insert("card");
+            }
             // "for each card revealed this way".
             Filter::In(s)
                 if matches!(s.as_ref(), Sel::Var(crate::kw::reveal_from_hand::REVEALED)) =>
