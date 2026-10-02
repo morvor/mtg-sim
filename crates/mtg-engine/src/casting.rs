@@ -888,6 +888,18 @@ impl Game {
                 self.player_rel_matches(*who, p, &ctx)
                     && self.matches_view(&view, card, &as_spell_filter(what), &ctx)
             })
+            // "The next creature spell you cast this turn can be cast as though it had
+            // flash."
+            || self.next_spell_effects.iter().any(|e| {
+                e.player == p
+                    && crate::next_spell::gives_flash(self, e)
+                    && self.matches_view(
+                        &view,
+                        card,
+                        &as_spell_filter(&e.filter),
+                        &Ctx::new(e.source, e.player),
+                    )
+            })
     }
 
     /// CR 205.4e: a player can't cast a legendary instant or sorcery spell unless they
@@ -944,6 +956,18 @@ impl Game {
                 }
                 Restriction::MaxSpellsPerTurn(who, n) => {
                     self.player_filter_matches(who, p, &ctx) && spells_cast >= *n
+                }
+                Restriction::MaxSpellsOfKindPerTurn { who, what, n } => {
+                    let f = as_spell_filter(what);
+                    self.player_filter_matches(who, p, &ctx)
+                        && self.matches_view(&view, card, &f, &ctx)
+                        && self
+                            .history
+                            .spells_cast
+                            .iter()
+                            .filter(|(q, s)| *q == p && self.matches(*s, &f, &ctx))
+                            .count() as u32
+                            >= *n
                 }
                 _ => false,
             }

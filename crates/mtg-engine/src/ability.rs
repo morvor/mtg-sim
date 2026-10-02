@@ -2369,6 +2369,15 @@ pub enum Restriction {
     MaxDrawsPerTurn(PlayerFilter, u32),
     /// "can't cast more than one spell each turn".
     MaxSpellsPerTurn(PlayerFilter, u32),
+    /// "Each player can't cast more than one noncreature spell each turn.", "Each player
+    /// who has cast a nonartifact spell this turn can't cast additional nonartifact
+    /// spells.": a player who has cast `n` spells matching `what` this turn can't cast
+    /// another one (counting spells cast before the effect began, CR 601.3).
+    MaxSpellsOfKindPerTurn {
+        who: PlayerFilter,
+        what: Filter,
+        n: u32,
+    },
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
     /// "[objects] can't be regenerated [this turn]": regeneration shields and effects

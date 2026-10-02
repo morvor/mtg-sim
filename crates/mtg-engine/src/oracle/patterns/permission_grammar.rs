@@ -1803,6 +1803,50 @@ fn spell_self_permission(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
     to_statics(&p, block.trim(), ctx)
 }
 
+/// "The next creature spell you cast this turn can be cast as though it had flash.", "The
+/// next creature card you play this turn can be played as though it had flash." (CR
+/// 601.3b): a waiting effect for the next such spell its controller casts this turn
+/// (CR 611.2f), which lets that spell be cast any time they could cast an instant; casting
+/// the next such spell, whenever, uses it up.
+fn next_spell_flash(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).trim().strip_prefix("the next ")?;
+    // "[quality] spell you cast", or "[quality] card you play" (a nonland card played is
+    // cast, CR 305.9).
+    let quality = if r == "spell you cast this turn can be cast as though it had flash" {
+        ""
+    } else if let Some(s) =
+        r.strip_suffix(" spell you cast this turn can be cast as though it had flash")
+    {
+        s
+    } else {
+        let s = r.strip_suffix(" card you play this turn can be played as though it had flash")?;
+        if s.is_empty() {
+            return None;
+        }
+        s
+    };
+    let filter = if quality == "spell" || quality.is_empty() {
+        Filter::Spell
+    } else {
+        let f = object_filter(&format!("{quality} card"))?;
+        if mentions_land(&f) {
+            return None;
+        }
+        Filter::and(vec![f, Filter::Spell])
+    };
+    if mentions_x(&filter) {
+        return None;
+    }
+    Some(Effect::NextSpell {
+        filter,
+        mods: vec![Modification::AddKeyword(
+            crate::keywords::Keyword::new(crate::keywords::KeywordKind::Flash).text("flash"),
+        )],
+        expires: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "permission grammar: the next spell you cast this turn can be cast as though it had flash", priority: 120, parse: next_spell_flash } }
 inventory::submit! { FollowupPattern { name: "permission grammar: you may play the cards an earlier instruction moved", priority: 120, apply: followup } }
 inventory::submit! { EffectPattern { name: "permission grammar: a permission to play cards", priority: 450, parse: effect } }
 inventory::submit! { StaticPattern { name: "permission grammar: a static permission to play cards", priority: 120, parse: statics } }

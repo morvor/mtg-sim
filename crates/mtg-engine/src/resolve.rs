@@ -2930,6 +2930,7 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::CantPlayLands(f)
         | Restriction::MaxDrawsPerTurn(f, _)
         | Restriction::MaxSpellsPerTurn(f, _)
+        | Restriction::MaxSpellsOfKindPerTurn { who: f, .. }
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         Restriction::CantCast { who, .. } => Some(who),
         Restriction::MustAttackPlayer { defender, .. }

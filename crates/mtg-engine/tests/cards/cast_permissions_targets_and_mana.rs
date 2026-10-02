@@ -94,7 +94,8 @@ fn hedonists_trove_casts_one_spell_a_turn_from_among_the_exiled_cards() {
     assert_eq!(t.life(P1), 17);
     // One spell this way each turn; lands are another permission.
     assert!(!can_cast_at(&mut t, P0, shock, &[Entity::Player(P1)]));
-    t.play_land(P0, t.g.current(forest)).expect("play a land exiled with it");
+    t.play_land(P0, t.g.current(forest))
+        .expect("play a land exiled with it");
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::PrecombatMain);
     assert!(can_cast_at(&mut t, P0, shock, &[Entity::Player(P1)]));
