@@ -792,3 +792,43 @@ fn sink_into_stupor_returns_only_an_opponents_spell_or_nonland_permanent() {
     assert!(t.in_hand(P1, "Lightning Bolt"));
     assert_eq!(t.life(P0), 20);
 }
+
+#[test]
+fn hedge_shredder_puts_the_land_cards_milled_onto_the_battlefield_tapped() {
+    cr!("701.17a", "603.2c");
+    assert_supported("Hedge Shredder");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Hedge Shredder");
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Island");
+    t.g.mill(P0, 3);
+    t.resolve_all();
+    let forest = t.named_on_battlefield("Forest");
+    let island = t.named_on_battlefield("Island");
+    assert_eq!((forest.len(), island.len()), (1, 1));
+    assert!(t.obj(forest[0]).tapped && t.obj(island[0]).tapped);
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
+
+#[test]
+fn colossal_grave_reaver_puts_one_of_the_creature_cards_onto_the_battlefield() {
+    cr!("603.2c");
+    assert_compiles("Colossal Grave-Reaver", "put one of them onto the battlefield");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Colossal Grave-Reaver");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Hill Giant");
+    t.library_top(P0, "Forest");
+    let milled = t.g.mill(P0, 3);
+    let giant = milled
+        .iter()
+        .map(|o| t.g.current(*o))
+        .find(|o| t.obj(*o).chars.name == "Hill Giant")
+        .expect("milled giant");
+    t.answer_choose(P0, &[o(giant)]);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(t.in_graveyard(P0, "Forest"));
+}

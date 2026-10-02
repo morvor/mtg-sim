@@ -2319,6 +2319,8 @@ mod tests {
             ("Sorcery", "Return a Pirate card from your graveyard to your hand, then do the same for Vampire, Dinosaur, and Merfolk."),
             ("Artifact", "{4}, {T}: Choose a card at random that was exiled with ~. Put that card into its owner's hand."),
             ("Creature", "When ~ enters, return target creature card of an opponent's choice from your graveyard to your hand."),
+            ("Creature", "Whenever one or more creature cards are put into your graveyard from your library, put one of them onto the battlefield."),
+            ("Creature", "Whenever one or more land cards are put into your graveyard from your library, put them onto the battlefield tapped."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
         }
