@@ -126,6 +126,32 @@ inventory::submit! {
     FollowupPattern { name: "dig: you may play the cards exiled from the top", priority: 200, apply: may_play_dug }
 }
 inventory::submit! {
+    crate::oracle::patterns::ConditionPattern { name: "dig: there is a [card] and a [card] in your graveyard", priority: 200, parse: cards_in_graveyard }
+}
+
+/// "there is an instant card and a sorcery card in your graveyard" (Flow State): a card
+/// of each description.
+fn cards_in_graveyard(c: &str) -> Option<Condition> {
+    let r = end(c)
+        .strip_prefix("there is ")?
+        .strip_suffix(" in your graveyard")?;
+    let (a, c2) = r.split_once(" and ")?;
+    let mut out = Vec::new();
+    for d in [a, c2] {
+        let d = d.strip_prefix("a ").or_else(|| d.strip_prefix("an "))?;
+        let (f, _, rest) = parse_object_phrase(d)?;
+        if !rest.trim().is_empty() || !d.ends_with(" card") {
+            return None;
+        }
+        out.push(Condition::Exists(Filter::and(vec![
+            f,
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+        ])));
+    }
+    Some(Condition::And(out))
+}
+inventory::submit! {
     EffectPattern { name: "dig: [source], [steps] / [source] and [instruction]", priority: 200, parse: source_then_steps }
 }
 inventory::submit! {
@@ -170,7 +196,7 @@ inventory::submit! {
     FollowupPattern { name: "dig: otherwise, you may put that card ...", priority: 200, apply: otherwise_put_untaken }
 }
 inventory::submit! {
-    FollowupPattern { name: "dig: if [condition], instead [selection]", priority: 150, apply: dig_instead }
+    FollowupPattern { name: "dig: if [condition], instead [selection]", priority: 50, apply: dig_instead }
 }
 inventory::submit! {
     FollowupPattern { name: "dig: [instruction] for each card put [somewhere] this way", priority: 150, apply: for_each_put_this_way }
@@ -1691,7 +1717,14 @@ fn until_source(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     };
     let saved = b.targets.len();
-    let (n, filter) = if r.starts_with("a ") || r.starts_with("an ") {
+    let (n, filter) = if let Some(x) = r.strip_prefix("that many ").filter(|_| !b.in_trigger) {
+        // "Exile all creatures you control, then reveal cards ... until you reveal that
+        // many creature cards": as many as the previous instruction affected.
+        (
+            Value::CountSel(Box::new(Sel::Var(vars::IT))),
+            dig_card_filter(x, b),
+        )
+    } else if r.starts_with("a ") || r.starts_with("an ") {
         // One card: "a Doctor card, a card with doctor's companion, or a Vehicle card", "a
         // nonlegendary, nonland card with mana value 3 or less" (the plain forms are
         // `card_flow_reveal_until`'s).

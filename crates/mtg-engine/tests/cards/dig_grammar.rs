@@ -1078,6 +1078,55 @@ fn break_out_puts_a_cheap_creature_onto_the_battlefield_or_into_hand() {
     }
 }
 
+#[test]
+fn flow_state_takes_two_with_an_instant_and_a_sorcery_in_the_graveyard() {
+    cr!("608.2c");
+    assert_supported("Flow State");
+    for both in [false, true] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 2);
+        t.graveyard(P0, "Shock");
+        if both {
+            t.graveyard(P0, "Divination");
+        }
+        let ids = stack(&mut t, P0, &["Forest", "Grizzly Bears", "Island"]);
+        let spell = t.hand(P0, "Flow State");
+        if both {
+            t.answer_choose(P0, &[Entity::Object(ids[1]), Entity::Object(ids[2])]);
+        } else {
+            t.answer_choose(P0, &[Entity::Object(ids[1])]);
+        }
+        t.cast(P0, spell).go();
+        t.resolve();
+        assert!(t.in_hand(P0, "Grizzly Bears"));
+        assert_eq!(t.in_hand(P0, "Island"), both);
+        assert_eq!(library_names(&t, P0)[0], "Filler");
+    }
+}
+
+#[test]
+fn mass_polymorph_reveals_as_many_creatures_as_were_exiled() {
+    cr!("701.20a", "701.24a");
+    assert_supported("Mass Polymorph");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 6);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Llanowar Elves");
+    stack(
+        &mut t,
+        P0,
+        &["Shivan Dragon", "Serra Angel", "Forest", "Ornithopter", "Shock"],
+    );
+    let spell = t.hand(P0, "Mass Polymorph");
+    t.cast(P0, spell).go();
+    t.resolve();
+    // Two creatures exiled: the first two creature cards revealed enter.
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
+    assert_eq!(t.named_on_battlefield("Serra Angel").len(), 1);
+    assert!(t.named_on_battlefield("Shivan Dragon").is_empty());
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+}
+
 /// Cards the dig grammar made fully supported (each with its dig, library position or
 /// shuffle text compiled); the families are exercised by the tests above.
 #[test]
@@ -1241,6 +1290,8 @@ fn dig_grammar_cards_are_supported() {
         "Dakra Mystic",
         "Break Out",
         "Nick Fury, Agent of S.H.I.E.L.D.",
+        "Flow State",
+        "Mass Polymorph",
     ] {
         assert_supported(name);
     }
