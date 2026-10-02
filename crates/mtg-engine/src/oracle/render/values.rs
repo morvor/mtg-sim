@@ -1022,6 +1022,10 @@ impl Renderer<'_> {
             }
             Duration::Permanent => String::new(),
             Duration::UntilHostLeaves => String::new(),
+            Duration::WhileAffectedHasCounter(k) => format!(
+                "for as long as it has {} on it",
+                with_article(&counter_name(k))
+            ),
             Duration::ThisTurn => "this turn".into(),
             Duration::ThroughNextUntapStep => "during its controller's next untap step".into(),
             Duration::ThroughYourNextUntapStep => "during your next untap step".into(),

@@ -175,6 +175,7 @@ impl Renderer<'_> {
                 let s = self.search(e);
                 (who, s, false)
             }
+            Effect::SearchCards(spec) => (spec.who.clone(), self.search_cards(spec), false),
             Effect::CreateToken {
                 controller,
                 spec,
@@ -587,6 +588,31 @@ impl Renderer<'_> {
                         format!("remove {c} from {t}{}", w.unwrap_or_default())
                     }
                 }
+            }
+            Effect::RemoveCountersUpTo { what, kind, max } => {
+                let noun = match kind {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let t = self.sel(what, Case::Obj);
+                match max {
+                    None => format!("remove any number of {} from {t}", plural(&noun)),
+                    Some(v) => {
+                        let (c, w) = self.counted(v, &noun);
+                        format!("remove up to {c} from {t}{}", w.unwrap_or_default())
+                    }
+                }
+            }
+            // "Choose a counter on target permanent. Put an additional counter of that kind
+            // on that permanent."
+            Effect::ChooseCounterKind { from, then } => {
+                let f = self.sel(from, Case::Obj);
+                let inner = self.effect(then);
+                let k = crate::ability::CHOSEN_COUNTER_KIND;
+                let inner = inner
+                    .replace(&format!("{k} counters"), "counters of that kind")
+                    .replace(&format!("{k} counter"), "counter of that kind");
+                format!("choose a counter on {f}. {inner}")
             }
             Effect::MoveCounters { from, to, kind, n } => {
                 let noun = match kind {
@@ -1034,6 +1060,7 @@ impl Renderer<'_> {
             | Effect::BecomeMonarch { .. }
             | Effect::TakeInitiative { .. }
             | Effect::Search { .. }
+            | Effect::SearchCards(_)
             | Effect::CreateEmblem { .. } => unreachable_text(),
             Effect::SetLife { who, n } => {
                 let p = self.player(who, Case::Poss);
@@ -2320,6 +2347,105 @@ impl Renderer<'_> {
             s.push_str(&format!(", put {pron} {dest}"));
         }
         if *shuffle {
+            s.push_str(", then shuffle");
+        }
+        s
+    }
+
+    /// A search of one or more zones for one or more kinds of cards (`SearchSpec`).
+    fn search_cards(&mut self, spec: &SearchSpec) -> String {
+        let whose =
+            if same_player(&spec.who, &spec.whose) || matches!(spec.whose, PlayerRef::Iterated) {
+                self.possessive_for(&spec.who)
+            } else {
+                self.player(&spec.whose, Case::Poss)
+            };
+        let zone = |z: &ZoneKind| match z {
+            ZoneKind::Library => "library",
+            ZoneKind::Graveyard => "graveyard",
+            ZoneKind::Hand => "hand",
+            ZoneKind::Exile => "exile",
+            ZoneKind::Battlefield => "battlefield",
+            _ => "zone",
+        };
+        let zones: Vec<&str> = spec.zones.iter().map(zone).collect();
+        let joiner = if spec.zones_optional { "and/or" } else { "and" };
+        let zones = match zones.as_slice() {
+            [] => String::new(),
+            [one] => (*one).to_string(),
+            [init @ .., last] => format!("{} {joiner} {last}", init.join(", ")),
+        };
+        let mut many = false;
+        let parts: Vec<String> = spec
+            .parts
+            .iter()
+            .map(|p| {
+                let det = match (&p.count, p.up_to) {
+                    _ if p.all => Det::Count("all".into()),
+                    (Value::Const(1), false) => Det::A,
+                    (Value::Const(n), _) if *n >= 99 => Det::Count("any number of".into()),
+                    (Value::Const(n), false) => Det::Count(number_word(*n)),
+                    (Value::Const(n), true) => Det::UpTo(number_word(*n)),
+                    (other, up_to) => {
+                        let v = self.value(other);
+                        if up_to {
+                            Det::UpTo(v)
+                        } else {
+                            Det::Count(v)
+                        }
+                    }
+                };
+                if p.all || p.up_to || !matches!(p.count, Value::Const(1)) {
+                    many = true;
+                }
+                self.noun_det(&p.filter, det)
+            })
+            .collect();
+        if parts.len() > 1 {
+            many = true;
+        }
+        let parts = match parts.as_slice() {
+            [] => String::new(),
+            [one] => one.clone(),
+            [init @ .., last] => format!("{} and {last}", init.join(", ")),
+        };
+        let may = if spec.optional { "may " } else { "" };
+        let mut s = format!("{may}search {whose} {zones} for {parts}");
+        if spec.distinct_names {
+            s.push_str(" with different names");
+        }
+        let pron = if many { "them" } else { "it" };
+        if spec.reveal {
+            s.push_str(&format!(", reveal {pron}"));
+        }
+        if spec.shuffle == SearchShuffle::Before {
+            s.push_str(&format!(", then shuffle and put {pron} on top"));
+            return s;
+        }
+        let own = same_player(&spec.who, &spec.whose);
+        let dests: Vec<String> = spec
+            .dests
+            .iter()
+            .map(|d| {
+                let mut alts = vec![self.destination_phrase(&d.to, many, own)];
+                for o in &d.or {
+                    alts.push(self.destination_phrase(o, many, own));
+                }
+                let phrase = alts.join(" or ");
+                match &d.count {
+                    Some(n) => {
+                        let (a, _) = self.amount(n);
+                        format!("{a} {phrase}")
+                    }
+                    None if spec.dests.len() > 1 => format!("the rest {phrase}"),
+                    None => format!("{pron} {phrase}"),
+                }
+            })
+            .collect();
+        if !dests.is_empty() {
+            s.push_str(&format!(", put {}", dests.join(" and ")));
+        }
+        if spec.shuffle == SearchShuffle::After {
             s.push_str(", then shuffle");
         }
         s

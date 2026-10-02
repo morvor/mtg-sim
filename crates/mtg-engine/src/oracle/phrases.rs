@@ -683,13 +683,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (f, r)
         } else if let Some((f, r)) = parse_with_suffix(t) {
             (f, r)
-        } else if let Some((f, r)) = t.strip_prefix("that has ").and_then(|x| {
-            // "a spell that has freerunning" (Brotherhood Headquarters): "with [keyword]".
-            let with = format!("with {x}");
-            let (f, rest) = parse_with_suffix(&with)?;
-            let n = rest.len();
-            Some((f, &t[t.len() - n..]))
-        }) {
+        } else if let Some((f, r)) = t
+            .strip_prefix("that has ")
+            .or_else(|| t.strip_prefix("that have "))
+            .and_then(|x| {
+                // "a spell that has freerunning" (Brotherhood Headquarters): "with [keyword]".
+                let with = format!("with {x}");
+                let (f, rest) = parse_with_suffix(&with)?;
+                let n = rest.len();
+                Some((f, &t[t.len() - n..]))
+            })
+        {
             (f, r)
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
@@ -940,6 +944,11 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
     } else {
         (false, t.strip_prefix("with ")?)
     };
+    // "with three or more +1/+1 counters on it", "with counters on them", "with no
+    // counters on it" (see `patterns::counter_grammar`).
+    if let Some(r) = super::patterns::counter_grammar::counters_on(rest, negate) {
+        return Some(r);
+    }
     // "with no abilities" (CR 113.12: granted abilities count, characteristics and
     // qualities don't).
     if let Some(tail) = rest.strip_prefix("no abilities") {

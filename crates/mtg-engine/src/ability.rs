@@ -525,6 +525,68 @@ pub enum ZoneKind {
     Outside,
 }
 
+/// A search (CR 701.23): "[who] search(es) [whose] [zones] for [parts][, reveal
+/// them][, put them DESTS][, then shuffle]".
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchSpec {
+    /// The searching player(s) ("each opponent may search": a variable).
+    pub who: PlayerRef,
+    /// Whose zones are searched, evaluated for each searcher (`Iterated` = their own).
+    pub whose: PlayerRef,
+    /// The zones searched (library, graveyard, hand).
+    pub zones: Vec<ZoneKind>,
+    /// "and/or": the searcher chooses which of the zones to search.
+    pub zones_optional: bool,
+    /// The cards searched for: each part is found separately ("a Forest card and a
+    /// Plains card"); a card is found for at most one part.
+    pub parts: Vec<SearchPart>,
+    /// "with different names" (CR 201.2).
+    pub distinct_names: bool,
+    /// The searcher may decline to search ("you may search").
+    pub optional: bool,
+    pub reveal: bool,
+    /// Where the found cards go, in order: each takes its count of the found cards (as
+    /// many as possible), the last (count `None`) the rest. Empty: they stay where they
+    /// are (a later instruction refers to them).
+    pub dests: Vec<SearchDest>,
+    pub shuffle: SearchShuffle,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchPart {
+    pub filter: Filter,
+    pub count: Value,
+    /// "up to N", "any number of": the searcher may find fewer.
+    pub up_to: bool,
+    /// "all cards with that name": every matching card in a public zone is found.
+    #[serde(default)]
+    pub all: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchDest {
+    /// How many of the found cards go here (`None`: the rest).
+    pub count: Option<Value>,
+    pub to: Destination,
+    /// "put it into your hand or graveyard", "onto the battlefield or into your hand":
+    /// other places the searcher may put these cards instead, chosen as they're put.
+    #[serde(default)]
+    pub or: Vec<Destination>,
+}
+
+/// When a searched library is shuffled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SearchShuffle {
+    #[default]
+    No,
+    /// After the found cards are put where they go ("then shuffle"); "if you search your
+    /// library this way, shuffle" is the same: only searched libraries are shuffled.
+    After,
+    /// "Then shuffle and put that card on top" (CR 701.24b): the library is shuffled
+    /// except the found cards, which are then put in their position in it.
+    Before,
+}
+
 /// Where an effect puts an object.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Destination {
@@ -875,6 +937,9 @@ pub enum Sel {
     TopOfLibrary(PlayerRef, Value),
 }
 
+/// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
+pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
+
 /// Refers to one or more players.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum PlayerRef {
@@ -1187,6 +1252,9 @@ pub enum Filter {
     SharesColor(Box<Sel>),
     HasKeyword(KeywordKind),
     HasCounter(Option<CounterKind>),
+    /// The number of counters of a kind (of all kinds: None) on it compared with a value
+    /// ("with three or more +1/+1 counters on it", "with exactly one tide counter on it").
+    CounterCount(Option<CounterKind>, Cmp, Box<Value>),
     /// Has at least one ability (for "creature with no abilities" use Not).
     HasAbilities,
     /// The source object itself.
@@ -1656,6 +1724,10 @@ pub enum Duration {
     Permanent,
     /// Until the affected object leaves (used by Auras granting effects via resolution).
     UntilHostLeaves,
+    /// "for as long as it has a [kind] counter on it": for each affected object, until it
+    /// has no counters of that kind (CR 611.2b: it doesn't apply again if it gets one
+    /// later, and does nothing to an object that has none as the effect begins).
+    WhileAffectedHasCounter(CounterKind),
     /// "this turn" for rule-modifying effects — same as EndOfTurn.
     ThisTurn,
     /// "[doesn't untap] during its controller's next untap step": for each affected
@@ -3221,10 +3293,29 @@ pub enum Effect {
         kind: CounterKind,
         n: Value,
     },
+    /// "Remove N [kind] counters from [what]" (CR 122). `kind: None`: N counters in all,
+    /// of the kinds the controller of the spell or ability chooses where the object has
+    /// several (every counter if N is at least how many it has: "remove all counters").
     RemoveCounters {
         what: Sel,
         kind: Option<CounterKind>,
         n: Value,
+    },
+    /// "Remove up to N [kind] counters from [what]", "remove any number of counters from
+    /// [what]" (`max: None`): for each object, the controller of the spell or ability
+    /// chooses how many to remove (at most `max`) and, of several kinds, which.
+    RemoveCountersUpTo {
+        what: Sel,
+        kind: Option<CounterKind>,
+        max: Option<Value>,
+    },
+    /// "Choose a counter on [from]. Put an additional counter of that kind on ...": the
+    /// controller chooses a kind of counter among the counters on `from` (objects or
+    /// players), then `then` is performed with [`CHOSEN_COUNTER_KIND`] standing for that
+    /// kind. Nothing happens if there are none.
+    ChooseCounterKind {
+        from: Sel,
+        then: Box<Effect>,
     },
     /// "Move [n / all] [kind] counters from [from] onto [to]" (CR 122.5). `kind: None`:
     /// counters of each kind; `n: None`: all of them.
@@ -3564,6 +3655,9 @@ pub enum Effect {
         reveal: bool,
         shuffle: bool,
     },
+    /// The general search (CR 701.23, see [`crate::search_rules`]): one or more zones,
+    /// several card descriptions, distinct names, split destinations.
+    SearchCards(Box<SearchSpec>),
     Shuffle {
         who: PlayerRef,
     },
