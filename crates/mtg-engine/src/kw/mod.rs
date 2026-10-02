@@ -71,6 +71,11 @@ pub trait KeywordRules: Sync + Send {
     ) -> bool {
         false
     }
+    /// Whether a rule this implementation defines prohibits `p` from playing the land
+    /// card `card` (CR 305.2). Called for every registered implementation.
+    fn land_play_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
+        false
+    }
     /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a
     /// foretold card face down in exile (CR 702.143a) or a plotted card (CR 702.170d).
     /// Called for every registered implementation.
@@ -954,6 +959,13 @@ pub fn damage_source_matches(g: &Game, source: ObjectId, f: &Filter, ctx: &Ctx) 
             crate::casting::matches_with_chars(g, source, &chars, f, ctx)
         }
     }
+}
+
+/// See [`KeywordRules::land_play_prohibited`].
+pub fn land_play_prohibited(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.land_play_prohibited(g, p, card))
 }
 
 /// See [`KeywordRules::target_forbidden`].

@@ -380,6 +380,7 @@ impl Game {
                 .rule_effects
                 .iter()
                 .any(|e| check(&e.restriction, e.source, e.controller))
+            || crate::kw::land_play_prohibited(self, p, card)
     }
 
     /// Characteristics of the face a card would be played with as a land.
