@@ -738,6 +738,16 @@ impl Game {
             by: m.by,
             lookback,
         });
+        if m.to == Zone::Battlefield {
+            // A permanent entering the battlefield attached to an object or player becomes
+            // attached to it (CR 303.4a, 603.2e): "whenever an Aura becomes attached"
+            // triggers (Brood Keeper's rulings).
+            if let Some(to) = m.etb.attach_to {
+                if self.obj(new_id).attached_to == Some(to) {
+                    self.emit(Event::Attached { obj: new_id, to });
+                }
+            }
+        }
         if let Some(host) = was_attached_to {
             // CR 603.10c: looks back in time (to the snapshot taken for this move).
             self.emit(Event::Unattached {

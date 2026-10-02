@@ -30,7 +30,10 @@ fn subject(s: &str, b: &mut Builder) -> Option<PlayerRef> {
 
 /// "[player]'s life total becomes N", "your life total becomes N".
 fn set_life(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (who, n) = if let Some(n) = l.strip_prefix("your life total becomes ") {
+    let (who, n) = if let Some(n) = l
+        .strip_prefix("your life total becomes ")
+        .or_else(|| l.strip_prefix("have your life total become "))
+    {
         (PlayerRef::You, n)
     } else if let Some(n) = l.strip_prefix("each player's life total becomes ") {
         (PlayerRef::EachPlayer, n)
@@ -38,8 +41,14 @@ fn set_life(l: &str, b: &mut Builder) -> Option<Effect> {
         let (p, n) = l.split_once("'s life total becomes ")?;
         (subject(p, b)?, n)
     };
-    let (n, rest) = parse_number(n)?;
-    if !end(rest).is_empty() {
+    if let Some((n, rest)) = parse_number(n) {
+        if end(rest).is_empty() {
+            return Some(Effect::SetLife { who, n });
+        }
+    }
+    // "the total toughness of creatures you control" (Loxodon Lifechanter).
+    let (n, rest) = crate::oracle::statics::parse_value_phrase(n, b)?;
+    if !end(&rest).is_empty() {
         return None;
     }
     Some(Effect::SetLife { who, n })

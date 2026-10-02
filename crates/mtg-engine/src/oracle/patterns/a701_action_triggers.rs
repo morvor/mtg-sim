@@ -361,6 +361,7 @@ fn support_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
         chosen_by_opponent: false,
         text: String::new(),
         condition: None,
+        together: None,
     };
     let slot = b.add_target(spec, text);
     Some(Effect::AddCounters {

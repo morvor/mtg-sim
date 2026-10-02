@@ -57,14 +57,18 @@ fn parse_triggered_at(
                 super::patterns::that_player_conditions::that_player_condition(c, &it_player)
             });
             // A condition read as being about the triggering object ("if it had counters
-            // on it", CR 603.10a) has the trigger's referent.
+            // on it", CR 603.10a; "if it doesn't have the same name as another creature
+            // you control") has the trigger's referent.
             let about_trigger_object = matches!(
                 parsed,
                 Some(Condition::SelMatches(
                     Sel::TriggerLki | Sel::TriggerObject,
                     _
                 ))
-            );
+            ) || parsed.as_ref().is_some_and(|p| {
+                let d = format!("{p:?}");
+                d.contains("TriggerObject") || d.contains("TriggerLki")
+            });
             if mentions_it && !matches!(it, Sel::This) && !about_trigger_object {
                 return None;
             }
@@ -136,7 +140,7 @@ fn parse_triggered_at(
 /// looking back in time), CR 113.6k — or its effect moves ~ out of the graveyard ("return
 /// ~ from your graveyard to your hand") and the trigger condition doesn't put it there
 /// (CR 113.6m).
-fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
+pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
     match trigger {
         TriggerCond::CastSpell {
             filter: Filter::Source,

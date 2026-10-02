@@ -43,7 +43,8 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
                 ch.color = Some(c);
             } else if let Some(t) = CardType::from_word(w) {
                 ch.card_type = Some(t);
-            } else if is_basic_land_type(w) {
+            } else if is_land_type(w) {
+                // "choose a land type": basic or not (stored with the basic land types).
                 ch.basic_land_type = Some(SmolStr::new(w));
             } else if is_creature_type(w) {
                 ch.creature_type = Some(SmolStr::new(w));
@@ -147,7 +148,7 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
                     entry.color = made.color;
                 } else if CardType::from_word(&w).is_some() {
                     entry.card_type = made.card_type;
-                } else if is_basic_land_type(&w) {
+                } else if is_land_type(&w) {
                     entry.basic_land_type = made.basic_land_type;
                 } else if is_creature_type(&w) {
                     entry.creature_type = made.creature_type;
