@@ -40,6 +40,11 @@ pub struct EndState {
     /// Forced priority passes in the current stretch of mandatory actions.
     #[serde(skip)]
     pub loop_len: u32,
+    /// Decisions asked that had only one possible answer (a target or object choice with
+    /// exactly as many candidates as must be chosen): not optional actions, so they don't
+    /// interrupt a loop of mandatory actions (CR 104.4b).
+    #[serde(skip)]
+    pub forced_asks: u64,
     /// A restart of the game requested by a resolving effect (CR 104.6, 727).
     #[serde(skip)]
     pub restart: Option<crate::restart::RestartRequest>,
@@ -371,10 +376,12 @@ impl Game {
     /// for someone.
     pub fn check_mandatory_loop(&mut self, forced: bool) -> bool {
         // Any other decision since the last forced pass was an optional action, or the
-        // stretch of mandatory actions ended.
-        let interrupted = self.actions_taken != self.end.loop_mark;
+        // stretch of mandatory actions ended. Decisions with a single possible answer
+        // aren't choices.
+        let choices = self.actions_taken - self.end.forced_asks;
+        let interrupted = choices != self.end.loop_mark;
         // The priority decision about to be asked counts as one action.
-        self.end.loop_mark = self.actions_taken + 1;
+        self.end.loop_mark = choices + 1;
         if interrupted || !forced || self.stack.is_empty() {
             self.end.loop_states.clear();
             self.end.loop_controllers.clear();
@@ -426,6 +433,31 @@ impl Game {
 
     /// A fingerprint of the game state that doesn't depend on object ids (which change with
     /// every zone change, CR 400.7), for recognizing repeated states.
+    /// Notes a decision about to be asked: one with a single possible answer (choosing
+    /// exactly as many targets or objects as there are candidates) is no optional action
+    /// for [`Game::check_mandatory_loop`].
+    pub(crate) fn note_forced_decision(&mut self, d: &crate::decision::Decision) {
+        use crate::decision::Decision;
+        let forced = match d {
+            Decision::ChooseTargets {
+                candidates,
+                min,
+                max,
+                ..
+            }
+            | Decision::ChooseEntities {
+                candidates,
+                min,
+                max,
+                ..
+            } => *min == *max && candidates.len() == *min as usize,
+            _ => false,
+        };
+        if forced {
+            self.end.forced_asks += 1;
+        }
+    }
+
     pub(crate) fn loop_fingerprint(&self) -> u64 {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         // Everything that could make a repetition end on its own must be part of the
