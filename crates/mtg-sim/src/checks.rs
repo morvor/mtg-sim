@@ -257,12 +257,13 @@ pub fn step_ended_problems(g: &Game) -> Option<String> {
     None
 }
 
-/// A permanent with damage marked as a turn begins (CR 514.2).
+/// A permanent with damage marked as a turn begins (CR 514.2), unless an effect says the
+/// damage isn't removed during cleanup steps (Ancient Adamantoise).
 pub fn damage_left_over(g: &Game) -> Option<String> {
     g.battlefield
         .iter()
         .map(|&id| g.obj(id))
-        .find(|o| o.damage > 0)
+        .find(|o| o.damage > 0 && !mtg_engine::kw::keeps_damage_in_cleanup(g, o.id))
         .map(|o| {
             format!(
                 "{} #{} still has {} damage marked as the turn begins",
@@ -597,6 +598,13 @@ mod tests {
         assert_eq!(damage_left_over(&t.g), None);
         t.g.objects[bears.0 as usize].damage = 1;
         assert!(damage_left_over(&t.g).unwrap().contains("1 damage marked"));
+        // Unless the damage isn't removed during cleanup steps.
+        t.g.objects[bears.0 as usize].damage = 0;
+        let tortoise = t.battlefield(P0, "Ancient Adamantoise");
+        t.g.objects[tortoise.0 as usize].damage = 3;
+        assert_eq!(damage_left_over(&t.g), None);
+        t.g.objects[tortoise.0 as usize].damage = 0;
+        t.g.objects[bears.0 as usize].damage = 1;
         // Through the observer, as a turn begins.
         let mut ledger = Ledger::default();
         ledger.baseline(&t.g);

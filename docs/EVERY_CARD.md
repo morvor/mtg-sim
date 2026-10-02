@@ -97,6 +97,13 @@ Game kinds: 22,796 standard, 163 commander, 59 planechase, 40 archenemy, 27 vang
 
 Run with `--report FILE` for the full list (card, reason, ability text).
 
+After merging the newer engine (pool of 23,613 cards), a one-game-per-card sweep
+(`--games-per-card 1`, 23,613 games, 33 min) found no panic, hang or slow game; its one
+rules report was the checker's own mistake (Ancient Adamantoise's damage legitimately
+isn't removed during cleanup; the check now asks the engine,
+`kw::keeps_damage_in_cleanup`). With one game per card: 99.5% cast or played, 93.7% of
+the abilities used, 94.7% of the cards fully exercised.
+
 ## Engine problems the sweeps found and fixed
 
 Each with a regression test in `crates/mtg-engine/tests`:
