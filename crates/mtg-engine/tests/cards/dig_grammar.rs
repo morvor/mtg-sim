@@ -881,3 +881,133 @@ fn dream_pillager_may_cast_spells_from_among_the_exiled_cards() {
         .unwrap();
     assert!(t.play_land(P0, island).is_err());
 }
+
+#[test]
+fn guided_passage_the_opponent_chooses_one_card_of_each_kind() {
+    cr!("701.20a");
+    ruling!(
+        "Guided Passage",
+        "If you have no cards of any of the specified card types, then ignore those types and the opponent only selects cards of the types you do have."
+    );
+    assert_supported("Guided Passage");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Mountain", 1);
+    t.g.players[0].library.clear();
+    // No noncreature, nonland card: only a creature and a land are chosen.
+    let ids = stack(&mut t, P0, &["Grizzly Bears", "Forest", "Llanowar Elves", "Island"]);
+    let spell = t.hand(P0, "Guided Passage");
+    t.answer_choose(P1, &[Entity::Object(ids[2]), Entity::Object(ids[3])]);
+    t.cast(P0, spell).go();
+    t.resolve();
+    // The opponent chose (among all four).
+    assert!(t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::ChooseEntities { .. })));
+    assert!(t.in_hand(P0, "Llanowar Elves") && t.in_hand(P0, "Island"));
+    assert_eq!(t.library_size(P0), 2);
+}
+
+#[test]
+fn heretic_s_punishment_deals_the_greatest_mana_value_among_the_milled_cards() {
+    cr!("701.17a");
+    ruling!(
+        "Heretic's Punishment",
+        "If you have two or fewer cards in your library when the ability resolves, all of them will be put into your graveyard."
+    );
+    assert_supported("Heretic's Punishment");
+    let mut t = TestGame::new(2);
+    let hp = t.battlefield(P0, "Heretic's Punishment");
+    t.lands(P0, "Mountain", 4);
+    t.g.players[0].library.clear();
+    stack(&mut t, P0, &["Shivan Dragon", "Shock"]);
+    t.activate(P0, hp, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve();
+    assert_eq!(t.graveyard_size(P0), 2);
+    assert_eq!(t.life(P1), 14, "Shivan Dragon's mana value");
+}
+
+#[test]
+fn elixir_gains_life_for_each_card_shuffled_away() {
+    cr!("701.24a");
+    assert_supported("Elixir");
+    let mut t = TestGame::new(2);
+    let elixir = t.battlefield(P0, "Elixir");
+    t.lands(P0, "Plains", 5);
+    t.graveyard(P0, "Shock");
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Forest");
+    t.activate(P0, elixir, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.life(P0), 22, "two nonland cards");
+    assert!(t.in_graveyard(P0, "Forest"));
+}
+
+#[test]
+fn god_eternal_bontu_goes_third_from_the_top() {
+    cr!("401.7");
+    assert_supported("God-Eternal Bontu");
+    let mut t = TestGame::new(2);
+    let bontu = t.battlefield(P0, "God-Eternal Bontu");
+    t.answer_yes(P0, true);
+    t.g.destroy(bontu, None);
+    t.resolve_all();
+    assert_eq!(library_names(&t, P0)[2], "God-Eternal Bontu");
+}
+
+#[test]
+fn archaic_s_agony_exiles_as_many_cards_as_the_excess_damage() {
+    cr!("120.10");
+    assert_supported("Archaic's Agony");
+    let mut t = TestGame::new(2);
+    for l in ["Mountain", "Forest", "Island", "Swamp", "Plains"] {
+        t.lands(P0, l, 1);
+    }
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    stack(&mut t, P0, &["Forest", "Shock", "Lightning Bolt", "Island"]);
+    let spell = t.hand(P0, "Archaic's Agony");
+    // Five colors: five damage to a 2/2, three excess.
+    t.cast(P0, spell).target(bear).go();
+    t.resolve();
+    assert_eq!(t.g.exile.len(), 3);
+    assert_eq!(library_names(&t, P0)[0], "Forest");
+}
+
+#[test]
+fn pact_weapon_reveals_the_card_drawn() {
+    cr!("701.20a");
+    ruling!(
+        "Pact Weapon",
+        "you will draw a card, reveal it, and lose life"
+    );
+    assert_supported("Pact Weapon");
+    let mut t = TestGame::new(2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let weapon = t.battlefield(P0, "Pact Weapon");
+    t.g.attach(weapon, Entity::Object(bear));
+    t.library_top(P0, "Shivan Dragon");
+    t.attack(&[(bear, Entity::Player(P1))], &[]);
+    assert!(t.in_hand(P0, "Shivan Dragon"));
+    // +6/+6 for Shivan Dragon's mana value: 8 damage; 6 life lost.
+    assert_eq!(t.life(P1), 12);
+    assert_eq!(t.life(P0), 14);
+}
+
+#[test]
+fn getaway_barrel_puts_a_random_creature_onto_the_battlefield() {
+    cr!("701.20a");
+    assert_supported("Getaway Barrel");
+    let mut t = TestGame::new(2);
+    let barrel = t.battlefield(P0, "Getaway Barrel");
+    stack(&mut t, P0, &["Grizzly Bears", "Shock", "Forest"]);
+    t.g.destroy(barrel, None);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // No choice was offered.
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseEntities { .. })));
+}

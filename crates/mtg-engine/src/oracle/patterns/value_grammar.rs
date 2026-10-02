@@ -285,6 +285,15 @@ fn of_referent(stat: Stat, sel: Sel) -> Value {
 /// control", "the card" (what "it" names), "that creature card".
 fn referent(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim_start();
+    // A phrase the text gave a meaning of its own ("that card" for the card drawn and
+    // revealed, `dig_grammar::draw_and_reveal`).
+    for (p, sel) in &b.named {
+        if let Some(rest) = s.strip_prefix(p.as_str()) {
+            if p == "that card" && (word_end(rest) || rest.starts_with('\'')) {
+                return Some((sel.clone(), rest.to_string()));
+            }
+        }
+    }
     for p in [
         "the card",
         "that creature card",

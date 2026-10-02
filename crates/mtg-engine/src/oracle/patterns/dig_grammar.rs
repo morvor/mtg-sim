@@ -99,7 +99,11 @@ fn draw_and_reveal(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let mut in_place = Destination::library_top();
     in_place.position = LibraryPosition::FromTop(0);
-    b.it = Sel::Var(vars::IT);
+    // "that card" is the card drawn; "it" and "the creature" keep meaning what they did
+    // (Pact Weapon: "The creature gets +X/+X ..., where X is that card's mana value").
+    for p in ["that card", "the revealed card"] {
+        b.named.push((p.to_string(), Sel::Var(vars::IT)));
+    }
     Some(Effect::seq(vec![
         Effect::Draw {
             who: PlayerRef::You,
