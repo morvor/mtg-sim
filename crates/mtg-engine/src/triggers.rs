@@ -531,7 +531,13 @@ impl Game {
             for s in sources.iter_mut() {
                 if s.0 == *obj {
                     if let AbilityKind::Triggered(t) = &s.2.kind {
-                        if matches!(t.trigger, TriggerCond::LoseControl(_)) {
+                        // (Also qualified: "whenever an opponent gains control of a
+                        // permanent from you".)
+                        let lose_control = match &t.trigger {
+                            TriggerCond::Where { trigger, .. } => &**trigger,
+                            other => other,
+                        };
+                        if matches!(lose_control, TriggerCond::LoseControl(_)) {
                             s.1 = *from;
                         }
                     }

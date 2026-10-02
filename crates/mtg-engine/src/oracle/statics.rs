@@ -796,7 +796,19 @@ pub fn parse_value_phrase_core(s: &str, b: &mut Builder) -> Option<(Value, Strin
         // "for each creature card milled this way": among the cards the preceding
         // instruction milled, where they went (CR 701.17c).
         if let Some(rest) = rest.trim_start().strip_prefix("milled this way") {
-            let milled = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::IT)))]);
+            // In the first sentence of a "whenever one or more [cards] are milled"
+            // trigger, before any instruction of its own, they're the trigger event's
+            // cards (The Wise Mothman).
+            let mill_trigger = b.in_trigger
+                && b.sentences == 0
+                && matches!(b.it, Sel::TriggerObjects)
+                && super::raw_text().to_lowercase().contains(" are milled, ");
+            let among = if mill_trigger {
+                Sel::TriggerObjects
+            } else {
+                Sel::Var(vars::IT)
+            };
+            let milled = Filter::and(vec![f, Filter::In(Box::new(among))]);
             return Some((Value::Count(milled), rest.to_string()));
         }
         // "the number of creatures tapped this way" (Angel's Trumpet).
