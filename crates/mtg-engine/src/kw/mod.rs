@@ -295,6 +295,18 @@ pub trait KeywordRules: Sync + Send {
     fn survives_lethal_damage(&self, g: &Game, creature: ObjectId) -> bool {
         false
     }
+    /// Whether damage `source` deals to the player `p` is dealt as though the source had
+    /// infect (CR 120.3b, 702.90b): it results in poison counters, not life loss.
+    fn damage_as_though_infect(&self, g: &Game, source: ObjectId, p: PlayerId) -> bool {
+        false
+    }
+    /// The colors `source` has as a source of damage, if a rule makes them differ from
+    /// its colors (e.g. "black and/or red ... spells are colorless sources of damage").
+    /// Used where effects look at the damage's source: prevention and replacement effects
+    /// and protection (CR 702.16e), not triggered abilities.
+    fn damage_source_colors(&self, g: &Game, source: ObjectId) -> Option<ColorSet> {
+        None
+    }
     /// Whether damage marked on the permanent `id` isn't removed in the cleanup step (an
     /// exception to CR 514.2).
     fn keeps_damage_in_cleanup(&self, g: &Game, id: ObjectId) -> bool {
@@ -864,6 +876,29 @@ pub fn lethal_damage_basis(g: &Game, creature: ObjectId) -> i32 {
         .iter()
         .find_map(|r| r.lethal_damage_basis(g, creature))
         .unwrap_or_else(|| g.obj(creature).toughness())
+}
+
+/// See [`KeywordRules::damage_as_though_infect`].
+pub fn damage_as_though_infect(g: &Game, source: ObjectId, p: PlayerId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.damage_as_though_infect(g, source, p))
+}
+
+/// Whether `source`, as a source of damage, matches `f` (see
+/// [`KeywordRules::damage_source_colors`]).
+pub fn damage_source_matches(g: &Game, source: ObjectId, f: &Filter, ctx: &Ctx) -> bool {
+    match registry()
+        .iter()
+        .find_map(|r| r.damage_source_colors(g, source))
+    {
+        None => g.matches(source, f, ctx),
+        Some(colors) => {
+            let mut chars = g.obj(source).chars.clone();
+            chars.colors = colors;
+            crate::casting::matches_with_chars(g, source, &chars, f, ctx)
+        }
+    }
 }
 
 /// See [`KeywordRules::keeps_damage_in_cleanup`].
