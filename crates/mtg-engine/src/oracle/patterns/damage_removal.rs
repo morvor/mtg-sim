@@ -142,6 +142,14 @@ fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
     }
     let it = b.it.clone();
+    // "the exiled card's mana value" right after an instruction exiled it (Spark of
+    // Creativity); X in its mana cost is 0 there (CR 202.3e).
+    if let Some(r) = s.strip_prefix("the exiled card's mana value") {
+        if matches!(&it, Sel::Var(v) if *v == vars::IT) {
+            return Some((Value::ManaValueOf(Box::new(it)), r.to_string()));
+        }
+        return None;
+    }
     // "that card"/"that creature" never names the source itself or a player; if the
     // referent is one of those, the antecedent wasn't tracked (e.g. a discarded card).
     if s.starts_with("that ") && !it_is_object(b) {

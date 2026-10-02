@@ -587,6 +587,42 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             rest.to_string(),
         ));
     }
+    // "one plus the number of spells cast this turn" (Magus of the Mind).
+    if let Some((n, r)) = s.split_once(" plus ") {
+        if let Some((Value::Const(k), tail)) = parse_number(n) {
+            if tail.trim().is_empty() {
+                let (v, rest) = parse_value_phrase(r, b)?;
+                return Some((Value::Sum(vec![Value::c(k), v]), rest));
+            }
+        }
+    }
+    // "the number of spells cast this turn": by all players.
+    if let Some(rest) = s.strip_prefix("the number of spells cast this turn") {
+        return Some((
+            Value::Custom("spells_cast_this_turn".into()),
+            rest.to_string(),
+        ));
+    }
+    if let Some(rest) = s.strip_prefix(
+        "the number of creatures that were exiled under your opponents' control this turn",
+    ) {
+        return Some((
+            Value::Custom("creatures_exiled_from_opponents_this_turn".into()),
+            rest.to_string(),
+        ));
+    }
+    // "the total number of instant and sorcery cards you own in exile and in your
+    // graveyard" (Beacon Bolt): the cards in either zone.
+    if let Some(r) = s
+        .strip_prefix("the total number of ")
+        .or_else(|| s.strip_prefix("the number of "))
+    {
+        const ZONES: &str = " you own in exile and in your graveyard";
+        if let Some((head, rest)) = r.split_once(ZONES) {
+            let v = super::patterns::statics::parse_for_each(&format!("{head}{ZONES}"), None)?;
+            return Some((v, rest.to_string()));
+        }
+    }
     if let Some(r) = s.strip_prefix("the number of ") {
         // "the number of +1/+1 counters on it", "the number of charge counters on ~",
         // "the number of counters on target permanent".

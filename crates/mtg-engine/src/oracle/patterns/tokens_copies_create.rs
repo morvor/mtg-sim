@@ -53,8 +53,8 @@ pub(crate) fn token_quote_abilities(
     types: &[CardType],
     ctx: &CompileContext,
 ) -> Option<Vec<Ability>> {
-    // A comma inside the closing quote belongs to the sentence ("with "This token can't
-    // block," where X is ..."), not to the quoted ability.
+    // A comma before the closing quote may be the sentence's rather than the ability's
+    // (`with "[ability]," where X is ...`): compared without it.
     let want = q_lower.trim().trim_end_matches(',');
     let orig = normalized_quotes(ctx)
         .into_iter()
@@ -566,8 +566,7 @@ inventory::submit! { FollowupPattern { name: "tokens_copies: the token has", pri
 
 /// Whether an effect refers to the tokens just created.
 fn mentions_created(e: &Effect) -> bool {
-    serde_json::to_string(e)
-        .is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::CREATED)))
+    serde_json::to_string(e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::CREATED)))
 }
 
 /// "It gains haste until end of turn", "They gain haste", "Those tokens gain flying and
@@ -675,12 +674,9 @@ fn f_created_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(tail) = tail else {
         return false;
     };
-    let Some(e) = super::damage_removal::delayed_removal(
-        verb,
-        Sel::Var(vars::CREATED),
-        tail.trim(),
-        step,
-    ) else {
+    let Some(e) =
+        super::damage_removal::delayed_removal(verb, Sel::Var(vars::CREATED), tail.trim(), step)
+    else {
         return false;
     };
     append_after_create(prev, e)

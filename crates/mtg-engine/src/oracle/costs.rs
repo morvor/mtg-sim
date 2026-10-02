@@ -324,7 +324,7 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
     let mut any = false;
     loop {
         let lower = text.to_lowercase();
-        let pats: [(&str, u8); 16] = [
+        let pats: [(&str, u8); 17] = [
             ("activate only as a sorcery.", 1),
             ("activate only once each turn.", 2),
             ("activate only during your turn.", 3),
@@ -347,7 +347,11 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
                 "activate only during combat before blockers are declared.",
                 15,
             ),
-            ("activate only during the end of combat step.", 16),
+            (
+                "activate only during your turn and only once each turn.",
+                16,
+            ),
+            ("activate only during the end of combat step.", 17),
         ];
         let mut matched = false;
         for (p, k) in pats {
@@ -366,7 +370,11 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
                         max = Some(1);
                     }
                     9 => timing = ActivationTiming::OpponentsTurn,
-                    10..=16 => {
+                    16 => {
+                        timing = ActivationTiming::YourTurn;
+                        max = Some(1);
+                    }
+                    10..=15 | 17 => {
                         let (point, after, during_combat) = match k {
                             10 => (CombatPoint::AttackersDeclared, false, false),
                             11 => (CombatPoint::AttackersDeclared, true, false),
@@ -375,7 +383,7 @@ pub fn split_activation_restrictions(s: &str) -> (&str, ActivationTiming, Option
                             14 => (CombatPoint::EndOfCombatStep, false, false),
                             // "During the end of combat step": during combat, once
                             // that step has begun (CR 506.8).
-                            16 => (CombatPoint::EndOfCombatStep, true, true),
+                            17 => (CombatPoint::EndOfCombatStep, true, true),
                             _ => (CombatPoint::BlockersDeclared, false, true),
                         };
                         timing = ActivationTiming::CombatWindow(CombatTiming {
