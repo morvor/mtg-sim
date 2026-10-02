@@ -712,7 +712,12 @@ impl Renderer<'_> {
             // "spells from anywhere other than your hand" (no type named).
             format!("spells {r}")
         } else {
-            format!("{} spells", n.trim_end_matches('s'))
+            // "sorcery spells" (not "sorcerie spells").
+            let one = match n.strip_suffix("ies") {
+                Some(r) => format!("{r}y"),
+                None => n.trim_end_matches('s').to_string(),
+            };
+            format!("{one} spells")
         }
     }
 

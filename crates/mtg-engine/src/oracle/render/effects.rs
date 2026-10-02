@@ -5183,6 +5183,30 @@ impl Becomes {
         } else {
             format!("is {}", with_article(&phrase))
         };
+        // CR 205.1b: an object that becomes an "artifact creature" keeps its other types.
+        let artifact_creature = {
+            let mut t = self.add_types.clone();
+            t.sort_by_key(|x| x.word());
+            t == [CardType::Artifact, CardType::Creature]
+                && self.subtypes.is_empty()
+                && self.supertypes.is_empty()
+                && self.colors.is_none()
+        };
+        // "becomes an artifact creature with base power and toughness 4/5", "... with
+        // power and toughness each equal to its mana value".
+        if artifact_creature {
+            if let Some((Some(p), Some(t))) = &self.pt {
+                let ps = r.value(p);
+                let ts = r.value(t);
+                let with_pt = if format!("{p:?}") == format!("{t:?}") && !Renderer::is_simple(p) {
+                    format!("power and toughness each equal to {ps}")
+                } else {
+                    format!("base power and toughness {ps}/{ts}")
+                };
+                let a = s.trim_start_matches("is ").to_string();
+                s = format!("is {{alt:{a}|an artifact creature with {with_pt}}}");
+            }
+        }
         // A resolving spell or ability's effect: "It becomes an enchantment" or "It's an
         // enchantment" (the same continuous effect, CR 611.2a).
         if gains {
@@ -5200,6 +5224,10 @@ impl Becomes {
         // keeps its card types without adding any, so nothing is "in addition".
         let only_creature_types = self.replaces_creature_types && self.add_types.is_empty();
         if self.additive && !self.land_type && !only_supertypes && !only_creature_types {
+            if artifact_creature {
+                s.push_str(" {opt:in addition to its other types}");
+                return Some((s, still));
+            }
             // An effect that adds types keeps the old ones: cards say "It's still a land"
             // when they know what the object was, else "in addition to its other types".
             let known: Vec<CardType> = r

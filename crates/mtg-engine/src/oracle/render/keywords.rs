@@ -159,6 +159,20 @@ impl Renderer<'_> {
                 }
                 None => "banding".into(),
             },
+            // CR 702.124i: "Partner—[text]", as the partner rules read it.
+            KeywordKind::Partner
+                if matches!(
+                    crate::kw::partner::partner_keyword(k),
+                    crate::kw::partner::PartnerAbility::Text(_)
+                ) =>
+            {
+                let crate::kw::partner::PartnerAbility::Text(t) =
+                    crate::kw::partner::partner_keyword(k)
+                else {
+                    return self.gap("partner text");
+                };
+                format!("partner—{t}")
+            }
             KeywordKind::Partner if variant == Some("partner with") => {
                 let raw = k.text.as_deref().unwrap_or("");
                 let name = raw

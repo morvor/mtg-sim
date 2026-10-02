@@ -870,7 +870,9 @@ impl Renderer<'_> {
         types.sort_by_key(|t| type_order(*t));
         words.extend(types.iter().map(|t| t.word().to_string()));
         if !np.alts.is_empty() {
-            let conj = if self.alt_and { "and" } else { "or" };
+            // "each Frog, Rabbit, Raccoon, or Squirrel" / "Knights and Walls": the same
+            // kinds either way.
+            let conj = if self.alt_and { "{alt:and|or}" } else { "or" };
             words.push(join_list(&np.alts, conj));
         }
         if np.permanent_card {
@@ -906,7 +908,8 @@ impl Renderer<'_> {
                 .collect();
             let list = join_list(&alts, "and");
             if suffix.is_empty() {
-                return list;
+                // "Knights and Walls" / "Knights or Walls".
+                return join_list(&alts, "{alt:and|or}");
             }
             // "Elemental spells and Warrior spells" / "instant and sorcery spells".
             if suffix == " spell" && alts.len() == 2 {
