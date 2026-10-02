@@ -1689,3 +1689,227 @@ fn magma_burst_kicked_second_target_is_a_different_one() {
     t.resolve();
     assert_eq!(t.life(P1), 17);
 }
+
+// ---------------------------------------------------------------------------
+// Different instances of "target", and how many targets there are
+// ---------------------------------------------------------------------------
+
+#[test]
+fn blood_feud_two_creatures_with_the_same_controller() {
+    cr!("115.3", "701.14a");
+    ruling!(
+        "Blood Feud",
+        "Blood Feud can target two creatures with the same controller."
+    );
+    supported("Blood Feud");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let spell = t.hand(P0, "Blood Feud");
+    add_mana(&mut t, P0, ManaType::R, 6);
+    t.cast(P0, spell).target(giant).target(bears).go();
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.obj_now(giant).damage, 2);
+}
+
+#[test]
+fn gleaming_splendor_two_different_players() {
+    cr!("115.3", "601.2c");
+    ruling!(
+        "Gleaming Splendor",
+        "Gleaming Splendor's activated ability requires two different target players. You cannot target the same player twice with a single activation of the ability."
+    );
+    supported("Gleaming Splendor");
+    let mut t = TestGame::new(3);
+    let splendor = t.battlefield(P0, "Gleaming Splendor");
+    add_mana(&mut t, P0, ManaType::W, 3);
+    // Answering P1 twice isn't legal: two different players are chosen.
+    t.answer_targets(P0, &[Entity::Player(P1), Entity::Player(P1)]);
+    let id = t.activate(P0, splendor, 0, &[]).unwrap().unwrap();
+    let chosen = stack_targets(&t, id);
+    assert_eq!(chosen.len(), 2);
+    assert_ne!(chosen[0], chosen[1]);
+}
+
+#[test]
+fn leeching_bite_needs_two_different_creatures() {
+    cr!("115.3", "601.2c");
+    ruling!(
+        "Leeching Bite",
+        "You need to be able to choose two different target creatures in order to cast Leeching Bite."
+    );
+    use crate::r_s21_common::castable;
+    supported("Leeching Bite");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let spell = t.hand(P0, "Leeching Bite");
+    add_mana(&mut t, P0, ManaType::G, 2);
+    assert!(!castable(&mut t, P0, spell));
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    assert!(castable(&mut t, P0, spell));
+    t.cast(P0, spell).target(bears).target(elves).go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (3, 3));
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+}
+
+#[test]
+fn magma_opus_taps_two_different_permanents_tapped_or_not() {
+    cr!("115.3", "601.2c");
+    ruling!(
+        "Magma Opus",
+        "You must choose two different target permanents for the second effect. You may choose permanents that are already tapped."
+    );
+    supported("Magma Opus");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.objects[giant.0 as usize].tapped = true;
+    let spell = t.hand(P0, "Magma Opus");
+    add_mana(&mut t, P0, ManaType::U, 4);
+    add_mana(&mut t, P0, ManaType::R, 4);
+    // 4 damage to P1; tap the (already tapped) Giant and the Bears.
+    let id = t
+        .cast(P0, spell)
+        .targets(&[Entity::Player(P1)])
+        .targets(&[Entity::Object(giant), Entity::Object(giant)])
+        .go();
+    let chosen = stack_targets(&t, id);
+    assert_eq!(chosen.len(), 3);
+    assert_eq!(chosen[1], Entity::Object(giant));
+    assert_eq!(chosen[2], Entity::Object(bears));
+    t.resolve();
+    assert!(t.obj_now(giant).tapped && t.obj_now(bears).tapped);
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn no_targets_when_the_number_of_targets_is_zero() {
+    cr!("601.2c", "601.2d", "107.3a");
+    ruling!(
+        "Fire Covenant",
+        "If X is 0, the number of targets must also be 0."
+    );
+    ruling!(
+        "Jaws of Stone",
+        "If you control no Mountains as you cast Jaws of Stone, the number of targets must be zero."
+    );
+    supported("Fire Covenant");
+    supported("Jaws of Stone");
+    // Fire Covenant with X = 0 life paid: no targets, no damage.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let spell = t.hand(P0, "Fire Covenant");
+    add_mana(&mut t, P0, ManaType::B, 1);
+    add_mana(&mut t, P0, ManaType::R, 2);
+    let from = t.asked().len();
+    let id = t
+        .cast(P0, spell)
+        .x(0)
+        .targets(&[Entity::Object(bears)])
+        .go();
+    assert!(bounds_since(&t, from).iter().all(|(_, max)| *max == 0));
+    assert!(stack_targets(&t, id).is_empty());
+    t.resolve();
+    assert_eq!(t.obj_now(bears).damage, 0);
+    assert_eq!(t.life(P0), 20);
+
+    // Jaws of Stone with no Mountains: no targets.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Grizzly Bears");
+    let spell = t.hand(P0, "Jaws of Stone");
+    add_mana(&mut t, P0, ManaType::R, 6);
+    let from = t.asked().len();
+    let id = t.cast(P0, spell).targets(&[Entity::Player(P1)]).go();
+    assert!(bounds_since(&t, from).iter().all(|(_, max)| *max == 0));
+    assert!(stack_targets(&t, id).is_empty());
+    t.resolve();
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn changing_targets_keeps_the_number_of_targets() {
+    cr!("115.7", "115.7a", "115.7d");
+    ruling!(
+        "Deflecting Swat",
+        "If the target spell has a variable number of targets, you can't change how many targets it has."
+    );
+    ruling!(
+        "Goblin Flectomancer",
+        "If a spell has a variable number of targets (such as Electrolyze), the number of targets chosen can't be changed."
+    );
+    ruling!(
+        "Spellskite",
+        "If a spell or ability has a variable number of targets, you can't change the number of targets."
+    );
+    ruling!(
+        "Mizzium Meddler",
+        "If a spell or ability has a variable number of targets, you can’t change the number of targets."
+    );
+    supported("Electrolyze");
+    supported("Deflecting Swat");
+    supported("Spellskite");
+    // P1's Electrolyze has one target (P0) of up to two. P0's Deflecting Swat chooses new
+    // targets for it: answering two new targets, only one target is changed.
+    let electrolyze = |t: &mut TestGame| -> ObjectId {
+        let spell = t.hand(P1, "Electrolyze");
+        add_mana(t, P1, ManaType::U, 1);
+        add_mana(t, P1, ManaType::R, 2);
+        t.cast(P1, spell).targets(&[Entity::Player(P0)]).go()
+    };
+    let mut t = TestGame::new(3);
+    let bolt = electrolyze(&mut t);
+    let swat = t.hand(P0, "Deflecting Swat");
+    add_mana(&mut t, P0, ManaType::R, 3);
+    t.answer_targets(P0, &[Entity::Object(bolt)]);
+    t.answer_targets(P0, &[Entity::Player(P2)]);
+    // A second new target would be answered here, but there's only one target to change.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, swat).go();
+    t.resolve();
+    assert_eq!(stack_targets(&t, bolt), vec![Entity::Player(P2)]);
+    t.resolve();
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 20, 18));
+
+    // Spellskite: a target is changed to it; still one target.
+    let mut t = TestGame::new(2);
+    let skite = t.battlefield(P0, "Spellskite");
+    let bolt = electrolyze(&mut t);
+    add_mana(&mut t, P0, ManaType::U, 1);
+    t.answer_targets(P0, &[Entity::Object(skite)]);
+    t.activate(P0, skite, 0, &[Entity::Object(bolt)]).unwrap();
+    t.resolve();
+    assert_eq!(stack_targets(&t, bolt), vec![Entity::Object(skite)]);
+    t.resolve();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.obj_now(skite).damage, 2);
+
+    // Mizzium Meddler: its enters ability changes a target to it; still one target.
+    supported("Mizzium Meddler");
+    let mut t = TestGame::new(2);
+    let bolt = electrolyze(&mut t);
+    t.answer_targets(P0, &[Entity::Object(bolt)]);
+    t.answer_yes(P0, true);
+    let meddler = crate::r_s05_common::enter(&mut t, P0, "Mizzium Meddler");
+    t.resolve();
+    assert_eq!(stack_targets(&t, bolt), vec![Entity::Object(meddler)]);
+    t.resolve();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.obj_now(meddler).damage, 2);
+
+    // Goblin Flectomancer: the targets of the spell are changed; still one target.
+    supported("Goblin Flectomancer");
+    let mut t = TestGame::new(3);
+    let flecto = t.battlefield(P0, "Goblin Flectomancer");
+    let bolt = electrolyze(&mut t);
+    t.answer_targets(P0, &[Entity::Object(bolt)]);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P2)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.activate(P0, flecto, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(stack_targets(&t, bolt), vec![Entity::Player(P2)]);
+    t.resolve();
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 20, 18));
+}
