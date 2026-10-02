@@ -2226,3 +2226,92 @@ fn f_round_down_each_time(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool 
 }
 
 inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: round down each time", priority: 960, apply: f_round_down_each_time } }
+
+/// "If target opponent has more cards in hand than you, draw cards equal to the
+/// difference.": the number is determined once (CR 121.2).
+fn p_draw_hand_difference(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if ")?;
+    let who = r.strip_suffix(" has more cards in hand than you, draw cards equal to the difference")?;
+    if !who.starts_with("target ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let (who, rest) = player_ref(who, b)?;
+    if !rest.trim().is_empty() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    let them = Value::HandSize(who);
+    let you = Value::HandSize(PlayerRef::You);
+    Some(Effect::If {
+        cond: Condition::Compare(them.clone(), Cmp::Gt, you.clone()),
+        then: Box::new(Effect::Draw {
+            who: PlayerRef::You,
+            n: Value::Diff(Box::new(them), Box::new(you)),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: if target opponent has more cards in hand, draw the difference", priority: 960, parse: p_draw_hand_difference } }
+
+/// "draw cards equal to the mana value of the sacrificed permanent": read as "the
+/// sacrificed permanent's mana value" (and likewise power and toughness).
+fn p_equal_to_stat_of(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    for stat in ["mana value", "power", "toughness"] {
+        let p = format!(" equal to the {stat} of ");
+        if let Some((head, obj)) = l.split_once(&p) {
+            if obj.contains(" equal to ") || obj.starts_with("each ") || obj.contains(" among ") {
+                return None;
+            }
+            let rewritten = format!("{head} equal to {obj}'s {stat}");
+            let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+            let e = parse_clause(&rewritten, b);
+            if e.is_none() {
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1, saved.2);
+            }
+            return e;
+        }
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: equal to the [stat] of [object]", priority: 960, parse: p_equal_to_stat_of } }
+
+/// "exile cards equal to its power from the top of its owner's library": the top that
+/// many cards.
+fn p_exile_cards_equal_from_top(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("exile cards equal to ")?;
+    let (value, lib) = r.split_once(" from the top of ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some((v, rest)) = crate::oracle::statics::parse_value_phrase(value, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    if !end(&rest).is_empty() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    clause_with_value(&format!("exile the top x cards of {lib}"), &v, b)
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile cards equal to [value] from the top of [library]", priority: 960, parse: p_exile_cards_equal_from_top } }
+
+/// "you gain life and draw cards equal to its power": both amounts are the value.
+fn p_gain_and_draw_equal(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you gain life and draw cards equal to ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let e = parse_clause(&format!("you gain life equal to {r} and draw cards equal to {r}"), b);
+    if e.is_none() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    e
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: gain life and draw cards equal to [value]", priority: 960, parse: p_gain_and_draw_equal } }

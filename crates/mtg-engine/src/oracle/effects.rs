@@ -727,6 +727,21 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             r.to_string(),
         ));
     }
+    // "~'s controller sacrifices it": the source's controller (or owner); "it" is ~.
+    for (p, owner) in [("~'s controller", false), ("~'s owner", true)] {
+        if let Some(r) = s.strip_prefix(p) {
+            if super::patterns::oracle_hardening_referents::is_no_referent(&b.it) {
+                b.it = Sel::This;
+            }
+            let this = Box::new(Sel::This);
+            let who = if owner {
+                PlayerRef::OwnerOf(this)
+            } else {
+                PlayerRef::ControllerOf(this)
+            };
+            return Some((who, r.to_string()));
+        }
+    }
     if let Some(r) = s
         .strip_prefix("its owner")
         .or_else(|| s.strip_prefix("their owner"))

@@ -1583,3 +1583,85 @@ fn mana_seism_adds_colorless_per_land_sacrificed() {
         2
     );
 }
+
+// ---------------------------------------------------------------------------
+// Fourth batch: "~'s owner/controller" subjects, values of objects, hand differences
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fourth_batch_compiles() {
+    assert_supported(&[
+        "Gandalf, Wandering Wizard",
+        "Morbid Curiosity",
+        "Lifeblood Hydra",
+        "Balance of Power",
+    ]);
+}
+
+#[test]
+fn gandalf_owner_shuffles_him_away_and_draws() {
+    cr!("701.24a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 6);
+    let g = t.battlefield(P0, "Gandalf, Wandering Wizard");
+    t.activate(P0, g, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(g), Zone::Library(P0));
+    assert_eq!(t.hand_size(P0), 3);
+    assert_eq!(t.library_size(P0), 28);
+}
+
+#[test]
+fn morbid_curiosity_draws_the_sacrificed_permanents_mana_value() {
+    cr!("601.2h");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let mc = t.hand(P0, "Morbid Curiosity");
+    t.answer_choose(P0, &objs(&[giant]));
+    t.cast(P0, mc).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+    assert_eq!(t.hand_size(P0), 4);
+}
+
+#[test]
+fn lifeblood_hydra_gains_and_draws_its_power() {
+    cr!("603.10a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 6);
+    let h = t.hand(P0, "Lifeblood Hydra");
+    t.cast(P0, h).x(3).go();
+    t.resolve_all();
+    let h = t.g.current(h);
+    assert_eq!(t.pt(h), (3, 3));
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(h).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    assert_eq!(t.hand_size(P0), 3);
+}
+
+#[test]
+fn balance_of_power_draws_the_difference() {
+    cr!("121.2");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 5);
+    for _ in 0..5 {
+        t.hand(P1, "Shock");
+    }
+    t.hand(P0, "Shock");
+    let b = t.hand(P0, "Balance of Power");
+    t.cast(P0, b).target(P1).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 5);
+    // Fewer cards: nothing.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 5);
+    t.hand(P0, "Shock");
+    let b = t.hand(P0, "Balance of Power");
+    t.cast(P0, b).target(P1).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 1);
+}
