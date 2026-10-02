@@ -293,6 +293,27 @@ pub(super) fn damage_clause(r: &str, t: &mut Targets) -> Option<Clause> {
             let (by, x) = sources(x, t)?;
             c.by = Some(by);
             r = x;
+        } else if let Some(x) = word(r, "except combat damage that would be dealt by")
+            .filter(|_| matches!(c.kind, Kind::Combat))
+        {
+            // "Prevent all combat damage that would be dealt this turn except combat
+            // damage that would be dealt by enchanted creatures and enchantment
+            // creatures." (Inspire Awe): damage from any other source.
+            // The exception ends the sentence; each group joined by "and" is read on its
+            // own ("enchanted creatures" and "enchantment creatures").
+            if c.by.is_some() {
+                return None;
+            }
+            let mut alts = Vec::new();
+            for part in x.split(" and ") {
+                let (f, rest) = object_group(part, t)?;
+                if !rest.trim().is_empty() {
+                    return None;
+                }
+                alts.push(f);
+            }
+            c.by = Some(Filter::not(Filter::Or(alts)));
+            r = "";
         } else {
             return None;
         }

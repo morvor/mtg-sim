@@ -614,6 +614,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::Attacking, r)
         } else if let Some(r) = t.strip_prefix("that's blocking") {
             (Filter::Blocking, r)
+        } else if let Some((f, r)) = t.strip_prefix("that's ").and_then(color_list_suffix) {
+            // "target creature or planeswalker that's black or red" (Devout Decree).
+            (f, r)
         } else if let Some(r) = t
             .strip_prefix("that was dealt damage this turn")
             .or_else(|| t.strip_prefix("that were dealt damage this turn"))
@@ -739,6 +742,38 @@ fn parse_originally_printed_suffix(t: &str) -> Option<(Filter, &str)> {
         return None;
     }
     Some((Filter::NameOriginallyPrintedIn(set.trim().into()), rest))
+}
+
+/// "black or red", "white, blue, black, or red": a list of colors (any of them) at the
+/// start of `t`, and the rest.
+fn color_list_suffix(t: &str) -> Option<(Filter, &str)> {
+    // The color word at the start of `s`, and the text after it.
+    fn color(s: &str) -> Option<(Color, &str)> {
+        let n = s
+            .find(|c: char| !c.is_ascii_alphabetic())
+            .unwrap_or(s.len());
+        Some((Color::from_word(&s[..n])?, &s[n..]))
+    }
+    let mut colors = Vec::new();
+    let mut rest = t;
+    loop {
+        let (c, r) = color(rest)?;
+        colors.push(Filter::Color(c));
+        rest = r;
+        let next = [", or ", " or ", ", "]
+            .iter()
+            .find_map(|sep| rest.strip_prefix(sep).filter(|r2| color(r2).is_some()));
+        match next {
+            Some(r2) => rest = r2,
+            None => break,
+        }
+    }
+    let f = if colors.len() == 1 {
+        colors.pop()?
+    } else {
+        Filter::Or(colors)
+    };
+    Some((f, rest))
 }
 
 /// References to a choice made for the source (CR 607.2d): "of the chosen type",
