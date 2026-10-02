@@ -2396,6 +2396,16 @@ impl Game {
         // "Target creature blocks this creature this combat if able": both creatures are
         // the objects named as the effect began.
         // Likewise "target creature can't block this creature this turn".
+        if let Restriction::MustBlockAttacker { attacker, .. } = &mut r {
+            // The creature to be blocked is only named, not affected: the requirement
+            // still refers to it if it has become an illegal target (CR 608.2b; Feral
+            // Contest: "the second targeted creature is still affected by the blocking
+            // restriction").
+            if filter_references_specific(attacker) {
+                let c2 = self.with_original_targets(ctx);
+                *attacker = Filter::Objects(self.named_objects(attacker, &c2));
+            }
+        }
         if let Restriction::MustBlockAttacker { blocker, attacker }
         | Restriction::CantBeBlockedBy { attacker, blocker } = &mut r
         {
@@ -2476,6 +2486,27 @@ impl Game {
         } else {
             None
         }
+    }
+
+    /// `ctx` with each target slot left empty by illegal targets (CR 608.2b) refilled with
+    /// the targets chosen for it, for wording that only names an illegal target.
+    fn with_original_targets(&self, ctx: &Ctx) -> Ctx {
+        let mut c = ctx.clone();
+        let chosen = ctx
+            .stack_obj
+            .and_then(|s| self.obj(s).stack.as_deref())
+            .map(|si| si.chosen.clone())
+            .unwrap_or_default();
+        if let [cm] = chosen.as_slice() {
+            for (k, slot) in cm.targets.iter().enumerate() {
+                if c.targets.len() == k {
+                    c.targets.push(slot.clone());
+                } else if let Some(t) = c.targets.get_mut(k).filter(|t| t.is_empty()) {
+                    *t = slot.clone();
+                }
+            }
+        }
+        c
     }
 
     /// The objects a filter naming specific objects matches as an effect begins.

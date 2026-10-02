@@ -316,9 +316,14 @@ fn damage_replacement(l: &str, is_static: bool) -> Option<(ReplacementDef, bool)
     } else {
         (None, cond.strip_prefix("damage")?)
     };
+    // "would deal damage to an opponent this turn", or "would deal damage this turn to an
+    // opponent" (Isengard Unleashed).
     let (this_turn, cond) = match cond.strip_suffix(" this turn") {
         Some(x) => (true, x),
-        None => (false, cond),
+        None => match cond.strip_prefix(" this turn") {
+            Some(x) => (true, x),
+            None => (false, cond),
+        },
     };
     let cond = cond.trim();
     let to = if cond.is_empty() {

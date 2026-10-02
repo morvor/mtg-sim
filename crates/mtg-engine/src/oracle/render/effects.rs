@@ -735,6 +735,14 @@ impl Renderer<'_> {
                     if let Some(x) = r.strip_suffix(" each combat if able") {
                         return format!("{x} this turn if able");
                     }
+                    // "Target creature blocks target creature this turn if able."
+                    if let Some(x) = r.strip_suffix(" this combat if able") {
+                        return format!("{x} this turn if able");
+                    }
+                }
+                // "... blocks it this combat if able."
+                if d == "until end of combat" && r.ends_with(" this combat if able") {
+                    return r;
                 }
                 join_words(&[r, d])
             }

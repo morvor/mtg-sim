@@ -47,6 +47,20 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
         Filter::And(v) => Filter::And(v.iter().map(|x| lock_filter(g, x, ctx)).collect()),
         Filter::Or(v) => Filter::Or(v.iter().map(|x| lock_filter(g, x, ctx)).collect()),
         Filter::Not(x) => Filter::Not(Box::new(lock_filter(g, x, ctx))),
+        // "creatures target opponent controls": that player, whoever controls what later.
+        Filter::ControlledBy(PlayerRel::Target(k)) => {
+            let ps = ctx
+                .targets
+                .get(*k as usize)
+                .into_iter()
+                .flatten()
+                .filter_map(|e| match e {
+                    Entity::Player(p) => Some(PlayerFilter::Is(*p)),
+                    _ => None,
+                })
+                .collect();
+            Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+        }
         other => other.clone(),
     }
 }
