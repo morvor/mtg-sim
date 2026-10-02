@@ -564,6 +564,14 @@ impl Renderer<'_> {
                     if matches!(g.as_ref(), Sel::Var(v) if *v == vars::IT) {
                         return decline(format!("{} of them", number_word(*n)), case);
                     }
+                    // "Tap up to three target creatures. Put a stun counter on one of
+                    // them.": one of the targets.
+                    if let Sel::Target(i) = g.as_ref() {
+                        if self.slot_is_many(*i) && self.introduced.get(*i as usize) == Some(&true)
+                        {
+                            return decline(format!("{} of them", number_word(*n)), case);
+                        }
+                    }
                 }
                 let det = if *up_to && unbounded_choice(filter, count) {
                     Det::Count("any number of".into())

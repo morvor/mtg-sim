@@ -665,7 +665,47 @@ impl Renderer<'_> {
             Effect::Destroy { what, no_regen } => {
                 let w = self.sel(what, Case::Obj);
                 if *no_regen {
-                    let pron = if is_plural_sel(what) { "They" } else { "It" };
+                    let plural_sel = is_plural_sel(what);
+                    let pron = if plural_sel { "They" } else { "It" };
+                    // "Creatures destroyed this way can't be regenerated."
+                    let filter = match what {
+                        Sel::All(f) | Sel::Choose { filter: f, .. } => Some(f.clone()),
+                        Sel::Target(i) => {
+                            match self.targets.get(*i as usize).map(|t| t.what.clone()) {
+                                Some(TargetKind::Object(f)) => Some(f),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    };
+                    let types: Vec<CardType> = match &filter {
+                        Some(Filter::And(v)) => v
+                            .iter()
+                            .filter_map(|x| match x {
+                                Filter::Type(t) => Some(*t),
+                                _ => None,
+                            })
+                            .collect(),
+                        Some(Filter::Type(t)) => vec![*t],
+                        _ => Vec::new(),
+                    };
+                    let pron = match types.as_slice() {
+                        [t] => {
+                            let head = t.word().to_string();
+                            if plural_sel {
+                                format!(
+                                    "{{alt:{pron}|{} destroyed this way}}",
+                                    capitalize(&plural(&head))
+                                )
+                            } else {
+                                format!(
+                                    "{{alt:{pron}|{} destroyed this way}}",
+                                    capitalize(&with_article(&head))
+                                )
+                            }
+                        }
+                        _ => pron.to_string(),
+                    };
                     format!("destroy {w}. {pron} can't be regenerated")
                 } else {
                     format!("destroy {w}")

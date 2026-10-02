@@ -14,6 +14,64 @@ impl Renderer<'_> {
             .or_else(|| self.does_the_same(v, i).map(|s| (2, s)))
             .or_else(|| self.any_player_may(v, i).map(|s| (2, s)))
             .or_else(|| self.unpreventable_damage(v, i).map(|s| (2, s)))
+            .or_else(|| self.any_player_may_have(v, i).map(|s| (3, s)))
+    }
+
+    /// "Any player may have ~ deal 5 damage to them. If no one does, target player draws
+    /// three cards.": each player in turn may; a flag remembers whether anyone did.
+    fn any_player_may_have(&mut self, v: &[Effect], i: usize) -> Option<String> {
+        let (
+            Effect::StoreValue {
+                var,
+                value: Value::Const(0),
+            },
+            Some(Effect::ForEachPlayer {
+                who: PlayerRef::EachPlayer,
+                effect,
+            }),
+            Some(Effect::If {
+                cond: Condition::Compare(Value::Var(flag), Cmp::Eq, Value::Const(0)),
+                then,
+                otherwise,
+            }),
+        ) = (&v[i], v.get(i + 1), v.get(i + 2))
+        else {
+            return None;
+        };
+        if flag != var || !matches!(otherwise.as_ref(), Effect::Noop) {
+            return None;
+        }
+        let Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: inner,
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        let Effect::May {
+            who: PlayerRef::You,
+            effect: body,
+        } = inner.as_ref()
+        else {
+            return None;
+        };
+        let Effect::Seq(steps) = body.as_ref() else {
+            return None;
+        };
+        let [act, Effect::StoreValue {
+            var: set,
+            value: Value::Const(1),
+        }] = steps.as_slice()
+        else {
+            return None;
+        };
+        if set != var {
+            return None;
+        }
+        let a = self.effect(act);
+        let a = a.replacen(" deals ", " deal ", 1);
+        let t = self.effect(then);
+        Some(format!("any player may have {a}. If no one does, {t}"))
     }
 
     /// "~ deals 5 damage to target creature. The damage can't be prevented.": a rule that
