@@ -311,7 +311,7 @@ fn the_ur_dragon_reduces_dragon_spells_from_the_command_zone() {
 
 #[test]
 fn rhystic_circle_prevents_unless_any_player_pays() {
-    cr!("118.12", "615.7");
+    cr!("118.12", "615.8");
     ruling!(
         "Rhystic Circle",
         "Can’t be used to prevent damage to your creatures, just to you."

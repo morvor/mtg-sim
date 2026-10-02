@@ -170,6 +170,34 @@ fn brainwash_attack_costs_three() {
 }
 
 #[test]
+fn brainwash_taxes_an_attack_on_a_battle_too() {
+    cr!("508.1d", "310.5");
+    // "can't attack unless ...": whatever it would attack, a battle included.
+    let mut t = TestGame::new(2);
+    t.answer_choose(P1, &[Entity::Player(P0)]);
+    let battle = t.enter(P1, "Invasion of Segovia");
+    t.resolve_all();
+    let aura = t.battlefield(P1, "Brainwash");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.attach(aura, Entity::Object(bears));
+    let cost = mtg_engine::combat::required_attack_cost(&t.g, bears, Entity::Object(battle));
+    assert_eq!(cost.and_then(|c| c.mana).map(|m| m.mana_value()), Some(3));
+    // "can't attack you" (Elephant Grass) doesn't cover the battle.
+    let mut t = TestGame::new(2);
+    t.answer_choose(P1, &[Entity::Player(P0)]);
+    let battle = t.enter(P1, "Invasion of Segovia");
+    t.resolve_all();
+    t.battlefield(P1, "Elephant Grass");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    assert!(
+        mtg_engine::combat::required_attack_cost(&t.g, bears, Entity::Object(battle)).is_none()
+    );
+    assert!(
+        mtg_engine::combat::required_attack_cost(&t.g, bears, Entity::Player(P1)).is_some()
+    );
+}
+
+#[test]
 fn myr_prototype_pays_for_each_counter_on_it() {
     cr!("508.1d", "509.1c", "509.1d");
     assert_supported(&["Myr Prototype", "Phyrexian Marauder"]);
@@ -428,7 +456,7 @@ fn imaginary_pet_returns_only_with_a_card_in_hand() {
 
 #[test]
 fn spirit_of_resistance_needs_each_color() {
-    cr!("611.3a", "105.4");
+    cr!("611.3a", "105.2");
     ruling!(
         "Spirit of Resistance",
         "A permanent which is of multiple colors counts as each of its colors."
