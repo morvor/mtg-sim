@@ -581,27 +581,42 @@ fn you_untap(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "basic effects: you untap/tap ...", priority: 60, parse: you_untap } }
 
 /// "If that player does, they lose 2 life." after an instruction a player might not be
-/// able to follow ("target opponent sacrifices a green or white creature of their choice"):
-/// whether they did (CR 118.12, 608.2c).
-fn if_that_player_does(l: &str, b: &mut Builder) -> Option<Effect> {
+/// able to follow ("target opponent sacrifices a green or white creature of their
+/// choice"): whether they did (CR 118.12, 608.2c).
+fn if_that_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
-    let r = ["if that player does, ", "if the player does, ", "if they do, "]
+    let Some(r) = ["if that player does, ", "if the player does, ", "if they do, "]
         .iter()
-        .find_map(|p| l.strip_prefix(p))?;
-    if super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
-        return None;
+        .find_map(|p| l.strip_prefix(p))
+    else {
+        return false;
+    };
+    // An instruction whose doing is recorded, performed by another player.
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        e => Some(e),
+    };
+    let recorded = matches!(last, Some(Effect::Sacrifice { who, .. }) if !matches!(who, PlayerRef::You));
+    if !recorded || super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+        return false;
     }
     // "they" is that player.
     let r = match r.strip_prefix("they ") {
         Some(x) => format!("that player {x}"),
         None => r.to_string(),
     };
-    let e = crate::oracle::effects::parse_clause(&r, b)?;
-    Some(Effect::If {
-        cond: Condition::PrevHappened,
-        then: Box::new(e),
-        otherwise: Box::new(Effect::Noop),
-    })
+    let Some(e) = crate::oracle::effects::parse_clause(&r, b) else {
+        return false;
+    };
+    append(
+        prev,
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    );
+    true
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: if that player does", priority: 60, parse: if_that_player_does } }
+inventory::submit! { FollowupPattern { name: "basic effects: if that player does", priority: 60, apply: if_that_player_does } }
