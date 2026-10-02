@@ -604,11 +604,8 @@ fn weatherlight_compleated_type_change_survives_losing_abilities() {
         "If Weatherlight Compleated loses its abilities, the type-changing effect of its second ability will continue to apply to it."
     );
     // "As long as Weatherlight Compleated has four or more phyresis counters on it, it's a
-    // Phyrexian creature in addition to its other types." (Its death trigger doesn't
-    // compile; this static does.)
-    let c = mtg_engine::card::card("Weatherlight Compleated");
-    assert_eq!(c.unsupported_text().len(), 1);
-    assert!(c.unsupported_text()[0].starts_with("Whenever a creature you control dies"));
+    // Phyrexian creature in addition to its other types."
+    supported("Weatherlight Compleated");
     let mut t = TestGame::new(2);
     let w = t.battlefield(P0, "Weatherlight Compleated");
     put_counters(&mut t, w, "phyresis", 4);
@@ -910,4 +907,38 @@ fn planetarium_free_cast_x_is_zero_and_no_alternative_costs() {
         .any(|(_, d)| matches!(d, Decision::ChooseCastingMethod { .. })));
     assert!(!t.on_battlefield(theirs));
     assert!(t.on_battlefield(theirs2));
+}
+
+#[test]
+fn weatherlight_compleated_dying_as_a_creature_triggers_itself() {
+    cr!("603.10a", "603.6c", "608.2h");
+    ruling!(
+        "Weatherlight Compleated",
+        "If Weatherlight Compleated is a creature and dies, its last ability will trigger."
+    );
+    ruling!(
+        "Weatherlight Compleated",
+        "If Weatherlight Compleated has left the battlefield by the time its triggered ability resolves, you won’t be able to add any counters to it. Whether you draw a card or scry 1 will be determined by the number of counters it had on it before it left the battlefield."
+    );
+    // "Whenever a creature you control dies, put a phyresis counter on Weatherlight
+    // Compleated. Then draw a card if it has seven or more phyresis counters on it. If it
+    // doesn't, scry 1."
+    for (n, draws) in [(6, false), (7, true)] {
+        let mut t = TestGame::new(2);
+        let w = t.battlefield(P0, "Weatherlight Compleated");
+        put_counters(&mut t, w, "phyresis", n);
+        assert!(t.obj(w).is(CardType::Creature));
+        destroy(&mut t, w);
+        assert!(t.in_graveyard(P0, "Weatherlight Compleated"));
+        assert_eq!(stacked_triggers(&t), 1);
+        let hand = t.hand_size(P0);
+        let from = n_asked(&t);
+        t.resolve_all();
+        // Six counters (no new one could be added): scry 1. Seven: a card.
+        assert_eq!(t.hand_size(P0), hand + usize::from(draws), "{n}");
+        assert_eq!(
+            scry_sizes(&t, P0, from),
+            if draws { vec![] } else { vec![1] }
+        );
+    }
 }
