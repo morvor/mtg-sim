@@ -2363,6 +2363,12 @@ impl Game {
                         None => m.clone(),
                     }
                 }
+                Modification::AddChosenColor => {
+                    match ctx.source.and_then(|s| self.obj(s).choices.color) {
+                        Some(c) => Modification::AddColors(ColorSet::single(c)),
+                        None => m.clone(),
+                    }
+                }
                 Modification::SetChosenColors => {
                     match ctx.source.and_then(|s| self.obj(s).choices.colors) {
                         Some(cs) => Modification::SetColors(cs),

@@ -3484,6 +3484,9 @@ impl Renderer<'_> {
                 Modification::SetChosenColors => {
                     parts.push("becomes the color or colors of your choice".into())
                 }
+                Modification::AddChosenColor => {
+                    parts.push("is the chosen color in addition to its other colors".into())
+                }
             }
         }
         let has = if gains { "gains" } else { "has" };

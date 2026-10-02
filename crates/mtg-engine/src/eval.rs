@@ -1497,7 +1497,7 @@ impl Game {
 
 /// The zones of a filter that requires one of several zones (`Or` of `InZone`s, possibly
 /// inside an `And`).
-fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
+pub(crate) fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
     match f {
         // "a nonland card from their hand or a card from their graveyard": each
         // alternative's zone.

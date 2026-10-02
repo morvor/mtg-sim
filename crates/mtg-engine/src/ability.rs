@@ -1904,6 +1904,9 @@ pub enum Modification {
     /// "becomes the color or colors of your choice": the colors chosen for the effect's
     /// source (fixed when a resolving effect is created).
     SetChosenColors,
+    /// "are the chosen color in addition to their other colors": adds the color chosen
+    /// for the effect's source (CR 607.2d). Does nothing while no color is chosen.
+    AddChosenColor,
     // Layer 6
     AddAbility(Ability),
     /// "... becomes a copy of [object], except it has this ability" (CR 707.9a): the
@@ -1999,7 +2002,7 @@ impl Modification {
             | AddChosenType
             | SetChosenBasicLandType => Layer::L4Type,
             SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor
-            | SetChosenColors => Layer::L5Color,
+            | SetChosenColors | AddChosenColor => Layer::L5Color,
             AddAbility(_)
             | AddThisAbility
             | AddKeyword(_)
