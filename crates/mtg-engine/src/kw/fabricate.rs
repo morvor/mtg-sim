@@ -2,21 +2,26 @@
 //! If you don't, create N 1/1 colorless Servo artifact creature tokens." (CR 702.123a).
 //! Each instance triggers separately (CR 702.123b).
 //!
-//! The choice is made as the ability resolves. If the permanent is no longer on the
-//! battlefield then, counters can't be put on it, and the tokens are created.
+//! The choice is made as the ability resolves. If counters can't be put on the permanent
+//! then — it's no longer on the battlefield, or an effect stops +1/+1 counters from being
+//! put on it — the player isn't offered the counters, and the tokens are created. If the
+//! player chooses the counters and none are put on it (CR 122.6: "put 0"), they didn't put
+//! counters on it, and the tokens are created too (Angel of Invention's rulings).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
+use crate::events::CounterOrigin;
 use crate::object::Zone;
+use crate::replacement::ReplEvent;
 use crate::types::*;
 use smol_str::SmolStr;
 
-/// `Condition::Custom`: the source of the resolving ability is still on the battlefield
-/// (as the same object), so counters can be put on it.
-const ON_BATTLEFIELD: &str = "fabricate:this permanent is on the battlefield";
+/// `Condition::Custom`: +1/+1 counters can be put on the source of the resolving ability:
+/// it's still on the battlefield (as the same object), and no effect prevents them.
+const CAN_PUT_COUNTERS: &str = "fabricate:counters can be put on this permanent";
 
 /// A 1/1 colorless Servo artifact creature token.
 pub fn servo() -> TokenSpec {
@@ -45,7 +50,7 @@ impl KeywordRules for Fabricate {
         let n = kw.n.unwrap_or(0);
         let effect = Effect::Seq(vec![
             Effect::If {
-                cond: Condition::Custom(ON_BATTLEFIELD.into()),
+                cond: Condition::Custom(CAN_PUT_COUNTERS.into()),
                 then: Box::new(Effect::May {
                     who: PlayerRef::You,
                     effect: Box::new(Effect::AddCounters {
@@ -78,9 +83,19 @@ impl KeywordRules for Fabricate {
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
-        (name == ON_BATTLEFIELD).then(|| {
-            ctx.source
-                .is_some_and(|s| g.is_live(s) && g.obj(s).zone == Zone::Battlefield)
+        (name == CAN_PUT_COUNTERS).then(|| {
+            ctx.source.is_some_and(|s| {
+                g.is_live(s)
+                    && g.obj(s).zone == Zone::Battlefield
+                    && !g.would_be_prevented(&ReplEvent::AddCounters {
+                        target: Entity::Object(s),
+                        kind: counters::PLUS1.into(),
+                        n: 1,
+                        source: Some(s),
+                        by: Some(ctx.controller),
+                        origin: CounterOrigin::Effect,
+                    })
+            })
         })
     }
 }

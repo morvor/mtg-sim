@@ -137,7 +137,8 @@ fn as_you(r: &str) -> Option<String> {
                 // "them" is usually objects; contractions aren't reworded: give up only
                 // on contractions (objects as "them" stay).
                 if core == "them" {
-                    None
+                    // "... and ~ deals 2 damage to them": the player.
+                    (i >= 2 && words[i - 1] == "to" && words[i - 2] == "damage").then_some("you")
                 } else {
                     return None;
                 }
@@ -250,7 +251,7 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
             )
         };
         let mut spec = TargetSpec::player(filter, text);
-        spec.min = 0;
+        spec.min = Value::c(0);
         spec.max = max;
         let slot = b.add_target(spec, text);
         // The predicate is in the plural ("each discard"): reword it as a singular one.

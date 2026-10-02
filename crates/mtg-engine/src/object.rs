@@ -335,6 +335,11 @@ pub struct ChosenMode {
     pub targets: Vec<Vec<Entity>>,
     /// Division of damage/counters among targets (CR 601.2d), per slot.
     pub divided: Vec<Vec<u32>>,
+    /// For a slot whose targets are chosen for each player ("for each opponent, ... up
+    /// to one target creature that player controls", `TargetSpec::per_player`): the
+    /// player each target was chosen for, parallel to `targets`. Empty otherwise.
+    #[serde(default)]
+    pub target_players: Vec<Vec<PlayerId>>,
 }
 
 /// Stack-specific data for spells and abilities on the stack.

@@ -30,7 +30,7 @@ fn group_doesnt_untap_next(l: &str, _b: &mut Builder) -> Option<Effect> {
     }
     Some(Effect::AddRestriction {
         restriction: Restriction::DoesntUntap(f),
-        duration: Duration::ThroughNextUntapStep,
+        duration: Duration::ThroughYourNextUntapStep,
     })
 }
 

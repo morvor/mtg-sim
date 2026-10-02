@@ -81,8 +81,10 @@ impl Game {
                     self.exec(then, ctx);
                 } else {
                     // "If it's a permanent card, you may put it onto the battlefield. If
-                    // you do, ...": an optional instruction that wasn't offered wasn't done.
-                    if matches!(**then, Effect::May { .. }) && matches!(**otherwise, Effect::Noop) {
+                    // you do, ...", "Then if there are three or more collection counters
+                    // on it, sacrifice it. If you do, ...": an instruction whose condition
+                    // didn't hold wasn't done.
+                    if matches!(**otherwise, Effect::Noop) {
                         ctx.prev_happened = false;
                     }
                     self.exec(otherwise, ctx);
@@ -225,7 +227,11 @@ impl Game {
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {
                 let objs = self.resolve_objects(what, ctx);
-                let res = self.destroy_all(objs.clone(), ctx.source, *no_regen);
+                let res = self.destroy_all_by(
+                    objs.clone(),
+                    crate::event_causes::Cause::of(ctx),
+                    *no_regen,
+                );
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
@@ -472,14 +478,27 @@ impl Game {
             }
             Effect::Fight { a, b } => {
                 // CR 701.14
-                let a = self
-                    .resolve_objects(a, ctx)
-                    .into_iter()
-                    .find(|o| self.is_live(*o) && self.obj(*o).is_creature());
-                let b = self
-                    .resolve_objects(b, ctx)
-                    .into_iter()
-                    .find(|o| self.is_live(*o) && self.obj(*o).is_creature());
+                let fighters = |g: &mut Game, s: &Sel, ctx: &mut Ctx| -> Vec<ObjectId> {
+                    let v = g.resolve_objects(s, ctx);
+                    v.into_iter()
+                        .filter(|o| g.is_live(*o) && g.obj(*o).is_creature())
+                        .collect()
+                };
+                let (a, b) = match (a, b) {
+                    // "Choose two target creatures ... Those creatures fight each other."
+                    // (one instance of the word "target"): the two fight each other; if
+                    // either is an illegal target, no damage is dealt (CR 701.14b).
+                    (Sel::Target(x), Sel::Target(y)) if x == y => {
+                        match fighters(self, a, ctx).as_slice() {
+                            [a, b] => (Some(*a), Some(*b)),
+                            _ => (None, None),
+                        }
+                    }
+                    _ => (
+                        fighters(self, a, ctx).first().copied(),
+                        fighters(self, b, ctx).first().copied(),
+                    ),
+                };
                 if let (Some(a), Some(b)) = (a, b) {
                     let pa = self.obj(a).power().max(0) as u32;
                     let pb = self.obj(b).power().max(0) as u32;
@@ -498,13 +517,24 @@ impl Game {
             Effect::AddCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut placed = 0;
+                let mut got = Vec::new();
                 for t in self.resolve_sel(what, ctx) {
                     let t = self.found_after_move(t, ctx);
-                    placed += self.add_counters(t, kind, k, ctx.source);
+                    let n = self.put_counters(t, kind, k, crate::event_causes::CounterPut::of(ctx));
+                    if n > 0 {
+                        got.push(t);
+                    }
+                    placed += n;
                 }
                 // "Put a coin counter on this artifact. When you do, ..." (CR 603.12):
                 // whether any counter was put.
                 ctx.prev_happened = placed > 0;
+                // "Put a quest counter on this enchantment. When you do, if it has four or
+                // more quest counters on it, ..." (Earthbender Ascension): "it" is what got
+                // the counters.
+                if !got.is_empty() {
+                    ctx.set_var(vars::IT, got);
+                }
             }
             Effect::RemoveCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
@@ -928,7 +958,7 @@ impl Game {
                 let mut any = false;
                 let mut moved = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
-                    if self.counter(o, ctx.source) {
+                    if self.counter_by(o, crate::event_causes::Cause::of(ctx)) {
                         any = true;
                         // CR 400.7j: other parts of the effect can find the countered card
                         // in the public zone it moved to ("exile it instead ... You may
@@ -1361,7 +1391,12 @@ impl Game {
             Effect::AddPlayerCounters { who, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 for p in self.eval_players(who, ctx) {
-                    self.add_counters(Entity::Player(p), kind, k, ctx.source);
+                    self.put_counters(
+                        Entity::Player(p),
+                        kind,
+                        k,
+                        crate::event_causes::CounterPut::of(ctx),
+                    );
                 }
             }
             Effect::Scry { who, n } => {
@@ -1452,6 +1487,7 @@ impl Game {
                 ctx.prev_happened = searched;
                 ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
             }
+            Effect::SearchCards(spec) => crate::search_rules::perform(self, spec, ctx),
             Effect::Shuffle { who } => {
                 for p in self.eval_players(who, ctx) {
                     self.shuffle_library(p);
@@ -2018,19 +2054,28 @@ impl Game {
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 // CR 406.4: face-down exiled cards the player can't look at are chosen by
                 // pile.
-                let all: Vec<Entity> = cands.iter().map(|o| Entity::Object(*o)).collect();
-                let picked: Vec<Entity> =
-                    crate::zones::choose_objects(self, p, ctx.source, "Choose", cands, min, n)
-                        .into_iter()
-                        .map(Entity::Object)
-                        .collect();
-                // Objects chosen together must meet the group requirements ("any number
-                // of cards with different names"; see `relational.rs`).
-                let picked = if crate::relational::groups_of(filter).is_empty() {
-                    picked
-                } else {
-                    crate::relational::fit_selection(self, filter, picked, &all, min as usize, ctx)
-                };
+                let chosen = crate::zones::choose_objects(
+                    self,
+                    p,
+                    ctx.source,
+                    "Choose",
+                    cands.clone(),
+                    min,
+                    n,
+                );
+                // "Choose any number of ... tokens you control with different names": the
+                // objects chosen must have the relationship.
+                let picked: Vec<Entity> = crate::target_groups::fit_together(
+                    self,
+                    filter,
+                    chosen,
+                    &cands,
+                    min as usize,
+                    ctx,
+                )
+                .into_iter()
+                .map(Entity::Object)
+                .collect();
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }
@@ -2334,8 +2379,13 @@ impl Game {
     fn fix_restriction(&self, r: &Restriction, ctx: &Ctx) -> Restriction {
         let mut r = r.clone();
         if let Some(f) = restriction_object_filter(&mut r) {
+            self.fix_excluded_objects(f, ctx);
             if filter_references_specific(f) {
                 *f = Filter::Any;
+            } else {
+                // "Creatures target player controls don't untap ...": the objects that
+                // player controls, whichever they are later.
+                *f = self.bind_target_players(f, ctx);
             }
         }
         // "Target creature blocks this creature this combat if able": both creatures are
@@ -2361,11 +2411,61 @@ impl Game {
         r
     }
 
+    /// "Creatures other than [specific objects]" (Intimidation Bolt: "other creatures
+    /// can't attack this turn", other than its target) is a class of objects that can
+    /// include objects arriving later (CR 611.2c); the excluded objects are those named as
+    /// the effect begins.
+    fn fix_excluded_objects(&self, f: &mut Filter, ctx: &Ctx) {
+        match f {
+            Filter::And(v) => {
+                for x in v.iter_mut() {
+                    if let Filter::Not(inner) = x {
+                        if matches!(**inner, Filter::In(_)) {
+                            **inner = Filter::Objects(self.named_objects(inner, ctx));
+                        }
+                    }
+                }
+            }
+            Filter::Not(inner) if matches!(**inner, Filter::In(_)) => {
+                **inner = Filter::Objects(self.named_objects(inner, ctx));
+            }
+            _ => {}
+        }
+    }
+
+    /// Replaces "controlled by the target player" in a filter kept beyond this resolution
+    /// with the player chosen as that target.
+    fn bind_target_players(&self, f: &Filter, ctx: &Ctx) -> Filter {
+        match f {
+            Filter::ControlledBy(PlayerRel::Target(k)) => {
+                let ps = ctx
+                    .targets
+                    .get(*k as usize)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| match e {
+                        Entity::Player(p) => Some(PlayerFilter::Is(*p)),
+                        _ => None,
+                    })
+                    .collect();
+                Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+            }
+            Filter::And(v) => {
+                Filter::And(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
+            }
+            Filter::Or(v) => {
+                Filter::Or(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
+            }
+            other => other.clone(),
+        }
+    }
+
     /// Restrictions naming specific objects ("target creature can't block this turn")
     /// lock onto those objects.
     fn lock_restriction_objects(&self, r: &Restriction, ctx: &Ctx) -> Option<Vec<ObjectId>> {
         let mut r = r.clone();
         let f = restriction_object_filter(&mut r)?;
+        self.fix_excluded_objects(f, ctx);
         if filter_references_specific(f) {
             Some(self.named_objects(f, ctx))
         } else {
@@ -2426,75 +2526,40 @@ impl Game {
         to: &Destination,
         ctx: &mut Ctx,
     ) -> Vec<ObjectId> {
-        let controller = to
-            .controller
-            .as_ref()
-            .and_then(|r| self.eval_player(r, ctx));
-        // "under its owner's control" / "under their owners' control": each object
-        // enters under its own owner's control.
-        let owners_control = matches!(to.controller, Some(PlayerRef::OwnerOf(_)));
-        let mut counters: Vec<(CounterKind, u32)> = Vec::new();
-        for (k, v) in &to.with_counters {
-            counters.push((k.clone(), self.eval_value(v, ctx).max(0) as u32));
-        }
-        let attack = if to.attacking {
-            self.attack_target_for_new_attacker(ctx)
-        } else {
-            None
-        };
-        let with_mods = if to.zone == ZoneKind::Battlefield && !to.with_mods.is_empty() {
-            Some((
-                ctx.source,
-                ctx.controller,
-                self.fix_mods(&to.with_mods, ctx),
-            ))
-        } else {
-            None
-        };
-        // "Put onto the battlefield attached to [x]": `None` if x is undefined
-        // (CR 301.5e, 303.4i).
-        let attach_to = match (&to.attached_to, to.zone) {
-            (Some(sel), ZoneKind::Battlefield) => Some(self.resolve_sel(sel, ctx).first().copied()),
-            _ => None,
-        };
-        let moves: Vec<MoveEv> = objs
-            .iter()
-            .filter(|o| self.is_live(**o))
-            .map(|o| {
-                let owner = self.obj(*o).owner;
-                MoveEv {
-                    obj: *o,
-                    to: Zone::of_kind(to.zone, owner),
-                    pos: to.position,
-                    cause: MoveCause::Effect,
-                    by: Some(ctx.controller),
-                    etb: EtbInfo {
-                        tapped: to.tapped,
-                        counters: counters.clone(),
-                        controller: if to.zone == ZoneKind::Battlefield && owners_control {
-                            Some(owner)
-                        } else if to.zone == ZoneKind::Battlefield {
-                            Some(controller.unwrap_or(ctx.controller))
-                        } else {
-                            None
-                        },
-                        face_down: if to.face_down {
-                            Some(KeywordKind::Morph)
-                        } else {
-                            None
-                        },
-                        transformed: to.transformed,
-                        attacking: attack,
-                        with_mods: with_mods.clone(),
-                        attach_to: attach_to.flatten(),
-                        attach_specified: attach_to.is_some(),
-                        ..Default::default()
-                    },
-                    source: ctx.source,
-                }
-            })
-            .collect();
+        let moves = self.destination_moves(objs, to, ctx);
         self.move_objects(moves).into_iter().flatten().collect()
+    }
+
+    /// The moves that put `objs` into `to` (see [`Self::move_to_destination`]), for
+    /// moving them together with others at the same time.
+    pub fn destination_moves(
+        &mut self,
+        objs: Vec<ObjectId>,
+        to: &Destination,
+        ctx: &mut Ctx,
+    ) -> Vec<MoveEv> {
+        let objs: Vec<ObjectId> = objs.into_iter().filter(|o| self.is_live(*o)).collect();
+        if objs.is_empty() {
+            return vec![];
+        }
+        // "Under its owner's control", "tapped", "with N counters", "your choice of the top
+        // or bottom" ...: see `destinations.rs`.
+        let dest = self.prepare_destination(to, ctx);
+        let mut moves: Vec<MoveEv> = Vec::with_capacity(objs.len());
+        for o in &objs {
+            let owner = self.obj(*o).owner;
+            let etb = self.destination_etb(&dest, owner, ctx);
+            moves.push(MoveEv {
+                obj: *o,
+                to: dest.zone(owner),
+                pos: dest.position(),
+                cause: MoveCause::Effect,
+                by: Some(ctx.controller),
+                etb,
+                source: ctx.source,
+            });
+        }
+        moves
     }
 
     /// Creates `n` tokens for `p` (`spec`), "tapped and attacking" if `attacking`: as each
@@ -2525,12 +2590,16 @@ impl Game {
     }
 
     /// What a creature put onto the battlefield attacking attacks when the effect doesn't
-    /// say: its controller chooses (CR 508.4), by default what the source is attacking if
+    /// say: its controller (`controller`) chooses (CR 508.4), by default what the source is attacking if
     /// it's attacking (Geist of Saint Traft's Angel needn't attack what Geist attacks).
-    fn attack_target_for_new_attacker(&mut self, ctx: &Ctx) -> Option<Entity> {
+    pub(crate) fn attack_target_for_new_attacker(
+        &mut self,
+        controller: PlayerId,
+        ctx: &Ctx,
+    ) -> Option<Entity> {
         let combat = self.combat.as_ref()?;
         let preferred = ctx.source.and_then(|src| combat.attack_target(src));
-        crate::combat::choose_attack_target_preferring(self, ctx.controller, preferred)
+        crate::combat::choose_attack_target_preferring(self, controller, preferred)
     }
 
     /// Determines the mana types produced by an AddMana effect (CR 106).
@@ -2818,11 +2887,13 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::CantBeRegenerated(f)
         | Restriction::SourceDamageCantBePrevented(f)
         | Restriction::AttackDespiteDefender(f)
+        | Restriction::BlockAsThoughUntapped(f)
         | Restriction::Goaded(f)
         | Restriction::DamageByToughness(f)
         | Restriction::AssignsNoCombatDamage(f) => Some(f),
         Restriction::CantBeTargeted { what, .. } => Some(what),
-        Restriction::MustAttackPlayer { attackers, .. } => Some(attackers),
+        Restriction::MustAttackPlayer { attackers, .. }
+        | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,
     }
 }
@@ -2841,7 +2912,11 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::MaxSpellsPerTurn(f, _)
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         Restriction::CantCast { who, .. } => Some(who),
-        Restriction::MustAttackPlayer { defender, .. } => Some(defender),
+        Restriction::MustAttackPlayer { defender, .. }
+        | Restriction::AttackAsThoughHaste {
+            defender: Some(defender),
+            ..
+        } => Some(defender),
         _ => None,
     }
 }

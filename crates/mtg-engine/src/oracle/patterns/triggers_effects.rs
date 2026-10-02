@@ -35,14 +35,14 @@ inventory::submit! {
 /// creatures don't untap during their controllers' next untap steps" (CR 502.3).
 fn doesnt_untap_next(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let subject = [
-        " doesn't untap during its controller's next untap step",
-        " don't untap during their controllers' next untap steps",
-        " doesn't untap during your next untap step",
-        " don't untap during your next untap step",
+    let (subject, yours) = [
+        (" doesn't untap during its controller's next untap step", false),
+        (" don't untap during their controllers' next untap steps", false),
+        (" doesn't untap during your next untap step", true),
+        (" don't untap during your next untap step", true),
     ]
     .iter()
-    .find_map(|s| l.strip_suffix(s))?;
+    .find_map(|(s, yours)| l.strip_suffix(s).map(|r| (r, *yours)))?;
     let what = match subject {
         "~" => Sel::This,
         "enchanted creature" | "equipped creature" | "enchanted permanent" | "enchanted land" => {
@@ -67,7 +67,11 @@ fn doesnt_untap_next(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     Some(Effect::AddRestriction {
         restriction: Restriction::DoesntUntap(Filter::In(Box::new(what))),
-        duration: Duration::ThroughNextUntapStep,
+        duration: if yours {
+            Duration::ThroughYourNextUntapStep
+        } else {
+            Duration::ThroughNextUntapStep
+        },
     })
 }
 

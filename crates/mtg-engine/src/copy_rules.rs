@@ -317,6 +317,15 @@ pub fn copied_referent(phrase: &str, it: &Sel) -> Sel {
 /// the card it became in its new zone ("you may exile it. If you do, create a token that's
 /// a copy of that creature": a dead Clone that was copying Hill Giant makes a Hill Giant).
 pub fn token_copy_sources(g: &mut Game, sel: &Sel, ctx: &mut Ctx) -> Vec<ObjectId> {
+    // CR 608.2h: an Aura that was attached to nothing as it last existed on the battlefield
+    // (its permanent left first) has no "enchanted permanent" to copy.
+    if matches!(sel, Sel::AttachedTo)
+        && ctx
+            .source
+            .is_some_and(|s| crate::attach::attached_to_nothing(g, s))
+    {
+        return vec![];
+    }
     if matches!(sel, Sel::TriggerLki | Sel::This) {
         let lki: Vec<ObjectId> = g
             .eval_sel(sel, ctx)
@@ -370,9 +379,21 @@ pub fn copy_cards(
     let mut out = Vec::new();
     match named {
         None => {
+            // "Copy the enchanted instant card" (Spellweaver Volute): the card the Aura
+            // enchanted as it last existed on the battlefield (CR 608.2h), even if that
+            // card has since left its zone — and nothing if the Aura was attached to
+            // nothing then.
+            let enchanted = matches!(what, Sel::AttachedTo);
+            if enchanted
+                && ctx
+                    .source
+                    .is_some_and(|s| crate::attach::attached_to_nothing(g, s))
+            {
+                return out;
+            }
             // CR 707.12: created in the zone the object is in.
             for o in g.resolve_objects(what, ctx) {
-                if !g.is_live(o) {
+                if !g.is_live(o) && !enchanted {
                     continue;
                 }
                 let ob = g.obj(o).clone();

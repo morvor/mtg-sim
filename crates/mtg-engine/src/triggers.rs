@@ -98,6 +98,9 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
         (TriggerCond::SpellCountered(_), Event::Countered { .. }) => true,
         // Keyword-defined triggers, e.g. exploiting (sacrificing) a creature.
         (TriggerCond::Custom(name), ev) => crate::kw::custom_trigger_looks_back(name, ev),
+        // A spell or ability destroying a permanent or countering a spell (CR 603.10a,
+        // 603.10e).
+        (c, ev) if crate::event_causes::looks_back(c, ev) => true,
         _ => false,
     }
 }
@@ -449,7 +452,8 @@ impl Game {
             } => Some(lb.clone()),
             Event::Sacrificed { obj, .. }
             | Event::Exploited { obj, .. }
-            | Event::Countered { what: obj }
+            | Event::Countered { what: obj, .. }
+            | Event::Destroyed { obj, .. }
             | Event::Unattached { obj, .. } => recent
                 .iter()
                 .rev()
@@ -780,6 +784,10 @@ impl Game {
         let ctx = base.clone();
         let one = |info: EventInfo| vec![info];
         let none = Vec::new;
+        // Who put counters, what destroyed or countered something.
+        if let Some(v) = crate::event_causes::trigger_matches(self, cond, &ctx, ev) {
+            return v;
+        }
         match (cond, ev) {
             (
                 TriggerCond::EntersBattlefield(f),
@@ -1254,9 +1262,14 @@ impl Game {
                     target: Entity::Object(o),
                     kind: k,
                     n,
+                    ..
                 },
             ) => {
-                if kind.as_ref().is_none_or(|x| x == k) && self.matches(*o, filter, &ctx) {
+                // CR 122.6: counters put on a permanent (or as it enters), not on a card.
+                if kind.as_ref().is_none_or(|x| x == k)
+                    && crate::event_causes::put_on_permanent(self, ev)
+                    && self.matches(*o, filter, &ctx)
+                {
                     // "Whenever a [kind] counter is put on …" triggers for each counter.
                     let (times, amount) = if *each { (*n, 1) } else { (1, *n as i32) };
                     (0..times)
@@ -1707,7 +1720,7 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::SpellCountered(f), Event::Countered { what }) => {
+            (TriggerCond::SpellCountered(f), Event::Countered { what, .. }) => {
                 if self.obj(*what).kind != ObjKind::StackAbility && self.matches(*what, f, &ctx) {
                     one(EventInfo {
                         object: Some(self.current(*what)),
@@ -1855,6 +1868,7 @@ impl Game {
                     target: Entity::Object(o),
                     kind: k,
                     n: added,
+                    ..
                 },
             ) => {
                 // CR 122.7: fewer than N before the counters were put on it, N or more after.

@@ -62,3 +62,52 @@ pub fn other_graveyard_cards(g: &Game, p: PlayerId) -> Vec<crate::types::ObjectI
         .flat_map(|q| q.graveyard.iter().copied())
         .collect()
 }
+
+/// What a creature would do as though it had haste (CR 302.6 with 609.4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HasteUse {
+    /// Attack (CR 508.1a): `Some(target)` attacking that player, planeswalker, or battle;
+    /// `None` attacking anything at all.
+    Attack(Option<crate::types::Entity>),
+    /// `p` activates its {T}/{Q} abilities (see `activation_costs::as_though_haste`).
+    Activate(PlayerId),
+}
+
+/// Whether an effect lets `creature` do something as though it had haste: attack
+/// ("can attack as though it had haste", `Restriction::AttackAsThoughHaste`) or activate
+/// its {T}/{Q} abilities ("you may activate abilities of creatures you control as though
+/// those creatures had haste", `ActivationPermission::as_though_haste`). It doesn't have
+/// haste (Frenzied Saddlebrute ruling): only the summoning sickness rule (CR 302.6) is
+/// waived for that action.
+pub fn as_though_haste(g: &Game, creature: crate::types::ObjectId, what: HasteUse) -> bool {
+    use crate::ability::Restriction;
+    use crate::eval::Ctx;
+    use crate::types::Entity;
+    let target = match what {
+        HasteUse::Activate(p) => return crate::activation_costs::as_though_haste(g, p, creature),
+        HasteUse::Attack(t) => t,
+    };
+    g.all_restrictions().iter().any(|(s, c, r, locked)| {
+        let Restriction::AttackAsThoughHaste {
+            attackers,
+            defender,
+        } = r
+        else {
+            return false;
+        };
+        let ctx = Ctx::new(*s, *c);
+        if !g.restriction_applies(creature, attackers, &ctx, locked) {
+            return false;
+        }
+        let (Some(pf), Some(t)) = (defender, target) else {
+            return true;
+        };
+        // "... your opponents and planeswalkers your opponents control".
+        let player = match t {
+            Entity::Player(p) => p,
+            Entity::Object(o) if g.obj(o).is(CardType::Planeswalker) => g.obj(o).controller,
+            Entity::Object(_) => return false,
+        };
+        g.player_filter_matches(pf, player, &ctx)
+    })
+}

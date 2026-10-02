@@ -211,9 +211,11 @@ pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
         TriggerCond::Dies(f)
         | TriggerCond::LeavesBattlefield(f)
         | TriggerCond::ZoneChange { filter: f, .. }
-            if mentions_source(f) =>
+            if mentions_source(f) || matches!(f, Filter::AttachedToSource) =>
         {
-            return FunctionZone::Battlefield
+            // (An Aura's "when enchanted creature dies, return ~ from your graveyard"
+            // triggers while the Aura is on the battlefield, CR 603.10a.)
+            return FunctionZone::Battlefield;
         }
         // Several trigger conditions (CR 603.1b), such as "When you cycle this card and
         // when this creature dies": one that triggers from wherever the card is combined

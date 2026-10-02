@@ -448,7 +448,7 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             if let Some((g, _, r)) = parse_object_phrase(&probe) {
                 let consumed = t.len().saturating_sub(r.len());
                 if consumed > 0 && r.len() <= t.len() {
-                    parts.push(g);
+                    parts.push(crate::oracle::phrases::without_probe_card(g));
                     rest = &t[consumed..];
                     continue;
                 }
@@ -1446,6 +1446,24 @@ pub(crate) fn type_predicate_mods(r: &str, subj: &Subject) -> Option<Vec<Modific
 fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
     let r = r.trim();
     let m = |v: Vec<Modification>| Some(v.into_iter().map(Out::Mod).collect::<Vec<Out>>());
+    // "... with base power and toughness 1/1 named Legitimate Businessperson" (Witness
+    // Protection): the rest of the predicate, and the object's name becomes that name
+    // (CR 201.2), in the card's own capitalization.
+    if let Some((x, name)) = r.rsplit_once(" named ") {
+        let name = name.trim();
+        if !name.is_empty() && !name.contains(['"', '~', ',']) && name.split(' ').count() <= 4 {
+            let raw = crate::oracle::raw_text();
+            let original = (raw.len() == raw.to_lowercase().len())
+                .then(|| {
+                    let i = raw.to_lowercase().find(&format!(" named {name}"))? + 7;
+                    raw.get(i..i + name.len()).map(str::to_string)
+                })
+                .flatten()?;
+            let mut out = type_predicate(x, subj)?;
+            out.push(Out::Mod(Modification::SetName(original.into())));
+            return Some(out);
+        }
+    }
     // "is also a Cleric, Rogue, Warrior, and Wizard"
     if let Some(x) = r.strip_prefix("also ") {
         let tw = type_words(x)?;
@@ -1674,6 +1692,26 @@ pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restricti
     match p {
         // CR 701.15b; a static "is goaded" goads for the source's controller.
         "is goaded" | "are goaded" => return Some(vec![Restriction::Goaded(fc)]),
+        // CR 302.6 with 609.4: summoning sickness is waived for attacking.
+        "can attack as though it had haste"
+        | "can attack as though they had haste"
+        | "can attack as though those creatures had haste" => {
+            return Some(vec![Restriction::AttackAsThoughHaste {
+                attackers: fc,
+                defender: None,
+            }])
+        }
+        "can attack your opponents and planeswalkers your opponents control as though those creatures had haste"
+        | "can attack your opponents and planeswalkers your opponents control as though they had haste" => {
+            return Some(vec![Restriction::AttackAsThoughHaste {
+                attackers: fc,
+                defender: Some(PlayerFilter::Opponent),
+            }])
+        }
+        // CR 509.1a with 609.4: only the untapped requirement is waived.
+        "can block as though it were untapped" | "can block as though they were untapped" => {
+            return Some(vec![Restriction::BlockAsThoughUntapped(fc)])
+        }
         "can't attack you" | "can't attack you or planeswalkers you control" => {
             return Some(vec![Restriction::CantAttackPlayer {
                 attackers: fc,
@@ -2045,6 +2083,29 @@ fn parse_predicate(
                     Some(x.clone()),
                     Some(x.clone()),
                 ))]);
+            }
+            // "has base power and toughness 5/5 and vigilance", "... 10/10, vigilance, and
+            // trample" (Timber Paladin): the rest are abilities it has.
+            if let Some((first, rest)) = pt.split_once(' ') {
+                let first = first.trim_end_matches(',');
+                let rest = rest.strip_prefix("and ").unwrap_or(rest);
+                let rest = if rest.matches(", ").count() == 1 {
+                    rest.replace(", and ", " and ")
+                } else {
+                    rest.to_string()
+                };
+                let (bp, bt) = base_pt(first)?;
+                let mut outs = vec![Out::Mod(Modification::SetPT(Some(bp), Some(bt)))];
+                outs.extend(parse_predicate(
+                    &format!("has {rest}"),
+                    subj,
+                    x,
+                    used_x,
+                    quotes,
+                    text,
+                    ctx,
+                )?);
+                return Some(outs);
             }
             let (bp, bt) = base_pt(pt)?;
             return Some(vec![Out::Mod(Modification::SetPT(Some(bp), Some(bt)))]);
@@ -2888,6 +2949,12 @@ fn parse_player_body(s: &str) -> Option<Body> {
             PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
         ),
         ("you ", PlayerFilter::You),
+        // "As long as ~ is attacking, defending player can't cast spells." (Wardscale
+        // Dragon): the player ~ is attacking (CR 506.2, 802.2a).
+        (
+            "defending player ",
+            PlayerFilter::Ref(Box::new(PlayerRef::DefendingPlayer)),
+        ),
         ("your opponents ", PlayerFilter::Opponent),
         ("each opponent ", PlayerFilter::Opponent),
         ("players ", PlayerFilter::Any),
