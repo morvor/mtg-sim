@@ -244,6 +244,20 @@ pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
             {
                 return FunctionZone::Anywhere;
             }
+            // "When you cast this spell and whenever this creature attacks" / "... and when
+            // this creature dies": the cast condition triggers from the stack, the others
+            // only for the permanent itself (attacking, or leaving the battlefield, which
+            // looks back at it): from anywhere.
+            let own_permanent =
+                |c: &TriggerCond| own_ltb(c) || matches!(c, TriggerCond::Attacks(Filter::Source));
+            if zones.contains(&FunctionZone::Stack)
+                && conds
+                    .iter()
+                    .zip(&zones)
+                    .all(|(c, z)| *z == FunctionZone::Stack || own_permanent(c))
+            {
+                return FunctionZone::Anywhere;
+            }
         }
         _ => {}
     }

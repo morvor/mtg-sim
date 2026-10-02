@@ -136,32 +136,50 @@ pub(crate) fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder
         kind: Some(kind.clone()),
         n: Value::CountersOn(Box::new(Sel::This), Some(kind)),
     };
+    // "remove those counters, transform ~, and create three Treasure tokens" (Treasure
+    // Map), "remove those counters, transform it, then untap it" (Hostile Hostel): a list
+    // of instructions, in order.
     let (first, rest) = if let Some(r) = clause.strip_prefix("remove those counters and ") {
-        (Some(remove), r)
+        (Some(remove), vec![r])
     } else if clause == "remove those counters" {
-        (Some(remove), "")
+        (Some(remove), vec![""])
+    } else if let Some(r) = clause.strip_prefix("remove those counters, ") {
+        let Some((a, z)) = r.split_once(", and ").or_else(|| r.split_once(", then ")) else {
+            return false;
+        };
+        (Some(remove), vec![a, z])
     } else {
-        (None, clause)
-    };
-    // "it deals 20 damage to you", "transform it": the source.
-    let rest = match rest.strip_prefix("it ") {
-        Some(r) => format!("~ {r}"),
-        None if rest == "transform it" => "transform ~".to_string(),
-        None if rest == "sacrifice it" => "sacrifice ~".to_string(),
-        None => rest.to_string(),
+        (None, vec![clause])
     };
     let saved_it = b.it.clone();
     let saved_targets = b.targets.len();
     b.it = Sel::This;
-    let parsed = if rest.is_empty() {
-        Some(Effect::Noop)
+    let mut parts = Vec::new();
+    for rest in rest {
+        // "it deals 20 damage to you", "transform it": the source.
+        let rest = match rest.strip_prefix("it ") {
+            Some(r) => format!("~ {r}"),
+            None if rest == "transform it" => "transform ~".to_string(),
+            None if rest == "sacrifice it" => "sacrifice ~".to_string(),
+            None if rest == "untap it" => "untap ~".to_string(),
+            None => rest.to_string(),
+        };
+        let parsed = if rest.is_empty() {
+            Some(Effect::Noop)
+        } else {
+            parse_clause(&rest, b)
+        };
+        let Some(p) = parsed else {
+            b.it = saved_it;
+            b.targets.truncate(saved_targets);
+            return false;
+        };
+        parts.push(p);
+    }
+    let then = if parts.len() == 1 {
+        parts.pop().unwrap_or(Effect::Noop)
     } else {
-        parse_clause(&rest, b)
-    };
-    let Some(then) = parsed else {
-        b.it = saved_it;
-        b.targets.truncate(saved_targets);
-        return false;
+        Effect::Seq(parts)
     };
     let then = match first {
         Some(f) if matches!(then, Effect::Noop) => f,
