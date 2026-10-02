@@ -378,3 +378,124 @@ fn null_summoner_casts_the_exiled_card_with_threshold_and_any_mana() {
     assert!(can_cast(&mut t, P0, bolt));
     assert_eq!(t.life(P1), 17);
 }
+
+/// `p` gains control of the permanent.
+fn gain_control(t: &mut TestGame, p: PlayerId, id: ObjectId) {
+    let mut ctx = mtg_engine::eval::Ctx::new(None, p);
+    ctx.targets = vec![vec![Entity::Object(t.g.current(id))]];
+    t.g.exec(
+        &ability::Effect::GainControl {
+            what: ability::Sel::Target(0),
+            who: ability::PlayerRef::You,
+            duration: ability::Duration::Permanent,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    t.g.flush_events();
+    t.settle();
+}
+
+#[test]
+fn kheru_mind_eater_looks_at_and_plays_the_face_down_exiled_cards() {
+    cr!("406.3", "607.2a");
+    ruling!(
+        "Kheru Mind-Eater",
+        "If another player gains control of Kheru Mind-Eater, that player can see all of the exiled cards and may play them."
+    );
+    assert_supported("Kheru Mind-Eater");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P1, "Mountain", 1);
+    let kheru = t.battlefield(P0, "Kheru Mind-Eater");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let shock = t.hand(P1, "Shock");
+    t.answer_choose(P1, &[Entity::Object(bolt)]);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(kheru, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    let exiled = t.g.current(bolt);
+    assert_eq!(t.zone(exiled), Zone::Exile);
+    assert!(t.g.obj(exiled).face_down);
+    // Its controller may look at it; its owner can't.
+    assert!(mtg_engine::zones::may_look(&t.g, P0, exiled));
+    assert!(!mtg_engine::zones::may_look(&t.g, P1, exiled));
+    // A card in the hand isn't one of them.
+    t.advance_to(P0, Step::PostcombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(!can_cast(&mut t, P0, shock));
+    t.clear_answers();
+    // A new controller sees the card and may play it.
+    gain_control(&mut t, P1, kheru);
+    assert!(mtg_engine::zones::may_look(&t.g, P1, exiled));
+    t.advance_to(P1, Step::PrecombatMain);
+    t.answer_targets(P1, &[Entity::Player(P0)]);
+    assert!(can_cast(&mut t, P1, bolt));
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
+fn kheru_mind_eater_controller_casts_the_exiled_card() {
+    cr!("601.3", "607.2a");
+    ruling!(
+        "Kheru Mind-Eater",
+        "You must pay the costs to cast the exiled cards."
+    );
+    let mut t = TestGame::new(2);
+    let kheru = t.battlefield(P0, "Kheru Mind-Eater");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.answer_choose(P1, &[Entity::Object(bolt)]);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(kheru, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    t.advance_to(P0, Step::PostcombatMain);
+    // No mana: can't pay for it.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(!can_cast(&mut t, P0, bolt));
+    t.clear_answers();
+    t.lands(P0, "Mountain", 1);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(can_cast(&mut t, P0, bolt));
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn pick_up_the_pace_plays_the_exiled_cards_as_long_as_you_attacked_this_turn() {
+    cr!("611.3a", "607.2a");
+    assert_supported("Pick Up the Pace");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    t.battlefield(P0, "Pick Up the Pace");
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let spike = t.library_top(P0, "Lava Spike");
+    let goblin = t.enter(P0, "Raging Goblin");
+    let goblin2 = t.enter(P0, "Raging Goblin");
+    t.resolve_all();
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(
+        &[(goblin, Entity::Player(P1)), (goblin2, Entity::Player(P1))],
+        &[],
+    );
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(spike)), Zone::Exile);
+    assert_eq!(t.zone(t.g.current(bolt)), Zone::Exile);
+    t.advance_to(P0, Step::PostcombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(can_cast(&mut t, P0, spike));
+    assert_eq!(t.life(P1), 15);
+    // A turn without attacking: it can't be played.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PostcombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(!can_cast(&mut t, P0, bolt));
+    t.clear_answers();
+    // Attacking with a creature that didn't enter this turn is enough.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.attack(&[(goblin, Entity::Player(P1))], &[]);
+    t.advance_to(P0, Step::PostcombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(can_cast(&mut t, P0, bolt));
+    assert_eq!(t.life(P1), 11);
+}

@@ -530,6 +530,20 @@ fn strip_tails(mut s: &str, p: &mut Perm) -> Option<()> {
             return Some(());
         }
         let mut done = false;
+        // "you may play cards exiled with ~ as long as you attacked this turn": the
+        // condition's own "this turn", not the permission's duration.
+        let cond_tail = t
+            .rsplit_once(" if ")
+            .or_else(|| t.rsplit_once(" as long as "))
+            .filter(|(h, c)| !h.ends_with(" for") && c.ends_with(" this turn"));
+        if let Some((head, cond)) = cond_tail {
+            if p.cond_text.is_some() {
+                return None;
+            }
+            p.cond_text = Some(cond.to_string());
+            s = head;
+            continue;
+        }
         for (suffix, f) in TAILS {
             if let Some(r) = t.strip_suffix(suffix) {
                 if !f(p) {
@@ -1789,6 +1803,28 @@ fn static_rider(s: &str, p: &mut Perm) -> bool {
 
 fn statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l).trim();
+    // "You may look at cards exiled with ~, and you may play lands and cast spells from
+    // among those cards." (Kheru Mind-Eater): looking at the face-down cards, and a
+    // permission to play them.
+    for lead in [
+        "you may look at cards exiled with ~, and ",
+        "you may look at the cards exiled with ~, and ",
+    ] {
+        let Some(r) = l.strip_prefix(lead) else {
+            continue;
+        };
+        let r = r.strip_suffix(" from among those cards")?;
+        let r = r.strip_prefix("you may ").unwrap_or(r);
+        let p = parse(&format!("you may {r} from among cards exiled with ~"))?;
+        let mut v = to_statics(&p, text, ctx)?;
+        v.push(AbilityDef::new(
+            AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(
+                crate::kw::look_at_exiled_with::MAY_LOOK_AT_LINKED.into(),
+            ))),
+            text,
+        ));
+        return Some(v);
+    }
     // "[permission]. [rider]."
     if let Some((first, second)) = l.split_once(". ") {
         let mut p = parse(first)?;
