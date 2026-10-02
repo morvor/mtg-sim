@@ -651,3 +651,69 @@ fn lux_artillery_each_instance_of_sunburst_works_separately() {
     t.resolve_all();
     assert_eq!(t.counters(oracle, counters::PLUS1), 4);
 }
+
+// ---------------------------------------------------------------------------------------
+// Wakka, Devoted Guardian: "if a counter was put on ~ this turn"
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn wakka_checks_whether_a_counter_was_put_on_it_this_turn() {
+    cr!("603.4", "122.6");
+    ruling!(
+        "Wakka, Devoted Guardian",
+        "Wakka's last ability checks at the moment it would trigger to see if a counter was put on Wakka this turn."
+    );
+    supported("Wakka, Devoted Guardian");
+    // A counter was put on Wakka earlier this turn (and removed again): it triggers.
+    let mut t = TestGame::new(2);
+    let wakka = t.battlefield(P0, "Wakka, Devoted Guardian");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    put(&mut t, wakka, counters::CHARGE, 1);
+    let w = t.g.current(wakka);
+    t.g.remove_counters(Entity::Object(w), counters::CHARGE, 1);
+    to_end_step(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::PLUS1), 1);
+    assert_eq!(t.counters(wakka, counters::PLUS1), 0, "each other creature");
+    // A counter on another creature doesn't count; no trigger.
+    let mut t = TestGame::new(2);
+    let wakka = t.battlefield(P0, "Wakka, Devoted Guardian");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    put(&mut t, bears, counters::CHARGE, 1);
+    to_end_step(&mut t, P0);
+    assert_eq!(t.stack_len(), 0, "didn't trigger");
+    // Once the end step has begun, it's too late.
+    put(&mut t, wakka, counters::CHARGE, 1);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::PLUS1), 0);
+    // A counter put on it last turn doesn't count either.
+    let mut t = TestGame::new(2);
+    let wakka = t.battlefield(P0, "Wakka, Devoted Guardian");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P1, Step::PrecombatMain);
+    put(&mut t, wakka, counters::CHARGE, 1);
+    t.advance_to(P0, Step::PrecombatMain);
+    to_end_step(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::PLUS1), 0);
+}
+
+#[test]
+fn wakka_combat_damage_destroys_an_artifact_and_feeds_blitzball_captain() {
+    // Wakka's first triggered ability puts the counter its last ability looks for.
+    cr!("510.3a", "603.4");
+    let mut t = TestGame::new(2);
+    let wakka = t.battlefield(P0, "Wakka, Devoted Guardian");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let ring = t.battlefield(P1, "Sol Ring");
+    t.answer_targets(P0, &[Entity::Object(ring)]);
+    attack_with(&mut t, &[(wakka, Entity::Player(P1))]);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert!(!t.on_battlefield(ring), "destroyed");
+    assert_eq!(t.counters(wakka, counters::PLUS1), 1);
+    to_end_step(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::PLUS1), 1);
+}
