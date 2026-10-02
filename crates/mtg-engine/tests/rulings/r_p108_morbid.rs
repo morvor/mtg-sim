@@ -416,3 +416,51 @@ fn caged_zombie_costs_the_opposing_two_headed_giant_team_four_life() {
     assert_eq!(t.life(P3), them - 4);
     assert_eq!(t.life(P0), us);
 }
+
+// --- Liliana's Scrounger -------------------------------------------------------------------
+
+#[test]
+fn lilianas_scrounger_triggers_for_a_death_before_it_entered() {
+    cr!("603.4", "700.4");
+    ruling!(
+        "Liliana's Scrounger",
+        "If a creature didn't die before your end step begins, the ability of Liliana's Scrounger doesn't trigger at all. The creature may have died before Liliana's Scrounger entered the battlefield, however."
+    );
+    ruling!(
+        "Liliana's Scrounger",
+        "The triggered ability triggers just once, no matter how many creatures died this turn."
+    );
+    supported("Liliana's Scrounger");
+    let mut t = TestGame::new(2);
+    let lili = t.battlefield(P0, "Liliana of the Veil");
+    let s = end_step_triggers(&mut t, "Liliana's Scrounger", 2);
+    assert_eq!(crate::r_s25_common::abilities_from(&t, s).len(), 1);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.counters(lili, "loyalty"), 4);
+    // No death: no trigger.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Liliana of the Veil");
+    let s = end_step_triggers(&mut t, "Liliana's Scrounger", 0);
+    assert!(crate::r_s25_common::abilities_from(&t, s).is_empty());
+}
+
+#[test]
+fn lilianas_scrounger_chooses_the_liliana_as_it_resolves() {
+    cr!("608.2c");
+    ruling!(
+        "Liliana's Scrounger",
+        "If you control more than one Liliana planeswalker, you choose which one receives a loyalty counter as the ability of Liliana's Scrounger resolves."
+    );
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Liliana of the Veil");
+    let s = end_step_triggers(&mut t, "Liliana's Scrounger", 1);
+    assert_eq!(crate::r_s25_common::abilities_from(&t, s).len(), 1);
+    // The second Liliana arrives while the ability is on the stack, and gets the counter.
+    let b = t.battlefield(P0, "Liliana, the Last Hope");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(b)]);
+    t.resolve_all();
+    assert_eq!(t.counters(a, "loyalty"), 3);
+    assert_eq!(t.counters(b, "loyalty"), 4);
+}
