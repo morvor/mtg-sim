@@ -156,13 +156,22 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
     let mut all: Vec<ObjectId> = Vec::new();
     let mut moves = Vec::new();
     let mut shuffles: Vec<PlayerId> = Vec::new();
+    // Found cards that stay in a library that's shuffled are revealed after the shuffle:
+    // they aren't part of it (CR 701.24b), so they don't become new objects (CR 701.20d).
+    let mut late_reveals: Vec<(PlayerId, Vec<ObjectId>, Ctx)> = Vec::new();
     for f in &founds {
         let mut c = ctx.clone();
         c.iter_player = Some(f.searcher);
         let mut cards = f.cards.clone();
+        let stays = spec.shuffle == SearchShuffle::Before
+            || (spec.dests.is_empty() && spec.shuffle != SearchShuffle::No);
         // CR 701.23e: revealed only if the effect says so.
         if spec.reveal && !cards.is_empty() {
-            crate::reveal::reveal_in(g, f.searcher, &cards, Some(&c));
+            if stays && f.library_searched {
+                late_reveals.push((f.searcher, cards.clone(), c.clone()));
+            } else {
+                crate::reveal::reveal_in(g, f.searcher, &cards, Some(&c));
+            }
         }
         // A rule that deals with cards found in a library instead ("they exile each card
         // they find"): the rest of the effect still applies.
@@ -217,6 +226,10 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
     ctx.set_var(FROM_HAND, from_hand);
     for o in shuffles {
         g.shuffle_library(o);
+    }
+    for (p, cards, c) in late_reveals {
+        let live: Vec<ObjectId> = cards.into_iter().filter(|o| g.is_live(*o)).collect();
+        crate::reveal::reveal_in(g, p, &live, Some(&c));
     }
     ctx.prev_affected = all.iter().map(|o| Entity::Object(*o)).collect();
     // CR 118.12b: "if you do" after a search checks whether the player searched.

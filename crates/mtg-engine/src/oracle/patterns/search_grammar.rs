@@ -1530,26 +1530,67 @@ mod tests {
         f(&mut b)
     }
 
+    /// The effect a text compiles to on a sorcery, if every ability is understood.
+    fn compiled(text: &str) -> Option<String> {
+        let tl = TypeLine::parse("Sorcery");
+        let ctx = CompileContext {
+            card_name: "Testcard",
+            full_name: "Testcard",
+            type_line: &tl,
+            layout: crate::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        let c = crate::oracle::compile(text, &ctx);
+        c.unsupported
+            .is_empty()
+            .then(|| format!("{:?}", c.abilities))
+    }
+
     #[test]
-    fn zz_debug() {
-        let Ok(t) = std::env::var("SG") else { return };
-        for t in t.split('|') {
-            with_builder(|b| {
-                let l = t.to_lowercase();
-                let l = end(&l);
-                let Some((sr, r)) = searcher(l, b) else { eprintln!("{t}: searcher fails"); return };
-                eprintln!("{t}: searcher ok who={:?}", sr.who);
-                let Some((_w, z, _o, r)) = zones(r, &sr, b) else { eprintln!("  zones fail"); return };
-                eprintln!("  zones {z:?} rest={r}");
-                let cut = ACTIONS.iter().filter_map(|a| r.find(a)).min().unwrap_or(r.len());
-                let (desc, t2) = r.split_at(cut);
-                eprintln!("  desc={desc:?} tail={t2:?}");
-                eprintln!("  specs={:?}", specs(desc, b));
-                let mut spec = SearchSpec { who: PlayerRef::You, whose: PlayerRef::You, zones: vec![ZoneKind::Library], zones_optional: false, parts: vec![], distinct_names: false, optional: false, reveal: false, dests: vec![], shuffle: SearchShuffle::No };
-                eprintln!("  tail={:?} {:?}", tail_inner(t2, &mut spec, &sr, b), spec.dests);
-                eprintln!("  clause={:?}", search_clause(l, b).is_some());
-            });
-        }
+    fn grammar_composes_parts_zones_and_searchers() {
+        // Several parts with their own articles.
+        let e = compiled(
+            "Search your library for a red card and a green card, reveal them, put them into your hand, then shuffle.",
+        )
+        .expect("two parts");
+        assert!(e.contains("Color(Red)") && e.contains("Color(Green)"), "{e}");
+        assert!(e.matches("SearchPart").count() == 2, "{e}");
+        // Another player searching, with third-person verbs.
+        let e = compiled(
+            "Target opponent searches their library for a land card, puts it onto the battlefield, then shuffles.",
+        )
+        .expect("third person");
+        assert!(e.contains("who: Target(0), whose: Target(0)"), "{e}");
+        // Zones in another order, a real card's name, and the follow-up shuffle.
+        let e = compiled(
+            "Search your graveyard and/or library for a card named Grizzly Bears and put it onto the battlefield. If you search your library this way, shuffle.",
+        )
+        .expect("zones");
+        assert!(e.contains("zones: [Graveyard, Library], zones_optional: true"), "{e}");
+        assert!(e.contains("Named(\"Grizzly Bears\")") && e.contains("shuffle: After"), "{e}");
+        // A split with "two of them" and "the rest".
+        let e = compiled(
+            "Search your library for up to four basic land cards, reveal them, put two of them onto the battlefield tapped and the rest into your hand, then shuffle.",
+        )
+        .expect("split");
+        assert!(e.contains("count: Some(Const(2))"), "{e}");
+    }
+
+    #[test]
+    fn grammar_rejects_what_it_cannot_do_exactly() {
+        // A name that isn't a real card's.
+        assert!(compiled(
+            "Search your library and/or graveyard for a card named Notacard Atall, reveal it, and put it into your hand."
+        )
+        .is_none());
+        // Third-person verbs need a third-person subject.
+        assert!(compiled(
+            "Search your library for a land card, puts it onto the battlefield, then shuffles."
+        )
+        .is_none());
     }
 
     fn show(name: &str) -> String {
