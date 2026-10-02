@@ -178,6 +178,20 @@ pub fn cast_during_resolution(
             }
         }
     }
+    // CR 608.2g, 601.2b: a spell cast with its costs paid while an effect resolves may be
+    // cast for an alternative cost the card has (evoke, emerge, ...) rather than its mana
+    // cost.
+    if method == CastMethod::Normal && !keyword_way && face == FaceState::Front {
+        let mut alts = resolution_alternative_costs(g, p, card);
+        if !alts.is_empty() {
+            let mut names = vec![format!("Cast {}", g.obj(card).chars.name)];
+            names.extend(alts.iter().map(|o| format!("Cast {:?}", o.method)));
+            let k = g.ask_option(p, Some(card), "Choose how to cast it", names);
+            if k > 0 && k <= alts.len() {
+                opt = alts.swap_remove(k - 1);
+            }
+        }
+    }
     opt.any_time = true;
     if method == CastMethod::Free {
         if !keyword_way {
@@ -186,6 +200,34 @@ pub fn cast_during_resolution(
         opt.alt_cost = Some(Cost::free());
     }
     g.cast_with_option(p, card, opt)
+}
+
+/// The alternative costs `card` could be cast for by `p` while an effect lets them cast it
+/// during its resolution: those its abilities offer wherever it is, as if an effect let
+/// them cast it from there (CR 608.2g, 601.2b, 118.9).
+fn resolution_alternative_costs(g: &mut Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+    let turn = g.turn.number;
+    g.play_grants.push(PlayGrant {
+        player: p,
+        object: card,
+        duration: Duration::EndOfTurn,
+        free: false,
+        source: None,
+        turn,
+    });
+    let alts: Vec<CastOption> = g
+        .cast_options(p, card)
+        .into_iter()
+        .filter(|o| {
+            matches!(
+                o.method,
+                CastMethod::Alternative(_) | CastMethod::Keyword(_)
+            ) && o.alt_cost.is_some()
+        })
+        .collect();
+    // The permission pushed above (finding the options doesn't change the grants).
+    g.play_grants.pop();
+    alts
 }
 
 /// The ways `card` could be cast without paying its mana cost as a spell whose mana value
@@ -609,7 +651,8 @@ impl Game {
             }
             // Alternative costs from the card's own abilities ("You may pay X rather than pay
             // this spell's mana cost", evoke, dash, ...).
-            for a in &o.chars.abilities {
+            let own = self.characteristics_to_cast(card);
+            for a in &own.abilities {
                 if let AbilityKind::Static(s) = &a.kind {
                     if let StaticEffect::CostModifier(cm) = &s.effect {
                         match (&cm.applies_to, &cm.change) {
@@ -729,6 +772,19 @@ impl Game {
             crate::kw::apply_spell_text_changes(self, card, &[tag.into()], &mut c);
         }
         c
+    }
+
+    /// The characteristics whose abilities offer ways to cast `card` (alternative costs,
+    /// keywords such as evoke): its own, or those of its front face if it's a face-down
+    /// card outside the battlefield, as it's turned face up just before it's cast
+    /// (CR 406.3a, 702.143a).
+    pub fn characteristics_to_cast(&self, card: ObjectId) -> Characteristics {
+        let o = self.obj(card);
+        if o.face_down && o.zone != Zone::Battlefield {
+            self.face_characteristics(card, FaceState::Front)
+        } else {
+            o.chars.clone()
+        }
     }
 
     /// Characteristics a card would have as a spell cast with the given face (CR 601.3e).
@@ -990,6 +1046,8 @@ impl Game {
             FaceState::Back
         };
         self.players[p.idx()].lands_played_this_turn += 1;
+        // "Each land played this way enters tapped" (CR 614.1c).
+        let tapped = crate::kw::play_permission_terms::lands_enter_tapped(self, p, card);
         self.play_grants.retain(|g| g.object != card);
         let new = self.move_object_ev(MoveEv {
             obj: card,
@@ -1000,6 +1058,7 @@ impl Game {
             etb: EtbInfo {
                 controller: Some(p),
                 face: Some(face),
+                tapped,
                 ..Default::default()
             },
             source: None,
@@ -1160,6 +1219,9 @@ impl Game {
             .play_grants
             .iter()
             .any(|g| g.object == card && g.player == p);
+        // "A spell cast this way costs {2} more to cast" (CR 601.2f).
+        let permission_cost_increase =
+            crate::kw::play_permission_terms::grant_cost_increase(self, p, card);
         self.play_grants.retain(|g| g.object != card);
         let mut cast_info = CastInfo {
             method: opt.method.clone(),
@@ -1168,6 +1230,7 @@ impl Game {
             turn: self.turn.number,
             instant_timing: !sorcery_time,
             main_phase: self.turn.step.is_main() && self.turn.active == p,
+            permission_cost_increase,
             ..Default::default()
         };
         if let Some(t) = opt.tag {
@@ -1548,6 +1611,12 @@ impl Game {
         let tax = crate::kw::partner::commander_tax(self, p, card);
         if tax > 0 {
             add_cost(&mut cost, &Cost::mana(ManaCost::generic(tax)));
+        }
+        // "A spell cast this way costs {2} more to cast": an increase that comes with the
+        // permission it's cast with.
+        let more = crate::kw::play_permission_terms::cost_increase(self, p, card);
+        if more > 0 {
+            add_cost(&mut cost, &Cost::mana(ManaCost::generic(more)));
         }
         // X has its announced value before cost reductions apply (CR 601.2f, 107.3b).
         if let Some(m) = cost.mana.as_mut() {

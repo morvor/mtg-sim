@@ -105,11 +105,38 @@ pub fn opening_hand_actions(g: &mut Game) {
     g.flush_events();
 }
 
+/// `StaticEffect::Custom` name of "If ~ is in your opening hand and you're not the
+/// starting player, you may reveal it. If you do, you become the starting player."
+/// (Impatient Iguana): like Power Play's effect (CR 103.1c), it supersedes how the
+/// starting player was determined; that player takes the first turn (CR 103.8).
+pub const BECOME_STARTING_PLAYER: &str = "opening hand: reveal it to become the starting player";
+
+/// Whether `card` has the ability named by [`BECOME_STARTING_PLAYER`].
+fn may_become_starting_player(g: &Game, card: ObjectId) -> bool {
+    g.obj(card).chars.abilities.iter().any(|a| {
+        matches!(&a.kind, AbilityKind::Static(s)
+            if matches!(&s.effect, StaticEffect::Custom(n) if n.as_str() == BECOME_STARTING_PLAYER))
+    })
+}
+
 /// The opening-hand actions available to one player.
 pub fn opening_hand_actions_for(g: &mut Game, p: PlayerId) {
     for card in g.zone_objects(Zone::Hand(p)) {
         if g.obj(card).zone != Zone::Hand(p) {
             continue;
+        }
+        if may_become_starting_player(g, card) && g.turn.starting_player != p {
+            let name = g.obj(card).chars.name.clone();
+            let prompt =
+                format!("Reveal {name} from your opening hand to become the starting player?");
+            if g.ask_yes_no(p, Some(card), &prompt, false) {
+                crate::reveal::reveal(g, p, &[card], Some(card));
+                g.log(|_| format!("{p} becomes the starting player"));
+                g.turn.starting_player = p;
+                // While starting the game, the starting player is the active player
+                // (CR 101.4e).
+                g.turn.active = p;
+            }
         }
         let actions: Vec<Option<Box<(TriggerCond, Body)>>> = g
             .obj(card)
