@@ -2019,6 +2019,48 @@ impl Renderer<'_> {
     }
 
     fn may(&mut self, who: &PlayerRef, effect: &Effect) -> String {
+        // "You may cast an instant or sorcery spell from your hand without paying its mana
+        // cost": up to one card, chosen as it's cast. Only a nonland card can be cast
+        // (CR 305.9), and the card cast is a spell (CR 601.2a).
+        if let Effect::CastCard {
+            who: caster,
+            what:
+                Sel::Choose {
+                    chooser: PlayerRef::You,
+                    filter,
+                    count: Value::Const(1),
+                    up_to: true,
+                    ..
+                },
+            free,
+            optional: false,
+        } = effect
+        {
+            if same_player(caster, who) && matches!(who, PlayerRef::You) {
+                let f = match filter {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::Type(CardType::Land))))
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let n = self.noun_det(&f, super::nouns::Det::A);
+                let n = match n.find(" card") {
+                    Some(i) if n[i + 5..].is_empty() || n[i + 5..].starts_with(' ') => {
+                        format!("{} spell{}", &n[..i], &n[i + 5..])
+                    }
+                    _ => n,
+                };
+                let fr = if *free {
+                    " without paying its mana cost"
+                } else {
+                    ""
+                };
+                return format!("you may cast {n}{fr}");
+            }
+        }
         if let Some((w, vp, _)) = self.actor_vp(effect) {
             if same_player(&w, who) {
                 let p = self.player(who, Case::Subj);
@@ -2686,9 +2728,11 @@ impl Renderer<'_> {
         for a in &spec.abilities {
             match &a.kind {
                 AbilityKind::Keyword(k) => kws.push(self.keyword_lower(k)),
-                _ => others.push(format!("\"{}\"", self.nested_ability(a))),
+                _ => others.push(self.nested_ability(a)),
             }
         }
+        super::merge_shared_as_though(&mut others);
+        let others: Vec<String> = others.iter().map(|o| format!("\"{o}\"")).collect();
         let mut with = Vec::new();
         if !kws.is_empty() {
             with.push(join_list(&kws, "and"));

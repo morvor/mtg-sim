@@ -141,6 +141,7 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
         merge_chapters(m);
     }
     merge_chapters(&mut out.lines);
+    merge_shared_as_though(&mut out.lines);
     out.gaps = std::mem::take(&mut r.gaps);
     out
 }
@@ -362,6 +363,31 @@ pub(crate) fn is_solved(c: &Condition) -> bool {
 fn is_changeling_cda(a: &Ability) -> bool {
     matches!(&a.kind, AbilityKind::Static(s) if s.is_cda && matches!(&s.effect,
         StaticEffect::Continuous { mods, .. } if mods.len() == 1 && matches!(mods[0], Modification::AllCreatureTypes)))
+}
+
+/// "~ saddles Mounts and crews Vehicles as though its power were two greater.": one
+/// sentence for two static abilities of the object that differ only in what it does
+/// ("~ saddles Mounts as though ..." and "~ crews Vehicles as though ...").
+pub(crate) fn merge_shared_as_though(lines: &mut Vec<String>) {
+    let mut out: Vec<String> = Vec::new();
+    for l in lines.drain(..) {
+        if let Some(prev) = out.last_mut() {
+            if let Some(m) = join_as_though(prev, &l) {
+                *prev = m;
+                continue;
+            }
+        }
+        out.push(l);
+    }
+    *lines = out;
+}
+
+fn join_as_though(a: &str, b: &str) -> Option<String> {
+    let (pa, ta) = a.split_once(" as though ")?;
+    let (pb, tb) = b.split_once(" as though ")?;
+    let (sa, va) = pa.split_once(' ')?;
+    let (sb, vb) = pb.split_once(' ')?;
+    (ta == tb && sa == sb && sa == "~").then(|| format!("{sa} {va} and {vb} as though {ta}"))
 }
 
 /// Saga chapters with the same effect are printed on one line ("II, III — ...",
