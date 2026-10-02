@@ -625,3 +625,96 @@ fn a_shard_token_is_a_colorless_enchantment_that_scries_then_draws() {
     // It scried first: the card drawn is the one that was second.
     assert_eq!(t.zone(g[1]), Zone::Hand(P0));
 }
+
+/// P0 has `others` on the battlefield; Littjara Kinseekers (a changeling) enters. Returns
+/// the Kinseekers after its ability is put on the stack (if it triggered).
+fn kinseekers(t: &mut TestGame, others: &[&str]) -> ObjectId {
+    supported("Littjara Kinseekers");
+    giants(t, P0, 3);
+    for o in others {
+        t.battlefield(P0, o);
+    }
+    let k = t.enter(P0, "Littjara Kinseekers");
+    t.settle();
+    k
+}
+
+#[test]
+fn littjara_kinseekers_checks_for_three_sharing_a_type_twice() {
+    cr!("603.4", "702.73a", "608.2h");
+    ruling!("Littjara Kinseekers", "If you don’t control three or more creatures that share a creature type immediately after Littjara Kinseekers enters the battlefield, its ability doesn’t trigger. If you don’t control three or more as the ability resolves, you won’t put a +1/+1 counter on Littjara Kinseekers or scry 1. The three shared-type creatures you control when the ability resolves don’t have to be the same three you controlled when the ability triggered.");
+    // A Bear and a Giant: with the changeling, only two share any type.
+    let mut t = TestGame::new(2);
+    kinseekers(&mut t, &["Grizzly Bears", "Hill Giant"]);
+    assert_eq!(t.stack_len(), 0);
+    // Two Bears: it triggers; one leaves before it resolves: nothing happens.
+    let mut t = TestGame::new(2);
+    let k = kinseekers(&mut t, &["Grizzly Bears", "Grizzly Bears"]);
+    assert_eq!(t.stack_len(), 1);
+    let bear = with_subtype(&t, P0, "Bear")
+        .into_iter()
+        .find(|b| *b != k)
+        .unwrap();
+    destroy(&mut t, bear);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert_eq!(t.counters(k, counters::PLUS1), 0);
+    assert!(scries_since(&t, from).is_empty());
+    // Two Bears when it triggers, two Giants (and no Bears) when it resolves: a
+    // different three share a type.
+    let mut t = TestGame::new(2);
+    let k = kinseekers(&mut t, &["Grizzly Bears", "Grizzly Bears"]);
+    for b in with_subtype(&t, P0, "Bear").into_iter().filter(|b| *b != k) {
+        destroy(&mut t, b);
+    }
+    t.battlefield(P0, "Hill Giant");
+    t.battlefield(P0, "Hill Giant");
+    let from = t.asked().len();
+    t.resolve_all();
+    assert_eq!(t.counters(k, counters::PLUS1), 1);
+    assert_eq!(scry_sizes(&t, P0, from), vec![1]);
+}
+
+#[test]
+fn littjara_kinseekers_gets_one_counter_however_many_trios() {
+    cr!("603.4", "608.2c");
+    ruling!("Littjara Kinseekers", "You put just one +1/+1 counter on Littjara Kinseekers and scry 1, no matter how many extra trios of creatures that share a creature type you control.");
+    let mut t = TestGame::new(2);
+    let k = kinseekers(
+        &mut t,
+        &[
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Hill Giant",
+            "Hill Giant",
+            "Hill Giant",
+        ],
+    );
+    let from = t.asked().len();
+    t.resolve_all();
+    assert_eq!(t.counters(k, counters::PLUS1), 1);
+    assert_eq!(scry_sizes(&t, P0, from), vec![1]);
+}
+
+#[test]
+fn synchronized_eviction_costs_less_with_two_creatures_sharing_a_type() {
+    cr!("601.2f");
+    supported("Synchronized Eviction");
+    // "This spell costs {2} less to cast if you control at least two creatures that share
+    // a creature type." Three lands: castable only with two Bears.
+    for (others, castable) in [
+        (vec!["Grizzly Bears", "Grizzly Bears"], true),
+        (vec!["Grizzly Bears", "Hill Giant"], false),
+    ] {
+        let mut t = TestGame::new(2);
+        for o in &others {
+            t.battlefield(P0, o);
+        }
+        let target = t.battlefield(P1, "Hill Giant");
+        t.lands(P0, "Island", 3);
+        let se = t.hand(P0, "Synchronized Eviction");
+        let r = t.cast(P0, se).target(target).try_go();
+        assert_eq!(r.is_ok(), castable, "{others:?}");
+    }
+}
