@@ -21,7 +21,9 @@
 //!
 //! An atomic action that itself consists of steps the rules perform one after another
 //! (amass: create an Army, then put counters on it, CR 701.47a) calls
-//! [`Game::sequential_step`] between them.
+//! [`Game::sequential_step`] between them. Conversely, code that performs several
+//! instructions as one simultaneous event (each player doing something at the same time)
+//! runs them inside [`Game::atomically`], so that no trigger check happens between them.
 
 use crate::ability::Effect;
 use crate::game::Game;
