@@ -453,7 +453,7 @@ fn you_imperative(l: &str, b: &mut Builder) -> Option<Effect> {
     let verb = r.split(' ').next()?;
     if !matches!(
         verb,
-        "gain" | "put" | "return" | "exile" | "destroy" | "tap" | "untap" | "create" | "sacrifice"
+        "gain" | "put" | "return" | "exile" | "destroy" | "tap" | "untap" | "create" | "sacrifice" | "add"
     ) || r.starts_with("gain ") && !r.starts_with("gain control of ")
     {
         return None;

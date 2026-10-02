@@ -98,3 +98,54 @@ fn choose_target_player_who(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: choose target player who [compared with you]", priority: 86, parse: choose_target_player_who } }
+
+/// The player chosen by "choose another player" and the like.
+pub const CHOSEN_PLAYER: Var = vars::USER + 4433;
+
+/// "choose another player", "choose an opponent who controls more creatures than you",
+/// "choose a player with the most life or tied for most life": the controller chooses one
+/// of the players described as the effect happens (CR 608.2d); "that player" and "the
+/// chosen player" refer to them.
+fn choose_a_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("choose ")?;
+    let (base, rest) = if let Some(x) = r.strip_prefix("another player") {
+        (PlayerFilter::NotYou, x)
+    } else if let Some(x) = r.strip_prefix("an opponent") {
+        (PlayerFilter::Opponent, x)
+    } else if let Some(x) = r.strip_prefix("a player") {
+        (PlayerFilter::Any, x)
+    } else {
+        return None;
+    };
+    let rest = rest.trim();
+    let quality = match rest {
+        "" => None,
+        "with the most life or tied for most life" => Some(PlayerFilter::Life(
+            Cmp::Ge,
+            Box::new(Value::OverPlayers(
+                AggOp::Max,
+                PlayerFilter::Any,
+                Box::new(Value::LifeTotal(PlayerRef::Iterated)),
+            )),
+        )),
+        _ => Some(compared_with_you(rest)?),
+    };
+    // "choose an opponent" alone is the core's (the ETB-style choice).
+    if quality.is_none() && !matches!(base, PlayerFilter::NotYou) {
+        return None;
+    }
+    let filter = match quality {
+        None => base,
+        Some(q) if matches!(base, PlayerFilter::Any) => q,
+        Some(q) => PlayerFilter::And(vec![base, q]),
+    };
+    let e = crate::kw::choice_grammar::choose_player_effect(CHOSEN_PLAYER, filter)?;
+    b.it_player = PlayerRef::Var(CHOSEN_PLAYER);
+    b.named.push((
+        "the chosen player".into(),
+        Sel::Players(PlayerRef::Var(CHOSEN_PLAYER)),
+    ));
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: choose a player [described]", priority: 87, parse: choose_a_player } }

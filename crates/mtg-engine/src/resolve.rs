@@ -2451,6 +2451,9 @@ impl Game {
             for f in [blocker, attacker] {
                 if filter_references_specific(f) {
                     *f = Filter::Objects(self.named_objects(f, ctx));
+                } else {
+                    // "creatures that player controls": the players as the effect begins.
+                    *f = self.bind_target_players(f, ctx);
                 }
             }
         }

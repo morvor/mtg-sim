@@ -250,3 +250,67 @@ fn cinderheart_giant_damage_to_a_random_creature_an_opponent_controls() {
     assert!(!t.on_battlefield(theirs), "{}", t.dump_log());
     assert!(t.on_battlefield(mine));
 }
+
+#[test]
+fn discerning_financier_another_player_gains_control_of_the_treasure() {
+    cr!("608.2d");
+    compiles("Discerning Financier");
+    let mut t = TestGame::new(3);
+    let fin = t.battlefield(P0, "Discerning Financier");
+    t.lands(P0, "Plains", 3);
+    let spec = mtg_engine::tokens::predefined("Treasure").expect("Treasure token");
+    let tc = mtg_engine::replacement::TokenCreate {
+        chars: mtg_engine::tokens::token_characteristics(&spec),
+        card: None,
+        tapped: false,
+        attacking: None,
+        copy_of: None,
+        copy_exceptions: vec![],
+    };
+    let treasure = t.g.create_tokens(P0, tc, 1, None)[0];
+    let hand = t.hand_size(P0);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    t.activate(P0, fin, 0, &[Entity::Object(treasure)]).expect("activates");
+    t.resolve_all();
+    assert_eq!(t.obj_now(treasure).controller, P2, "{}", t.dump_log());
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn the_black_gate_a_player_with_the_most_life() {
+    cr!("608.2d", "509.1b");
+    compiles("The Black Gate");
+    let mut t = TestGame::new(3);
+    let gate = t.battlefield(P0, "The Black Gate");
+    t.lands(P0, "Swamp", 2);
+    t.g.player_mut(P1).life = 25;
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    // P2 doesn't have the most life: P1 is chosen.
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let idx = 1;
+    t.activate(P0, gate, idx, &[Entity::Object(bears)]).expect("activates");
+    t.resolve_all();
+    let giant = t.named_on_battlefield("Hill Giant")[0];
+    t.attack(&[(bears, Entity::Player(P1))], &[(giant, bears)]);
+    assert_eq!(t.life(P1), 23, "{}", t.dump_log());
+}
+
+#[test]
+fn priest_of_forgotten_gods_you_add_mana_and_draw() {
+    cr!("106.4", "701.21a");
+    compiles("Priest of Forgotten Gods");
+    let mut t = TestGame::new(2);
+    let priest = t.battlefield(P0, "Priest of Forgotten Gods");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P1, "Hill Giant");
+    let hand = t.hand_size(P0);
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.activate(P0, priest, 0, &[Entity::Player(P1)]).expect("activates");
+    t.resolve();
+    assert_eq!(t.life(P1), 18);
+    assert!(t.named_on_battlefield("Hill Giant").is_empty());
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 2, "{}", t.dump_log());
+}

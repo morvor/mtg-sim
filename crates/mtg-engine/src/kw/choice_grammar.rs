@@ -102,6 +102,23 @@ pub fn deciding_opponent_effect(var: crate::ability::Var) -> Option<crate::abili
     ))
 }
 
+/// `Effect::Custom` prefix: the controller chooses one player among those matching a
+/// filter ("choose another player", "choose a player with the most life or tied for
+/// most life") and stores them in a variable (JSON of `(Var, PlayerFilter)`). Nothing is
+/// chosen (and the previous instruction didn't happen) if no player matches.
+pub const CHOOSE_PLAYER: &str = "choice_grammar:choose player:";
+
+/// "choose another player": the effect storing the player chosen in `var`.
+pub fn choose_player_effect(
+    var: crate::ability::Var,
+    filter: crate::ability::PlayerFilter,
+) -> Option<crate::ability::Effect> {
+    let json = serde_json::to_string(&(var, filter)).ok()?;
+    Some(crate::ability::Effect::Custom(
+        format!("{CHOOSE_PLAYER}{json}").into(),
+    ))
+}
+
 pub struct ChoiceGrammar;
 
 impl KeywordRules for ChoiceGrammar {
@@ -123,6 +140,27 @@ impl KeywordRules for ChoiceGrammar {
                 .map(|p| Entity::Player(*p))
                 .into_iter()
                 .collect();
+            ctx.prev_happened = !pick.is_empty();
+            ctx.chosen_player = pick.first().and_then(|e| e.player());
+            ctx.set_var(var, pick);
+            return true;
+        }
+        if let Some(json) = name.strip_prefix(CHOOSE_PLAYER) {
+            let Ok((var, filter)) = serde_json::from_str::<(
+                crate::ability::Var,
+                crate::ability::PlayerFilter,
+            )>(json) else {
+                return true;
+            };
+            let cands: Vec<Entity> = g
+                .players_in_game()
+                .into_iter()
+                .filter(|p| g.player_filter_matches(&filter, *p, ctx))
+                // CR 801.5a: a player within the chooser's range of influence.
+                .filter(|p| crate::multiplayer::range::player_in_range(g, ctx.controller, *p))
+                .map(Entity::Player)
+                .collect();
+            let pick = g.ask_entities(ctx.controller, ctx.source, "Choose a player", cands, 1, 1);
             ctx.prev_happened = !pick.is_empty();
             ctx.chosen_player = pick.first().and_then(|e| e.player());
             ctx.set_var(var, pick);
