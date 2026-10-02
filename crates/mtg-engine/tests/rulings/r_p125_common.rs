@@ -46,3 +46,29 @@ pub fn choose_color(t: &mut TestGame, p: PlayerId, c: mtg_engine::types::Color) 
         .unwrap();
     t.answer(p, DecisionKind::Option, mtg_engine::decision::Answer::Index(i));
 }
+
+pub use crate::r_s29_common::damage_marked;
+
+/// Exiles the permanent (making it an illegal target) and settles.
+pub fn exile_now(t: &mut TestGame, id: ObjectId) {
+    let id = t.g.current(id);
+    t.g.exile_object(id, None);
+    t.g.flush_events();
+    t.settle();
+}
+
+/// From P0's beginning of combat: P0 attacks P1 with `attackers`, P1 blocks with `blocks`,
+/// and combat damage is dealt (the game advances to the end of combat step).
+pub fn fight_it_out(t: &mut TestGame, attackers: &[ObjectId], blocks: &[(ObjectId, ObjectId)]) {
+    to_beginning_of_combat(t, P0);
+    attack_with(t, &at_p1(attackers));
+    t.resolve_all();
+    block_and_finish(t, P1, blocks);
+}
+
+/// Whether `p` shuffled their library this turn.
+pub fn shuffled(t: &TestGame, p: PlayerId) -> bool {
+    t.g.turn_events
+        .iter()
+        .any(|e| matches!(e, mtg_engine::events::Event::Shuffled { player } if *player == p))
+}
