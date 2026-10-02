@@ -54,6 +54,20 @@ impl Renderer<'_> {
             }
             return None;
         }
+        // "When ~ enters during the declare attackers step".
+        if matches!(cond, Condition::Phase(_)) {
+            let c = self.condition(cond);
+            if let Some(rest) = c.strip_prefix("it's ") {
+                if !rest.contains(['{', '|', '}']) {
+                    let (s, vp) = self.trigger_event_parts(trigger);
+                    return Some((
+                        s,
+                        format!("{vp} {{alt:during {rest}|while it's {rest}|if it's {rest}}}"),
+                    ));
+                }
+            }
+            return None;
+        }
         // "Whenever one or more lands enter under an opponent's control without being
         // played".
         if is_custom(cond, NOT_PLAYED) {

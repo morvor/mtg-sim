@@ -245,6 +245,10 @@ impl Renderer<'_> {
         if let Some(s) = self.cast_only_permission(e) {
             return s;
         }
+        // "If it's a land card, you may ... If you don't, ..." (`outcomes.rs`).
+        if let Some(s) = self.if_or_else_part(e) {
+            return s;
+        }
         if let Some((who, vp, keep)) = self.actor_vp(e) {
             return self.with_subject(&who, &vp, keep);
         }

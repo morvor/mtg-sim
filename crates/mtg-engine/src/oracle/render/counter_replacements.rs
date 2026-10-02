@@ -73,9 +73,11 @@ impl Renderer<'_> {
                     let w = self.rel_subject(r);
                     (w.clone(), "put", format!("{w} puts"))
                 }
-                None => return format!(
+                None => {
+                    return format!(
                     "if {one_or_more} would be put {on}, {amount} {what} are put on {that} instead"
-                ),
+                )
+                }
             }
         };
         let _ = verb;

@@ -136,6 +136,56 @@ fn owned_by_you(f: &Filter) -> bool {
 }
 
 impl Renderer<'_> {
+    /// "If it's a creature card, you may reveal it and put it into your hand. If you don't
+    /// put the card into your hand, you may put it into your graveyard.": compiled as
+    /// `If { c, [A, if not done: B], otherwise: B }` — B happens if the condition doesn't
+    /// hold or A wasn't done.
+    pub(crate) fn if_or_else_part(&mut self, e: &Effect) -> Option<String> {
+        let Effect::If {
+            cond,
+            then,
+            otherwise,
+        } = e
+        else {
+            return None;
+        };
+        let Effect::Seq(v) = then.as_ref() else {
+            return None;
+        };
+        let [a, Effect::If {
+            cond: Condition::Not(np),
+            then: b,
+            otherwise: none,
+        }] = v.as_slice()
+        else {
+            return None;
+        };
+        if !matches!(np.as_ref(), Condition::PrevHappened)
+            || !matches!(none.as_ref(), Effect::Noop)
+            || format!("{b:?}") != format!("{otherwise:?}")
+        {
+            return None;
+        }
+        let c = self.condition(cond);
+        let a_text = self.effect(a);
+        // What wasn't done: "put the card into your hand".
+        let done = match a {
+            Effect::May { effect, .. } => match effect.as_ref() {
+                Effect::Seq(steps) => steps.last(),
+                other => Some(other),
+            },
+            _ => None,
+        };
+        let what = match done {
+            Some(Effect::Move { to, .. }) if to.zone == ZoneKind::Hand => {
+                " {opt:put it into your hand}"
+            }
+            _ => "",
+        };
+        let b_text = self.effect(b);
+        Some(format!("if {c}, {a_text}. If you don't{what}, {b_text}"))
+    }
+
     /// At `v[i]` of a sequence: renders an instruction (or several) whose outcome later
     /// parts refer to, returning how many instructions it covers and its text.
     pub(crate) fn outcome_seq_part(
@@ -370,7 +420,27 @@ impl Renderer<'_> {
                     up_to: matches!(sel, Sel::Choose { up_to: true, .. }),
                     store: None,
                 };
-                // "reveals a number of cards from their hand equal to ...".
+                // "reveals a number of cards from their hand equal to ...": a number the
+                // ability remembered first is that number.
+                let what = match &what {
+                    Sel::Choose {
+                        chooser,
+                        filter,
+                        count: Value::Var(v),
+                        up_to: false,
+                        store,
+                    } => match self.stored_values.iter().find(|(x, _, _)| x == v) {
+                        Some((_, value, _)) => Sel::Choose {
+                            chooser: chooser.clone(),
+                            filter: filter.clone(),
+                            count: value.clone(),
+                            up_to: false,
+                            store: *store,
+                        },
+                        None => what.clone(),
+                    },
+                    other => other.clone(),
+                };
                 let s = match &what {
                     Sel::Choose {
                         filter,
