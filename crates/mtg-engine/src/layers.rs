@@ -1257,8 +1257,15 @@ impl Game {
                 // "Until end of turn, you may play lands and cast spells from the top of
                 // your library."
                 (PlayerModification::PlayPermission(pp), Some(src)) => {
+                    // "You may cast a creature spell from your graveyard this turn": a
+                    // single use, this effect's own (see `permissions.rs`).
+                    let once = pp
+                        .terms
+                        .limit
+                        .map(|_| smol_str::SmolStr::from(format!("effect {}", e.id)));
                     for p in &e.players {
-                        st.play_permissions.push((src, *p, pp.clone(), None));
+                        st.play_permissions
+                            .push((src, *p, pp.clone(), once.clone()));
                     }
                 }
                 // "You may cast sorcery spells this turn as though they had flash."

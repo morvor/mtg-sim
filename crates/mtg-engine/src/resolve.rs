@@ -1871,6 +1871,7 @@ impl Game {
                 for g in self.play_grants.iter_mut().skip(before) {
                     g.terms.merge(terms);
                 }
+                crate::permissions::given(self, before);
             }
             Effect::PreventDamage {
                 to,

@@ -2616,6 +2616,13 @@ pub struct PlayPermission {
     /// instant.
     #[serde(default)]
     pub flash: bool,
+    /// Other terms the permission comes with (see [`PlayTerms`]): an additional cost ("by
+    /// discarding a card in addition to paying its other costs", CR 601.2b, 601.2f), mana
+    /// flexibility ("and you may spend mana as though it were mana of any color to cast
+    /// those spells", CR 609.4b), "you can't cast more than one spell this way each turn"
+    /// (`limit`), ...
+    #[serde(default)]
+    pub terms: PlayTerms,
 }
 
 /// The terms an effect's permission to play particular cards comes with (CR 601.3,
@@ -2658,11 +2665,59 @@ pub struct PlayTerms {
     /// only (CR 118.14).
     #[serde(default)]
     pub spend_any_type: bool,
+    /// "You may cast red spells from among them", "a creature spell from among those
+    /// cards": the qualities the card must have as it's played with the permission, judged
+    /// by the characteristics it would have as it's played (CR 601.3e). Relative to the
+    /// permission's source and player.
+    #[serde(default)]
+    pub what: Option<Filter>,
+    /// "You may cast a spell from among those cards", "you may play one of those cards",
+    /// "up to two of those cards": how many of the cards the effect's permissions are for
+    /// may be played with them; once that many are, the others' permissions end.
+    #[serde(default)]
+    pub limit: Option<u32>,
+    /// The permissions an effect gave together with a `limit` share this number, given
+    /// as they're given (0: none).
+    #[serde(default)]
+    pub group: u32,
+    /// "You may play it until you exile another card with ~": the permission ends when
+    /// its source gives another such permission.
+    #[serde(default)]
+    pub until_another: bool,
+    /// "During any turn you attacked with ~, you may play that card", "you may play it if
+    /// you control a Kavu": the card may be played with the permission only while the
+    /// condition holds (relative to the permission's source and player).
+    #[serde(default)]
+    pub condition: Option<Condition>,
+    /// "During your next turn, you may play that card": not during the turn the
+    /// permission was given.
+    #[serde(default)]
+    pub later_turn: bool,
 }
 
 impl PlayTerms {
     /// Adds `other`'s terms to these.
     pub fn merge(&mut self, other: &PlayTerms) {
+        if let Some(f) = &other.what {
+            self.what = Some(match self.what.take() {
+                Some(w) => Filter::and(vec![w, f.clone()]),
+                None => f.clone(),
+            });
+        }
+        if other.limit.is_some() {
+            self.limit = other.limit;
+        }
+        if other.group != 0 {
+            self.group = other.group;
+        }
+        self.until_another |= other.until_another;
+        if let Some(c) = &other.condition {
+            self.condition = Some(match self.condition.take() {
+                Some(w) => Condition::And(vec![w, c.clone()]),
+                None => c.clone(),
+            });
+        }
+        self.later_turn |= other.later_turn;
         self.spells_only |= other.spells_only;
         if other.alt_cost.is_some() {
             self.alt_cost = other.alt_cost.clone();
