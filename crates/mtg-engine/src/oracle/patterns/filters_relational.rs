@@ -1361,3 +1361,17 @@ fn that_each_have<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)>
 }
 
 inventory::submit! { FilterSuffixPattern { name: "relational: that each have [stat] N", priority: 100, parse: that_each_have } }
+
+/// "that dealt damage to you this turn" (Reciprocate, Spear of Heliod): see
+/// `kw/dealt_damage_to_you.rs`.
+fn dealt_damage_to_you<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("that dealt damage to you this turn")?;
+    word_end(r).then(|| {
+        (
+            Filter::Custom(crate::kw::dealt_damage_to_you::DEALT_DAMAGE_TO_YOU_THIS_TURN.into()),
+            r,
+        )
+    })
+}
+
+inventory::submit! { FilterSuffixPattern { name: "relational: that dealt damage to you this turn", priority: 100, parse: dealt_damage_to_you } }

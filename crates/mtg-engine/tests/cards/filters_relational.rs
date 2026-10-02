@@ -546,3 +546,23 @@ fn booby_trap_names_a_card_other_than_a_basic_land() {
         Some("Grizzly Bears")
     );
 }
+
+#[test]
+fn reciprocate_exiles_only_a_creature_that_dealt_damage_to_you_this_turn() {
+    cr!("120.3a", "400.7");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    // Grizzly Bears deals combat damage to P0.
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P0))], &[]);
+    assert_eq!(t.life(P0), 18);
+    t.lands(P0, "Plains", 1);
+    let r = t.hand(P0, "Reciprocate");
+    t.cast(P0, r).target(bears).go();
+    let cands = last_target_candidates(&t, P0);
+    assert!(cands.contains(&bears.into()));
+    assert!(!cands.contains(&giant.into()), "didn't deal damage to you");
+    t.resolve();
+    assert!(t.in_exile("Grizzly Bears"));
+}
