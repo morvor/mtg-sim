@@ -871,6 +871,23 @@ fn shadrix_silverquill_zero_or_two_modes_each_a_different_player() {
         crate::r_s05_common::tokens_with_subtype(&t, P0, "Inkling").len(),
         1
     );
+
+    // The third mode puts a counter on each creature the target player controls, not on
+    // the controller's: P1 is the third mode's target, P0 the second's.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    t.library_top(P0, "Island");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1, 2]));
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    let hand = t.hand_size(P0);
+    combat(&mut t);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert_eq!(t.counters(mine, "+1/+1"), 0);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.life(P0), 19);
 }
 
 #[test]
