@@ -1606,7 +1606,8 @@ impl Renderer<'_> {
         let to_s = if to.is_empty() {
             String::new()
         } else {
-            format!(" to {}", join_list(&to, "or"))
+            // "to you and creatures you control" / "to you or a creature you control".
+            format!(" to {}", join_list(&to, "{alt:or|and}"))
         };
         match action {
             A::Prevent => {

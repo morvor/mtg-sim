@@ -317,6 +317,19 @@ impl Renderer<'_> {
                 let t = self.sel(&what, Case::Obj);
                 format!("put your choice of {} on {t}", join_list(&kinds, "or"))
             }
+            // "Tap or untap target creature."
+            Effect::ChooseOne {
+                who: PlayerRef::You,
+                options,
+            } if matches!(options.as_slice(),
+                [(_, Effect::Tap { what: a }), (_, Effect::Untap { what: b })] if same_sel(a, b)) =>
+            {
+                let Effect::Tap { what } = &options[0].1 else {
+                    return self.gap("tap or untap");
+                };
+                let w = self.sel(what, Case::Obj);
+                format!("tap or untap {w}")
+            }
             Effect::ChooseOne { who, options } => {
                 let w = self.player(who, Case::Subj);
                 let head = if w == "you" {
@@ -1057,6 +1070,14 @@ impl Renderer<'_> {
                         }
                         (s, _) => format!("at the beginning of the next {}", self.step_name(*s)),
                     },
+                    // "When you next cast an instant spell this turn, ..."
+                    other if *once => {
+                        let t = self.trigger_text(other);
+                        match t.strip_prefix("whenever you cast ") {
+                            Some(r) => format!("when you next cast {r}"),
+                            None => t,
+                        }
+                    }
                     other => self.trigger_text(other),
                 };
                 let b = self.body(body);
@@ -1336,6 +1357,37 @@ impl Renderer<'_> {
         let mut parts: Vec<String> = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Target creature gains protection from the color of your choice": a color
+            // chosen for the next instruction only.
+            if let (
+                Some(Effect::Choose {
+                    who: PlayerRef::You,
+                    kind: ChoiceKind::Color,
+                }),
+                Some(next),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                let later = format!("{:?}", &v[i + 2..]);
+                if !later.contains("Chosen") {
+                    let n = self.effect(next);
+                    if n.matches("the chosen color").count() == 1 {
+                        parts.push(format!(
+                            "{{opt:choose a color}} {}",
+                            n.replace(
+                                "the chosen color",
+                                "{alt:the chosen color|the color of your choice}"
+                            )
+                        ));
+                        i += 2;
+                        continue;
+                    }
+                    let c = self.effect(&v[i]);
+                    parts.push(c);
+                    parts.push(n);
+                    i += 2;
+                    continue;
+                }
+            }
             // "Each opponent may scry 1": each player chooses whether to take part
             // (`scry_rules::OPT_IN`), then those who did act.
             if let (
@@ -2498,10 +2550,17 @@ impl Renderer<'_> {
     pub(crate) fn exceptions(&mut self, mods: &[Modification]) -> String {
         let vp = self.mods_vp(mods, false);
         // "except it isn't legendary, it's a 4/4 Hero": each exception has its subject.
+        // A copy's "except it's a 4/4 black Zombie" keeps the copied types (the rulings
+        // on eternalize and similar copies), with or without "in addition to its other
+        // types".
         format!(
             "it {}",
             vp.replace(" and is ", " and it is ")
                 .replace(" and has ", " and it has ")
+                .replace(
+                    " in addition to its other types",
+                    " {opt:in addition to its other types}"
+                )
         )
     }
 

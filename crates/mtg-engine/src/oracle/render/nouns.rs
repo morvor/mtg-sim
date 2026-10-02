@@ -358,6 +358,10 @@ impl Renderer<'_> {
             Filter::HasAbilities => np.with.push("an ability".into()),
             Filter::Source => np.is_self = true,
             Filter::Other => np.other = true,
+            // "a creature dealt damage this way".
+            Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
+                np.post.push("dealt damage this way".into())
+            }
             Filter::In(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("among {s}"));
@@ -491,6 +495,12 @@ impl Renderer<'_> {
     /// The head noun ("artifact creature", "Elf", "permanent", "creature card").
     fn head(&mut self, np: &Np) -> String {
         let mut words: Vec<String> = Vec::new();
+        // "commander creatures you own".
+        let commander_first =
+            np.kind == Some("commander") && (!np.types.is_empty() || !np.subtypes.is_empty());
+        if commander_first {
+            words.push("commander".into());
+        }
         words.extend(np.subtypes.iter().cloned());
         let mut types = np.types.clone();
         types.sort_by_key(|t| type_order(*t));
@@ -504,6 +514,7 @@ impl Renderer<'_> {
         }
         match np.kind {
             Some("permanent") if !words.is_empty() => {}
+            Some("commander") if commander_first => {}
             Some(k) => words.push(k.to_string()),
             None => {}
         }

@@ -443,6 +443,8 @@ impl Renderer<'_> {
                 let w = self.rel_subject(*who);
                 let n = if matches!(filter, Filter::Source) {
                     self.me()
+                } else if matches!(filter, Filter::Any) {
+                    "a card".into()
                 } else {
                     self.noun_det(filter, Det::A)
                 };

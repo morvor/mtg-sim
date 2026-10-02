@@ -28,6 +28,12 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"\bif (?:it|that spell) is countered this way, exile it instead of putting it into its owner's graveyard",
+        replacement: "if it would be put into a graveyard from the stack, exile it instead",
+        why: "A spell countered by the instruction goes to its owner's graveyard from the \
+              stack (CR 701.6a); the replacement (CR 614.1a) applies to that event.",
+    },
+    Equivalence {
         pattern: r"\bwhenever\b",
         replacement: "when",
         why: "\"When\" and \"whenever\" both introduce a trigger condition (CR 603.1); the \
@@ -222,6 +228,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "that many life",
         why: "\"Life equal to the life lost this way\" is the amount of life the previous \
               instruction made players lose: \"that many life\" (CR 608.2c).",
+    },
+    Equivalence {
+        pattern: r"\byour (commanders?)\b",
+        replacement: "$1 you own",
+        why: "A player's commander is the commander they own (CR 903.3); \"your commander\" \
+              and \"a commander you own\" are the same objects.",
     },
     Equivalence {
         pattern: r"\bthey\b",

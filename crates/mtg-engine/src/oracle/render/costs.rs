@@ -161,6 +161,14 @@ impl Renderer<'_> {
                     format!("pay {s} {{E}}")
                 }
             },
+            CostPart::PayPlayerCounters { kind, count } if kind.as_str() == "energy" => match count
+            {
+                Value::Const(n) if *n > 0 => format!("pay {}", "{E}".repeat(*n as usize)),
+                other => {
+                    let s = self.value(other);
+                    format!("pay {s} {{E}}")
+                }
+            },
             CostPart::PayPlayerCounters { kind, count } => {
                 let (c, w) = self.counted(count, &counter_name(kind));
                 format!("pay {c}{}", w.unwrap_or_default())
