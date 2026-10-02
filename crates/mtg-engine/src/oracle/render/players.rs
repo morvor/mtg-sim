@@ -425,6 +425,9 @@ impl Renderer<'_> {
             }
             Sel::Var(v) if self.plural_vars.contains(v) => them(case),
             Sel::Var(v) => match *v {
+                vars::SACRIFICED if self.sacrificed.as_deref() == Some("~") => {
+                    decline("~".into(), case)
+                }
                 vars::SACRIFICED => {
                     let n = self.sacrificed.clone().unwrap_or_else(|| "creature".into());
                     decline(format!("the sacrificed {n}"), case)

@@ -953,6 +953,34 @@ impl Renderer<'_> {
                     .unwrap_or_default();
                 format!("~ costs {mana} more to cast for each target beyond the first")
             }
+            // "Planeswalkers' loyalty abilities you activate cost an additional +1 to
+            // activate" (CR 606.4: the loyalty cost changes).
+            CostChange::AdditionalCost(Cost { mana: None, parts })
+                if matches!(cm.applies_to, CostTarget::LoyaltyAbilities(_))
+                    && matches!(parts.as_slice(), [CostPart::Loyalty(_)]) =>
+            {
+                let [CostPart::Loyalty(n)] = parts.as_slice() else {
+                    return self.gap("loyalty cost");
+                };
+                let n = if *n > 0 {
+                    format!("+{n}")
+                } else {
+                    n.to_string()
+                };
+                let CostTarget::LoyaltyAbilities(f) = &cm.applies_to else {
+                    return self.gap("loyalty cost");
+                };
+                let o = self.noun(f, Num::Many);
+                let who = if cm.who == PlayerRel::You {
+                    " you activate"
+                } else {
+                    ""
+                };
+                format!(
+                    "{} loyalty abilities{who} cost an additional {n} to activate",
+                    super::nouns::possessive(&o)
+                )
+            }
             CostChange::AdditionalCost(c) => {
                 let c = self.cost_as_payment(c);
                 if matches!(cm.applies_to, CostTarget::ThisSpell) {

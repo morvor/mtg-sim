@@ -93,6 +93,11 @@ impl Renderer<'_> {
             CostPart::Sacrifice { filter, count } => {
                 let det = self.det_for(count);
                 let f = super::effects::strip_controller(filter);
+                // "Sacrifice Blazing Torch" in an ability it grants: the object itself.
+                if matches!(&f, Filter::Custom(n) if n == crate::granted_by::GRANTER) {
+                    self.sacrificed = Some("~".into());
+                    return "sacrifice ~".into();
+                }
                 let head = self.noun(&f, Num::One);
                 self.sacrificed = head.split_whitespace().last().map(str::to_string);
                 let n = self.noun_det(&f, det);
