@@ -446,11 +446,25 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let (cost, loyalty) = costs::parse_cost(cost_s)?;
     // Activation restrictions at the end of the effect text.
     let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
+    // "X can't be 0." (CR 107.3a): a condition on the value announced for X in the cost.
+    let cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x())
+        || cost.parts.iter().any(crate::casting::cost_part_has_x);
+    let x_not_zero = cost_has_x
+        .then(|| patterns::r107_x_cant_be_zero::strip(eff_text))
+        .flatten();
+    let eff_text = x_not_zero.as_deref().unwrap_or(eff_text);
     // CR 400.7j: "the exiled card" is the card the cost exiled.
-    let body = match crate::zones::cost_exiled_text(&cost, eff_text) {
-        Some(text) => effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_EXILED))?,
-        None => effects::parse_body(eff_text, ctx)?,
-    };
+    // CR 107.3a, 107.3k: an X in the activation cost defines X for the ability.
+    let x = patterns::value_grammar::cost_has_x(cost_s);
+    let body =
+        patterns::value_grammar::with_x_defined(x, || {
+            match crate::zones::cost_exiled_text(&cost, eff_text) {
+                Some(text) => {
+                    effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_EXILED))
+                }
+                None => effects::parse_body(eff_text, ctx),
+            }
+        })?;
     // CR 605.1a: no target, could add mana, not a loyalty ability, and neither its cost
     // nor its effect moves a card to or from a library.
     let is_mana = effects::is_mana_effect(&body.effect)
@@ -464,6 +478,11 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     act.is_mana_ability = is_mana;
     act.any_player = any_player;
     act.zone = activated_zone(cost_s, eff_text);
+    if x_not_zero.is_some() {
+        act.condition = Some(patterns::r107_x_cant_be_zero::condition(
+            act.condition.take(),
+        ));
+    }
     Some(AbilityDef::new(AbilityKind::Activated(act), full))
 }
 
