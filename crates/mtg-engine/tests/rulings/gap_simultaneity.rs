@@ -808,3 +808,88 @@ fn each_player_spares_creatures_in_turn_order_then_the_rest_are_sacrificed() {
         assert!(!t.on_battlefield(giant0) && !t.on_battlefield(bears1), "{card}");
     }
 }
+
+#[test]
+fn kroxa_opponents_choose_face_down_discard_together_then_lose_life() {
+    cr!("101.4", "101.4a", "608.2e");
+    ruling!(
+        "Kroxa, Titan of Death's Hunger",
+        "chooses a card in hand without revealing it, then each other opponent in turn order does the same. All the chosen cards are discarded at the same time, and then the appropriate players lose 3 life each."
+    );
+    ruling!(
+        "Kroxa, Titan of Death's Hunger",
+        "chooses a card in hand and sets it aside without revealing it. Then each other opponent in turn order does the same. Next, all chosen cards are revealed and discarded at the same time. Finally, each opponent who didn't discard a nonland card loses 3 life."
+    );
+    ruling!(
+        "Kroxa, Titan of Death's Hunger",
+        "An opponent loses 3 life if they discard a land card or if they can't discard a card at all."
+    );
+    ruling!(
+        "Kroxa, Titan of Death's Hunger",
+        "Kroxa's second ability triggers when it enters the battlefield, even if it didn't escape."
+    );
+    supported("Kroxa, Titan of Death's Hunger");
+    // P1 discards a nonland card, P2 a land, P3 has no cards.
+    let mut t = TestGame::new(4);
+    let bears = t.hand(P1, "Grizzly Bears");
+    t.hand(P1, "Forest");
+    let island = t.hand(P2, "Island");
+    t.hand(P2, "Shock");
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.answer_choose(P2, &[Entity::Object(island)]);
+    // When P2 chooses, P1's card is still in P1's hand and hidden.
+    let seen = watch(&mut t, P2, is_choose, |g| {
+        (
+            g.player(PlayerId(1)).hand.len(),
+            g.known_apnap_choices(PlayerId(2))
+                .iter()
+                .map(|(p, c)| (*p, c.is_some()))
+                .collect::<Vec<_>>(),
+        )
+    });
+    let from = t.g.turn_events.len();
+    // Cast without escaping: it's sacrificed, but its second ability triggers too.
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 2);
+    let kroxa = t.hand(P0, "Kroxa, Titan of Death's Hunger");
+    t.cast(P0, kroxa).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Kroxa, Titan of Death's Hunger"));
+    assert_eq!(*seen.lock().unwrap(), vec![(2, vec![(P1, false)])]);
+    assert!(t.in_graveyard(P1, "Grizzly Bears") && t.in_graveyard(P2, "Island"));
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.life(P2), 17);
+    assert_eq!(t.life(P3), 17);
+    // The discards came before any life loss.
+    let events = &t.g.turn_events[from..];
+    let last_discard = events
+        .iter()
+        .rposition(|e| matches!(e, Event::Discarded { .. }))
+        .unwrap();
+    let first_loss = events
+        .iter()
+        .position(|e| matches!(e, Event::LifeLost { .. }))
+        .unwrap();
+    assert!(last_discard < first_loss);
+}
+
+#[test]
+fn strongarm_tactics_players_who_didnt_discard_a_creature_card_lose_life() {
+    cr!("101.4", "608.2e");
+    supported("Strongarm Tactics");
+    let mut t = TestGame::new(3);
+    t.hand(P0, "Forest");
+    let bears = t.hand(P1, "Grizzly Bears");
+    t.hand(P1, "Forest");
+    let shock = t.hand(P2, "Shock");
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.answer_choose(P2, &[Entity::Object(shock)]);
+    t.lands(P0, "Swamp", 2);
+    let spell = t.hand(P0, "Strongarm Tactics");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    // P0 discarded a Forest, P2 a Shock: they lose 4 life; P1 discarded a creature card.
+    assert_eq!(t.life(P0), 16);
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.life(P2), 16);
+}

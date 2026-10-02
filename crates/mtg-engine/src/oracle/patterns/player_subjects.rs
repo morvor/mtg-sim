@@ -898,6 +898,47 @@ fn each_who_didnt_put(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "each opponent who didn't [put a card] [instruction]", priority: 150, parse: each_who_didnt_put } }
 
+/// "then each opponent who didn't discard a nonland card this way loses 3 life" (Kroxa,
+/// Titan of Death's Hunger), "Then each player who didn't discard a creature card this way
+/// loses 4 life." (Strongarm Tactics), after "each [player] discards a card": the players
+/// discarded at the same time (CR 101.4); each of those players none of whose discarded
+/// cards has the quality, in APNAP order — including a player who discarded nothing.
+fn each_who_didnt_discard(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (who, r) = if let Some(r) = l.strip_prefix("each opponent who didn't discard ") {
+        (PlayerFilter::Opponent, r)
+    } else {
+        (
+            PlayerFilter::Any,
+            l.strip_prefix("each player who didn't discard ")?,
+        )
+    };
+    let (desc, rest) = r.split_once(" this way ")?;
+    let desc = desc.strip_prefix("a ").or_else(|| desc.strip_prefix("an "))?;
+    let quality = super::card_flow_search::card_filter(desc, b)?;
+    let e = instruction(&as_you(rest)?, Some(rest), b)?;
+    // The cards a player discarded are cards they owned (CR 701.9a: from their hand).
+    let discarded_one = PlayerFilter::Ref(Box::new(PlayerRef::OwnerOf(Box::new(Sel::All(
+        Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(crate::discard_rules::DISCARDED))),
+            quality,
+        ]),
+    )))));
+    Some(Effect::ForEachPlayer {
+        who: PlayerRef::Each(PlayerFilter::And(vec![
+            who,
+            PlayerFilter::Not(Box::new(discarded_one)),
+        ])),
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(e),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "each opponent who didn't discard [a card] this way [instruction]", priority: 150, parse: each_who_didnt_discard } }
+
 /// Marks that the players who accepted "each [player] may search their library ..."
 /// searched (a player who chooses to search searches, even if they find nothing).
 const SEARCHED_NAME: &str = "\u{1}the players who searched";
