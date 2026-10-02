@@ -13,8 +13,8 @@
 use super::EffectPattern;
 use crate::ability::*;
 use crate::oracle::effects::Builder;
-use crate::oracle::statics::parse_value_phrase;
 use crate::oracle::phrases::*;
+use crate::oracle::statics::parse_value_phrase;
 
 fn modify(mods: Vec<Modification>, duration: Duration) -> Effect {
     Effect::Modify {
@@ -124,7 +124,10 @@ fn base_pt_becomes(l: &str, b: &mut Builder) -> Option<Effect> {
         });
     }
     let (p, t) = const_pt(s)?;
-    Some(modify(vec![Modification::SetPT(Some(p), Some(t))], duration))
+    Some(modify(
+        vec![Modification::SetPT(Some(p), Some(t))],
+        duration,
+    ))
 }
 
 inventory::submit! { EffectPattern { name: "~'s base power [and toughness] become(s) ...", priority: 100, parse: base_pt_becomes } }

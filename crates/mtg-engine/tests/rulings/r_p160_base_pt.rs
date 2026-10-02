@@ -50,10 +50,20 @@ fn setting_spells_overwrite_earlier_setting_effects_and_keep_modifiers() {
         ("Square Up", "Relic's Roar", "Mind Transfer Protocol", false),
         ("Relic's Roar", "Square Up", "Mind Transfer Protocol", false),
         ("Mind Transfer Protocol", "Square Up", "Relic's Roar", false),
-        ("Majestic Metamorphosis", "Relic's Roar", "Mind Transfer Protocol", false),
+        (
+            "Majestic Metamorphosis",
+            "Relic's Roar",
+            "Mind Transfer Protocol",
+            false,
+        ),
         ("Suit Up", "Square Up", "Relic's Roar", false),
         ("Humble", "Relic's Roar", "Mind Transfer Protocol", true),
-        ("Vengeant Earth", "Relic's Roar", "Mind Transfer Protocol", false),
+        (
+            "Vengeant Earth",
+            "Relic's Roar",
+            "Mind Transfer Protocol",
+            false,
+        ),
     ];
     for (name, earlier, later, switch) in cases {
         supported(name);
@@ -118,7 +128,15 @@ fn setting_activated_abilities_overwrite_earlier_setting_effects_and_keep_modifi
         t.lands(P0, "Forest", 2);
         activate_resolve(t, P0, hulk, 0, &[Entity::Object(bears)]);
     };
-    layer7(&mut t, bears, "Relic's Roar", true, apply, (5, 5), "Square Up");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        true,
+        apply,
+        (5, 5),
+        "Square Up",
+    );
 
     // Gigantomancer: "{1}: Target creature you control has base power and toughness 7/7
     // until end of turn."
@@ -129,7 +147,15 @@ fn setting_activated_abilities_overwrite_earlier_setting_effects_and_keep_modifi
         t.lands(P0, "Wastes", 1);
         activate_resolve(t, P0, mancer, 0, &[Entity::Object(bears)]);
     };
-    layer7(&mut t, bears, "Relic's Roar", true, apply, (7, 7), "Square Up");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        true,
+        apply,
+        (7, 7),
+        "Square Up",
+    );
 
     // Mirror Entity with X = 3.
     let mut t = TestGame::new(2);
@@ -140,7 +166,15 @@ fn setting_activated_abilities_overwrite_earlier_setting_effects_and_keep_modifi
         t.answer(P0, DecisionKind::X, Answer::Number(3));
         activate_resolve(t, P0, entity, 0, &[]);
     };
-    layer7(&mut t, bears, "Relic's Roar", false, apply, (3, 3), "Square Up");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        false,
+        apply,
+        (3, 3),
+        "Square Up",
+    );
 
     // Jolrael: "{4}{G}{G}: Until end of turn, creatures you control have base power and
     // toughness X/X, where X is the number of cards in your hand." Two cards in hand (the
@@ -154,12 +188,25 @@ fn setting_activated_abilities_overwrite_earlier_setting_effects_and_keep_modifi
         }
         while t.hand_size(P0) > 2 {
             let c = t.g.player(P0).hand[0];
-            t.g.move_object(c, mtg_engine::object::Zone::Graveyard(P0), mtg_engine::events::MoveCause::Effect, None);
+            t.g.move_object(
+                c,
+                mtg_engine::object::Zone::Graveyard(P0),
+                mtg_engine::events::MoveCause::Effect,
+                None,
+            );
         }
         t.lands(P0, "Forest", 6);
         activate_resolve(t, P0, jolrael, 0, &[]);
     };
-    layer7(&mut t, bears, "Relic's Roar", false, apply, (2, 2), "Square Up");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        false,
+        apply,
+        (2, 2),
+        "Square Up",
+    );
 }
 
 #[test]
@@ -204,7 +251,15 @@ fn setting_auras_and_equipment_overwrite_earlier_setting_effects() {
         activate_resolve(t, P0, blade, 0, &[Entity::Object(bears)]);
         assert_eq!(t.obj(blade).attached_to, Some(Entity::Object(bears)));
     };
-    layer7(&mut t, bears, "Relic's Roar", false, apply, (5, 5), "Square Up");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        false,
+        apply,
+        (5, 5),
+        "Square Up",
+    );
 }
 
 #[test]
@@ -223,11 +278,7 @@ fn setting_triggered_abilities_overwrite_earlier_setting_effects() {
         "Effects that modify Risen Riptide’s power or toughness without setting it will apply to its new base power and toughness no matter when they started to take effect. The same is true for counters that change the creature’s power or toughness."
     );
     helpers_supported();
-    for name in [
-        "Glamer Gifter",
-        "Risen Riptide",
-        "Burst Lightning",
-    ] {
+    for name in ["Glamer Gifter", "Risen Riptide", "Burst Lightning"] {
         supported(name);
     }
 
@@ -241,7 +292,15 @@ fn setting_triggered_abilities_overwrite_earlier_setting_effects() {
         t.enter(P0, "Glamer Gifter");
         t.resolve_all();
     };
-    layer7(&mut t, bears, "Relic's Roar", false, apply, (4, 4), "Mind Transfer Protocol");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        false,
+        apply,
+        (4, 4),
+        "Mind Transfer Protocol",
+    );
 
     // Risen Riptide: "Whenever you cast a kicked spell, this creature has base power and
     // toughness 5/5 until end of turn."
@@ -256,7 +315,15 @@ fn setting_triggered_abilities_overwrite_earlier_setting_effects() {
         t.resolve_all();
         assert_eq!(t.life(P1), 16);
     };
-    layer7(&mut t, riptide, "Relic's Roar", false, apply, (5, 5), "Square Up");
+    layer7(
+        &mut t,
+        riptide,
+        "Relic's Roar",
+        false,
+        apply,
+        (5, 5),
+        "Square Up",
+    );
 }
 
 #[test]
@@ -292,14 +359,30 @@ fn setting_static_abilities_overwrite_earlier_setting_effects() {
     let apply = |t: &mut TestGame| {
         t.battlefield(P1, "Harmonious Archon");
     };
-    layer7(&mut t, bears, "Relic's Roar", false, apply, (3, 3), "Square Up");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        false,
+        apply,
+        (3, 3),
+        "Square Up",
+    );
 
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Hill Giant");
     let apply = |t: &mut TestGame| {
         t.battlefield(P1, "Kudo, King Among Bears");
     };
-    layer7(&mut t, bears, "Relic's Roar", true, apply, (2, 2), "Square Up");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        true,
+        apply,
+        (2, 2),
+        "Square Up",
+    );
 
     // Porcelain Gallery: "Creatures you control have base power and toughness each equal to
     // the number of creatures you control." Three creatures.
@@ -312,7 +395,15 @@ fn setting_static_abilities_overwrite_earlier_setting_effects() {
         mtg_engine::rooms::unlock(&mut t.g, room, 1, P0);
         t.settle();
     };
-    layer7(&mut t, bears, "Relic's Roar", true, apply, (3, 3), "Square Up");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        true,
+        apply,
+        (3, 3),
+        "Square Up",
+    );
 }
 
 #[test]
@@ -334,7 +425,15 @@ fn the_antiquities_war_makes_artifacts_5_5_keeping_modifiers() {
         t.g.flush_events();
         t.resolve_all();
     };
-    layer7(&mut t, thopter, "Relic's Roar", true, apply, (5, 5), "Square Up");
+    layer7(
+        &mut t,
+        thopter,
+        "Relic's Roar",
+        true,
+        apply,
+        (5, 5),
+        "Square Up",
+    );
 }
 
 #[test]
@@ -404,7 +503,11 @@ fn damage_stays_marked_so_a_lower_base_toughness_can_be_lethal() {
     t.lands(P0, "Wastes", 1);
     let elk = t.hand(P0, "Trickster's Elk");
     t.answer_targets(P0, &[Entity::Object(ogre)]);
-    t.cast(P0, elk).method(mtg_engine::object::CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Bestow)).go();
+    t.cast(P0, elk)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Bestow,
+        ))
+        .go();
     t.resolve_all();
     assert!(!t.on_battlefield(ogre));
 
@@ -415,7 +518,11 @@ fn damage_stays_marked_so_a_lower_base_toughness_can_be_lethal() {
     t.lands(P0, "Wastes", 1);
     let elk = t.hand(P0, "Trickster's Elk");
     t.answer_targets(P0, &[Entity::Object(elf)]);
-    t.cast(P0, elk).method(mtg_engine::object::CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Bestow)).go();
+    t.cast(P0, elk)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Bestow,
+        ))
+        .go();
     t.resolve_all();
     assert_eq!(t.pt(elf), (3, 3));
     cast_resolve(&mut t, P0, "Shock", &[Entity::Object(elf)]);
@@ -495,7 +602,15 @@ fn biomass_mutation_example() {
         t.cast(P0, spell).x(4).go();
         t.resolve_all();
     };
-    layer7(&mut t, bears, "Relic's Roar", true, apply, (4, 4), "Square Up");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        true,
+        apply,
+        (4, 4),
+        "Square Up",
+    );
 }
 
 #[test]
@@ -515,5 +630,13 @@ fn bramblefort_fink_sets_its_base_pt_under_its_modifiers() {
         t.lands(P0, "Wastes", 8);
         activate_resolve(t, P0, fink, 0, &[]);
     };
-    layer7(&mut t, fink, "Relic's Roar", true, apply, (10, 10), "Square Up");
+    layer7(
+        &mut t,
+        fink,
+        "Relic's Roar",
+        true,
+        apply,
+        (10, 10),
+        "Square Up",
+    );
 }

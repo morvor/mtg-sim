@@ -27,7 +27,13 @@ pub fn cast_resolve(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity
 }
 
 /// Activates the `index`th activated ability of `source` and resolves the stack.
-pub fn activate_resolve(t: &mut TestGame, p: PlayerId, source: ObjectId, index: usize, targets: &[Entity]) {
+pub fn activate_resolve(
+    t: &mut TestGame,
+    p: PlayerId,
+    source: ObjectId,
+    index: usize,
+    targets: &[Entity],
+) {
     t.activate(p, source, index, targets)
         .unwrap_or_else(|e| panic!("activation failed: {e:?}"));
     t.resolve_all();
@@ -113,7 +119,11 @@ pub fn layer7_by(
     assert_eq!(t.pt(target), sw((e.0 + 4, e.1 + 4)), "after {earlier}");
     apply(t);
     t.g.recompute();
-    assert_eq!(t.pt(target), sw((set.0 + 4, set.1 + 4)), "after the tested effect");
+    assert_eq!(
+        t.pt(target),
+        sw((set.0 + 4, set.1 + 4)),
+        "after the tested effect"
+    );
     cast_resolve(t, caster, later, &[Entity::Object(target)]);
     let l = setter_pt(later);
     assert_eq!(t.pt(target), sw((l.0 + 4, l.1 + 4)), "after {later}");

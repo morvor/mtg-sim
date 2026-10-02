@@ -91,7 +91,9 @@ fn elvish_warmaster_pumps_only_the_elves_you_control_as_it_resolves() {
     assert_eq!(t.pt(elf), (3, 3));
     let late = t.battlefield(P0, "Llanowar Elves");
     assert_eq!(t.pt(late), (1, 1));
-    assert!(!t.obj(late).has_keyword(mtg_engine::keywords::KeywordKind::Deathtouch));
+    assert!(!t
+        .obj(late)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Deathtouch));
 }
 
 #[test]
@@ -215,7 +217,12 @@ fn x_where_x_is_its_power_is_determined_as_the_ability_resolves() {
         "Yew Spirit",
         "The value of X is determined when the ability resolves. The bonus won't change later in the turn if the creature's power changes."
     );
-    for name in ["Heroes' Bane", "Electrostatic Pummeler", "Yew Spirit", "Giant Growth"] {
+    for name in [
+        "Heroes' Bane",
+        "Electrostatic Pummeler",
+        "Yew Spirit",
+        "Giant Growth",
+    ] {
         supported(name);
     }
 
@@ -502,7 +509,11 @@ fn loxodon_lifechanter() {
     assert_eq!(t.pt(lc), (24, 26));
     // Choosing not to: the life total stays.
     let mut t = TestGame::new(2);
-    t.answer(P0, DecisionKind::YesNo, mtg_engine::decision::Answer::Bool(false));
+    t.answer(
+        P0,
+        DecisionKind::YesNo,
+        mtg_engine::decision::Answer::Bool(false),
+    );
     t.enter(P0, "Loxodon Lifechanter");
     t.resolve_all();
     assert_eq!(t.life(P0), 20);

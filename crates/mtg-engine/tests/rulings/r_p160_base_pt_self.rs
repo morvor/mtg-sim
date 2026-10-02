@@ -34,7 +34,15 @@ fn mirkwood_meditator_sets_its_base_pt_on_landfall() {
     };
     let mut t = TestGame::new(2);
     let med = t.battlefield(P0, "Mirkwood Meditator");
-    layer7(&mut t, med, "Relic's Roar", true, landfall, (4, 2), "Square Up");
+    layer7(
+        &mut t,
+        med,
+        "Relic's Roar",
+        true,
+        landfall,
+        (4, 2),
+        "Square Up",
+    );
 
     // A 2/4 with 2 damage becomes a 4/2 and dies.
     let mut t = TestGame::new(2);
@@ -75,10 +83,28 @@ fn master_of_winds_chooses_4_1_or_1_4() {
     };
     let mut t = TestGame::new(2);
     let master = t.battlefield(P0, "Master of Winds");
-    layer7_by(&mut t, P1, master, "Relic's Roar", false, cast_opt(0), (4, 1), "Square Up");
+    layer7_by(
+        &mut t,
+        P1,
+        master,
+        "Relic's Roar",
+        false,
+        cast_opt(0),
+        (4, 1),
+        "Square Up",
+    );
     let mut t = TestGame::new(2);
     let master = t.battlefield(P0, "Master of Winds");
-    layer7_by(&mut t, P1, master, "Relic's Roar", false, cast_opt(1), (1, 4), "Square Up");
+    layer7_by(
+        &mut t,
+        P1,
+        master,
+        "Relic's Roar",
+        false,
+        cast_opt(1),
+        (1, 4),
+        "Square Up",
+    );
 
     // A 1/4 with 2 damage that becomes a 4/1 dies.
     let mut t = TestGame::new(2);
@@ -110,7 +136,16 @@ fn symmetry_sage_sets_only_the_base_power() {
         cast_resolve(t, P0, "Opt", &[]);
     };
     // Base 4/3 (Relic's Roar) becomes base 2/3.
-    layer7_by(&mut t, P1, bears, "Relic's Roar", false, apply, (2, 3), "Square Up");
+    layer7_by(
+        &mut t,
+        P1,
+        bears,
+        "Relic's Roar",
+        false,
+        apply,
+        (2, 3),
+        "Square Up",
+    );
 }
 
 #[test]
@@ -163,6 +198,9 @@ fn riptide_mangler_copies_a_power_indefinitely() {
     activate_resolve(&mut t, P0, mangler, 0, &[Entity::Object(bears)]);
     // Base 2/3 +1/+1 +3/+3 = 6/7, switched: 7/6.
     assert_eq!(t.pt(mangler), (7, 6));
+    // The power is copied once (CR 608.2h): pumping the Bears later changes nothing.
+    cast_resolve(&mut t, P0, "Giant Growth", &[Entity::Object(bears)]);
+    assert_eq!(t.pt(mangler), (7, 6));
     // The effect lasts indefinitely: next turn it's a 3/4 (base 2/3 and the counter).
     t.advance_to(P1, Step::Upkeep);
     assert_eq!(t.pt(mangler), (3, 4));
@@ -184,7 +222,15 @@ fn eldrazi_mimic_copies_the_entering_creatures_pt() {
         t.enter(P0, "Ornithopter");
         t.resolve_all();
     };
-    layer7(&mut t, mimic, "Relic's Roar", true, apply, (0, 2), "Square Up");
+    layer7(
+        &mut t,
+        mimic,
+        "Relic's Roar",
+        true,
+        apply,
+        (0, 2),
+        "Square Up",
+    );
 }
 
 #[test]
@@ -291,6 +337,28 @@ fn pupu_ufo_putting_a_land_isnt_playing_one() {
 }
 
 #[test]
+fn pupu_ufo_base_power_counts_towns_as_it_resolves() {
+    cr!("613.4b", "608.2h");
+    supported("PuPu UFO");
+    // "{3}: Until end of turn, this creature's base power becomes equal to the number of
+    // Towns you control." Two Towns: base power 2 (toughness stays 4), plus a counter.
+    let mut t = TestGame::new(2);
+    let ufo = t.battlefield(P0, "PuPu UFO");
+    plus_counters(&mut t, ufo, 1);
+    t.battlefield(P0, "Capital City");
+    t.battlefield(P0, "Adventurer's Inn");
+    t.lands(P0, "Wastes", 3);
+    activate_resolve(&mut t, P0, ufo, 1, &[]);
+    assert_eq!(t.pt(ufo), (3, 5));
+    // A third Town afterwards doesn't change it; the effect ends with the turn.
+    t.battlefield(P0, "Clive's Hideaway");
+    t.g.recompute();
+    assert_eq!(t.pt(ufo), (3, 5));
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(t.pt(ufo), (1, 5));
+}
+
+#[test]
 fn allosaurus_shepherd_sets_elves_base_pt_and_makes_them_dinosaurs() {
     cr!("613.4b", "613.4c", "613.1d", "613.7b", "611.2c");
     ruling!(
@@ -316,7 +384,15 @@ fn allosaurus_shepherd_sets_elves_base_pt_and_makes_them_dinosaurs() {
         // Not an Elf: unaffected.
         assert_eq!(t.pt(bears), (2, 2));
     };
-    layer7(&mut t, elf, "Relic's Roar", true, apply, (5, 5), "Square Up");
+    layer7(
+        &mut t,
+        elf,
+        "Relic's Roar",
+        true,
+        apply,
+        (5, 5),
+        "Square Up",
+    );
 }
 
 #[test]
@@ -351,5 +427,13 @@ fn archon_of_the_wild_rose_sets_enchanted_creatures_base_pt() {
         assert_eq!(t.pt(plain), (2, 2));
         assert_eq!(t.pt(theirs), (2, 2));
     };
-    layer7(&mut t, bears, "Relic's Roar", true, apply, (4, 4), "Mind Transfer Protocol");
+    layer7(
+        &mut t,
+        bears,
+        "Relic's Roar",
+        true,
+        apply,
+        (4, 4),
+        "Mind Transfer Protocol",
+    );
 }

@@ -20,7 +20,7 @@ fn creature(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn inkfathom_witch_affects_only_unblocked_creatures() {
-    cr!("509.1h", "506.4", "611.2c");
+    cr!("509.1h", "511.3", "611.2c");
     ruling!(
         "Inkfathom Witch",
         "An “unblocked creature” is a creature that attacked and wasn't blocked. Creatures aren't “blocked” or “unblocked” until the declare blockers step, so activating this ability before then (or after combat ends) will have no effect."
@@ -353,14 +353,13 @@ fn urza_copying_a_token_or_a_copy() {
     t.answer_choose(P0, &[Entity::Object(thopter)]);
     cast_new(&mut t, P0, "Sculpting Steel", &[]);
     t.resolve_all();
-    let steel = t
-        .g
-        .permanents()
-        .filter(|o| o.controller == P0 && !o.is_token())
-        .filter(|o| o.card.as_ref().is_some_and(|c| c.name == "Sculpting Steel"))
-        .map(|o| o.id)
-        .next()
-        .expect("Sculpting Steel on the battlefield");
+    let steel =
+        t.g.permanents()
+            .filter(|o| o.controller == P0 && !o.is_token())
+            .filter(|o| o.card.as_ref().is_some_and(|c| c.name == "Sculpting Steel"))
+            .map(|o| o.id)
+            .next()
+            .expect("Sculpting Steel on the battlefield");
     assert_eq!(t.obj(steel).chars.name.as_str(), "Ornithopter");
     t.lands(P0, "Wastes", 6);
     activate_resolve(&mut t, P0, urza, 0, &[Entity::Object(steel)]);
@@ -599,7 +598,12 @@ fn vincents_limit_break_on_a_token() {
     cast_resolve(&mut t, P0, "Servo Exhibition", &[]);
     let servo = tokens_of(&t, P0)[0];
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
-    cast_resolve(&mut t, P0, "Vincent's Limit Break", &[Entity::Object(servo)]);
+    cast_resolve(
+        &mut t,
+        P0,
+        "Vincent's Limit Break",
+        &[Entity::Object(servo)],
+    );
     assert_eq!(t.pt(servo), (3, 2));
     cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Object(servo)]);
     t.resolve();
