@@ -661,6 +661,16 @@ fn relative_list<'a>(r: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
 /// An object phrase with the qualifiers above, in any order. Returns the filter and the
 /// rest.
 pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
+    // CR 702.62b: a "suspended" card is in exile with suspend and a time counter on it.
+    if let Some(r) = s.strip_prefix("suspended ") {
+        let (f, rest) = objects(r, b)?;
+        let suspended = Filter::and(vec![
+            Filter::InZone(ZoneKind::Exile),
+            Filter::HasKeyword(crate::keywords::KeywordKind::Suspend),
+            Filter::HasCounter(Some(crate::types::counters::TIME.into())),
+        ]);
+        return Some((Filter::and(vec![suspended, f]), rest));
+    }
     // "Aura and Equipment attached to it": either kind (a union of two nouns).
     let owned;
     let s = match s.split_once(' ') {
@@ -1163,6 +1173,19 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                         ])),
                     };
                     return Some((v, t.to_string()));
+                }
+            }
+        }
+        b.targets.truncate(saved);
+    }
+    // "suspended card you own and each other permanent you control with a time counter
+    // on it": the sum of both counts.
+    if let Some((x, y)) = r.split_once(" and each ") {
+        let saved = b.targets.len();
+        if let Some((v1, r1)) = count(x, b) {
+            if r1.trim().is_empty() {
+                if let Some((v2, r2)) = count(y, b) {
+                    return Some((Value::Sum(vec![v1, v2]), r2));
                 }
             }
         }

@@ -1934,14 +1934,27 @@ fn parse_predicate(
         if let Some(fe) = tail.strip_prefix("for each ") {
             // In a group, "it" is each affected object.
             let each = Sel::Var(vars::AFFECTED);
-            let n = parse_for_each(fe, Some(subj.it.as_ref().unwrap_or(&each)))?;
-            let mul = |v: Value| match v {
+            let it = subj.it.as_ref().unwrap_or(&each);
+            // "+1/+1 for each creature you control and +1/+1 for each Aura you control":
+            // both bonuses.
+            let (fe, more) = match fe.split_once(" and +") {
+                Some((a, b)) if b.contains(" for each ") => (a, Some(format!("+{b}"))),
+                _ => (fe, None),
+            };
+            let times = |v: Value, n: &Value| match v {
                 Value::Const(0) => Value::Const(0),
                 Value::Const(1) => n.clone(),
                 other => Value::Mul(Box::new(other), Box::new(n.clone())),
             };
-            pv = mul(pv);
-            tv = mul(tv);
+            let n = parse_for_each(fe, Some(it))?;
+            pv = times(pv, &n);
+            tv = times(tv, &n);
+            if let Some(m) = more {
+                let (p2, t2, tail2) = crate::oracle::effects::parse_pt_mod(&m)?;
+                let n2 = parse_for_each(tail2.trim().strip_prefix("for each ")?, Some(it))?;
+                pv = Value::Sum(vec![pv, times(p2, &n2)]);
+                tv = Value::Sum(vec![tv, times(t2, &n2)]);
+            }
         } else if !tail.is_empty() {
             return None;
         }
@@ -1974,6 +1987,14 @@ fn parse_predicate(
                 return Some(vec![Out::Mod(Modification::SetPT(
                     Some(v.clone()),
                     Some(v),
+                ))]);
+            }
+            // "has base power and toughness X/X, where X is your life total".
+            if let (Some("x/x"), Some(x)) = (Some(pt), x) {
+                used_x.set(true);
+                return Some(vec![Out::Mod(Modification::SetPT(
+                    Some(x.clone()),
+                    Some(x.clone()),
                 ))]);
             }
             let (bp, bt) = base_pt(pt)?;
