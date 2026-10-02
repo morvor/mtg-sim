@@ -123,6 +123,32 @@ pub fn holder(s: &str, b: &mut Builder) -> Option<Sel> {
         return Some(sel);
     }
     restore(b);
+    // "target permanent or suspended card", "target permanent with a time counter on it
+    // or suspended card": a permanent or a suspended card in exile (CR 702.62b).
+    if let Some(perm) = s
+        .strip_prefix("target ")
+        .and_then(|r| r.strip_suffix(" or suspended card"))
+    {
+        let (f, plural, tail) = parse_object_phrase(perm)?;
+        if plural || !end(tail).is_empty() {
+            return None;
+        }
+        let suspended = Filter::and(vec![
+            Filter::Card,
+            Filter::InZone(ZoneKind::Exile),
+            Filter::HasKeyword(crate::keywords::KeywordKind::Suspend),
+            Filter::HasCounter(Some(crate::types::counters::TIME.into())),
+        ]);
+        let spec = TargetSpec::one(
+            TargetKind::Object(Filter::Or(vec![
+                Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+                suspended,
+            ])),
+            s,
+        );
+        let slot = b.add_target(spec, s);
+        return Some(Sel::Target(slot));
+    }
     // "each permanent and each suspended card".
     if let Some((x, y)) = s.split_once(" and each ") {
         if let (Some(a), Some(c)) = (holder(x, b), holder(&format!("each {y}"), b)) {
@@ -599,7 +625,9 @@ fn put_counters(l: &str, b: &mut Builder) -> Option<Effect> {
             }
             let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
             if let Some(ea) = crate::oracle::effects::parse_clause(&format!("put {a}"), b) {
-                if let Some(ec) = put_counters(&format!("put {c}"), b) {
+                if let Some(ec) = put_counters(&format!("put {c}"), b)
+                    .or_else(|| crate::oracle::effects::parse_clause(&format!("put {c}"), b))
+                {
                     return Some(Effect::seq(vec![ea, ec]));
                 }
             }
