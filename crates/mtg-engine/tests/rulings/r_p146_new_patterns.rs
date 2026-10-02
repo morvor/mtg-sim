@@ -284,3 +284,95 @@ fn kishla_skimmer_once_each_turn_on_your_turn() {
     assert_eq!(stacked_triggers(&t), 0);
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn prosper_pact_boon_triggers_for_any_card_played_from_exile() {
+    cr!("603.2", "601.2i", "305.1", "715.3d");
+    ruling!(
+        "Prosper, Tome-Bound",
+        "The Pact Boon ability triggers whenever you play any cards from exile, not just those exiled with the Mystic Arcanum ability."
+    );
+    supported("Prosper, Tome-Bound");
+    // "Pact Boon — Whenever you play a card from exile, create a Treasure token."
+    // Casting an adventurer card from exile after its Adventure.
+    let mut t = TestGame::new(2);
+    let p = t.battlefield(P0, "Prosper, Tome-Bound");
+    assert!(t.obj(p).has_keyword(KeywordKind::Deathtouch));
+    t.lands(P0, "Mountain", 4);
+    let m = t.hand(P0, "Merchant of the Vale // Haggle");
+    t.cast(P0, m)
+        .method(mtg_engine::object::CastMethod::Half(1))
+        .go();
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    // Cast from hand: no Treasure.
+    assert_eq!(treasures(&t, P0), 0);
+    let m = t.g.current(m);
+    assert_eq!(t.zone(m), Zone::Exile);
+    t.cast(P0, m).go();
+    t.settle();
+    assert_eq!(stacked_triggers(&t), 1);
+    t.resolve_all();
+    assert_eq!(treasures(&t, P0), 1);
+    assert_eq!(t.named_on_battlefield("Merchant of the Vale").len(), 1);
+    // A card cast from the hand: nothing.
+    cast_new(&mut t, P0, "Ornithopter", &[]);
+    t.resolve_all();
+    assert_eq!(treasures(&t, P0), 1);
+}
+
+#[test]
+fn prosper_mystic_arcanum_and_playing_a_land_from_exile() {
+    cr!("603.2", "305.1", "611.2a");
+    // "Mystic Arcanum — At the beginning of your end step, exile the top card of your
+    // library. Until the end of your next turn, you may play that card."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Prosper, Tome-Bound");
+    let forest = t.library_top(P0, "Forest");
+    end_step(&mut t, P0);
+    let forest = t.g.current(forest);
+    assert_eq!(t.zone(forest), Zone::Exile);
+    // Not during the opponent's turn (it's a land); in P0's next turn it's played, and
+    // Pact Boon triggers.
+    t.advance_to(P0, Step::PrecombatMain);
+    t.play_land(P0, forest).unwrap();
+    t.settle();
+    assert_eq!(stacked_triggers(&t), 1);
+    t.resolve_all();
+    assert_eq!(treasures(&t, P0), 1);
+    // A land played from the hand: nothing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Prosper, Tome-Bound");
+    let f = t.hand(P0, "Forest");
+    t.play_land(P0, f).unwrap();
+    t.settle();
+    assert_eq!(stacked_triggers(&t), 0);
+    // The permission lasts until the end of P0's next turn.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Prosper, Tome-Bound");
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    end_step(&mut t, P0);
+    let bolt = t.g.current(bolt);
+    t.lands(P0, "Mountain", 1);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(can_cast(
+        &mut t,
+        P0,
+        bolt,
+        mtg_engine::object::CastMethod::Normal
+    ));
+    t.advance_to(P0, Step::End);
+    assert!(can_cast(
+        &mut t,
+        P0,
+        bolt,
+        mtg_engine::object::CastMethod::Normal
+    ));
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!can_cast(
+        &mut t,
+        P0,
+        bolt,
+        mtg_engine::object::CastMethod::Normal
+    ));
+}
