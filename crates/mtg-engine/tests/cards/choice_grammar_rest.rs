@@ -155,3 +155,31 @@ fn temporal_firestorm_the_chosen_permanents_phase_out() {
     assert!(!t.on_battlefield(other) || t.obj_now(other).damage >= 4);
     assert!(!t.on_battlefield(theirs));
 }
+
+#[test]
+fn consuming_tide_keep_one_bounce_the_rest_draw_for_bigger_hands() {
+    cr!("608.2d", "101.4");
+    compiles("Consuming Tide");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Island", 4);
+    let my_keep = t.battlefield(P0, "Grizzly Bears");
+    let my_other = t.battlefield(P0, "Ornithopter");
+    let p1_keep = t.battlefield(P1, "Hill Giant");
+    let p1_other = t.battlefield(P1, "Llanowar Elves");
+    let p2_only = t.battlefield(P2, "Grizzly Bears");
+    t.hand(P2, "Forest");
+    t.hand(P1, "Forest");
+    t.hand(P1, "Forest");
+    t.library_top(P0, "Island");
+    t.answer_choose(P0, &[e(my_keep)]);
+    t.answer_choose(P1, &[e(p1_keep)]);
+    let spell = t.hand(P0, "Consuming Tide");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(my_keep) && t.on_battlefield(p1_keep) && t.on_battlefield(p2_only));
+    assert!(t.in_hand(P0, "Ornithopter") && t.in_hand(P1, "Llanowar Elves"));
+    let _ = (my_other, p1_other);
+    // After the bounce: P0 has 1 card (Ornithopter), P1 has 3, P2 has 1: one opponent
+    // has more cards in hand than P0, who draws one card.
+    assert_eq!(t.hand_size(P0), 2, "{}", t.dump_log());
+}

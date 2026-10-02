@@ -34,7 +34,7 @@ pub fn compared_with_you(s: &str) -> Option<PlayerFilter> {
                 cmp,
                 Box::new(theirs_vs(Value::LifeTotal(PlayerRef::You))),
             )),
-            "cards in hand" => Some(PlayerFilter::HandSize(
+            "cards in hand" | "cards in their hand" => Some(PlayerFilter::HandSize(
                 cmp,
                 Box::new(theirs_vs(Value::HandSize(PlayerRef::You))),
             )),
