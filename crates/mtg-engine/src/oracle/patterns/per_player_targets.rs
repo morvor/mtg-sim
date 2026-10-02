@@ -70,6 +70,7 @@ fn for_each_player_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     spec.per_player = Some(players);
+    spec.text = spec.text.replace("the iterated player", "that player");
     Some(e)
 }
 
