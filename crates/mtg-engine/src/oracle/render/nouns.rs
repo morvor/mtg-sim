@@ -901,9 +901,19 @@ impl Renderer<'_> {
         }
         if let Some(f) = &np.fixed {
             let mut s = f.clone();
+            // The qualities the alternatives share: "artifact, enchantment, or nonbasic land
+            // an opponent controls".
+            if let Some(c) = np.controller {
+                s.push(' ');
+                s.push_str(&self.controls_phrase(c, num));
+            }
             for p in &np.post {
                 s.push(' ');
                 s.push_str(p);
+            }
+            for r in &np.rel {
+                s.push(' ');
+                s.push_str(r);
             }
             return s;
         }
