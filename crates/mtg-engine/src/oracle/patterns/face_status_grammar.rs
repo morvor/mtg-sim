@@ -84,6 +84,16 @@ fn p_exile_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
     if !(tail.is_empty() || tail.starts_with([' ', ','])) {
         return None;
     }
+    // "Face down" says how the exiled objects are exiled: it follows them directly, not
+    // another instruction ("exile ~, then return it to the battlefield face down").
+    let verb_at = ["exiles ", "exile "]
+        .iter()
+        .filter_map(|v| head.rfind(v))
+        .max()?;
+    let objects = &head[verb_at..];
+    if objects.contains(", ") || objects.contains(" and ") || objects.contains("battlefield") {
+        return None;
+    }
     let text = format!("{head}{tail}");
     let saved = (
         b.targets.len(),
@@ -511,3 +521,126 @@ fn p_transform_objects(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "face grammar: transform [targets / all objects / any number of objects]", priority: 110, parse: p_transform_objects } }
+
+// ---------------------------------------------------------------------------
+// Entering face down: "return it to the battlefield face down under your control. It's a
+// 2/2 Cyberman artifact creature." (CR 708.2a, 708.3)
+// ---------------------------------------------------------------------------
+
+/// Sets `mods` as the listed characteristics of the one face-down battlefield destination
+/// in `e`; false unless there's exactly one, with none listed yet.
+fn list_face_down_characteristics(e: &mut Effect, mods: &[Modification]) -> bool {
+    use serde_json::Value as J;
+    fn walk(v: &mut J, mods: &J, n: &mut usize) {
+        match v {
+            J::Object(m) => {
+                let face_down_entry = m.get("zone").and_then(|z| z.as_str()) == Some("Battlefield")
+                    && m.get("face_down") == Some(&J::Bool(true))
+                    && m
+                        .get("with_mods")
+                        .is_some_and(|w| w.as_array().is_some_and(|a| a.is_empty()));
+                if face_down_entry {
+                    m.insert("with_mods".into(), mods.clone());
+                    *n += 1;
+                }
+                for x in m.values_mut() {
+                    walk(x, mods, n);
+                }
+            }
+            J::Array(a) => a.iter_mut().for_each(|x| walk(x, mods, n)),
+            _ => {}
+        }
+    }
+    let (Ok(mut json), Ok(mods)) = (serde_json::to_value(&*e), serde_json::to_value(mods)) else {
+        return false;
+    };
+    let mut n = 0;
+    walk(&mut json, &mods, &mut n);
+    if n != 1 {
+        return false;
+    }
+    match serde_json::from_value(json) {
+        Ok(x) => {
+            *e = x;
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// "It's a 2/2 Cyberman artifact creature.", "They're 5/5 artifact creatures.", "It's a
+/// Forest land." after putting cards onto the battlefield face down: the characteristics
+/// they have face down instead of a 2/2 creature's (CR 708.2a).
+fn f_face_down_entry_listed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if super::zz_probe_ps::disabled() {
+        return false;
+    }
+    let l = end(l);
+    let clause = if let Some(r) = l.strip_prefix("it's ") {
+        format!("~ becomes {r}")
+    } else if let Some(r) = l.strip_prefix("they're ") {
+        format!("~ becomes {r}")
+    } else {
+        return false;
+    };
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let parsed = parse_clause(&clause, b);
+    b.targets.truncate(saved.0);
+    (b.it, b.it_player) = (saved.1, saved.2);
+    let Some(Effect::Modify {
+        what: Sel::This,
+        mods,
+        duration: Duration::Permanent,
+    }) = parsed
+    else {
+        return false;
+    };
+    list_face_down_characteristics(prev, &mods)
+}
+
+inventory::submit! { FollowupPattern { name: "face grammar: face-down entry characteristics listed", priority: 95, apply: f_face_down_entry_listed } }
+
+/// "[put/return objects onto/to the battlefield] face up or face down": the controller of
+/// the effect chooses which as it's performed.
+fn p_face_up_or_down(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let head = end(l).strip_suffix(" face up or face down")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let up = parse_clause(head, b);
+    let parsed = up.and_then(|up| {
+        // Read again from the same starting point (the same target slots).
+        let mut again = Builder {
+            targets: b.targets[..saved.0].to_vec(),
+            it: saved.1.clone(),
+            it_player: saved.2.clone(),
+            in_trigger: b.in_trigger,
+            sentences: b.sentences,
+            chosen_creature: b.chosen_creature.clone(),
+            group: b.group.clone(),
+            named: b.named.clone(),
+            ctx: b.ctx,
+        };
+        let down = parse_clause(&format!("{head} face down"), &mut again)?;
+        if again.targets.len() != b.targets.len() {
+            return None;
+        }
+        // The same instruction, entering face down.
+        let s = |e: &Effect| serde_json::to_string(e).unwrap_or_default();
+        if s(&up) == s(&down) || !s(&down).contains("\"face_down\":true") {
+            return None;
+        }
+        Some(Effect::ChooseOne {
+            who: PlayerRef::You,
+            options: vec![("Face up".into(), up), ("Face down".into(), down)],
+        })
+    });
+    if parsed.is_none() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "face grammar: [enter the battlefield] face up or face down", priority: 110, parse: p_face_up_or_down } }

@@ -623,7 +623,9 @@ impl Game {
                     }
                 }
                 if let Some((source, ctl, mods)) = m.etb.with_mods.clone() {
-                    // CR 611.2e, 613.7n.
+                    // CR 611.2e, 613.7n. Characteristics listed for a permanent put onto
+                    // the battlefield face down are its face-down characteristics: they
+                    // stop applying as it's turned face up (CR 708.2a, 708.8).
                     let id = self.new_effect_id();
                     let ts = self.new_timestamp();
                     self.effects.push(ContinuousEffect {
@@ -631,7 +633,11 @@ impl Game {
                         source,
                         controller: ctl,
                         timestamp: ts,
-                        duration: Duration::Permanent,
+                        duration: if m.etb.face_down.is_some() {
+                            Duration::WhileFaceDown
+                        } else {
+                            Duration::Permanent
+                        },
                         affected: Affected::Objects(vec![new_id]),
                         mods,
                         layer1: None,

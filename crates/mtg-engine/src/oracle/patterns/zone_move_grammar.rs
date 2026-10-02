@@ -1494,6 +1494,19 @@ fn modifiers<'a>(
             }
             to.transformed = true;
             s = r;
+        } else if let Some(r) = strip_word(t, "face down and tapped")
+            .map(|r| (r, true))
+            .or_else(|| strip_word(t, "face down").map(|r| (r, false)))
+            .filter(|_| !super::zz_probe_ps::disabled())
+        {
+            // "Return it to the battlefield face down": a face-down 2/2 creature with no
+            // text, unless the effect lists other characteristics (CR 708.2a, 708.3).
+            if to.zone != ZoneKind::Battlefield {
+                return s;
+            }
+            to.face_down = true;
+            to.tapped |= r.1;
+            s = r.0;
         } else if let Some(r) = strip_word(t, "under your control") {
             to.controller = Some(PlayerRef::You);
             s = r;

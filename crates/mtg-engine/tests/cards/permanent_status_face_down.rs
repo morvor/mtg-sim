@@ -5,6 +5,7 @@
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
+use mtg_engine::types::CardType;
 use mtg_engine::zones;
 use mtg_engine::*;
 
@@ -383,4 +384,155 @@ fn bustle_may_turn_a_creature_you_control_face_up() {
     t.resolve_all();
     assert!(!t.g.obj(giant).face_down);
     assert_eq!(t.pt(giant), (5, 5));
+}
+
+// ---------------------------------------------------------------------------
+// Entering the battlefield face down
+// ---------------------------------------------------------------------------
+
+#[test]
+fn face_down_entry_cards_compile() {
+    assert_compiles(&[
+        "Ashcloud Phoenix",
+        "Yedora, Grave Gardener",
+        "Death in Heaven",
+        "The Cyber-Controller",
+        "Tezzeret, Cruel Machinist",
+        "Deathmist Raptor",
+        "Yarus, Roar of the Old Gods",
+    ]);
+}
+
+#[test]
+fn ashcloud_phoenix_returns_face_down_and_can_be_turned_up_for_its_morph_cost() {
+    cr!("708.2a", "708.3", "702.37e");
+    ruling!(
+        "Ashcloud Phoenix",
+        "If Ashcloud Phoenix is face down, you can turn it face up for its morph cost, even if you didn't cast Ashcloud Phoenix face down using its morph ability."
+    );
+    let mut t = TestGame::new(2);
+    let phoenix = t.battlefield(P0, "Ashcloud Phoenix");
+    destroy(&mut t, phoenix);
+    t.resolve_all();
+    let now = t.g.current(phoenix);
+    assert!(t.on_battlefield(now));
+    assert!(t.g.obj(now).face_down);
+    assert_eq!(t.g.obj(now).controller, P0);
+    assert_eq!(t.pt(now), (2, 2));
+    assert!(t.g.obj(now).chars.name.is_empty());
+    // Turned face up for {4}{R}{R}: "it deals 2 damage to each player".
+    t.lands(P0, "Mountain", 6);
+    t.set_step(P0, Step::PrecombatMain);
+    t.g.turn.priority = Some(P0);
+    t.g
+        .perform_action(
+            P0,
+            mtg_engine::decision::Action::Special(mtg_engine::decision::SpecialAction::TurnFaceUp {
+                obj: now,
+            }),
+        )
+        .expect("turned face up");
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(!t.g.obj(now).face_down);
+    assert_eq!(t.pt(now), (4, 1));
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn yedora_returns_the_creature_face_down_as_a_forest_land() {
+    cr!("708.2a", "305.6");
+    ruling!(
+        "Yedora, Grave Gardener",
+        "The face-down card has no name or colors. Its only type is land, its only subtype is Forest"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Yedora, Grave Gardener");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    destroy(&mut t, bears);
+    t.resolve_all();
+    let now = t.g.current(bears);
+    assert!(t.on_battlefield(now));
+    let o = t.g.obj(now);
+    assert!(o.face_down);
+    assert!(o.is(CardType::Land));
+    assert!(!o.is(CardType::Creature));
+    assert!(o.chars.has_subtype("Forest"));
+    assert!(o.chars.name.is_empty());
+}
+
+#[test]
+fn cyber_controller_puts_milled_creature_cards_onto_the_battlefield_as_face_down_cybermen() {
+    cr!("708.2a", "708.8");
+    ruling!(
+        "The Cyber-Controller",
+        "Each creature turned face down this way or put onto the battlefield this way is a 2/2 Cyberman artifact creature with no name and no color."
+    );
+    ruling!(
+        "The Cyber-Controller",
+        "If, for any reason, the face-down creature is turned face up, the effect making it a Cyberman ends."
+    );
+    let mut t = TestGame::new(2);
+    let angel = t.library_top(P1, "Serra Angel");
+    let bolt = t.library_top(P1, "Lightning Bolt");
+    let controller = t.hand(P0, "The Cyber-Controller");
+    t.lands(P0, "Island", 4);
+    t.lands(P0, "Swamp", 1);
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, controller).x(2).go();
+    t.resolve_all();
+    let angel = t.g.current(angel);
+    assert!(t.on_battlefield(angel));
+    assert_eq!(t.g.obj(angel).controller, P0);
+    assert!(t.g.obj(angel).face_down);
+    assert!(t.g.obj(angel).is(CardType::Artifact));
+    assert!(t.g.obj(angel).chars.has_subtype("Cyberman"));
+    // 2/2, +1/+1 from The Cyber-Controller.
+    assert_eq!(t.pt(angel), (3, 3));
+    // The noncreature card stays in the graveyard.
+    assert_eq!(t.zone(t.g.current(bolt)), Zone::Graveyard(P1));
+    // Turned face up, it's the Serra Angel printed on the card.
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    t.g.exec(
+        &mtg_engine::ability::Effect::TurnFaceUp {
+            what: mtg_engine::ability::Sel::All(mtg_engine::ability::Filter::FaceDown),
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    assert!(!t.g.obj(angel).face_down);
+    assert!(!t.g.obj(angel).is(CardType::Artifact));
+    assert_eq!(t.pt(angel), (4, 4));
+}
+
+#[test]
+fn deathmist_raptor_may_return_face_down() {
+    cr!("708.3");
+    ruling!(
+        "Deathmist Raptor",
+        "You choose whether Deathmist Raptor will enter the battlefield face up or face down as the ability resolves."
+    );
+    let mut t = TestGame::new(2);
+    let raptor = t.graveyard(P0, "Deathmist Raptor");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, bears));
+    t.answer_yes(P0, true);
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(1),
+    );
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    t.g.exec(
+        &mtg_engine::ability::Effect::TurnFaceUp {
+            what: mtg_engine::ability::Sel::All(mtg_engine::ability::Filter::FaceDown),
+        },
+        &mut ctx,
+    );
+    t.g.flush_events();
+    t.resolve_all();
+    let now = t.g.current(raptor);
+    assert!(t.on_battlefield(now));
+    assert!(t.g.obj(now).face_down);
 }
