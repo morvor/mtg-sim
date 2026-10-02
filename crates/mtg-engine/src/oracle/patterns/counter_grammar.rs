@@ -152,8 +152,9 @@ pub fn holder(s: &str, b: &mut Builder) -> Option<Sel> {
     // "each permanent and each suspended card".
     if let Some((x, y)) = s.split_once(" and each ") {
         if let (Some(a), Some(c)) = (holder(x, b), holder(&format!("each {y}"), b)) {
-            if let (Sel::All(f1), Sel::All(f2)) = (&a, &c) {
-                return Some(Sel::All(Filter::Or(vec![f1.clone(), f2.clone()])));
+            // Objects in different zones: each group found in its own zone.
+            if let (Sel::All(_), Sel::All(_)) = (&a, &c) {
+                return Some(Sel::Union(vec![a, c]));
             }
         }
         restore(b);
@@ -1043,12 +1044,22 @@ fn put_or_remove(l: &str, b: &mut Builder) -> Option<Effect> {
         kind: Some(rkind.clone()),
         n: rn,
     };
-    Some(Effect::ChooseOne {
-        who: PlayerRef::You,
-        options: vec![
-            (format!("put a {kind} counter"), put.clone()),
-            (format!("remove a {rkind} counter"), remove),
-        ],
+    // Removing a counter can be chosen only if there's one to remove (Plague Boiler's
+    // ruling).
+    Some(Effect::If {
+        cond: Condition::Compare(
+            Value::CountersOn(Box::new(what.clone()), Some(rkind.clone())),
+            Cmp::Ge,
+            Value::c(1),
+        ),
+        then: Box::new(Effect::ChooseOne {
+            who: PlayerRef::You,
+            options: vec![
+                (format!("put a {kind} counter"), put.clone()),
+                (format!("remove a {rkind} counter"), remove),
+            ],
+        }),
+        otherwise: Box::new(put.clone()),
     })
 }
 

@@ -612,12 +612,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             .strip_prefix("that has ")
             .or_else(|| t.strip_prefix("that have "))
             .and_then(|x| {
-            // "a spell that has freerunning" (Brotherhood Headquarters): "with [keyword]".
-            let with = format!("with {x}");
-            let (f, rest) = parse_with_suffix(&with)?;
-            let n = rest.len();
-            Some((f, &t[t.len() - n..]))
-        }) {
+                // "a spell that has freerunning" (Brotherhood Headquarters): "with [keyword]".
+                let with = format!("with {x}");
+                let (f, rest) = parse_with_suffix(&with)?;
+                let n = rest.len();
+                Some((f, &t[t.len() - n..]))
+            })
+        {
             (f, r)
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
