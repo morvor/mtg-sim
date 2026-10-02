@@ -1,8 +1,8 @@
-//! Object filters of group grants ("Creatures attacking you get -1/-0", "Creatures
-//! attacking enchanted player have trample", "Creatures attacking your opponents have
-//! double strike"): a creature attacking a player, not a planeswalker or battle that
-//! player controls or protects (CR 506.2, 508.1b). Evaluated for the static ability's
-//! source and controller.
+//! Object filters of group grants. "Creatures attacking you" and "creatures attacking
+//! your opponents" are `Filter::AttackingPlayer` (the player only, CR 506.2, 508.1b);
+//! here: "creatures attacking enchanted player" (the player the source is attached to),
+//! "attacking your opponents and/or planeswalkers they control" (Roar of Resistance),
+//! "attacking the same player or planeswalker" and a few non-combat qualifiers.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::eval::Ctx;
@@ -10,16 +10,12 @@ use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::types::*;
 
-/// Attacking the controller of the ability ("creatures attacking you").
-pub const ATTACKING_YOU: &str = "attacking_player:you";
-/// Attacking an opponent of the controller ("creatures attacking your opponents").
-pub const ATTACKING_OPPONENT: &str = "attacking_player:opponent";
 /// Attacking the player the source is attached to ("creatures attacking enchanted
 /// player").
 pub const ATTACKING_ENCHANTED_PLAYER: &str = "attacking_player:enchanted";
-/// `Filter::Custom`: attacking the player the trigger is about ("that's attacking that
-/// player").
-pub const ATTACKING_TRIGGER_PLAYER: &str = "attacking_player:trigger";
+/// Attacking an opponent of the controller or a planeswalker an opponent controls
+/// ("creatures attacking your opponents and/or planeswalkers they control").
+pub const ATTACKING_OPPONENT_OR_THEIR_PLANESWALKER: &str = "attacking_player_or_pw:opponent";
 /// `Filter::Custom`: attacking the same player, planeswalker or battle as the source
 /// ("another target creature attacking the same player or planeswalker", Kitesail
 /// Skirmisher).
@@ -83,23 +79,27 @@ impl KeywordRules for GrantFilters {
                 t.is_some() && t == target_of(id)
             }));
         }
-        if !matches!(
-            name,
-            ATTACKING_YOU | ATTACKING_OPPONENT | ATTACKING_ENCHANTED_PLAYER | ATTACKING_TRIGGER_PLAYER
-        ) {
+        let target = g.combat.as_ref().and_then(|c| c.attack_target(id));
+        if name == ATTACKING_OPPONENT_OR_THEIR_PLANESWALKER {
+            return Some(match target {
+                Some(Entity::Player(p)) => g.are_opponents(ctx.controller, p),
+                Some(Entity::Object(o)) => {
+                    g.obj(o).chars.card_types.contains(CardType::Planeswalker)
+                        && g.are_opponents(ctx.controller, g.obj(o).controller)
+                }
+                None => false,
+            });
+        }
+        if name != ATTACKING_ENCHANTED_PLAYER {
             return None;
         }
-        let Some(Entity::Player(p)) = g.combat.as_ref().and_then(|c| c.attack_target(id)) else {
+        let Some(Entity::Player(p)) = target else {
             return Some(false);
         };
-        Some(match name {
-            ATTACKING_YOU => p == ctx.controller,
-            ATTACKING_OPPONENT => g.are_opponents(ctx.controller, p),
-            ATTACKING_TRIGGER_PLAYER => ctx.event.as_ref().and_then(|e| e.player) == Some(p),
-            _ => ctx
-                .source
+        Some(
+            ctx.source
                 .is_some_and(|s| g.obj(s).attached_to == Some(Entity::Player(p))),
-        })
+        )
     }
 }
 

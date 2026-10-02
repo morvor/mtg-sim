@@ -1217,7 +1217,8 @@ pub enum Filter {
     Blocking,
     Blocked,
     Unblocked,
-    /// "attacking you" / "attacking a planeswalker you control".
+    /// "attacking you", "attacking your opponents": attacking that player, not a
+    /// planeswalker they control or a battle they protect (CR 506.2, 508.1b).
     AttackingPlayer(PlayerRel),
     /// "creature blocking it", "creature blocked by it" relative to the source.
     BlockingSource,

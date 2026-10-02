@@ -819,7 +819,10 @@ fn attacking_opponents_or_their_planeswalkers<'a>(
     if !(r.is_empty() || r.starts_with([' ', ',', '.'])) {
         return None;
     }
-    Some((Filter::AttackingPlayer(PlayerRel::Opponent), r))
+    Some((
+        Filter::Custom(crate::kw::grant_filters::ATTACKING_OPPONENT_OR_THEIR_PLANESWALKER.into()),
+        r,
+    ))
 }
 
 inventory::submit! { FilterSuffixPattern { name: "grants: attacking your opponents and/or planeswalkers they control", priority: 100, parse: attacking_opponents_or_their_planeswalkers } }

@@ -368,3 +368,67 @@ fn elektra_may_damage_you_and_then_deals_damage_to_a_creature() {
         assert_eq!(t.on_battlefield(giant), !yes);
     }
 }
+
+#[test]
+fn red_hulk_deals_the_reflexive_damage_himself() {
+    cr!("603.12", "120.3");
+    assert_supported(&["Red Hulk"]);
+    let mut t = TestGame::new(2);
+    let hulk = t.battlefield(P0, "Red Hulk");
+    let shock_source = t.battlefield(P1, "Grizzly Bears");
+    t.answer(
+        P0,
+        DecisionKind::Targets,
+        mtg_engine::decision::Answer::Entities(vec![Entity::Player(P1)]),
+    );
+    t.g.deal_damage(shock_source, Entity::Object(hulk), 2, false);
+    t.settle();
+    t.resolve_all();
+    // One +1/+1 counter, then Red Hulk (not the Bears) deals 1 damage to P1.
+    assert_eq!(t.pt(hulk), (7, 8));
+    assert_eq!(t.life(P1), 19);
+    assert!(t
+        .g
+        .history
+        .damage_sources
+        .iter()
+        .any(|(s, _)| *s == hulk));
+}
+
+/// Desculpting Blast: "If it was attacking" uses the returned permanent's last known
+/// information (CR 608.2h); the Drone token has flying and its quoted restriction.
+#[test]
+fn desculpting_blast_makes_a_drone_only_for_an_attacker() {
+    cr!("608.2h", "111.4");
+    assert_supported(&["Desculpting Blast"]);
+    for attacking in [true, false] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.lands(P0, "Island", 2);
+        if attacking {
+            t.set_step(P1, mtg_engine::turn::Step::BeginningOfCombat);
+            t.answer(
+                P1,
+                DecisionKind::Attackers,
+                mtg_engine::decision::Answer::Attackers(vec![(bears, Entity::Player(P0))]),
+            );
+            t.advance_to(P1, mtg_engine::turn::Step::DeclareBlockers);
+        }
+        let blast = t.hand(P0, "Desculpting Blast");
+        t.cast(P0, blast).target(bears).go();
+        t.resolve_all();
+        assert!(t.in_hand(P1, "Grizzly Bears"));
+        let drones: Vec<ObjectId> = t
+            .g
+            .permanents()
+            .filter(|o| o.chars.has_subtype("Drone"))
+            .map(|o| o.id)
+            .collect();
+        assert_eq!(drones.len(), usize::from(attacking));
+        if attacking {
+            let d = t.obj_now(drones[0]);
+            assert!(d.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+            assert!(d.chars.abilities.len() >= 2);
+        }
+    }
+}

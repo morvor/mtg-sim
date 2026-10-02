@@ -267,3 +267,58 @@ fn pugnacious_pugilist_creates_a_tapped_and_attacking_devil() {
     // The Devil attacked too: 4 + 1 damage.
     assert_eq!(t.life(P1), 15);
 }
+
+/// "Creatures attacking you" means attacking the player, not a planeswalker the player
+/// controls (CR 506.2, 508.1b): Boarded Window's static ability, Blessed Reversal's count.
+#[test]
+fn creatures_attacking_you_exclude_those_attacking_your_planeswalkers() {
+    cr!("506.2", "508.1b", "611.3a");
+    // (Boarded Window's end-step trigger isn't supported; its static ability is.)
+    assert_supported(&["Blessed Reversal"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Boarded Window");
+    let pw = t.battlefield(P0, "Ajani Goldmane");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        decision::Answer::Attackers(vec![(a, Entity::Player(P0)), (b, Entity::Object(pw))]),
+    );
+    t.advance_to(P1, Step::DeclareBlockers);
+    assert_eq!(t.pt(a), (1, 2));
+    assert_eq!(t.pt(b), (2, 2));
+    // Blessed Reversal: 3 life for the one creature attacking P0 itself.
+    let reversal = t.hand(P0, "Blessed Reversal");
+    t.lands(P0, "Plains", 2);
+    let before = t.life(P0);
+    t.cast(P0, reversal).go();
+    t.resolve();
+    assert_eq!(t.life(P0), before + 3);
+}
+
+/// "creatures attacking your opponents and/or planeswalkers they control" (Roar of
+/// Resistance) includes a creature attacking an opponent's planeswalker.
+#[test]
+fn roar_of_resistance_includes_creatures_attacking_planeswalkers() {
+    cr!("506.2", "603.2c");
+    assert_supported(&["Roar of Resistance"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Roar of Resistance");
+    let pw = t.battlefield(P1, "Ajani Goldmane");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    t.answer_yes(P0, true);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        decision::Answer::Attackers(vec![(a, Entity::Player(P1)), (b, Entity::Object(pw))]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.resolve_all();
+    assert_eq!(t.pt(a), (4, 2));
+    assert_eq!(t.pt(b), (4, 2));
+}

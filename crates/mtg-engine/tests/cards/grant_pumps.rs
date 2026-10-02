@@ -230,3 +230,34 @@ fn kingpin_creatures_with_more_toughness_assign_damage_by_toughness() {
     assert_eq!(t.life(P1), 13);
     assert_eq!(t.life(P0), 18);
 }
+
+/// The Kingpin's effect doesn't modify characteristics, so it's a rules change whose set of
+/// creatures isn't locked in as it begins (CR 611.2c): a creature whose toughness becomes
+/// greater than its power later in the turn assigns damage by toughness too.
+#[test]
+fn kingpin_effect_applies_to_creatures_that_qualify_later() {
+    cr!("611.2c", "510.1a");
+    assert_supported(&["The Kingpin of Crime", "Dive Down"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Kingpin of Crime");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Island", 1);
+    t.answer_yes(P0, true);
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(giant, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, mtg_engine::turn::Step::DeclareBlockers);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    // Hill Giant 3/3 -> 3/6 after the Kingpin's ability resolved.
+    let dd = t.hand(P0, "Dive Down");
+    t.cast(P0, dd).target(giant).go();
+    // (Extort triggers too.)
+    t.resolve_all();
+    assert_eq!(t.pt(giant), (3, 6));
+    t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
+    assert_eq!(t.life(P1), 14);
+}

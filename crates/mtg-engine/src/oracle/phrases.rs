@@ -793,7 +793,7 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // "Whenever you attack a player, target creature that's attacking that player
             // ..." (Ordruun Mentor): the player the trigger is about.
             (
-                Filter::Custom(crate::kw::grant_filters::ATTACKING_TRIGGER_PLAYER.into()),
+                Filter::Custom(crate::kw::attacking_that_player::ATTACKING_THAT_PLAYER.into()),
                 r,
             )
         } else if let Some(r) = t.strip_prefix("that's attacking alone") {

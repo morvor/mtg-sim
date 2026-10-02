@@ -160,3 +160,30 @@ fn masked_bandits_grant_stays_if_the_card_leaves_exile_otherwise() {
     t.settle();
     assert_eq!(count_kind(&t, land, activated), 2);
 }
+
+/// Obsidian Fireheart: the land keeps burning after the Fireheart leaves (the duration is
+/// about the land's counter, CR 611.2b), "this land" is the land and "you" its
+/// controller, and it stops once the counter is gone.
+#[test]
+fn obsidian_fireheart_land_burns_while_it_has_a_blaze_counter() {
+    cr!("611.2b", "113.6");
+    assert_supported(&["Obsidian Fireheart"]);
+    let mut t = TestGame::new(2);
+    let fh = t.battlefield(P0, "Obsidian Fireheart");
+    let land = t.battlefield(P1, "Forest");
+    t.lands(P0, "Mountain", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.activate(P0, fh, 0, &[Entity::Object(land)]).unwrap();
+    t.resolve();
+    assert_eq!(t.obj_now(land).counters.get("blaze").copied(), Some(1));
+    t.g.destroy_all(vec![fh], None, false);
+    t.settle();
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.life(P0), 20);
+    // Without the counter, no more ability.
+    t.g.objects[land.0 as usize].counters.remove("blaze");
+    t.g.recompute();
+    assert_eq!(count_kind(&t, land, triggered), 0);
+}

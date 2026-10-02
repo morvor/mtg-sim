@@ -43,6 +43,18 @@ fn blazing_torch_sacrifices_itself_and_deals_the_damage() {
     assert!(t.obj_now(bears).tapped);
     t.resolve();
     assert_eq!(t.life(P1), 18);
+    // The Torch is the source of the damage: a creature with protection from artifacts
+    // can be targeted (the creature's ability targets), but the damage is prevented.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let torch = t.battlefield(P0, "Blazing Torch");
+    let chosen = t.battlefield(P1, "Tel-Jilad Chosen");
+    t.g.attach(torch, Entity::Object(bears));
+    let i = granted_index(&mut t, bears);
+    t.activate(P0, bears, i, &[Entity::Object(chosen)]).unwrap();
+    t.resolve();
+    assert!(t.on_battlefield(chosen));
+    assert_eq!(t.obj_now(chosen).damage, 0);
     // The targeting is the creature's ability: a red creature's can't target a creature
     // with protection from red.
     let mut t = TestGame::new(2);

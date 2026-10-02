@@ -269,13 +269,10 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
         ("that are attacking", Filter::Attacking),
         ("that are modified", Filter::Modified),
         ("that's modified", Filter::Modified),
-        (
-            "attacking you",
-            Filter::Custom(crate::kw::grant_filters::ATTACKING_YOU.into()),
-        ),
+        ("attacking you", Filter::AttackingPlayer(PlayerRel::You)),
         (
             "attacking your opponents",
-            Filter::Custom(crate::kw::grant_filters::ATTACKING_OPPONENT.into()),
+            Filter::AttackingPlayer(PlayerRel::Opponent),
         ),
         (
             "attacking enchanted player",
