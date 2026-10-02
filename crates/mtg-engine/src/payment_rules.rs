@@ -111,3 +111,44 @@ pub fn life_for_mana(g: &Game, p: PlayerId) -> Vec<(Color, u32)> {
     }
     out
 }
+
+/// Records the mana spent on the X of the spell `spell`, limited to mana of particular
+/// colors ("the amount of {B} spent on X").
+pub fn record_x_mana(g: &mut Game, spell: ObjectId, mana: &[crate::mana::ManaType]) {
+    let o = &mut g.objects[spell.0 as usize];
+    if o.zone != crate::object::Zone::Stack {
+        return;
+    }
+    if let Some(si) = o.stack.as_mut() {
+        si.cast.mana_spent_on_x.extend_from_slice(mana);
+    }
+}
+
+/// `Value::Custom` prefix: "the amount of {B} spent on X" (`"mana spent on X: B"`), the
+/// mana of that type spent on the resolving spell's X ([`record_x_mana`]).
+pub const MANA_SPENT_ON_X: &str = "mana spent on X: ";
+
+/// `Value::Custom` name for "the amount of [type] mana spent on X".
+pub fn mana_spent_on_x_value(t: crate::mana::ManaType) -> Value {
+    Value::Custom(format!("{MANA_SPENT_ON_X}{t:?}").into())
+}
+
+struct ManaSpentOnX;
+
+impl crate::kw::KeywordRules for ManaSpentOnX {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
+        let t = name.strip_prefix(MANA_SPENT_ON_X)?;
+        let t = crate::mana::ManaType::ALL
+            .into_iter()
+            .find(|x| format!("{x:?}") == t)?;
+        Some(g.cast_info(ctx).map_or(0, |c| {
+            c.mana_spent_on_x.iter().filter(|m| **m == t).count() as i64
+        }))
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ManaSpentOnX) }

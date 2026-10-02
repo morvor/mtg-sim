@@ -2063,6 +2063,15 @@ pub fn pay_mana(
     if let (true, Some(spell), true) = (spend.is_spell, spend.source, plan.phyrexian > 0) {
         crate::kw::compleated::record_phyrexian_life(g, spell, plan.phyrexian);
     }
+    // "The amount of {B} spent on X" (see `payment_rules`).
+    if let (true, Some(spell), false) = (spend.is_spell, spend.source, plan.x_indices.is_empty()) {
+        let on_x: Vec<ManaType> = plan
+            .x_indices
+            .iter()
+            .map(|i| g.player(p).mana_pool.mana[*i].ty)
+            .collect();
+        crate::payment_rules::record_x_mana(g, spell, &on_x);
+    }
     let mut spent = Vec::new();
     let mut idxs = plan.pool_indices.clone();
     idxs.sort_unstable_by(|a, b| b.cmp(a));

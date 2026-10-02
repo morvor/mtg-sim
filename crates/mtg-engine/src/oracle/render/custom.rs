@@ -224,6 +224,10 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_value(&mut self, name: &str) -> String {
+        // "the amount of {B} spent on X" (see `payment_rules`).
+        if let Some(t) = name.strip_prefix(crate::payment_rules::MANA_SPENT_ON_X) {
+            return format!("the amount of {{{t}}} spent on X");
+        }
         match name {
             "party_size" => "the number of creatures in your party".into(),
             crate::kw::hand_graveyard_actions::THAT_MANY => "that many".into(),

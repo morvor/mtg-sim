@@ -663,6 +663,10 @@ pub struct PaymentPlan {
     pub life: u32,
     /// How many Phyrexian symbols are paid with life (CR 107.4f, 702.150a).
     pub phyrexian: u32,
+    /// The indices into the pool (among `pool_indices`) of the mana that pays the X a
+    /// spell or ability limits to mana of particular colors ([`XSpend`]): "the amount of
+    /// {B} spent on X".
+    pub x_indices: Vec<usize>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -834,8 +838,15 @@ impl PoolSolver<'_> {
             if free.len() < need {
                 return false;
             }
-            // Prefer spending colorless, then the most plentiful colors first to keep options.
-            free.sort_by_key(|&j| (pool[j].ty != ManaType::C, pool[j].restriction.is_none()));
+            // Prefer spending colorless, then the most plentiful colors first to keep
+            // options (mana that triggers when it's spent before other mana of its type).
+            free.sort_by_key(|&j| {
+                (
+                    pool[j].ty != ManaType::C,
+                    pool[j].restriction.is_none(),
+                    pool[j].rider.is_none(),
+                )
+            });
             for &j in free.iter().take(need) {
                 used[j] = true;
                 plan.pool_indices.push(j);
@@ -906,15 +917,17 @@ impl PoolSolver<'_> {
         next: &dyn Fn(&mut Vec<bool>, &mut PaymentPlan) -> bool,
     ) -> bool {
         let pool = self.pool;
-        // Try restricted mana first (it's less flexible elsewhere).
+        // Try restricted mana first (it's less flexible elsewhere), then mana that
+        // triggers when it's spent (CR 106.6: its player made it to spend).
         let mut cands: Vec<usize> = (0..pool.len())
             .filter(|&j| self.usable[j] && !used[j] && pred(&pool[j]))
             .collect();
-        cands.sort_by_key(|&j| pool[j].restriction.is_none());
+        cands.sort_by_key(|&j| (pool[j].restriction.is_none(), pool[j].rider.is_none()));
         let mut seen_plain: Vec<ManaType> = Vec::new();
         for j in cands {
-            // Symmetry breaking: unrestricted, non-snow mana of the same type is interchangeable.
-            if pool[j].restriction.is_none() && !pool[j].snow {
+            // Symmetry breaking: unrestricted, non-snow mana of the same type with no
+            // trigger is interchangeable.
+            if pool[j].restriction.is_none() && !pool[j].snow && pool[j].rider.is_none() {
                 if seen_plain.contains(&pool[j].ty) {
                     continue;
                 }
@@ -952,7 +965,17 @@ impl PoolSolver<'_> {
                 &|m| m.pays_generic() && matches_color(m, c, self.any),
                 used,
                 plan,
-                &|u, p| self.solve(reqs, i + 1, u, p, now),
+                &|u, p| {
+                    let j = p.pool_indices.last().copied();
+                    p.x_indices.extend(j);
+                    if self.solve(reqs, i + 1, u, p, now) {
+                        return true;
+                    }
+                    if j.is_some() {
+                        p.x_indices.pop();
+                    }
+                    false
+                },
             ) {
                 return true;
             }

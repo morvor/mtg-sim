@@ -1581,7 +1581,16 @@ impl Game {
             };
             x = match answer {
                 Answer::Number(n) if n >= x_min && payable(n) => n,
-                _ => max.max(x_min),
+                // Otherwise the greatest legal value whose total cost could be paid.
+                _ => (x_min..=max)
+                    .rev()
+                    .find(|n| {
+                        payable(*n) && {
+                            let c = self.total_cost_with(p, id, &chars, opt, *n as u32, &extra);
+                            self.can_pay_cost_optimistic(p, &c, Some(id), &chars)
+                        }
+                    })
+                    .unwrap_or(max.max(x_min)),
             };
         }
         // CR 107.3a, 107.3b: "X can't be 0" leaves no legal value for an X that must be 0

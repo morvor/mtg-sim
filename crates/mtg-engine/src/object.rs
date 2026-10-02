@@ -296,6 +296,10 @@ pub struct CastInfo {
     /// cast this way costs {2} more to cast", CR 601.2f).
     #[serde(default)]
     pub permission_cost_increase: u32,
+    /// The mana spent on an X that only mana of particular colors may pay ("Spend only
+    /// black and/or red mana on X": "the amount of {B} spent on X", see `payment_rules`).
+    #[serde(default)]
+    pub mana_spent_on_x: Vec<ManaType>,
 }
 
 /// Data from the event that caused a triggered ability to trigger, used by "that
