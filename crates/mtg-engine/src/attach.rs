@@ -13,12 +13,23 @@ use crate::types::*;
 /// (CR 301.5c, 303.4k, 701.3).
 pub const SOURCE_CAN_ATTACH: &str = "source_can_attach";
 
+/// `Filter::Custom` name: an object enchanted by an Aura the evaluating player controls
+/// ("creatures you control that are enchanted by Auras you control", CR 303.4b).
+pub const ENCHANTED_BY_YOUR_AURA: &str = "enchanted_by_your_aura";
+
 /// Custom filters about attaching. Returns `None` if `name` isn't one.
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
-    (name == SOURCE_CAN_ATTACH).then(|| {
-        ctx.source
-            .is_some_and(|s| can_attach(g, s, Entity::Object(id)))
-    })
+    match name {
+        SOURCE_CAN_ATTACH => Some(
+            ctx.source
+                .is_some_and(|s| can_attach(g, s, Entity::Object(id))),
+        ),
+        ENCHANTED_BY_YOUR_AURA => Some(g.attachments_of(Entity::Object(id)).iter().any(|a| {
+            let a = g.obj(*a);
+            a.controller == ctx.controller && a.chars.has_subtype("Aura")
+        })),
+        _ => None,
+    }
 }
 
 /// Whether `t` has protection that keeps the Aura from enchanting it (CR 702.16c),
