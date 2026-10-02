@@ -20,6 +20,7 @@
 //! * [`testing`] provides a harness for rules tests.
 
 pub mod ability;
+pub mod ability_grants;
 pub mod actions;
 pub mod activation_costs;
 pub mod adventure;
@@ -84,6 +85,7 @@ pub mod layers;
 pub mod legend_rule;
 pub mod library;
 pub mod life_totals;
+pub mod linked_notes;
 pub mod mana;
 pub mod mana_abilities;
 pub mod mana_value;

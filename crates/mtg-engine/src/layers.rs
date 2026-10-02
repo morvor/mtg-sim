@@ -1126,6 +1126,7 @@ impl Game {
                     | Modification::AddKeyword(_)
                     | Modification::AddKeywordX(..)
                     | Modification::AddKeywordsOf { .. }
+                    | Modification::AddAbilitiesOf { .. }
             );
             if !trial && grants {
                 let after = self.obj(t).chars.abilities.len();
@@ -1498,6 +1499,19 @@ fn mod_values(g: &Game, mods: &[Modification], layer: Layer, ctx: &Ctx) -> Vec<i
                 out.push(g.eval_value(p, ctx));
                 out.push(g.eval_value(t, ctx));
             }
+            // What abilities it gives depends on the abilities other objects have, which
+            // other layer-6 effects can change (CR 613.8a).
+            Modification::AddAbilitiesOf { from, which } => {
+                out.extend(crate::ability_grants::copied_uids(g, from, which, ctx))
+            }
+            Modification::AddKeywordsOf { kinds, from } => {
+                out.extend(keywords_of(g, kinds, from, ctx).iter().map(|k| {
+                    use std::hash::{Hash, Hasher};
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    format!("{k:?}").hash(&mut h);
+                    h.finish() as i64
+                }))
+            }
             _ => {}
         }
     }
@@ -1803,11 +1817,18 @@ pub fn apply_mod(
                 apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
             }
         }
+        Modification::AddAbilitiesOf { from, which } => c.abilities.extend(
+            crate::ability_grants::abilities_for(g, from, which, ctx, _target),
+        ),
         Modification::RemoveKeyword(k) => c
             .abilities
             .retain(|a| !matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == *k)),
         Modification::LoseKeyword(k) => c.abilities.retain(|a| {
             !matches!(&a.kind, AbilityKind::Keyword(kw) if crate::keywords::same_instance(kw, k))
+        }),
+        Modification::LoseKeywordWithQuality { kind, quality } => c.abilities.retain(|a| {
+            !matches!(&a.kind, AbilityKind::Keyword(kw)
+                if kw.kind == *kind && crate::keywords::has_quality(kw, quality.as_ref()))
         }),
         Modification::RemoveAllAbilities => c.abilities.clear(),
         Modification::CantHaveKeyword(k) => c

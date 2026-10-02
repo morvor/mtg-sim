@@ -954,6 +954,10 @@ pub enum Sel {
     /// The top N cards of each of the players' libraries ("the top two cards of your
     /// library"), top first.
     TopOfLibrary(PlayerRef, Value),
+    /// The objects the linked abilities of the source noted ([`Effect::NoteLinked`],
+    /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
+    /// has since changed zones is a new object the note doesn't find (CR 400.7).
+    LinkedNoted,
 }
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
@@ -998,6 +1002,11 @@ pub enum PlayerRef {
     ChosenOpponent,
     /// The monarch / initiative holder etc.
     Monarch,
+    /// The players the linked abilities of the source noted, or that such an ability
+    /// still on the stack targets ([`Effect::NoteLinked`], CR 607.1): "When ~ enters,
+    /// target player loses 6 life. When ~ leaves the battlefield, that player gains 6
+    /// life." (Laquatus's Champion).
+    LinkedNoted,
 }
 
 /// Player predicates, used in targets and filters.
@@ -1891,10 +1900,32 @@ pub enum Modification {
         kinds: Vec<KeywordKind>,
         from: Filter,
     },
+    /// "has all activated abilities of [objects]", "gains all activated and triggered
+    /// abilities of target creature" (CR 113.10, 613.1f): the abilities of the selected
+    /// objects of the selected kinds, as those objects' characteristics stand when this
+    /// applies (an object's own abilities and those it has gained in earlier layer-6
+    /// effects, CR 613.8). Keyword abilities that stand for only abilities of those kinds
+    /// come along ("Some keywords are activated abilities"). The gained abilities refer to
+    /// the object that has them (CR 201.5b) and linked abilities gained together stay
+    /// linked only to each other (CR 607.5). A resolving effect fixes which abilities as
+    /// it's created (CR 608.2h; see `Game::fix_mods`). See `ability_grants.rs`.
+    AddAbilitiesOf {
+        from: Box<Sel>,
+        which: AbilitySelection,
+    },
     RemoveKeyword(KeywordKind),
     /// Loses one particular keyword ability: the instances of that kind with the same
     /// parameter text (Animate Dead: "it loses \"enchant creature card in a graveyard\"").
     LoseKeyword(Keyword),
+    /// Loses the keyword abilities of a kind with a quality: those whose quality is
+    /// `quality` ("loses islandwalk", "loses protection from red": each landwalk and each
+    /// protection ability is a separate ability, CR 702.14, 702.16g), or, with `None`,
+    /// every one that has a quality ("loses all \"bands with other\" abilities" leaves plain
+    /// banding, CR 702.22b).
+    LoseKeywordWithQuality {
+        kind: KeywordKind,
+        quality: Option<Filter>,
+    },
     RemoveAllAbilities,
     /// "can't have or gain [ability]".
     CantHaveKeyword(KeywordKind),
@@ -1950,8 +1981,10 @@ impl Modification {
             | AddKeyword(_)
             | AddKeywordX(..)
             | AddKeywordsOf { .. }
+            | AddAbilitiesOf { .. }
             | RemoveKeyword(_)
             | LoseKeyword(_)
+            | LoseKeywordWithQuality { .. }
             | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
@@ -2628,6 +2661,34 @@ impl AbilityScope {
             first_each_turn: false,
         }
     }
+}
+
+/// Which abilities of other objects [`Modification::AddAbilitiesOf`] gives: "all activated
+/// abilities", "all activated and triggered abilities", "all loyalty abilities", "...
+/// except mana abilities", "... except for loyalty abilities".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbilitySelection {
+    pub activated: bool,
+    pub triggered: bool,
+    /// Only activated abilities of this class ("all loyalty abilities").
+    pub only: Option<AbilityClass>,
+    /// Not activated abilities of this class ("except mana abilities").
+    pub except: Option<AbilityClass>,
+}
+
+impl AbilitySelection {
+    pub const ACTIVATED: AbilitySelection = AbilitySelection {
+        activated: true,
+        triggered: false,
+        only: None,
+        except: None,
+    };
+    pub const ACTIVATED_AND_TRIGGERED: AbilitySelection = AbilitySelection {
+        activated: true,
+        triggered: true,
+        only: None,
+        except: None,
+    };
 }
 
 /// A kind of activated ability.
@@ -3969,6 +4030,16 @@ pub enum Effect {
         body: Box<Body>,
         /// Fires once and is then removed.
         once: bool,
+    },
+    /// Notes the selected objects and players for the abilities linked to this one
+    /// (CR 607.1, 607.2e): what the ability affected or what a player chose, which a
+    /// linked ability refers to as "that player" or "the last chosen card"
+    /// ([`PlayerRef::LinkedNoted`], [`Sel::LinkedNoted`]). With `replace`, the new note
+    /// replaces earlier ones ("the last chosen card"); otherwise it adds to them
+    /// (CR 607.3). See `linked_notes.rs`.
+    NoteLinked {
+        what: Sel,
+        replace: bool,
     },
     /// A reflexive triggered ability ("When you do, ..."): created during resolution, it
     /// triggers immediately and is put on the stack the next time a player would receive

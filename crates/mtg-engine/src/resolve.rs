@@ -830,7 +830,10 @@ impl Game {
             }
             Effect::ExchangeControl { a, b } => {
                 // CR 701.12a: exactly two permanents, or no part of the exchange occurs
-                // ("two target creatures" select both from one target slot).
+                // ("two target creatures" select both from one target slot). Whether it
+                // happened is what "If you do" / "If you don't or can't make an exchange"
+                // ask about (CR 701.12b: between one player's permanents it does nothing).
+                ctx.prev_happened = false;
                 let mut both: Vec<ObjectId> = Vec::new();
                 for o in self
                     .resolve_objects(a, ctx)
@@ -865,6 +868,7 @@ impl Game {
                         });
                     }
                     self.dirty = true;
+                    ctx.prev_happened = true;
                 }
             }
             Effect::CreateToken {
@@ -1700,6 +1704,9 @@ impl Game {
                     performer,
                 });
             }
+            Effect::NoteLinked { what, replace } => {
+                crate::linked_notes::exec(self, what, *replace, ctx);
+            }
             Effect::Reflexive { body } => {
                 // CR 603.12: a reflexive triggered ability is checked immediately after it's
                 // created; it triggers now and waits to be put on the stack (with its own
@@ -2277,6 +2284,11 @@ impl Game {
                         .into_iter()
                         .map(Modification::AddKeyword)
                         .collect()
+                }
+                // "gains all activated abilities of target creature until end of turn":
+                // the abilities it has as the effect is created (CR 608.2h).
+                Modification::AddAbilitiesOf { from, which } => {
+                    crate::ability_grants::snapshot(self, from, which, ctx)
                 }
                 other => vec![other.clone()],
             })

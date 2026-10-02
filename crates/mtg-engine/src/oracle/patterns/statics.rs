@@ -2150,9 +2150,16 @@ fn parse_predicate(
         }
         let mut out = Vec::new();
         for item in split_list(r) {
-            out.push(Out::Mod(Modification::RemoveKeyword(
-                KeywordKind::from_name(item)?,
-            )));
+            match KeywordKind::from_name(item) {
+                Some(k) => out.push(Out::Mod(Modification::RemoveKeyword(k))),
+                // One ability of a keyword with a quality ("islandwalk", "protection
+                // from red", CR 702.14, 702.16g).
+                None => out.extend(
+                    super::keywords_702_11_17::lost_keywords(item)?
+                        .into_iter()
+                        .map(Out::Mod),
+                ),
+            }
         }
         return Some(out);
     }
