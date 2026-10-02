@@ -49,6 +49,9 @@ pub(crate) enum Clause {
     PerTurn(u32),
     /// "once".
     Total(u32),
+    /// "if ~ is on the stack", "if ~ is in your graveyard": where the ability functions
+    /// (CR 113.6).
+    Zone(FunctionZone),
 }
 
 fn and2(a: Condition, b: Condition) -> Condition {
@@ -429,6 +432,11 @@ pub(crate) fn clause(s: &str, ctx: &CompileContext) -> Option<Clause> {
         return Some(combat_window(combat_point(r)?, true, false));
     }
     if let Some(r) = s.strip_prefix("if ") {
+        match r {
+            "~ is on the stack" => return Some(Clause::Zone(FunctionZone::Stack)),
+            "~ is in your graveyard" => return Some(Clause::Zone(FunctionZone::Graveyard)),
+            _ => {}
+        }
         return Some(Clause::If(if_clause(r, ctx)?));
     }
     if let Some(r) = s.strip_suffix(" each turn") {
@@ -536,6 +544,7 @@ pub(crate) fn apply(act: &mut ActivatedAbility, clauses: Vec<Clause>, who: Who) 
             Clause::If(cond) => conds.push(cond),
             Clause::PerTurn(n) => act.max_per_turn = Some(act.max_per_turn.map_or(n, |m| m.min(n))),
             Clause::Total(n) => act.max_total = Some(act.max_total.map_or(n, |m| m.min(n))),
+            Clause::Zone(z) => act.zone = z,
         }
     }
     act.condition = match conds.len() {

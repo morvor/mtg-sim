@@ -1424,6 +1424,49 @@ fn none_on_battlefield(c: &str) -> Option<Condition> {
 
 inventory::submit! { super::ConditionPattern { name: "restriction grammar: no [permanents] are on the battlefield", priority: 100, parse: none_on_battlefield } }
 
+/// "that doesn't have first strike, double strike, vigilance, or haste", "that don't
+/// have flying": none of the listed keyword abilities (CR 702).
+fn without_keywords<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let list = ["that doesn't have ", "that don't have "]
+        .iter()
+        .find_map(|p| r.strip_prefix(p))?;
+    // The keywords, separated by ", ", ", or " and " or "; the rest after the last one.
+    let mut kws = Vec::new();
+    let mut rest = list;
+    loop {
+        // The longest keyword name at the start.
+        let mut best: Option<(crate::keywords::KeywordKind, usize)> = None;
+        for (i, _) in rest.char_indices().chain(std::iter::once((rest.len(), ' '))) {
+            if i == 0 || (i < rest.len() && !rest[i..].starts_with([' ', ','])) {
+                continue;
+            }
+            if let Some(k) = crate::keywords::KeywordKind::from_name(&rest[..i]) {
+                best = Some((k, i));
+            }
+        }
+        let (k, i) = best?;
+        kws.push(Filter::HasKeyword(k));
+        rest = &rest[i..];
+        if let Some(r) = rest
+            .strip_prefix(", or ")
+            .or_else(|| rest.strip_prefix(" or "))
+            .or_else(|| rest.strip_prefix(", "))
+        {
+            rest = r;
+            continue;
+        }
+        break;
+    }
+    let any = if kws.len() == 1 {
+        kws.pop()?
+    } else {
+        Filter::Or(kws)
+    };
+    Some((Filter::not(any), rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "restriction grammar: that doesn't have [keywords]", priority: 100, parse: without_keywords } }
+
 /// "with no abilities", "with abilities" (CR 113).
 fn with_abilities<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
     for (p, has) in [("with no abilities", false), ("with abilities", true)] {
