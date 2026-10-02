@@ -117,17 +117,8 @@ pub(super) struct Targets {
 fn object_group<'a>(s: &'a str, t: &mut Targets) -> Option<(Filter, &'a str)> {
     let s = s.trim_start();
     if s.starts_with("target ") {
-        let base = t.base?;
-        let (spec, rest) = parse_target(s)?;
-        if spec.fixed_min() != Some(1)
-            || !matches!(spec.max, Value::Const(1))
-            || !matches!(spec.what, TargetKind::Object(_))
-        {
-            return None;
-        }
-        let slot = (base + t.specs.len()) as u8;
-        let text = s[..s.len() - rest.len()].trim().to_string();
-        t.specs.push((spec, text));
+        let (_, rest) = parse_target(s)?;
+        let slot = claim_target(s, t, |k| matches!(k, TargetKind::Object(_)))?;
         return Some((Filter::In(Box::new(Sel::Target(slot))), rest.trim_start()));
     }
     for (p, f) in [
@@ -162,7 +153,48 @@ fn object_group<'a>(s: &'a str, t: &mut Targets) -> Option<(Filter, &'a str)> {
     if !plural {
         return None;
     }
-    Some((f, rest.trim_start()))
+    let rest = rest.trim_start();
+    // "creatures target opponent controls" (Encircling Fissure): the player is locked in
+    // as the effect is created (`prevention::lock_filter`).
+    for who in ["target opponent", "target player"] {
+        if let Some(r) = word(rest, who).and_then(|r| word(r, "controls")) {
+            let text = format!("{who} ");
+            let slot = claim_target(&text, t, |k| matches!(k, TargetKind::Player(_)))?;
+            return Some((
+                Filter::and(vec![f, Filter::ControlledBy(PlayerRel::Target(slot))]),
+                r,
+            ));
+        }
+    }
+    // "creatures other than target creature" (Terrifying Presence).
+    if let Some(r) = word(rest, "other than") {
+        if r.starts_with("target ") {
+            let (_, after) = parse_target(r)?;
+            let slot = claim_target(r, t, |k| matches!(k, TargetKind::Object(_)))?;
+            return Some((
+                Filter::and(vec![
+                    f,
+                    Filter::not(Filter::In(Box::new(Sel::Target(slot)))),
+                ]),
+                after.trim_start(),
+            ));
+        }
+    }
+    Some((f, rest))
+}
+
+/// Claims the single target at the start of `s` ("target creature ...") as the next target
+/// slot of a one-shot clause; `None` for statics or another kind of target.
+fn claim_target(s: &str, t: &mut Targets, kind: fn(&TargetKind) -> bool) -> Option<u8> {
+    let base = t.base?;
+    let (spec, rest) = parse_target(s)?;
+    if spec.fixed_min() != Some(1) || !matches!(spec.max, Value::Const(1)) || !kind(&spec.what) {
+        return None;
+    }
+    let slot = (base + t.specs.len()) as u8;
+    let text = s[..s.len() - rest.len()].trim().to_string();
+    t.specs.push((spec, text));
+    Some(slot)
 }
 
 /// Recipients joined by "and": "you", "players", "you and creatures you control", "you

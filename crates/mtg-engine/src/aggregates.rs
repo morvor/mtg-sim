@@ -109,7 +109,25 @@ pub fn distinct_among(g: &Game, what: Among, sel: &Sel, ctx: &Ctx) -> i64 {
             .filter_map(|c| c.mana_cost.as_ref())
             .filter(|m| !m.symbols.is_empty())
             .map(|m| {
-                let mut v: Vec<String> = m.symbols.iter().map(|s| format!("{s:?}")).collect();
+                // Generic symbols add up: a split card's combined cost {1}{R} + {1}{U} is
+                // the mana cost {2}{U}{R} (CR 709.4b, 202.1a).
+                let generic: u32 = m
+                    .symbols
+                    .iter()
+                    .map(|s| match s {
+                        crate::mana::ManaSymbol::Generic(n) => *n,
+                        _ => 0,
+                    })
+                    .sum();
+                let mut v: Vec<String> = m
+                    .symbols
+                    .iter()
+                    .filter(|s| !matches!(s, crate::mana::ManaSymbol::Generic(_)))
+                    .map(|s| format!("{s:?}"))
+                    .collect();
+                if generic > 0 || v.is_empty() {
+                    v.push(format!("{:?}", crate::mana::ManaSymbol::Generic(generic)));
+                }
                 v.sort();
                 v
             })

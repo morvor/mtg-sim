@@ -674,10 +674,19 @@ impl Game {
         let turn = self.turn.number;
         // CR 603.7b: a delayed trigger that can trigger more than once has a stated
         // duration ("this turn"); it ends with the turn.
+        // In Grand Melee, "this turn" is the turn it was created during, among those
+        // being taken at the same time (CR 807.4).
+        let in_progress: Vec<u32> = self
+            .delayed_triggers
+            .iter()
+            .map(|d| d.created_turn)
+            .filter(|n| crate::multiplayer::grand_melee::turn_in_progress(self, *n))
+            .collect();
         self.delayed_triggers.retain(|d| {
             d.once
                 || d.for_rest_of_game
                 || d.created_turn == turn
+                || in_progress.contains(&d.created_turn)
                 || matches!(d.trigger, TriggerCond::UntilYourNextTurn(_))
         });
         let mut once_matches: Vec<(u32, EventInfo)> = Vec::new();
@@ -706,7 +715,12 @@ impl Game {
             base.controller = d.performer.unwrap_or(d.controller);
             for info in self.trigger_matches_ctx(&d.trigger, &base, ev) {
                 if d.once {
-                    once_matches.push((d.id, info));
+                    // CR 801.7: an event outside its controller's range of influence
+                    // doesn't trigger it; it waits for the next one.
+                    let pending = self.delayed_pending(&d, info.clone());
+                    if crate::multiplayer::range::trigger_in_range(self, &pending) {
+                        once_matches.push((d.id, info));
+                    }
                 } else {
                     self.trigger_order += 1;
                     found.push(self.delayed_pending(&d, info));

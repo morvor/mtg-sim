@@ -694,11 +694,12 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         ("enchanted planeswalker", Sel::AttachedTo),
     ];
     for (p, sel) in pairs {
-        if let Some(rest) = s.strip_prefix(p) {
-            // A whole phrase: "equipped creatures you control" is a group.
-            if !(rest.is_empty() || rest.starts_with([' ', '\'', ','])) {
-                continue;
-            }
+        // A whole phrase: "equipped creatures you control" is a group, not "equipped
+        // creature".
+        if let Some(rest) = s
+            .strip_prefix(p)
+            .filter(|r| p == "~" || !r.starts_with(|c: char| c.is_alphanumeric()))
+        {
             // "Gain control of enchanted permanent. Untap that permanent.": the object
             // just named is what a later pronoun refers to (unless something more
             // specific already is).

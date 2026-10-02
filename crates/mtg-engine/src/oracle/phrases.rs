@@ -639,6 +639,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::ControlledBy(PlayerRel::Iterated), r)
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
+        } else if let Some(r) = t.strip_prefix("an opponent owns") {
+            (Filter::OwnedBy(PlayerRel::Opponent), r)
         } else if let Some(r) = t
             .strip_prefix("in your graveyard")
             .or_else(|| t.strip_prefix("from your graveyard"))
@@ -806,6 +808,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::Blocking, r)
         } else if let Some((f, r)) = t.strip_prefix("that's ").and_then(color_list_suffix) {
             // "target creature or planeswalker that's black or red" (Devout Decree).
+            (f, r)
+        } else if let Some((f, r)) = t.strip_prefix("that's ").and_then(type_list_suffix) {
+            // "each creature you control that's an artifact or Human" (Paladin Danse).
             (f, r)
         } else if let Some(r) = t
             .strip_prefix("that was dealt damage this turn")
@@ -976,6 +981,43 @@ fn color_list_suffix(t: &str) -> Option<(Filter, &str)> {
         colors.pop()?
     } else {
         Filter::Or(colors)
+    };
+    Some((f, rest))
+}
+
+/// "a Human", "an artifact or Human", "an artifact or an enchantment" after "that's": card
+/// types and subtypes, each with an optional article, joined by "or".
+fn type_list_suffix(t: &str) -> Option<(Filter, &str)> {
+    fn one(s: &str) -> Option<(Filter, &str)> {
+        let s = s
+            .strip_prefix("an ")
+            .or_else(|| s.strip_prefix("a "))
+            .unwrap_or(s);
+        let n = s.find(|c: char| !c.is_alphanumeric()).unwrap_or(s.len());
+        let w = &s[..n];
+        // A singular word only ("Humans" would be a different phrase).
+        if w.is_empty() || singular(w) != w {
+            return None;
+        }
+        match head_noun(w)? {
+            f @ (Filter::Type(_) | Filter::Subtype(_)) => Some((f, &s[n..])),
+            _ => None,
+        }
+    }
+    let (first, mut rest) = one(t)?;
+    let mut alts = vec![first];
+    while let Some((f, r)) = rest.strip_prefix(" or ").and_then(one) {
+        alts.push(f);
+        rest = r;
+    }
+    // Comma-separated lists ("that's a Cat, Elemental, ... or Beast") are parsed elsewhere.
+    if rest.starts_with(',') {
+        return None;
+    }
+    let f = if alts.len() == 1 {
+        alts.pop()?
+    } else {
+        Filter::Or(alts)
     };
     Some((f, rest))
 }

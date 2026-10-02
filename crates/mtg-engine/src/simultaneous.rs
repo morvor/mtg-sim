@@ -15,7 +15,8 @@
 //! * the cards they discard are discarded once all of them have chosen;
 //! * damage dealt to each of them is dealt at once, so a source with lifelink causes one
 //!   life gain event (CR 120.3f, 608.2f);
-//! * a search: each searches, then the cards found are moved together.
+//! * a search: each searches, then the cards found are moved together;
+//! * life gained or lost: each amount is determined before anyone's life total changes.
 //!
 //! An instruction that isn't one of those is performed for each player in turn, in APNAP
 //! order (CR 608.2f); "you may ..." questions and conditions are still settled for every
@@ -780,6 +781,17 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
                 shuffle: *shuffle,
             }
         }
+        // "Each player loses a third of their life": every amount is determined before
+        // anyone's life changes (CR 608.2f) — in Two-Headed Giant the teammates look at
+        // the shared total (CR 810.9).
+        Effect::LoseLife { who, n } => Plan::Exec(Effect::LoseLife {
+            who: who.clone(),
+            n: Value::Const(g.eval_value(n, ctx) as i32),
+        }),
+        Effect::GainLife { who, n } => Plan::Exec(Effect::GainLife {
+            who: who.clone(),
+            n: Value::Const(g.eval_value(n, ctx) as i32),
+        }),
         other => Plan::Exec(other.clone()),
     }
 }

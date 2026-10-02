@@ -209,13 +209,15 @@ fn parse_conjunction(r: &str) -> Option<Parsed> {
         format!("whenever {first}")
     };
     let a = crate::oracle::triggers::parse_trigger_condition(&first_full)?;
-    // "When ~ enters and whenever it attacks": "it" is the object of the first condition.
+    // "When ~ enters and whenever it attacks", "When ~ enters and when you sacrifice it"
+    // (Carrot Cake): "it" is the object of the first condition.
     let rest_self;
     let rest = match rest.strip_prefix("whenever it ") {
         Some(r) if first.starts_with("~ ") => {
             rest_self = format!("whenever ~ {r}");
             rest_self.as_str()
         }
+        _ if first.starts_with("~ ") && rest == "when you sacrifice it" => "when you sacrifice ~",
         _ => rest,
     };
     let b = crate::oracle::triggers::parse_trigger_condition(rest)?;

@@ -62,10 +62,13 @@ fn copy_target_ability(l: &str, b: &mut Builder) -> Option<Effect> {
         parts.push(Filter::AbilityFrom(Box::new(source)));
         rest = x;
     }
-    // "... X times" (Gogo, Master of Mimicry): X copies.
+    // "... X times" (Gogo, Master of Mimicry): X copies; "... twice" (Mister Fantastic).
     let mut count = Value::c(1);
     if let Some(x) = strip(rest, "x times") {
         count = Value::X;
+        rest = x;
+    } else if let Some(x) = strip(rest, "twice") {
+        count = Value::c(2);
         rest = x;
     }
     if !end(rest).is_empty() {
