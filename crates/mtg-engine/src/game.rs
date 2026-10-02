@@ -406,6 +406,9 @@ pub struct TurnHistory {
     pub players_attacked: BTreeSet<PlayerId>,
     pub attackers: Vec<ObjectId>,
     pub objects_dealt_damage: BTreeSet<ObjectId>,
+    /// Objects dealt noncombat damage this turn. Recorded by `kw/noncombat_damage.rs`.
+    #[serde(default)]
+    pub objects_dealt_noncombat_damage: BTreeSet<ObjectId>,
     /// (source, object) pairs: objects dealt damage this turn and by what.
     pub damage_by_source: BTreeSet<(ObjectId, ObjectId)>,
     /// Sources that dealt damage this turn (each object once, CR 400.7), with the player

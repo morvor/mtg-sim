@@ -76,6 +76,16 @@ fn object_state(r: &str, sel: &Sel, contracted: bool) -> Option<Condition> {
 /// "it" refers to, as a filter.
 pub(crate) fn pronoun_state(c: &str) -> Option<Filter> {
     let c = end(c);
+    // "it was dealt [noncombat] damage this turn" (Grisly Sigil).
+    match c {
+        "it was dealt damage this turn" => return Some(Filter::DealtDamageThisTurn),
+        "it was dealt noncombat damage this turn" => {
+            return Some(Filter::Custom(
+                crate::kw::noncombat_damage::DEALT_NONCOMBAT_DAMAGE_THIS_TURN.into(),
+            ))
+        }
+        _ => {}
+    }
     let (neg, state) = if let Some(r) = c
         .strip_prefix("it's not ")
         .or_else(|| c.strip_prefix("it isn't "))
