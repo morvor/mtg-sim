@@ -2455,6 +2455,10 @@ pub struct PlayTerms {
     /// spells cast with this permission only (CR 609.4b, 118.14).
     #[serde(default)]
     pub spend_as_any_color: bool,
+    /// "Mana of any type can be spent to cast it": for spells cast with this permission
+    /// only (CR 118.14).
+    #[serde(default)]
+    pub spend_any_type: bool,
 }
 
 impl PlayTerms {
@@ -2474,6 +2478,7 @@ impl PlayTerms {
         self.cost_increase += other.cost_increase;
         self.lands_enter_tapped |= other.lands_enter_tapped;
         self.spend_as_any_color |= other.spend_as_any_color;
+        self.spend_any_type |= other.spend_any_type;
     }
 }
 

@@ -163,6 +163,49 @@ fn a_permission_may_come_with_an_additional_cost() {
 }
 
 #[test]
+fn a_permission_may_let_mana_be_spent_as_though_it_were_mana_of_any_type_or_color() {
+    cr!("118.14", "609.4b");
+    // Thought-Knot Seer ({3}{C}) with four Mountains: only if mana of any type can be
+    // spent; mana of any color doesn't pay {C}. Llanowar Elves ({G}) with a Mountain:
+    // either.
+    for (any_type, any_color) in [(false, false), (false, true), (true, false)] {
+        let terms = PlayTerms {
+            spend_any_type: any_type,
+            spend_as_any_color: any_color,
+            ..Default::default()
+        };
+        let mut t = TestGame::new(2);
+        let seer = t.exile(P0, "Thought-Knot Seer");
+        let elves = t.exile(P0, "Llanowar Elves");
+        grant(&mut t, "Mana Permission", terms);
+        t.lands(P0, "Mountain", 5);
+        let ok = t.cast(P0, elves).try_go().is_ok();
+        assert_eq!(ok, any_type || any_color, "{any_type} {any_color}");
+        t.resolve_all();
+        let ok = t
+            .cast(P0, seer)
+            .target(Entity::Player(P1))
+            .try_go()
+            .is_ok();
+        assert_eq!(ok, any_type, "{any_type} {any_color}");
+    }
+    // The flexibility is for spells cast with that permission only: Grizzly Bears from the
+    // hand still needs green mana.
+    let mut t = TestGame::new(2);
+    grant(
+        &mut t,
+        "Mana Permission",
+        PlayTerms {
+            spend_any_type: true,
+            ..Default::default()
+        },
+    );
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    assert!(t.cast(P0, bears).try_go().is_err());
+}
+
+#[test]
 fn a_permission_may_let_spells_be_cast_as_though_they_had_flash() {
     cr!("702.8a", "601.3", "307.1");
     let flash = PlayTerms {

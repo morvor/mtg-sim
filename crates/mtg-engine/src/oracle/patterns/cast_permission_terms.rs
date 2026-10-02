@@ -4,6 +4,9 @@
 //!   mana cost." after an effect's permission to play cards (Inside Information, Xander's
 //!   Pact): the alternative cost every spell cast with that permission is cast for
 //!   (CR 118.9b), so no other alternative cost can be used for it (CR 118.9a);
+//! * "If you cast a spell this way, you may spend mana as though it were mana of any color
+//!   to cast it." / "... mana of any type can be spent to cast it." (Brainstealer
+//!   Dragon): the mana flexibility comes with the permission (CR 609.4b, 118.14);
 //! * "Each opponent exiles the top card of their library. You may cast spells from among
 //!   those cards this turn." (Xander's Pact): permissions to cast those cards, not to play
 //!   them as lands (CR 305.9);
@@ -36,10 +39,16 @@ fn life_equal_to_mana_value() -> Cost {
 /// "If you cast a spell this way, pay life equal to its mana value rather than pay its
 /// mana cost."
 fn is_pay_life_instead(l: &str) -> bool {
+    let Some(r) = end(l).strip_prefix("if you cast a spell this way, ") else {
+        return false;
+    };
+    let r = r.strip_prefix("you ").unwrap_or(r);
     matches!(
-        end(l),
-        "if you cast a spell this way, pay life equal to its mana value rather than pay its mana cost"
-            | "if you cast a spell this way, pay life equal to that spell's mana value rather than pay its mana cost"
+        r,
+        "pay life equal to its mana value rather than pay its mana cost"
+            | "pay life equal to its mana value rather than paying its mana cost"
+            | "pay life equal to that spell's mana value rather than pay its mana cost"
+            | "pay life equal to that spell's mana value rather than paying its mana cost"
     )
 }
 
@@ -74,6 +83,36 @@ fn pay_life_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         prev,
         PlayTerms {
             alt_cost: Some(life_equal_to_mana_value()),
+            ..Default::default()
+        },
+    );
+    true
+}
+
+/// "If you cast a spell this way, you may spend mana as though it were mana of any color to
+/// cast it." / "... mana of any type can be spent to cast it." after an effect's
+/// permission to play cards: for the spells cast with that permission (CR 609.4b, 118.14).
+fn spend_mana_this_way(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let (any_color, any_type) = match end(l) {
+        "if you cast a spell this way, you may spend mana as though it were mana of any color to cast it"
+        | "if you cast a spell this way, you may spend mana as though it were mana of any color to cast that spell" => {
+            (true, false)
+        }
+        "if you cast a spell this way, you may spend mana as though it were mana of any type to cast it"
+        | "if you cast a spell this way, mana of any type can be spent to cast it"
+        | "if you cast a spell this way, mana of any type can be spent to cast that spell" => {
+            (false, true)
+        }
+        _ => return false,
+    };
+    if !grants_play(prev) {
+        return false;
+    }
+    with_terms(
+        prev,
+        PlayTerms {
+            spend_as_any_color: any_color,
+            spend_any_type: any_type,
             ..Default::default()
         },
     );
@@ -250,6 +289,7 @@ fn play_from_graveyard_this_turn(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "cast permission terms: until end of turn, you may play lands and cast spells from your graveyard", priority: 90, parse: play_from_graveyard_this_turn } }
 inventory::submit! { FollowupPattern { name: "cast permission terms: if you cast a spell this way, pay life equal to its mana value rather than pay its mana cost", priority: 85, apply: pay_life_instead } }
+inventory::submit! { FollowupPattern { name: "cast permission terms: if you cast a spell this way, you may spend mana as though it were mana of any color", priority: 85, apply: spend_mana_this_way } }
 inventory::submit! { EffectPattern { name: "cast permission terms: each opponent exiles the top card of their library", priority: 90, parse: each_exiles_top } }
 inventory::submit! { FollowupPattern { name: "cast permission terms: you may cast spells from among those cards this turn", priority: 90, apply: may_cast_spells_from_among } }
 inventory::submit! { StaticPattern { name: "cast permission terms: play from a zone, with flash", priority: 60, parse: static_with_flash } }
