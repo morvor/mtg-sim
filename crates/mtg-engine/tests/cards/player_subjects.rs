@@ -538,3 +538,197 @@ fn rites_of_flourishing_each_player_may_play_an_additional_land() {
     assert!(t.play_land(P0, b).is_ok());
     assert!(t.play_land(P0, c).is_err());
 }
+
+#[test]
+fn horn_of_plenty_the_delayed_draw_is_controlled_by_horn_s_controller() {
+    // The delayed trigger is created by Horn of Plenty's triggered ability: its
+    // controller controls it, and the player who paid draws.
+    cr!("603.7e", "118.12");
+    assert_supported("Horn of Plenty");
+    let mut t = TestGame::new(2);
+    library(&mut t, P0, 3);
+    library(&mut t, P1, 3);
+    t.battlefield(P0, "Horn of Plenty");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Island", 2);
+    let opt = t.hand(P1, "Opt");
+    t.answer_yes(P1, true);
+    t.cast(P1, opt).go();
+    t.resolve_all();
+    let (h0, h1) = (t.hand_size(P0), t.hand_size(P1));
+    t.advance_to_step(Step::End);
+    t.settle();
+    let top = *t.g.stack.last().expect("the delayed trigger is on the stack");
+    assert_eq!(t.obj_now(top).controller, P0);
+    t.resolve();
+    assert_eq!(t.hand_size(P1), h1 + 1);
+    assert_eq!(t.hand_size(P0), h0);
+}
+
+#[test]
+fn aether_barrier_the_caster_pays_or_sacrifices_their_own_permanent() {
+    // "that player sacrifices a permanent of their choice unless they pay {1}": the
+    // player who cast the spell decides whether to pay, and chooses among their own
+    // permanents.
+    cr!("118.12a", "701.21a");
+    assert_supported("Aether Barrier");
+    for pays in [true, false] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Aether Barrier");
+        let mine = t.battlefield(P0, "Grizzly Bears");
+        t.set_step(P1, Step::PrecombatMain);
+        let lands = t.lands(P1, "Forest", 3);
+        let bears = t.hand(P1, "Grizzly Bears");
+        t.answer_yes(P1, pays);
+        if !pays {
+            t.answer_choose(P1, &[Entity::Object(lands[2])]);
+        }
+        t.cast(P1, bears).go();
+        t.resolve_all();
+        assert!(t.on_battlefield(mine), "pays: {pays}");
+        if pays {
+            assert!(lands.iter().all(|l| t.on_battlefield(*l)));
+            assert!(lands.iter().all(|l| t.obj_now(*l).tapped));
+        } else {
+            assert!(!t.on_battlefield(lands[2]));
+            let offered = choices_of(&t, P1).last().unwrap().0.clone();
+            assert!(!offered.contains(&Entity::Object(mine)));
+            assert!(choices_of(&t, P0).is_empty());
+        }
+        assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2, "pays: {pays}");
+    }
+}
+
+#[test]
+fn wandering_archaic_the_opponent_pays_or_you_copy() {
+    // "they may pay {2}. If they don't, you may copy that spell": the caster decides
+    // whether to pay; "you" is Wandering Archaic's controller.
+    cr!("118.12", "707.10");
+    ruling!(
+        "Wandering Archaic // Explore the Vastlands",
+        "the opponent chooses whether to pay {2} before their spell resolves"
+    );
+    // (Its back face, Explore the Vastlands, isn't supported yet; the front face is.)
+    assert_eq!(card("Wandering Archaic // Explore the Vastlands").faces[0].unsupported.len(), 0);
+    for pays in [true, false] {
+        let mut t = TestGame::new(2);
+        library(&mut t, P0, 3);
+        library(&mut t, P1, 3);
+        t.battlefield(P0, "Wandering Archaic // Explore the Vastlands");
+        t.set_step(P1, Step::PrecombatMain);
+        t.lands(P1, "Island", 3);
+        let opt = t.hand(P1, "Opt");
+        t.answer_yes(P1, pays).answer_yes(P0, true);
+        t.cast(P1, opt).go();
+        t.resolve_all();
+        // P0 draws from a copy of Opt only if P1 didn't pay.
+        assert_eq!(t.hand_size(P0), if pays { 0 } else { 1 }, "pays: {pays}");
+        assert_eq!(t.hand_size(P1), 1, "pays: {pays}");
+    }
+}
+
+#[test]
+fn crashing_boars_the_defending_player_chooses_among_their_untapped_creatures() {
+    cr!("509.1c");
+    assert_supported("Crashing Boars");
+    let mut t = TestGame::new(2);
+    let boars = t.battlefield(P0, "Crashing Boars");
+    t.battlefield(P0, "Grizzly Bears");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Llanowar Elves");
+    let tapped = t.battlefield(P1, "Watchwolf");
+    t.g.objects[tapped.0 as usize].tapped = true;
+    t.answer_choose(P1, &[Entity::Object(b)]);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(boars, Entity::Player(P1))], &[]);
+    let mut offered = choices_of(&t, P1)[0].0.clone();
+    offered.sort();
+    let mut expected = vec![Entity::Object(a), Entity::Object(b)];
+    expected.sort();
+    assert_eq!(offered, expected);
+    // The chosen creature had to block, and it did (the requirement is obeyed even
+    // though no blocks were declared for it).
+    assert!(!t.on_battlefield(b));
+}
+
+#[test]
+fn mind_s_dilation_its_controller_may_cast_the_exiled_card() {
+    // "that player exiles the top card of their library. If it's a nonland card, you may
+    // cast it": the opponent exiles from their own library; Mind's Dilation's controller
+    // casts it.
+    cr!("608.2c");
+    ruling!(
+        "Mind's Dilation",
+        "If you cast an instant or sorcery card this way, it goes to its owner's graveyard as normal."
+    );
+    assert_supported("Mind's Dilation");
+    let mut t = TestGame::new(2);
+    library(&mut t, P0, 3);
+    library(&mut t, P1, 3);
+    t.battlefield(P0, "Mind's Dilation");
+    let top = t.library_top(P1, "Opt");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Island", 1);
+    let opt = t.hand(P1, "Opt");
+    t.answer_yes(P0, true);
+    t.cast(P1, opt).go();
+    t.resolve_all();
+    // P0 cast the exiled Opt and drew; P1 drew from their own Opt.
+    assert_eq!(t.hand_size(P0), 1);
+    assert_eq!(t.hand_size(P1), 1);
+    assert_eq!(t.zone(t.g.current(top)), Zone::Graveyard(P1));
+}
+
+#[test]
+fn epicenter_target_player_sacrifices_a_land_or_each_player_sacrifices_all() {
+    cr!("701.21a");
+    assert_supported("Epicenter");
+    for full in [false, true] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Mountain", 5);
+        let theirs = t.lands(P1, "Forest", 3);
+        if full {
+            for _ in 0..7 {
+                t.graveyard(P0, "Shock");
+            }
+        }
+        let spell = t.hand(P0, "Epicenter");
+        if !full {
+            t.answer_choose(P1, &[Entity::Object(theirs[1])]);
+        }
+        t.cast(P0, spell).target(P1).go();
+        t.resolve();
+        if full {
+            assert!(t.named_on_battlefield("Mountain").is_empty());
+            assert!(t.named_on_battlefield("Forest").is_empty());
+        } else {
+            assert_eq!(t.named_on_battlefield("Mountain").len(), 5);
+            assert!(!t.on_battlefield(theirs[1]));
+            assert_eq!(t.named_on_battlefield("Forest").len(), 2);
+        }
+    }
+}
+
+#[test]
+fn twilight_s_call_all_players_cards_enter_at_the_same_time() {
+    // The returned cards enter simultaneously (CR 101.4): Imposing Sovereign isn't on
+    // the battlefield yet as the opponent's creatures enter, so they enter untapped
+    // (CR 614.12: only effects that already exist apply).
+    cr!("101.4", "614.12");
+    assert_supported("Twilight's Call");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 6);
+    t.graveyard(P0, "Imposing Sovereign");
+    t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P1, "Shock");
+    let spell = t.hand(P0, "Twilight's Call");
+    t.cast(P0, spell).go();
+    t.resolve();
+    let s = t.named_on_battlefield("Imposing Sovereign");
+    let b = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!((s.len(), b.len()), (1, 1));
+    assert_eq!(t.obj_now(s[0]).controller, P0);
+    assert_eq!(t.obj_now(b[0]).controller, P1);
+    assert!(!t.obj_now(b[0]).tapped);
+    assert!(t.in_graveyard(P1, "Shock"));
+}

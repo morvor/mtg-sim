@@ -359,6 +359,12 @@ pub struct DelayedTrigger {
     /// rather than for the turn (e.g. epic, CR 702.50a).
     #[serde(default)]
     pub for_rest_of_game: bool,
+    /// The player who performs it, when another player performed the instruction that
+    /// created it ("they draw a card at the beginning of the next end step"): "you" in
+    /// its trigger condition and effect is that player, while `controller` controls it
+    /// (CR 603.7d–e).
+    #[serde(default)]
+    pub performer: Option<PlayerId>,
 }
 
 /// A triggered ability waiting to be put on the stack (CR 603.3).

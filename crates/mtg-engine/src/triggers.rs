@@ -585,7 +585,8 @@ impl Game {
             // effect that created it.
             let mut base = d.ctx.clone();
             base.source = d.source;
-            base.controller = d.controller;
+            // "you" in its trigger condition is the player who performs it.
+            base.controller = d.performer.unwrap_or(d.controller);
             for info in self.trigger_matches_ctx(&d.trigger, &base, ev) {
                 if d.once {
                     once_matches.push((d.id, info));
@@ -609,7 +610,11 @@ impl Game {
     }
 
     fn delayed_pending(&self, d: &DelayedTrigger, info: EventInfo) -> PendingTrigger {
-        let mut tr = TriggeredAbility::new(d.trigger.clone(), d.body.clone());
+        let body = match d.performer {
+            Some(p) => crate::resolve::performed_by(d.body.clone(), p),
+            None => d.body.clone(),
+        };
+        let mut tr = TriggeredAbility::new(d.trigger.clone(), body.clone());
         // "Until end of turn, whenever a player taps an Island for mana, that player adds
         // an additional {U}" is a mana ability too (CR 605.1b).
         tr.is_mana_ability = is_triggered_mana_ability(&d.trigger, &d.body);
@@ -621,7 +626,7 @@ impl Game {
             event: info,
             source_lki: None,
             saved: Some(d.ctx.clone()),
-            body: Some(d.body.clone()),
+            body: Some(body),
             order: self.trigger_order,
         }
     }

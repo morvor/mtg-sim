@@ -613,25 +613,27 @@ fn opt_in(who: PlayerRef, guard: &dyn Fn(Effect) -> Effect) -> Vec<Effect> {
 
 /// "put a card from your hand onto the battlefield" (a choice, then a move) split into the
 /// choice, which adds to [`COLLECTED`], and one move of all the players' choices (for the
-/// players' own cards, under their own control).
+/// players' own cards, under their own control). "return all creature cards from your
+/// graveyard to the battlefield" likewise: each player's cards are collected, then all of
+/// them enter at the same time (CR 101.4), so none of them sees the others enter (CR
+/// 614.12).
 fn split_choice_move(e: &Effect) -> Option<(Effect, Effect)> {
     let (mv, rest): (&Effect, &[Effect]) = match e {
         Effect::Seq(v) => (v.first()?, &v[1..]),
         e => (e, &[]),
     };
-    let Effect::Move {
-        what:
-            Sel::Choose {
-                chooser: PlayerRef::You,
-                filter,
-                count,
-                up_to,
-                store: None,
-            },
-        to,
-    } = mv
-    else {
+    let Effect::Move { what, to } = mv else {
         return None;
+    };
+    let filter = match what {
+        Sel::Choose {
+            chooser: PlayerRef::You,
+            filter,
+            store: None,
+            ..
+        } => filter,
+        Sel::All(filter) => filter,
+        _ => return None,
     };
     if to.zone != ZoneKind::Battlefield
         || !format!("{filter:?}").contains("OwnedBy(You)")
@@ -643,13 +645,7 @@ fn split_choice_move(e: &Effect) -> Option<(Effect, Effect)> {
     let choose = Effect::seq(vec![
         Effect::Store {
             var: PICK,
-            sel: Sel::Choose {
-                chooser: PlayerRef::You,
-                filter: filter.clone(),
-                count: count.clone(),
-                up_to: *up_to,
-                store: None,
-            },
+            sel: what.clone(),
         },
         Effect::Custom(COLLECT.into()),
     ]);

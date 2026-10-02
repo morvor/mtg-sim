@@ -89,6 +89,7 @@ impl KeywordRules for Paradigm {
             created_turn: g.turn.number,
             created_step: Some(g.turn.step),
             for_rest_of_game: true,
+            performer: None,
         });
         g.log(|g| format!("{p}'s paradigm: {}", g.describe(spell)));
     }

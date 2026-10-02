@@ -53,6 +53,11 @@ pub struct Ctx {
     /// of ..., except it has this ability", CR 707.9a).
     #[serde(default)]
     pub reflexive_parent: Option<Box<crate::ability::Ability>>,
+    /// While another player performs part of the resolving spell or ability
+    /// ([`crate::ability::Effect::AsPlayer`]): that spell's or ability's controller, who
+    /// controls the delayed and reflexive triggered abilities it creates (CR 603.7d–e).
+    #[serde(default)]
+    pub resolving_controller: Option<PlayerId>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this

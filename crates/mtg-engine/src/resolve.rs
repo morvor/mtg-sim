@@ -149,9 +149,12 @@ impl Game {
             Effect::AsPlayer { who, effect } => {
                 if let Some(p) = self.eval_player(who, ctx) {
                     let saved = ctx.controller;
+                    let saved_resolving = ctx.resolving_controller;
+                    ctx.resolving_controller.get_or_insert(saved);
                     ctx.controller = p;
                     self.exec(effect, ctx);
                     ctx.controller = saved;
+                    ctx.resolving_controller = saved_resolving;
                 }
             }
             Effect::Repeat { times, effect } => {
@@ -1564,17 +1567,21 @@ impl Game {
                 // CR 603.7a: it won't trigger on events that happened before it was created.
                 self.flush_events();
                 let id = self.new_effect_id();
+                let (controller, performer) = delayed_controller(ctx);
+                let mut saved = crate::transform_rules::delayed_ctx(self, ctx);
+                saved.resolving_controller = None;
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
                     source: ctx.source,
-                    controller: ctx.controller,
+                    controller,
                     trigger: trigger.clone(),
                     body: (**body).clone(),
                     once: *once,
-                    ctx: crate::transform_rules::delayed_ctx(self, ctx),
+                    ctx: saved,
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
                     for_rest_of_game: false,
+                    performer,
                 });
             }
             Effect::Reflexive { body } => {
@@ -1595,37 +1602,47 @@ impl Game {
                     .filter(|s| self.obj(*s).is_spell())
                     .or(ctx.source);
                 let mut saved = ctx.clone();
+                saved.resolving_controller = None;
                 if saved.reflexive_parent.is_none() {
                     saved.reflexive_parent = self.resolving_ability(ctx).map(Box::new);
                 }
+                let (controller, performer) = delayed_controller(ctx);
+                let mut body = (**body).clone();
+                if let Some(p) = performer {
+                    body = performed_by(body, p);
+                }
                 self.pending_triggers.push(PendingTrigger {
                     source: src.unwrap_or(ObjectId(0)),
-                    controller: ctx.controller,
+                    controller,
                     ability,
                     event: ctx.event.clone().unwrap_or_default(),
                     source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
                     saved: Some(saved),
-                    body: Some((**body).clone()),
+                    body: Some(body),
                     order: self.trigger_order,
                 });
             }
             Effect::AtNext { step, effect } => {
                 self.flush_events();
                 let id = self.new_effect_id();
+                let (controller, performer) = delayed_controller(ctx);
+                let mut saved = ctx.clone();
+                saved.resolving_controller = None;
                 self.delayed_triggers.push(DelayedTrigger {
                     id,
                     source: ctx.source,
-                    controller: ctx.controller,
+                    controller,
                     trigger: TriggerCond::BeginningOf {
                         step: *step,
                         whose: PlayerRel::Any,
                     },
                     body: Body::effect((**effect).clone()),
                     once: true,
-                    ctx: ctx.clone(),
+                    ctx: saved,
                     created_turn: self.turn.number,
                     created_step: Some(self.turn.step),
                     for_rest_of_game: false,
+                    performer,
                 });
             }
             Effect::CreateEmblem { who, abilities } => {
@@ -2747,3 +2764,34 @@ pub fn describe_cost(c: &Cost) -> String {
 
 #[allow(dead_code)]
 fn unused(_: Event) {}
+
+/// The controller of a delayed or reflexive triggered ability created now, and the player
+/// who performs it when that's someone else: while another player performs part of the
+/// resolving spell or ability ([`Effect::AsPlayer`], "they may pay {1}. If they do, they
+/// draw a card at the beginning of the next end step"), the triggered ability is
+/// controlled by the spell's or ability's controller (CR 603.7d–e, 603.12) and that
+/// player performs it.
+pub(crate) fn delayed_controller(ctx: &Ctx) -> (PlayerId, Option<PlayerId>) {
+    match ctx.resolving_controller {
+        Some(c) if c != ctx.controller => (c, Some(ctx.controller)),
+        _ => (ctx.controller, None),
+    }
+}
+
+/// `body` (of a triggered ability) performed by player `p` ("you" in it is `p`).
+pub(crate) fn performed_by(mut body: Body, p: PlayerId) -> Body {
+    let wrap = |e: &mut Effect| {
+        let inner = std::mem::replace(e, Effect::Noop);
+        *e = Effect::AsPlayer {
+            who: PlayerRef::Player(p),
+            effect: Box::new(inner),
+        };
+    };
+    wrap(&mut body.effect);
+    if let Some(m) = body.modal.as_mut() {
+        for mode in &mut m.modes {
+            wrap(&mut mode.effect);
+        }
+    }
+    body
+}

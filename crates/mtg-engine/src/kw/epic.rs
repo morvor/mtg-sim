@@ -104,6 +104,7 @@ impl KeywordRules for Epic {
                     created_turn: g.turn.number,
                     created_step: Some(g.turn.step),
                     for_rest_of_game: true,
+                    performer: None,
                 });
                 g.dirty = true;
                 true
