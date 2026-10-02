@@ -27,6 +27,22 @@ pub fn without_probe_card(f: Filter) -> Filter {
 /// Parses a number word or digits at the start of `s`. Returns (value, rest).
 pub fn parse_number(s: &str) -> Option<(Value, &str)> {
     let s = s.trim_start();
+    // "twice X", "three times X" (CR 107.3a: X is the value chosen or defined for it).
+    for (p, k) in [("twice x", 2), ("three times x", 3)] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if rest.is_empty() || rest.starts_with(' ') {
+                let v = Value::Mul(Box::new(Value::Const(k)), Box::new(Value::X));
+                return Some((v, rest.trim_start()));
+            }
+        }
+    }
+    // "X plus 3"
+    if let Some(r) = s.strip_prefix("x plus ") {
+        let (w, rest) = split_word(r);
+        if let Ok(n) = w.parse::<i32>() {
+            return Some((Value::Sum(vec![Value::X, Value::Const(n)]), rest));
+        }
+    }
     let (w, rest) = split_word(s);
     let n = match w {
         "a" | "an" | "one" | "1" => 1,
@@ -214,6 +230,19 @@ pub fn adjective(w: &str) -> Option<Filter> {
         // CR 903.3d: "noncommander".
         if rest == "commander" {
             return Some(Filter::not(Filter::Commander));
+        }
+        // "nonattacking", "nonblocking": not in that combat state.
+        if matches!(rest, "attacking" | "blocking") {
+            return adjective(rest).map(Filter::not);
+        }
+    }
+    // "1/1 creature": a creature with exactly that power and toughness.
+    if let Some((p, t)) = w.split_once('/') {
+        if let (Ok(p), Ok(t)) = (p.parse::<i32>(), t.parse::<i32>()) {
+            return Some(Filter::and(vec![
+                Filter::Power(Cmp::Eq, Box::new(Value::Const(p))),
+                Filter::Toughness(Cmp::Eq, Box::new(Value::Const(t))),
+            ]));
         }
     }
     if let Some(s) = Supertype::from_word(w) {
@@ -487,9 +516,25 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             } else {
                 Filter::Or(group)
             };
+            let subtype_pair = matches!(nf, Filter::Subtype(_));
             heads.push(Filter::and(vec![joined, nf]));
             group_start = heads.len();
             s = nrest;
+            // "Goblin Warrior creatures", "Eldrazi Spawn creatures": two subtypes, then a
+            // card type.
+            if subtype_pair {
+                let (tw, trest) = split_word(s);
+                let tw2 = tw.trim_end_matches(',');
+                if let Some(tf @ Filter::Type(_)) = head_noun(tw2) {
+                    if tw2.ends_with('s') && singular(tw2) != tw2 {
+                        plural = true;
+                    }
+                    let last = heads.pop().unwrap();
+                    heads.push(Filter::and(vec![last, tf]));
+                    group_start = heads.len();
+                    s = trest;
+                }
+            }
             // "Dragon creature cards": a subtype narrowed by a card type, then by "card".
             let mut ends_in_card = matches!(nw2, "card" | "cards");
             let (cw, crest) = split_word(s);
@@ -755,6 +800,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::InZone(ZoneKind::Exile), r)
         } else if let Some(r) = t.strip_prefix("on the battlefield") {
             (Filter::InZone(ZoneKind::Battlefield), r)
+        } else if let Some((f @ Filter::Or(_), r)) = t
+            .starts_with("with ")
+            .then(|| parse_with_suffix(t))
+            .flatten()
+        {
+            // "with flying, deathtouch, and/or lifelink".
+            (f, r)
         } else if let Some(r) = t.strip_prefix("with flying") {
             (Filter::HasKeyword(KeywordKind::Flying), r)
         } else if let Some(r) = t.strip_prefix("without flying") {
@@ -784,6 +836,16 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             })
         {
             (f, r)
+        } else if let Some(r) = t.strip_prefix("that's attacking that player") {
+            // "Whenever you attack a player, target creature that's attacking that player
+            // ..." (Ordruun Mentor): the player the trigger is about.
+            (
+                Filter::Custom(crate::kw::attacking_that_player::ATTACKING_THAT_PLAYER.into()),
+                r,
+            )
+        } else if let Some(r) = t.strip_prefix("that's attacking alone") {
+            // CR 506.5: the only creature declared as an attacker.
+            (Filter::AttackingAlone, r)
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
             .or_else(|| t.strip_prefix("that is attacking"))
@@ -1171,6 +1233,17 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         };
         let consumed: usize = words[..n].iter().map(|w| w.len()).sum::<usize>() + (n - 1);
         let tail = &rest[consumed.min(rest.len())..];
+        if !negate {
+            // The list's comma belongs to the separator.
+            let before_comma = consumed - usize::from(words[n - 1].ends_with(','));
+            if let Some((ks, tail)) = keyword_alternatives(k, &rest[before_comma.min(rest.len())..])
+            {
+                return Some((
+                    Filter::Or(ks.into_iter().map(Filter::HasKeyword).collect()),
+                    tail,
+                ));
+            }
+        }
         let f = Filter::HasKeyword(k);
         // "with flash or haste": either keyword. (A landwalk keyword names one kind of
         // landwalk, which `HasKeyword` doesn't.)
@@ -1188,6 +1261,40 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         return Some((if negate { Filter::not(f) } else { f }, tail));
     }
     None
+}
+
+/// The rest of a list of keywords after the first: "with flying, deathtouch, and/or
+/// lifelink" (Henrika Domnathi), "with flying, deathtouch, or lifelink": objects with any of
+/// them. A comma list must end in "or" or "and/or".
+fn keyword_alternatives(first: KeywordKind, mut t: &str) -> Option<(Vec<KeywordKind>, &str)> {
+    let mut ks = vec![first];
+    loop {
+        let (last, r) = if let Some(r) = [", and/or ", ", or ", " and/or ", " or "]
+            .into_iter()
+            .find_map(|p| t.strip_prefix(p))
+        {
+            (true, r)
+        } else if let Some(r) = t.strip_prefix(", ") {
+            (false, r)
+        } else {
+            return None;
+        };
+        let words: Vec<&str> = r.splitn(3, ' ').collect();
+        let (k, consumed) = [2usize, 1].into_iter().find_map(|n| {
+            if words.len() < n {
+                return None;
+            }
+            let name = words[..n].join(" ");
+            let k = KeywordKind::from_name(name.trim_end_matches(','))?;
+            let consumed = name.trim_end_matches(',').len();
+            Some((k, consumed))
+        })?;
+        ks.push(k);
+        t = &r[consumed..];
+        if last {
+            return (ks.len() > 1).then_some((ks, t));
+        }
+    }
 }
 
 /// "with power 2 or less", "with mana value 3 or greater", "with toughness 4 or greater".

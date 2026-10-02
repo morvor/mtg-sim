@@ -561,7 +561,22 @@ impl Game {
         }
         let mut remove: Vec<u32> = Vec::new();
         for e in &self.effects {
-            if self.effect_expired(&e.duration, e.source, e.controller) {
+            // "For as long as that creature has a bounty counter on it, it has ...": a
+            // condition about the objects the effect applies to (CR 611.2b).
+            let about_affected = match (&e.duration, &e.affected) {
+                (Duration::WhileCondition(c), Affected::Objects(v)) => {
+                    let mut ctx = Ctx::new(e.source, e.controller);
+                    ctx.set_var(
+                        vars::AFFECTED,
+                        v.iter().map(|o| Entity::Object(*o)).collect(),
+                    );
+                    Some(!self.eval_cond(c, &ctx))
+                }
+                _ => None,
+            };
+            if about_affected
+                .unwrap_or_else(|| self.effect_expired(&e.duration, e.source, e.controller))
+            {
                 remove.push(e.id);
             } else if matches!(&e.affected, Affected::Objects(v) if v.iter().all(|o| !self.is_live(*o)))
             {
@@ -1879,7 +1894,13 @@ pub fn acquired_ability(a: &Ability, from: Option<ObjectId>, target: ObjectId) -
             // A link id distinct from those of printed abilities and of abilities acquired
             // from other objects (CR 607.5).
             let link = 0x8000 | ((a.link as u32 * 131 + src.0 * 31) % 0x7fff) as u16;
-            AbilityDef::with_link(a.kind.clone(), a.text.clone(), link)
+            // "Sacrifice Blazing Torch": the object granting the ability (`granted_by`).
+            let kind = if crate::granted_by::refers_to_granter(a) {
+                crate::granted_by::bind_granter(a, src).kind.clone()
+            } else {
+                a.kind.clone()
+            };
+            AbilityDef::with_link(kind, a.text.clone(), link)
         })
         .clone()
 }

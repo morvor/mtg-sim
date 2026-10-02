@@ -68,6 +68,10 @@ fn player_mods(s: &str) -> Option<Vec<PlayerModification>> {
         // CR 702.11c
         return Some(vec![PlayerModification::Hexproof]);
     }
+    if s == "shroud" {
+        // CR 702.18a
+        return Some(vec![PlayerModification::Shroud]);
+    }
     let q = s.strip_prefix("protection from ")?;
     Some(
         protection_qualities(q)?
@@ -104,12 +108,16 @@ fn you_have_protection(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
 /// end of turn".
 fn you_gain_protection(l: &str, _b: &mut Builder) -> Option<Effect> {
     let (duration, l) = duration_suffix(l);
-    let r = l.strip_prefix("you gain ")?;
+    // "Players gain hexproof until end of turn." (Everybody Lives!): each player.
+    let (who, r) = match l.strip_prefix("you gain ") {
+        Some(r) => (PlayerRef::You, r),
+        None => (PlayerRef::EachPlayer, l.strip_prefix("players gain ")?),
+    };
     let mods = player_mods(r)?;
     Some(Effect::seq(
         mods.into_iter()
             .map(|effect| Effect::AddPlayerEffect {
-                who: PlayerRef::You,
+                who: who.clone(),
                 effect,
                 duration: duration.clone(),
             })

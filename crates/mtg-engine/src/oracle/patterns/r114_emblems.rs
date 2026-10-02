@@ -30,7 +30,25 @@ fn quoted_abilities(s: &str, b: &Builder) -> Option<Vec<Ability>> {
         // Inside an emblem, "this emblem" is the emblem itself.
         let inner = r[..close].replace("this emblem", "~");
         let inner = inner.trim().trim_end_matches('.');
-        for a in crate::oracle::parse_ability(inner, &ctx)? {
+        // An ability the emblem's ability grants, in single quotes ("Creatures you
+        // control have haste and '{T}: This creature deals ...'"): compiled as a quoted
+        // ability, whose "this creature" is the object that has it. Only when the raw
+        // text says "this ..." there, not the card's name.
+        let nested = inner.contains(" '") && inner.ends_with('\'');
+        if nested && nested_quote_names_card(b.ctx) {
+            return None;
+        }
+        let inner = if nested {
+            inner.replace(" '", " \"").trim_end_matches('\'').to_string() + "\""
+        } else {
+            inner.to_string()
+        };
+        let parsed = if nested {
+            super::statics::with_quotes_naming_no_card(|| crate::oracle::parse_ability(&inner, &ctx))
+        } else {
+            crate::oracle::parse_ability(&inner, &ctx)
+        };
+        for a in parsed? {
             if matches!(a.kind, AbilityKind::Unsupported(_)) {
                 return None;
             }
@@ -46,6 +64,15 @@ fn quoted_abilities(s: &str, b: &Builder) -> Option<Vec<Ability>> {
             .or_else(|| rest.strip_prefix(", "))?
             .trim();
     }
+}
+
+/// Whether a single-quoted ability nested in the card's raw text names the card.
+fn nested_quote_names_card(ctx: &CompileContext) -> bool {
+    let raw = crate::oracle::raw_text();
+    raw.split(" '").skip(1).any(|seg| {
+        let q = seg.split('\'').next().unwrap_or("");
+        q.contains(ctx.card_name) || ctx.card_name.split([' ', ',']).next().is_some_and(|w| !w.is_empty() && q.contains(w))
+    })
 }
 
 /// "you get an emblem with "..."", "target opponent gets an emblem with "..."", "each
