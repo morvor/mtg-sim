@@ -291,13 +291,14 @@ impl Frames {
         let frames = items
             .into_iter()
             .map(|item| {
-                let mut c = ctx.clone();
-                if let Item::Player(p) = item {
-                    c.iter_player = Some(p);
-                }
-                let actor = match as_player {
-                    Some(who) => g.eval_player(who, &c),
-                    None => Some(ctx.controller),
+                let actor = match (as_player, item) {
+                    (Some(who), Item::Player(p)) => {
+                        let mut c = ctx.clone();
+                        c.iter_player = Some(p);
+                        g.eval_player(who, &c)
+                    }
+                    (Some(who), Item::Object(..)) => g.eval_player(who, ctx),
+                    (None, _) => Some(ctx.controller),
                 };
                 Frame {
                     item,
