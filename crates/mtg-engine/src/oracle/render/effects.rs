@@ -1453,6 +1453,12 @@ impl Renderer<'_> {
                         i += 2;
                         continue;
                     }
+                    // The next instruction already says "the color of your choice".
+                    if n.contains("the color of your choice") {
+                        parts.push(n);
+                        i += 2;
+                        continue;
+                    }
                     let c = self.effect(&v[i]);
                     parts.push(c);
                     parts.push(n);

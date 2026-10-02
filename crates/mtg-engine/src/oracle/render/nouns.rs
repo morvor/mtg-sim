@@ -96,7 +96,9 @@ pub(crate) fn supertype_word(s: Supertype) -> &'static str {
 
 pub(crate) fn cmp_phrase(cmp: Cmp, v: &str) -> String {
     match cmp {
-        Cmp::Eq => v.to_string(),
+        // "with mana value 3" / "with mana value equal to the number of ...".
+        Cmp::Eq if v.parse::<i64>().is_ok() || v == "X" => v.to_string(),
+        Cmp::Eq => format!("{{opt:equal to}} {v}"),
         Cmp::Ne => format!("other than {v}"),
         Cmp::Lt => format!("less than {v}"),
         Cmp::Le => format!("{v} or less"),

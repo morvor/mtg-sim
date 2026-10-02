@@ -698,10 +698,18 @@ impl Renderer<'_> {
                 let e = self.trigger_event(trigger, det);
                 Ev::new(e.subj, format!("roll {}", with_article(&n.to_string())))
             }
+            // "When ~ becomes monstrous" (CR 701.37b).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, .. } if name == "monstrous") => {
+                Ev::new(self.me(), "becomes monstrous")
+            }
+            // "Whenever ~ attacks while you control two or more artifacts".
             TriggerCond::Where { trigger, cond } => {
                 let e = self.trigger_event(trigger, det);
                 let c = self.condition(cond);
-                Ev::new(e.subj, format!("{}, if {c}", e.vp))
+                Ev::new(e.subj, format!("{} {{alt:while|if}} {c}", e.vp))
             }
             TriggerCond::FirstTimeEachTurn(inner) => {
                 let e = self.trigger_event(inner, det);
