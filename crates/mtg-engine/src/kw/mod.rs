@@ -263,6 +263,19 @@ pub trait KeywordRules: Sync + Send {
     fn combat_damage_assigner(&self, g: &Game, creature: ObjectId) -> Option<PlayerId> {
         None
     }
+    /// A way the attacking creature `attacker` may assign its `power` combat damage other
+    /// than the usual one (an exception to CR 510.1b–c), e.g. "divided as you choose among
+    /// defending player and/or any number of creatures they control": the assignment, if
+    /// this implementation's rule applies and its controller chose to use it. Not called
+    /// for a blocked creature whose blockers are all gone (it assigns no damage).
+    fn assign_combat_damage(
+        &self,
+        g: &mut Game,
+        attacker: ObjectId,
+        power: u32,
+    ) -> Option<Vec<(ObjectId, Entity, u32)>> {
+        None
+    }
     /// Other attacking creatures that become blocked by the same blocking creature when
     /// `attacker` becomes blocked by it (or become blocked when an effect blocks it), e.g.
     /// the rest of its band (CR 702.22h–i).
@@ -860,6 +873,17 @@ pub fn also_blocked(g: &Game, attacker: ObjectId) -> Vec<ObjectId> {
         }
     }
     out
+}
+
+/// See [`KeywordRules::assign_combat_damage`].
+pub fn assign_combat_damage(
+    g: &mut Game,
+    attacker: ObjectId,
+    power: u32,
+) -> Option<Vec<(ObjectId, Entity, u32)>> {
+    registry()
+        .iter()
+        .find_map(|r| r.assign_combat_damage(g, attacker, power))
 }
 
 pub fn combat_damage_assigner(g: &Game, id: ObjectId) -> Option<PlayerId> {

@@ -1864,6 +1864,17 @@ fn assign_attacker_damage(
     if power == 0 {
         return vec![];
     }
+    // Other ways to assign its damage a rule allows (not once all its blockers are gone).
+    let blockers_gone = ai.blocked
+        && !ai
+            .blockers
+            .iter()
+            .any(|b| g.is_live(*b) && g.obj(*b).zone == Zone::Battlefield && g.is_blocking(*b));
+    if !blockers_gone {
+        if let Some(v) = crate::kw::assign_combat_damage(g, id, power) {
+            return v;
+        }
+    }
     let controller = g.obj(id).controller;
     let trample = g.obj(id).has_keyword(KeywordKind::Trample);
     let over_pw = crate::kw::trample::over_planeswalkers(g, id);
