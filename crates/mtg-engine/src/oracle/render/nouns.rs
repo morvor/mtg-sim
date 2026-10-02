@@ -637,6 +637,16 @@ impl Renderer<'_> {
                 np.post.push("revealed this way".into());
                 np.kind.get_or_insert("card");
             }
+            // "a permanent card from among the milled cards".
+            Filter::In(s)
+                if self.milled
+                    && matches!(s.as_ref(), Sel::Var(v) if *v == crate::ability::vars::IT) =>
+            {
+                np.post.push(
+                    "{alt:among them|from among them|from among the milled cards|from among them milled this way}"
+                        .into(),
+                );
+            }
             Filter::In(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("among {s}"));

@@ -99,6 +99,7 @@ impl Renderer<'_> {
                 )
             }
             Effect::Mill { who, n } => {
+                self.milled = true;
                 let (c, w) = self.counted(n, "card");
                 (
                     who.clone(),
@@ -901,6 +902,38 @@ impl Renderer<'_> {
             Effect::SacrificeObjects { what } => {
                 let w = self.sel(what, Case::Obj);
                 format!("sacrifice {w}")
+            }
+            // "You may put a permanent card from among them into your hand": up to one.
+            Effect::Move {
+                what:
+                    Sel::Choose {
+                        chooser: PlayerRef::You,
+                        filter,
+                        count: Value::Const(1),
+                        up_to: true,
+                        store: None,
+                    },
+                to,
+            } if !format!("{filter:?}").contains("Target") => {
+                let one = Sel::Choose {
+                    chooser: PlayerRef::You,
+                    filter: filter.clone(),
+                    count: Value::Const(1),
+                    up_to: false,
+                    store: None,
+                };
+                let a = self.move_effect(&one, to);
+                let b = self.move_effect(
+                    &Sel::Choose {
+                        chooser: PlayerRef::You,
+                        filter: filter.clone(),
+                        count: Value::Const(1),
+                        up_to: true,
+                        store: None,
+                    },
+                    to,
+                );
+                format!("{{alt:{b}|you may {a}}}")
             }
             Effect::Move { what, to } => self.move_effect(what, to),
             Effect::Tap { what } => {

@@ -695,6 +695,8 @@ pub struct Renderer<'a> {
     /// The instruction before is one the player must follow if able ("Sacrifice a
     /// creature. If you can't, ...").
     pub(crate) prev_mandatory: bool,
+    /// An instruction of this ability milled cards ("from among the milled cards").
+    pub(crate) milled: bool,
     /// How the trigger's player is called in the ability being rendered ("that spell's
     /// controller" for a targeting trigger).
     pub(crate) trigger_player: Option<&'static str>,
@@ -762,6 +764,7 @@ impl<'a> Renderer<'a> {
             it_done: None,
             batch_once: false,
             prev_mandatory: false,
+            milled: false,
             trigger_player: None,
             revealed_hand: false,
             x_for_each: None,
@@ -867,6 +870,7 @@ impl<'a> Renderer<'a> {
         self.var_defs.clear();
         self.outer_vars.clear();
         self.it_done = None;
+        self.milled = false;
         self.plural_vars.clear();
         self.target_vars.clear();
         self.stored_values.clear();
