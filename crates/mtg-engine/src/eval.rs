@@ -1315,6 +1315,9 @@ impl Game {
                 .eval_player(r, ctx)
                 .and_then(|p| self.player(p).speed)
                 .unwrap_or(0) as i64,
+            Value::TurnsTaken(r) => self
+                .eval_player(r, ctx)
+                .map_or(0, |p| self.player(p).turns_taken as i64),
             Value::Aggregate(op, stat, sel) => {
                 crate::aggregates::aggregate(self, *op, stat, sel, ctx)
             }

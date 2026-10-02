@@ -387,6 +387,14 @@ impl Renderer<'_> {
                 }
             }
             StaticEffect::Dice(d) => self.dice_static(d),
+            // "You can't cast ~ during your first, second, or third turns of the game."
+            StaticEffect::CastOnlyIf(Condition::Not(inner))
+                if crate::rule_statics::turns_taken::early_turns_n(inner).is_some() =>
+            {
+                let n = crate::rule_statics::turns_taken::early_turns_n(inner).unwrap_or(1);
+                let l = crate::rule_statics::turns_taken::ordinal_list(n);
+                format!("you can't cast ~ during your {l} turns of the game")
+            }
             StaticEffect::CastOnlyIf(c) => {
                 let c = self.cast_only_condition(c);
                 format!("cast ~ only {c}")

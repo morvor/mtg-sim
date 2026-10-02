@@ -1430,6 +1430,10 @@ pub enum Value {
     TimesKicked,
     /// Speed (CR 702.179).
     Speed(PlayerRef),
+    /// The number of turns the player has taken this game, including the current turn if
+    /// it's theirs ("your first, second, or third turn of the game"; not the number of
+    /// turns the game has had, as players may take extra turns).
+    TurnsTaken(PlayerRef),
     /// "the greatest power among creatures you control", "the total mana value of
     /// artifacts you control", "the number of +1/+1 counters among creatures you control":
     /// a characteristic of each selected object, combined (0 when nothing is selected).

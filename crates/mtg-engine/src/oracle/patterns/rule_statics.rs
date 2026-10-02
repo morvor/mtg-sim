@@ -82,3 +82,32 @@ fn damaged_count(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "n or more creatures are damaged", priority: 60, parse: damaged_count } }
+
+/// "it's your first, second, or third turn of the game".
+fn early_turn_condition(c: &str) -> Option<Condition> {
+    use crate::rule_statics::turns_taken::*;
+    let (n, rest) = parse_ordinal_list(c.trim().strip_prefix("it's your ")?)?;
+    (rest == " turn of the game").then(|| early_turns(n))
+}
+
+/// "You can't cast ~ during your first, second, or third turns of the game." (Serra
+/// Avenger): a restriction on casting the card itself, wherever it's cast from (CR 601.3);
+/// casting it during another player's turn isn't restricted.
+fn cant_cast_during_early_turns(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::rule_statics::turns_taken::*;
+    let r = end(l)
+        .trim()
+        .strip_prefix("you can't cast ~ during your ")?;
+    let (n, rest) = parse_ordinal_list(r)?;
+    if rest != " turns of the game" {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::CastOnlyIf(Condition::Not(Box::new(
+        early_turns(n),
+    ))));
+    s.zone = FunctionZone::Anywhere;
+    Some(static_ability(s, text))
+}
+
+inventory::submit! { ConditionPattern { name: "it's your first, second, or third turn of the game", priority: 60, parse: early_turn_condition } }
+inventory::submit! { StaticPattern { name: "you can't cast ~ during your first turns", priority: 100, parse: cant_cast_during_early_turns } }
