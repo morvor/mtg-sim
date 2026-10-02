@@ -90,7 +90,7 @@ fn crypsis_follows_the_new_controller() {
 
 #[test]
 fn cliffside_rescuer_protection_from_players() {
-    cr!("702.16j", "108.4a");
+    cr!("702.16k", "108.4a");
     ruling!(
         "Cliffside Rescuer",
         "Protection from a player means that the permanent has protection from each object controlled by that player. If an object has no controller (such as a card in a graveyard), its owner is considered its controller for this purpose."
@@ -111,7 +111,7 @@ fn cliffside_rescuer_protection_from_players() {
 
 #[test]
 fn cliffside_rescuer_opponents_fixed_on_resolution() {
-    cr!("702.16j", "611.2c");
+    cr!("702.16k", "611.2c");
     ruling!(
         "Cliffside Rescuer",
         "The players that the target permanent has protection from are determined as Cliffside Rescuer’s ability resolves. If an opponent somehow gains control of that permanent later in the turn, it still has protection from your opponents, including its new controller."
@@ -214,7 +214,7 @@ fn spellbreaker_behemoth_counterspells_still_draw() {
 
 #[test]
 fn spellbreaker_behemoth_anthems_dont_apply_on_the_stack() {
-    cr!("101.2", "611.3c");
+    cr!("101.2", "109.2");
     ruling!(
         "Spellbreaker Behemoth",
         "Effects that affect a creature’s power (such as the one from Glorious Anthem, for example) apply only to creatures on the battlefield, not to creature spells on the stack."
@@ -353,7 +353,7 @@ fn rhythm_of_the_wild_a_permanent_that_becomes_a_creature_later() {
 
 #[test]
 fn jailbreak_scheme_on_a_merged_permanent_moves_all_its_cards_together() {
-    cr!("721.3", "730.3d", "401.4");
+    cr!("730.3", "730.3a", "401.4");
     ruling!(
         "Jailbreak Scheme",
         "If multiple cards are put into the library this way (such as when the spell targets a melded permanent), that permanent’s owner puts all the cards on top or all the cards on the bottom. They put them in whatever order they wish, and do not need to reveal the order."

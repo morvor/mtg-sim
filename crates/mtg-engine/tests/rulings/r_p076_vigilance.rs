@@ -179,7 +179,7 @@ fn keeper_of_keys_checks_the_monarch_at_upkeep_and_on_resolution() {
 
 #[test]
 fn keeper_of_keys_affects_creatures_that_arrive_later() {
-    cr!("611.2c", "611.3a");
+    cr!("611.2c");
     ruling!(
         "Keeper of Keys",
         "The last ability of Keeper of Keys will affect all creatures you control that turn, even if they weren't on the battlefield or weren't creatures as the ability resolved."
@@ -502,7 +502,7 @@ fn shining_armor_with_no_knight_stays_unattached() {
 
 #[test]
 fn forebears_blade_with_no_target_stays_unattached() {
-    cr!("603.3d", "301.5c");
+    cr!("603.3d", "608.2b");
     ruling!(
         "Forebear's Blade",
         "If there's no target for the triggered ability of Forebear's Blade, or if the ability's target becomes illegal, Forebear's Blade remains on the battlefield unattached."
@@ -592,7 +592,7 @@ fn vihaan_overwrites_set_pt_but_keeps_modifications() {
 
 #[test]
 fn loyal_unicorn_prevents_damage_to_creatures_that_arrive_later() {
-    cr!("611.3a", "615.1");
+    cr!("611.2c", "615.1");
     ruling!(
         "Loyal Unicorn",
         "Loyal Unicorn’s effect will prevent all combat damage that would be dealt to creatures you control, even if those creatures weren’t on the battlefield or weren’t creatures when the effect resolved."

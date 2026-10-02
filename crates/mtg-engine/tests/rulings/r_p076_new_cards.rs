@@ -272,7 +272,7 @@ fn predatory_focus_applies_to_creatures_that_enter_later() {
 
 #[test]
 fn murmuration_counts_spells_cast_before_it_and_countered_spells() {
-    cr!("601.2i", "700.14");
+    cr!("601.2i");
     ruling!(
         "Murmuration",
         "Murmuration's last ability counts spells you cast earlier in the turn even if you didn't control Murmuration as you cast them and even if those spells were countered or otherwise didn't resolve."

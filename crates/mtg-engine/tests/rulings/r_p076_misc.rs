@@ -23,7 +23,7 @@ fn there_halves_supported() {
 
 #[test]
 fn there_theyre_their_is_one_card_in_the_graveyard() {
-    cr!("709.4", "709.4b");
+    cr!("709.2", "709.4c");
     ruling!(
         "There // They're // Their",
         "Each split card is a single card. For example, if you discard a split card, you’ve discarded one card. If an effect counts the number of instant and sorcery cards in your graveyard, There // They’re // Their counts once, not three times."
@@ -80,7 +80,7 @@ fn there_theyre_their_cast_third_only_on_the_stack() {
 
 #[test]
 fn there_theyre_their_naming_one_name() {
-    cr!("709.4", "201.3");
+    cr!("709.4a", "201.4b");
     ruling!(
         "There // They're // Their",
         "This split card has three names. If an effect instructs you to choose a card name, you may choose one of those names, but not all of them (though you might want to write it down and not just say it out loud)."
@@ -187,7 +187,7 @@ fn face_down_creatures_have_no_name_or_creature_types() {
 
 #[test]
 fn a_manifested_card_returned_to_the_battlefield_is_face_up() {
-    cr!("708.10", "701.40g", "400.7");
+    cr!("400.7", "400.4a");
     ruling!(
         "Soul-Strike Technique",
         "If an effect tries to return a face-down creature to the battlefield after it leaves (such as Astral Drift’s delayed triggered ability), that effect returns the card face up. If it tries to put an instant or sorcery card onto the battlefield this way, that card remains in its current zone instead."
@@ -354,7 +354,7 @@ fn rebuild_the_city_copying_a_land_that_copies_something() {
 
 #[test]
 fn three_blind_mice_copying_a_token_that_copies_something() {
-    cr!("707.3", "714.3b");
+    cr!("707.3");
     ruling!(
         "Three Blind Mice",
         "If the copied token is copying something else, then the token enters the battlefield as whatever that token copied."

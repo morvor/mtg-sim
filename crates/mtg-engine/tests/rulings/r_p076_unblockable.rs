@@ -50,7 +50,7 @@ fn two_phase_dolphins_can_target_each_other() {
 
 #[test]
 fn phase_dolphins_effect_outlasts_it() {
-    cr!("611.2a", "610.1");
+    cr!("611.2a");
     ruling!(
         "Phase Dolphin",
         "The target creature can’t be blocked this turn even if Phase Dolphin leaves the battlefield."
@@ -413,7 +413,7 @@ fn jace_triggers_once_per_turn_even_if_it_missed_the_first_draw() {
 
 #[test]
 fn jaces_ultimate_lasts_after_jace_leaves() {
-    cr!("611.2a", "610.1");
+    cr!("611.2a");
     ruling!(
         "Jace, Arcane Strategist",
         "Once Jace’s last ability has resolved, its effect applies even if Jace has left the battlefield."
