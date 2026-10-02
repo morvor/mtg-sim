@@ -434,6 +434,7 @@ fn face_down_exiled_cards_can_be_cast_only_by_a_player_who_can_look_at_them() {
         free: false,
         source: None,
         turn: 1,
+        terms: Default::default(),
     });
     t.cast(P0, down).go();
     t.resolve();

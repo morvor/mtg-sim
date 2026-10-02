@@ -2394,6 +2394,48 @@ pub struct PlayPermission {
     pub cost: Option<Cost>,
 }
 
+/// The terms an effect's permission to play particular cards comes with (CR 601.3,
+/// 305.1): what it allows, and how spells cast with it are cast. A player who has several
+/// permissions to play a card chooses which one they're using as they begin to play it,
+/// and gets that one's terms (see `permissions.rs`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlayTerms {
+    /// "You may cast that card": a permission to cast it, not to play it as a land (to
+    /// play a card is to play it as a land or cast it, whichever is appropriate; a land
+    /// can't be cast, CR 305.9).
+    #[serde(default)]
+    pub spells_only: bool,
+    /// The alternative cost a spell cast with the permission must be cast for ("If you
+    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
+    /// cost.", CR 118.9b): no other alternative cost can be used with it (CR 118.9a).
+    /// `Value::ManaValueOf(Sel::This)` in it is the mana value of the spell the card would
+    /// become (X being 0, CR 107.3b).
+    #[serde(default)]
+    pub alt_cost: Option<Cost>,
+    /// "You may cast it as though it had flash" (CR 702.8a, 601.3b).
+    #[serde(default)]
+    pub flash: bool,
+    /// "A spell cast this way costs {N} more to cast" (CR 601.2f).
+    #[serde(default)]
+    pub cost_increase: u32,
+    /// "Each land played this way enters tapped" (CR 614.1c).
+    #[serde(default)]
+    pub lands_enter_tapped: bool,
+}
+
+impl PlayTerms {
+    /// Adds `other`'s terms to these.
+    pub fn merge(&mut self, other: &PlayTerms) {
+        self.spells_only |= other.spells_only;
+        if other.alt_cost.is_some() {
+            self.alt_cost = other.alt_cost.clone();
+        }
+        self.flash |= other.flash;
+        self.cost_increase += other.cost_increase;
+        self.lands_enter_tapped |= other.lands_enter_tapped;
+    }
+}
+
 /// Trigger events (CR 603). Filters are relative to the ability's source.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TriggerCond {
@@ -3345,6 +3387,14 @@ pub enum Effect {
         what: Sel,
         duration: Duration,
         free: bool,
+    },
+    /// The permissions to play cards `effect` gives (`GrantPlayPermission`) come with
+    /// `terms`: "you may cast that card" (not play it as a land), "If you cast a spell
+    /// this way, pay life equal to its mana value rather than pay its mana cost", "you may
+    /// cast them as though they had flash" (see [`PlayTerms`], `permissions.rs`).
+    WithPlayTerms {
+        terms: PlayTerms,
+        effect: Box<Effect>,
     },
     /// Prevent the next N damage / all damage (CR 615).
     PreventDamage {

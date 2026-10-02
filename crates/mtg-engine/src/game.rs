@@ -440,10 +440,12 @@ pub struct TurnHistory {
     /// "crewed" it (CR 702.122b–c). Recorded by `kw/crew.rs`.
     #[serde(default)]
     pub crewed: Vec<crate::kw::crew::CrewRecord>,
-    /// Objects whose "once during each of your turns, you may cast ..." permission was
-    /// used this turn. Recorded by `kw/once_each_turn_cast.rs`.
+    /// The "once during each of your turns, you may cast ..." permissions used this turn:
+    /// the object whose ability it is and which of its uses (Muldrotha's "a permanent spell
+    /// of each permanent type": the type). Recorded as a card is played with one (see
+    /// `permissions.rs`, `kw/once_each_turn_cast.rs`).
     #[serde(default)]
-    pub once_permissions_used: Vec<ObjectId>,
+    pub once_permissions_used: Vec<(ObjectId, SmolStr)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -477,7 +479,9 @@ pub struct ActiveStatics {
     pub restrictions: Vec<(ObjectId, PlayerId, Restriction)>,
     pub cost_modifiers: Vec<(ObjectId, PlayerId, CostModifier)>,
     pub replacements: Vec<(ObjectId, PlayerId, Timestamp, Ability, ReplacementDef)>,
-    pub play_permissions: Vec<(ObjectId, PlayerId, PlayPermission)>,
+    /// (source, controller, permission, the once-each-turn use it is, if it's one: see
+    /// `kw/once_each_turn_cast.rs`)
+    pub play_permissions: Vec<(ObjectId, PlayerId, PlayPermission, Option<SmolStr>)>,
     pub flash_permissions: Vec<(ObjectId, PlayerId, PlayerRel, Filter)>,
     pub customs: Vec<(ObjectId, PlayerId, SmolStr)>,
     pub other: Vec<(ObjectId, PlayerId, StaticEffect)>,

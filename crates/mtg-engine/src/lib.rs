@@ -94,6 +94,7 @@ pub mod object;
 pub mod opening_hand;
 pub mod oracle;
 pub mod oracle_ext;
+pub mod permissions;
 pub mod piles;
 pub mod planechase;
 pub mod player_control;
