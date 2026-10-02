@@ -27,13 +27,53 @@ use crate::oracle::patterns::{EffectPattern, FollowupPattern};
 use crate::oracle::phrases::*;
 
 inventory::submit! {
-    EffectPattern { name: "dig: a step on the cards dug", priority: 200, parse: step_sentence }
+    EffectPattern { name: "dig: a step on the cards dug", priority: 1000, parse: step_sentence }
 }
 inventory::submit! {
     EffectPattern { name: "dig: look at / reveal / exile N cards from the top", priority: 200, parse: source_sentence }
 }
 inventory::submit! {
     FollowupPattern { name: "dig: a step on the cards dug (after the source)", priority: 200, apply: step_followup }
+}
+inventory::submit! {
+    FollowupPattern { name: "dig: you may put [cards] from among them ...", priority: 200, apply: may_take_followup }
+}
+
+/// "You may put a creature card and/or a land card from among them into your hand.", "You
+/// may put any number of them into your hand and the rest into your graveyard.": an
+/// optional selection is a choice of up to that many cards (what follows, "the rest",
+/// happens either way), not "you may" around the whole instruction. Only where no other
+/// pattern reads the sentence.
+fn may_take_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !dug(b) || !l.starts_with("you may ") {
+        return false;
+    }
+    let saved = (
+        b.named.clone(),
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.group.clone(),
+    );
+    b.named.retain(|(n, _)| n != DIG_MARK);
+    let others = crate::oracle::effects::parse_sentence(l, b).is_some();
+    (b.named, b.it, b.it_player, b.group) = (saved.0.clone(), saved.2.clone(), saved.3.clone(), saved.4.clone());
+    b.targets.truncate(saved.1);
+    if others {
+        return false;
+    }
+    let Some(v) = parse_take(l, b) else {
+        (b.named, b.it, b.it_player, b.group) = (saved.0, saved.2, saved.3, saved.4);
+        b.targets.truncate(saved.1);
+        return false;
+    };
+    let old = std::mem::take(prev);
+    let mut all = vec![old];
+    all.extend(v);
+    *prev = Effect::seq(all);
+    b.it = Sel::Var(vars::IT);
+    true
 }
 inventory::submit! {
     crate::oracle::patterns::ConditionPattern { name: "dig: if you put [cards] into your hand this way", priority: 200, parse: put_this_way }
@@ -210,8 +250,8 @@ fn split_selection(prev: &mut Effect) -> Option<usize> {
     } else {
         return None;
     };
-    // The selection must follow the source directly.
-    (start >= 1 && source_kind(&v[start - 1]).is_some()).then_some(start)
+    // The selection follows the source directly (or in an earlier sentence).
+    (start == 0 || source_kind(&v[start - 1]).is_some()).then_some(start)
 }
 
 /// "If you gained life this turn, you may instead reveal two creature and/or land cards
@@ -241,7 +281,7 @@ fn dig_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     let saved = (prev.clone(), b.named.clone(), b.targets.len());
-    let Some(start) = split_selection(prev) else {
+    let Some(start) = split_selection(prev).filter(|s| *s > 0 || dug(b)) else {
         *prev = saved.0;
         return false;
     };
@@ -389,6 +429,14 @@ fn may_play_dug(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 /// into two piles.": a dig and what's done with the cards in one sentence.
 fn source_then_steps(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
+    // Only a sentence that starts by digging, and goes on about the cards.
+    if !["look at ", "reveal ", "exile the top ", "mill "]
+        .iter()
+        .any(|p| l.starts_with(p))
+        || !(l.contains(" them") || l.contains(" those cards") || l.contains(" the rest"))
+    {
+        return None;
+    }
     for sep in [", ", " and "] {
         let mut from = 0;
         while let Some(i) = l[from..].find(sep).map(|i| i + from) {
@@ -1270,19 +1318,30 @@ fn step_sentence(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 fn step_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    if !ends_with_dig(prev) {
+    // A sentence after the one that dug is read as a sentence of its own (the other
+    // patterns first, see `step_sentence`); this is for a step joined to the dig in one
+    // sentence ("Mill four cards, then put ...").
+    if dug(b) || !ends_with_dig(prev) {
         return false;
     }
-    let saved = b.named.clone();
+    let saved = (b.named.clone(), b.targets.len(), b.it.clone(), b.it_player.clone());
+    if crate::oracle::effects::parse_simple(l, b).is_some() {
+        (b.named, b.it, b.it_player) = (saved.0, saved.2, saved.3);
+        b.targets.truncate(saved.1);
+        return false;
+    }
+    (b.it, b.it_player) = (saved.2.clone(), saved.3.clone());
+    b.targets.truncate(saved.1);
     note_source(Some(prev), b);
     let Some(e) = parse_step(l, b) else {
-        b.named = saved;
+        b.named = saved.0;
         return false;
     };
+    // The mark is set again after the whole sentence (`note_source`).
+    b.named = saved.0;
     let old = std::mem::take(prev);
     *prev = Effect::seq(vec![old, e]);
     b.it = Sel::Var(vars::IT);
-    note_source(Some(prev), b);
     true
 }
 

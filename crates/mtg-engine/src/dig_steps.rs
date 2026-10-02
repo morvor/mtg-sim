@@ -227,8 +227,17 @@ fn take(
     ctx: &mut Ctx,
 ) {
     let p = g.eval_player(chooser, ctx).unwrap_or(ctx.controller);
+    // Cards an earlier selection took (and left in the library) aren't among them any
+    // more, unless the selection is of exactly those ("put the revealed cards into your
+    // hand").
+    let taken = if matches!(from, Sel::Var(vars::DUG)) {
+        ctx.var_objects(vars::DUG_TAKEN)
+    } else {
+        vec![]
+    };
     let cands: Vec<ObjectId> = remaining(g, from, ctx)
         .into_iter()
+        .filter(|o| !taken.contains(o))
         .filter(|o| {
             g.matches(*o, filter, ctx)
                 && (each_of.is_empty() || each_of.iter().any(|f| g.matches(*o, f, ctx)))
