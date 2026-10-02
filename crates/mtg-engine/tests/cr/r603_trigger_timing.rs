@@ -143,3 +143,50 @@ fn create_a_token_and_attach_this_equipment_to_it() {
     // It entered as a 2/2.
     assert_eq!(triggered(&t, "power 2 or less"), 1);
 }
+
+#[test]
+fn a_token_that_enters_with_counters_has_them_as_it_enters() {
+    cr!("122.6", "603.6a", "603.10");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Elemental Bond");
+    t.battlefield(P0, "Mentor of the Meek");
+    // The wording of Printlifter Ooze's ability.
+    let spell = oracle_card(
+        "Ooze Summons",
+        "Sorcery",
+        "{0}",
+        None,
+        "Create a 0/0 green Ooze creature token. The token enters with X +1/+1 counters on it, where X is the number of other creatures you control.",
+    );
+    t.battlefield(P0, "Grizzly Bears");
+    let spell = t.custom(P0, spell, Zone::Hand(P0));
+    t.cast(P0, spell).go();
+    t.resolve();
+    let ooze =
+        t.g.permanents()
+            .find(|o| o.is_token() && o.chars.has_subtype("Ooze"))
+            .map(|o| o.id)
+            .expect("an Ooze token");
+    // Mentor of the Meek and the Bears are the other creatures.
+    assert_eq!(t.pt(ooze), (2, 2));
+    assert_eq!(t.counters(ooze, "+1/+1"), 2);
+    // It entered as a 2/2: Mentor of the Meek saw it; a third creature makes it a 3/3
+    // for Elemental Bond.
+    assert_eq!(triggered(&t, "power 2 or less"), 1);
+    assert_eq!(triggered(&t, "power 3 or greater"), 0);
+    t.resolve_all();
+    t.battlefield(P0, "Grizzly Bears");
+    let spell = oracle_card(
+        "Ooze Summons",
+        "Sorcery",
+        "{0}",
+        None,
+        "Create a 0/0 green Ooze creature token. The token enters with X +1/+1 counters on it, where X is the number of other creatures you control.",
+    );
+    let spell = t.custom(P0, spell, Zone::Hand(P0));
+    t.cast(P0, spell).go();
+    t.resolve();
+    // Mentor, two Bears and the first Ooze.
+    assert_eq!(triggered(&t, "power 3 or greater"), 1);
+    assert_eq!(triggered(&t, "power 2 or less"), 0);
+}

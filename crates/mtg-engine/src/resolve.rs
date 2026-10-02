@@ -1920,6 +1920,9 @@ impl Game {
             Effect::Exchange(spec) => crate::exchange::perform(self, spec, ctx),
             Effect::FlipCoins(spec) => crate::dice::flip(self, spec, ctx),
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
+            Effect::TokensEnterWithCounters { counters, effect } => {
+                crate::tokens::enter_with_counters(self, counters, effect, ctx)
+            }
         }
     }
 
