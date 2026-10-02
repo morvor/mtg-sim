@@ -107,7 +107,8 @@ fn shuffle_after_search(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let l = l.strip_prefix("then ").unwrap_or(l);
     if l == "that player shuffles" {
-        if crate::oracle::patterns::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+        if crate::oracle::patterns::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+        {
             return None;
         }
         return Some(Effect::Shuffle {
@@ -146,7 +147,11 @@ fn some_player_condition(c: &str) -> Option<Condition> {
 /// you" (adding the target), or any other condition.
 fn condition(c: &str, b: &mut Builder) -> Option<Condition> {
     for (p, pf, text) in [
-        ("target opponent ", PlayerFilter::Opponent, "target opponent"),
+        (
+            "target opponent ",
+            PlayerFilter::Opponent,
+            "target opponent",
+        ),
         ("target player ", PlayerFilter::Any, "target player"),
     ] {
         if let Some(r) = c.strip_prefix(p) {
@@ -218,7 +223,8 @@ fn search_conditional_inner(c: &str, x: &str, prev: &mut Effect, b: &mut Builder
         let Effect::SearchCards(a) = &alt else {
             return None;
         };
-        if !a.dests.is_empty() || a.shuffle != SearchShuffle::No || !matches!(a.who, PlayerRef::You) {
+        if !a.dests.is_empty() || a.shuffle != SearchShuffle::No || !matches!(a.who, PlayerRef::You)
+        {
             return None;
         }
         let old = std::mem::take(last);
@@ -391,7 +397,9 @@ fn put_found(l: &str, b: &mut Builder) -> Option<Effect> {
     // left the found cards where they were.
     if let Some(r) = p.strip_prefix("the chosen cards ") {
         if found && r == "on top of your library in any order" {
-            return Some(Effect::Custom(crate::search_rules::FOUND_ON_TOP_ANY_ORDER.into()));
+            return Some(Effect::Custom(
+                crate::search_rules::FOUND_ON_TOP_ANY_ORDER.into(),
+            ));
         }
         return None;
     }
@@ -647,7 +655,8 @@ fn description<'a>(s: &'a str, b: &mut Builder) -> Option<(Filter, String)> {
         .find(|i| {
             let after = &s[i + 4..];
             let after = after.strip_prefix('s').unwrap_or(after);
-            (*i == 0 || s[..*i].ends_with(' ')) && (after.is_empty() || after.starts_with([' ', ',']))
+            (*i == 0 || s[..*i].ends_with(' '))
+                && (after.is_empty() || after.starts_with([' ', ',']))
         })
         .map(|i| {
             let after = &s[i + 4..];
@@ -803,10 +812,16 @@ fn qualifier(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
         return Some((f, r.to_string()));
     }
     if let Some(r) = s.strip_prefix("with a mana ability") {
-        return Some((Filter::Custom(crate::search_rules::HAS_MANA_ABILITY.into()), r.to_string()));
+        return Some((
+            Filter::Custom(crate::search_rules::HAS_MANA_ABILITY.into()),
+            r.to_string(),
+        ));
     }
     if let Some(r) = s.strip_prefix("with enchant creature") {
-        return Some((Filter::Custom(crate::search_rules::ENCHANT_CREATURE.into()), r.to_string()));
+        return Some((
+            Filter::Custom(crate::search_rules::ENCHANT_CREATURE.into()),
+            r.to_string(),
+        ));
     }
     // A list of keywords: "with flashback or disturb", "with deathtouch, hexproof, reach,
     // or trample".
@@ -867,7 +882,10 @@ fn mana_value_qualifier(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
     if let Some(r2) = r.strip_prefix("or ") {
         if let Some((m, rest)) = parse_number(r2) {
             if m.as_const().is_some() && n.as_const().is_some() {
-                return Some((Filter::Or(vec![mv(Cmp::Eq, n), mv(Cmp::Eq, m)]), rest.to_string()));
+                return Some((
+                    Filter::Or(vec![mv(Cmp::Eq, n), mv(Cmp::Eq, m)]),
+                    rest.to_string(),
+                ));
             }
         }
     }
@@ -915,7 +933,9 @@ enum Sep {
 /// card"), or alternatives for one card ("a snow permanent card, a legendary card, or a
 /// Saga card"). Returns the parts, whether they need different names, and the rest.
 fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
-    let s = s.strip_prefix("any card").map_or(s.to_string(), |r| format!("a card{r}"));
+    let s = s
+        .strip_prefix("any card")
+        .map_or(s.to_string(), |r| format!("a card{r}"));
     let mut items: Vec<(Value, bool, bool, Filter)> = Vec::new();
     let mut seps: Vec<Sep> = Vec::new();
     let mut rest: String = s;
@@ -999,7 +1019,9 @@ fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
         // Alternatives for one card: every part is "a"/"an" and every separator "or"
         // (the last may follow a comma list).
         if seps.iter().any(|s| *s == Sep::And)
-            || items.iter().any(|(n, up, all, _)| !matches!(n, Value::Const(1)) || *up || *all)
+            || items
+                .iter()
+                .any(|(n, up, all, _)| !matches!(n, Value::Const(1)) || *up || *all)
         {
             return None;
         }
@@ -1165,8 +1187,8 @@ fn tail_inner<'a>(
         ", exiles ",
         " and exiles ",
     ]
-        .iter()
-        .find_map(|p| t.strip_prefix(p))
+    .iter()
+    .find_map(|p| t.strip_prefix(p))
     {
         t = pronoun(x)?;
         spec.dests = vec![SearchDest {
@@ -1272,7 +1294,11 @@ fn put_dests<'a>(
     if let Some(r) = pronoun(x) {
         let (to, r) = destination(r.trim_start(), sr, b)?;
         let (or, r) = alternative_destinations(&to, r, sr, b);
-        spec.dests = vec![SearchDest { count: None, to, or }];
+        spec.dests = vec![SearchDest {
+            count: None,
+            to,
+            or,
+        }];
         return Some(r);
     }
     // Split: "[N] [of them] DEST and the other/the rest DEST".
@@ -1358,9 +1384,14 @@ fn subject_then_search(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     if matches!(
         who,
-        PlayerRef::You | PlayerRef::EachPlayer | PlayerRef::EachOpponent | PlayerRef::EachOtherPlayer
-    ) || !matches!(b.targets.get(n0).map(|t| &t.what), None | Some(TargetKind::Player(_)))
-    {
+        PlayerRef::You
+            | PlayerRef::EachPlayer
+            | PlayerRef::EachOpponent
+            | PlayerRef::EachOtherPlayer
+    ) || !matches!(
+        b.targets.get(n0).map(|t| &t.what),
+        None | Some(TargetKind::Player(_))
+    ) {
         return None;
     }
     // The search's subject is that same player.
@@ -1435,9 +1466,13 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
     // "Search your library and graveyard for five cards and exile the rest." (Doomsday):
     // the found cards stay where they are; every other card in the searched zones is
     // exiled.
-    if let Some(x) = [" and exile the rest", ", then exile the rest", ", exile the rest"]
-        .iter()
-        .find_map(|p| t.strip_prefix(p))
+    if let Some(x) = [
+        " and exile the rest",
+        ", then exile the rest",
+        ", exile the rest",
+    ]
+    .iter()
+    .find_map(|p| t.strip_prefix(p))
     {
         if !x.trim().is_empty()
             || sr.third
@@ -1496,6 +1531,9 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
             Some(x) => (x, true),
             None => (x, false),
         };
+        // "Search your library for an Equipment card, put it onto the battlefield, attach
+        // it to a creature you control": "it" is the card put there (CR 400.7).
+        b.it = Sel::Var(vars::IT);
         let e = crate::oracle::effects::parse_clause(x, b)?;
         if !library_free(&e) {
             return None;
@@ -1506,7 +1544,13 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
         then = Some(e);
     }
     // Third-person verbs go with a subject other than you, and only then.
-    let third_verbs = [", reveals ", ", puts ", " and puts ", ", then shuffles", ", exiles "];
+    let third_verbs = [
+        ", reveals ",
+        ", puts ",
+        " and puts ",
+        ", then shuffles",
+        ", exiles ",
+    ];
     if !sr.third && third_verbs.iter().any(|v| t.contains(v)) {
         return None;
     }
@@ -1635,9 +1679,19 @@ fn deep(e: &mut Effect, f: &mut dyn FnMut(&mut SearchSpec) -> bool) -> Option<us
 /// makes no difference).
 fn library_free(e: &Effect) -> bool {
     let j = serde_json::to_string(e).unwrap_or_default();
-    !["\"Library\"", "Draw", "Mill", "Scry", "Surveil", "Dig", "Search", "Shuffle", "Explore"]
-        .iter()
-        .any(|w| j.contains(w))
+    ![
+        "\"Library\"",
+        "Draw",
+        "Mill",
+        "Scry",
+        "Surveil",
+        "Dig",
+        "Search",
+        "Shuffle",
+        "Explore",
+    ]
+    .iter()
+    .any(|w| j.contains(w))
 }
 
 /// "Then each player who searched their library this way shuffles." after "each opponent
@@ -1647,7 +1701,11 @@ fn opponents_who_searched_shuffle(prev: &mut Effect) -> bool {
     let Effect::Seq(v) = prev else {
         return false;
     };
-    let Some(Effect::ForEachPlayer { who: PlayerRef::Var(var), effect }) = v.last_mut() else {
+    let Some(Effect::ForEachPlayer {
+        who: PlayerRef::Var(var),
+        effect,
+    }) = v.last_mut()
+    else {
         return false;
     };
     if *var != ACCEPTED {
@@ -1726,7 +1784,8 @@ fn complete_search(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     }
     // "That player shuffles, then draws a card for each card exiled from their hand this
     // way." (Lost Legacy).
-    if l == "that player shuffles, then draws a card for each card exiled from their hand this way" {
+    if l == "that player shuffles, then draws a card for each card exiled from their hand this way"
+    {
         let mut whose = None;
         let ok = update_searches(prev, &mut |s| {
             let exiles = s.dests.len() == 1 && s.dests[0].to.zone == ZoneKind::Exile;
@@ -1839,7 +1898,10 @@ mod tests {
             "Search your library for a red card and a green card, reveal them, put them into your hand, then shuffle.",
         )
         .expect("two parts");
-        assert!(e.contains("Color(Red)") && e.contains("Color(Green)"), "{e}");
+        assert!(
+            e.contains("Color(Red)") && e.contains("Color(Green)"),
+            "{e}"
+        );
         assert!(e.matches("SearchPart").count() == 2, "{e}");
         // Another player searching, with third-person verbs.
         let e = compiled(
@@ -1852,8 +1914,14 @@ mod tests {
             "Search your graveyard and/or library for a card named Grizzly Bears and put it onto the battlefield. If you search your library this way, shuffle.",
         )
         .expect("zones");
-        assert!(e.contains("zones: [Graveyard, Library], zones_optional: true"), "{e}");
-        assert!(e.contains("Named(\"Grizzly Bears\")") && e.contains("shuffle: After"), "{e}");
+        assert!(
+            e.contains("zones: [Graveyard, Library], zones_optional: true"),
+            "{e}"
+        );
+        assert!(
+            e.contains("Named(\"Grizzly Bears\")") && e.contains("shuffle: After"),
+            "{e}"
+        );
         // A split with "two of them" and "the rest".
         let e = compiled(
             "Search your library for up to four basic land cards, reveal them, put two of them onto the battlefield tapped and the rest into your hand, then shuffle.",
@@ -1903,7 +1971,10 @@ mod tests {
         .expect("doomsday");
         assert!(e.contains("dests: [], shuffle: No"), "{e}");
         assert!(e.contains("Store"), "{e}");
-        assert!(e.contains(crate::search_rules::FOUND_ON_TOP_ANY_ORDER), "{e}");
+        assert!(
+            e.contains(crate::search_rules::FOUND_ON_TOP_ANY_ORDER),
+            "{e}"
+        );
         // Not after a search that chooses its zones, or another player's.
         assert!(compiled(
             "Search your library and/or graveyard for five cards and exile the rest."
@@ -1917,7 +1988,11 @@ mod tests {
 
     fn show(name: &str) -> String {
         let d = CardDb::global().get(name).expect("card");
-        format!("{:?} {:?}", d.unsupported_text(), d.faces[0].chars.abilities)
+        format!(
+            "{:?} {:?}",
+            d.unsupported_text(),
+            d.faces[0].chars.abilities
+        )
     }
 
     #[test]
