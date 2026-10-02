@@ -709,10 +709,19 @@ impl Renderer<'_> {
                         return format!("{a} block {d} and how {b}");
                     }
                 }
-                // "Target creature blocks this turn if able."
+                // "Target creature blocks this turn if able.", "Target creature must be
+                // blocked this turn if able.", "... blocks it this combat if able."
                 if d == "this turn" {
-                    if let Some(x) = r.strip_suffix(" each combat if able") {
+                    if let Some(x) = r
+                        .strip_suffix(" each combat if able")
+                        .or_else(|| r.strip_suffix(" if able"))
+                    {
                         return format!("{x} this turn if able");
+                    }
+                }
+                if d == "until end of combat" {
+                    if let Some(x) = r.strip_suffix(" each combat if able") {
+                        return format!("{x} this combat if able");
                     }
                 }
                 join_words(&[r, d])

@@ -1087,7 +1087,7 @@ impl Renderer<'_> {
             Restriction::MustBlockAttacker { blocker, attacker } => {
                 let b = subj(self, blocker);
                 let a = self.noun_det(attacker, Det::A);
-                format!("{b} blocks {a} this combat if able")
+                format!("{b} blocks {a} each combat if able")
             }
             Restriction::AttackCost {
                 attackers,
