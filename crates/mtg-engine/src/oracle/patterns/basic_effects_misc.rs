@@ -366,3 +366,20 @@ fn behold_and_exile(p: &str) -> Option<CostPart> {
 }
 
 inventory::submit! { super::CostPattern { name: "basic effects: behold and exile it", priority: 100, parse: behold_and_exile } }
+
+/// "sacrifice a legendary artifact or legendary creature" (a cost, e.g. for ward): one
+/// permanent you control described by alternatives.
+fn sacrifice_alternatives(p: &str) -> Option<CostPart> {
+    let r = end(p).strip_prefix("sacrifice ")?;
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let (f, plural, rest) = super::basic_effects_targets::object_alternatives(r)?;
+    if plural || !end(rest).is_empty() {
+        return None;
+    }
+    Some(CostPart::Sacrifice {
+        filter: Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]),
+        count: Value::Const(1),
+    })
+}
+
+inventory::submit! { super::CostPattern { name: "basic effects: sacrifice one of alternatives", priority: 100, parse: sacrifice_alternatives } }

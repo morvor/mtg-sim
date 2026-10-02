@@ -237,9 +237,22 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
             }
         }
         KeywordKind::Equip => {
-            // "Equip {2}", "Equip legendary creature {3}", "Equip—Pay 3 life."
+            // "Equip {2} or {B}": two equip abilities, one for each cost.
+            if let Some((a, b)) = rest_raw.split_once(" or ") {
+                if a.starts_with('{') && b.starts_with('{') {
+                    let mk = |c: &str| {
+                        Some(Keyword {
+                            cost: Some(parse_keyword_cost(c)?),
+                            ..kw.clone()
+                        })
+                    };
+                    return Some(vec![mk(a)?, mk(b)?]);
+                }
+            }
+            // "Equip {2}", "Equip legendary creature {3}", "Equip—Pay 3 life.", "Equip—{2},
+            // Pay 2 life."
             if let Some(i) = rest.find('{') {
-                let pre = rest[..i].trim();
+                let pre = rest[..i].trim().trim_start_matches('—').trim();
                 if !pre.is_empty() {
                     // CR 702.6c: "Equip [quality]" / "Equip [quality] creature".
                     kw.filter = Some(match pre {
@@ -351,6 +364,19 @@ pub fn parse_keyword_cost(s: &str) -> Option<Cost> {
             .all(|c| "{}0123456789WUBRGCSXPHwubrgcsxph/½∞".contains(c))
     {
         return Some(Cost::mana(ManaCost::parse(s)?));
+    }
+    // "Pay six {C}": that many of the symbol (Emrakul, the World Anew).
+    if let Some(r) = s.strip_prefix("Pay ").or_else(|| s.strip_prefix("pay ")) {
+        if let Some((n, sym)) = super::phrases::parse_number(&r.to_lowercase())
+            .and_then(|(n, rest)| Some((n.as_const()?, rest.trim().to_string())))
+        {
+            if n > 1 && sym.starts_with('{') && sym.ends_with('}') && sym.matches('{').count() == 1
+            {
+                return Some(Cost::mana(ManaCost::parse(
+                    &sym.to_uppercase().repeat(n as usize),
+                )?));
+            }
+        }
     }
     super::costs::parse_cost(&s.replace('—', ", ")).map(|(c, _)| c)
 }

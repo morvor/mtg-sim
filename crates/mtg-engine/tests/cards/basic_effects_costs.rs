@@ -43,3 +43,51 @@ fn ruthless_disposal_discards_and_sacrifices() {
     t.resolve();
     assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
 }
+
+#[test]
+fn transmogrants_crown_equips_for_either_cost() {
+    cr!("702.6a");
+    assert_supported("Transmogrant's Crown");
+    let mut t = TestGame::new(2);
+    let crown = t.battlefield(P0, "Transmogrant's Crown");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 1);
+    // The {B} equip ability (the second one).
+    t.activate(P0, crown, 1, &[Entity::Object(bears)]).unwrap();
+    t.resolve();
+    assert_eq!(t.pt(bears), (4, 2));
+}
+
+#[test]
+fn my_precious_equip_costs_mana_and_life() {
+    cr!("702.6a");
+    assert_supported("My Precious // Allure of Power");
+    let mut t = TestGame::new(2);
+    let mp = t.battlefield(P0, "My Precious // Allure of Power");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 2);
+    t.activate(P0, mp, 0, &[Entity::Object(bears)]).unwrap();
+    assert_eq!(t.life(P0), 18);
+    t.resolve();
+    assert_eq!(t.obj_now(mp).attached_to, Some(Entity::Object(bears)));
+}
+
+#[test]
+fn sauron_ward_demands_a_legendary_artifact_or_creature() {
+    cr!("702.21a");
+    assert_supported("Sauron, the Dark Lord");
+    for has_legend in [false, true] {
+        let mut t = TestGame::new(2);
+        let sauron = t.battlefield(P0, "Sauron, the Dark Lord");
+        if has_legend {
+            t.battlefield(P1, "Isamaru, Hound of Konda");
+        }
+        t.lands(P1, "Mountain", 1);
+        let shock = t.hand(P1, "Shock");
+        t.cast(P1, shock).target(sauron).go();
+        t.answer_yes(P1, true);
+        t.resolve_all();
+        assert_eq!(t.obj_now(sauron).damage, if has_legend { 2 } else { 0 });
+        assert_eq!(t.in_graveyard(P1, "Isamaru, Hound of Konda"), has_legend);
+    }
+}
