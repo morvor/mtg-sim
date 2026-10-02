@@ -1210,15 +1210,19 @@ impl Game {
                 ctx.set_var(vars::IT, discarded);
             }
             Effect::DiscardHand { who } => {
-                let mut n = 0;
+                let mut discarded = Vec::new();
                 for p in self.eval_players(who, ctx) {
                     for c in self.player(p).hand.clone() {
-                        if self.discard(p, c, ctx.source).is_some() {
-                            n += 1;
+                        if let Some(n) = self.discard(p, c, ctx.source) {
+                            discarded.push(Entity::Object(n));
                         }
                     }
                 }
-                ctx.prev_value = n;
+                // "for each card discarded this way", "if you do".
+                ctx.prev_value = discarded.len() as i64;
+                ctx.prev_happened = !discarded.is_empty();
+                ctx.set_var(crate::discard_rules::DISCARDED, discarded.clone());
+                ctx.set_var(vars::IT, discarded);
             }
             Effect::Mill { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;

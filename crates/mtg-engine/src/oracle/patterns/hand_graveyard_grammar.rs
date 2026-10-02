@@ -690,3 +690,139 @@ fn p_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: that many", priority: 300, parse: p_that_many } }
+
+// ---------------------------------------------------------------------------
+// "this way"
+// ---------------------------------------------------------------------------
+
+/// "cards revealed this way", "creature card exiled this way", "cards discarded this
+/// way": how many of the cards the earlier action affected match the description (they
+/// are counted where they went, CR 400.7).
+pub fn this_way_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let i = r.find(" this way")?;
+    let (head, rest) = (&r[..i], &r[i + " this way".len()..]);
+    if !word_end(rest) {
+        return None;
+    }
+    let (noun, verb) = head.rsplit_once(' ')?;
+    let var = match verb {
+        "discarded" => crate::discard_rules::DISCARDED,
+        "revealed" if acted(b) => crate::kw::reveal_from_hand::REVEALED,
+        "exiled" if acted(b) => AFFECTED,
+        _ => return None,
+    };
+    let (f, _, tail) = parse_object_phrase(noun)?;
+    if !tail.trim().is_empty() || !has_card_head(&f) {
+        return None;
+    }
+    let f = match f {
+        Filter::Card => Filter::In(Box::new(Sel::Var(var))),
+        f => Filter::and(vec![f, Filter::In(Box::new(Sel::Var(var)))]),
+    };
+    Some((Value::Count(f), rest.to_string()))
+}
+
+/// "[instruction] for each card revealed this way", "you gain 2 life for each creature
+/// card exiled this way".
+fn p_for_each_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (clause, thing) = end(l).rsplit_once(" for each ")?;
+    if !thing.ends_with(" this way") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let (count, tail) = this_way_count(thing, b)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let Some(e) = parse_clause(clause, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    super::damage_removal_foreach::multiply(e, count)
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: for each card [verb] this way", priority: 300, parse: p_for_each_this_way } }
+
+// ---------------------------------------------------------------------------
+// "A or B"
+// ---------------------------------------------------------------------------
+
+/// "sacrifice an artifact or discard a card", "discard a card or sacrifice a land": the
+/// player chooses which instruction to follow; "if you do" afterwards is about the one
+/// they followed (whether it was done). Both must be complete instructions for the same
+/// player without targets.
+fn p_either_or(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let mut start = 0;
+    while let Some(i) = l[start..].find(" or ") {
+        let at = start + i;
+        start = at + 4;
+        let (x, y) = (&l[..at], &l[at + 4..]);
+        let first = x.split(' ').next()?;
+        let second = y.split(' ').next()?;
+        let verbs = ["sacrifice", "discard", "exile", "return", "reveal", "tap", "put"];
+        if !verbs.contains(&first) || !verbs.contains(&second) {
+            continue;
+        }
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let ex = crate::oracle::effects::parse_simple(x, b);
+        let ey = crate::oracle::effects::parse_simple(y, b);
+        match (ex, ey) {
+            (Some(ex), Some(ey)) if b.targets.len() == saved.0 => {
+                b.it = saved.1;
+                return Some(Effect::ChooseOne {
+                    who: PlayerRef::You,
+                    options: vec![(x.to_string(), ex), (y.to_string(), ey)],
+                });
+            }
+            _ => {
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1, saved.2);
+            }
+        }
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: [instruction] or [instruction]", priority: 300, parse: p_either_or } }
+
+/// Whether `e` ends with an exile instruction (possibly optional or conditional).
+fn ends_with_exile(e: &Effect) -> bool {
+    match e {
+        Effect::Exile { .. } => true,
+        Effect::Seq(v) => v.last().is_some_and(ends_with_exile),
+        Effect::May { effect, .. } => ends_with_exile(effect),
+        _ => false,
+    }
+}
+
+/// A sentence about the cards the previous sentence exiled ("Exile up to two target cards
+/// from graveyards. You gain 2 life for each creature card exiled this way."): those cards
+/// are recorded as this grammar's affected cards, then the sentence is read.
+fn f_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.contains(" exiled this way") || acted(b) || !ends_with_exile(prev) {
+        return false;
+    }
+    b.named.push((ACTED.to_string(), Sel::Var(AFFECTED)));
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(e) = crate::oracle::effects::parse_sentence(l, b) else {
+        b.named.retain(|(n, _)| n != ACTED);
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::Store {
+            var: AFFECTED,
+            sel: Sel::Var(vars::IT),
+        },
+        e,
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: [cards] exiled this way", priority: 300, apply: f_exiled_this_way } }

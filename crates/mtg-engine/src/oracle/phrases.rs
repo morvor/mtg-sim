@@ -519,8 +519,21 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t
             .strip_prefix("in a graveyard")
             .or_else(|| t.strip_prefix("from a graveyard"))
+            .or_else(|| t.strip_prefix("from graveyards"))
+            .or_else(|| t.strip_prefix("in graveyards"))
         {
             (Filter::InZone(ZoneKind::Graveyard), r)
+        } else if let Some(r) = t
+            .strip_prefix("in defending player's graveyard")
+            .or_else(|| t.strip_prefix("from defending player's graveyard"))
+        {
+            (
+                Filter::and(vec![
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedBy(PlayerRel::Defending),
+                ]),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("from the triggering player's graveyard") {
             // Internal form of "from that player's graveyard" inside a trigger whose
             // player is the triggering player (`triggers_effects::that_player_controls`).
