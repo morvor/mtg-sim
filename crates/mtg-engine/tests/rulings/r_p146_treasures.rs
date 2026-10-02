@@ -90,6 +90,7 @@ fn wary_farmer_checks_as_the_end_step_begins() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Wary Farmer");
     t.advance_to(P0, Step::End);
+    t.settle();
     assert_eq!(t.stack_len(), 0);
     // A creature entering during the end step is too late.
     t.enter(P0, "Grizzly Bears");
@@ -99,8 +100,11 @@ fn wary_farmer_checks_as_the_end_step_begins() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Wary Farmer");
     t.enter(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
     let from = n_asked(&t);
-    end_step(&mut t, P0);
+    t.resolve_all();
     assert_eq!(surveils_since(&t, P0, from), 1);
 }
 
@@ -118,6 +122,7 @@ fn relic_retriever_checks_as_the_end_step_begins() {
     t.battlefield(P0, "Relic Retriever");
     let card = t.graveyard(P0, "Grizzly Bears");
     t.advance_to(P0, Step::End);
+    t.settle();
     assert_eq!(t.stack_len(), 0);
     move_to(&mut t, card, Zone::Exile);
     assert_eq!(t.stack_len(), 0);
@@ -128,7 +133,10 @@ fn relic_retriever_checks_as_the_end_step_begins() {
     t.battlefield(P0, "Relic Retriever");
     let card = t.graveyard(P0, "Grizzly Bears");
     move_to(&mut t, card, Zone::Exile);
-    end_step(&mut t, P0);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
     assert_eq!(treasures(&t, P0), 1);
 }
 

@@ -96,3 +96,27 @@ pub fn enter_together(t: &mut TestGame, p: PlayerId, names: &[&str]) -> Vec<Obje
     t.settle();
     ids
 }
+
+/// Exiles the cards simultaneously (as "exile target player's graveyard" would), then
+/// settles.
+pub fn exile_together(t: &mut TestGame, ids: &[ObjectId]) {
+    use mtg_engine::ability::LibraryPosition;
+    use mtg_engine::events::MoveCause;
+    use mtg_engine::object::Zone;
+    use mtg_engine::replacement::{EtbInfo, MoveEv};
+    let moves = ids
+        .iter()
+        .map(|id| MoveEv {
+            obj: t.g.current(*id),
+            to: Zone::Exile,
+            pos: LibraryPosition::Top,
+            cause: MoveCause::Effect,
+            by: Some(P0),
+            etb: EtbInfo::default(),
+            source: None,
+        })
+        .collect();
+    t.g.move_objects(moves);
+    t.g.flush_events();
+    t.settle();
+}

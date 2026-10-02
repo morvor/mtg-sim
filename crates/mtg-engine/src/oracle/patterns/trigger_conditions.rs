@@ -33,6 +33,19 @@ fn parse_condition(c: &str) -> Option<Condition> {
             Cmp::Gt,
             Value::c(0),
         ),
+        // Whether life was gained or lost at all, not the net change (Starlit Soothsayer).
+        "you gained or lost life this turn" => Condition::Or(vec![
+            Condition::Compare(
+                Value::LifeGainedThisTurn(PlayerRef::You),
+                Cmp::Gt,
+                Value::c(0),
+            ),
+            Condition::Compare(
+                Value::LifeLostThisTurn(PlayerRef::You),
+                Cmp::Gt,
+                Value::c(0),
+            ),
+        ]),
         "you attacked this turn" | "you attacked with a creature this turn" => {
             custom("you_attacked_this_turn")
         }

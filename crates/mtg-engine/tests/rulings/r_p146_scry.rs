@@ -649,28 +649,6 @@ fn graveyard_leave_triggers_once_per_event() {
     assert_eq!(stacked_triggers(&t), 1);
 }
 
-/// Exiles the cards simultaneously (as "exile target player's graveyard" would), then
-/// settles.
-pub fn exile_together(t: &mut TestGame, ids: &[ObjectId]) {
-    use mtg_engine::events::MoveCause;
-    use mtg_engine::replacement::{EtbInfo, MoveEv};
-    let moves = ids
-        .iter()
-        .map(|id| MoveEv {
-            obj: t.g.current(*id),
-            to: Zone::Exile,
-            pos: LibraryPosition::Top,
-            cause: MoveCause::Effect,
-            by: Some(P0),
-            etb: EtbInfo::default(),
-            source: None,
-        })
-        .collect();
-    t.g.move_objects(moves);
-    t.g.flush_events();
-    t.settle();
-}
-
 #[test]
 fn jaces_sanctum_reduces_the_total_cost() {
     cr!("601.2f", "118.7");
