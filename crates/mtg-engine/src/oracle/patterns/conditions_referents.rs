@@ -336,6 +336,16 @@ fn subject(c: &str, b: &mut Builder) -> Option<(Subject, String)> {
             return Some((Subject::Player(b.it_player.clone()), rest.to_string()));
         }
     }
+    // "an opponent controls more lands than you" (Knight of the White Orchid): some
+    // opponent does.
+    if let Some(rest) = c.strip_prefix("an opponent ") {
+        if rest.starts_with("controls more ") || rest.starts_with("has more ") {
+            return Some((
+                Subject::Player(PlayerRef::Each(PlayerFilter::Opponent)),
+                format!(" {rest}"),
+            ));
+        }
+    }
     // "they" as a player ("if they do"): only when "that player" has an antecedent and
     // "it" doesn't name a group.
     if let Some(rest) = c.strip_prefix("they ") {

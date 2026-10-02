@@ -504,7 +504,7 @@ fn exile_creature_or_creature_card(l: &str, b: &mut Builder) -> Option<Effect> {
         ]),
         text,
     );
-    spec.min = 0;
+    spec.min = Value::c(0);
     let slot = b.add_target(spec, text);
     Some(Effect::Exile {
         what: Sel::Target(slot),

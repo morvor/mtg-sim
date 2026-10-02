@@ -443,6 +443,7 @@ pub fn custom_trigger(
             target: Entity::Object(o),
             kind,
             n,
+            ..
         } = ev
         {
             if *o == src && kind.as_str() == counters::LORE {

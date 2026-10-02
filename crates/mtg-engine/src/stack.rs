@@ -171,7 +171,8 @@ impl Game {
                     Decision::ChooseModes {
                         source: id,
                         modes: modes.clone(),
-                        min,
+                        // "You may choose two": or none.
+                        min: if modal.optional { 0 } else { min },
                         max: max.min(if modal.allow_repeat {
                             u32::MAX
                         } else {
@@ -189,7 +190,8 @@ impl Game {
                     let mut s = v.clone();
                     s.sort_unstable();
                     let distinct = modal.allow_repeat || s.windows(2).all(|w| w[0] != w[1]);
-                    v.len() as u32 >= min
+                    (modal.optional && v.is_empty())
+                        || v.len() as u32 >= min
                         && v.len() as u32 <= max
                         && distinct
                         && v.iter().all(|i| available.contains(i))
@@ -200,17 +202,40 @@ impl Game {
                             }
                             _ => true,
                         }
+                        // "Each mode must target a different player": a different player
+                        // for each mode.
+                        && (!modal.different_players
+                            || crate::mode_players::matchable(
+                                &crate::mode_players::sets_for(self, modal, v, ctx, id),
+                                &[],
+                            ))
                 };
                 match ans {
                     Answer::Indices(v) if valid(&v) => v,
-                    _ => available
-                        .iter()
-                        .copied()
-                        .take(min.max(1) as usize)
-                        .collect(),
+                    _ => {
+                        let mut v: Vec<usize> = Vec::new();
+                        for m in available.iter().copied() {
+                            if v.len() >= min.max(1) as usize {
+                                break;
+                            }
+                            v.push(m);
+                            if modal.different_players
+                                && !crate::mode_players::matchable(
+                                    &crate::mode_players::sets_for(self, modal, &v, ctx, id),
+                                    &[],
+                                )
+                            {
+                                v.pop();
+                            }
+                        }
+                        if modal.optional && (v.len() as u32) < min {
+                            v.clear();
+                        }
+                        v
+                    }
                 }
             };
-            if (picks.len() as u32) < min {
+            if (picks.len() as u32) < min && !(modal.optional && picks.is_empty()) {
                 return false;
             }
             // CR 700.2b: a modal triggered ability with no mode chosen is removed from the
@@ -226,29 +251,45 @@ impl Game {
             // CR 700.2: modes are performed in the order printed.
             picks.sort_unstable();
             crate::modal_history::record(self, id, &modal.chooser, &picks);
-            for m in picks {
+            // "Each mode must target a different player": the players each mode may
+            // target, given those the earlier modes target.
+            let player_sets = if modal.different_players {
+                crate::mode_players::sets_for(self, modal, &picks, ctx, id)
+            } else {
+                vec![]
+            };
+            for (k, m) in picks.into_iter().enumerate() {
                 let mode = &modal.modes[m];
-                let targets = match self.choose_targets_for(&mode.targets, ctx, id) {
-                    Some(t) => t,
-                    None => return false,
-                };
+                // (A mode that targets no player isn't restricted.)
+                let only = player_sets.get(k).and_then(|s| s.as_ref()).map(|_| {
+                    let used = crate::mode_players::targeted_players(&chosen);
+                    crate::mode_players::allowed_for(&player_sets, k, &used)
+                });
+                let (targets, target_players) =
+                    match self.choose_targets_for(&mode.targets, ctx, id, only.as_deref()) {
+                        Some(t) => t,
+                        None => return false,
+                    };
                 let divided = self.choose_divisions(&mode.targets, &targets, ctx, id);
                 chosen.push(ChosenMode {
                     mode: Some(m),
                     targets,
                     divided,
+                    target_players,
                 });
             }
         } else {
-            let targets = match self.choose_targets_for(&body.targets, ctx, id) {
-                Some(t) => t,
-                None => return false,
-            };
+            let (targets, target_players) =
+                match self.choose_targets_for(&body.targets, ctx, id, None) {
+                    Some(t) => t,
+                    None => return false,
+                };
             let divided = self.choose_divisions(&body.targets, &targets, ctx, id);
             chosen.push(ChosenMode {
                 mode: None,
                 targets,
                 divided,
+                target_players,
             });
         }
         // Targets become targets: "becomes the target" triggers (CR 601.2c, 603.3d).
@@ -278,17 +319,111 @@ impl Game {
     /// Whether every required target slot has enough legal choices. Slots required only
     /// if some choice is made (e.g. a kicker cost is paid, CR 601.2c) are optional here.
     pub fn targets_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
+        self.each_slot_possible(specs, ctx, stack_obj)
+            && self.distinct_slots_possible(
+                specs,
+                &(0..specs.len()).collect::<Vec<_>>(),
+                &[],
+                ctx,
+                stack_obj,
+            )
+    }
+
+    /// The slots among `slots` whose targets are required as they're chosen (a minimum
+    /// above zero, not depending on a choice, not chosen per player).
+    fn required_slots(&self, specs: &[TargetSpec], slots: &[usize], ctx: &Ctx) -> Vec<usize> {
+        slots
+            .iter()
+            .copied()
+            .filter(|i| {
+                let s = &specs[*i];
+                s.condition.is_none() && s.per_player.is_none() && self.target_min(s, ctx) > 0
+            })
+            .collect()
+    }
+
+    /// Whether the required slots among `slots` can all get their minimum number of
+    /// targets with different instances of "target" that must be different objects
+    /// ("another target", "a third target") getting different ones (CR 115.3), given the
+    /// targets already `chosen` for other slots.
+    fn distinct_slots_possible(
+        &self,
+        specs: &[TargetSpec],
+        slots: &[usize],
+        chosen: &[Vec<Entity>],
+        ctx: &Ctx,
+        stack_obj: ObjectId,
+    ) -> bool {
+        if specs.iter().all(|s| s.distinct_from.is_empty()) {
+            return true;
+        }
+        let slots = self.required_slots(specs, slots, ctx);
+        // The later slots' choices may depend on the targets already chosen ("another
+        // target creature that player controls").
+        let mut c2 = ctx.clone();
+        if !chosen.is_empty() {
+            c2.targets = chosen.to_vec();
+        }
+        let mut cands = vec![vec![]; specs.len()];
+        let mut mins = vec![0; specs.len()];
+        for i in &slots {
+            cands[*i] = self.legal_target_candidates(&specs[*i], &c2, stack_obj);
+            mins[*i] = self.target_min(&specs[*i], &c2);
+        }
+        crate::target_groups::distinct_targets_possible(specs, &slots, &cands, &mins, chosen)
+    }
+
+    fn each_slot_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
         specs.iter().all(|s| {
-            let min = s.min.min(self.eval_value(&s.max, ctx).max(0) as u32);
-            min == 0 || s.condition.is_some() || {
+            let min = self.target_min(s, ctx);
+            // Targets chosen for each player: a player with no legal choice gets none.
+            min == 0 || s.condition.is_some() || s.per_player.is_some() || {
                 let cands = self.legal_target_candidates(s, ctx, stack_obj);
-                cands.len() as u32 >= min
+                cands.len() >= min
                     && s.together.as_ref().is_none_or(|grp| {
-                        crate::target_groups::find_group(self, grp, &cands, min as usize, ctx)
-                            .is_some()
+                        crate::target_groups::find_group(self, grp, &cands, min, ctx).is_some()
                     })
+                    && self.related_partner_possible(specs, s, &cands, ctx, stack_obj)
             }
         })
+    }
+
+    /// The fewest targets a slot requires: its minimum, but never more than its maximum
+    /// ("X target creatures" with X = 0 has no targets, CR 601.2c).
+    pub fn target_min(&self, s: &TargetSpec, ctx: &Ctx) -> usize {
+        let max = self.eval_value(&s.max, ctx).max(0);
+        self.eval_value(&s.min, ctx).max(0).min(max) as usize
+    }
+
+    /// For a slot whose targets must be related to those of an earlier, required slot
+    /// ("another target creature with the same controller"): whether some legal target
+    /// of that slot has a candidate of this one to go with.
+    fn related_partner_possible(
+        &self,
+        specs: &[TargetSpec],
+        s: &TargetSpec,
+        cands: &[Entity],
+        ctx: &Ctx,
+        stack_obj: ObjectId,
+    ) -> bool {
+        let Some((j, grp)) = &s.related_to else {
+            return true;
+        };
+        let Some(other) = specs.get(*j as usize) else {
+            return true;
+        };
+        if self.target_min(other, ctx) == 0 || other.condition.is_some() {
+            return true;
+        }
+        let distinct = s.distinct_from.contains(j);
+        self.legal_target_candidates(other, ctx, stack_obj)
+            .iter()
+            .any(|c| {
+                cands.iter().any(|d| {
+                    !(distinct && c == d)
+                        && crate::target_groups::group_ok(self, grp, &[*c, *d], ctx)
+                })
+            })
     }
 
     /// The opponent who makes a choice that "an opponent" makes while a spell or ability
@@ -399,6 +534,11 @@ impl Game {
         ctx: &Ctx,
         stack_obj: ObjectId,
     ) -> bool {
+        // A target chosen for each player, with no particular player meant: legal if
+        // it's legal for one of them.
+        if spec.per_player.is_some() && ctx.iter_player.is_none() {
+            return crate::per_player_targets::legal_for_any_player(self, spec, e, ctx, stack_obj);
+        }
         let source_obj = if self.is_live(stack_obj) {
             Some(stack_obj)
         } else {
@@ -602,13 +742,19 @@ impl Game {
     }
 
     /// Asks the controller to choose targets for each slot. Returns None if impossible.
+    /// `only_players`, if given, are the only players that may be chosen as targets ("each
+    /// mode must target a different player", see `mode_players`). Returns the targets per
+    /// slot and, for slots chosen for each player, the player each target is for.
+    #[allow(clippy::type_complexity)]
     fn choose_targets_for(
         &mut self,
         specs: &[TargetSpec],
         ctx: &mut Ctx,
         stack_obj: ObjectId,
-    ) -> Option<Vec<Vec<Entity>>> {
+        only_players: Option<&[PlayerId]>,
+    ) -> Option<(Vec<Vec<Entity>>, Vec<Vec<PlayerId>>)> {
         let mut out: Vec<Vec<Entity>> = vec![vec![]; specs.len()];
+        let mut players: Vec<Vec<PlayerId>> = vec![vec![]; specs.len()];
         // Candidates and maximum per slot, for the "must target" check below.
         let mut slot_cands: Vec<Vec<Entity>> = vec![vec![]; specs.len()];
         let mut slot_max: Vec<u32> = vec![0; specs.len()];
@@ -618,7 +764,7 @@ impl Game {
             .filter(|i| !specs[*i].chosen_by_opponent)
             .chain((0..specs.len()).filter(|i| specs[*i].chosen_by_opponent))
             .collect();
-        for i in order {
+        for (pos, &i) in order.iter().enumerate() {
             let spec = &specs[i];
             ctx.targets = out.clone();
             // CR 601.2c: a target required only if some choice was made (e.g. a kicker
@@ -628,6 +774,27 @@ impl Game {
                     continue;
                 }
             }
+            let chooser = if spec.chosen_by_opponent {
+                self.deciding_opponent(ctx.controller, stack_obj, ctx)
+            } else {
+                ctx.controller
+            };
+            // "For each opponent, ... up to one target creature that player controls".
+            if spec.per_player.is_some() {
+                let exclude: Vec<Entity> = spec
+                    .distinct_from
+                    .iter()
+                    .filter_map(|d| out.get(*d as usize))
+                    .flatten()
+                    .copied()
+                    .collect();
+                let (t, ps) = crate::per_player_targets::choose(
+                    self, spec, ctx, stack_obj, chooser, &exclude,
+                );
+                out[i] = t;
+                players[i] = ps;
+                continue;
+            }
             let mut cands = self.legal_target_candidates(spec, ctx, stack_obj);
             // "another target": exclude entities chosen in the listed slots.
             for d in &spec.distinct_from {
@@ -635,11 +802,70 @@ impl Game {
                     cands.retain(|c| !prev.contains(c));
                 }
             }
+            if let Some(allowed) = only_players {
+                cands.retain(|c| c.player().is_none_or(|p| allowed.contains(&p)));
+            }
+            // Targets that must be related to an earlier slot's ("another target creature
+            // with the same controller").
+            if spec.related_to.is_some() {
+                cands.retain(|c| crate::target_groups::related_ok(self, spec, &[*c], &out, ctx));
+            }
             let spec_max = self.eval_value(&spec.max, ctx).max(0) as u32;
+            // CR 601.2c: the number of targets is announced, then they're chosen: "X
+            // target creatures" is exactly X of them, never more than the maximum.
+            let min = self.target_min(spec, ctx) as u32;
+            // A target that would leave a later instance of "target" that must be a
+            // different object without enough choices isn't one to choose (CR 115.3).
+            if spec_max == 1 {
+                let later: Vec<usize> = order[pos + 1..].to_vec();
+                if later.iter().any(|k| {
+                    specs[*k].distinct_from.contains(&(i as u8))
+                        || spec.distinct_from.contains(&(*k as u8))
+                }) {
+                    let base = out.clone();
+                    cands.retain(|c| {
+                        let mut chosen = base.clone();
+                        chosen[i] = vec![*c];
+                        self.distinct_slots_possible(specs, &later, &chosen, ctx, stack_obj)
+                    });
+                }
+            }
+            // A later slot whose targets must be related to this one's needs one to go
+            // with each target chosen here.
+            let partners: Vec<usize> = (0..specs.len())
+                .filter(|k| {
+                    let s = &specs[*k];
+                    s.related_to.as_ref().is_some_and(|(j, _)| *j as usize == i)
+                        && s.condition.is_none()
+                        && s.per_player.is_none()
+                        && self.target_min(s, ctx) > 0
+                })
+                .collect();
+            if !partners.is_empty() {
+                let base = out.clone();
+                cands.retain(|c| {
+                    partners.iter().all(|k| {
+                        let s = &specs[*k];
+                        let mut c2 = ctx.clone();
+                        c2.targets = base.clone();
+                        c2.targets[i] = vec![*c];
+                        let distinct = s.distinct_from.contains(&(i as u8));
+                        self.legal_target_candidates(s, &c2, stack_obj)
+                            .into_iter()
+                            .any(|d| {
+                                !(distinct && d == *c)
+                                    && crate::target_groups::related_ok(
+                                        self,
+                                        s,
+                                        &[d],
+                                        &c2.targets,
+                                        &c2,
+                                    )
+                            })
+                    })
+                });
+            }
             let max = spec_max.min(cands.len() as u32);
-            // A slot never requires more targets than its maximum: "X target creatures"
-            // with X = 0 has no targets (CR 601.2c).
-            let min = spec.min.min(spec_max);
             if (cands.len() as u32) < min {
                 return None;
             }
@@ -650,11 +876,6 @@ impl Game {
             }
             slot_cands[i] = cands.clone();
             slot_max[i] = max;
-            let chooser = if spec.chosen_by_opponent {
-                self.deciding_opponent(ctx.controller, stack_obj, ctx)
-            } else {
-                ctx.controller
-            };
             let picked = if max == 0 {
                 vec![]
             } else {
@@ -692,7 +913,10 @@ impl Game {
         }
         self.enforce_must_target(specs, &mut out, &slot_cands, &slot_max, ctx, stack_obj);
         ctx.targets = out.clone();
-        Some(out)
+        if players.iter().all(|v| v.is_empty()) {
+            players.clear();
+        }
+        Some((out, players))
     }
 
     /// CR 601.2c: "If any effects say that an object or player must be chosen as a
@@ -849,6 +1073,10 @@ impl Game {
         ctx.source = source;
         ctx.controller = o.controller;
         ctx.stack_obj = Some(id);
+        // A resolving spell or ability performs its own effects (CR 609.1), whatever
+        // context created it.
+        ctx.paying_cost = false;
+        ctx.cause = None;
         ctx.x = si.x.unwrap_or(ctx.x);
         ctx.event = si.event.clone().or(ctx.event);
         // An ability's "if it was kicked", "if you cast it from your hand" etc. refer to how
@@ -893,7 +1121,19 @@ impl Game {
                 let mut legal_div = Vec::new();
                 for (j, t) in slot.iter().enumerate() {
                     any_target = true;
-                    if self.is_legal_target(spec, *t, &c2, id) {
+                    // A target chosen for a player ("target creature that player
+                    // controls") must still be legal for that player.
+                    let for_player = cm.target_players.get(i).and_then(|v| v.get(j));
+                    let ok = match for_player {
+                        Some(p) => self.is_legal_target(
+                            spec,
+                            *t,
+                            &crate::per_player_targets::ctx_for(&c2, *p),
+                            id,
+                        ),
+                        None => self.is_legal_target(spec, *t, &c2, id),
+                    };
+                    if ok {
                         legal.push(*t);
                         if let Some(d) = cm.divided.get(i).and_then(|d| d.get(j)) {
                             legal_div.push(*d);
@@ -901,13 +1141,34 @@ impl Game {
                     }
                 }
                 // Targets that must have a relationship with each other no longer have
-                // it: they're all illegal (CR 608.2b). Ones that left are compared using
-                // their last known information (see `target_groups`).
+                // it: they're all illegal (CR 608.2b). Which are compared depends on the
+                // relationship (see `target_groups`).
                 if let Some(grp) = &spec.together {
-                    if !crate::target_groups::group_ok(self, grp, slot, &c2) {
+                    if !crate::target_groups::holds_on_resolution(self, grp, slot, &legal, &c2) {
                         legal.clear();
                         legal_div.clear();
                     }
+                }
+                // Targets that must be related to another slot's no longer are: neither
+                // slot's targets are legal ("if the two target creatures aren't controlled
+                // by the same player when the ability resolves, the ability does nothing").
+                let unrelated = |k: usize| {
+                    specs.get(k).is_some_and(|s| {
+                        cm.targets.get(k).is_some_and(|mine| {
+                            !crate::target_groups::related_ok(self, s, mine, &cm.targets, &c2)
+                        })
+                    })
+                };
+                let related_from_later = (0..cm.targets.len()).any(|k| {
+                    specs
+                        .get(k)
+                        .and_then(|s| s.related_to.as_ref())
+                        .is_some_and(|(j, _)| *j as usize == i)
+                        && unrelated(k)
+                });
+                if unrelated(i) || related_from_later {
+                    legal.clear();
+                    legal_div.clear();
                 }
                 any_legal |= !legal.is_empty();
                 // CR 608.2b: damage divided onto an illegal target isn't dealt; keep the
@@ -919,10 +1180,30 @@ impl Game {
                 }
                 new_targets.push(legal);
             }
+            // The players the remaining targets were chosen for, still aligned with them.
+            let target_players = cm
+                .target_players
+                .iter()
+                .enumerate()
+                .map(|(i, ps)| {
+                    let kept = new_targets.get(i).map(Vec::as_slice).unwrap_or(&[]);
+                    cm.targets
+                        .get(i)
+                        .map(|orig| {
+                            orig.iter()
+                                .zip(ps.iter())
+                                .filter(|(t, _)| kept.contains(t))
+                                .map(|(_, p)| *p)
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                })
+                .collect();
             out.push(ChosenMode {
                 mode: cm.mode,
                 targets: new_targets,
                 divided: new_divided,
+                target_players,
             });
         }
         (out, any_target && !any_legal)
@@ -1300,17 +1581,30 @@ impl Game {
         });
     }
 
-    /// Counters a spell or ability (CR 701.6). Returns false if it can't be countered.
+    /// Counters a spell or ability (CR 701.6) by the spell or ability `by` (its
+    /// controller's). Returns false if it can't be countered.
     pub fn counter(&mut self, id: ObjectId, by: Option<ObjectId>) -> bool {
+        let cause = crate::event_causes::Cause::of_source(self, by);
+        self.counter_by(id, cause)
+    }
+
+    /// Counters a spell or ability (CR 701.6); `cause` is the spell or ability countering
+    /// it, which the countered event records ("a creature spell you cast this turn was
+    /// countered by a spell or ability an opponent controlled"). Returns false if it can't
+    /// be countered.
+    pub fn counter_by(&mut self, id: ObjectId, cause: crate::event_causes::Cause) -> bool {
         if !self.is_live(id) || self.obj(id).zone != Zone::Stack {
             return false;
         }
         if self.cant_be_countered(id) {
             return false;
         }
-        let _ = by;
         self.counter_or_fizzle(id, MoveCause::Counter);
-        self.emit(Event::Countered { what: id });
+        self.emit(Event::Countered {
+            what: id,
+            cause: cause.obj,
+            by: cause.by,
+        });
         true
     }
 

@@ -143,7 +143,12 @@ pub fn earthbend(g: &mut Game, p: PlayerId, land: ObjectId, n: u32, ctx: &mut Ct
         },
         &mut c,
     );
-    g.add_counters(Entity::Object(land), counters::PLUS1, n, ctx.source);
+    g.put_counters(
+        Entity::Object(land),
+        counters::PLUS1,
+        n,
+        crate::event_causes::CounterPut::by_player(p, ctx),
+    );
     // "When that land dies or is put into exile, return it to the battlefield tapped
     // under your control."
     let it = Filter::Objects(vec![land]);

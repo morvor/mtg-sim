@@ -9,8 +9,9 @@
 //! [`Filter::ValueCmp`] and [`Value::Extreme`] evaluate their values with the object being
 //! tested or measured in [`vars::TESTED`]. [`Filter::Together`] marks a group requirement
 //! inside a selection's filter: each object matches it on its own, and whatever chooses
-//! the objects checks the group with [`selection_ok`] / [`fit_selection`] (target slots
-//! carry it as [`TargetSpec::together`] instead, see `target_groups.rs`).
+//! the objects checks the group (`target_groups::fit_together`,
+//! `target_groups::can_choose_together`; target slots carry it as
+//! [`TargetSpec::together`] instead, see `target_groups.rs`).
 
 use crate::ability::*;
 use crate::eval::Ctx;
@@ -128,48 +129,4 @@ pub fn countable(f: &Filter) -> bool {
         && groups
             .iter()
             .all(|x| matches!(x, TargetGroup::DifferentNames))
-}
-
-/// Whether the objects chosen together for a selection with filter `f` meet its group
-/// requirements.
-pub fn selection_ok(g: &Game, f: &Filter, chosen: &[Entity], ctx: &Ctx) -> bool {
-    groups_of(f)
-        .into_iter()
-        .all(|grp| crate::target_groups::group_ok(g, &grp, chosen, ctx))
-}
-
-/// The objects chosen for a selection with filter `f` if they meet its group
-/// requirements; otherwise the largest group, in choice order, of them that does,
-/// completed to `min` objects from the candidates if possible.
-pub fn fit_selection(
-    g: &Game,
-    f: &Filter,
-    picked: Vec<Entity>,
-    cands: &[Entity],
-    min: usize,
-    ctx: &Ctx,
-) -> Vec<Entity> {
-    if selection_ok(g, f, &picked, ctx) {
-        return picked;
-    }
-    let mut kept: Vec<Entity> = Vec::new();
-    for e in picked {
-        kept.push(e);
-        if !selection_ok(g, f, &kept, ctx) {
-            kept.pop();
-        }
-    }
-    for c in cands {
-        if kept.len() >= min {
-            break;
-        }
-        if kept.contains(c) {
-            continue;
-        }
-        kept.push(*c);
-        if !selection_ok(g, f, &kept, ctx) {
-            kept.pop();
-        }
-    }
-    kept
 }

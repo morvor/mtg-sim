@@ -17,6 +17,7 @@ pub mod effects;
 pub mod keywords;
 pub mod patterns;
 pub mod phrases;
+pub mod render;
 pub mod statics;
 pub mod triggers;
 
@@ -500,7 +501,7 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let target_slots = if body
         .targets
         .iter()
-        .all(|t| t.max.as_const() == Some(1) && t.min == 1)
+        .all(|t| t.max.as_const() == Some(1) && t.fixed_min() == Some(1))
     {
         body.targets.len()
     } else {

@@ -119,7 +119,7 @@ fn object_group<'a>(s: &'a str, t: &mut Targets) -> Option<(Filter, &'a str)> {
     if s.starts_with("target ") {
         let base = t.base?;
         let (spec, rest) = parse_target(s)?;
-        if spec.min != 1
+        if spec.fixed_min() != Some(1)
             || !matches!(spec.max, Value::Const(1))
             || !matches!(spec.what, TargetKind::Object(_))
         {
