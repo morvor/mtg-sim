@@ -921,3 +921,110 @@ fn p_reveal_and_put(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal it and put it into your hand", priority: 300, parse: p_reveal_and_put } }
+
+// ---------------------------------------------------------------------------
+// Statics granting keywords to cards in a hand or graveyard
+// ---------------------------------------------------------------------------
+
+/// Keywords that function while their card is in `zone` (and do what the card says
+/// there), with whether a granted one may be costless ("its flashback cost is equal to
+/// its mana cost": see `kw/flashback.rs`, `kw/mayhem.rs`, `kw/madness.rs`).
+fn grantable_in(zone: ZoneKind, k: crate::keywords::KeywordKind) -> Option<bool> {
+    use crate::keywords::KeywordKind::*;
+    match (zone, k) {
+        (ZoneKind::Graveyard, Flashback | Mayhem) => Some(true),
+        (ZoneKind::Graveyard, Unearth | Embalm | Eternalize | Scavenge | Retrace) => Some(false),
+        (ZoneKind::Hand, Madness) => Some(true),
+        (ZoneKind::Hand, Cycling | Ninjutsu) => Some(false),
+        _ => None,
+    }
+}
+
+/// "Each instant and sorcery card in your graveyard has flashback. The flashback cost is
+/// equal to that card's mana cost.", "During your turn, each Lesson card in your graveyard
+/// has flashback {1}.", "Each creature card in your graveyard that's a Cleric, Rogue,
+/// Warrior, and/or Wizard has unearth {1}{B}.", "Each nonland card in your graveyard has
+/// mayhem. The mayhem cost is equal to its mana cost.": a static ability of the permanent
+/// that grants a keyword to the cards in that zone (layer 6, CR 613.1f), which functions
+/// there (CR 113.6).
+fn s_zone_keyword_grant(
+    l: &str,
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (cond, l) = match l.strip_prefix("during your turn, ") {
+        Some(r) => (Some(Condition::YourTurn), r),
+        None => (None, l),
+    };
+    let r = l.strip_prefix("each ")?;
+    let (subject, rest) = r.split_once(" has ")?;
+    // The keyword, and the sentence about its cost.
+    let (granted, cost_sentence) = match rest.split_once(". ") {
+        Some((g, c)) => (g, Some(c)),
+        None => (rest, None),
+    };
+    // Subject: "[quality] card in your graveyard [that's a A, B, and/or C]".
+    let (head, relative) = match subject.split_once(" that's ") {
+        Some((h, rel)) => (h, Some(rel)),
+        None => (subject, None),
+    };
+    let (f, _, tail) = parse_object_phrase(head)?;
+    if !tail.trim().is_empty() || !has_card_head(&f) {
+        return None;
+    }
+    let zone = f.zone()?;
+    if !matches!(zone, ZoneKind::Graveyard | ZoneKind::Hand) {
+        return None;
+    }
+    let mut parts = vec![f];
+    if let Some(rel) = relative {
+        let rel = rel
+            .strip_prefix("a ")
+            .or_else(|| rel.strip_prefix("an "))
+            .unwrap_or(rel);
+        let norm = rel.replace(", and/or ", ", ").replace(" and/or ", ", ").replace(", or ", ", ");
+        let mut alts = Vec::new();
+        for w in norm.split(", ") {
+            let (f, _, t) = parse_object_phrase(w.trim())?;
+            if !t.trim().is_empty() {
+                return None;
+            }
+            alts.push(f);
+        }
+        parts.push(Filter::Or(alts));
+    }
+    let kws: Vec<crate::keywords::Keyword> =
+        crate::oracle::keywords::parse_keyword_line(granted, ctx)?
+            .into_iter()
+            .map(|a| match &a.kind {
+                AbilityKind::Keyword(k) => Some(k.clone()),
+                _ => None,
+            })
+            .collect::<Option<_>>()?;
+    let [kw] = &kws[..] else { return None };
+    let costless_ok = grantable_in(zone, kw.kind)?;
+    match (&kw.cost, cost_sentence) {
+        (Some(_), None) => {}
+        (None, Some(c)) if costless_ok => {
+            let name = kw.kind.name().to_lowercase();
+            let ok = [
+                format!("the {name} cost is equal to its mana cost"),
+                format!("the {name} cost is equal to that card's mana cost"),
+                format!("its {name} cost is equal to its mana cost"),
+            ];
+            if !ok.iter().any(|o| o == end(c)) {
+                return None;
+            }
+        }
+        _ => return None,
+    }
+    let mut st = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::and(parts),
+        mods: vec![Modification::AddKeyword(kw.clone())],
+    });
+    st.condition = cond;
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+inventory::submit! { super::StaticPattern { name: "hand/graveyard grammar: cards in a zone have [keyword]", priority: 300, parse: s_zone_keyword_grant } }
