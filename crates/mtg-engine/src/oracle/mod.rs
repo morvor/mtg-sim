@@ -71,10 +71,13 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
     for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {
-        // A pronoun left without an antecedent means the text wasn't understood.
+        // A pronoun left without an antecedent, or an instruction to repeat a process
+        // outside any process, means the text wasn't understood.
         let parsed = parse_ability(&block, ctx).filter(|v| {
-            !v.iter()
-                .any(|a| patterns::oracle_hardening_referents::has_no_referent(a))
+            !v.iter().any(|a| {
+                patterns::oracle_hardening_referents::has_no_referent(a)
+                    || crate::repeat_process::has_stray_repeat(a)
+            })
         });
         match parsed {
             Some(mut abilities) => out.abilities.append(&mut abilities),
@@ -105,7 +108,10 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         .replace('\u{201C}', "\"")
         .replace('\u{201D}', "\"")
         // Older wording, still in the Oracle text of a few playtest cards (CR 202.3).
-        .replace("converted mana cost", "mana value");
+        .replace("converted mana cost", "mana value")
+        // A comma inside a closing quote before "where X is" belongs to the sentence:
+        // `tokens with "[ability]," where X is ...` (Vren, the Relentless).
+        .replace(",\" where X is ", "\", where X is ");
     // Self references.
     let mut names: Vec<String> = vec![ctx.card_name.to_string()];
     if ctx.full_name != ctx.card_name {

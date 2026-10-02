@@ -269,9 +269,14 @@ impl Game {
     /// if some choice is made (e.g. a kicker cost is paid, CR 601.2c) are optional here.
     pub fn targets_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
         specs.iter().all(|s| {
-            s.min == 0
-                || s.condition.is_some()
-                || self.legal_target_candidates(s, ctx, stack_obj).len() as u32 >= s.min
+            s.min == 0 || s.condition.is_some() || {
+                let cands = self.legal_target_candidates(s, ctx, stack_obj);
+                cands.len() as u32 >= s.min
+                    && s.together.is_none_or(|grp| {
+                        crate::target_groups::find_group(self, grp, &cands, s.min as usize)
+                            .is_some()
+                    })
+            }
         })
     }
 
@@ -622,6 +627,11 @@ impl Game {
             if (cands.len() as u32) < spec.min {
                 return None;
             }
+            // Targets that must have a relationship with each other: a group of the
+            // required size must exist (CR 601.2c).
+            if let Some(grp) = spec.together {
+                crate::target_groups::find_group(self, grp, &cands, spec.min as usize)?;
+            }
             slot_cands[i] = cands.clone();
             slot_max[i] = max;
             let chooser = if spec.chosen_by_opponent {
@@ -657,7 +667,12 @@ impl Game {
                         .collect(),
                 }
             };
-            out[i] = picked;
+            out[i] = match spec.together {
+                Some(grp) => {
+                    crate::target_groups::fit(self, grp, picked, &cands, spec.min as usize)?
+                }
+                None => picked,
+            };
         }
         self.enforce_must_target(specs, &mut out, &slot_cands, &slot_max, ctx, stack_obj);
         ctx.targets = out.clone();
@@ -864,12 +879,21 @@ impl Game {
                     any_target = true;
                     if self.is_legal_target(spec, *t, &c2, id) {
                         legal.push(*t);
-                        any_legal = true;
                         if let Some(d) = cm.divided.get(i).and_then(|d| d.get(j)) {
                             legal_div.push(*d);
                         }
                     }
                 }
+                // Targets that must have a relationship with each other no longer have
+                // it: they're all illegal (CR 608.2b). Ones that left are compared using
+                // their last known information (see `target_groups`).
+                if let Some(grp) = spec.together {
+                    if !crate::target_groups::group_ok(self, grp, slot) {
+                        legal.clear();
+                        legal_div.clear();
+                    }
+                }
+                any_legal |= !legal.is_empty();
                 // CR 608.2b: damage divided onto an illegal target isn't dealt; keep the
                 // remaining divisions aligned with the remaining targets.
                 if let Some(d) = new_divided.get_mut(i) {
@@ -1108,9 +1132,23 @@ impl Game {
                 crate::keyword_impls::resolve_mutate(self, id);
                 return;
             }
-            if let Some(to) = crate::kw::permanent_spell_destination(self, id) {
-                // E.g. buyback: it moves from the stack to its owner's hand (CR 702.27a).
-                self.move_object(id, to, MoveCause::Resolve, Some(controller));
+            if let Some(dest) = crate::kw::permanent_resolved_destination(self, id) {
+                // A keyword puts the resolving permanent spell somewhere else instead
+                // (e.g. rebound on a creature spell, CR 702.88a; buyback on
+                // a permanent spell, which goes to its owner's hand, CR 702.27a).
+                let moved = self.move_object_ev(MoveEv {
+                    obj: id,
+                    to: dest.0,
+                    pos: dest.1,
+                    cause: MoveCause::Resolve,
+                    by: Some(controller),
+                    etb: EtbInfo::default(),
+                    source: None,
+                });
+                if let Some(new) = moved {
+                    crate::kw::after_spell_resolved(self, id, new);
+                }
+                self.emit(Event::SpellResolved { spell: id });
                 return;
             }
             crate::kw::before_permanent_enters(self, id);

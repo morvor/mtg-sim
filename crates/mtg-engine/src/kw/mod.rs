@@ -165,6 +165,18 @@ pub trait KeywordRules: Sync + Send {
     ) -> Option<(Zone, LibraryPosition)> {
         None
     }
+    /// Where a resolving permanent spell is put instead of onto the battlefield, if the
+    /// keyword changes it: e.g. a creature spell with rebound cast from its owner's hand
+    /// is exiled (CR 702.88a; Jeskai Baller). [`KeywordRules::after_spell_resolved`] is
+    /// then called as for an instant or sorcery.
+    fn permanent_resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
     /// Whether [`KeywordRules::resolved_destination`] is a replacement effect of the
     /// spell being put into its owner's graveyard ("instead of putting it into your
     /// graveyard as it resolves, ...", CR 614.1a): if other replacement effects would
@@ -296,12 +308,6 @@ pub trait KeywordRules: Sync + Send {
     /// e.g. the effect making a bestowed Aura spell an Aura is carried over to the
     /// permanent, so it enters as an Aura (CR 702.103b, 614.12).
     fn before_permanent_enters(&self, g: &mut Game, spell: ObjectId) {}
-    /// Where a resolving permanent spell with this keyword goes instead of entering the
-    /// battlefield, if the keyword says so: e.g. a permanent spell whose buyback cost was
-    /// paid moves from the stack to its owner's hand (CR 702.27a).
-    fn permanent_spell_destination(&self, g: &Game, spell: ObjectId, kw: &Keyword) -> Option<Zone> {
-        None
-    }
     /// How the permanent a resolving permanent spell becomes enters the battlefield
     /// (CR 608.3), if a keyword of the spell changes it: e.g. a spell whose sneak cost was
     /// paid enters tapped and attacking (CR 702.190b). Called for every registered
@@ -493,7 +499,11 @@ pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         .iter()
         .flat_map(|r| r.global_cast_options(g, p, card))
         .collect();
-    let mut kws: Vec<Keyword> = g.obj(card).chars.keywords().cloned().collect();
+    let mut kws: Vec<Keyword> = g
+        .characteristics_to_cast(card)
+        .keywords()
+        .cloned()
+        .collect();
     // Keywords static abilities make it gain as it's cast ("Assassin spells you cast have
     // freerunning {B}{B}", CR 610.5).
     for k in crate::next_spell::cast_grant_keywords(g, p, card) {
@@ -690,6 +700,16 @@ pub fn resolved_destinations(
     out
 }
 
+/// See [`KeywordRules::permanent_resolved_destination`].
+pub fn permanent_resolved_destination(
+    g: &Game,
+    spell: ObjectId,
+) -> Option<(Zone, LibraryPosition)> {
+    distinct_kinds(&g.obj(spell).chars).iter().find_map(|kw| {
+        impls_for(kw.kind).find_map(|r| r.permanent_resolved_destination(g, spell, kw))
+    })
+}
+
 pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
     for r in registry() {
         r.global_after_spell_resolved(g, spell, new);
@@ -865,16 +885,6 @@ pub fn unbestow(g: &mut Game, spell: ObjectId) {
             return;
         }
     }
-}
-
-/// See [`KeywordRules::permanent_spell_destination`].
-pub fn permanent_spell_destination(g: &Game, spell: ObjectId) -> Option<Zone> {
-    let kws: Vec<Keyword> = g.obj(spell).chars.keywords().cloned().collect();
-    kws.iter().find_map(|kw| {
-        impls_for(kw.kind)
-            .into_iter()
-            .find_map(|r| r.permanent_spell_destination(g, spell, kw))
-    })
 }
 
 /// See [`KeywordRules::before_permanent_enters`].

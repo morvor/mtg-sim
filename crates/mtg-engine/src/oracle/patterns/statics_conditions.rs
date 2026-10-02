@@ -158,7 +158,7 @@ fn state_filter(s: &str) -> Option<Filter> {
 }
 
 /// "has a +1/+1 counter on it", "has N or more quest counters on it", "has flying",
-/// "entered this turn", "attacked this turn".
+/// "entered this turn", "attacked this turn", "attacked a battle this turn".
 fn object_has(r: &str, sel: &Sel) -> Option<Condition> {
     let r = end(r);
     match r {
@@ -167,6 +167,12 @@ fn object_has(r: &str, sel: &Sel) -> Option<Condition> {
         }
         "attacked this turn" => {
             return Some(Condition::SelMatches(sel.clone(), Filter::AttackedThisTurn))
+        }
+        "attacked a battle this turn" => {
+            return Some(Condition::SelMatches(
+                sel.clone(),
+                Filter::Custom(crate::battle::ATTACKED_A_BATTLE_THIS_TURN.into()),
+            ))
         }
         _ => {}
     }

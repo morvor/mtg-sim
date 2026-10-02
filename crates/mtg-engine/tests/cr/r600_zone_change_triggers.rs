@@ -121,6 +121,7 @@ fn every_permanent_is_checked_including_those_entering_simultaneously() {
             Body::effect(gain(1)),
         )],
         scryfall_name: None,
+        pt_values: None,
     };
     let maker = CB::new("Greeter Maker")
         .sorcery()

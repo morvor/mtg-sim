@@ -67,6 +67,7 @@ fn starting_values_come_from_the_card_or_the_creating_effect() {
                 toughness: Some(1),
                 abilities: vec![],
                 scryfall_name: None,
+                pt_values: None,
             },
             count: Value::c(1),
             controller: PlayerRef::You,

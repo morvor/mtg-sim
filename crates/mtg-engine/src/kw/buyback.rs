@@ -59,13 +59,13 @@ impl KeywordRules for Buyback {
 
     /// A permanent spell whose buyback cost was paid doesn't enter the battlefield as it
     /// resolves: it moves from the stack to its owner's hand (Innocuous Insect).
-    fn permanent_spell_destination(
+    fn permanent_resolved_destination(
         &self,
         g: &Game,
         spell: ObjectId,
         _kw: &Keyword,
-    ) -> Option<Zone> {
-        buyback_paid(g, spell).then(|| Zone::Hand(g.obj(spell).owner))
+    ) -> Option<(Zone, LibraryPosition)> {
+        buyback_paid(g, spell).then(|| (Zone::Hand(g.obj(spell).owner), LibraryPosition::Top))
     }
 }
 
