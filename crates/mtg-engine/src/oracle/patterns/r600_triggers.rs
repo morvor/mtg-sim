@@ -16,6 +16,12 @@ pub(crate) fn reflexive_body(text: &str, b: &Builder) -> Option<Body> {
     let text = text
         .replace("that creature's power", "its power")
         .replace("that creature's toughness", "its toughness");
+    // "When you do, she deals 4 damage to target creature." (Elektra, Femme Fatale): a
+    // character's pronoun is the card itself.
+    let text = match ["she ", "he "].iter().find_map(|p| text.strip_prefix(p)) {
+        Some(r) => format!("~ {r}"),
+        None => text,
+    };
     let mut sub = Builder::new(b.ctx);
     sub.in_trigger = true;
     sub.it = Sel::Var(vars::IT);

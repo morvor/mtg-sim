@@ -103,6 +103,9 @@ inventory::submit! { AbilityPattern { name: "ninjutsu abilities cost less", prio
 /// storm", "Spells you cast have affinity for artifacts"): a static ability affecting
 /// spells on the stack, which have the keyword as they're cast.
 fn spells_you_cast_have(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    // "Spells you cast from exile have convoke." (Hoarding Broodlord, Party Thrasher).
+    let from_exile = l.contains("spells you cast from exile have ");
+    let l = &l.replacen("spells you cast from exile have ", "spells you cast have ", 1);
     let (subject, kw_text) = if let Some(r) = l.strip_prefix("spells you cast have ") {
         ("", r)
     } else {
@@ -110,6 +113,9 @@ fn spells_you_cast_have(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec
     };
     let kws = spell_keywords(kw_text, ctx, false)?;
     let mut parts = spell_quality(subject)?;
+    if from_exile {
+        parts.push(Filter::CastFrom(ZoneKind::Exile));
+    }
     parts.push(Filter::Spell);
     parts.push(Filter::ControlledBy(PlayerRel::You));
     let s = StaticAbility::new(StaticEffect::Continuous {

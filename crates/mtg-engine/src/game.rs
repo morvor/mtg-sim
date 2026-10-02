@@ -484,6 +484,13 @@ pub struct TurnHistory {
     /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
     #[serde(default)]
     pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
+    /// Named actions players performed this turn, from [`Event::Custom`] events with a
+    /// player ("surveil", "scry"): "as long as you've surveilled this turn". Recorded by
+    /// `kw/grant_conditions.rs`.
+    ///
+    /// [`Event::Custom`]: crate::events::Event::Custom
+    #[serde(default)]
+    pub custom_actions: Vec<(PlayerId, SmolStr)>,
     /// Cards milled this turn (CR 701.17), as the objects they became, and cards
     /// discarded this turn with the player who discarded each ("a card in a graveyard
     /// that was milled this turn", "cards you cycled or discarded this turn"). Recorded

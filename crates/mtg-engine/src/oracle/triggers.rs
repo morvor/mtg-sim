@@ -162,6 +162,18 @@ fn parse_triggered_at(
     if matches!(it_player, PlayerRef::Iterated) && eff.to_lowercase().contains("that player") {
         return None;
     }
+    // "Whenever ~ becomes blocked by a creature, the blocking creature gets -1/-1 until
+    // end of turn." (Order of the Mirror): the blocker is the creature the trigger is
+    // about.
+    let blocking_named;
+    let eff = if matches!(trigger, TriggerCond::BlockedByCreature { .. })
+        && eff.contains("the blocking creature")
+    {
+        blocking_named = eff.replace("the blocking creature", "that creature");
+        blocking_named.as_str()
+    } else {
+        eff
+    };
     let trigger_it = it.clone();
     let mut body = parse_trigger_body(eff, ctx, it, it_player)?;
     // "look at that many cards from the top of your library": only a trigger with an

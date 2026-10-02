@@ -169,6 +169,8 @@ enum Verb {
     BecomesCreatureType,
     /// "loses all abilities"
     LoseAll,
+    /// "loses all land types and abilities" (layers 4 and 6)
+    LoseLandTypesAndAbilities,
     /// "loses all creature types" (layer 4, CR 613.1d)
     LoseCreatureTypes,
 }
@@ -176,6 +178,10 @@ enum Verb {
 /// The verb starting at `s` (a word boundary), and the text after it.
 fn verb_at(s: &str) -> Option<(Verb, &str)> {
     for (p, v) in [
+        // "gets an additional +1/+1" (after an earlier bonus): P/T changes add up
+        // (CR 613.4c).
+        ("gets an additional ", Verb::Get),
+        ("get an additional ", Verb::Get),
         ("gets ", Verb::Get),
         ("get ", Verb::Get),
         ("gains ", Verb::Gain),
@@ -189,6 +195,8 @@ fn verb_at(s: &str) -> Option<(Verb, &str)> {
         ("becomes a ", Verb::BecomesCreatureType),
         ("becomes an ", Verb::BecomesCreatureType),
         ("become ", Verb::BecomesCreatureType),
+        ("loses all land types and abilities", Verb::LoseLandTypesAndAbilities),
+        ("lose all land types and abilities", Verb::LoseLandTypesAndAbilities),
         ("loses all abilities", Verb::LoseAll),
         ("lose all abilities", Verb::LoseAll),
         ("loses all creature types", Verb::LoseCreatureTypes),
@@ -204,7 +212,10 @@ fn verb_at(s: &str) -> Option<(Verb, &str)> {
             {
                 return None;
             }
-            if matches!(v, Verb::LoseAll | Verb::LoseCreatureTypes)
+            if matches!(
+                v,
+                Verb::LoseAll | Verb::LoseCreatureTypes | Verb::LoseLandTypesAndAbilities
+            )
                 && !(r.is_empty() || r.starts_with([',', ' ']))
             {
                 return None;
@@ -555,6 +566,17 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
                 if !body.is_empty() {
                     return None;
                 }
+                mods.push(Modification::RemoveAllAbilities);
+            }
+            Verb::LoseLandTypesAndAbilities => {
+                // CR 205.3i, 305.7: its land subtypes (layer 4) and its abilities (layer 6).
+                if !body.is_empty() {
+                    return None;
+                }
+                mods.push(Modification::Custom {
+                    name: crate::kw::grant_filters::LOSE_ALL_LAND_TYPES.into(),
+                    layer: Layer::L4Type,
+                });
                 mods.push(Modification::RemoveAllAbilities);
             }
             Verb::LoseCreatureTypes => {
