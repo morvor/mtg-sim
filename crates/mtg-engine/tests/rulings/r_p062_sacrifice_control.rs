@@ -149,7 +149,7 @@ fn star_athletes_target_is_sacrificed_by_its_controller_or_they_take_damage() {
 
 #[test]
 fn slow_motions_player_sacrifices_the_creature_unless_they_pay() {
-    cr!("701.21a", "118.12");
+    cr!("701.21a", "118.12a");
     supported("Slow Motion");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -158,11 +158,22 @@ fn slow_motions_player_sacrifices_the_creature_unless_they_pay() {
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert!(t.in_hand(P0, "Slow Motion"));
+    // P1 (not the Aura's controller) is the player who may pay {2} to keep them.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    attach_new(&mut t, P0, "Slow Motion", bears);
+    t.lands(P1, "Forest", 2);
+    t.lands(P0, "Forest", 2);
+    t.answer_yes(P1, true);
+    next_upkeep(&mut t, P1);
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.g.battlefield.iter().filter(|id| t.g.obj(**id).tapped).count(), 2);
 }
 
 #[test]
 fn soul_tithes_player_sacrifices_the_permanent_unless_they_pay() {
-    cr!("701.21a", "118.12");
+    cr!("701.21a", "118.12a");
     supported("Soul Tithe");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -226,6 +237,7 @@ fn burn_together_sacrifices_the_creature_you_control() {
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert!(t.in_graveyard(P0, "Hill Giant"));
+    assert!(t.in_exile("Callous Sell-Sword"));
 }
 
 #[test]
