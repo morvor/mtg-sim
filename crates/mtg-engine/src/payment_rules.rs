@@ -7,8 +7,8 @@
 //!   announced X, see `oracle/patterns/r107_x_cant_be_zero.rs`), "Spend only black mana
 //!   on X." (the X in the cost is still generic mana, so cost reductions can reduce it and
 //!   life can't pay it — Drain Life, Helm of Awakening and K'rrik rulings), and "You can't
-//!   spend mana to cast this spell." (only other ways of paying its total cost, such as
-//!   convoke and delve, can pay it, CR 601.2h).
+//!   spend mana to cast this spell." (only other ways of paying its total cost can pay it,
+//!   CR 601.2h: convoke, delve, and life for a symbol an effect lets be paid with life).
 //! - A player modification of how they pay mana symbols ("For each {B} in a cost, you may
 //!   pay 2 life rather than pay that mana.", [`PlayerModification::PayLifeForMana`]): it
 //!   applies to every cost the player pays (spells, abilities, special actions, costs paid

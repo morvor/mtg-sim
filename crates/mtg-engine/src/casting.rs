@@ -1698,7 +1698,11 @@ impl Game {
         // prohibition that applies to the spell as proposed (e.g. to the mana value it has
         // with the chosen X) makes the casting illegal (CR 601.3a, 601.6).
         let proposed = self.obj(id).chars.clone();
-        if self.cast_prohibited_by_effects(p, id, &proposed) {
+        // (Also as the card in the zone it's cast from: "Players can't cast spells from
+        // graveyards" applies to a spell with {X} proposed from a graveyard.)
+        if self.cast_prohibited_by_effects(p, id, &proposed)
+            || self.cast_prohibited_by_effects(p, card, &proposed)
+        {
             return Err(Illegal("the proposed spell can't be cast".into()));
         }
         // The permission it's cast with must allow the spell as proposed: "a permanent
