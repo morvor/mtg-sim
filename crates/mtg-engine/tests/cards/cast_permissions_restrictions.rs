@@ -74,9 +74,15 @@ fn dosan_players_cast_spells_only_during_their_own_turns() {
     t.lands(P0, "Mountain", 2);
     let bolt = t.hand(P1, "Lightning Bolt");
     let mine = t.hand(P0, "Lightning Bolt");
+    let gnomes = t.battlefield(P1, "Bottle Gnomes");
     // P0's turn: P1 can't cast an instant; P0 can.
     assert!(!try_cast(&mut t, P1, bolt, &[Entity::Player(P0)]));
     assert!(try_cast(&mut t, P0, mine, &[Entity::Player(P1)]));
+    // Activated abilities aren't stopped: P1 sacrifices the Gnomes in P0's turn.
+    t.g.turn.priority = Some(P1);
+    t.activate(P1, gnomes, 0, &[]).expect("an activated ability");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20 - 3 + 3);
     t.advance_to(P1, Step::Upkeep);
     assert!(try_cast(&mut t, P1, bolt, &[Entity::Player(P0)]));
 }
@@ -124,7 +130,7 @@ fn ethersworn_canonist_one_nonartifact_spell_counting_earlier_ones() {
 
 #[test]
 fn ward_of_bones_opponents_with_more_creatures_cant_cast_creature_spells() {
-    cr!("601.3", "305.2");
+    cr!("601.3", "101.2");
     assert_supported("Ward of Bones");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Ward of Bones");
@@ -145,7 +151,7 @@ fn ward_of_bones_opponents_with_more_creatures_cant_cast_creature_spells() {
 
 #[test]
 fn experimental_frenzy_cant_play_cards_from_your_hand() {
-    cr!("601.3", "305.2");
+    cr!("601.3", "101.2");
     ruling!(
         "Experimental Frenzy",
         "You can’t cast spells or play lands from your hand"

@@ -135,6 +135,14 @@ impl Perm {
             });
             return Some(terms);
         }
+        // Another quality of the card ("if it shares a card type with a card exiled with
+        // ~") isn't a condition on the game: not understood.
+        if ["it ", "its ", "that card ", "that spell ", "the spell "]
+            .iter()
+            .any(|w| c.starts_with(w))
+        {
+            return None;
+        }
         let cond = crate::oracle::statics::parse_condition(c, ctx)?;
         terms.condition = Some(match terms.condition.take() {
             Some(w) => Condition::And(vec![w, cond]),
@@ -1394,6 +1402,9 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
     if terms.limit.is_some() || terms.until_another || terms.later_turn {
         return None;
     }
+    // A quality the spell must have ("... if it's an instant or sorcery spell") is part of
+    // what the static permission is for (its `what`, judged as the spell, CR 601.3e).
+    let quality = terms.what.take();
     // A condition on playing the card ("... if you control a Human") is the static
     // ability's condition.
     let play_condition = terms.condition.take();
@@ -1413,7 +1424,7 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
     // "You may cast ~ as though it had flash [if ...]", "You may cast noncreature spells
     // as though they had flash" (CR 601.3b): a timing permission. The card's own functions
     // wherever it could be cast from (CR 601.3d).
-    if terms.flash && flash_only(p, &terms) && !p.once_each_turn {
+    if terms.flash && quality.is_none() && flash_only(p, &terms) && !p.once_each_turn {
         let (what, zone) = match &p.obj {
             Obj::SelfCard => (Filter::Source, FunctionZone::Anywhere),
             Obj::Class {
@@ -1484,6 +1495,10 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
         }
         Obj::Referent { .. } | Obj::Target { .. } => return None,
     };
+    let mut pp = pp;
+    if let Some(q) = quality {
+        pp.what = Filter::and(vec![pp.what, q]);
+    }
     if mentions_x(&pp) {
         return None;
     }

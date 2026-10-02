@@ -170,17 +170,19 @@ fn chandra_hopes_beacon_casts_one_instant_or_sorcery_spell_from_among_them() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 6);
     let chandra = t.battlefield(P0, "Chandra, Hope's Beacon");
-    let bears = t.library_top(P0, "Grizzly Bears");
+    let goblin = t.library_top(P0, "Raging Goblin");
     let shock = t.library_top(P0, "Shock");
     let giant = t.library_top(P0, "Bonecrusher Giant");
     let bolt = t.library_top(P0, "Lightning Bolt");
     t.library_top(P0, "Mountain");
     t.activate(P0, chandra, 1, &[]).unwrap();
     t.resolve_all();
-    // A creature card isn't an instant or sorcery spell.
-    let bears_x = t.g.current(bears);
-    assert_eq!(t.zone(bears_x), Zone::Exile);
-    assert!(t.cast_with(P0, bears_x, &[]).is_err());
+    // A creature spell isn't an instant or sorcery spell (a red one, castable with the
+    // Mountains, so only the permission's quality stops it).
+    let goblin_x = t.g.current(goblin);
+    assert_eq!(t.zone(goblin_x), Zone::Exile);
+    assert!(t.cast_with(P0, goblin_x, &[]).is_err());
+    assert_eq!(t.zone(t.g.current(goblin)), Zone::Exile);
     // The Adventure of a creature card is: Stomp is cast (and uses up the permission).
     let giant_x = t.g.current(giant);
     t.cast(P0, giant_x)
@@ -262,7 +264,11 @@ fn release_to_the_wind_its_owner_may_cast_it_for_free() {
     // Not its caster's: its owner's.
     t.g.turn.priority = Some(P0);
     assert!(t.g.cast_spell(P0, bears_x, CastMethod::Free).is_err());
-    // The owner casts it without paying its mana cost, at sorcery speed.
+    // Normal timing rules: a creature can't be cast during another player's turn.
+    t.g.turn.priority = Some(P1);
+    assert!(t.g.cast_spell(P1, bears_x, CastMethod::Free).is_err());
+    assert_eq!(t.zone(t.g.current(bears)), Zone::Exile);
+    // The owner casts it without paying its mana cost (no lands), at sorcery speed.
     t.advance_to(P1, Step::PrecombatMain);
     t.g.turn.priority = Some(P1);
     t.g.cast_spell(P1, bears_x, CastMethod::Free)

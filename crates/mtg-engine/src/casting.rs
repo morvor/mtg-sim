@@ -510,27 +510,45 @@ impl Game {
             .any(|c| with_required_costs || !c.requires_cost())
     }
 
-    /// Whether a static permission lets `p` cast `card` from their hand without paying its
-    /// mana cost, as a spell with the characteristics `chars` (CR 601.3e).
-    fn free_from_hand_permitted(
+    /// The static permission that lets `p` cast `card` from their hand without paying its
+    /// mana cost, as a spell with the characteristics `chars` (CR 601.3e), if one does:
+    /// one usable any number of times rather than one usable once each turn ("Once during
+    /// each of your turns, you may cast an instant or sorcery spell from your hand without
+    /// paying its mana cost"), whose use casting the spell records.
+    fn free_from_hand_permission(
         &self,
         p: PlayerId,
         card: ObjectId,
         chars: &Characteristics,
-    ) -> bool {
-        self.statics
-            .play_permissions
-            .iter()
-            .any(|(src, ctl, perm, _)| {
-                let free = perm.cost.as_ref().is_some_and(Cost::is_free);
-                if !free || !perm.spells || perm.zone != ZoneKind::Hand {
-                    return false;
-                }
-                let ctx = Ctx::new(Some(*src), *ctl);
-                let view = WithChars { id: card, chars };
-                self.player_rel_matches(perm.who, p, &ctx)
-                    && self.matches_view(&view, card, &as_spell_filter(&perm.what), &ctx)
-            })
+    ) -> Option<crate::permissions::CastPermission> {
+        let mut found: Option<crate::permissions::CastPermission> = None;
+        for (i, (src, ctl, perm, once)) in self.statics.play_permissions.iter().enumerate() {
+            let free = perm.cost.as_ref().is_some_and(Cost::is_free);
+            if !free || !perm.spells || perm.zone != ZoneKind::Hand {
+                continue;
+            }
+            let ctx = Ctx::new(Some(*src), *ctl);
+            let view = WithChars { id: card, chars };
+            let f = as_spell_filter(&perm.what);
+            if !self.player_rel_matches(perm.who, p, &ctx)
+                || !self.matches_view(&view, card, &f, &ctx)
+            {
+                continue;
+            }
+            let c = crate::permissions::CastPermission {
+                kind: crate::permissions::PermissionKind::Static(i),
+                source: Some(*src),
+                free: true,
+                terms: perm.terms.clone(),
+                once: once.clone().map(|slot| (*src, slot)),
+                qualities: None,
+            };
+            if c.once.is_none() {
+                return Some(c);
+            }
+            found.get_or_insert(c);
+        }
+        found
     }
 
     fn card_has_land_face(&self, c: ObjectId) -> bool {
@@ -683,10 +701,14 @@ impl Game {
             if in_hand {
                 for face in castable_faces(self, card) {
                     let chars = self.face_characteristics(card, face);
-                    if self.free_from_hand_permitted(p, card, &chars) {
+                    if let Some(c) = self.free_from_hand_permission(p, card, &chars) {
                         let mut opt = CastOption::normal(face);
                         opt.method = CastMethod::Free;
                         opt.alt_cost = Some(Cost::free());
+                        // A once-each-turn permission is used up by casting with it.
+                        if c.once.is_some() {
+                            opt.permission = Some(c);
+                        }
                         out.push(opt);
                     }
                 }

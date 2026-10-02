@@ -37,7 +37,8 @@ fn liliana_casts_zombie_spells_from_your_graveyard_this_turn() {
     t.lands(P0, "Swamp", 4);
     let liliana = t.battlefield(P0, "Liliana, Untouched by Death");
     let ghoul = t.graveyard(P0, "Diregraf Ghoul");
-    let bears = t.graveyard(P0, "Grizzly Bears");
+    // A black non-Zombie creature card the Swamps could pay for.
+    let rats = t.graveyard(P0, "Typhoid Rats");
     let ghoul2 = t.graveyard(P0, "Diregraf Ghoul");
     // Not before the ability resolves.
     assert!(!can_cast(&mut t, P0, ghoul));
@@ -46,7 +47,8 @@ fn liliana_casts_zombie_spells_from_your_graveyard_this_turn() {
     // A Zombie, as many as you like; not another creature.
     assert!(can_cast(&mut t, P0, ghoul));
     assert!(can_cast(&mut t, P0, ghoul2));
-    assert!(!can_cast(&mut t, P0, bears));
+    assert!(!can_cast(&mut t, P0, rats));
+    assert_eq!(t.zone(t.g.current(rats)), Zone::Graveyard(P0));
     assert_eq!(t.named_on_battlefield("Diregraf Ghoul").len(), 2);
 }
 
@@ -114,7 +116,23 @@ fn their_number_is_legion_can_be_cast_from_your_graveyard() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 6);
     let legion = t.graveyard(P0, "Their Number Is Legion");
+    // Normal timing: a sorcery can't be cast during the opponent's turn.
+    t.advance_to(P1, Step::Upkeep);
+    t.g.turn.priority = Some(P0);
+    assert!(t
+        .g
+        .cast_spell(P0, legion, CastMethod::Normal)
+        .is_err());
+    assert_eq!(t.zone(t.g.current(legion)), Zone::Graveyard(P0));
+    t.advance_to(P0, Step::PrecombatMain);
     t.cast(P0, legion).x(2).go();
+    // Its normal cost, {2}{B}{B}{B}{B}: all six Swamps.
+    let untapped =
+        t.g.battlefield
+            .iter()
+            .filter(|o| t.g.obj(**o).chars.name.as_str() == "Swamp" && !t.g.obj(**o).tapped)
+            .count();
+    assert_eq!(untapped, 0);
     t.resolve_all();
     let necrons =
         t.g.battlefield
@@ -221,11 +239,12 @@ fn valley_floodcaller_casts_noncreature_spells_as_though_they_had_flash() {
     t.lands(P0, "Mountain", 3);
     t.battlefield(P0, "Valley Floodcaller");
     let sorcery = t.hand(P0, "Lava Spike");
-    let bears = t.hand(P0, "Grizzly Bears");
+    // A red creature card: the Mountains could pay for it.
+    let goblin = t.hand(P0, "Raging Goblin");
     t.advance_to(P1, Step::Upkeep);
     t.g.turn.priority = Some(P0);
     // A creature spell isn't a noncreature spell.
-    assert!(t.g.cast_spell(P0, bears, CastMethod::Normal).is_err());
+    assert!(t.g.cast_spell(P0, goblin, CastMethod::Normal).is_err());
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.g.cast_spell(P0, sorcery, CastMethod::Normal)
         .expect("a sorcery during the opponent's upkeep");
@@ -307,11 +326,12 @@ fn sproutback_trudge_casts_itself_from_your_graveyard_after_you_gained_life() {
         "You still need to pay the cost to cast Sproutback Trudge from your graveyard."
     );
     assert_supported("Sproutback Trudge");
-    // No life gained: the ability doesn't trigger.
+    // No life gained: the ability doesn't trigger (though nine Forests could pay for it).
     let mut t = TestGame::new(2);
-    t.lands(P0, "Forest", 6);
+    t.lands(P0, "Forest", 9);
     let trudge = t.graveyard(P0, "Sproutback Trudge");
     t.advance_to(P0, Step::End);
+    t.answer_yes(P0, true);
     t.resolve_all();
     assert_eq!(t.zone(t.g.current(trudge)), Zone::Graveyard(P0));
     // 3 life gained: {7}{G}{G} costs {4}{G}{G}, paid with six Forests.
@@ -323,6 +343,13 @@ fn sproutback_trudge_casts_itself_from_your_graveyard_after_you_gained_life() {
     t.answer_yes(P0, true);
     t.resolve_all();
     assert!(t.on_battlefield(t.g.current(trudge)), "{}", t.dump_log());
+    // Its cost was paid: every Forest is tapped.
+    assert!(t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.g.obj(**o).chars.name.as_str() == "Forest")
+        .all(|o| t.g.obj(*o).tapped));
 }
 
 #[test]
@@ -344,9 +371,15 @@ fn swift_reckoning_flash_timing_with_spell_mastery() {
     t.answer_targets(P0, &[Entity::Object(bears)]);
     assert!(!can_cast(&mut t, P0, reckoning));
     t.clear_answers();
-    t.graveyard(P0, "Lava Spike");
+    let spike = t.graveyard(P0, "Lava Spike");
     t.answer_targets(P0, &[Entity::Object(bears)]);
-    assert!(can_cast(&mut t, P0, reckoning));
+    t.g.turn.priority = Some(P0);
+    t.g.cast_spell(P0, reckoning, CastMethod::Normal)
+        .expect("cast as though it had flash");
+    // Once it's cast, the number of those cards doesn't matter: it still resolves.
+    let spike = t.g.current(spike);
+    t.g.move_object(spike, Zone::Exile, events::MoveCause::Effect, None);
+    t.resolve_all();
     assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
 }
 

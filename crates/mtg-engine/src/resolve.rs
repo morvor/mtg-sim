@@ -1832,7 +1832,11 @@ impl Game {
                 // "You may cast ... If you do, ...": whether a spell was cast.
                 ctx.prev_happened = !cast.is_empty();
                 // CR 400.7h: other parts of the effect can find the spells cast this way.
-                ctx.set_var(vars::IT, cast);
+                // When none was, "it" still means the cards ("You may cast it without
+                // paying its mana cost. If you don't, put it into your hand.").
+                if !cast.is_empty() {
+                    ctx.set_var(vars::IT, cast);
+                }
             }
             Effect::PlayCard {
                 who,
@@ -1841,6 +1845,7 @@ impl Game {
                 optional,
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let mut played = false;
                 for o in self.resolve_objects(what, ctx) {
                     if *optional && !self.ask_yes_no(p, Some(o), "Play this card?", true) {
                         continue;
@@ -1848,7 +1853,7 @@ impl Game {
                     // A face-down card (e.g. exiled with hideaway) is played face up.
                     if self.face_characteristics(o, FaceState::Front).is_land() {
                         // CR 305.2b, 305.3: ignored if the player can't play a land now.
-                        let _ = self.play_land_during_resolution(p, o);
+                        played |= self.play_land_during_resolution(p, o).is_ok();
                         continue;
                     }
                     let method = if *free {
@@ -1856,8 +1861,11 @@ impl Game {
                     } else {
                         CastMethod::Normal
                     };
-                    let _ = crate::casting::cast_during_resolution(self, p, o, method);
+                    played |= crate::casting::cast_during_resolution(self, p, o, method).is_ok();
                 }
+                // "You may play that card without paying its mana cost. If you don't, ...":
+                // whether a card was played.
+                ctx.prev_happened = played;
             }
             Effect::GrantPlayPermission {
                 who,
