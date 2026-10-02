@@ -587,13 +587,13 @@ impl Renderer<'_> {
             Filter::Modified => np.status.push("modified".into()),
             Filter::DiedThisTurn => np.rel.push("that died this turn".into()),
             Filter::AttackedThisTurn => np.rel.push("that attacked this turn".into()),
-            Filter::ChosenColor | Filter::LinkedChosenColor => {
-                np.post.push("of the chosen color".into())
-            }
+            // "Choose a color. ... each card of that color": the color just chosen.
+            Filter::ChosenColor => np.post.push("of {alt:the chosen color|that color}".into()),
+            Filter::LinkedChosenColor => np.post.push("of the chosen color".into()),
             Filter::ChosenType | Filter::LinkedChosenCreatureType => {
                 np.post.push("of {alt:the chosen type|that type}".into())
             }
-            Filter::ChosenName => np.with.push("the chosen name".into()),
+            Filter::ChosenName => np.with.push("{alt:the chosen name|that name}".into()),
             Filter::ChosenCardType => np.post.push("of the chosen card type".into()),
             Filter::Prepared => np.status.push("prepared".into()),
             Filter::Targets(f) => {

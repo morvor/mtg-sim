@@ -73,6 +73,14 @@ impl Renderer<'_> {
                     }
                 }
                 let noun = self.card_noun(filter);
+                // "That player discards all cards with that name": as many as there are
+                // in their hand (each that matches).
+                if matches!(n, Value::HandSize(p) if same_player(p, who))
+                    && !matches!(filter, Filter::Any)
+                    && !*random
+                {
+                    return Some((who.clone(), format!("discard all {}", plural(&noun)), false));
+                }
                 let (c, w) = self.counted(n, &noun);
                 let r = if *random { " at random" } else { "" };
                 (
