@@ -1218,7 +1218,9 @@ impl Game {
                 .eval_player(r, ctx)
                 .and_then(|p| self.player(p).speed)
                 .unwrap_or(0) as i64,
-            Value::Aggregate(op, stat, sel) => crate::aggregates::aggregate(self, *op, stat, sel, ctx),
+            Value::Aggregate(op, stat, sel) => {
+                crate::aggregates::aggregate(self, *op, stat, sel, ctx)
+            }
             Value::DistinctAmong(what, sel) => {
                 crate::aggregates::distinct_among(self, *what, sel, ctx)
             }
