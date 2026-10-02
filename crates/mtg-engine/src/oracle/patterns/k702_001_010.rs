@@ -83,13 +83,15 @@ fn trailing_as_long_as(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
 
 /// "[This] has flash as long as ..." modifies how the object can be cast, so it functions
 /// in every zone it could be cast from and on the stack (CR 113.6e, 601.3d, 702.8a).
+/// Likewise "this spell has cascade as long as ..." (Bloodbraid Marauder): cascade
+/// triggers on casting, so it must function on the stack (CR 702.85a).
 fn conditional_flash_zone(a: &Ability) -> Ability {
     if let AbilityKind::Static(s) = &a.kind {
         if let StaticEffect::Continuous { affected, mods } = &s.effect {
             if matches!(affected, Filter::Source)
                 && !mods.is_empty()
                 && mods.iter().all(
-                    |m| matches!(m, Modification::AddKeyword(k) if k.kind == KeywordKind::Flash),
+                    |m| matches!(m, Modification::AddKeyword(k) if matches!(k.kind, KeywordKind::Flash | KeywordKind::Cascade)),
                 )
             {
                 let mut s = s.clone();
@@ -335,7 +337,12 @@ fn attack_despite_defender_effect(l: &str, b: &mut Builder) -> Option<Effect> {
             if !end(tail).is_empty() {
                 return None;
             }
-            Sel::All(f)
+            // Not a characteristic change, so the affected set isn't locked in (CR
+            // 611.2c): creatures that match later this turn can attack too.
+            return Some(Effect::AddRestriction {
+                restriction: Restriction::AttackDespiteDefender(f),
+                duration: Duration::EndOfTurn,
+            });
         }
     };
     Some(permission(sel))

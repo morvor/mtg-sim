@@ -1424,6 +1424,9 @@ fn p_tap_untap(l: &str, b: &mut Builder) -> Option<Effect> {
 /// "search your library for a basic land card, put it onto the battlefield tapped, then shuffle".
 fn p_search(l: &str, _b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("search your library for ")?;
+    // "search your library for any card" (Demonic Counsel) is "a card".
+    let any = r.strip_prefix("any card").map(|x| format!("a card{x}"));
+    let r = any.as_deref().unwrap_or(r);
     let (count, r) = if let Some(r2) = r.strip_prefix("up to ") {
         let (n, r3) = parse_number(r2)?;
         (n, r3)
