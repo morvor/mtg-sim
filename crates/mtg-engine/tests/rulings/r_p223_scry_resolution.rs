@@ -265,10 +265,6 @@ fn two_headed_giant_the_scarab_god_scries_only_the_number_of_zombies() {
     t.battlefield(P0, "The Scarab God");
     t.battlefield(P0, "Gravecrawler");
     t.battlefield(P0, "Gravecrawler");
-    t.set_step(P0, Step::Upkeep);
-    let god = t.named_on_battlefield("The Scarab God")[0];
-    // Put the upkeep trigger on the stack by running the upkeep from its start.
-    let _ = god;
     t.set_step(P3, Step::End);
     t.advance_to(P0, Step::Upkeep);
     let from = t.asked().len();
