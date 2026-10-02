@@ -564,3 +564,247 @@ fn tempt_with_discovery_the_opponents_lands_enter_in_one_event() {
     // Both opponents' lands entered at the same time: one trigger.
     assert_eq!(t.life(P0), 21);
 }
+
+#[test]
+fn twilights_call_all_the_creature_cards_enter_together() {
+    cr!("101.4", "608.2f");
+    ruling!("Twilight's Call", "All the creature cards enter simultaneously.");
+    supported("Twilight's Call");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Clone");
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P1, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.lands(P0, "Swamp", 6);
+    let spell = t.hand(P0, "Twilight's Call");
+    let from = t.asked().len();
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    // Nothing was on the battlefield for the Clone to copy as it entered.
+    assert!(offered_permanents(&t, P0, from).is_empty());
+    assert!(t.in_graveyard(P0, "Clone"));
+}
+
+/// P0's creature `card` enters with "each player sacrifices [n] creature(s)": P0 and P1
+/// each control Grizzly Bears, Hill Giant and Elvish Mystic; P0 chooses Grizzly Bears
+/// (and Elvish Mystic), P1 Hill Giant (and Elvish Mystic). Checks that P1 chose knowing
+/// P0's choice, before anything was sacrificed, and that the chosen creatures died.
+fn each_player_sacrifices(card: &str, n: usize) {
+    supported(card);
+    let mut t = TestGame::new(2);
+    let mut p0 = vec![t.battlefield(P0, "Grizzly Bears")];
+    t.battlefield(P0, "Hill Giant");
+    let mystic0 = t.battlefield(P0, "Elvish Mystic");
+    t.battlefield(P1, "Grizzly Bears");
+    let mut p1 = vec![t.battlefield(P1, "Hill Giant")];
+    let mystic1 = t.battlefield(P1, "Elvish Mystic");
+    if n == 2 {
+        p0.push(mystic0);
+        p1.push(mystic1);
+    }
+    let ents = |v: &[ObjectId]| v.iter().map(|o| Entity::Object(*o)).collect::<Vec<_>>();
+    t.answer_choose(P0, &ents(&p0));
+    t.answer_choose(P1, &ents(&p1));
+    let seen = watch(&mut t, P1, is_choose, |g| {
+        (
+            g.find_in_zone(Zone::Battlefield, "Grizzly Bears").len(),
+            g.known_apnap_choices(PlayerId(1))
+                .iter()
+                .map(|(p, c)| (*p, c.as_ref().map(|c| c.len())))
+                .collect::<Vec<_>>(),
+        )
+    });
+    t.enter(P0, card);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![(2, vec![(P0, Some(n))])],
+        "{card}: P1 knew P0's choice, and nothing had been sacrificed yet"
+    );
+    for o in p0.iter().chain(&p1) {
+        assert!(!t.g.is_live(*o) || t.zone(*o) != Zone::Battlefield, "{card}");
+    }
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{card}");
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1, "{card}");
+}
+
+#[test]
+fn each_player_sacrifices_choices_in_turn_order_then_all_at_once() {
+    cr!("101.4", "101.4b", "701.21a");
+    ruling!(
+        "Fleshbag Marauder",
+        "first the player whose turn it is chooses a creature to sacrifice, then each other player in turn order does the same knowing the choices made before them. Then all those creatures are sacrificed simultaneously."
+    );
+    ruling!(
+        "Lokhust Heavy Destroyer",
+        "first the player whose turn it is chooses a creature to sacrifice, then each other player in turn order does the same knowing the choices made before them. Then all those creatures are sacrificed simultaneously."
+    );
+    ruling!(
+        "Accursed Marauder",
+        "Players will know the choices of previous players when making their choice. Then all of the chosen creatures are sacrificed by their controllers simultaneously."
+    );
+    ruling!(
+        "Abyssal Gorestalker",
+        "first the player whose turn it is chooses which two creatures they are going to sacrifice, then each other player in turn order does the same. Players will know the choices of previous players when making their choices. Then all creatures are sacrificed by their controllers simultaneously."
+    );
+    each_player_sacrifices("Fleshbag Marauder", 1);
+    each_player_sacrifices("Lokhust Heavy Destroyer", 1);
+    each_player_sacrifices("Accursed Marauder", 1);
+    each_player_sacrifices("Abyssal Gorestalker", 2);
+}
+
+#[test]
+fn each_opponent_discards_cards_chosen_face_down_then_discarded_together() {
+    cr!("101.4", "101.4a");
+    ruling!(
+        "Elvish Doomsayer",
+        "first the next opponent in turn order chooses a card without revealing it, then each other opponent in turn order does the same. Then each chosen card is discarded simultaneously."
+    );
+    supported("Elvish Doomsayer");
+    let mut t = TestGame::new(3);
+    let doomsayer = t.battlefield(P0, "Elvish Doomsayer");
+    let a = t.hand(P1, "Grizzly Bears");
+    t.hand(P1, "Hill Giant");
+    t.hand(P2, "Grizzly Bears");
+    let b = t.hand(P2, "Hill Giant");
+    t.answer_choose(P1, &[Entity::Object(a)]);
+    t.answer_choose(P2, &[Entity::Object(b)]);
+    // When P2 chooses, P1's card is still in P1's hand, and only the fact that P1 chose
+    // is known.
+    let seen = watch(&mut t, P2, is_choose, |g| {
+        (
+            g.player(PlayerId(1)).hand.len(),
+            g.known_apnap_choices(PlayerId(2))
+                .iter()
+                .map(|(p, c)| (*p, c.is_some()))
+                .collect::<Vec<_>>(),
+        )
+    });
+    let from = t.asked().len();
+    t.g.destroy(doomsayer, None);
+    t.settle();
+    t.resolve_all();
+    let order: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| is_choose(d))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(order, vec![P1, P2]);
+    assert_eq!(*seen.lock().unwrap(), vec![(2, vec![(P1, false)])]);
+    assert!(t.in_graveyard(P1, "Grizzly Bears") && t.in_graveyard(P2, "Hill Giant"));
+}
+
+#[test]
+fn each_player_discards_at_the_beginning_of_upkeep_all_at_once() {
+    cr!("101.4", "101.4a");
+    ruling!(
+        "Cunning Lethemancer",
+        "First you choose a card to discard, then each other player in turn order chooses a card to discard, then all those cards are discarded simultaneously. No one sees what the other players are discarding before deciding which cards to discard."
+    );
+    supported("Cunning Lethemancer");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Cunning Lethemancer");
+    let a = t.hand(P0, "Grizzly Bears");
+    t.hand(P0, "Hill Giant");
+    let b = t.hand(P1, "Lightning Bolt");
+    t.hand(P1, "Shock");
+    t.answer_choose(P0, &[Entity::Object(a)]);
+    t.answer_choose(P1, &[Entity::Object(b)]);
+    let seen = watch(&mut t, P1, is_choose, |g| {
+        (
+            g.player(PlayerId(0)).hand.len(),
+            g.known_apnap_choices(PlayerId(1))
+                .iter()
+                .map(|(p, c)| (*p, c.is_some()))
+                .collect::<Vec<_>>(),
+        )
+    });
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(*seen.lock().unwrap(), vec![(2, vec![(P0, false)])]);
+    assert!(t.in_graveyard(P0, "Grizzly Bears") && t.in_graveyard(P1, "Lightning Bolt"));
+}
+
+#[test]
+fn malboro_each_opponent_discards_then_loses_life_then_exiles() {
+    cr!("101.4", "608.2e");
+    ruling!(
+        "Malboro",
+        "Then the chosen cards are discarded at the same time. Next, each opponent loses 2 life at the same time. Finally, each opponent exiles the top three cards of their library simultaneously."
+    );
+    supported("Malboro");
+    let mut t = TestGame::new(3);
+    let a = t.hand(P1, "Grizzly Bears");
+    t.hand(P1, "Hill Giant");
+    t.hand(P2, "Grizzly Bears");
+    let b = t.hand(P2, "Hill Giant");
+    t.answer_choose(P1, &[Entity::Object(a)]);
+    t.answer_choose(P2, &[Entity::Object(b)]);
+    let seen = watch(&mut t, P2, is_choose, |g| g.player(PlayerId(1)).hand.len());
+    let from = t.g.turn_events.len();
+    t.enter(P0, "Malboro");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(*seen.lock().unwrap(), vec![2]);
+    let mut discards = Vec::new();
+    let mut losses = Vec::new();
+    let mut exiles = Vec::new();
+    for (i, e) in t.g.turn_events.iter().enumerate().skip(from) {
+        match e {
+            Event::Discarded { .. } => discards.push(i),
+            Event::LifeLost { .. } => losses.push(i),
+            Event::ZoneChange { to: Zone::Exile, .. } => exiles.push(i),
+            _ => {}
+        }
+    }
+    assert_eq!((discards.len(), losses.len(), exiles.len()), (2, 2, 6));
+    assert!(discards.iter().max() < losses.iter().min());
+    assert!(losses.iter().max() < exiles.iter().min());
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P2), 18);
+}
+
+#[test]
+fn each_player_spares_creatures_in_turn_order_then_the_rest_are_sacrificed() {
+    cr!("101.4", "101.4b");
+    ruling!(
+        "Slaughter the Strong",
+        "first the player whose turn it is chooses which creatures will be spared, then each other player in turn order does the same knowing the choices made before them. Then all the creatures not chosen are sacrificed simultaneously."
+    );
+    ruling!(
+        "Destined Confrontation",
+        "first the player whose turn it is chooses which creatures will be spared, then each other player in turn order does the same knowing the choices made before them. Then all the creatures not chosen are sacrificed simultaneously."
+    );
+    for (card, cost) in [("Slaughter the Strong", 3), ("Destined Confrontation", 4)] {
+        supported(card);
+        let mut t = TestGame::new(2);
+        let bears0 = t.battlefield(P0, "Grizzly Bears");
+        let giant0 = t.battlefield(P0, "Hill Giant");
+        let bears1 = t.battlefield(P1, "Grizzly Bears");
+        let giant1 = t.battlefield(P1, "Hill Giant");
+        t.answer_choose(P0, &[Entity::Object(bears0)]);
+        t.answer_choose(P1, &[Entity::Object(giant1)]);
+        // When P1 chooses, P0's Hill Giant (not spared) is still on the battlefield.
+        let seen = watch(&mut t, P1, is_choose, |g| {
+            g.find_in_zone(Zone::Battlefield, "Hill Giant").len()
+        });
+        t.lands(P0, "Plains", cost);
+        let spell = t.hand(P0, card);
+        let from = t.asked().len();
+        t.cast(P0, spell).go();
+        t.resolve_all();
+        let order: Vec<PlayerId> = t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| is_choose(d))
+            .map(|(p, _)| *p)
+            .collect();
+        assert_eq!(order, vec![P0, P1], "{card}");
+        assert_eq!(*seen.lock().unwrap(), vec![2], "{card}");
+        assert!(t.on_battlefield(bears0) && t.on_battlefield(giant1), "{card}");
+        assert!(!t.on_battlefield(giant0) && !t.on_battlefield(bears1), "{card}");
+    }
+}
