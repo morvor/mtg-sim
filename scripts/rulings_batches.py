@@ -159,8 +159,17 @@ def plan():
     return cards, names, ids, oos
 
 
-def citations(names):
-    """(oracle_id, normalized needle) pairs cited anywhere in the workspace sources."""
+def citations(names, cards=None):
+    """(oracle_id, normalized needle) pairs cited anywhere in the workspace sources.
+
+    With `cards`, a citation counts for every card with the cited name (two cards can
+    share a name, e.g. Liberate and an Un-set split card with a Liberate half; the
+    ruling! macro checks that one of them has the ruling)."""
+    all_oids = collections.defaultdict(list)
+    for oid, c in (cards or {}).items():
+        for n in {c['name']} | {f.get('name', '') for f in faces(c)}:
+            if n:
+                all_oids[n.lower()].append(oid)
     pat = re.compile(r'ruling!\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"', re.S)
     out = collections.defaultdict(list)
     for f in glob.glob(os.path.join(ROOT, 'crates/**/*.rs'), recursive=True):
@@ -168,9 +177,10 @@ def citations(names):
         if 'ruling!' not in src:
             continue
         for m in pat.finditer(src):
-            oid = names.get(m.group(1).replace('\\"', '"').lower())
-            if oid:
-                needle = m.group(2).replace('\\"', '"').replace('\\\\', '\\').replace('\\n', ' ')
+            name = m.group(1).replace('\\"', '"').lower()
+            oids = all_oids.get(name) or ([names[name]] if name in names else [])
+            needle = m.group(2).replace('\\"', '"').replace('\\\\', '\\').replace('\\n', ' ')
+            for oid in oids:
                 out[oid].append(normalize(needle))
     return out
 
@@ -188,7 +198,7 @@ def exemptions(names):
 
 
 def status_fn(names, cards):
-    cites = citations(names)
+    cites = citations(names, cards)
     ex = exemptions(names)
 
     def status(oids, text):

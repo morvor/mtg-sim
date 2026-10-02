@@ -19,6 +19,51 @@ pub fn top_cards(g: &Game, p: PlayerId, n: u32) -> Vec<ObjectId> {
         .collect()
 }
 
+/// Puts the cards named in [`crate::game::GameConfig::top_of_library`] on top of each
+/// player's library (top first), after the starting shuffle. A name not found in the
+/// library is looked for among the player's face-down cards in the command zone — their
+/// supplementary decks (planar, scheme and Attraction decks, CR 901.4, 904.4, 717.2),
+/// which run in command-zone order — and that card is put on top of its deck.
+pub fn stack_starting_libraries(g: &mut Game) {
+    for (i, names) in g.config.top_of_library.clone().iter().enumerate() {
+        let p = PlayerId(i as u8);
+        if i >= g.players.len() {
+            break;
+        }
+        let named = |g: &Game, c: ObjectId, name: &str| {
+            g.obj(c)
+                .card
+                .as_ref()
+                .is_some_and(|d| d.name.eq_ignore_ascii_case(name))
+        };
+        let mut chosen: Vec<ObjectId> = Vec::new();
+        let mut supplementary: Vec<ObjectId> = Vec::new();
+        for name in names {
+            let found = g
+                .player(p)
+                .library
+                .iter()
+                .rev()
+                .copied()
+                .find(|c| !chosen.contains(c) && named(g, *c, name));
+            if let Some(c) = found {
+                chosen.push(c);
+                continue;
+            }
+            let found = g.command.iter().copied().find(|c| {
+                let o = g.obj(*c);
+                o.face_down && o.owner == p && !supplementary.contains(c) && named(g, *c, name)
+            });
+            supplementary.extend(found);
+        }
+        set_top(g, p, &chosen);
+        g.command.retain(|c| !supplementary.contains(c));
+        for (k, c) in supplementary.into_iter().enumerate() {
+            g.command.insert(k, c);
+        }
+    }
+}
+
 /// Reorders the library so `top_first` are on top in that order.
 fn set_top(g: &mut Game, p: PlayerId, top_first: &[ObjectId]) {
     let lib = &mut g.players[p.idx()].library;

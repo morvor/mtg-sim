@@ -455,10 +455,17 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
         .flatten();
     let eff_text = x_not_zero.as_deref().unwrap_or(eff_text);
     // CR 400.7j: "the exiled card" is the card the cost exiled.
-    let body = match crate::zones::cost_exiled_text(&cost, eff_text) {
-        Some(text) => effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_EXILED))?,
-        None => effects::parse_body(eff_text, ctx)?,
-    };
+    // CR 107.3a, 107.3k: an X in the activation cost defines X for the ability.
+    let x = patterns::value_grammar::cost_has_x(cost_s);
+    let body =
+        patterns::value_grammar::with_x_defined(x, || {
+            match crate::zones::cost_exiled_text(&cost, eff_text) {
+                Some(text) => {
+                    effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_EXILED))
+                }
+                None => effects::parse_body(eff_text, ctx),
+            }
+        })?;
     // CR 605.1a: no target, could add mana, not a loyalty ability, and neither its cost
     // nor its effect moves a card to or from a library.
     let is_mana = effects::is_mana_effect(&body.effect)

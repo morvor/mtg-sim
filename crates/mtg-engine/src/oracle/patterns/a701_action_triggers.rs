@@ -205,12 +205,14 @@ fn monstrous_x_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
         return None;
     }
     let start = t.len() - eff.len();
-    let body = crate::oracle::effects::parse_trigger_body(
-        &t[start..],
-        ctx,
-        Sel::TriggerObject,
-        PlayerRef::TriggerPlayer,
-    )?;
+    let body = super::value_grammar::with_x_defined(true, || {
+        crate::oracle::effects::parse_trigger_body(
+            &t[start..],
+            ctx,
+            Sel::TriggerObject,
+            PlayerRef::TriggerPlayer,
+        )
+    })?;
     let body = substitute_x(&body, &Value::EventAmount)?;
     let tr = TriggeredAbility::new(
         object_action(crate::kwa::monstrosity::MONSTROUS, Filter::Source, None),

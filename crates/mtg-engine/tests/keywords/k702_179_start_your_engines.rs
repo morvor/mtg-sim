@@ -318,3 +318,15 @@ fn damage_to_each_player_who_doesnt_have_max_speed() {
     // A player with no speed doesn't have max speed.
     assert_eq!(t.life(P2), 18);
 }
+
+#[test]
+fn a_bonus_that_counts_speed_applies_once_the_speed_becomes_one() {
+    cr!("704.5aa", "611.3a");
+    let mut t = TestGame::new(2);
+    let voice = t.battlefield(P1, "Voice of Truth");
+    // "Other creatures you control get +X/+0, where X is your speed."
+    t.battlefield(P1, "Samut, the Driving Force");
+    t.settle();
+    assert_eq!(speed(&t, P1), Some(1));
+    assert_eq!(t.pt(voice), (3, 2));
+}

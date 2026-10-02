@@ -21,7 +21,9 @@ pub(crate) const X_DEFINED: &str = "\u{1}x is defined";
 /// Whether "X" in the text being parsed has a value: an instant's or sorcery's X (its
 /// mana cost's, CR 107.3a) or one the text defines.
 pub(crate) fn x_defined(b: &Builder) -> bool {
-    (b.ctx.is_spell() && !b.in_trigger) || b.named.iter().any(|(n, _)| n == X_DEFINED)
+    (b.ctx.is_spell() && !b.in_trigger)
+        || b.named.iter().any(|(n, _)| n == X_DEFINED)
+        || super::value_grammar::x_defined()
 }
 
 /// "create an X/X [token description]".

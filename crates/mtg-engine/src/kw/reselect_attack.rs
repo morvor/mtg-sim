@@ -39,6 +39,7 @@ pub fn reselect_options(g: &Game, attacker: ObjectId) -> Vec<Entity> {
         .filter(|e| {
             // The primitive checks every rule of CR 508.7; try it on a copy of the game.
             let mut trial = g.clone();
+            trial.observer = None;
             crate::combat::reselect_attack_target(&mut trial, attacker, *e)
         })
         .collect()

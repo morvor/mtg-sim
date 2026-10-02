@@ -831,6 +831,10 @@ fn counter_words(body: &str) -> Option<Option<CounterKind>> {
 /// What's counted by "for each [...]" or "the number of [...]" (singular or plural
 /// nouns). `it` is the single object the subject is, if any.
 pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
+    parse_for_each_inner(s, it).or_else(|| super::value_grammar::whole_count(s, it))
+}
+
+fn parse_for_each_inner(s: &str, it: Option<&Sel>) -> Option<Value> {
     let s = end(s);
     // "instant and sorcery cards you own in exile and in your graveyard" (Crackling
     // Drake): the cards in either zone.
@@ -1310,9 +1314,12 @@ fn grant_list(
 /// "N/N" base P/T.
 fn base_pt(s: &str) -> Option<(Value, Value)> {
     let (p, t) = s.split_once('/')?;
-    let p: i32 = p.parse().ok()?;
-    let t: i32 = t.parse().ok()?;
-    Some((Value::c(p), Value::c(t)))
+    // "becomes an X/X creature" where the ability defines X (its cost, "where X is").
+    let num = |v: &str| match v {
+        "x" if super::value_grammar::x_defined() => Some(Value::X),
+        v => v.parse::<i32>().ok().map(Value::c),
+    };
+    Some((num(p)?, num(t)?))
 }
 
 /// Type words after "is"/"are": colors, card types and subtypes ("a blue Frog
@@ -1966,14 +1973,27 @@ fn parse_predicate(
         if let Some(fe) = tail.strip_prefix("for each ") {
             // In a group, "it" is each affected object.
             let each = Sel::Var(vars::AFFECTED);
-            let n = parse_for_each(fe, Some(subj.it.as_ref().unwrap_or(&each)))?;
-            let mul = |v: Value| match v {
+            let it = subj.it.as_ref().unwrap_or(&each);
+            // "+1/+1 for each creature you control and +1/+1 for each Aura you control":
+            // both bonuses.
+            let (fe, more) = match fe.split_once(" and +") {
+                Some((a, b)) if b.contains(" for each ") => (a, Some(format!("+{b}"))),
+                _ => (fe, None),
+            };
+            let times = |v: Value, n: &Value| match v {
                 Value::Const(0) => Value::Const(0),
                 Value::Const(1) => n.clone(),
                 other => Value::Mul(Box::new(other), Box::new(n.clone())),
             };
-            pv = mul(pv);
-            tv = mul(tv);
+            let n = parse_for_each(fe, Some(it))?;
+            pv = times(pv, &n);
+            tv = times(tv, &n);
+            if let Some(m) = more {
+                let (p2, t2, tail2) = crate::oracle::effects::parse_pt_mod(&m)?;
+                let n2 = parse_for_each(tail2.trim().strip_prefix("for each ")?, Some(it))?;
+                pv = Value::Sum(vec![pv, times(p2, &n2)]);
+                tv = Value::Sum(vec![tv, times(t2, &n2)]);
+            }
         } else if !tail.is_empty() {
             return None;
         }
@@ -2006,6 +2026,14 @@ fn parse_predicate(
                 return Some(vec![Out::Mod(Modification::SetPT(
                     Some(v.clone()),
                     Some(v),
+                ))]);
+            }
+            // "has base power and toughness X/X, where X is your life total".
+            if let (Some("x/x"), Some(x)) = (Some(pt), x) {
+                used_x.set(true);
+                return Some(vec![Out::Mod(Modification::SetPT(
+                    Some(x.clone()),
+                    Some(x.clone()),
                 ))]);
             }
             let (bp, bt) = base_pt(pt)?;

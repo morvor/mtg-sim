@@ -656,6 +656,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             )
         } else if let Some(r) = t.strip_prefix("defending player controls") {
             (Filter::ControlledBy(PlayerRel::Defending), r)
+        } else if let Some(r) = t.strip_prefix("the monarch controls") {
+            // CR 725: none while there's no monarch.
+            (
+                Filter::ControllerMatches(Box::new(PlayerFilter::Monarch)),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("blocking or blocked by ~") {
             (
                 Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]),

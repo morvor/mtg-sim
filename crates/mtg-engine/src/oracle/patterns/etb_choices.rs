@@ -473,6 +473,11 @@ fn on_self(s: &str) -> Option<&str> {
 
 /// "for each [X]" amounts.
 fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
+    for_each_value_inner(s, ctx)
+        .or_else(|| super::value_grammar::whole_count_in(s, ctx, Sel::This))
+}
+
+fn for_each_value_inner(s: &str, ctx: &CompileContext) -> Option<Value> {
     let s = end(s);
     // "{G}{G} spent to cast it": each two green mana spent
     if let Some(v) = s

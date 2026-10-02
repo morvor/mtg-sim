@@ -16,9 +16,15 @@
 //! decision was made for `--timeout` seconds is reported as a hang and ends the run with
 //! status 2.
 //!
-//! `--check N` checks every Nth priority decision that no state-based action was pending
-//! when the player got priority (CR 117.5); a violation is reported like a panic. Fuzzing
-//! checks every 4th decision unless told otherwise (`--check 0` turns it off).
+//! `--check N` runs the rules checks of `checks.rs` before every Nth priority decision (no
+//! state-based action pending, CR 117.5; consistent zones; up-to-date characteristics;
+//! damage only on creatures; life totals and counters that add up to the events), and
+//! watches every event (the stack and mana pools empty as each step ends, damage gone as
+//! each turn begins); a violation is reported like a panic. Fuzzing checks every 4th
+//! decision unless told otherwise (`--check 0` turns it off).
+//!
+//! `mtg-sim --every-card ...` plays games built around every fully supported card in turn
+//! (see `every_card.rs`).
 //!
 //! `--agent SEAT=KIND` chooses who plays a seat (0-based): `random` (the default),
 //! `passive` (always lets the engine choose), or `cmd:COMMAND`, an external program
@@ -28,226 +34,21 @@
 //! pass. With an external agent the `--slow` and `--timeout` limits default to a day.
 
 mod checks;
+mod coverage;
 mod decks;
+mod every_card;
+mod runner;
 
-use checks::{CheckingAgent, Violation};
 use decks::{default_deck, load_deck, random_deck, DeckList};
-use mtg_api::{spawn_external, ChildTransport, ProtocolOptions};
-use mtg_engine::agents::RandomAgent;
-use mtg_engine::decision::PassiveAgent;
-use mtg_engine::turn::Stage;
 use mtg_engine::*;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use runner::{install_panic_hook, kind_of, play, AgentSpec, ExternalSettings, GameSpec, Outcome};
 use std::collections::BTreeMap;
-use std::panic::{self, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, RecvTimeoutError};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// Who plays a seat.
-#[derive(Clone, Debug)]
-enum AgentSpec {
-    Random,
-    Passive,
-    /// An external program speaking the JSON protocol.
-    Command(String),
-}
-
-impl AgentSpec {
-    fn parse(s: &str) -> AgentSpec {
-        match s {
-            "random" => AgentSpec::Random,
-            "passive" => AgentSpec::Passive,
-            _ => match s.strip_prefix("cmd:") {
-                Some(c) if !c.trim().is_empty() => AgentSpec::Command(c.to_string()),
-                _ => panic!("unknown agent {s:?} (random, passive or cmd:COMMAND)"),
-            },
-        }
-    }
-}
-
-/// How the external agents are run.
-#[derive(Clone, Default)]
-struct ExternalSettings {
-    transcript: Option<String>,
-    auto_pass: bool,
-}
-
-/// The message and location of the latest panic, recorded by the panic hook.
-static LAST_PANIC: Mutex<Option<String>> = Mutex::new(None);
-
-enum Outcome {
-    Finished {
-        result: GameResult,
-        turns: u32,
-        log: Vec<String>,
-    },
-    /// Stopped after the `--slow` limit.
-    Slow { turn: u32, log: Vec<String> },
-    Panicked {
-        message: String,
-        turn: u32,
-        log: Vec<String>,
-    },
-}
-
-/// Plays one game on its own thread (with a large stack), catching a panic. Returns
-/// `None` if no decision was made for `timeout` (the game thread is left running).
-#[allow(clippy::too_many_arguments)]
-fn play(
-    config: GameConfig,
-    decks: Vec<DeckList>,
-    specs: Vec<AgentSpec>,
-    external: ExternalSettings,
-    agent_seed: u64,
-    logging: bool,
-    check: u32,
-    slow: Duration,
-    timeout: Duration,
-) -> Option<(Outcome, Vec<Violation>)> {
-    let (tx, rx) = mpsc::channel();
-    let violations: Arc<Mutex<Vec<Violation>>> = Arc::default();
-    let violations2 = violations.clone();
-    let progress = Arc::new(AtomicU64::new(0));
-    let stop = Arc::new(AtomicBool::new(false));
-    let (progress2, stop2) = (progress.clone(), stop.clone());
-    std::thread::Builder::new()
-        .stack_size(256 << 20)
-        .spawn(move || {
-            let mut game: Option<Game> = None;
-            let mut connections: Vec<(PlayerId, ChildTransport)> = Vec::new();
-            let r = panic::catch_unwind(AssertUnwindSafe(|| {
-                let agents: Vec<Box<dyn Agent>> = (0..decks.len())
-                    .map(|p| {
-                        let seat = PlayerId(p as u8);
-                        let spec = specs.get(p).cloned().unwrap_or(AgentSpec::Random);
-                        let a: Box<dyn Agent> = match spec {
-                            AgentSpec::Random => {
-                                let a = RandomAgent::new(agent_seed.wrapping_add(p as u64));
-                                if check > 0 {
-                                    Box::new(CheckingAgent::new(a, check, violations2.clone()))
-                                } else {
-                                    Box::new(a)
-                                }
-                            }
-                            AgentSpec::Passive => Box::new(PassiveAgent),
-                            AgentSpec::Command(cmd) => {
-                                let options = ProtocolOptions {
-                                    auto_pass: external.auto_pass,
-                                    ..Default::default()
-                                };
-                                let (agent, conn) = spawn_external(&cmd, seat, options)
-                                    .unwrap_or_else(|e| panic!("can't start {cmd:?}: {e}"));
-                                if let Some(path) = &external.transcript {
-                                    let file = std::fs::OpenOptions::new()
-                                        .create(true)
-                                        .append(true)
-                                        .open(path)
-                                        .unwrap_or_else(|e| panic!("can't open {path}: {e}"));
-                                    conn.transcript(file);
-                                }
-                                connections.push((seat, conn));
-                                Box::new(agent)
-                            }
-                        };
-                        a
-                    })
-                    .collect();
-                let g = game.insert(Game::new(
-                    config,
-                    decks.iter().map(|d| d.main.clone()).collect(),
-                    agents,
-                ));
-                if !connections.is_empty() {
-                    mtg_api::prepare_game(g);
-                }
-                // Sideboards stay outside the game (a companion may be revealed from them).
-                for (i, d) in decks.iter().enumerate() {
-                    if !d.sideboard.is_empty() {
-                        g.add_to_sideboard(PlayerId(i as u8), d.sideboard.clone());
-                    }
-                }
-                g.logging = logging;
-                // `Game::run`, one unit at a time so the watchdog sees progress and can
-                // stop a slow game.
-                if g.turn.stage == Stage::PreGame {
-                    g.start();
-                }
-                while g.result.is_none() {
-                    if stop2.load(Ordering::Relaxed) {
-                        return None;
-                    }
-                    g.advance();
-                    if g.turn.number > g.config.max_turns || g.actions_taken > g.config.max_actions
-                    {
-                        g.draw_game();
-                    }
-                    progress2.store(g.actions_taken, Ordering::Relaxed);
-                }
-                g.result.clone()
-            }));
-            // Tell the external agents how the game ended, and let them exit.
-            for (seat, mut conn) in connections {
-                if let Some(g) = game.as_ref() {
-                    mtg_api::Transport::game_over(&mut conn, &mtg_api::GameOver::new(g, seat));
-                }
-                conn.shut_down();
-            }
-            let turn = game.as_ref().map_or(0, |g| g.turn.number);
-            let log: Vec<String> = game.as_ref().map_or(Vec::new(), |g| {
-                g.log
-                    .iter()
-                    .map(|l| format!("[T{}] {}", l.turn, l.text))
-                    .collect()
-            });
-            let outcome = match r {
-                Ok(Some(result)) => Outcome::Finished {
-                    result,
-                    turns: turn,
-                    log,
-                },
-                Ok(None) => Outcome::Slow { turn, log },
-                Err(_) => Outcome::Panicked {
-                    message: LAST_PANIC
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .take()
-                        .unwrap_or_else(|| "panic".into()),
-                    turn,
-                    log,
-                },
-            };
-            let _ = tx.send(outcome);
-        })
-        .expect("spawn game thread");
-    let start = Instant::now();
-    let (mut seen, mut since) = (0, Instant::now());
-    loop {
-        match rx.recv_timeout(Duration::from_millis(200)) {
-            Ok(outcome) => {
-                let v = std::mem::take(&mut *violations.lock().unwrap_or_else(|e| e.into_inner()));
-                return Some((outcome, v));
-            }
-            Err(RecvTimeoutError::Disconnected) => return None,
-            Err(RecvTimeoutError::Timeout) => {
-                let now = progress.load(Ordering::Relaxed);
-                if now != seen {
-                    (seen, since) = (now, Instant::now());
-                } else if since.elapsed() > timeout {
-                    return None;
-                }
-                if start.elapsed() > slow {
-                    stop.store(true, Ordering::Relaxed);
-                }
-            }
-        }
-    }
-}
-
 /// Prints the decks, the command that replays the game and the tail of its log.
-fn report(decks: &[DeckList], repro: &str, log: &[String], tail: usize) {
+pub fn report(decks: &[DeckList], repro: &str, log: &[String], tail: usize) {
     for (p, d) in decks.iter().enumerate() {
         println!("  deck {}: {}", p + 1, d.summary());
     }
@@ -259,6 +60,10 @@ fn report(decks: &[DeckList], repro: &str, log: &[String], tail: usize) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--every-card") {
+        every_card::run(&args[1..]);
+        return;
+    }
     let mut games = 100u64;
     let mut seed = 1u64;
     let mut deck_files: Vec<String> = Vec::new();
@@ -339,9 +144,7 @@ fn main() {
     }
     let check = check.unwrap_or(if random { 4 } else { 0 });
     let fixed: Vec<DeckList> = deck_files.iter().map(|f| load_deck(f)).collect();
-    panic::set_hook(Box::new(|info| {
-        *LAST_PANIC.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.to_string());
-    }));
+    install_panic_hook();
 
     let start = Instant::now();
     let mut wins = vec![0u64; players];
@@ -388,14 +191,20 @@ fn main() {
         );
         // A panic mid-game needs the log to be useful, so fuzzing always records it.
         let logging = log || random;
-        let Some(outcome) = play(
+        let spec = GameSpec {
             config,
-            decks.clone(),
-            specs.clone(),
-            external.clone(),
-            s.wrapping_mul(7),
+            decks: decks.clone(),
+            specs: specs.clone(),
+            external: external.clone(),
+            agent_seed: s.wrapping_mul(7),
             logging,
             check,
+            commanders: vec![],
+            focus: None,
+            usage: None,
+        };
+        let Some(outcome) = play(
+            spec,
             Duration::from_secs(slow),
             Duration::from_secs(timeout),
         ) else {
@@ -414,12 +223,7 @@ fn main() {
             );
             report(&decks, &repro, &[], 0);
             // Group by the kind of violation, without object numbers.
-            let kind: String = first
-                .what
-                .split(|c: char| c.is_ascii_digit())
-                .collect::<Vec<_>>()
-                .join("N");
-            violations.entry(kind).or_default().push(gi);
+            violations.entry(kind_of(&first.what)).or_default().push(gi);
         }
         match outcome {
             Outcome::Finished {

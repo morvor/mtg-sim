@@ -1069,7 +1069,9 @@ impl Game {
                 ctx,
                 created_turn: self.turn.number,
                 created_step: Some(self.turn.step),
+                created_steps: self.turn.step_log.len(),
                 for_rest_of_game: false,
+                performer: None,
             });
         }
     }
