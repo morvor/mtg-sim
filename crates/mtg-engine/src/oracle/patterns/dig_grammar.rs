@@ -66,7 +66,11 @@ pub fn check_that_many(e: &Effect, trigger: &TriggerCond) -> Option<()> {
     }
     fn has_amount(t: &TriggerCond) -> bool {
         match t {
-            TriggerCond::Batched { trigger, .. } => has_amount(trigger),
+            TriggerCond::Batched { trigger, .. }
+            | TriggerCond::Where { trigger, .. }
+            | TriggerCond::FirstTimeEachTurn(trigger)
+            | TriggerCond::Noncombat(trigger) => has_amount(trigger),
+            TriggerCond::AnyOf(v) => v.iter().all(has_amount),
             TriggerCond::DealsDamage { .. }
             | TriggerCond::IsDealtDamage { .. }
             | TriggerCond::PlayerDealtDamage { .. }
