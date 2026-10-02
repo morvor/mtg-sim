@@ -786,6 +786,23 @@ fn dealt_damage_suffix<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a 
 
 inventory::submit! { FilterSuffixPattern { name: "grants: that dealt damage this turn", priority: 100, parse: dealt_damage_suffix } }
 
+/// "another target creature attacking the same player or planeswalker" (Kitesail
+/// Skirmisher, in its attack trigger): attacking what the source is attacking.
+fn attacking_same_suffix<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t
+        .strip_prefix("attacking the same player or planeswalker")
+        .or_else(|| t.strip_prefix("that's attacking the same player or planeswalker"))?;
+    if !(r.is_empty() || r.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    Some((
+        Filter::Custom(crate::kw::grant_filters::ATTACKING_SAME_AS_SOURCE.into()),
+        r,
+    ))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "grants: attacking the same player or planeswalker", priority: 100, parse: attacking_same_suffix } }
+
 /// "~ deals 2 damage to target player and gains indestructible until end of turn." (Ellie,
 /// Vengeful Hunter): two predicates of the same object, the second read as its own
 /// sentence about it.

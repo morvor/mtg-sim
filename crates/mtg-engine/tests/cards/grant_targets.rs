@@ -207,3 +207,54 @@ fn vexing_devil_is_sacrificed_if_an_opponent_takes_the_damage() {
         assert_eq!(t.life(P1), if take { 16 } else { 20 });
     }
 }
+
+#[test]
+fn kitesail_skirmisher_targets_a_creature_attacking_the_same_player() {
+    cr!("506.2", "508.1b");
+    assert_supported(&["Kitesail Skirmisher"]);
+    let mut t = TestGame::new(3);
+    let k = t.battlefield(P0, "Kitesail Skirmisher");
+    // Created first, so the first candidate if the target weren't restricted.
+    let home = t.battlefield(P0, "Grizzly Bears");
+    let other = t.battlefield(P0, "Grizzly Bears");
+    let same = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        mtg_engine::testing::DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![
+            (k, Entity::Player(P1)),
+            (other, Entity::Player(P2)),
+            (same, Entity::Player(P1)),
+        ]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.resolve_all();
+    assert!(t.obj_now(same).has_keyword(KeywordKind::Flying));
+    assert!(!t.obj_now(other).has_keyword(KeywordKind::Flying));
+    assert!(!t.obj_now(home).has_keyword(KeywordKind::Flying));
+}
+
+#[test]
+fn ordruun_mentor_targets_a_creature_attacking_that_player() {
+    cr!("506.2", "603.2");
+    assert_supported(&["Ordruun Mentor"]);
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Ordruun Mentor");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        mtg_engine::testing::DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![
+            (a, Entity::Player(P1)),
+            (b, Entity::Player(P2)),
+        ]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.resolve_all();
+    // One trigger for each player attacked, each targeting a creature attacking them.
+    assert!(t.obj_now(a).has_keyword(KeywordKind::FirstStrike));
+    assert!(t.obj_now(b).has_keyword(KeywordKind::FirstStrike));
+}

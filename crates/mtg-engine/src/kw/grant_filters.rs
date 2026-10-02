@@ -17,6 +17,13 @@ pub const ATTACKING_OPPONENT: &str = "attacking_player:opponent";
 /// Attacking the player the source is attached to ("creatures attacking enchanted
 /// player").
 pub const ATTACKING_ENCHANTED_PLAYER: &str = "attacking_player:enchanted";
+/// `Filter::Custom`: attacking the player the trigger is about ("that's attacking that
+/// player").
+pub const ATTACKING_TRIGGER_PLAYER: &str = "attacking_player:trigger";
+/// `Filter::Custom`: attacking the same player, planeswalker or battle as the source
+/// ("another target creature attacking the same player or planeswalker", Kitesail
+/// Skirmisher).
+pub const ATTACKING_SAME_AS_SOURCE: &str = "attacking_same_as_source";
 
 /// "that dealt damage this turn": the object was the source of damage this turn (CR 120).
 pub const DEALT_DAMAGE_THIS_TURN: &str = "dealt_damage_this_turn";
@@ -69,9 +76,16 @@ impl KeywordRules for GrantFilters {
         if name == DEALT_DAMAGE_THIS_TURN {
             return Some(g.history.damage_sources.iter().any(|(s, _)| *s == id));
         }
+        if name == ATTACKING_SAME_AS_SOURCE {
+            let target_of = |o| g.combat.as_ref().and_then(|c| c.attack_target(o));
+            return Some(ctx.source.is_some_and(|s| {
+                let t = target_of(s);
+                t.is_some() && t == target_of(id)
+            }));
+        }
         if !matches!(
             name,
-            ATTACKING_YOU | ATTACKING_OPPONENT | ATTACKING_ENCHANTED_PLAYER
+            ATTACKING_YOU | ATTACKING_OPPONENT | ATTACKING_ENCHANTED_PLAYER | ATTACKING_TRIGGER_PLAYER
         ) {
             return None;
         }
@@ -81,6 +95,7 @@ impl KeywordRules for GrantFilters {
         Some(match name {
             ATTACKING_YOU => p == ctx.controller,
             ATTACKING_OPPONENT => g.are_opponents(ctx.controller, p),
+            ATTACKING_TRIGGER_PLAYER => ctx.event.as_ref().and_then(|e| e.player) == Some(p),
             _ => ctx
                 .source
                 .is_some_and(|s| g.obj(s).attached_to == Some(Entity::Player(p))),
