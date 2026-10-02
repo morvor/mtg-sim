@@ -783,3 +783,38 @@ fn elven_farsight_draws_if_a_creature_card_is_revealed() {
         assert_eq!(t.hand_size(P0), hand + usize::from(draws), "{top}");
     }
 }
+
+#[test]
+fn inspire_awe_scries_as_it_resolves_and_prevents_other_combat_damage() {
+    cr!("608.2c", "615.1", "701.22a");
+    ruling!("Inspire Awe", "You scry 2 while Inspire Awe is resolving, not after damage is prevented.");
+    supported("Inspire Awe");
+    // "Prevent all combat damage that would be dealt this turn except combat damage that
+    // would be dealt by enchanted creatures and enchantment creatures. Scry 2."
+    let mut t = TestGame::new(2);
+    giants(&mut t, P0, 3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let enchanted = t.battlefield(P0, "Grizzly Bears");
+    crate::r_s06_common::attach_new(&mut t, P0, "Holy Strength", enchanted);
+    let dryad = t.battlefield(P0, "Leafcrown Dryad");
+    crate::r_s03_common::to_blockers(
+        &mut t,
+        &[
+            (bears, Entity::Player(P1)),
+            (enchanted, Entity::Player(P1)),
+            (dryad, Entity::Player(P1)),
+        ],
+        &[],
+    );
+    let awe = in_hand_with_mana(&mut t, P0, "Inspire Awe");
+    t.cast(P0, awe).go();
+    let from = t.asked().len();
+    t.resolve();
+    // Scried during the resolution, before any combat damage.
+    assert_eq!(scry_sizes(&t, P0, from), vec![2]);
+    assert_eq!(t.life(P1), 20);
+    t.advance_to(P0, Step::EndOfCombat);
+    // Grizzly Bears' 2 is prevented; the enchanted Bears (3/3) and the Dryad (2/2) deal
+    // theirs.
+    assert_eq!(t.life(P1), 15);
+}
