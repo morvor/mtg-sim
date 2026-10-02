@@ -335,7 +335,20 @@ pub fn split_sentences(t: &str) -> Vec<String> {
         if *ch == '"' {
             in_quote = !in_quote;
         }
-        if *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ') {
+        // A quoted ability that ends a sentence ("it becomes an Aura with \"enchant
+        // creature put onto the battlefield with ~.\" Put target creature card ..."): the
+        // next sentence starts with a capital letter.
+        let quote_ends_sentence = *ch == '"'
+            && !in_quote
+            && i > 0
+            && chars[i - 1] == '.'
+            && chars.get(i + 1) == Some(&' ')
+            && chars
+                .get(i + 2)
+                .is_some_and(|c| c.is_uppercase() || *c == '~');
+        if quote_ends_sentence
+            || *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ')
+        {
             let s = cur.trim().to_string();
             if !s.is_empty() {
                 out.push(s);
@@ -632,8 +645,14 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
 /// Resolves pronoun/self references to a selection.
 pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim();
-    let pairs: [(&str, Sel); 7] = [
+    let pairs: [(&str, Sel); 11] = [
         ("~", Sel::This),
+        // An Aura enchanting a card in a graveyard ("Enchant creature card in a
+        // graveyard", CR 303.4a): that card.
+        ("enchanted creature card", Sel::AttachedTo),
+        ("enchanted instant card", Sel::AttachedTo),
+        ("enchanted card", Sel::AttachedTo),
+        ("the enchanted card", Sel::AttachedTo),
         ("enchanted creature", Sel::AttachedTo),
         ("equipped creature", Sel::AttachedTo),
         // Auras with "enchant permanent/land/artifact/...": the object it's attached to

@@ -1,4 +1,6 @@
-//! "Return [card] to the battlefield and attach ~ to it." (Pre-War Formalwear): the
+//! "Return [card] to the battlefield and attach ~ to it." (Pre-War Formalwear), "put
+//! enchanted creature card onto the battlefield tapped under your control and attach ~ to
+//! it" (Dance of the Dead): the
 //! source is attached to the permanent the card became (CR 400.7: "it" is the new
 //! object, followed through `vars::IT`). If it can't be attached to that permanent (it
 //! isn't a creature, for an Equipment), the source doesn't move and stays where it is,
@@ -11,9 +13,8 @@ use crate::oracle::phrases::end;
 
 fn return_and_attach(l: &str, b: &mut Builder) -> Option<Effect> {
     let first = end(l).strip_suffix(" and attach ~ to it")?;
-    if !first.ends_with(" to the battlefield") {
-        return None;
-    }
+    // "Put target creature card from a graveyard onto the battlefield under your control
+    // and attach ~ to it." (Necromancy) as well.
     let e = parse_clause(first, b)?;
     let Effect::Move { to, .. } = &e else {
         return None;
