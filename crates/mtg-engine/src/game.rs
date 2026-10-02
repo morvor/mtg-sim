@@ -554,6 +554,10 @@ pub struct ActiveStatics {
     pub flash_permissions: Vec<(ObjectId, PlayerId, PlayerRel, Filter)>,
     pub customs: Vec<(ObjectId, PlayerId, SmolStr)>,
     pub other: Vec<(ObjectId, PlayerId, StaticEffect)>,
+    /// Alternative costs other objects offer for the spells players cast ("You may pay
+    /// {W}{U}{B}{R}{G} rather than pay the mana cost for spells you cast"), with the
+    /// once-each-turn use each is: see `kw/offered_costs.rs`.
+    pub offered_alt_costs: Vec<crate::kw::offered_costs::OfferedAltCost>,
 }
 
 #[derive(Clone, Debug)]
