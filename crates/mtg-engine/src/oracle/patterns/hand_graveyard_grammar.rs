@@ -2414,3 +2414,69 @@ fn c_more_life_than(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "hand/graveyard grammar: you have more life than an opponent", priority: 960, parse: c_more_life_than } }
+
+/// "The owner of target permanent shuffles it into their library, then reveals the top
+/// card of their library.": the shuffle, then that player's next instruction.
+fn p_owner_shuffles_then(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (first, then) = l.split_once(", then ")?;
+    if then.starts_with("draw") || then.starts_with("you ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let parsed = (|| {
+        let (obj, rest) = match first.strip_prefix("the owner of ") {
+            Some(r) => r.split_once(" shuffles ")?,
+            None => first.split_once("'s owner shuffles ")?,
+        };
+        if !["it into their library", "that card into their library"].contains(&rest) {
+            return None;
+        }
+        let (what, tail) = crate::oracle::effects::object_ref(obj, b)?;
+        if !tail.trim().is_empty() || matches!(what, Sel::All(_) | Sel::Players(_) | Sel::None | Sel::Choose { .. }) {
+            return None;
+        }
+        let owner = PlayerRef::OwnerOf(Box::new(what.clone()));
+        b.it = what.clone();
+        let next = parse_clause(&format!("its owner {then}"), b)?;
+        b.it_player = owner.clone();
+        Some(Effect::seq(vec![
+            Effect::ShuffleIntoLibrary {
+                what,
+                library: owner,
+            },
+            next,
+        ]))
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: the owner of [object] shuffles it into their library, then ...", priority: 960, parse: p_owner_shuffles_then } }
+
+/// "exile it unless you discard a creature card": the instruction happens unless the
+/// player discards (CR 118.12a: a cost paid while the ability resolves).
+fn p_unless_you_discard(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (eff, cost) = end(l).split_once(" unless you discard ")?;
+    let (cost, _) = crate::oracle::costs::parse_cost(&format!("discard {cost}"))?;
+    if !cost.parts.iter().all(|p| matches!(p, CostPart::Discard { .. })) || cost.mana.is_some() {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(effect) = parse_clause(eff, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    Some(Effect::PayOptional {
+        who: PlayerRef::You,
+        cost,
+        then: Box::new(Effect::Noop),
+        otherwise: Box::new(effect),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: [instruction] unless you discard [cards]", priority: 960, parse: p_unless_you_discard } }

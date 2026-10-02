@@ -1760,3 +1760,56 @@ fn survival_cache_draws_with_more_life_than_an_opponent() {
     t.resolve();
     assert_eq!(t.hand_size(P0), 0);
 }
+
+#[test]
+fn chaos_warp_owner_shuffles_then_reveals() {
+    cr!("701.24a", "701.20a");
+    assert_supported(&["Chaos Warp"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    let target = t.battlefield(P1, "Hill Giant");
+    let c = t.hand(P0, "Chaos Warp");
+    t.cast(P0, c).target(target).go();
+    t.resolve();
+    // The shuffle puts the giant somewhere in a library of fillers and a giant; a filler
+    // (not a permanent card) or the giant may be revealed.
+    assert_eq!(t.zone(target), Zone::Library(P1));
+    let on_bf = t.named_on_battlefield("Hill Giant").len();
+    let lib = t.library_size(P1);
+    assert_eq!(on_bf + lib, 31);
+    // A permanent card on top goes onto the battlefield under its owner's control.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    let target = t.battlefield(P1, "Hill Giant");
+    // Only permanent cards in the library: whatever is revealed enters.
+    t.g.players[P1.idx()].library.clear();
+    t.library_top(P1, "Grizzly Bears");
+    let c = t.hand(P0, "Chaos Warp");
+    t.cast(P0, c).target(target).go();
+    t.resolve();
+    let entered: Vec<ObjectId> = ["Grizzly Bears", "Hill Giant"]
+        .iter()
+        .flat_map(|n| t.named_on_battlefield(n))
+        .collect();
+    assert_eq!(entered.len(), 1);
+    assert_eq!(t.obj_now(entered[0]).controller, P1);
+}
+
+#[test]
+fn body_snatcher_is_exiled_unless_you_discard_a_creature_card() {
+    cr!("118.12a");
+    assert_supported(&["Body Snatcher"]);
+    let mut t = TestGame::new(2);
+    t.hand(P0, "Shock");
+    let bs = t.enter(P0, "Body Snatcher");
+    t.resolve_all();
+    assert_eq!(t.zone(bs), Zone::Exile);
+    let mut t = TestGame::new(2);
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &objs(&[bears]));
+    let bs = t.enter(P0, "Body Snatcher");
+    t.resolve_all();
+    assert!(t.on_battlefield(bs));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
