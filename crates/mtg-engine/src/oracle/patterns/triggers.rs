@@ -1118,9 +1118,17 @@ pub(crate) fn parse_subject(s: &str) -> Option<Subject> {
         return mk(Filter::Or(vec![Filter::Source, other.filter]), false, false);
     }
     if let Some(r) = s.strip_prefix("~ or another ") {
-        let (f, plural, tail) = parse_object_phrase(r)?;
+        // "~ or another creature with the same name" (as ~; Pirated Copy, CR 201.2a).
+        let (r, same_name) = match r.strip_suffix(" with the same name") {
+            Some(x) => (x, true),
+            None => (r, false),
+        };
+        let (mut f, plural, tail) = parse_object_phrase(r)?;
         if plural || !end(tail).is_empty() {
             return None;
+        }
+        if same_name {
+            f = Filter::and(vec![f, Filter::SameNameAs(Box::new(Sel::This))]);
         }
         return mk(
             Filter::Or(vec![Filter::Source, Filter::and(vec![f, Filter::Other])]),
