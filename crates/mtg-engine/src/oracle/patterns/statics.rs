@@ -2824,6 +2824,11 @@ fn parse_player_body(s: &str) -> Option<Body> {
             "enchanted creature's controller ",
             PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
         ),
+        // A Curse's player (CR 303.4: the Aura is attached to that player).
+        (
+            "enchanted player ",
+            PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
+        ),
         ("you ", PlayerFilter::You),
         ("your opponents ", PlayerFilter::Opponent),
         ("each opponent ", PlayerFilter::Opponent),
