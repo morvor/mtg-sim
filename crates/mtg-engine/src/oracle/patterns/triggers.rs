@@ -978,6 +978,11 @@ pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
             rest = r;
             continue;
         }
+        if let Some(r) = t.strip_prefix("from your library") {
+            parts.push(Filter::CastFrom(ZoneKind::Library));
+            rest = r;
+            continue;
+        }
         if let Some(r) = t.strip_prefix("from exile") {
             parts.push(Filter::CastFrom(ZoneKind::Exile));
             rest = r;

@@ -715,3 +715,34 @@ fn echo_mage_s_copies_of_fling_deal_the_sacrificed_power() {
     t.resolve_all();
     assert_eq!(t.life(P1), 11);
 }
+
+// --- Melek, Izzet Paragon ------------------------------------------------------------------------
+
+#[test]
+fn melek_s_copy_of_a_spell_cast_from_the_library_isnt_cast() {
+    cr!("707.10", "707.10c", "601.2");
+    ruling!(
+        "Melek, Izzet Paragon",
+        "When the last ability resolves, it creates a copy of the spell. You control the copy. That copy is created on the stack, so it’s not “cast.”"
+    );
+    supported("Melek, Izzet Paragon");
+    // "You may cast instant and sorcery spells from the top of your library. Whenever you
+    // cast an instant or sorcery spell from your library, copy it."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Melek, Izzet Paragon");
+    t.battlefield(P0, "Young Pyromancer");
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    t.lands(P0, "Mountain", 1);
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    keep_copy_targets(&mut t, P0);
+    let copies = resolve_until_copies(&mut t);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(t.obj(copies[0]).controller, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    assert_eq!(elementals(&t, P0), 1);
+    // A spell cast from the hand isn't copied.
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 11);
+}
