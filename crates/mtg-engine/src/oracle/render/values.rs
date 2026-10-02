@@ -502,6 +502,14 @@ impl Renderer<'_> {
                 format!("{poss} mana value is {}", cmp_phrase(*c, &v))
             }
             // "if ~ entered this turn".
+            // "If you controlled that permanent" (after it left the battlefield; its last
+            // known information, CR 608.2h).
+            Condition::SelMatches(s, Filter::ControlledBy(PlayerRel::You))
+                if !matches!(s, Sel::This) =>
+            {
+                let subj = self.sel(s, Case::Subj);
+                format!("{{alt:{subj} is under your control|you control {subj}|you controlled {subj}}}")
+            }
             Condition::SelMatches(s, Filter::EnteredThisTurn) => {
                 let subj = self.sel(s, Case::Subj);
                 format!("{subj} entered this turn")

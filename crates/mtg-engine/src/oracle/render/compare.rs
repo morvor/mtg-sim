@@ -105,6 +105,19 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               in it is discarding that hand.",
     },
     Equivalence {
+        pattern: r"\byou had (an?|one or more|two or more|three or more) ([a-z]+) enter the battlefield under your control\b",
+        replacement: "$1 $2 entered the battlefield under your control",
+        why: "\"If you had a land enter the battlefield under your control this turn\" asks \
+              whether a land entered the battlefield under your control this turn.",
+    },
+    Equivalence {
+        pattern: r"(^|[.:—•] )if ([^,.]+), (~ (?:doesn't|does not) untap during your untap step)\b",
+        replacement: "$1$3 as long as $2",
+        why: "A static ability's condition (\"~ doesn't untap during your untap step if it \
+              has a depletion counter on it\") applies whenever it's true, as \"as long as\" \
+              says (CR 604.1).",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \
@@ -331,6 +344,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         pattern: r"\bremove any number of (\S+) counters\b",
         replacement: "remove x $1 counters",
         why: "A cost of X counters is paid with any number of them (CR 107.3).",
+    },
+    Equivalence {
+        pattern: r"\b(a|an|another) ([a-z]+) and/or ([a-z]+)\b",
+        replacement: "$1 $2 or $3",
+        why: "One object that's \"a Villain and/or artifact\" is one that's a Villain or an \
+              artifact (or both).",
     },
     Equivalence {
         pattern: r"\band/or\b",
@@ -933,7 +952,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(mills?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\bputs? an? (\S+) counter on ([^.]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
             (r"\benters? with an? (\S+) counter on it for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
-            (r"\b(enters?|puts?) (with )?a number of (\S+) counters on ([^.]+?) equal to ([^.]+?)(\.|$)", "$1 $2x $3 counters on $4, where x is $5$6"),
+            (r"\b(enters?|puts?) (with )?a number of (\S+) counters on ([^.]+?) equal to ([^.]+?)(\.|$)", "$1 ${2}x $3 counters on $4, where x is $5$6"),
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
             (r"\b(creates?) an? ([^.]+?) tokens? for each ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is the number of $3$4"),
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),

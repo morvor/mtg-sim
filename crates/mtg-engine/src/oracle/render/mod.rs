@@ -919,7 +919,9 @@ impl<'a> Renderer<'a> {
                     let Value::If(c, yes, no) = &m.max else {
                         return self.gap("modal max");
                     };
-                    let c = self.condition(c);
+                    // The modes are chosen as the spell is cast (CR 601.2b), so that's
+                    // when the condition is checked; cards may say so.
+                    let c = format!("{} {{opt:as you cast ~}}", self.condition(c));
                     let no_s = match no.as_ref() {
                         Value::Const(n) if *n == a => self.count_word(*n),
                         other => self.value(other),

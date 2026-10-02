@@ -360,6 +360,27 @@ impl Renderer<'_> {
                 let s = self.sel(sel, Case::Subj);
                 format!("if {s} doesn't have suspend, it gains suspend")
             }
+            // "Put each card exiled with ~ onto the battlefield under its owner's
+            // control": each card moved on its own (to its own owner's control).
+            Effect::ForEach {
+                sel: sel @ Sel::All(_),
+                var,
+                effect,
+            } if matches!(effect.as_ref(), Effect::Move { what: Sel::Var(v), .. } if v == var) => {
+                let Effect::Move { to, .. } = effect.as_ref() else {
+                    return self.gap("each linked card");
+                };
+                let mut to = to.clone();
+                let owner_each = matches!(&to.controller, Some(PlayerRef::OwnerOf(o)) if matches!(o.as_ref(), Sel::Var(v) if v == var));
+                if owner_each {
+                    to.controller = None;
+                }
+                let mut s = self.move_effect(sel, &to);
+                if owner_each && to.zone == ZoneKind::Battlefield && !s.contains(" under ") {
+                    s.push_str(" under its owner's control");
+                }
+                s
+            }
             // "Return the exiled card to the battlefield": each card linked to this object.
             Effect::ForEach {
                 sel: Sel::Linked | Sel::CreatorLinked,
@@ -2642,6 +2663,23 @@ impl Renderer<'_> {
     fn if_effect(&mut self, cond: &Condition, then: &Effect, otherwise: &Effect) -> String {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
+        // "After this main phase, there is an additional combat phase ...": only during
+        // a main phase is there a main phase to come after.
+        if else_empty
+            && matches!(cond, Condition::Phase(PhaseCond::MainPhase))
+            && matches!(
+                then,
+                Effect::AddTurnParts {
+                    after_phase: true,
+                    ..
+                }
+            )
+        {
+            let t = self.effect(then);
+            if t.contains("after this phase") {
+                return t.replacen("after this phase", "after this main phase", 1);
+            }
+        }
         match cond {
             Condition::PrevHappened if else_empty && matches!(then, Effect::Reflexive { .. }) => {
                 // "When you do, ..." already means "if you do" (CR 603.12).

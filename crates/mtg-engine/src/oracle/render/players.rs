@@ -530,7 +530,10 @@ impl Renderer<'_> {
                     && matches!(&v[0], Filter::In(s) if matches!(s.as_ref(), Sel::Linked))
                     && matches!(v[1], Filter::InZone(ZoneKind::Exile)) =>
             {
-                decline("{alt:the exiled card|each card exiled with ~}".into(), case)
+                decline(
+                    "{alt:the exiled card|each card exiled with ~it}".into(),
+                    case,
+                )
             }
             Sel::All(f) => {
                 if let Some(z) = whole_zone(f) {
@@ -631,7 +634,7 @@ impl Renderer<'_> {
                 }
                 decline(s, case)
             }
-            Sel::Linked => decline("each card exiled with ~".into(), case),
+            Sel::Linked => decline("each card exiled with ~it".into(), case),
             Sel::LinkedNoted => decline("the last chosen card".into(), case),
             Sel::CreatorLinked => decline("the exiled card".into(), case),
             Sel::ExiledWithCardsNamed(n) => {
@@ -739,6 +742,28 @@ impl Renderer<'_> {
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
                 format!("{s} controller")
+            }
+            // "Return target permanent to its owner's hand. Then that player discards a
+            // card": the owner, the one player the text has named (no player target,
+            // no other player the event names).
+            PlayerRef::OwnerOf(sel)
+                if matches!(case, Case::Subj)
+                    && matches!(
+                        sel.as_ref(),
+                        Sel::Target(_) | Sel::TriggerObject | Sel::TriggerLki
+                    )
+                    && self.trigger_player.is_none()
+                    && !self.targets.iter().any(|t| {
+                        matches!(
+                            t.what,
+                            TargetKind::Player(_)
+                                | TargetKind::AnyTarget
+                                | TargetKind::ObjectOrPlayer(..)
+                        )
+                    }) =>
+            {
+                let s = self.sel(sel, Case::Poss);
+                format!("{{alt:{s} owner|that player}}")
             }
             PlayerRef::OwnerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);

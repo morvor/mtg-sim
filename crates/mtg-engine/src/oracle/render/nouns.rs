@@ -256,6 +256,11 @@ impl Renderer<'_> {
             // CR 700.12: an outlaw is an object with the Assassin, Mercenary, Pirate,
             // Rogue, and/or Warlock creature types.
             Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),
+            // "artifact, enchantment, or tapped creature": one list.
+            Filter::Or(v) if v.iter().any(|x| matches!(x, Filter::Or(_))) => {
+                let flat = flatten_or(f);
+                self.collect(&flat, np)
+            }
             Filter::Or(v) => {
                 let status_word = |x: &Filter| -> Option<&'static str> {
                     Some(match x {
@@ -511,7 +516,7 @@ impl Renderer<'_> {
             // "with the same name as a card exiled with ~": as any of them.
             Filter::SameNameAs(s) => {
                 let s = self.sel(s, Case::Obj);
-                let s = s.replace("|each card exiled with ~}", "|a card exiled with ~}");
+                let s = s.replace("|each card exiled with ~it}", "|a card exiled with ~it}");
                 np.with.push(format!("the same name as {s}"));
             }
             Filter::DifferentNameFrom(s) => {
