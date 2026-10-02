@@ -1103,6 +1103,13 @@ impl Renderer<'_> {
             PlayerRel::Any => "a player controls".into(),
             PlayerRel::TargetOrController(i) => {
                 let p = self.target_player_mention(i);
+                // "each creature that player or that planeswalker's controller controls":
+                // the target, mentioned again, is a player or a planeswalker.
+                let p = if p == "it" {
+                    "that player".to_string()
+                } else {
+                    p
+                };
                 format!("{p} or that planeswalker's controller controls")
             }
             // "among creatures they control": the player each player is.
