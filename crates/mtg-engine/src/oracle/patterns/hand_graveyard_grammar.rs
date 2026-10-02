@@ -1889,3 +1889,248 @@ fn f_play_distributed_exile(l: &str, prev: &mut Effect, _b: &mut Builder) -> boo
 }
 
 inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: you may play the exiled card this turn", priority: 960, apply: f_play_distributed_exile } }
+
+/// "Look at the top card of each player's library.": each library's top card(s), in turn
+/// (CR 401.2: looking doesn't move them).
+fn p_look_each_library(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("look at the top ")?;
+    let (n, r) = match r.strip_prefix("card of ") {
+        Some(r) => (Value::Const(1), r),
+        None => {
+            let (n, r) = parse_number(r)?;
+            (n, r.trim_start().strip_prefix("cards of ")?)
+        }
+    };
+    let who = match r {
+        "each player's library" => PlayerRef::EachPlayer,
+        "each opponent's library" => PlayerRef::EachOpponent,
+        _ => return None,
+    };
+    let _ = b;
+    Some(Effect::ForEachPlayer {
+        who,
+        effect: Box::new(Effect::Dig {
+            who: PlayerRef::Iterated,
+            n,
+            reveal: false,
+            filter: Filter::Any,
+            take: Value::Const(0),
+            take_up_to: true,
+            take_to: Destination::zone(ZoneKind::Hand),
+            rest_to: Destination {
+                position: LibraryPosition::FromTop(0),
+                ..Destination::zone(ZoneKind::Library)
+            },
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: look at the top card of each player's library", priority: 960, parse: p_look_each_library } }
+
+/// "Look at its controller's hand.", "look at that player's hand".
+fn p_look_at_players_hand(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("look at ")?;
+    let who = r.strip_suffix("'s hand")?;
+    if who.starts_with("target ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let (who, rest) = player_ref(who, b)?;
+    if !rest.trim().is_empty() || b.targets.len() != saved.0 {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    Some(Effect::LookAtHand { who })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: look at [player]'s hand", priority: 960, parse: p_look_at_players_hand } }
+
+/// "Draw three cards, untap up to two lands, then discard a card.": three or more
+/// instructions in order.
+fn p_comma_list_then(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (head, last) = end(l).rsplit_once(", then ")?;
+    let parts: Vec<&str> = head.split(", ").collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let mut v = Vec::new();
+    for p in parts.iter().chain(std::iter::once(&last)) {
+        let first = p.split(' ').next().unwrap_or("");
+        // Imperative instructions only (no subject to carry over).
+        if !["draw", "untap", "discard", "tap", "scry", "mill", "surveil", "put", "exile", "return", "sacrifice", "shuffle", "create", "gain", "lose"].contains(&first) {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            return None;
+        }
+        match parse_clause(p, b) {
+            Some(e) => v.push(e),
+            None => {
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1, saved.2);
+                return None;
+            }
+        }
+    }
+    Some(Effect::seq(v))
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: A, B, then C", priority: 960, parse: p_comma_list_then } }
+
+/// "~ gets +2/+0 for every seven cards in your graveyard.": +2/+0 for each complete group
+/// of seven (the count divided by seven, rounded down).
+fn s_for_every_n(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (head, r) = l.split_once(" for every ")?;
+    let (n, thing) = parse_number(r)?;
+    let Value::Const(n) = n else { return None };
+    if n < 2 {
+        return None;
+    }
+    let rewritten = format!("{head} for each {}", thing.trim_start());
+    let mut abilities = crate::oracle_ext::parse_static_ext(&rewritten, text, ctx)?;
+    let per_group = |v: &Value| -> Option<Value> {
+        Some(match v {
+            Value::Const(_) => v.clone(),
+            Value::Mul(k, c) if matches!(**k, Value::Const(_)) => {
+                Value::Mul(k.clone(), Box::new(Value::Div(c.clone(), n, false)))
+            }
+            c => Value::Div(Box::new(c.clone()), n, false),
+        })
+    };
+    for a in &mut abilities {
+        let a = std::sync::Arc::make_mut(a);
+        let AbilityKind::Static(st) = &mut a.kind else {
+            return None;
+        };
+        let StaticEffect::Continuous { mods, .. } = &mut st.effect else {
+            return None;
+        };
+        for m in mods.iter_mut() {
+            let Modification::ModifyPT(p, t) = m else {
+                return None;
+            };
+            *m = Modification::ModifyPT(per_group(p)?, per_group(t)?);
+        }
+    }
+    Some(abilities)
+}
+
+inventory::submit! { super::StaticPattern { name: "hand/graveyard grammar: +N/+N for every N [things]", priority: 960, parse: s_for_every_n } }
+
+/// After "the number of": counts about cards in hands and graveyards — "cards revealed
+/// this way" ([`this_way_count`]), "cards in the hand of the opponent with the most cards
+/// in hand", "card types among cards in your opponents' graveyards".
+pub fn count_phrase(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(v) = this_way_count(r, b) {
+        return Some(v);
+    }
+    for (p, f) in [
+        ("cards in the hand of the opponent with the most cards in hand", PlayerFilter::Opponent),
+        ("cards in the hand of the player with the most cards in hand", PlayerFilter::Any),
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if word_end(rest) {
+                return Some((
+                    Value::OverPlayers(AggOp::Max, f, Box::new(Value::HandSize(PlayerRef::Iterated))),
+                    rest.to_string(),
+                ));
+            }
+        }
+    }
+    for p in ["card types among cards in ", "card type among cards in "] {
+        if let Some(z) = r.strip_prefix(p) {
+            let owner = if let Some(rest) = z
+                .strip_prefix("your opponents' graveyards")
+                .or_else(|| z.strip_prefix("opponents' graveyards"))
+            {
+                (Filter::OwnedBy(PlayerRel::Opponent), rest)
+            } else {
+                return None;
+            };
+            if !word_end(owner.1) {
+                return None;
+            }
+            return Some((
+                Value::CardTypesAmong(Filter::and(vec![
+                    Filter::Card,
+                    Filter::InZone(ZoneKind::Graveyard),
+                    owner.0,
+                ])),
+                owner.1.to_string(),
+            ));
+        }
+    }
+    None
+}
+
+/// "there are ten or more cards in a single graveyard": some graveyard has that many.
+fn c_single_graveyard(c: &str) -> Option<Condition> {
+    let r = end(c).strip_prefix("there are ")?;
+    let (n, r) = parse_number(r)?;
+    let r = r.trim_start().strip_prefix("or more cards in a single graveyard")?;
+    if !r.trim().is_empty() {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::OverPlayers(
+            AggOp::Max,
+            PlayerFilter::Any,
+            Box::new(Value::CardsInGraveyard(PlayerRef::Iterated, Filter::Card)),
+        ),
+        Cmp::Ge,
+        n,
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "hand/graveyard grammar: N or more cards in a single graveyard", priority: 960, parse: c_single_graveyard } }
+
+/// "Exile target creature card from a graveyard that was put there this turn.", "Exile all
+/// creature cards in all graveyards that were put there from the battlefield this turn.":
+/// the cards in graveyards are limited to those put there this turn (from that zone).
+fn p_put_there_this_turn(l: &str, b: &mut Builder) -> Option<Effect> {
+    use crate::kw::hand_graveyard_actions::PUT_THERE_THIS_TURN;
+    let l = end(l);
+    let (clause, from) = [
+        (" that was put there this turn", ""),
+        (" that were put there this turn", ""),
+        (" that was put there from anywhere this turn", ""),
+        (" that were put there from anywhere this turn", ""),
+        (" that was put there from the battlefield this turn", "battlefield"),
+        (" that were put there from the battlefield this turn", "battlefield"),
+    ]
+    .iter()
+    .find_map(|(p, from)| l.contains(p).then(|| (l.replacen(p, "", 1), *from)))?;
+    let custom = Filter::Custom(SmolStr::new(format!("{PUT_THERE_THIS_TURN}{from}")));
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let mut e = parse_clause(&clause, b)?;
+    let in_gy = |f: &Filter| f.zone() == Some(ZoneKind::Graveyard);
+    let mut patched = 0;
+    for t in b.targets[saved.0..].iter_mut() {
+        if let TargetKind::Object(f) = &t.what {
+            if in_gy(f) {
+                t.what = TargetKind::Object(Filter::and(vec![f.clone(), custom.clone()]));
+                patched += 1;
+            }
+        }
+    }
+    let exile = match &mut e {
+        Effect::Seq(v) => v.first_mut(),
+        e => Some(e),
+    };
+    if let Some(Effect::Exile { what: Sel::All(f), .. }) = exile {
+        if in_gy(f) {
+            *f = Filter::and(vec![f.clone(), custom.clone()]);
+            patched += 1;
+        }
+    }
+    if patched != 1 {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: cards put into a graveyard this turn", priority: 960, parse: p_put_there_this_turn } }

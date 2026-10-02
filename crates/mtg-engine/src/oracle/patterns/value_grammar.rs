@@ -968,7 +968,7 @@ fn amount(s: &str) -> Option<(Cmp, Value, &str)> {
 /// After "the number of": what's counted.
 fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     // "cards revealed this way", "creature cards exiled this way".
-    if let Some(v) = super::hand_graveyard_grammar::this_way_count(r, b) {
+    if let Some(v) = super::hand_graveyard_grammar::count_phrase(r, b) {
         return Some(v);
     }
     // "times ~ was kicked", "time it was kicked" (CR 702.33): the source's kicker count.

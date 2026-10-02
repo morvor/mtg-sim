@@ -46,6 +46,33 @@ fn last_choice_of(t: &TestGame, p: PlayerId) -> Vec<Entity> {
         .expect("no choice was asked")
 }
 
+/// A sorcery costing {0} compiled from oracle text with the real compiler.
+fn sorcery(name: &str, text: &str) -> mtg_engine::card::CardDef {
+    use mtg_engine::oracle::{self, CompileContext};
+    use mtg_engine::types::TypeLine;
+    let tl = TypeLine::parse("Sorcery");
+    let ctx = CompileContext {
+        card_name: name,
+        full_name: name,
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let compiled = oracle::compile(text, &ctx);
+    assert!(compiled.unsupported.is_empty(), "{:?}", compiled.unsupported);
+    mtg_engine::card::CardDef::custom(mtg_engine::object::Characteristics {
+        name: name.into(),
+        mana_cost: mtg_engine::mana::ManaCost::parse("{0}"),
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        rules_text: std::sync::Arc::from(text),
+        ..Default::default()
+    })
+}
+
 fn objs(ids: &[ObjectId]) -> Vec<Entity> {
     ids.iter().map(|o| Entity::Object(*o)).collect()
 }
@@ -1189,4 +1216,199 @@ fn sanctifier_en_vec_exiles_black_and_red_cards_from_graveyards() {
     t.resolve_all();
     assert!(t.in_exile("Lightning Bolt") && t.in_exile("Doom Blade"));
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+// ---------------------------------------------------------------------------
+// Third batch: graveyard and hand counts, cards put into a graveyard this turn, looking
+// ---------------------------------------------------------------------------
+
+#[test]
+fn third_batch_compiles() {
+    assert_supported(&[
+        "Dark Matter Manipulator",
+        "Swimmer in Nightmares",
+        "Adamaro, First to Desire",
+        "Nighthawk Scavenger",
+        "Abyssal Harvester",
+        "Reenact the Crime",
+        "Case the Joint",
+        "Lay Bare",
+        "Pore Over the Pages",
+    ]);
+}
+
+#[test]
+fn dark_matter_manipulator_counts_groups_of_seven() {
+    cr!("613.4c");
+    let mut t = TestGame::new(2);
+    let d = t.battlefield(P0, "Dark Matter Manipulator");
+    for _ in 0..6 {
+        t.graveyard(P0, "Shock");
+    }
+    t.g.recompute();
+    assert_eq!(t.pt(d), (1, 2));
+    t.graveyard(P0, "Shock");
+    t.g.recompute();
+    assert_eq!(t.pt(d), (3, 2));
+    for _ in 0..7 {
+        t.graveyard(P0, "Shock");
+    }
+    t.g.recompute();
+    assert_eq!(t.pt(d), (5, 2));
+}
+
+#[test]
+fn swimmer_in_nightmares_any_single_graveyard() {
+    cr!("613.4c");
+    let mut t = TestGame::new(2);
+    let s = t.battlefield(P0, "Swimmer in Nightmares");
+    for _ in 0..5 {
+        t.graveyard(P0, "Shock");
+        t.graveyard(P1, "Shock");
+    }
+    t.g.recompute();
+    // Ten cards in all, but not in a single graveyard.
+    assert_eq!(t.pt(s), (1, 4));
+    for _ in 0..5 {
+        t.graveyard(P1, "Shock");
+    }
+    t.g.recompute();
+    assert_eq!(t.pt(s), (4, 4));
+}
+
+#[test]
+fn adamaro_counts_the_largest_opponent_hand() {
+    cr!("604.3");
+    let mut t = TestGame::with_config(3, Default::default());
+    let a = t.battlefield(P0, "Adamaro, First to Desire");
+    for _ in 0..5 {
+        t.hand(P0, "Shock");
+    }
+    t.hand(P1, "Shock");
+    for _ in 0..3 {
+        t.hand(P2, "Shock");
+    }
+    t.g.recompute();
+    assert_eq!(t.pt(a), (3, 3));
+}
+
+#[test]
+fn nighthawk_scavenger_counts_card_types_in_opponents_graveyards() {
+    cr!("604.3");
+    let mut t = TestGame::new(2);
+    let n = t.battlefield(P0, "Nighthawk Scavenger");
+    t.graveyard(P0, "Forest");
+    t.g.recompute();
+    assert_eq!(t.pt(n), (1, 3));
+    t.graveyard(P1, "Forest");
+    t.graveyard(P1, "Shock");
+    t.graveyard(P1, "Ornithopter"); // artifact creature: two types
+    t.g.recompute();
+    assert_eq!(t.pt(n), (5, 3));
+}
+
+#[test]
+fn reenact_the_crime_only_cards_put_there_this_turn() {
+    cr!("115.1");
+    let mut t = TestGame::new(2);
+    // A card that went to the graveyard on an earlier turn.
+    let old = t.graveyard(P1, "Grizzly Bears");
+    t.g.objects[old.0 as usize].entered_turn = 0;
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.lands(P1, "Mountain", 1);
+    t.cast(P1, bolt).target(P0).go();
+    t.resolve();
+    let bolt_gy = t.g.current(bolt);
+    t.lands(P0, "Island", 4);
+    let r = t.hand(P0, "Reenact the Crime");
+    t.cast(P0, r).target(bolt_gy).go();
+    let asked = t.asked();
+    let cands = asked
+        .iter()
+        .rev()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert!(cands.contains(&Entity::Object(bolt_gy)));
+    assert!(!cands.contains(&Entity::Object(old)));
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.zone(bolt_gy), Zone::Exile);
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn exile_creature_cards_put_into_graveyards_from_the_battlefield_this_turn() {
+    cr!("400.7");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let discarded = t.graveyard(P1, "Hill Giant");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(bears).go();
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    let s = t.custom(
+        P0,
+        sorcery(
+            "Cry Probe",
+            "Exile all creature cards in all graveyards that were put there from the battlefield this turn.",
+        ),
+        Zone::Hand(P0),
+    );
+    t.cast(P0, s).go();
+    t.resolve();
+    assert!(t.in_exile("Grizzly Bears"));
+    // A card not put there from the battlefield stays.
+    assert_eq!(t.zone(discarded), Zone::Graveyard(P1));
+}
+
+#[test]
+fn case_the_joint_looks_at_each_top_card() {
+    cr!("401.2");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 4);
+    let a = t.library_top(P0, "Shock");
+    let b = t.library_top(P1, "Grizzly Bears");
+    let c = t.hand(P0, "Case the Joint");
+    t.cast(P0, c).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(t.zone(b), Zone::Library(P1));
+    assert_eq!(*t.g.player(P1).library.last().unwrap(), t.g.current(b));
+    let _ = a;
+}
+
+#[test]
+fn lay_bare_counters_then_looks() {
+    cr!("701.6a");
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(P0).go();
+    let spell = t.g.stack[0];
+    t.lands(P0, "Island", 4);
+    let lb = t.hand(P0, "Lay Bare");
+    t.cast(P0, lb).target(spell).go();
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn pore_over_the_pages_draws_untaps_discards() {
+    cr!("608.2c");
+    let mut t = TestGame::new(2);
+    let lands = t.lands(P0, "Island", 5);
+    let p = t.hand(P0, "Pore Over the Pages");
+    t.answer_choose(P0, &objs(&lands[..2]));
+    t.cast(P0, p).go();
+    t.resolve();
+    let untapped = lands.iter().filter(|l| !t.obj_now(**l).tapped).count();
+    assert_eq!(untapped, 2);
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(t.graveyard_size(P0), 2);
 }

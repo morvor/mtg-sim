@@ -22,6 +22,11 @@ pub const RECORD_THAT_MANY: &str = "record that many for the iterated player";
 /// [`THAT_MANY_VAR`].
 pub const THAT_MANY: &str = "that many";
 
+/// `Filter::Custom` name prefix: a card that was put into its graveyard this turn
+/// ("target creature card in a graveyard that was put there this turn"), followed by
+/// the zone it came from ("battlefield", "library") or nothing for anywhere.
+pub const PUT_THERE_THIS_TURN: &str = "put into its graveyard this turn from:";
+
 pub struct HandGraveyardActions;
 
 impl KeywordRules for HandGraveyardActions {
@@ -38,6 +43,24 @@ impl KeywordRules for HandGraveyardActions {
             ctx.nums.insert(THAT_MANY_BY_PLAYER + p.0 as Var, n);
         }
         true
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: crate::types::ObjectId, _ctx: &Ctx) -> Option<bool> {
+        let from = name.strip_prefix(PUT_THERE_THIS_TURN)?;
+        let o = g.obj(id);
+        if !matches!(o.zone, crate::object::Zone::Graveyard(_)) || o.entered_turn != g.turn.number {
+            return Some(false);
+        }
+        if from.is_empty() {
+            return Some(true);
+        }
+        // The zone it was in before (its previous incarnation, CR 400.7).
+        let prev_zone = o.prev.map(|p| g.obj(p).zone);
+        Some(match (from, prev_zone) {
+            ("battlefield", Some(crate::object::Zone::Battlefield)) => true,
+            ("library", Some(crate::object::Zone::Library(_))) => true,
+            _ => false,
+        })
     }
 
     fn custom_value(&self, _g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
