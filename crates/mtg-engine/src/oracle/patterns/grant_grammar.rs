@@ -153,8 +153,29 @@ fn becomes_with_quotes(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let (masked, quotes) = mask_quotes(l)?;
+    // "... and loses all other card types and abilities" (Vraska, Betrayal's Sting): the
+    // new card types replace the old ones anyway (CR 205.1a); the abilities it had are
+    // removed before the granted ones are added (layer 6, in order, CR 613.1f).
+    let mut masked = masked.as_str();
+    let mut other_types = false;
+    let mut lose_abilities = false;
+    for (tail, t, a) in [
+        (" and loses all other card types and abilities", true, true),
+        (", and it loses all other card types and abilities", true, true),
+        (" and loses all other card types", true, false),
+        (", and it loses all other card types", true, false),
+        (" and loses all other abilities", false, true),
+        (", and it loses all other abilities", false, true),
+    ] {
+        if let Some(r) = masked.strip_suffix(tail) {
+            masked = r;
+            other_types = t;
+            lose_abilities = a;
+            break;
+        }
+    }
     // Peel a trailing duration.
-    let mut core = masked.as_str();
+    let mut core = masked;
     let mut suffix = "";
     for s in DURATION_SUFFIXES {
         if let Some(r) = core.strip_suffix(s) {
@@ -262,9 +283,68 @@ fn becomes_with_quotes(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let to_source = matches!(what, Sel::This);
     let granted = compile_quotes(&qs, &quotes, hint, to_source, b)?;
+    if other_types && !mods.iter().any(|m| matches!(m, Modification::SetTypes { .. })) {
+        return None;
+    }
+    if lose_abilities {
+        mods.insert(0, Modification::RemoveAllAbilities);
+    }
     mods.extend(granted.into_iter().map(Modification::AddAbility));
     Some(e)
 }
+
+/// "If you do, return that card to the battlefield tapped under your control. It's a
+/// Treasure artifact with \"{T}, Sacrifice this artifact: Add one mana of any color,\"
+/// and it loses all other card types." (Vraska, the Silencer): what the permanent is as
+/// it enters (CR 614.1c), read as "becomes" would be.
+fn its_a_with_quotes(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(rest) = l.strip_prefix("it's ") else {
+        return false;
+    };
+    if !rest.contains('"') {
+        return false;
+    }
+    {
+        let Some(Effect::Move { to, .. }) = last_move(prev) else {
+            return false;
+        };
+        if to.zone != ZoneKind::Battlefield || !to.with_mods.is_empty() {
+            return false;
+        }
+    }
+    let saved = b.it.clone();
+    b.it = Sel::This;
+    let e = becomes_with_quotes(&format!("~ becomes {rest}"), b);
+    b.it = saved;
+    let Some(Effect::Modify {
+        what: Sel::This,
+        mods,
+        duration: Duration::Permanent,
+    }) = e
+    else {
+        return false;
+    };
+    let Some(Effect::Move { to, .. }) = last_move(prev) else {
+        return false;
+    };
+    to.with_mods = mods;
+    true
+}
+
+/// The last instruction of `e`, if it's a zone change.
+fn last_move(e: &mut Effect) -> Option<&mut Effect> {
+    match e {
+        Effect::Move { .. } => Some(e),
+        Effect::Seq(v) => v.last_mut().and_then(last_move),
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => last_move(then),
+        Effect::May { effect, .. } => last_move(effect),
+        _ => None,
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "grants: it's a [type] with \"[ability]\"", priority: 90, apply: its_a_with_quotes } }
 
 /// An ability that sets the power and toughness of the object that has it ("This
 /// creature's power and toughness are each equal to ...": granted, it isn't
@@ -830,3 +910,63 @@ fn may_cast_self_while_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> b
 }
 
 inventory::submit! { FollowupPattern { name: "grants: you may cast ~ for as long as it remains exiled", priority: 120, apply: may_cast_self_while_exiled } }
+
+/// "Until end of turn, target creature gets +3/+3, up to one other target creature gets
+/// +2/+2, and up to one other target creature gets +1/+1." (Arm the Cathars), "Until end
+/// of turn, double target creature's power and it gains first strike." (Legion
+/// Leadership): a leading duration over a list of clauses, each with its own subject;
+/// each clause is read as its own sentence with that duration.
+fn leading_duration_clauses(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let (suffix, body) = [
+        ("until end of turn, ", " until end of turn"),
+        ("until your next turn, ", " until your next turn"),
+    ]
+    .into_iter()
+    .find_map(|(p, s)| l.strip_prefix(p).map(|r| (s, r)))?;
+    if body.contains('"') {
+        return None;
+    }
+    const SUBJECTS: &[&str] = &["it ", "target ", "up to ", "another target ", "~ "];
+    let mut cuts = vec![];
+    for sep in [", and ", ", ", " and "] {
+        for (i, _) in body.match_indices(sep) {
+            let next = &body[i + sep.len()..];
+            if SUBJECTS.iter().any(|s| next.starts_with(s)) {
+                cuts.push((i, i + sep.len()));
+            }
+        }
+    }
+    cuts.sort();
+    cuts.dedup_by_key(|c| c.0);
+    let mut clauses = Vec::new();
+    let mut from = 0;
+    let mut last_end = 0;
+    for (start, next) in cuts {
+        if start < last_end {
+            continue;
+        }
+        clauses.push(&body[from..start]);
+        from = next;
+        last_end = next;
+    }
+    clauses.push(&body[from..]);
+    if clauses.len() < 2 {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let mut out = Vec::new();
+    for c in clauses {
+        match crate::oracle::effects::parse_sentence(&format!("{c}{suffix}"), b) {
+            Some(e) => out.push(e),
+            None => {
+                b.targets.truncate(saved.0);
+                b.it = saved.1;
+                return None;
+            }
+        }
+    }
+    Some(Effect::seq(out))
+}
+
+inventory::submit! { EffectPattern { name: "grants: leading duration over several clauses", priority: 95, parse: leading_duration_clauses } }

@@ -163,6 +163,8 @@ enum Verb {
     BasePt,
     /// "has base power N" (layer 7b, setting only the power)
     BasePower,
+    /// "has base toughness N" (layer 7b, setting only the toughness)
+    BaseToughness,
     /// "becomes a Dinosaur in addition to its other creature types" (layer 4)
     BecomesCreatureType,
     /// "loses all abilities"
@@ -174,6 +176,10 @@ enum Verb {
 /// The verb starting at `s` (a word boundary), and the text after it.
 fn verb_at(s: &str) -> Option<(Verb, &str)> {
     for (p, v) in [
+        // "gets an additional +1/+1" (after an earlier bonus): P/T changes add up
+        // (CR 613.4c).
+        ("gets an additional ", Verb::Get),
+        ("get an additional ", Verb::Get),
         ("gets ", Verb::Get),
         ("get ", Verb::Get),
         ("gains ", Verb::Gain),
@@ -182,6 +188,8 @@ fn verb_at(s: &str) -> Option<(Verb, &str)> {
         ("have base power and toughness ", Verb::BasePt),
         ("has base power ", Verb::BasePower),
         ("have base power ", Verb::BasePower),
+        ("has base toughness ", Verb::BaseToughness),
+        ("have base toughness ", Verb::BaseToughness),
         ("becomes a ", Verb::BecomesCreatureType),
         ("becomes an ", Verb::BecomesCreatureType),
         ("become ", Verb::BecomesCreatureType),
@@ -515,6 +523,16 @@ fn predicate_list(l: &str, b: &mut Builder) -> Option<Effect> {
                     Value::c(body.parse().ok()?)
                 };
                 mods.push(Modification::SetPT(Some(pv), None));
+            }
+            Verb::BaseToughness => {
+                // Layer 7b (CR 613.4b): only the toughness is set.
+                let tv = if body == "x" {
+                    used_x = true;
+                    x.clone().unwrap_or(Value::X)
+                } else {
+                    Value::c(body.parse().ok()?)
+                };
+                mods.push(Modification::SetPT(None, Some(tv)));
             }
             Verb::BecomesCreatureType => {
                 // Layer 4 (CR 613.1d): one creature type added.
