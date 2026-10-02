@@ -484,6 +484,14 @@ pub struct TurnHistory {
     /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
     #[serde(default)]
     pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
+    /// Cards milled this turn (CR 701.17), as the objects they became, and cards
+    /// discarded this turn with the player who discarded each ("a card in a graveyard
+    /// that was milled this turn", "cards you cycled or discarded this turn"). Recorded
+    /// by `kw/zone_moves.rs`.
+    #[serde(default)]
+    pub milled: Vec<ObjectId>,
+    #[serde(default)]
+    pub discarded: Vec<(PlayerId, ObjectId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

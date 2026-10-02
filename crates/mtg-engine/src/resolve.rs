@@ -2477,6 +2477,14 @@ impl Game {
                     .collect();
                 Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
             }
+            // "creatures that player controls", "creatures the active player controls":
+            // the players as the effect begins.
+            Filter::ControlledByPlayer(r) => {
+                let ps = self.eval_players(r, ctx);
+                Filter::ControllerMatches(Box::new(PlayerFilter::Or(
+                    ps.into_iter().map(PlayerFilter::Is).collect(),
+                )))
+            }
             Filter::And(v) => {
                 Filter::And(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
             }
@@ -2940,7 +2948,20 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::BlockAsThoughUntapped(f)
         | Restriction::Goaded(f)
         | Restriction::DamageByToughness(f)
-        | Restriction::AssignsNoCombatDamage(f) => Some(f),
+        | Restriction::AssignsNoCombatDamage(f)
+        | Restriction::CantAttackAlone(f)
+        | Restriction::CantBlockAlone(f)
+        | Restriction::AttackOnlyAlone(f)
+        | Restriction::CantTransform(f) => Some(f),
+        Restriction::CantBe { what, .. } => Some(what),
+        Restriction::AttackTogether { attackers, .. }
+        | Restriction::MustAttackOtherThan { attackers, .. } => Some(attackers),
+        Restriction::CantActivate { sources, .. } => Some(sources),
+        Restriction::ExtraBlocks { blocker, .. } => Some(blocker),
+        Restriction::MinBlockers { attacker, .. }
+        | Restriction::MaxBlockedBy { attacker, .. }
+        | Restriction::MustBeBlockedBy { attacker, .. }
+        | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
@@ -2963,6 +2984,16 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         Restriction::CantCast { who, .. } => Some(who),
         Restriction::MustAttackPlayer { defender, .. }
+        | Restriction::CantAttackPlayer { defender, .. }
+        | Restriction::AttackCost { defender, .. }
+        | Restriction::MustAttackOtherThan {
+            players: defender, ..
+        }
+        | Restriction::MaxBlockersOf { who: defender, .. }
+        | Restriction::MaxAttackersAgainst {
+            player: Some(defender),
+            ..
+        }
         | Restriction::AttackAsThoughHaste {
             defender: Some(defender),
             ..

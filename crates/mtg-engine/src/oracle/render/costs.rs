@@ -296,6 +296,11 @@ impl Renderer<'_> {
             Some(2) => restr.push("twice each turn".into()),
             Some(n) => restr.push(format!("{} times each turn", number_word(n as i32))),
         }
+        match a.max_total {
+            None => {}
+            Some(1) => restr.push("once".into()),
+            Some(n) => restr.push(format!("{} times", number_word(n as i32))),
+        }
         let solved = a.condition.as_ref().is_some_and(super::is_solved);
         // "X can't be 0." (CR 107.3a): the condition on the announced X alone.
         let x_not_zero = matches!(
@@ -339,6 +344,9 @@ impl Renderer<'_> {
         }
         if a.any_player {
             s.push_str(" Any player may activate this ability.");
+        }
+        if a.only_opponents {
+            s.push_str(" Only your opponents may activate this ability.");
         }
         match (a.cant_be_copied, x_not_zero) {
             (true, true) => s.push_str(" This ability can't be copied and X can't be 0."),

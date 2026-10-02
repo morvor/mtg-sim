@@ -846,6 +846,10 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: that many", 
 /// way": how many of the cards the earlier action affected match the description (they
 /// are counted where they went, CR 400.7).
 pub fn this_way_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "Swamps returned this way" (see `zone_move_grammar`).
+    if let Some(v) = super::zone_move_grammar::returned_this_way(r, b) {
+        return Some(v);
+    }
     let i = r.find(" this way")?;
     let (head, rest) = (&r[..i], &r[i + " this way".len()..]);
     if !word_end(rest) {
