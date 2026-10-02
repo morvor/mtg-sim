@@ -239,10 +239,25 @@ fn strip_introduced(e: Effect) -> Effect {
 /// target spell unless its controller pays {1}. That player discards a card."): if
 /// "that player" had no antecedent yet, it's that player now.
 pub fn note_player_mention(text: &str, b: &mut Builder) {
-    if !is_no_player_referent(&b.it_player) || is_no_referent(&b.it) {
+    if !is_no_player_referent(&b.it_player) {
         return;
     }
     let l = text.to_lowercase();
+    // "~'s owner draws a card, then that player may ..." (Pendant of Prosperity).
+    for (p, owner) in [("~'s owner ", true), ("~'s controller ", false)] {
+        if l.starts_with(p) {
+            let this = Box::new(Sel::This);
+            b.it_player = if owner {
+                PlayerRef::OwnerOf(this)
+            } else {
+                PlayerRef::ControllerOf(this)
+            };
+            return;
+        }
+    }
+    if is_no_referent(&b.it) {
+        return;
+    }
     let owner = l.contains("its owner");
     let controller = l.contains("its controller");
     // Neither, or both (ambiguous).

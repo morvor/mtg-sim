@@ -272,6 +272,7 @@ pub fn same_way(a: &CastOption, b: &CastOption) -> bool {
         && a.tag == b.tag
         && a.flash == b.flash
         && a.any_time == b.any_time
+        && a.alt_source == b.alt_source
         && format!("{:?}", a.alt_cost) == format!("{:?}", b.alt_cost)
         && format!("{:?}", a.extra_cost) == format!("{:?}", b.extra_cost)
 }

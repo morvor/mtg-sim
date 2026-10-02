@@ -741,6 +741,11 @@ fn with_names<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     }
     if let Some(r) = t.strip_prefix("with the same name as ") {
         let (sel, rest) = object_in(r)?;
+        // "with the same name as another permanent": another than the object itself
+        // (CR 201.2), not than the source.
+        if r.starts_with("another ") {
+            return Some((crate::kw::basic_effects::same_name_as_another(&sel)?, rest));
+        }
         return Some((Filter::SameNameAs(Box::new(sel)), rest));
     }
     if let Some(r) = t.strip_prefix("with a different name than ") {
