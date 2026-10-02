@@ -77,3 +77,35 @@ pub fn play_forests(t: &mut TestGame, p: PlayerId, tries: usize) -> usize {
 pub fn set_life(t: &mut TestGame, p: PlayerId, life: i32) {
     t.g.players[p.idx()].life = life;
 }
+
+/// Puts real cards onto the battlefield under `p`'s control at the same time.
+pub fn enter_together(t: &mut TestGame, p: PlayerId, names: &[&str]) -> Vec<ObjectId> {
+    use mtg_engine::events::MoveCause;
+    use mtg_engine::object::Zone;
+    use mtg_engine::replacement::{EtbInfo, MoveEv};
+    let moves = names
+        .iter()
+        .map(|n| MoveEv {
+            obj: t
+                .g
+                .create_card_object(mtg_engine::card::card(n), p, Zone::Nowhere),
+            to: Zone::Battlefield,
+            pos: mtg_engine::ability::LibraryPosition::Top,
+            cause: MoveCause::Effect,
+            by: Some(p),
+            etb: EtbInfo {
+                controller: Some(p),
+                ..Default::default()
+            },
+            source: None,
+        })
+        .collect();
+    t.g.move_objects(moves).into_iter().flatten().collect()
+}
+
+/// Casts the real card `name` for `p` (with lands for its cost) with the given targets
+/// and resolves it (and everything else on the stack).
+pub fn cast_resolve(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) {
+    cast_new(t, p, name, targets);
+    t.resolve_all();
+}
