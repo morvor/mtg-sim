@@ -1181,7 +1181,6 @@ struct Counted {
     count: Option<Value>,
     up_to: bool,
     random: bool,
-    single: bool,
     /// A number without "of them" ("Put one into your hand and exile the rest"): only
     /// with "the rest" in the same sentence.
     implicit: bool,
@@ -1259,15 +1258,10 @@ fn dig_card_filter(desc: &str, b: &mut Builder) -> Option<Filter> {
         _ => Filter::Or(alts),
     };
     Some(match mv_alts {
-        Some(m) if alts_ok(&kinds) => Filter::and(vec![kinds, Filter::Or(m)]),
-        Some(_) => return None,
+        Some(m) => Filter::and(vec![kinds, Filter::Or(m)]),
         None if kinds_is_list(desc) => kinds,
         None => return None,
     })
-}
-
-fn alts_ok(_f: &Filter) -> bool {
-    true
 }
 
 /// Whether the description is a list of kinds (not one the grammar rejected for another
@@ -1302,7 +1296,6 @@ fn counted(s: &str, may: bool, b: &mut Builder) -> Option<Counted> {
                 each_of: each,
                 up_to: may,
                 random: false,
-                single: false,
                 implicit: false,
             });
         }
@@ -1327,14 +1320,12 @@ fn counted(s: &str, may: bool, b: &mut Builder) -> Option<Counted> {
         (Some(n), may, false, r)
     };
     let filter = dig_card_filter(desc, b)?;
-    let single = matches!(count, Some(Value::Const(1)));
     Some(Counted {
         filter,
         each_of: vec![],
         count,
         up_to,
         random,
-        single,
         implicit: false,
     })
 }
@@ -1379,7 +1370,6 @@ fn counted_of_them(s: &str, may: bool) -> Option<(Counted, &str)> {
         Some(x) => (true, x),
         None => (false, r),
     };
-    let single = matches!(count, Value::Const(1));
     Some((
         Counted {
             filter: Filter::Any,
@@ -1387,8 +1377,7 @@ fn counted_of_them(s: &str, may: bool) -> Option<(Counted, &str)> {
             count: Some(count),
             up_to: up_to && !random,
             random,
-            single,
-            implicit,
+                implicit,
         },
         r,
     ))
@@ -1576,7 +1565,6 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
                 count: Some(Value::c(999)),
                 up_to: true,
                 random: false,
-                single: false,
                 implicit: false,
             },
             after,
@@ -1645,8 +1633,8 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
     if reveal && matches!(to.zone, ZoneKind::Battlefield | ZoneKind::Graveyard) {
         return None;
     }
-    let _ = c.single;
     let chosen_in_place = crate::dig_steps::in_place(&to);
+    let face_down = to.face_down;
     let mut out = vec![Effect::DigStep(Box::new(DigStep::Take {
         from,
         chooser: PlayerRef::You,
@@ -1670,7 +1658,23 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
         b.named
             .push((CHOSEN_MARK.to_string(), Sel::Var(vars::DUG_CHOSEN)));
     }
+    forget_that_creature(b, &out);
+    if face_down && !exiled_face_down(b) {
+        b.named
+            .push((FACE_DOWN_MARK.to_string(), Sel::Var(vars::IT)));
+    }
     Some(out)
+}
+
+/// Marks that cards dug were exiled face down (see [`exiled_face_down`]).
+const FACE_DOWN_MARK: &str = "\u{1}dig-face-down";
+
+/// Whether the text exiled cards dug face down: an exiled card has no characteristics
+/// while it's face down (CR 406.3a), so a later "if it's an instant spell with mana value
+/// 2 or less" about it isn't a condition the engine can check (the player looks at the
+/// card).
+pub fn exiled_face_down(b: &Builder) -> bool {
+    b.named.iter().any(|(n, _)| n == FACE_DOWN_MARK)
 }
 
 /// "Put that card onto the battlefield and the rest on the bottom of your library in a
@@ -1859,6 +1863,7 @@ fn parse_step(l: &str, b: &mut Builder) -> Option<Effect> {
     let v = parse_put_found(r, b)
         .or_else(|| reveal_that_card(r, b))
         .or_else(|| parse_rest(r, &rest_sel(b)).map(|e| vec![e]))?;
+    forget_that_creature(b, &v);
     let e = Effect::seq(v);
     Some(if may {
         Effect::May {
@@ -1936,6 +1941,7 @@ fn source_sentence(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(saved);
         return None;
     }
+    keep_that_creature(b);
     b.it = Sel::Var(vars::IT);
     Some(match verb {
         "exile" => Effect::Exile {
@@ -1958,6 +1964,33 @@ fn source_sentence(l: &str, b: &mut Builder) -> Option<Effect> {
             },
         },
     })
+}
+
+/// "Whenever a creature attacks you ..., reveal the top card of your library. If it's a
+/// Forest card, remove that creature from combat." (Lost in the Woods): "it" comes to mean
+/// the cards dug, but "that creature" still means the triggering creature (a card in a
+/// library isn't a creature), until a card dug is put onto the battlefield
+/// ([`forget_that_creature`]).
+pub(super) fn keep_that_creature(b: &mut Builder) {
+    if b.in_trigger
+        && matches!(b.it, Sel::TriggerObject)
+        && !b.named.iter().any(|(n, _)| n == "that creature")
+    {
+        b.named
+            .push(("that creature".to_string(), Sel::TriggerObject));
+    }
+}
+
+/// After cards dug are put onto the battlefield, "that creature" may be one of them
+/// ("Return that creature to its owner's hand at end of combat", Arthur, Marigold Knight).
+fn forget_that_creature(b: &mut Builder, steps: &[Effect]) {
+    let to_battlefield = steps.iter().any(|e| {
+        matches!(e, Effect::DigStep(s) if matches!(&**s, DigStep::Take { to, .. } if to.zone == ZoneKind::Battlefield))
+    });
+    if to_battlefield {
+        b.named
+            .retain(|(n, s)| !(n == "that creature" && matches!(s, Sel::TriggerObject)));
+    }
 }
 
 /// How many cards from the top of which library: "the top X plus one cards of your
@@ -2060,6 +2093,9 @@ fn until_source(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         return None;
     };
+    if super::card_flow_reveal_until::implicit_comparison_with_source(r, b) {
+        return None;
+    }
     let saved = b.targets.len();
     let (n, filter) = if let Some(x) = r.strip_prefix("that many ").filter(|_| !b.in_trigger) {
         // "Exile all creatures you control, then reveal cards ... until you reveal that
@@ -2094,6 +2130,7 @@ fn until_source(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(saved);
         return None;
     };
+    keep_that_creature(b);
     b.it = Sel::Var(vars::IT);
     Some(Effect::DigStep(Box::new(DigStep::Until {
         who: PlayerRef::You,
@@ -2283,7 +2320,7 @@ mod tests {
     }
 
     #[test]
-    fn probe_filters() {
+    fn card_descriptions() {
         with_builder(|b| {
             for d in [
                 "blue or artifact card",
@@ -2294,56 +2331,12 @@ mod tests {
                 "land and/or legendary permanent cards with mana value x or less",
                 "permanent card with mana value 3 or less",
                 "artifact card with mana value 2 or 3",
-                "card with {x} in its mana cost",
-                "cards of the chosen type",
-                "creature cards of the chosen type",
                 "hero or enchantment card",
                 "double-faced card",
                 "nonland, nonlegendary card",
             ] {
-                println!("{d} => {:?}", dig_card_filter(d, b));
+                assert!(dig_card_filter(d, b).is_some(), "{d}");
             }
         });
-    }
-
-    #[test]
-    fn probe_texts() {
-        let Ok(path) = std::env::var("DIG_TEXTS") else {
-            return;
-        };
-        let texts = std::fs::read_to_string(path).unwrap();
-        for t in texts.lines() {
-            let (trig, t) = match t.strip_prefix("T:") {
-                Some(x) => (true, x),
-                None => (false, t),
-            };
-            with_builder(|b| {
-                b.in_trigger = trig;
-                if trig {
-                    b.it_player = PlayerRef::TriggerPlayer;
-                }
-                let r = crate::oracle::effects::parse_effect_text(&t.to_lowercase(), b);
-                println!("{} {t}", if r.is_some() { "OK" } else { "NO" });
-                if std::env::var("DIG_DEBUG").is_ok() {
-                    println!("{r:?}");
-                }
-                if r.is_none() {
-                    // Prefixes: which sentence fails.
-                    let sents: Vec<&str> = t.split(". ").collect();
-                    for k in 1..=sents.len() {
-                        let pre = sents[..k].join(". ");
-                        let ok = with_builder(|b2| {
-                            b2.in_trigger = trig;
-                            crate::oracle::effects::parse_effect_text(&pre.to_lowercase(), b2)
-                                .is_some()
-                        });
-                        if !ok {
-                            println!("   fails at: {}", sents[k - 1]);
-                            break;
-                        }
-                    }
-                }
-            });
-        }
     }
 }
