@@ -59,3 +59,11 @@ pub fn two_headed_giant() -> TestGame {
         },
     )
 }
+
+/// Whether the spell `spell` (its id on the stack) resolved this turn (rather than not
+/// resolving because all its targets were illegal, CR 608.2b).
+pub fn resolved(t: &TestGame, spell: ObjectId) -> bool {
+    t.g.turn_events
+        .iter()
+        .any(|e| matches!(e, mtg_engine::events::Event::SpellResolved { spell: s } if *s == spell))
+}
