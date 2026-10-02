@@ -346,6 +346,16 @@ impl Game {
             .collect()
     }
 
+    /// Whether the proposed event can't happen: a mandatory replacement effect that applies
+    /// to it prevents it ("~ can't have counters put on it", CR 113.6i, 614.1). Used to
+    /// tell whether a player "can" do something before offering it.
+    pub fn would_be_prevented(&self, ev: &ReplEvent) -> bool {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replacement_candidates(ev, &applied, CandScope::All)
+            .iter()
+            .any(|c| matches!(c.def.action, ReplacementAction::Prevent) && !c.def.optional)
+    }
+
     /// The player who chooses among replacement effects for an event (CR 616.1).
     fn affected_player(&self, ev: &ReplEvent) -> PlayerId {
         match ev {

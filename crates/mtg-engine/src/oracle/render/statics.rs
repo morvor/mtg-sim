@@ -1408,6 +1408,22 @@ impl Renderer<'_> {
                 let v = self.value(v);
                 format!("damage that would reduce {} life total to less than {v} reduces it to {v} instead", nouns::possessive(&w))
             }
+            // "Creatures your opponents control can't have +1/+1 counters put on them."
+            (
+                E::PutCounters {
+                    on_objects: Some(f),
+                    on_players: None,
+                    kind,
+                },
+                A::Prevent,
+            ) if !matches!(f, Filter::Source) => {
+                let k = match kind {
+                    Some(k) => plural(&counter_name(k)),
+                    None => "counters".into(),
+                };
+                let subj = self.affected_subject(f);
+                format!("{subj} can't have {k} put on them")
+            }
             (
                 E::PutCounters {
                     on_objects,

@@ -104,3 +104,45 @@ fn each_instance_of_fabricate_triggers_separately() {
         "{counters_on} counters, {servos} servos"
     );
 }
+
+#[test]
+fn if_counters_cant_be_put_on_it_you_create_servos_without_being_asked() {
+    cr!("702.123a", "614.1");
+    ruling!(
+        "Angel of Invention",
+        "If you can't put +1/+1 counters on the creature for any reason as fabricate resolves"
+    );
+    assert_supported_card("Angel of Invention");
+    assert_supported_card("Blightbeetle");
+    let mut t = TestGame::new(2);
+    // Creatures P0's opponents control can't have +1/+1 counters put on them.
+    t.battlefield(P1, "Blightbeetle");
+    let angel = t.enter(P0, "Angel of Invention");
+    t.settle();
+    assert_eq!(on_stack(&t, "Fabricate 2"), 1);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    // P0 isn't offered the counters: they can't be put on it, so the Servos are created.
+    assert!(
+        !t.asked()
+            .iter()
+            .any(|(p, d)| *p == P0 && matches!(d, decision::Decision::YesNo { .. })),
+        "{:?}",
+        t.asked()
+    );
+    assert_eq!(t.counters(angel, counters::PLUS1), 0);
+    assert_eq!(tokens_of(&t, P0).len(), 2);
+}
+
+#[test]
+fn counters_prevented_for_other_players_only_still_offer_the_choice() {
+    cr!("702.123a");
+    let mut t = TestGame::new(2);
+    // Blightbeetle stops counters only on its controller's opponents' creatures.
+    t.battlefield(P0, "Blightbeetle");
+    let angel = t.enter(P0, "Angel of Invention");
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.counters(angel, counters::PLUS1), 2);
+    assert!(tokens_of(&t, P0).is_empty());
+}
