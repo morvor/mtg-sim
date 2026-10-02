@@ -452,11 +452,6 @@ pub struct GameObject {
     pub entered_turn: u32,
     /// Times each activated ability (by uid) has been activated this turn.
     pub activations_this_turn: BTreeMap<u64, u32>,
-    /// Loyalty abilities of this permanent activated this turn (CR 606.3), whichever
-    /// face or copied abilities they were: the limit is per permanent, and a permanent
-    /// that transforms keeps it (CR 712.18).
-    #[serde(default)]
-    pub loyalty_activations_this_turn: u32,
     /// Times each activated ability (by uid) has been activated since this object came
     /// into existence ("Activate only once", CR 702.177a): a new object after a zone
     /// change starts afresh (CR 400.7).
@@ -594,7 +589,6 @@ impl GameObject {
             next: None,
             entered_turn: 0,
             activations_this_turn: BTreeMap::new(),
-            loyalty_activations_this_turn: 0,
             activations: BTreeMap::new(),
             triggers_this_turn: BTreeMap::new(),
             world_since: None,
