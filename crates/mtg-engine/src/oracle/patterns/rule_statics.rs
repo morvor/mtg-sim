@@ -190,3 +190,85 @@ pub(crate) fn strip_cant_be_copied(eff: &str) -> Option<String> {
     let rest = rest.trim().to_string();
     (!rest.is_empty() && !rest.to_lowercase().contains(S)).then_some(rest)
 }
+
+/// "Spells and abilities your opponents control can't cause you to sacrifice permanents."
+/// (Sigarda, Host of Herons), "Triggered abilities you control can't cause you to
+/// sacrifice or exile creature tokens you control." (The Master, Multiplied): CR 701.21.
+fn cant_cause_sacrifice(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if ctx.is_spell() {
+        return None;
+    }
+    let l = end(l).trim();
+    let (by, r) = if let Some(r) =
+        l.strip_prefix("spells and abilities your opponents control can't cause you to ")
+    {
+        (SacrificeCauses::OpponentsSpellsAndAbilities, r)
+    } else {
+        (
+            SacrificeCauses::YourTriggeredAbilities,
+            l.strip_prefix("triggered abilities you control can't cause you to ")?,
+        )
+    };
+    let (exile, noun) = match r.strip_prefix("sacrifice or exile ") {
+        Some(n) => (true, n),
+        None => (false, r.strip_prefix("sacrifice ")?),
+    };
+    let (f, plural, tail) = parse_object_phrase(noun)?;
+    if !plural || !end(tail).trim().is_empty() {
+        return None;
+    }
+    Some(static_ability(
+        StaticAbility::new(StaticEffect::Restriction(Restriction::CantCauseSacrifice {
+            what: Filter::and(vec![Filter::Permanent, f]),
+            by,
+            exile,
+        })),
+        text,
+    ))
+}
+
+/// "Players can't pay life to cast spells or to activate abilities that aren't mana
+/// abilities." (Karn's Sylex), "Players can't pay life or sacrifice nonland permanents to
+/// cast spells or activate abilities." (Yasharn, Implacable Earth): CR 118.3, 119.4.
+fn cant_pay_to_cast_or_activate(
+    l: &str,
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    if ctx.is_spell() {
+        return None;
+    }
+    let l = end(l).trim();
+    let r = l.strip_prefix("players can't pay life")?;
+    let (r, mana_abilities) = if let Some(r) =
+        r.strip_suffix(" to cast spells or to activate abilities that aren't mana abilities")
+    {
+        (r, false)
+    } else {
+        (r.strip_suffix(" to cast spells or activate abilities")?, true)
+    };
+    let sacrifice = if r.is_empty() {
+        None
+    } else {
+        let noun = r.strip_prefix(" or sacrifice ")?;
+        let (f, plural, tail) = parse_object_phrase(noun)?;
+        if !plural || !end(tail).trim().is_empty() {
+            return None;
+        }
+        Some(Filter::and(vec![Filter::Permanent, f]))
+    };
+    Some(static_ability(
+        StaticAbility::new(StaticEffect::Restriction(
+            Restriction::CantPayToCastOrActivate {
+                who: PlayerFilter::Any,
+                life: true,
+                sacrifice,
+                mana_abilities,
+            },
+        )),
+        text,
+    ))
+}
+
+inventory::submit! { StaticPattern { name: "can't cause you to sacrifice", priority: 100, parse: cant_cause_sacrifice } }
+inventory::submit! { StaticPattern { name: "players can't pay life to cast spells or activate abilities", priority: 100, parse: cant_pay_to_cast_or_activate } }

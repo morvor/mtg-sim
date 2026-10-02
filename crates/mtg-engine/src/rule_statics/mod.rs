@@ -7,12 +7,18 @@
 //! * [`counters_remain`]: "Counters remain on ~ as it moves to any zone other than a
 //!   player's hand or library" (an exception to CR 122.2 and 400.7).
 //! * [`face_up`]: "[permanents] can't be turned face up" (CR 708.7).
+//! * [`sacrifice_causes`]: "Spells and abilities your opponents control can't cause you
+//!   to sacrifice permanents" (CR 701.21).
+//! * [`payment`]: "Players can't pay life or sacrifice [permanents] to cast spells or
+//!   activate abilities" (CR 118.3, 119.4).
 //! * [`turns_taken`]: "your first, second, or third turn of the game".
 
 pub mod cant_be_copied;
 pub mod cleanup_damage;
 pub mod counters_remain;
 pub mod face_up;
+pub mod payment;
+pub mod sacrifice_causes;
 pub mod turns_taken;
 
 use crate::ability::*;

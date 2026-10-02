@@ -1135,6 +1135,42 @@ impl Renderer<'_> {
             }
             Restriction::CantBeCountered(f) => format!("{} can't be countered", subj(self, f)),
             Restriction::CantBeCopied(f) => format!("{} can't be copied", subj(self, f)),
+            Restriction::CantCauseSacrifice { what, by, exile } => {
+                let who = match by {
+                    SacrificeCauses::OpponentsSpellsAndAbilities => {
+                        "spells and abilities your opponents control"
+                    }
+                    SacrificeCauses::YourTriggeredAbilities => "triggered abilities you control",
+                };
+                let verb = if *exile {
+                    "sacrifice or exile"
+                } else {
+                    "sacrifice"
+                };
+                let n = self.noun(what, Num::Many);
+                format!("{who} can't cause you to {verb} {n}")
+            }
+            Restriction::CantPayToCastOrActivate {
+                who,
+                life,
+                sacrifice,
+                mana_abilities,
+            } => {
+                let w = self.player_filter_subject(who);
+                let mut what = Vec::new();
+                if *life {
+                    what.push("pay life".to_string());
+                }
+                if let Some(f) = sacrifice {
+                    what.push(format!("sacrifice {}", self.noun(f, Num::Many)));
+                }
+                let purpose = if *mana_abilities {
+                    "to cast spells or activate abilities"
+                } else {
+                    "to cast spells or to activate abilities that aren't mana abilities"
+                };
+                format!("{w} can't {} {purpose}", what.join(" or "))
+            }
             Restriction::CantEnterBattlefield(f) | Restriction::CantEnter(f) => {
                 format!("{} can't enter the battlefield", subj(self, f))
             }

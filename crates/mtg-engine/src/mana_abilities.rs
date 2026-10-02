@@ -1070,7 +1070,19 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                             ok = false;
                         }
                     }
-                    CostPart::SacrificeSelf => rank = rank.max(3),
+                    CostPart::SacrificeSelf => {
+                        // "Players can't ... sacrifice [permanents] to ... activate
+                        // abilities" (see `rule_statics::payment`).
+                        if crate::rule_statics::payment::forbids_sacrifice(
+                            g,
+                            p,
+                            o.id,
+                            Some(crate::rule_statics::payment::CostOf::ManaAbility),
+                        ) {
+                            ok = false;
+                        }
+                        rank = rank.max(3)
+                    }
                     // "Sacrifice a Food", "Sacrifice a creature": other permanents the
                     // player controls, never the object the payment is for.
                     CostPart::Sacrifice { filter, count } if sac_pool.is_empty() => {
@@ -1083,6 +1095,12 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                                 Some(*x) != reserve
                                     && g.obj(*x).controller == p
                                     && !g.cant_be_sacrificed(*x)
+                                    && !crate::rule_statics::payment::forbids_sacrifice(
+                                        g,
+                                        p,
+                                        *x,
+                                        Some(crate::rule_statics::payment::CostOf::ManaAbility),
+                                    )
                             })
                             .collect();
                         if sac_count == 0 || sac_pool.len() < sac_count {
@@ -1092,7 +1110,9 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                     }
                     CostPart::PayLife(v) => {
                         let n = g.eval_value(v, &Ctx::new(Some(o.id), p)).max(0) as u32;
-                        if !g.can_pay_life(p, n) {
+                        let mut c = Ctx::new(Some(o.id), p);
+                        c.cost_of = Some(crate::rule_statics::payment::CostOf::ManaAbility);
+                        if !g.may_pay_life_for_cost(p, n, &c) {
                             ok = false;
                         }
                         life += n;
@@ -1445,6 +1465,9 @@ pub fn plan_payment(
     }
     let life = g.player(p).life.max(0) as u32;
     let mut planner = Planner::new(&reqs, &units, &sources, life);
+    // "Players can't pay life to cast spells ..." (Phyrexian mana, CR 107.4f; see
+    // `rule_statics::payment`).
+    planner.phyrexian_life = !crate::rule_statics::payment::forbids_life(g, p, spend.cost_of);
     if !planner.solve(0) {
         return None;
     }
@@ -1491,6 +1514,8 @@ struct Planner<'a> {
     /// Life paid so far: for Phyrexian symbols and for uses of special actions.
     life_used: u32,
     life: u32,
+    /// Phyrexian symbols may be paid with life.
+    phyrexian_life: bool,
 }
 
 impl<'a> Planner<'a> {
@@ -1538,6 +1563,7 @@ impl<'a> Planner<'a> {
             source_life: sources.iter().map(|s| s.life).collect(),
             life_used: 0,
             life,
+            phyrexian_life: true,
         }
     }
 
@@ -1784,7 +1810,7 @@ impl<'a> Planner<'a> {
 
     /// Pays the Phyrexian symbol `i` with 2 life, then the rest.
     fn pay_life_instead(&mut self, i: usize) -> bool {
-        if self.life_used + 2 > self.life {
+        if !self.phyrexian_life || self.life_used + 2 > self.life {
             return false;
         }
         self.life_used += 2;
@@ -1895,11 +1921,12 @@ pub fn pay_mana(
         }
     }
     // The life left after any life paid for mana (CR 119.4).
-    let max_life = if g.cant_lose_life(p) {
-        0
-    } else {
-        g.player(p).life.max(0) as u32
-    };
+    let max_life =
+        if g.cant_lose_life(p) || crate::rule_statics::payment::forbids_life(g, p, spend.cost_of) {
+            0
+        } else {
+            g.player(p).life.max(0) as u32
+        };
     let plan = try_pool(g, 0).or_else(|| try_pool(g, max_life))?;
     if plan.life > 0 && !g.pay_life(p, plan.life) {
         return None;

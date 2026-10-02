@@ -1645,8 +1645,12 @@ impl Game {
             any_color: self.any_color_mana(p, id, false),
             check_only: false,
             class_level: false,
+            cost_of: Some(crate::rule_statics::payment::CostOf::Spell),
         };
-        let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx)?;
+        ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Spell);
+        let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx);
+        ctx.cost_of = None;
+        let paid = paid?;
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             // With any mana another player already spent on it (assist, CR 702.132a).
             si.cast.mana_spent.extend(paid.mana_spent.iter().cloned());
@@ -1994,6 +1998,11 @@ impl Game {
         }
         let x = least_x.unwrap_or(0);
         let mut pay_ctx = Ctx::new(Some(src), p);
+        pay_ctx.cost_of = Some(if act.is_mana_ability {
+            crate::rule_statics::payment::CostOf::ManaAbility
+        } else {
+            crate::rule_statics::payment::CostOf::Ability
+        });
         if least_x.is_some() {
             pay_ctx.x = x;
             pay_ctx.x_defined = true;
@@ -2228,9 +2237,13 @@ impl Game {
                 card_types: src_chars.card_types,
                 source: Some(src),
                 any_color: self.any_color_mana(p, src, true),
+                cost_of: Some(crate::rule_statics::payment::CostOf::ManaAbility),
                 ..Default::default()
             };
-            self.pay_total_cost(p, &cost, Some(src), &spend, &ctx)?;
+            ctx.cost_of = Some(crate::rule_statics::payment::CostOf::ManaAbility);
+            let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx);
+            ctx.cost_of = None;
+            paid?;
             self.record_activation(p, src, a.uid);
             self.emit(Event::AbilityActivated {
                 ability: None,
@@ -2314,12 +2327,15 @@ impl Game {
             source: Some(src),
             any_color: self.any_color_mana(p, src, true),
             class_level: crate::classes::gains_a_level(act),
+            cost_of: Some(crate::rule_statics::payment::CostOf::Ability),
             ..Default::default()
         };
         // The costs are paid for the ability on the stack: a card revealed to pay them
         // stays revealed until the ability leaves the stack (CR 701.20a).
         let before = ctx.stack_obj.replace(id);
+        ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Ability);
         let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx);
+        ctx.cost_of = None;
         ctx.stack_obj = before;
         let paid = paid?;
         ctx.nums.insert(vars::USER + 90, paid.objects.len() as i64);
@@ -2471,7 +2487,10 @@ impl Game {
         src: Option<ObjectId>,
         chars: &Characteristics,
     ) -> bool {
-        self.can_pay_cost_optimistic_in(p, cost, src, chars, &Ctx::new(src, p))
+        // The costs of casting a spell (CR 601.2f–h).
+        let mut ctx = Ctx::new(src, p);
+        ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Spell);
+        self.can_pay_cost_optimistic_in(p, cost, src, chars, &ctx)
     }
 
     /// [`Self::can_pay_cost_optimistic`] with the parts' values read in `ctx` (e.g. with
@@ -2517,6 +2536,7 @@ impl Game {
                     })
                     .unwrap_or_default(),
                 check_only: true,
+                cost_of: ctx.cost_of,
                 ..Default::default()
             };
             let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, src);
@@ -2528,7 +2548,7 @@ impl Game {
     pub fn can_pay_cost(&self, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
         let chars = src.map(|s| self.obj(s).chars.clone()).unwrap_or_default();
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
-        self.can_pay_cost_optimistic(p, cost, src, &chars)
+        self.can_pay_cost_optimistic_in(p, cost, src, &chars, &Ctx::new(src, p))
     }
 
     /// Pays a cost during resolution ("you may pay ..."). Returns true if paid.
@@ -2606,21 +2626,27 @@ impl Game {
                         crate::as_though::HasteUse::Activate(p),
                     ))
             }
-            CostPart::PayLife(v) => self.can_pay_life(p, self.eval_value(v, ctx).max(0) as u32),
+            CostPart::PayLife(v) => {
+                self.may_pay_life_for_cost(p, self.eval_value(v, ctx).max(0) as u32, ctx)
+            }
             CostPart::Loyalty(n) => {
                 let Some(o) = so else { return false };
                 *n >= 0 || o.loyalty() >= -*n
             }
             // CR 614.17b: a cost that includes an event that can't happen can't be paid.
             CostPart::SacrificeSelf => so.is_some_and(|o| {
-                o.zone == Zone::Battlefield && o.controller == p && !self.cant_be_sacrificed(o.id)
+                o.zone == Zone::Battlefield
+                    && o.controller == p
+                    && self.may_sacrifice_for_cost(o.id, ctx)
             }),
             CostPart::Sacrifice { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 let cands: Vec<ObjectId> = self
                     .objects_matching(filter, ctx)
                     .into_iter()
-                    .filter(|o| self.obj(*o).controller == p && !self.cant_be_sacrificed(*o))
+                    .filter(|o| {
+                        self.obj(*o).controller == p && self.may_sacrifice_for_cost(*o, ctx)
+                    })
                     .collect();
                 crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
             }
@@ -2781,7 +2807,9 @@ impl Game {
                 };
                 let flat = crate::kw::cumulative_upkeep::expand_repeated(self, &one, ctx);
                 let chars = so.map(|o| o.chars.clone()).unwrap_or_default();
-                self.can_pay_cost_optimistic(p, &flat, src, &chars)
+                let mut c = Ctx::new(src, p);
+                c.cost_of = ctx.cost_of;
+                self.can_pay_cost_optimistic_in(p, &flat, src, &chars, &c)
             }
         }
     }
@@ -2890,7 +2918,7 @@ impl Game {
             }
             CostPart::PayLife(v) => {
                 let n = self.eval_value(v, ctx).max(0) as u32;
-                if !self.pay_life(p, n) {
+                if !self.may_pay_life_for_cost(p, n, ctx) || !self.pay_life(p, n) {
                     return bad("can't pay life");
                 }
             }
@@ -2927,7 +2955,9 @@ impl Game {
                 let cands: Vec<ObjectId> = self
                     .objects_matching(filter, ctx)
                     .into_iter()
-                    .filter(|o| self.obj(*o).controller == p && !self.cant_be_sacrificed(*o))
+                    .filter(|o| {
+                        self.obj(*o).controller == p && self.may_sacrifice_for_cost(*o, ctx)
+                    })
                     // A mana ability activated to pay another cost doesn't sacrifice the
                     // object that cost is for (see `Game::mana_reserve`).
                     .filter(|o| Some(*o) != self.mana_reserve)

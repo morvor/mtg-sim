@@ -243,9 +243,16 @@ impl Game {
                 let objs = self.resolve_objects(what, ctx);
                 let prev_link = self.current_link;
                 self.current_link = ctx.link;
+                // "... can't cause you to sacrifice or exile [permanents]" (CR 701.21).
+                let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 let moves: Vec<MoveEv> = objs
                     .iter()
                     .filter(|o| self.is_live(**o))
+                    .filter(|o| {
+                        cause.as_ref().is_none_or(|c| {
+                            !crate::rule_statics::sacrifice_causes::forbidden(self, **o, c, true)
+                        })
+                    })
                     .map(|o| MoveEv {
                         obj: *o,
                         to: Zone::Exile,
@@ -285,13 +292,17 @@ impl Game {
                 let round = self.apnap_choices.len();
                 let requests = players.into_iter().map(|p| (p, ())).collect();
                 let rctx: &Ctx = ctx;
+                // What makes them sacrifice (CR 701.21; see `rule_statics::sacrifice_causes`).
+                let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 self.apnap_round(requests, |g, p, ()| {
                     let mut pctx = rctx.clone();
                     pctx.iter_player = Some(p);
                     let cands: Vec<ObjectId> = g
                         .objects_matching(filter, &pctx)
                         .into_iter()
-                        .filter(|o| g.obj(*o).controller == p && !g.cant_be_sacrificed(*o))
+                        .filter(|o| {
+                            g.obj(*o).controller == p && !g.sacrifice_forbidden(*o, cause.as_ref())
+                        })
                         .collect();
                     let k = n.min(cands.len() as u32);
                     let pick = g.ask_objects(
@@ -331,10 +342,12 @@ impl Game {
                 // can't do if another player controls it now (CR 701.21a).
                 let own_source = matches!(what, Sel::This);
                 let objs = self.resolve_objects(what, ctx);
+                let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 // Sacrificed at the same time (CR 101.4).
                 let what: Vec<(ObjectId, PlayerId)> = objs
                     .into_iter()
                     .filter(|o| self.is_live(*o))
+                    .filter(|o| !self.sacrifice_forbidden(*o, cause.as_ref()))
                     .filter(|o| !own_source || self.obj(*o).controller == ctx.controller)
                     .map(|o| (o, self.obj(o).controller))
                     .collect();

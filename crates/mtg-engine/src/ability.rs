@@ -2373,6 +2373,29 @@ pub enum Restriction {
     MaxSpellsPerTurn(PlayerFilter, u32),
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
+    /// "Players can't pay life [or sacrifice (permanents)] to cast spells or activate
+    /// abilities [that aren't mana abilities]" (Karn's Sylex, Yasharn, Angel of
+    /// Jubilation; CR 118.3, 119.4): the players `who` describes can't pay life (with
+    /// `life`) nor sacrifice permanents matching `sacrifice` to pay the costs of casting
+    /// spells or activating abilities (with `mana_abilities`, mana abilities too). Costs
+    /// paid as a spell or ability resolves aren't affected. See `rule_statics::payment`.
+    CantPayToCastOrActivate {
+        who: PlayerFilter,
+        life: bool,
+        sacrifice: Option<Filter>,
+        mana_abilities: bool,
+    },
+    /// "Spells and abilities your opponents control can't cause you to sacrifice
+    /// permanents" (Sigarda, Host of Herons), "Triggered abilities you control can't cause
+    /// you to sacrifice or exile creature tokens you control" (The Master, Multiplied):
+    /// the spells and abilities `by` describes can't make their controller's opponent (or
+    /// controller) sacrifice permanents matching `what` (CR 701.21), nor, with `exile`,
+    /// exile them. See `rule_statics::sacrifice_causes`.
+    CantCauseSacrifice {
+        what: Filter,
+        by: SacrificeCauses,
+        exile: bool,
+    },
     /// "[objects] can't be regenerated [this turn]": regeneration shields and effects
     /// don't apply when they're destroyed (CR 701.19c).
     CantBeRegenerated(Filter),
@@ -2410,6 +2433,16 @@ pub enum Restriction {
     },
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
+}
+
+/// The spells and abilities a [`Restriction::CantCauseSacrifice`] is about, relative to
+/// the controller of its source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SacrificeCauses {
+    /// "Spells and abilities your opponents control".
+    OpponentsSpellsAndAbilities,
+    /// "Triggered abilities you control".
+    YourTriggeredAbilities,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
