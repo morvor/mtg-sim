@@ -917,3 +917,34 @@ fn if_you_reveal_a_card_named_this_way_put_it_onto_the_battlefield() {
         assert_eq!(shuffles(&t, P0), 1);
     }
 }
+
+#[test]
+fn if_it_has_six_quest_counters_sacrifice_it_and_if_you_do_search() {
+    cr!("701.23a", "603.4", "608.2c");
+    assert_supported("Last Light of Durin's Day");
+    for (before, sacrificed) in [(5, true), (1, false)] {
+        let mut t = TestGame::new(2);
+        let light = t.battlefield(P0, "Last Light of Durin's Day");
+        t.g.objects[light.0 as usize]
+            .counters
+            .insert("quest".into(), before);
+        let dragon = t.hand(P0, "Shivan Dragon");
+        let mountain = t.hand(P0, "Mountain");
+        t.answer_yes(P0, false); // don't search the library
+        t.answer_choose(P0, &[Entity::Object(dragon)]);
+        t.play_land(P0, mountain).unwrap();
+        t.resolve_all();
+        // The counter went on Last Light, not on the Mountain.
+        assert_eq!(t.on_battlefield(light), !sacrificed);
+        if !sacrificed {
+            assert_eq!(t.counters(light, "quest"), before + 1);
+        }
+        let in_play = t
+            .g
+            .battlefield
+            .iter()
+            .any(|o| t.g.obj(*o).chars.name == "Shivan Dragon");
+        assert_eq!(in_play, sacrificed);
+        assert_eq!(t.on_battlefield(t.g.current(mountain)), true);
+    }
+}
