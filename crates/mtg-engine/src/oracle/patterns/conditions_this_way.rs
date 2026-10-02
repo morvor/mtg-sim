@@ -31,47 +31,134 @@ fn ends_optional(e: &Effect) -> bool {
     }
 }
 
-/// "If you do, [effect]." right after "If [condition], you may [instruction].": nested in
-/// the conditional part.
+/// The object a condition is about ("it's a creature card", "its mana value is 3 or
+/// less"): what "it" means in the alternative ("Otherwise, put it into your hand."), where
+/// the instruction the condition governed (which may have moved it) didn't happen.
+pub fn cond_subject(c: &Condition) -> Option<Sel> {
+    fn of_value(v: &Value) -> Option<Sel> {
+        match v {
+            Value::PowerOf(s) | Value::ToughnessOf(s) | Value::ManaValueOf(s) => Some((**s).clone()),
+            Value::CountersOn(s, _) => Some((**s).clone()),
+            _ => None,
+        }
+    }
+    let s = match c {
+        Condition::SelMatches(s, _) => Some(s.clone()),
+        Condition::Compare(a, _, b) => of_value(a).or_else(|| of_value(b)),
+        Condition::Not(x) => cond_subject(x),
+        Condition::And(v) | Condition::Or(v) => v.iter().find_map(cond_subject),
+        _ => None,
+    }?;
+    matches!(s, Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject | Sel::TriggerLki).then_some(s)
+}
+
+/// "You may put it onto the battlefield if it's a creature card" parses as an optional
+/// conditional instruction; as the last instruction of `prev`, turns it into the
+/// equivalent conditional optional one, so that what follows ("If you don't, ...",
+/// "Otherwise, ...") can refer to the condition.
+pub fn normalize_may_if(prev: &mut Effect) {
+    let last = match prev {
+        Effect::Seq(v) => match v.last_mut() {
+            Some(l) => l,
+            None => return,
+        },
+        other => other,
+    };
+    let Effect::May { who, effect } = last else {
+        return;
+    };
+    let Effect::If {
+        cond,
+        then,
+        otherwise,
+    } = &**effect
+    else {
+        return;
+    };
+    if !matches!(**otherwise, Effect::Noop) {
+        return;
+    }
+    *last = Effect::If {
+        cond: cond.clone(),
+        then: Box::new(Effect::May {
+            who: who.clone(),
+            effect: then.clone(),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+}
+
+/// "If you do, [effect]." / "If you don't [cast it], [effect]." right after "If
+/// [condition], you may [instruction]." (or "You may [instruction] if [condition]."): the
+/// follow-up belongs to the conditional part; "if you don't" also happens when the
+/// condition didn't hold. After "[instruction] if [condition]." (not optional), "If you
+/// don't [draw a card] this way, [effect]." is what happens otherwise.
 fn if_you_do_after_conditional_may(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
-    let (neg, r) = if let Some(r) = l.strip_prefix("if you do, ") {
-        (false, r)
+    let (neg, r, bare) = if let Some(r) = l.strip_prefix("if you do, ") {
+        (false, r, true)
     } else if let Some(r) = l.strip_prefix("if you don't, ") {
-        (true, r)
+        (true, r, true)
+    } else if let Some(r) = l.strip_prefix("if you don't ") {
+        // "If you don't cast it, ...", "If you don't put the card onto the battlefield,
+        // ...", "If you don't draw a card this way, ..."
+        match r.split_once(", ") {
+            Some((_, x)) => (true, x, false),
+            None => return false,
+        }
     } else {
         return false;
     };
-    let last = match prev {
+    let mut trial = prev.clone();
+    normalize_may_if(&mut trial);
+    let last = match &mut trial {
         Effect::Seq(v) => v.last_mut(),
         other => Some(other),
     };
     let Some(Effect::If {
-        then, otherwise, ..
+        cond,
+        then,
+        otherwise,
     }) = last
     else {
         return false;
     };
-    if !matches!(**otherwise, Effect::Noop) || !ends_optional(then) {
+    if !matches!(**otherwise, Effect::Noop) || matches!(cond, Condition::PrevHappened) {
         return false;
     }
-    let Some(e) = crate::oracle::effects::parse_clause(r, b) else {
+    let optional = ends_optional(then);
+    if !optional && (bare || !neg) {
+        return false;
+    }
+    let saved_it = b.it.clone();
+    if let Some(sel) = cond_subject(cond) {
+        b.it = sel;
+    }
+    let parsed = crate::oracle::effects::parse_clause(r, b);
+    b.it = saved_it;
+    let Some(e) = parsed else {
         return false;
     };
-    let cond = if neg {
-        Condition::Not(Box::new(Condition::PrevHappened))
-    } else {
-        Condition::PrevHappened
-    };
-    let inner = std::mem::replace(&mut **then, Effect::Noop);
-    **then = Effect::seq(vec![
-        inner,
-        Effect::If {
-            cond,
-            then: Box::new(e),
-            otherwise: Box::new(Effect::Noop),
-        },
-    ]);
+    if optional {
+        let cond = if neg {
+            Condition::Not(Box::new(Condition::PrevHappened))
+        } else {
+            Condition::PrevHappened
+        };
+        let inner = std::mem::replace(&mut **then, Effect::Noop);
+        **then = Effect::seq(vec![
+            inner,
+            Effect::If {
+                cond,
+                then: Box::new(e.clone()),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ]);
+    }
+    if neg {
+        **otherwise = e;
+    }
+    *prev = trial;
     true
 }
 
@@ -519,6 +606,15 @@ fn if_you_did_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     };
     let cond = match (c, &**effect) {
         ("you search your library this way", Effect::Search { .. }) => Condition::PrevHappened,
+        // The search found and put a card into your hand.
+        ("you don't put a card into your hand this way", Effect::Search { to, .. })
+            if to.zone == ZoneKind::Hand =>
+        {
+            Condition::Not(Box::new(Condition::And(vec![
+                Condition::PrevHappened,
+                Condition::SelNonEmpty(Sel::Var(vars::IT)),
+            ])))
+        }
         ("you draw one or more cards this way", Effect::Draw { n, .. }) => Condition::And(vec![
             Condition::PrevHappened,
             Condition::Compare(n.clone(), Cmp::Ge, Value::c(1)),

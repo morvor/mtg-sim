@@ -282,12 +282,17 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(r) = crate::oracle::phrases::end(l).strip_prefix("otherwise, ") else {
         return false;
     };
+    // "You may put that card onto the battlefield if it's a permanent card ... Otherwise,
+    // ...": the condition's alternative.
+    super::conditions_this_way::normalize_may_if(prev);
     let last = match prev {
         Effect::Seq(v) => v.last_mut(),
         other => Some(other),
     };
     let Some(Effect::If {
-        then, otherwise, ..
+        cond,
+        then,
+        otherwise,
     }) = last
     else {
         return false;
@@ -295,6 +300,9 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if !matches!(**otherwise, Effect::Noop) {
         return false;
     }
+    // "Otherwise, put it into your hand.": "it" is what the condition is about, not what
+    // the instruction it governed (which didn't happen) produced.
+    let subject = super::conditions_this_way::cond_subject(cond);
     // "that much life": the amount of life the instruction the condition governs would
     // have gained or lost.
     let much = r.contains("that much life");
@@ -307,7 +315,13 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     }
     let text = r.replace("that much life", "1 life");
     let first_new = b.targets.len();
-    let Some(mut e) = crate::oracle::effects::parse_clause(&text, b) else {
+    let saved_it = b.it.clone();
+    if let Some(sel) = subject {
+        b.it = sel;
+    }
+    let parsed = crate::oracle::effects::parse_clause(&text, b);
+    b.it = saved_it;
+    let Some(mut e) = parsed else {
         b.targets.truncate(first_new);
         return false;
     };

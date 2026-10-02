@@ -358,6 +358,18 @@ fn subject(c: &str, b: &mut Builder) -> Option<(Subject, String)> {
             return Some((Subject::Object(it), format!(" 's-contracted {rest}")));
         }
     }
+    // "the card", "the spell": what "it" refers to, when that's an object an earlier
+    // instruction found or targeted.
+    for p in ["the card", "the spell"] {
+        if let Some(rest) = c.strip_prefix(p) {
+            if (rest.is_empty() || rest.starts_with(' ') || rest.starts_with("'s "))
+                && matches!(b.it, Sel::Var(_) | Sel::Target(_))
+                && !is_no_referent(&b.it)
+            {
+                return Some((Subject::Object(b.it.clone()), rest.to_string()));
+            }
+        }
+    }
     for (p, sel) in [
         ("the sacrificed creature", Sel::Var(vars::SACRIFICED)),
         ("the sacrificed permanent", Sel::Var(vars::SACRIFICED)),
@@ -573,6 +585,20 @@ fn game_state_phrases(c: &str, b: &mut Builder) -> Option<Condition> {
             });
         }
     }
+    // "you control three or more permanents you don't own"
+    if let Some(r) = c.strip_prefix("you control ") {
+        if let Some((cmp, n, rest)) = amount_cmp(r) {
+            let rest = rest.trim();
+            let f = match rest.strip_suffix(" you don't own") {
+                Some(p) => Filter::and(vec![
+                    color_or_phrase(p)?,
+                    Filter::not(Filter::OwnedBy(PlayerRel::You)),
+                ]),
+                None => color_or_phrase(rest)?,
+            };
+            return Some(Condition::Compare(Value::Count(f.you_control()), cmp, n));
+        }
+    }
     // "you control more creatures than that spell's controller"
     if let Some(r) = c.strip_prefix("you control more ") {
         let (noun, who) = r.split_once(" than ")?;
@@ -662,6 +688,10 @@ fn named_phrase(r: &str, b: &Builder) -> Option<Filter> {
         }
         let name = name.replace('~', b.ctx.card_name);
         return Some(Filter::and(vec![f, Filter::Named(name.into())]));
+    }
+    // "a Pest creature token"
+    if let Some(p) = r.strip_suffix(" token") {
+        return Some(Filter::and(vec![color_or_phrase(p)?, Filter::Token]));
     }
     color_or_phrase(r)
 }
@@ -1181,6 +1211,15 @@ fn player_condition(p: &PlayerRef, r: &str, b: &mut Builder) -> Option<Condition
         } else {
             m(f)
         });
+    }
+    if r == "has more life than each other player" {
+        let others = PlayerRef::Each(PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+            p.clone(),
+        )))));
+        return Some(Condition::Not(Box::new(Condition::PlayerMatches(
+            others,
+            PlayerFilter::Life(Cmp::Ge, Box::new(Value::LifeTotal(p.clone()))),
+        ))));
     }
     // "has more cards in hand than each other player"
     if r == "has more cards in hand than each other player" {

@@ -197,7 +197,16 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         _ => x,
     };
     let targets = b.targets.len();
-    let parsed = parse_clause(x, b);
+    // "If that creature is attacking, you may put it on top of its owner's library
+    // instead.": if you don't, the original instruction still happens.
+    let optional = x.strip_prefix("you may ");
+    let parsed = match optional {
+        Some(r) => parse_clause(r, b).map(|e| Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(e),
+        }),
+        None => parse_clause(x, b),
+    };
     b.it = it_before;
     let replacement = match parsed {
         Some(e) if b.targets.len() == targets => Some(e),
@@ -226,7 +235,17 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     }
     let old = std::mem::replace(prev, Effect::Noop);
-    let e = restated_modify(&old, e);
+    let e = match e {
+        may @ Effect::May { .. } => Effect::seq(vec![
+            may,
+            Effect::If {
+                cond: Condition::Not(Box::new(Condition::PrevHappened)),
+                then: Box::new(old.clone()),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ]),
+        e => restated_modify(&old, e),
+    };
     *prev = Effect::If {
         cond,
         then: Box::new(e),

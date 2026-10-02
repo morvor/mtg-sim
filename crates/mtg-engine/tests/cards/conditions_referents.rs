@@ -693,8 +693,145 @@ fn if_the_sacrificed_creatures_toughness_was_four_two_food_instead() {
 }
 
 #[test]
-fn unused_effect_import() {
-    // Keeps the `Effect` import used by helpers in this file.
-    let _ = std::mem::size_of::<Effect>();
-    let _ = Answer::Default;
+fn if_you_dont_put_it_onto_the_battlefield_put_it_into_your_hand() {
+    cr!("608.2c");
+    ruling!(
+        "Cosmic Rebirth",
+        "You put the card into your hand if you didn't put it onto the battlefield because you chose not to or because its mana value was 4 or greater."
+    );
+    // Cosmic Rebirth: "Choose target permanent card in your graveyard. If it has mana value
+    // 3 or less, you may put it onto the battlefield. If you don't put it onto the
+    // battlefield, put it into your hand. You gain 3 life."
+    assert_supported(&["Cosmic Rebirth"]);
+    for (c, yes, onto) in [
+        ("Grizzly Bears", true, true),
+        ("Grizzly Bears", false, false),
+        ("Craw Wurm", true, false),
+    ] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Forest", 2);
+        t.lands(P0, "Plains", 1);
+        let card = t.graveyard(P0, c);
+        let s = t.hand(P0, "Cosmic Rebirth");
+        t.answer_yes(P0, yes);
+        t.cast(P0, s).target(card).go();
+        t.resolve_all();
+        assert_eq!(t.named_on_battlefield(c).len(), usize::from(onto), "{c} {yes}");
+        assert_eq!(t.in_hand(P0, c), !onto, "{c} {yes}");
+    }
 }
+
+#[test]
+fn otherwise_put_that_card_into_your_hand() {
+    cr!("603.10a", "608.2c");
+    ruling!(
+        "Matter Reshaper",
+        "put the card onto the battlefield for any reason, you put the card into your hand"
+    );
+    // Matter Reshaper: "When ~ dies, reveal the top card of your library. You may put
+    // that card onto the battlefield if it's a permanent card with mana value 3 or less.
+    // Otherwise, put that card into your hand."
+    assert_supported(&["Matter Reshaper"]);
+    for (top, onto) in [("Grizzly Bears", true), ("Craw Wurm", false), ("Lightning Bolt", false)] {
+        let mut t = TestGame::new(2);
+        let m = t.battlefield(P0, "Matter Reshaper");
+        t.library_top(P0, top);
+        t.answer_yes(P0, true);
+        destroy(&mut t, m);
+        t.resolve_all();
+        assert_eq!(t.named_on_battlefield(top).len(), usize::from(onto), "{top}");
+        assert_eq!(t.in_hand(P0, top), !onto, "{top}");
+    }
+}
+
+#[test]
+fn if_attacking_you_may_put_it_on_top_instead() {
+    cr!("608.2c", "614.1a");
+    // Sweep Away: "Return target creature to its owner's hand. If that creature is
+    // attacking, you may put it on top of its owner's library instead."
+    assert_supported(&["Sweep Away"]);
+    for (attacking, yes, on_top) in [(false, true, false), (true, true, true), (true, false, false)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 3);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        if attacking {
+            t.set_step(P1, Step::BeginningOfCombat);
+            t.answer(
+                P1,
+                DecisionKind::Attackers,
+                Answer::Attackers(vec![(bears, Entity::Player(P0))]),
+            );
+            let ok = t.g.run_until(10_000, |g| {
+                g.turn.step == Step::DeclareAttackers
+                    && g.turn.stage == mtg_engine::turn::Stage::Priority
+            });
+            assert!(ok);
+        }
+        let s = t.hand(P0, "Sweep Away");
+        t.answer_yes(P0, yes);
+        t.cast(P0, s).target(bears).go();
+        t.resolve_all();
+        assert_eq!(t.in_hand(P1, "Grizzly Bears"), !on_top, "{attacking} {yes}");
+        let top = t.g.player(P1).library.last().copied();
+        assert_eq!(
+            top.is_some_and(|c| t.g.obj(c).chars.has_name("Grizzly Bears")),
+            on_top,
+            "{attacking} {yes}"
+        );
+    }
+}
+
+#[test]
+fn if_you_dont_draw_a_card_this_way() {
+    cr!("608.2c");
+    // Trade Route Envoy: "When ~ enters, draw a card if you control a creature with a
+    // counter on it. If you don't draw a card this way, put a +1/+1 counter on ~."
+    assert_supported(&["Trade Route Envoy"]);
+    for countered in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        if countered {
+            t.g.add_counters(Entity::Object(bears), "+1/+1", 1, None);
+        }
+        let before = t.hand_size(P0);
+        let envoy = t.enter(P0, "Trade Route Envoy");
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), before + usize::from(countered));
+        assert_eq!(t.counters(envoy, "+1/+1"), u32::from(!countered));
+    }
+}
+
+#[test]
+fn if_you_control_three_or_more_permanents_you_dont_own() {
+    cr!("603.4", "108.3");
+    ruling!(
+        "Agent of Treachery",
+        "If you don't control three permanents you don't own as your end step begins"
+    );
+    // Agent of Treachery: "At the beginning of your end step, if you control three or more
+    // permanents you don't own, draw three cards."
+    assert_supported(&["Agent of Treachery"]);
+    for stolen in [2, 3] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Agent of Treachery");
+        for _ in 0..stolen {
+            let c = t.battlefield(P1, "Grizzly Bears");
+            let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+            ctx.targets = vec![vec![Entity::Object(c)]];
+            t.g.exec(
+                &Effect::GainControl {
+                    what: mtg_engine::ability::Sel::Target(0),
+                    who: mtg_engine::ability::PlayerRef::You,
+                    duration: mtg_engine::ability::Duration::Permanent,
+                },
+                &mut ctx,
+            );
+            t.g.recompute();
+        }
+        t.set_step(P0, Step::PostcombatMain);
+        let before = t.hand_size(P0);
+        t.advance_to(P1, Step::Upkeep);
+        assert_eq!(t.hand_size(P0), before + if stolen == 3 { 3 } else { 0 });
+    }
+}
+
