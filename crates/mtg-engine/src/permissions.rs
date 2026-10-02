@@ -161,7 +161,9 @@ pub fn allowing(
         // your next turn", "you may cast red spells from among them" (see `PlayTerms`).
         let ctx = Ctx::new(gr.source, gr.player);
         if g.effect_expired(&gr.duration, gr.source, gr.player)
-            || (gr.terms.later_turn && g.turn.number <= gr.turn)
+            // "During your next turn": not before that turn begins (when the permission
+            // becomes one that lasts until end of turn, see `turn.rs`).
+            || (gr.terms.later_turn && matches!(gr.duration, Duration::UntilEndOfYourNextTurn))
             || gr
                 .terms
                 .condition
