@@ -457,21 +457,15 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     if let Some(r) = t.strip_prefix("that are ") {
         return relative_list(r, b);
     }
-    // "that shares a creature type with it" (other than it).
+    // "that shares a creature type with it" (it shares one with itself if it has any;
+    // "other ..." excludes it, see `objects`).
     for p in [
         "that shares a creature type with it",
         "that share a creature type with it",
     ] {
         if let Some(r) = t.strip_prefix(p) {
             if word_end(r) && !is_no_referent(&b.it) {
-                let it = Box::new(b.it.clone());
-                return Some((
-                    Filter::and(vec![
-                        Filter::SharesCreatureType(it.clone()),
-                        Filter::not(Filter::In(it)),
-                    ]),
-                    r,
-                ));
+                return Some((Filter::SharesCreatureType(Box::new(b.it.clone())), r));
             }
         }
     }
@@ -488,8 +482,8 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
         return Some((Filter::and(vec![Filter::InZone(z), owned_by(&p)]), r3));
     }
     if let Some(r) = t.strip_prefix("named ~") {
-        if word_end(r) && !b.ctx.card_name.is_empty() {
-            return Some((Filter::Named(b.ctx.card_name.into()), r));
+        if word_end(r) {
+            return Some((named_this(b), r));
         }
         return None;
     }
@@ -529,6 +523,16 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     Some((controlled_by(&p), r))
 }
 
+/// "named ~": the card's name (CR 201.2), or the source's name where the card isn't known
+/// (a static ability read on its own).
+fn named_this(b: &Builder) -> Filter {
+    if b.ctx.card_name.is_empty() {
+        Filter::SameNameAs(Box::new(Sel::This))
+    } else {
+        Filter::Named(b.ctx.card_name.into())
+    }
+}
+
 /// "instant cards, sorcery cards, and/or have an Adventure", "Oozes or are named ~":
 /// alternatives after "that are" (to the end of the phrase).
 fn relative_list<'a>(r: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
@@ -550,10 +554,7 @@ fn relative_list<'a>(r: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
             continue;
         }
         if item == "named ~" {
-            if b.ctx.card_name.is_empty() {
-                return None;
-            }
-            alts.push(Filter::Named(b.ctx.card_name.into()));
+            alts.push(named_this(b));
             continue;
         }
         let (f, _, tail) = parse_object_phrase(item)?;
@@ -605,7 +606,27 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
         }
         break;
     }
-    // A bare "cards" phrase with a zone counts cards only (CR 108.2b: tokens aren't).
+    // "other creatures with the same name as that creature": other than that creature,
+    // not other than the source.
+    let referent = parts.iter().find_map(|p| match p {
+        Filter::SameNameAs(sel) | Filter::SharesCreatureType(sel) if !matches!(**sel, Sel::This) => {
+            Some(sel.clone())
+        }
+        _ => None,
+    });
+    if let Some(sel) = referent {
+        parts = parts
+            .into_iter()
+            .flat_map(|p| match p {
+                Filter::And(v) => v,
+                p => vec![p],
+            })
+            .map(|p| match p {
+                Filter::Other => Filter::not(Filter::In(sel.clone())),
+                p => p,
+            })
+            .collect();
+    }
     Some((Filter::and(parts), rest))
 }
 
@@ -1144,6 +1165,30 @@ fn extreme(op: AggOp, r: &str, b: &mut Builder) -> Option<(Value, String)> {
         }
     }
     None
+}
+
+/// "the number of [s]" read as a whole phrase outside an instruction (static abilities:
+/// "~ gets +1/+1 for each Equipment attached to it", cost reductions), where "it" is the
+/// object `it` names (the source by default) and there are no targets.
+pub fn whole_count(s: &str, it: Option<&Sel>) -> Option<Value> {
+    use crate::card::Layout;
+    use crate::oracle::CompileContext;
+    use crate::types::TypeLine;
+    let tl = TypeLine::default();
+    let ctx = CompileContext {
+        card_name: "",
+        full_name: "",
+        type_line: &tl,
+        layout: Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let mut b = Builder::new(&ctx);
+    b.it = it.cloned().unwrap_or(Sel::This);
+    let (v, rest) = count(end(s), &mut b)?;
+    (rest.trim().is_empty() && b.targets.is_empty()).then_some(v)
 }
 
 #[cfg(test)]
