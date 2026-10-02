@@ -601,6 +601,12 @@ impl Renderer<'_> {
             n
         } else if n == "permanents" || n == "cards" {
             "spells".into()
+        } else if let Some(r) = n
+            .strip_prefix("permanents ")
+            .filter(|_| !format!("{f:?}").contains("Permanent"))
+        {
+            // "spells from anywhere other than your hand" (no type named).
+            format!("spells {r}")
         } else {
             format!("{} spells", n.trim_end_matches('s'))
         }

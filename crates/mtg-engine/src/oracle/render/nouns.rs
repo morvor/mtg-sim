@@ -565,6 +565,35 @@ impl Renderer<'_> {
             Filter::Modified => np.status.push("unmodified".into()),
             Filter::EnteredThisTurn => np.rel.push("that didn't enter this turn".into()),
             Filter::AttackedThisTurn => np.rel.push("that didn't attack this turn".into()),
+            // "a spell from anywhere other than your hand": a spell is cast from its
+            // caster's own hand (CR 601.2a); one that isn't in a hand either (Drannith
+            // Magistrate's "can't cast spells from anywhere other than their hands").
+            Filter::CastFrom(z) => np.post.push(format!(
+                "from anywhere other than {{alt:your|their}} {}",
+                zone_word(*z)
+            )),
+            Filter::Or(v)
+                if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Filter::CastFrom(_)))
+                    && v.iter().all(|x| match x {
+                        Filter::CastFrom(z) | Filter::InZone(z) => v.iter().all(
+                            |y| matches!(y, Filter::CastFrom(w) | Filter::InZone(w) if w == z),
+                        ),
+                        _ => false,
+                    }) =>
+            {
+                let z = v
+                    .iter()
+                    .find_map(|x| match x {
+                        Filter::CastFrom(z) => Some(*z),
+                        _ => None,
+                    })
+                    .unwrap_or(ZoneKind::Hand);
+                np.post.push(format!(
+                    "from anywhere other than {{alt:your|their}} {}",
+                    zone_word(z)
+                ))
+            }
             Filter::Or(v) => {
                 for x in v {
                     self.collect_not(x, np);
