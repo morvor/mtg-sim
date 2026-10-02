@@ -180,6 +180,11 @@ impl Renderer<'_> {
             // "target instant spell, sorcery spell, or triggered ability": the
             // alternatives name what they are.
             TargetKind::SpellOrAbility(f @ Filter::Or(_)) => self.noun(f, num),
+            // "target spell, activated ability, or triggered ability": the abilities on the
+            // stack are activated or triggered ones (CR 113.1).
+            TargetKind::SpellOrAbility(Filter::Any) if matches!(num, Num::One) => {
+                "{alt:spell or ability|spell, activated ability, or triggered ability}".into()
+            }
             TargetKind::SpellOrAbility(f) => {
                 let base = match num {
                     Num::One => "spell or ability",

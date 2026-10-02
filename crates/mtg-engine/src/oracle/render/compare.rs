@@ -130,6 +130,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "\"For each opponent you have\" counts your opponents (CR 102.2, 102.3).",
     },
     Equivalence {
+        pattern: r"\bnon(artifact|creature|land|enchantment|legendary|token),? non(white|blue|black|red|green)\b",
+        replacement: "non$2 non$1",
+        why: "The order of a noun's qualities doesn't change what it describes: a \
+              \"nonartifact, nonblack creature\" is a \"nonblack nonartifact creature\".",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \

@@ -340,6 +340,15 @@ impl Renderer<'_> {
                     Some(c) => {
                         let t = self.trigger_text(c);
                         let t = t.trim_start_matches("whenever ").to_string();
+                        // "If an artifact or creature entering causes ...": the event as a
+                        // gerund.
+                        let t = if let Some(x) = t.strip_suffix(" enters") {
+                            format!("{x} entering {{opt:the battlefield}}")
+                        } else if let Some(x) = t.strip_suffix(" dies") {
+                            format!("{x} dying")
+                        } else {
+                            t
+                        };
                         format!(
                             "if {t} causes a triggered ability of {s} to trigger, that ability triggers an additional time"
                         )

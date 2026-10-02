@@ -630,6 +630,8 @@ impl Renderer<'_> {
                 let t = self.noun_det(f, Det::A);
                 np.rel.push(format!("that targets {t}"));
             }
+            // CR 123.4: an object with any kind of sticker on it is "stickered".
+            Filter::HasSticker(None) => np.status.push("stickered".into()),
             Filter::HasSticker(k) => np.with_on.push(match k {
                 None => "sticker".into(),
                 Some(StickerType::Name) => "name sticker".into(),
