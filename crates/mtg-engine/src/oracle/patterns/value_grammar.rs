@@ -558,6 +558,26 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
         }
         return None;
     }
+    // "with base power or toughness 1", "with base power and toughness 2/2" (CR 208.4b).
+    if let Some(r) = t.strip_prefix("with base power or toughness ") {
+        let (n, rest) = parse_number(r)?;
+        let n = n.as_const()?;
+        return Some((
+            Filter::Custom(format!("{}{n}", crate::kw::value_counts::BASE_POWER_OR_TOUGHNESS).into()),
+            rest,
+        ));
+    }
+    if let Some(r) = t.strip_prefix("with base power and toughness ") {
+        let (pt, rest) = split_word(r);
+        let (p, q) = pt.split_once('/')?;
+        let (p, q): (i32, i32) = (p.parse().ok()?, q.parse().ok()?);
+        return Some((
+            Filter::Custom(
+                format!("{}{p}/{q}", crate::kw::value_counts::BASE_POWER_AND_TOUGHNESS).into(),
+            ),
+            rest,
+        ));
+    }
     // "with power less than 0", "with toughness greater than 3".
     for (p, cmp, power) in [
         ("with power less than ", Cmp::Lt, true),
@@ -948,6 +968,35 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                         }
                     }
                 }
+            }
+        }
+    }
+    // "white mana symbols in its mana cost" (CR 107.4e: hybrid symbols of the color
+    // count).
+    {
+        let (w, x) = split_word(r);
+        if let Some(color) = crate::types::Color::from_word(w) {
+            let x = x.trim_start();
+            if let Some(y) = x
+                .strip_prefix("mana symbols in ")
+                .or_else(|| x.strip_prefix("mana symbol in "))
+            {
+                let (sel, rest) = if let Some(z) = y.strip_prefix("the mana cost of ") {
+                    referent(z, b)?
+                } else {
+                    let (who, z) = split_possessive(y)
+                        .or_else(|| y.strip_prefix("its ").map(|z| ("it", z)))?;
+                    let rest = z.strip_prefix("mana cost")?;
+                    let (sel, t) = referent(who, b)?;
+                    if !t.trim().is_empty() {
+                        return None;
+                    }
+                    (sel, rest.to_string())
+                };
+                return Some((
+                    Value::Aggregate(AggOp::Sum, Stat::ManaSymbols(color), Box::new(sel)),
+                    rest,
+                ));
             }
         }
     }

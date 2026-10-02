@@ -1351,6 +1351,9 @@ pub enum Stat {
     ManaValue,
     /// Counters of a kind (all kinds when `None`).
     Counters(Option<CounterKind>),
+    /// Mana symbols of a color in its mana cost (hybrid symbols of the color count, CR
+    /// 107.4e).
+    ManaSymbols(crate::types::Color),
 }
 
 /// What [`Value::DistinctAmong`] counts the different values of.

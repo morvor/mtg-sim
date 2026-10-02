@@ -32,6 +32,9 @@ pub fn aggregate(g: &Game, op: AggOp, stat: &Stat, sel: &Sel, ctx: &Ctx) -> i64 
             Stat::ManaValue => g.mana_value_of(id) as i64,
             Stat::Counters(Some(k)) => o.counter(k) as i64,
             Stat::Counters(None) => o.counters.values().map(|n| *n as i64).sum(),
+            Stat::ManaSymbols(c) => o.chars.mana_cost.as_ref().map_or(0, |m| {
+                m.symbols.iter().filter(|s| s.colors().contains(*c)).count() as i64
+            }),
         }
     };
     combine(op, objs.into_iter().map(of))
