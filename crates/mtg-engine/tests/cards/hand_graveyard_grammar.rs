@@ -1482,3 +1482,104 @@ fn thranduil_only_elf_cards_in_your_graveyard() {
         .count();
     assert_eq!(n, 1);
 }
+
+// ---------------------------------------------------------------------------
+// "twice X" and "half X"
+// ---------------------------------------------------------------------------
+
+#[test]
+fn twice_and_half_x_compile() {
+    assert_supported(&[
+        "Erebos's Intervention",
+        "Drown in Dreams",
+        "Heliod's Intervention",
+        "Procrastinate",
+        "Sanguine Sacrament",
+        "Wan Shi Tong, Librarian",
+        "Hydroid Krasis",
+    ]);
+}
+
+#[test]
+fn drown_in_dreams_mills_twice_x() {
+    cr!("107.3a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 6);
+    let d = t.hand(P0, "Drown in Dreams");
+    t.cast(P0, d).x(3).modes(&[1]).target(P1).go();
+    t.resolve();
+    assert_eq!(t.graveyard_size(P1), 6);
+}
+
+#[test]
+fn erebos_intervention_exiles_up_to_twice_x_cards() {
+    cr!("107.3a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let cards: Vec<ObjectId> = (0..5).map(|_| t.graveyard(P1, "Shock")).collect();
+    let d = t.hand(P0, "Erebos's Intervention");
+    t.cast(P0, d).x(2).modes(&[1]).targets(&objs(&cards[..4])).go();
+    // At most four could be chosen.
+    let max = t
+        .asked()
+        .iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { max, .. } => Some(*max),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(max, 4);
+    t.resolve();
+    assert_eq!(t.graveyard_size(P1), 1);
+}
+
+#[test]
+fn hydroid_krasis_halves_x_rounding_down() {
+    cr!("107.1a", "107.3a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 4);
+    t.lands(P0, "Island", 3);
+    t.g.players[P0.idx()].life = 10;
+    let k = t.hand(P0, "Hydroid Krasis");
+    t.cast(P0, k).x(5).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 12, "{}", t.dump_log());
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(t.counters(t.g.current(k), "+1/+1"), 5);
+}
+
+#[test]
+fn wan_shi_tong_draws_half_x_rounded_down() {
+    cr!("107.1a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 5);
+    let w = t.hand(P0, "Wan Shi Tong, Librarian");
+    t.cast(P0, w).x(3).go();
+    t.resolve_all();
+    assert_eq!(t.counters(t.g.current(w), "+1/+1"), 3);
+    assert_eq!(t.hand_size(P0), 1);
+}
+
+#[test]
+fn mana_seism_adds_colorless_per_land_sacrificed() {
+    cr!("701.21a");
+    assert_supported(&["Mana Seism"]);
+    let mut t = TestGame::new(2);
+    let lands = t.lands(P0, "Mountain", 4);
+    let ms = t.hand(P0, "Mana Seism");
+    // Two Mountains pay for it; the other two are sacrificed.
+    t.cast(P0, ms).go();
+    let untapped: Vec<ObjectId> = lands
+        .iter()
+        .copied()
+        .filter(|l| !t.obj_now(*l).tapped)
+        .collect();
+    assert_eq!(untapped.len(), 2);
+    t.answer_choose(P0, &objs(&untapped));
+    t.resolve();
+    assert_eq!(t.graveyard_size(P0), 3);
+    assert_eq!(
+        t.g.player(P0).mana_pool.count(mtg_engine::mana::ManaType::C),
+        2
+    );
+}

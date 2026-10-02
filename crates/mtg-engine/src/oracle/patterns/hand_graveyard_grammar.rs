@@ -2184,3 +2184,45 @@ fn kind_title(w: &str) -> String {
 }
 
 inventory::submit! { super::StaticPattern { name: "hand/graveyard grammar: has all activated abilities of cards in graveyards", priority: 960, parse: s_activated_abilities_of_graveyard_cards } }
+
+/// "draw half X cards, rounded down", "you gain half X life and draw half X cards" (with
+/// "Round down each time." following): X halved, rounded as the text says (CR 107.1a).
+fn p_half_x(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains("half x ") {
+        return None;
+    }
+    let (body, up) = if let Some(h) = l.strip_suffix(", rounded down") {
+        (h, false)
+    } else if let Some(h) = l.strip_suffix(", rounded up") {
+        (h, true)
+    } else if crate::oracle::raw_text()
+        .to_lowercase()
+        .contains(&format!("{l}. round down each time"))
+    {
+        (l, false)
+    } else {
+        return None;
+    };
+    // Every X is halved.
+    let rewritten = body.replace("half x ", "x ");
+    if rewritten.contains("half ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(e) = parse_clause(&rewritten, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    super::r107_numbers::substitute_x(&e, &Value::Div(Box::new(Value::X), 2, up))
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: half X, rounded down", priority: 960, parse: p_half_x } }
+
+/// "Round down each time." after an instruction with "half X" (read with it).
+fn f_round_down_each_time(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    end(l) == "round down each time" && format!("{prev:?}").contains("Div(X, 2, false)")
+}
+
+inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: round down each time", priority: 960, apply: f_round_down_each_time } }

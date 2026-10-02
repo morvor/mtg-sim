@@ -31,6 +31,17 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "fifteen" | "15" => 15,
         "twenty" | "20" => 20,
         "x" => return Some((Value::X, rest)),
+        // "mills twice X cards", "exile up to twice X target cards".
+        "twice" => {
+            let (w2, rest2) = split_word(rest);
+            if w2 != "x" {
+                return None;
+            }
+            return Some((
+                Value::Mul(Box::new(Value::Const(2)), Box::new(Value::X)),
+                rest2,
+            ));
+        }
         other => {
             if let Ok(n) = other.parse::<i32>() {
                 n
