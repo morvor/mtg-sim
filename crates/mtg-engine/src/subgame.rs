@@ -135,10 +135,12 @@ pub fn begin(g: &mut Game) -> Subgame {
         starting_player: Some(first),
         first_turn_chooser: None,
         seed,
+        top_of_library: vec![],
         ..g.config.clone()
     };
     let mut sub = Game::new(config, decks, vec![]);
     sub.agents = g.agents.clone();
+    sub.observer = g.observer.clone();
     sub.logging = g.logging;
     sub.subgames.depth = g.subgames.depth + 1;
     for (i, p) in g.players.iter().enumerate() {

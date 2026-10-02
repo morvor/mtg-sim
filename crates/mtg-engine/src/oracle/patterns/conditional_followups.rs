@@ -41,7 +41,9 @@ fn if_condition_continuation(l: &str, prev: &mut Effect, b: &mut Builder) -> boo
     if x.ends_with(" instead") || x.starts_with("instead ") || matches!(prev, Effect::Noop) {
         return false;
     }
-    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx)
+        .or_else(|| super::conditions_referents::parse_condition_with(c, b))
+    else {
         return false;
     };
     let before = parts(prev);
@@ -155,6 +157,7 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
             otherwise: Box::new(Effect::Noop),
         });
     }
+    let original = c;
     // Where "it" is the ability's source ("Whenever ~ attacks, you win the game if there
     // are twenty or more counters on it"), so is the condition's "it".
     let about_source;
@@ -168,8 +171,8 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         c
     };
-    let cond = match that_player_life(c, b) {
-        Some(c) => c,
+    let simple = match that_player_life(c, b) {
+        Some(c) => Some(c),
         None if pronoun_free(c) => {
             let parse = |c: &str| crate::oracle::statics::parse_condition(c, b.ctx);
             // "if there are twenty or more counters on ~ or you have twenty or more cards
@@ -178,9 +181,47 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
                 c.match_indices(" or ").find_map(|(i, _)| {
                     Some(Condition::Or(vec![parse(&c[..i])?, parse(&c[i + 4..])?]))
                 })
-            })?
+            })
         }
-        None => return None,
+        None => None,
+    };
+    let cond = match simple {
+        Some(c) => c,
+        // "Destroy target creature if it's white.", "draw a card if that player has more
+        // cards in hand than each other player": the condition is about what the
+        // instruction (or an earlier one) names, so the instruction is read first.
+        None => {
+            if super::conditions_referents::ambiguous_it(original, b) {
+                return None;
+            }
+            let it_before = b.it.clone();
+            let e = crate::oracle::effects::parse_clause(x, b)?;
+            // The condition is checked before the instruction happens: "it" is what it
+            // was before, or a target the instruction named, not the objects it produced
+            // ("Put target creature card ... onto the battlefield ... if its mana value is
+            // ...").
+            let it_after = b.it.clone();
+            if matches!(it_after, Sel::Var(_)) {
+                let new_object_target = (first_new..b.targets.len())
+                    .rev()
+                    .find(|i| !matches!(b.targets[*i].what, TargetKind::Player(_)));
+                b.it = match new_object_target {
+                    Some(i) => Sel::Target(i as u8),
+                    None => it_before,
+                };
+            }
+            let cond = super::conditions_referents::parse_condition_with(original, b);
+            b.it = it_after;
+            let Some(cond) = cond else {
+                b.targets.truncate(first_new);
+                return None;
+            };
+            return Some(Effect::If {
+                cond,
+                then: Box::new(e),
+                otherwise: Box::new(Effect::Noop),
+            });
+        }
     };
     let e = crate::oracle::effects::parse_clause(x, b)?;
     targets_only_if_paid(&cond, b, first_new);
@@ -204,10 +245,9 @@ fn legendary_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     }
     let legendary = Filter::Supertype(crate::types::Supertype::Legendary);
     match rest.trim() {
-        "isn't legendary" | "is not legendary" => Some(Condition::SelMatches(
-            sel,
-            Filter::Not(Box::new(legendary)),
-        )),
+        "isn't legendary" | "is not legendary" => {
+            Some(Condition::SelMatches(sel, Filter::Not(Box::new(legendary))))
+        }
         "is legendary" => Some(Condition::SelMatches(sel, legendary)),
         _ => None,
     }
@@ -234,6 +274,31 @@ fn if_and_object_condition(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "if [condition] and [object] isn't legendary, [instruction]", priority: 250, parse: if_and_object_condition } }
 
+/// Groups a trailing run of two or more conditional instructions about the same object
+/// ("If it was a creature card, create a 2/2 black Rogue creature token. If it was a land
+/// card, create a Treasure token.") into one effect, for an "Otherwise, ..." that follows
+/// them all.
+pub(crate) fn group_condition_run(effects: &mut Vec<Effect>) {
+    let subject_of = |e: &Effect| match e {
+        Effect::If { cond, otherwise, .. } if matches!(**otherwise, Effect::Noop) => {
+            super::conditions_this_way::cond_subject(cond).map(|s| format!("{s:?}"))
+        }
+        _ => None,
+    };
+    let Some(subject) = effects.last().and_then(subject_of) else {
+        return;
+    };
+    let run = effects
+        .iter()
+        .rev()
+        .take_while(|e| subject_of(e).as_ref() == Some(&subject))
+        .count();
+    if run >= 2 {
+        let tail = effects.split_off(effects.len() - run);
+        effects.push(Effect::Seq(tail));
+    }
+}
+
 /// "Otherwise, [instruction]." after a conditional instruction ("You lose life equal to
 /// that card's mana value if ~ isn't saddled. Otherwise, each opponent loses that much
 /// life.", Caustic Bronco): what happens if the condition doesn't hold.
@@ -241,12 +306,42 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(r) = crate::oracle::phrases::end(l).strip_prefix("otherwise, ") else {
         return false;
     };
+    // "You may put that card onto the battlefield if it's a permanent card ... Otherwise,
+    // ...": the condition's alternative.
+    super::conditions_this_way::normalize_may_if(prev);
+    // "If it was a creature card, ... If it was a land card, ... Otherwise, ...": the
+    // alternative to every one of a run of conditions about the same object.
+    let earlier: Vec<Condition> = match &*prev {
+        Effect::Seq(v) if v.len() >= 2 => {
+            let subject_of = |e: &Effect| match e {
+                Effect::If {
+                    cond, otherwise, ..
+                } if matches!(**otherwise, Effect::Noop) => {
+                    super::conditions_this_way::cond_subject(cond)
+                        .map(|s| (format!("{s:?}"), cond.clone()))
+                }
+                _ => None,
+            };
+            match subject_of(&v[v.len() - 1]) {
+                Some((subject, _)) => v[..v.len() - 1]
+                    .iter()
+                    .rev()
+                    .map_while(|e| subject_of(e).filter(|(s, _)| *s == subject))
+                    .map(|(_, c)| c)
+                    .collect(),
+                None => vec![],
+            }
+        }
+        _ => vec![],
+    };
     let last = match prev {
         Effect::Seq(v) => v.last_mut(),
         other => Some(other),
     };
     let Some(Effect::If {
-        then, otherwise, ..
+        cond,
+        then,
+        otherwise,
     }) = last
     else {
         return false;
@@ -254,6 +349,9 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if !matches!(**otherwise, Effect::Noop) {
         return false;
     }
+    // "Otherwise, put it into your hand.": "it" is what the condition is about, not what
+    // the instruction it governed (which didn't happen) produced.
+    let subject = super::conditions_this_way::cond_subject(cond);
     // "that much life": the amount of life the instruction the condition governs would
     // have gained or lost.
     let much = r.contains("that much life");
@@ -266,7 +364,13 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     }
     let text = r.replace("that much life", "1 life");
     let first_new = b.targets.len();
-    let Some(mut e) = crate::oracle::effects::parse_clause(&text, b) else {
+    let saved_it = b.it.clone();
+    if let Some(sel) = subject {
+        b.it = sel;
+    }
+    let parsed = crate::oracle::effects::parse_clause(&text, b);
+    b.it = saved_it;
+    let Some(mut e) = parsed else {
         b.targets.truncate(first_new);
         return false;
     };
@@ -280,6 +384,13 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
                 return false;
             }
         }
+    }
+    if !earlier.is_empty() {
+        e = Effect::If {
+            cond: Condition::Not(Box::new(Condition::Or(earlier))),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        };
     }
     **otherwise = e;
     true

@@ -43,10 +43,26 @@ fn parse_triggered_at(
     }
     // Intervening "if" clause (CR 603.4).
     let mut intervening = None;
+    let mut body_it: Option<Sel> = None;
     let subject_is_source;
     let el = eff.to_lowercase();
     if let Some(r) = el.strip_prefix("if ") {
-        if let Some((c, _)) = r.split_once(", ") {
+        // The condition ends at the first comma that doesn't continue a list of adjectives
+        // ("if that player controls a nonblack, nonland permanent, ...").
+        let continues_list = |before: &str, rest: &str| {
+            let last = before.rsplit(' ').next().unwrap_or("");
+            let next = split_word(rest).0.trim_end_matches(',');
+            matches!(next, "or" | "and" | "and/or")
+                || (adjective(last).is_some()
+                    && head_noun(last).is_none()
+                    && (adjective(next).is_some() || head_noun(next).is_some()))
+        };
+        let split = r
+            .match_indices(", ")
+            .map(|(i, _)| i)
+            .find(|&i| !continues_list(&r[..i], &r[i + 2..]))
+            .map(|i| (&r[..i], &r[i + 2..]));
+        if let Some((c, _)) = split {
             // Conditions are parsed without a referent: "it" in them means the source
             // ("When ~ enters, if you cast it"), so it can't refer to another object
             // ("Whenever a creature enters, if you cast it" is about that creature).
@@ -69,9 +85,32 @@ fn parse_triggered_at(
                 let d = format!("{p:?}");
                 d.contains("TriggerObject") || d.contains("TriggerLki")
             });
-            if mentions_it && !matches!(it, Sel::This) && !about_trigger_object {
-                return None;
-            }
+            // Otherwise the condition's pronouns refer to the trigger's object and player
+            // ("if it had a +1/+1 counter on it", "if that player has no cards in hand").
+            // "If enchanted creature is untapped, tap it": the condition's object is what
+            // the effect's "it" refers to.
+            let parsed = if (mentions_it && !matches!(it, Sel::This) && !about_trigger_object)
+                || parsed.is_none()
+            {
+                match super::patterns::conditions_referents::intervening(c, ctx, &it, &it_player) {
+                    Some((cond, subject)) => {
+                        match (&subject, &it) {
+                            (Some(sel @ Sel::AttachedTo), Sel::This) => body_it = Some(sel.clone()),
+                            // "Whenever you cast an instant or sorcery spell, if ~ has fewer
+                            // than three charge counters on it, put a charge counter on it."
+                            (Some(Sel::This), _) => body_it = Some(Sel::This),
+                            _ => {}
+                        }
+                        Some(cond)
+                    }
+                    None if mentions_it && !matches!(it, Sel::This) && !about_trigger_object => {
+                        return None
+                    }
+                    None => parsed,
+                }
+            } else {
+                parsed
+            };
             if let Some(cond) = parsed {
                 intervening = Some(cond);
                 eff = &eff[3 + c.len() + 2..];
@@ -94,7 +133,7 @@ fn parse_triggered_at(
     {
         Sel::This
     } else {
-        it
+        body_it.unwrap_or(it)
     };
     // A trigger condition with no single referent for "it" (e.g. several conditions
     // joined by "and whenever", or "whenever chaos ensues") gives the body's pronouns no
@@ -296,10 +335,17 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         };
         // "That player" is the player whose step it is: the active player, or with shared
         // team turns each player on the active team the ability triggers for (CR 805.4d).
+        // On "your [step]" that's you, whom the text calls "you": "that player" then
+        // names a player the instructions mention ("target opponent").
+        let it_player = if matches!(whose, PlayerRel::You) {
+            PlayerRef::You
+        } else {
+            PlayerRef::TriggerPlayer
+        };
         return Some((
             TriggerCond::BeginningOf { step, whose },
             Sel::This,
-            PlayerRef::TriggerPlayer,
+            it_player,
         ));
     }
     let r = l
@@ -535,7 +581,14 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     ];
     for (p, t) in player_pairs {
         if r == p {
-            return Some((t, obj(), PlayerRef::TriggerPlayer));
+            // "Whenever you ...": the text calls that player "you", so "they" and "that
+            // player" name someone else.
+            let it_player = if p.starts_with("you ") {
+                PlayerRef::You
+            } else {
+                PlayerRef::TriggerPlayer
+            };
+            return Some((t, obj(), it_player));
         }
     }
     if r == "you sacrifice a permanent" {

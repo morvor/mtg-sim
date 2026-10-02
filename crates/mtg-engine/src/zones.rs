@@ -162,6 +162,17 @@ pub fn record_cost_moved(
     if !moved.is_empty() {
         vars.insert(COST_MOVED, moved);
     }
+    // Cards discarded to pay the cost ("the discarded card"): cards that left a hand
+    // for a public zone other than by being exiled.
+    let discarded: Vec<Entity> = paid
+        .objects
+        .iter()
+        .filter(|o| matches!(g.obj(**o).zone, Zone::Hand(_)) && !paid.exiled.contains(o))
+        .filter_map(|o| now_in(o, &|z| matches!(z, Zone::Graveyard(_))))
+        .collect();
+    if !discarded.is_empty() {
+        vars.insert(crate::discard_rules::DISCARDED, discarded);
+    }
     let exiled: Vec<Entity> = paid
         .exiled
         .iter()

@@ -10,12 +10,12 @@
 //! * "at the beginning of your second main phase" (CR 505.1b: main phases are counted
 //!   within the turn).
 
-use super::{AbilityPattern, EffectPattern, StaticPattern, TriggerPattern};
+use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern, TriggerPattern};
 use crate::ability::*;
 use crate::oracle::effects::{player_ref, Builder};
 use crate::oracle::phrases::{end, parse_number};
 use crate::oracle::CompileContext;
-use crate::turn_structure::{AFTER_UPKEEP, MAIN_PHASE, UPKEEP};
+use crate::turn_structure::{AFTER_UPKEEP, END_STEP, MAIN_PHASE, UPKEEP};
 
 // ---------------------------------------------------------------------------
 // Additional phases and steps (CR 500.8–500.10)
@@ -138,6 +138,19 @@ fn additional_parts(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "r500 additional phases and steps", priority: 100, parse: additional_parts } }
+
+/// "If it's the first end step of the turn, there is an additional end step after this
+/// step." (Y'shtola Rhul): end steps are counted within the turn (CR 500.8).
+fn first_end_step(c: &str) -> Option<Condition> {
+    match end(c) {
+        "it's the first end step of the turn" | "it's the first end step of this turn" => {
+            Some(Condition::Custom(format!("{END_STEP}1").into()))
+        }
+        _ => None,
+    }
+}
+
+inventory::submit! { ConditionPattern { name: "r513 it's the first end step of the turn", priority: 100, parse: first_end_step } }
 
 // ---------------------------------------------------------------------------
 // Extra turns (CR 500.7)
