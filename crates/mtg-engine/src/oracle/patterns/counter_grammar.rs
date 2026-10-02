@@ -222,11 +222,8 @@ pub fn holder(s: &str, b: &mut Builder) -> Option<Sel> {
     // "a creature they control" in a trigger about a player: that player.
     let they;
     let s = match s.strip_suffix(" they control") {
-        Some(head)
-            if b.in_trigger
-                && !super::oracle_hardening_referents::is_no_player_referent(&b.it_player) =>
-        {
-            they = format!("{head} that player controls");
+        Some(head) if b.in_trigger && matches!(b.it_player, PlayerRef::TriggerPlayer) => {
+            they = format!("{head} the triggering player controls");
             &they[..]
         }
         _ => s,
@@ -1150,6 +1147,16 @@ fn exile_with_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     if !l.starts_with("exile ") {
         return None;
     }
+    // "exile a creature you control and put a takeover counter on it": the same as
+    // exiling it with the counter on it.
+    let rewritten;
+    let l = match l.rsplit_once(" and put ") {
+        Some((head, put)) if put.ends_with(" on it") && !head.contains(" with ") => {
+            rewritten = format!("{head} with {put}");
+            rewritten.as_str()
+        }
+        _ => l,
+    };
     // "... and it gains suspend" is another instruction.
     let (l, and_then) = match l.split_once(" on it and ") {
         Some((a, c)) => (format!("{a} on it"), Some(c.to_string())),
@@ -1199,3 +1206,238 @@ fn exile_with_counters(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "counter grammar: exile [object] with N counters on it", priority: 50, parse: exile_with_counters } }
+
+/// "Choose a counter on target permanent.", "Choose a kind of counter on a creature you
+/// control.", "Choose a counter on target permanent or player.": the kind is chosen as
+/// the ability resolves; the next sentence says what's done with it (see
+/// [`with_that_kind`]).
+fn choose_a_counter(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l)
+        .strip_prefix("choose a counter on ")
+        .or_else(|| end(l).strip_prefix("choose a kind of counter on "))?;
+    let from = match holder(r, b)? {
+        Sel::Choose {
+            chooser,
+            filter,
+            count,
+            up_to,
+            ..
+        } => {
+            let s = Sel::Choose {
+                chooser,
+                filter: Filter::and(vec![filter, Filter::HasCounter(None)]),
+                count,
+                up_to,
+                store: Some(CHOSEN),
+            };
+            b.it = Sel::Var(CHOSEN);
+            s
+        }
+        other => other,
+    };
+    Some(Effect::ChooseCounterKind {
+        from,
+        then: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: choose a counter on [holder]", priority: 50, parse: choose_a_counter } }
+
+/// After "Choose a counter on [holder].": "Put an additional counter of that kind on that
+/// permanent.", "Give that permanent or player another counter of that kind.", "Put a
+/// counter of that kind on each other creature you control.", "Put a counter of that kind
+/// on target permanent you control if it doesn't have a counter of that kind on it.",
+/// "Remove that counter from that permanent or card or put another of those counters on
+/// it."
+fn with_that_kind(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let slot = match prev {
+        Effect::ChooseCounterKind { then, .. } if matches!(**then, Effect::Noop) => then,
+        _ => return false,
+    };
+    let k = CHOSEN_COUNTER_KIND;
+    let mut t = end(l).to_string();
+    for (from, to) in [
+        ("an additional counter of that kind", format!("an additional {k} counter")),
+        ("another counter of that kind", format!("another {k} counter")),
+        ("a counter of that kind", format!("a {k} counter")),
+        ("another of those counters", format!("another {k} counter")),
+        ("that counter", format!("a {k} counter")),
+    ] {
+        t = t.replace(from, &to);
+    }
+    if let Some(r) = t.strip_prefix("give that permanent or player ") {
+        t = format!("put {r} on it");
+    }
+    // "... if it doesn't have a counter of that kind on it": only then.
+    let (t, unless_has) = match t.strip_suffix(&format!(" if it doesn't have a {k} counter on it")) {
+        Some(head) => (head.to_string(), true),
+        None => (t, false),
+    };
+    // "remove [a counter] from that permanent or card or put another [one] on it".
+    let e = if let Some(r) = t.strip_prefix(&format!("remove a {k} counter from ")) {
+        let Some((_, put)) = r.split_once(" or put ") else {
+            return false;
+        };
+        if put != format!("another {k} counter on it") {
+            return false;
+        }
+        let it = b.it.clone();
+        Effect::ChooseOne {
+            who: PlayerRef::You,
+            options: vec![
+                (
+                    "remove that counter".into(),
+                    Effect::RemoveCounters {
+                        what: it.clone(),
+                        kind: Some(k.into()),
+                        n: Value::c(1),
+                    },
+                ),
+                (
+                    "put another of those counters".into(),
+                    Effect::AddCounters {
+                        what: it,
+                        kind: k.into(),
+                        n: Value::c(1),
+                    },
+                ),
+            ],
+        }
+    } else {
+        let Some(mut e) = crate::oracle::effects::parse_clause(&t, b) else {
+            return false;
+        };
+        // "each other creature you control": other than the one with the chosen counter.
+        if t.contains(" each other ") {
+            match &mut e {
+                Effect::AddCounters {
+                    what: Sel::All(f), ..
+                } => {
+                    *f = Filter::and(vec![
+                        f.clone(),
+                        Filter::not(Filter::In(Box::new(Sel::Var(CHOSEN)))),
+                    ]);
+                }
+                _ => return false,
+            }
+        }
+        if unless_has {
+            let Effect::AddCounters { what, .. } = &e else {
+                return false;
+            };
+            e = Effect::If {
+                cond: Condition::Not(Box::new(Condition::SelMatches(
+                    what.clone(),
+                    Filter::HasCounter(Some(k.into())),
+                ))),
+                then: Box::new(e),
+                otherwise: Box::new(Effect::Noop),
+            };
+        }
+        e
+    };
+    // Only instructions about the chosen kind.
+    if !serde_json::to_string(&e).is_ok_and(|s| s.contains(k)) {
+        return false;
+    }
+    **slot = e;
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "counter grammar: [instruction] with a counter of that kind", priority: 50, apply: with_that_kind } }
+
+/// "they lose 1 life and you put a -1/-1 counter on up to one target creature they
+/// control": a put with "you" as its explicit subject, tried before patterns that read
+/// "you [verb]" generally.
+fn you_put(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !end(l).starts_with("you put ") {
+        return None;
+    }
+    put_counters(l, b)
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: you put [counters] on [holder]", priority: 5, parse: you_put } }
+
+/// "put the same number of each kind of counter on that creature" (as ~ has, Denry
+/// Klin): for each kind of counter on ~, that many of that kind (CR 122.1).
+fn same_counters_as_this(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("put the same number of each kind of counter on ")?;
+    // "Whenever a nontoken creature you control enters, if ~ has counters on it, put ...
+    // on that creature": the creature that entered (the condition made "it" ~).
+    let to = if r == "that creature" && b.in_trigger {
+        Sel::TriggerObject
+    } else {
+        holder(r, b)?
+    };
+    if matches!(to, Sel::This) {
+        return None;
+    }
+    // Only after a condition that names ~'s counters ("if ~ has counters on it").
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains(" has counters on it") {
+        return None;
+    }
+    Some(Effect::PutCountersOf {
+        from: Sel::This,
+        to,
+        kind: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: put the same number of each kind of counter on [holder]", priority: 5, parse: same_counters_as_this } }
+
+/// "Then sacrifice it if it has five or more bloodstain counters on it." after an
+/// instruction that changed the counters on ~: the condition first (see
+/// `counters_then_if_on_it`).
+fn then_x_if_it_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("then ") else {
+        return false;
+    };
+    let Some((clause, cond)) = r.rsplit_once(" if it has ") else {
+        return false;
+    };
+    if !cond.contains(" counter") {
+        return false;
+    }
+    super::counters_then_if_on_it::then_if_counters_on_it(
+        &format!("then if it has {cond}, {clause}"),
+        prev,
+        b,
+    )
+}
+
+inventory::submit! { FollowupPattern { name: "counter grammar: then [instruction] if it has N counters on it", priority: 55, apply: then_x_if_it_has } }
+
+/// "~ has trample as long as it has two or fewer oil counters on it. Otherwise, it has
+/// hexproof." (Evolved Spinoderm): one static ability while the counters say so, another
+/// otherwise.
+fn has_x_otherwise_y(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (first, second) = l.split_once(". otherwise, it has ")?;
+    let (grant, cond) = first.split_once(" as long as it has ")?;
+    let grant = grant.strip_prefix("~ has ")?;
+    if !cond.contains(" counter") {
+        return None;
+    }
+    let cond = crate::oracle::statics::parse_condition(&format!("~ has {cond}"), ctx)?;
+    let a = crate::oracle::statics::parse_static(&format!("~ has {grant}."), ctx)?;
+    let b2 = crate::oracle::statics::parse_static(&format!("~ has {second}."), ctx)?;
+    let with = |v: Vec<Ability>, c: Condition| -> Option<Vec<Ability>> {
+        v.into_iter()
+            .map(|ab| match &ab.kind {
+                AbilityKind::Static(st) if st.condition.is_none() => {
+                    let mut st = st.clone();
+                    st.condition = Some(c.clone());
+                    Some(AbilityDef::new(AbilityKind::Static(st), text))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    let mut out = with(a, cond.clone())?;
+    out.extend(with(b2, Condition::Not(Box::new(cond)))?);
+    Some(out)
+}
+
+inventory::submit! { StaticPattern { name: "counter grammar: ~ has X as long as it has N counters on it. Otherwise, it has Y.", priority: 50, parse: has_x_otherwise_y } }

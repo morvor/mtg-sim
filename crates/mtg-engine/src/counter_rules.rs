@@ -454,3 +454,32 @@ pub fn remove_up_to_counters(
     );
     remove_chosen_counters(g, target, kind, n.max(0) as u32, chooser, source)
 }
+
+/// [`Effect::ChooseCounterKind`]: the controller chooses a kind of counter among those on
+/// `from`; returns `then` with that kind in place of [`CHOSEN_COUNTER_KIND`], or None if
+/// there's no counter to choose.
+pub fn with_chosen_counter_kind(
+    g: &mut Game,
+    from: &Sel,
+    then: &Effect,
+    ctx: &mut crate::eval::Ctx,
+) -> Option<Effect> {
+    let mut kinds: Vec<CounterKind> = Vec::new();
+    for e in g.resolve_sel(from, ctx) {
+        for (k, _) in counters_of(g, e) {
+            if !kinds.contains(&k) {
+                kinds.push(k);
+            }
+        }
+    }
+    if kinds.is_empty() {
+        return None;
+    }
+    let labels = kinds.iter().map(|k| format!("{k} counter")).collect();
+    let i = g.ask_option(ctx.controller, ctx.source, "Choose a kind of counter", labels);
+    let kind = kinds.get(i).unwrap_or(&kinds[0]);
+    let json = serde_json::to_string(then).ok()?;
+    let placeholder = serde_json::to_string(CHOSEN_COUNTER_KIND).ok()?;
+    let chosen = serde_json::to_string(kind.as_str()).ok()?;
+    serde_json::from_str(&json.replace(&placeholder, &chosen)).ok()
+}

@@ -785,6 +785,9 @@ pub enum Sel {
     TopOfLibrary(PlayerRef, Value),
 }
 
+/// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
+pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
+
 /// Refers to one or more players.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum PlayerRef {
@@ -3065,6 +3068,14 @@ pub enum Effect {
         what: Sel,
         kind: Option<CounterKind>,
         max: Option<Value>,
+    },
+    /// "Choose a counter on [from]. Put an additional counter of that kind on ...": the
+    /// controller chooses a kind of counter among the counters on `from` (objects or
+    /// players), then `then` is performed with [`CHOSEN_COUNTER_KIND`] standing for that
+    /// kind. Nothing happens if there are none.
+    ChooseCounterKind {
+        from: Sel,
+        then: Box<Effect>,
     },
     /// "Move [n / all] [kind] counters from [from] onto [to]" (CR 122.5). `kind: None`:
     /// counters of each kind; `n: None`: all of them.

@@ -533,6 +533,12 @@ impl Game {
                 // "Remove a counter from it. If you do, …" (CR 608.2c).
                 ctx.prev_happened = total > 0;
             }
+            Effect::ChooseCounterKind { from, then } => {
+                if let Some(e) = crate::counter_rules::with_chosen_counter_kind(self, from, then, ctx)
+                {
+                    self.exec(&e, ctx);
+                }
+            }
             Effect::RemoveCountersUpTo { what, kind, max } => {
                 let max = max.as_ref().map(|v| self.eval_value(v, ctx).max(0) as u32);
                 let mut total = 0;

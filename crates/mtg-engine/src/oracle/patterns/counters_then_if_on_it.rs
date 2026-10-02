@@ -31,7 +31,7 @@ fn last_counter_change(e: &Effect) -> Option<&CounterKind> {
     }
 }
 
-fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+pub(crate) fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(changed) = last_counter_change(prev).cloned() else {
         return false;
     };
@@ -67,10 +67,9 @@ fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         cmp,
         n,
     );
-    // A later "if you do" would need to know whether a sacrifice here happened.
-    if clause.starts_with("sacrifice ") {
-        return false;
-    }
+    // "Then sacrifice it if it has five or more bloodstain counters on it. When you do,
+    // ...": a later "if you do"/"when you do" is about the sacrifice, which didn't happen if
+    // the condition was false (see `Effect::If`).
     let (optional, clause) = match clause.strip_prefix("you may ") {
         Some(c) => (true, c),
         None => (false, clause),
@@ -92,6 +91,7 @@ fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let rest = match rest.strip_prefix("it ") {
         Some(r) => format!("~ {r}"),
         None if rest == "transform it" => "transform ~".to_string(),
+        None if rest == "sacrifice it" => "sacrifice ~".to_string(),
         None => rest.to_string(),
     };
     let saved_it = b.it.clone();
