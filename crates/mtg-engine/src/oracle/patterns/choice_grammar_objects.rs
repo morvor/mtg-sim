@@ -599,3 +599,78 @@ fn continues_otherwise_choice(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
 }
 
 inventory::submit! { FollowupPattern { name: "choice grammar: continues an otherwise branch's choice", priority: 50, apply: continues_otherwise_choice } }
+
+/// "The owners of those cards shuffle them into their libraries.", "Their owners shuffle
+/// those cards into their libraries.": each card is shuffled into its owner's library (as
+/// "shuffle those cards into their owners' libraries" reads).
+fn owners_shuffle(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let what = if let Some(r) = l.strip_prefix("the owners of ") {
+        let (what, rest) = r.split_once(" shuffle them into their libraries")?;
+        if !rest.is_empty() {
+            return None;
+        }
+        what
+    } else {
+        let r = l.strip_prefix("their owners shuffle ")?;
+        r.strip_suffix(" into their libraries")?
+    };
+    parse_sentence(&format!("shuffle {what} into their owners' libraries"), b)
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: their owners shuffle them into their libraries", priority: 118, parse: owners_shuffle } }
+
+/// "Choose three cards in each graveyard.": up to that many cards from each player's
+/// graveyard (as many as it has), all chosen by you; "those cards" are all of them.
+fn choose_in_each_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("choose ")?;
+    let (count, up_to, any, r) = quantity(r)?;
+    if any {
+        return None;
+    }
+    let phrase = r.trim().strip_suffix(" in each graveyard")?;
+    let (f, _, tail) = parse_object_phrase(phrase)?;
+    if !end(tail).is_empty() || f.zone().is_some() {
+        return None;
+    }
+    let word = head_word(phrase);
+    let filter = Filter::and(vec![
+        f,
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::OwnedBy(PlayerRel::Iterated),
+    ]);
+    let e = Effect::seq(vec![
+        Effect::Store {
+            var: CHOSEN,
+            sel: Sel::Union(vec![]),
+        },
+        Effect::ForEachPlayer {
+            who: PlayerRef::EachPlayer,
+            effect: Box::new(Effect::Store {
+                var: CHOSEN,
+                sel: Sel::Union(vec![
+                    Sel::Var(CHOSEN),
+                    Sel::Choose {
+                        chooser: PlayerRef::You,
+                        filter,
+                        count,
+                        up_to,
+                        store: None,
+                    },
+                ]),
+            }),
+        },
+    ]);
+    let chosen = Sel::Var(CHOSEN);
+    for name in [
+        format!("the chosen {word}s"),
+        format!("those {word}s"),
+        "the chosen cards".to_string(),
+    ] {
+        b.named.push((name, chosen.clone()));
+    }
+    b.it = chosen;
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: choose N cards in each graveyard", priority: 114, parse: choose_in_each_graveyard } }

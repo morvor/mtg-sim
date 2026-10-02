@@ -183,3 +183,46 @@ fn consuming_tide_keep_one_bounce_the_rest_draw_for_bigger_hands() {
     // has more cards in hand than P0, who draws one card.
     assert_eq!(t.hand_size(P0), 2, "{}", t.dump_log());
 }
+
+#[test]
+fn turn_the_earth_owners_shuffle_the_chosen_cards_into_their_libraries() {
+    cr!("115.1", "701.24a");
+    compiles("Turn the Earth");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    let a = t.graveyard(P0, "Grizzly Bears");
+    let b = t.graveyard(P1, "Hill Giant");
+    let c = t.graveyard(P1, "Forest");
+    let spell = t.hand(P0, "Turn the Earth");
+    let (l0, l1) = (t.library_size(P0), t.library_size(P1));
+    t.cast(P0, spell).targets(&[e(a), e(b)]).go();
+    t.resolve_all();
+    assert_eq!(t.library_size(P0), l0 + 1, "{}", t.dump_log());
+    assert_eq!(t.library_size(P1), l1 + 1);
+    assert!(t.in_graveyard(P1, "Forest"));
+    let _ = c;
+    assert_eq!(t.life(P0), 22);
+}
+
+#[test]
+fn the_three_seasons_three_cards_from_each_graveyard() {
+    cr!("714.2b", "701.24a");
+    compiles("The Three Seasons");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let saga = t.battlefield(P0, "The Three Seasons");
+    for _ in 0..4 {
+        t.graveyard(P0, "Forest");
+        t.graveyard(P1, "Island");
+    }
+    let (l0, l1) = (t.library_size(P0), t.library_size(P1));
+    t.g.objects[saga.0 as usize]
+        .counters
+        .insert("lore".into(), 2);
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    // Three from each graveyard (not three in all).
+    assert_eq!(t.library_size(P0), l0 + 3, "{}", t.dump_log());
+    assert_eq!(t.library_size(P1), l1 + 3);
+}
