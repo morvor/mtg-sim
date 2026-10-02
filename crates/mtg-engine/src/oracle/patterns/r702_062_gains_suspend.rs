@@ -98,16 +98,6 @@ fn countered_card_gains_suspend(l: &str, prev: &mut Effect, _b: &mut Builder) ->
 
 inventory::submit! { FollowupPattern { name: "k702.62 countered card exiled with time counters gains suspend", priority: 45, apply: countered_card_gains_suspend } }
 
-/// "If it doesn't have suspend, it gains suspend." after an instruction that moved the card
-/// to exile (`vars::IT` holds the object it became there).
-fn it_gains_suspend(l: &str, b: &mut Builder) -> Option<Effect> {
-    if !says_gains_suspend(l) || !matches!(b.it, Sel::Var(vars::IT)) {
-        return None;
-    }
-    Some(gains_suspend(Sel::Var(vars::IT)))
-}
-
-inventory::submit! { EffectPattern { name: "k702.62 if it doesn't have suspend, it gains suspend", priority: 100, parse: it_gains_suspend } }
 
 /// "exile that card with three time counters on it instead of putting it into your
 /// graveyard as it resolves" said of the spell a "whenever you cast" ability triggered on
