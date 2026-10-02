@@ -1218,9 +1218,9 @@ impl Game {
                         }
                     }
                 }
-                // "for each card discarded this way", "if you do".
+                // "for each card discarded this way". A hand of no cards is discarded too
+                // ("you may discard your hand. If you do, ..."): it still happened.
                 ctx.prev_value = discarded.len() as i64;
-                ctx.prev_happened = !discarded.is_empty();
                 ctx.set_var(crate::discard_rules::DISCARDED, discarded.clone());
                 ctx.set_var(vars::IT, discarded);
             }

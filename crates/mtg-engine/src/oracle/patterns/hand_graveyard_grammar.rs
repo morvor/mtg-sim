@@ -460,6 +460,8 @@ fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
             random: false,
             filter: adj,
         },
+        // The whole hand (even a hand of no cards is discarded).
+        Qty::All if matches!(adj, Filter::Any | Filter::Card) => Effect::DiscardHand { who: who.clone() },
         // CR 701.9a: all of them; the player chooses none.
         Qty::All => Effect::Discard {
             who: who.clone(),
