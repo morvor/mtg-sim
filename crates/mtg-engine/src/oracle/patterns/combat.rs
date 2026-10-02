@@ -173,6 +173,23 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             PlayerRef::TriggerPlayer,
         ));
     }
+    // "[filter] attacks the player with the most life or tied for most life" (Undercover
+    // Butler): part of the trigger event, as for dethrone (CR 702.105a).
+    if let Some(x) =
+        r.strip_suffix(" attacks the player with the most life or tied for most life")
+    {
+        return Some((
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::AttacksRecipient {
+                    attacker: object_filter(x)?,
+                    recipient: DamageRecipient::Player(PlayerRel::Any),
+                }),
+                cond: Condition::Custom(crate::kw::dethrone::EVENT_PLAYER_HAS_MOST_LIFE.into()),
+            },
+            obj,
+            PlayerRef::TriggerPlayer,
+        ));
+    }
     // CR 508.3a: "[filter] attacks [you / a planeswalker you control / ...]".
     if let Some((x, rec)) = r.split_once(" attacks ") {
         if let (Some(attacker), Some(recipient)) = (object_filter(x), attack_recipient(rec)) {
