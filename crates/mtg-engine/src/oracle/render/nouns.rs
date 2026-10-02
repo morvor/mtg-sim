@@ -395,8 +395,10 @@ impl Renderer<'_> {
                 np.with.push(format!("loyalty {}", cmp_phrase(*c, &v)));
             }
             Filter::Named(n) => np.post.push(format!("named {n}")),
+            // "with the same name as a card exiled with ~": as any of them.
             Filter::SameNameAs(s) => {
                 let s = self.sel(s, Case::Obj);
+                let s = s.replace("|each card exiled with ~}", "|a card exiled with ~}");
                 np.with.push(format!("the same name as {s}"));
             }
             Filter::DifferentNameFrom(s) => {

@@ -456,6 +456,16 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Subj);
                 decline(format!("the permanent {s} is attached to"), case)
             }
+            // The cards exiled with this object that are still in exile: "the exiled card"
+            // (an object that exiles one card, as with imprint) or "each card exiled with
+            // ~".
+            Sel::All(Filter::And(v))
+                if v.len() == 2
+                    && matches!(&v[0], Filter::In(s) if matches!(s.as_ref(), Sel::Linked))
+                    && matches!(v[1], Filter::InZone(ZoneKind::Exile)) =>
+            {
+                decline("{alt:the exiled card|each card exiled with ~}".into(), case)
+            }
             Sel::All(f) => {
                 if let Some(z) = whole_zone(f) {
                     let s = self.whole_zone_phrase(z.0, z.1);
