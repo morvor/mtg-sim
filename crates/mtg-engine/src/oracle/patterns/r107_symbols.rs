@@ -264,6 +264,8 @@ fn pawprint_modes(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         modes,
         per_mode_cost: false,
         chooser: ModeChooser::Pawprints(budget),
+        different_players: false,
+        optional: false,
     };
     Some(vec![AbilityDef::new(
         AbilityKind::Spell(SpellAbility {

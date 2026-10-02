@@ -5,6 +5,7 @@
 //! from combat, and combat timing windows (CR 506.8).
 
 use crate::ability::*;
+use crate::as_though::{as_though_haste, HasteUse};
 use crate::decision::{Answer, Decision};
 use crate::eval::Ctx;
 use crate::events::Event;
@@ -207,7 +208,7 @@ impl Game {
     /// Whether a restriction's object filter applies to `id`. Effects that named specific
     /// objects ("target creature can't block this turn") are locked onto those objects; the
     /// filter's references to targets/the source were resolved then.
-    fn restriction_applies(
+    pub(crate) fn restriction_applies(
         &self,
         id: ObjectId,
         f: &Filter,
@@ -264,7 +265,11 @@ impl Game {
         {
             return false;
         }
-        if o.summoning_sick && !o.has_keyword(KeywordKind::Haste) {
+        // CR 302.6, 508.1a, unless an effect lets it attack as though it had haste.
+        if o.summoning_sick
+            && !o.has_keyword(KeywordKind::Haste)
+            && !as_though_haste(self, id, HasteUse::Attack(None))
+        {
             return false;
         }
         // CR 702.3b, unless an effect lets it attack as though it didn't have defender.
@@ -284,6 +289,15 @@ impl Game {
 
     /// Whether a creature can attack a specific player/planeswalker/battle.
     pub fn can_attack_target(&self, id: ObjectId, target: Entity) -> bool {
+        // An effect that lets it attack as though it had haste may cover only some
+        // players and planeswalkers (Frenzied Saddlebrute).
+        let o = self.obj(id);
+        if o.summoning_sick
+            && !o.has_keyword(KeywordKind::Haste)
+            && !as_though_haste(self, id, HasteUse::Attack(Some(target)))
+        {
+            return false;
+        }
         // "can't attack you (or planeswalkers you control)": the player, a planeswalker
         // they control, or a battle they protect: (player, planeswalker?, battle?).
         let defender = match target {
@@ -337,11 +351,17 @@ impl Game {
     /// Whether a creature can block at all (CR 509.1a).
     pub fn can_block_at_all(&self, id: ObjectId) -> bool {
         let o = self.obj(id);
-        if o.zone != Zone::Battlefield
-            || o.phased_out
-            || !o.is_creature()
-            || o.is(CardType::Battle)
-            || o.tapped
+        if o.zone != Zone::Battlefield || o.phased_out || !o.is_creature() || o.is(CardType::Battle)
+        {
+            return false;
+        }
+        // "Tapped creatures you control can block as though they were untapped" waives
+        // only the requirement that blockers be untapped (Masako the Humorless ruling).
+        if o.tapped
+            && !self.restricted_obj(id, |r| match r {
+                Restriction::BlockAsThoughUntapped(f) => Some(f),
+                _ => None,
+            })
         {
             return false;
         }
@@ -957,7 +977,7 @@ pub fn attack_declaration_legal(
     attack_declaration_legal_with(g, options, decl, &reqs, max)
 }
 
-fn attack_declaration_legal_with(
+pub(crate) fn attack_declaration_legal_with(
     g: &Game,
     options: &[(ObjectId, Vec<Entity>)],
     decl: &[(ObjectId, Entity)],
@@ -979,8 +999,12 @@ pub fn declare_attackers_step(g: &mut Game) {
     let options = attack_options(g);
     let reqs = attack_requirements(g);
     let (max, best) = best_attack(g, &options, &reqs);
+    // "You choose which creatures attack this turn" (Master Warcraft).
+    let chooser = crate::attack_choice::attack_decider(g).filter(|p| *p != ap);
     let declared: Vec<(ObjectId, Entity)> = if options.is_empty() {
         vec![]
+    } else if let Some(chooser) = chooser {
+        crate::attack_choice::declaration_chosen_by(g, chooser, ap, &options, &reqs, max, &best)
     } else {
         match g.ask(
             ap,
@@ -1823,10 +1847,14 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
     };
     let mut assignments: Vec<(ObjectId, Entity, u32)> = Vec::new();
     // Attacking player assigns first, then defending players (CR 510.1).
-    for ai in &combat.attackers {
-        if !deals.contains(&ai.id) || !g.is_live(ai.id) || g.obj(ai.id).zone != Zone::Battlefield {
-            continue;
-        }
+    let attackers: Vec<&AttackerInfo> = combat
+        .attackers
+        .iter()
+        .filter(|ai| {
+            deals.contains(&ai.id) && g.is_live(ai.id) && g.obj(ai.id).zone == Zone::Battlefield
+        })
+        .collect();
+    for ai in trample_assignment_order(g, attackers) {
         let a = assign_attacker_damage(g, ai, &assignments);
         assignments.extend(a);
     }
@@ -1839,6 +1867,49 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
     // CR 510.2: all combat damage is dealt simultaneously.
     crate::keyword_impls::before_combat_damage(g, &mut assignments);
     g.deal_damage_batch(assignments, true);
+}
+
+/// The order in which the attacking creatures' combat damage is assigned. Lethal damage
+/// for trample counts damage other creatures are assigning in the same step (CR 702.19b,
+/// 702.19c), and the player makes those assignments in whatever order they like: creatures
+/// without trample (whose assignments never depend on others') first, then those with
+/// trample — in an order the attacking player chooses when two of them are blocked by the
+/// same creature or attack the same planeswalker.
+fn trample_assignment_order<'a>(
+    g: &mut Game,
+    attackers: Vec<&'a AttackerInfo>,
+) -> Vec<&'a AttackerInfo> {
+    let (mut tramplers, mut out): (Vec<&AttackerInfo>, Vec<&AttackerInfo>) = attackers
+        .into_iter()
+        .partition(|ai| g.obj(ai.id).has_keyword(KeywordKind::Trample));
+    let shares = |a: &AttackerInfo, b: &AttackerInfo| {
+        a.blockers.iter().any(|x| b.blockers.contains(x))
+            || matches!(a.target, Some(Entity::Object(pw))
+                if b.target == Some(Entity::Object(pw)) && g.obj(pw).is(CardType::Planeswalker))
+    };
+    let shared = tramplers
+        .iter()
+        .enumerate()
+        .any(|(i, a)| tramplers[i + 1..].iter().any(|b| shares(a, b)));
+    if shared {
+        let chooser = g
+            .combat
+            .as_ref()
+            .and_then(|c| c.attacking_player)
+            .unwrap_or(g.turn.active);
+        let names: Vec<String> = tramplers
+            .iter()
+            .map(|ai| g.obj(ai.id).chars.name.to_string())
+            .collect();
+        let order = g.ask_order(
+            chooser,
+            "Order in which to assign the combat damage of attacking creatures with trample",
+            names,
+        );
+        tramplers = order.into_iter().map(|i| tramplers[i]).collect();
+    }
+    out.append(&mut tramplers);
+    out
 }
 
 fn damage_amount(g: &Game, id: ObjectId) -> u32 {
