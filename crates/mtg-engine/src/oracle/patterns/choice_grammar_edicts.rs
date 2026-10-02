@@ -238,25 +238,32 @@ fn edict_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
         items.last_mut()?.1 = last;
         Some(items)
     });
-    let Some(items) = parsed else {
+    let Some(mut items) = parsed else {
         restore(b);
         return None;
     };
-    // A single permanent one player sacrificed is "it" / "that creature" afterward.
-    if items.len() == 1
-        && !optional
-        && items[0].0.as_const() == Some(1)
-        && !matches!(
+    // One kind: the core's edict, with the qualified kind.
+    if items.len() == 1 && !optional {
+        let (count, filter) = items.pop()?;
+        // A single permanent one player sacrificed is "it" / "that creature" afterward.
+        if count.as_const() == Some(1)
+            && !matches!(
+                who,
+                PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
+            )
+        {
+            b.it = Sel::Var(vars::SACRIFICED);
+        }
+        return Some(Effect::Sacrifice {
             who,
-            PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
-        )
-    {
-        b.it = Sel::Var(vars::SACRIFICED);
+            filter,
+            count,
+        });
     }
     edict_effect(who, items, optional)
 }
 
-inventory::submit! { EffectPattern { name: "choice grammar: edict of their choice (kinds, qualifiers, optional)", priority: 49, parse: edict_of_their_choice } }
+inventory::submit! { EffectPattern { name: "choice grammar: edict of their choice (kinds, qualifiers, optional)", priority: 900, parse: edict_of_their_choice } }
 
 /// Whether the effect is an optional edict for several players (see [`edict_effect`]).
 fn is_optional_edict(e: &Effect) -> bool {
