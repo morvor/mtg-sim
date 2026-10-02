@@ -25,6 +25,8 @@ use crate::oracle::phrases::*;
 pub const CHOSEN: Var = vars::USER + 4430;
 /// The opponent who makes a choice "an opponent" makes (CR 801.5a).
 const DECIDER: Var = vars::USER + 4431;
+/// The objects a choice "of them" chose among, as they were when it was made.
+const AMONG: Var = vars::USER + 4432;
 /// Marks, in [`Builder::named`], what the choice chose among (for "the rest"): the
 /// selection is all such objects.
 const UNIVERSE: &str = "\u{1}choice grammar: chosen among";
@@ -98,6 +100,10 @@ fn quantity(s: &str) -> Option<(Value, bool, bool, &str)> {
 /// The head noun of a phrase, for naming the chosen objects afterward ("creature",
 /// "card", "land", "permanent").
 fn head_word(phrase: &str) -> &'static str {
+    // "creatures and/or planeswalkers", "artifacts or creatures": permanents.
+    if (phrase.contains(" and/or ") || phrase.contains(" or ")) && !phrase.contains("card") {
+        return "permanent";
+    }
     let words: Vec<&str> = phrase
         .split([' ', ','])
         .filter(|w| !w.is_empty())
@@ -217,7 +223,18 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
         restore(b);
         return None;
     };
-    let among = matches!(filter, Filter::In(_));
+    // "One of them": the objects chosen among are kept as they are now (what "them"
+    // refers to may change as later instructions move objects).
+    let (among, filter) = match filter {
+        Filter::In(sel) => {
+            let kept = Effect::Store {
+                var: AMONG,
+                sel: *sel,
+            };
+            (Some(kept), Filter::In(Box::new(Sel::Var(AMONG))))
+        }
+        f => (None, f),
+    };
     let count = if any_number {
         Value::CountSel(Box::new(Sel::All(filter.clone())))
     } else {
@@ -232,6 +249,8 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let mut out = Vec::new();
     out.extend(c.pre);
+    let among_them = among.is_some();
+    out.extend(among);
     match &c.each {
         Some(who) => {
             out.push(Effect::Store {
@@ -261,7 +280,7 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
     let chosen = Sel::Var(CHOSEN);
     b.named.push((UNIVERSE.into(), Sel::All(universe.clone())));
     // "One of them": the other one(s) ("the other").
-    if among {
+    if among_them {
         b.named.push((
             "the other".into(),
             Sel::All(Filter::and(vec![
@@ -480,3 +499,103 @@ fn chooses_and_sacrifices(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: [player] chooses and sacrifices one of them", priority: 116, parse: chooses_and_sacrifices } }
+
+/// "Put that card into your graveyard and the rest into your hand.", "You put that card
+/// on the bottom of your library and return the other to the battlefield tapped.", "Return
+/// that card to your hand and the other to the battlefield.": an instruction about the
+/// chosen object joined by "and" to one about the others, whose verb may be left out.
+fn chosen_and_the_rest(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    // "Leave the chosen cards in your graveyard and put the rest into your hand.":
+    // leaving them where they are does nothing.
+    if let Some(r) = l.strip_prefix("leave the chosen ") {
+        let (_, second) = r.split_once(" and ")?;
+        if !(second.starts_with("put the rest ") || second.starts_with("return the rest ")) {
+            return None;
+        }
+        return crate::oracle::effects::parse_simple(second, b);
+    }
+    let verb = ["put ", "return ", "exile "]
+        .into_iter()
+        .find(|v| l.starts_with(v))?;
+    for others in [" and the rest ", " and the other ", " and the others "] {
+        let Some(k) = l.find(others) else { continue };
+        let first = &l[..k];
+        let second = format!("{verb}{}", &l[k + " and ".len()..]);
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.named.len());
+        let restore = |b: &mut Builder| {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+            b.named.truncate(saved.3);
+        };
+        let Some(a) = crate::oracle::effects::parse_simple(first, b) else {
+            restore(b);
+            continue;
+        };
+        // "the rest"/"the other" mean the objects not chosen, not what "it" now is.
+        let Some(c) = crate::oracle::effects::parse_simple(&second, b) else {
+            restore(b);
+            continue;
+        };
+        return Some(Effect::seq(vec![a, c]));
+    }
+    // "... and return the other to the battlefield tapped": the second verb is given.
+    for others in [" and return the other ", " and put the other ", " and exile the other ", " and put the rest ", " and return the rest "] {
+        let Some(k) = l.find(others) else { continue };
+        let first = &l[..k];
+        let second = &l[k + " and ".len()..];
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.named.len());
+        let restore = |b: &mut Builder| {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+            b.named.truncate(saved.3);
+        };
+        let Some(a) = crate::oracle::effects::parse_simple(first, b) else {
+            restore(b);
+            continue;
+        };
+        let Some(c) = crate::oracle::effects::parse_simple(second, b) else {
+            restore(b);
+            continue;
+        };
+        return Some(Effect::seq(vec![a, c]));
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: [verb] the chosen one ... and the rest ...", priority: 117, parse: chosen_and_the_rest } }
+
+/// "If you control a Bolas planeswalker, return those cards to your hand. Otherwise, an
+/// opponent chooses two of them. Leave the chosen cards in your graveyard and put the rest
+/// into your hand.": a sentence about what the choice in an "otherwise" branch chose
+/// continues that branch.
+fn continues_otherwise_choice(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let last = match prev {
+        Effect::Seq(v) => match v.last_mut() {
+            Some(x) => x,
+            None => return false,
+        },
+        e => e,
+    };
+    let Effect::If { otherwise, .. } = last else {
+        return false;
+    };
+    if !ends_with_choice(otherwise) {
+        return false;
+    }
+    let mentions = ["the chosen ", "the rest", "the other", "those ", "that card"]
+        .iter()
+        .any(|m| l.contains(m));
+    if !mentions {
+        return false;
+    }
+    let Some(e) = parse_sentence(l, b) else {
+        return false;
+    };
+    let old = std::mem::take(otherwise.as_mut());
+    **otherwise = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "choice grammar: continues an otherwise branch's choice", priority: 50, apply: continues_otherwise_choice } }
