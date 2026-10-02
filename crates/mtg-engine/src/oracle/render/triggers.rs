@@ -538,6 +538,17 @@ impl Renderer<'_> {
                             );
                         }
                     }
+                    // "blocks or becomes blocked by a creature": the object said once.
+                    if let [a, b] = vps.as_slice() {
+                        if let Some((verb, obj)) = a.split_once(' ') {
+                            if !verb.is_empty() && b.ends_with(&format!(" {obj}")) {
+                                return Ev::new(
+                                    evs[0].subj.clone(),
+                                    format!("{verb} {{opt:{obj}}} or {b}"),
+                                );
+                            }
+                        }
+                    }
                     Ev::new(evs[0].subj.clone(), join_list(&vps, "or"))
                 } else {
                     // "Whenever A and whenever B" (each condition keeps its trigger word).

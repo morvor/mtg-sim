@@ -230,6 +230,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               instruction made players lose: \"that many life\" (CR 608.2c).",
     },
     Equivalence {
+        pattern: r"\{x\} (less|more) to (cast|activate),? where x is the number of ([^.]+)",
+        replacement: "{1} $1 to $2 for each $3",
+        why: "A cost reduced or increased by {X}, where X is a number of objects, changes by \
+              {1} for each of them.",
+    },
+    Equivalence {
         pattern: r"\byour (commanders?)\b",
         replacement: "$1 you own",
         why: "A player's commander is the commander they own (CR 903.3); \"your commander\" \

@@ -110,6 +110,31 @@ impl Renderer<'_> {
         };
         self.subject_types.clear();
         self.self_salient = saved;
+        let mut e = e;
+        // CR 702.16n, 702.16p: protection that doesn't make some permanents fall off.
+        if let StaticEffect::Continuous { mods, .. } = &s.effect {
+            for m in mods {
+                let Modification::AddKeyword(k) = m else {
+                    continue;
+                };
+                if k.kind != crate::keywords::KeywordKind::Protection {
+                    continue;
+                }
+                let what = match k.text.as_deref() {
+                    Some(crate::choices::DOESNT_REMOVE_SOURCE) => self.me(),
+                    Some(crate::kw::protection::DOESNT_REMOVE_AURAS) => "Auras".into(),
+                    Some(crate::kw::protection::DOESNT_REMOVE_ATTACHED) => {
+                        "Auras and Equipment you control that are already attached to it".into()
+                    }
+                    _ => continue,
+                };
+                e = format!(
+                    "{}. This effect doesn't remove {what}",
+                    e.trim_end_matches('.')
+                );
+                break;
+            }
+        }
         let e = capitalize(e.trim());
         if e.ends_with('.') || e.ends_with('"') {
             e
@@ -372,6 +397,20 @@ impl Renderer<'_> {
             Condition::NotYourTurn => "during an opponent's turn".into(),
             Condition::Phase(PhaseCond::Combat) => "during combat".into(),
             Condition::Phase(PhaseCond::Upkeep) => "during an opponent's upkeep".into(),
+            Condition::Phase(PhaseCond::DeclareAttackers) => {
+                "during the declare attackers step".into()
+            }
+            Condition::Phase(PhaseCond::EndStep) => "during the end step".into(),
+            Condition::Custom(n) if n == "restrictions:declare_blockers_step" => {
+                "during the declare blockers step".into()
+            }
+            // "Cast ~ only during the declare attackers step and only if you've been
+            // attacked this step."
+            Condition::And(v) if v.len() == 2 => {
+                let a = self.cast_only_condition(&v[0]);
+                let b = self.cast_only_condition(&v[1]);
+                format!("{a} and only {b}")
+            }
             other => {
                 let c = self.condition(other);
                 format!("if {c}")
@@ -502,7 +541,11 @@ impl Renderer<'_> {
         if matches!(f, Filter::Source) {
             return self.me();
         }
+        // "Red spells and white spells you cast cost {1} less".
+        let saved = self.alt_and;
+        self.alt_and = true;
         let n = self.noun(f, Num::Many);
+        self.alt_and = saved;
         if n.contains("spell") {
             n
         } else if n == "permanents" || n == "cards" {

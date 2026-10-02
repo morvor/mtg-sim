@@ -937,7 +937,11 @@ impl Renderer<'_> {
         self.alt_and = true;
         let n = self.noun(f, Num::One);
         self.alt_and = saved;
-        n
+        if Self::counts_all_permanents(f, &n) {
+            format!("{n} {{opt:on the battlefield}}")
+        } else {
+            n
+        }
     }
 
     /// A determiner for a count value ("a", "two", "X").

@@ -317,6 +317,27 @@ impl Renderer<'_> {
                 let t = self.sel(&what, Case::Obj);
                 format!("put your choice of {} on {t}", join_list(&kinds, "or"))
             }
+            // "Target creature's owner puts it on their choice of the top or bottom of their
+            // library."
+            Effect::ChooseOne { who, options }
+                if matches!(options.as_slice(),
+                    [(_, Effect::Move { what: a, to: ta }), (_, Effect::Move { what: b, to: tb })]
+                    if same_sel(a, b)
+                        && ta.zone == ZoneKind::Library && tb.zone == ZoneKind::Library
+                        && ta.position == LibraryPosition::Top
+                        && tb.position == LibraryPosition::Bottom) =>
+            {
+                let Effect::Move { what, .. } = &options[0].1 else {
+                    return self.gap("top or bottom");
+                };
+                let w = self.sel(what, Case::Obj);
+                let you = matches!(who, PlayerRef::You);
+                let choice = if you { "your" } else { "their" };
+                let vp = format!(
+                    "put {w} on {choice} choice of the top or bottom of {{alt:their|its owner's|your}} library"
+                );
+                return self.with_subject(who, &vp, false);
+            }
             // "Tap or untap target creature."
             Effect::ChooseOne {
                 who: PlayerRef::You,
@@ -2461,9 +2482,11 @@ impl Renderer<'_> {
                     becomes.subtypes.extend(s.iter().map(|x| x.to_string()));
                     becomes.land_type = true;
                 }
-                Modification::AddChosenType => {
-                    parts.push("is the chosen type in addition to its other types".into())
-                }
+                // "This land is the chosen type" on a land with no land type of its own
+                // adds it (the land keeps its abilities).
+                Modification::AddChosenType => parts.push(
+                    "is the chosen type {opt:in addition to its other types}".into(),
+                ),
                 Modification::SetChosenBasicLandType => parts.push("is the chosen type".into()),
                 Modification::SetColors(cs) => {
                     let w: Vec<String> = color_words(*cs);
@@ -3097,7 +3120,10 @@ impl Becomes {
         }
         s.push_str(&with);
         let mut still = String::new();
-        if self.additive && !self.land_type {
+        // Adding a supertype ("is snow", "is legendary") never removes anything.
+        let only_supertypes =
+            self.add_types.is_empty() && self.subtypes.is_empty() && !self.supertypes.is_empty();
+        if self.additive && !self.land_type && !only_supertypes {
             // An effect that adds types keeps the old ones: cards say "It's still a land"
             // when they know what the object was, else "in addition to its other types".
             let known: Vec<CardType> = r

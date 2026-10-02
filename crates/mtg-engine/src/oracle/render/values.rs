@@ -20,16 +20,8 @@ impl Renderer<'_> {
                 self.alt_and = true;
                 let n = self.noun_det(f, Det::Plural);
                 self.alt_and = saved;
-                // A count of permanents with no controller is of all of them.
-                let global = split_controller(f).0.is_none()
-                    && f.zone().is_none_or(|z| z == ZoneKind::Battlefield)
-                    && !n.contains(" you ")
-                    && !n.contains("among")
-                    && !n.contains("attacking")
-                    && !n.contains("blocking")
-                    && !n.ends_with(" ~");
-                if global {
-                    format!("the number of {n} on the battlefield")
+                if Self::counts_all_permanents(f, &n) {
+                    format!("the number of {n} {{opt:on the battlefield}}")
                 } else {
                     format!("the number of {n}")
                 }
@@ -251,6 +243,19 @@ impl Renderer<'_> {
 
     /// An amount before a noun: "3", "X", or "X" with a "where X is" clause to add.
     /// Returns (amount, where-clause).
+    /// Whether a count of `f` (rendered `n`) is of all permanents of a kind, with no
+    /// controller: cards say "for each Goblin" or "for each Goblin on the battlefield".
+    pub(crate) fn counts_all_permanents(f: &Filter, n: &str) -> bool {
+        split_controller(f).0.is_none()
+            && f.zone().is_none_or(|z| z == ZoneKind::Battlefield)
+            && !n.contains(" you ")
+            && !n.contains("among")
+            && !n.contains("attacking")
+            && !n.contains("blocking")
+            && !n.contains("{opt:")
+            && !n.ends_with(" ~")
+    }
+
     pub(crate) fn amount(&mut self, v: &Value) -> (String, Option<String>) {
         if matches!(v, Value::EventAmount) {
             return ("that much".into(), None);
@@ -721,6 +726,13 @@ impl Renderer<'_> {
         if let (Some(rest), Value::Const(n)) = (a.strip_prefix("the number of "), b) {
             let w = number_word(*n);
             if matches!((cmp, n), (Cmp::Ge, 1) | (Cmp::Gt, 0)) {
+                // "if there's a counter on it" / "if it has a counter on it".
+                if let (Value::CountersOn(sel, _), Some((counters, _))) =
+                    (a_value, rest.split_once(" on "))
+                {
+                    let subj = self.sel(sel, Case::Subj);
+                    return format!("{{alt:there is a {rest}|{subj} has a {counters} on it}}");
+                }
                 return format!("there is a {rest}");
             }
             let q = match cmp {
