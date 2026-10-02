@@ -29,10 +29,15 @@ fn may_cast_while_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     else {
         return false;
     };
-    let any_type = match rest {
-        "" => false,
+    let (any_type, any_color) = match rest {
+        "" => (false, false),
         ", and mana of any type can be spent to cast it"
-        | ", and mana of any type can be spent to cast that spell" => true,
+        | ", and mana of any type can be spent to cast that spell" => (true, false),
+        // For the spell cast with this permission (CR 609.4b, 118.14).
+        ", and you may spend mana as though it were mana of any color to cast that spell"
+        | ", and you may spend mana as though it were mana of any color to cast it" => {
+            (false, true)
+        }
         _ => return false,
     };
     if !ends_with_exile(prev) {
@@ -40,15 +45,21 @@ fn may_cast_while_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     }
     // Each exiled card that isn't a land: a land card is played, never cast (CR 305.9).
     let card = Sel::Var(CARD);
-    let mut grant = vec![Effect::GrantPlayPermission {
-        who: PlayerRef::You,
-        what: card.clone(),
-        // The permission is for that object: it ends when the card leaves exile.
-        duration: Duration::Permanent,
-        free: false,
-    }
     // A permission to cast it, not to play a land (CR 305.9).
-    .cast_only()];
+    let mut grant = vec![Effect::WithPlayTerms {
+        terms: PlayTerms {
+            spells_only: true,
+            spend_as_any_color: any_color,
+            ..Default::default()
+        },
+        effect: Box::new(Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: card.clone(),
+            // The permission is for that object: it ends when the card leaves exile.
+            duration: Duration::Permanent,
+            free: false,
+        }),
+    }];
     if any_type {
         grant.push(Effect::SpendAnyTypeMana {
             who: PlayerRef::You,

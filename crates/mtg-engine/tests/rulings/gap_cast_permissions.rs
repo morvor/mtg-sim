@@ -743,3 +743,81 @@ fn lurrus_the_mana_value_counts_the_value_chosen_for_x() {
     t.resolve_all();
     assert!(t.on_battlefield(spell));
 }
+
+/// P0 casts Hurl Through Hell on `target` and it resolves: the card is exiled.
+fn hurl(t: &mut TestGame, target: ObjectId) -> ObjectId {
+    let hurl = t.hand(P0, "Hurl Through Hell");
+    add_mana(t, P0, ManaType::B, 1);
+    add_mana(t, P0, ManaType::R, 1);
+    add_mana(t, P0, ManaType::C, 2);
+    t.g.turn.priority = Some(P0);
+    t.cast(P0, hurl).target(target).go();
+    t.resolve_all();
+    let exiled = t.g.current(target);
+    assert_eq!(t.obj(exiled).zone, Zone::Exile);
+    exiled
+}
+
+#[test]
+fn hurl_through_hell_an_animated_land_cant_be_played() {
+    cr!("305.9", "601.3");
+    ruling!(
+        "Hurl Through Hell",
+        "If the creature you exile is actually a land card that was animated, you won't be able to play the land card from exile."
+    );
+    supported("Hurl Through Hell");
+    supported("Mutavault");
+    let mut t = TestGame::new(2);
+    let mutavault = t.battlefield(P1, "Mutavault");
+    t.lands(P1, "Wastes", 1);
+    // P1 animates Mutavault ("{1}: ... becomes a 2/2 creature ... It's still a land.").
+    t.g.turn.priority = Some(P1);
+    t.activate(P1, mutavault, 1, &[]).expect("animate Mutavault");
+    t.resolve_all();
+    assert!(t
+        .obj_now(mutavault)
+        .chars
+        .is(mtg_engine::types::CardType::Creature));
+    let card = hurl(&mut t, mutavault);
+    // P0 has a land play, in their main phase with an empty stack: still not this card.
+    assert!(!can_play_land(&mut t, P0, card));
+    assert!(t.play_land(P0, card).is_err());
+    assert!(legal_cast_methods(&mut t, P0, card).is_empty());
+}
+
+#[test]
+fn hurl_through_hell_the_card_is_cast_with_normal_timing_and_mana_of_any_color() {
+    cr!("307.1", "601.3", "609.4b", "118.14");
+    ruling!(
+        "Hurl Through Hell",
+        "You must still follow all normal timing rules for casting the spell."
+    );
+    supported("Hurl Through Hell");
+    supported("Thought-Knot Seer");
+    // Grizzly Bears ({1}{G}) with red mana: mana may be spent as though it were mana of
+    // any color — but not during combat (a creature spell's timing).
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let card = hurl(&mut t, bears);
+    t.lands(P0, "Mountain", 2);
+    t.advance_to_step(Step::BeginningOfCombat);
+    t.g.turn.priority = Some(P0);
+    assert!(legal_cast_methods(&mut t, P0, card).is_empty());
+    // Until the end of P0's next turn: in their next main phase.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(legal_cast_methods(&mut t, P0, card), vec![CastMethod::Normal]);
+    t.cast(P0, card).go();
+    assert_eq!(tapped_lands(&t, P0), 2);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // Thought-Knot Seer ({3}{C}): {C} still needs colorless mana (mana of any color, not
+    // of any type).
+    let mut t = TestGame::new(2);
+    let seer = t.battlefield(P1, "Thought-Knot Seer");
+    let card = hurl(&mut t, seer);
+    t.lands(P0, "Mountain", 4);
+    assert!(t.cast(P0, card).target(Entity::Player(P1)).try_go().is_err());
+    t.lands(P0, "Wastes", 1);
+    t.cast(P0, card).target(Entity::Player(P1)).go();
+}

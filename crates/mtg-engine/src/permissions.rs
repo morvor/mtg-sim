@@ -491,6 +491,15 @@ pub fn still_allows(
     }
 }
 
+/// The mana a spell cast with the permission `perm` asks for: "you may spend mana as
+/// though it were mana of any color to cast that spell" applies to spells cast with that
+/// permission (CR 609.4b, 118.14).
+pub fn spend_terms(perm: Option<&CastPermission>, cost: &mut Cost) {
+    if perm.is_some_and(|c| c.terms.spend_as_any_color) {
+        crate::cost_rules::pay_with_any_mana(cost, false);
+    }
+}
+
 /// Records that `perm` was used to play a card: a once-each-turn permission is used up.
 pub fn record_use(g: &mut Game, perm: Option<&CastPermission>) {
     if let Some((src, slot)) = perm.and_then(|c| c.once.clone()) {

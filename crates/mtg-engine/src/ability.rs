@@ -2446,6 +2446,10 @@ pub struct PlayTerms {
     /// "Each land played this way enters tapped" (CR 614.1d).
     #[serde(default)]
     pub lands_enter_tapped: bool,
+    /// "You may spend mana as though it were mana of any color to cast that spell": for
+    /// spells cast with this permission only (CR 609.4b, 118.14).
+    #[serde(default)]
+    pub spend_as_any_color: bool,
 }
 
 impl PlayTerms {
@@ -2458,6 +2462,7 @@ impl PlayTerms {
         self.flash |= other.flash;
         self.cost_increase += other.cost_increase;
         self.lands_enter_tapped |= other.lands_enter_tapped;
+        self.spend_as_any_color |= other.spend_as_any_color;
     }
 }
 
