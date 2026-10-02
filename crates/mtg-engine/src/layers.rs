@@ -1220,9 +1220,12 @@ impl Game {
                         st.replacements
                             .push((id, ctl, o.timestamp, a.clone(), r.clone()))
                     }
-                    StaticEffect::PlayPermission(p) => {
-                        st.play_permissions.push((id, ctl, p.clone()))
-                    }
+                    StaticEffect::PlayPermission(p) => st.play_permissions.push((
+                        id,
+                        ctl,
+                        p.clone(),
+                        crate::kw::once_each_turn_cast::once_slot(s),
+                    )),
                     StaticEffect::FlashPermission { who, what } => {
                         st.flash_permissions.push((id, ctl, *who, what.clone()))
                     }
@@ -1245,7 +1248,7 @@ impl Game {
                 // your library."
                 (PlayerModification::PlayPermission(pp), Some(src)) => {
                     for p in &e.players {
-                        st.play_permissions.push((src, *p, pp.clone()));
+                        st.play_permissions.push((src, *p, pp.clone(), None));
                     }
                 }
                 // "You may cast sorcery spells this turn as though they had flash."

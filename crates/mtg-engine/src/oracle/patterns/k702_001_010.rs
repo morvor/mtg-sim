@@ -769,6 +769,7 @@ fn play_from_top_of_library(l: &str, text: &str, _ctx: &CompileContext) -> Optio
                 lands,
                 spells: spells_part.is_some(),
                 cost: None,
+                flash: false,
             },
         ))),
         text,

@@ -2485,6 +2485,74 @@ pub struct PlayPermission {
     pub spells: bool,
     /// Alternative cost, e.g. "without paying its mana cost" or "by paying life".
     pub cost: Option<Cost>,
+    /// "If you cast a spell this way, you may cast it as though it had flash" (CR 702.8a):
+    /// spells cast with this permission may be cast any time their player could cast an
+    /// instant.
+    #[serde(default)]
+    pub flash: bool,
+}
+
+/// The terms an effect's permission to play particular cards comes with (CR 601.3,
+/// 305.1): what it allows, and how spells cast with it are cast. A player who has several
+/// permissions to play a card chooses which one they're using as they begin to play it,
+/// and gets that one's terms (see `permissions.rs`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlayTerms {
+    /// "You may cast that card": a permission to cast it, not to play it as a land (to
+    /// play a card is to play it as a land or cast it, whichever is appropriate; a land
+    /// can't be cast, CR 305.9).
+    #[serde(default)]
+    pub spells_only: bool,
+    /// The alternative cost a spell cast with the permission must be cast for ("If you
+    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
+    /// cost.", CR 118.9b): no other alternative cost can be used with it (CR 118.9a).
+    /// `Value::ManaValueOf(Sel::This)` in it is the mana value of the spell the card would
+    /// become (X being 0, CR 107.3b).
+    #[serde(default)]
+    pub alt_cost: Option<Cost>,
+    /// An additional cost a spell cast with the permission must be cast with ("by paying 2
+    /// life in addition to paying its other costs", CR 601.2b, 601.2f); amounts may be
+    /// relative to the spell as for `alt_cost`.
+    #[serde(default)]
+    pub extra_cost: Option<Cost>,
+    /// "You may cast it as though it had flash" (CR 702.8a, 601.3b).
+    #[serde(default)]
+    pub flash: bool,
+    /// "A spell cast this way costs {N} more to cast" (CR 601.2f).
+    #[serde(default)]
+    pub cost_increase: u32,
+    /// "Each land played this way enters tapped" (CR 614.1d).
+    #[serde(default)]
+    pub lands_enter_tapped: bool,
+    /// "You may spend mana as though it were mana of any color to cast that spell": for
+    /// spells cast with this permission only (CR 609.4b, 118.14).
+    #[serde(default)]
+    pub spend_as_any_color: bool,
+    /// "Mana of any type can be spent to cast it": for spells cast with this permission
+    /// only (CR 118.14).
+    #[serde(default)]
+    pub spend_any_type: bool,
+}
+
+impl PlayTerms {
+    /// Adds `other`'s terms to these.
+    pub fn merge(&mut self, other: &PlayTerms) {
+        self.spells_only |= other.spells_only;
+        if other.alt_cost.is_some() {
+            self.alt_cost = other.alt_cost.clone();
+        }
+        if let Some(e) = &other.extra_cost {
+            match self.extra_cost.as_mut() {
+                Some(c) => crate::casting::add_cost(c, e),
+                None => self.extra_cost = Some(e.clone()),
+            }
+        }
+        self.flash |= other.flash;
+        self.cost_increase += other.cost_increase;
+        self.lands_enter_tapped |= other.lands_enter_tapped;
+        self.spend_as_any_color |= other.spend_as_any_color;
+        self.spend_any_type |= other.spend_any_type;
+    }
 }
 
 /// Trigger events (CR 603). Filters are relative to the ability's source.
@@ -3470,6 +3538,14 @@ pub enum Effect {
         duration: Duration,
         free: bool,
     },
+    /// The permissions to play cards `effect` gives (`GrantPlayPermission`) come with
+    /// `terms`: "you may cast that card" (not play it as a land), "If you cast a spell
+    /// this way, pay life equal to its mana value rather than pay its mana cost", "you may
+    /// cast them as though they had flash" (see [`PlayTerms`], `permissions.rs`).
+    WithPlayTerms {
+        terms: PlayTerms,
+        effect: Box<Effect>,
+    },
     /// Prevent the next N damage / all damage (CR 615).
     PreventDamage {
         to: Sel,
@@ -3583,6 +3659,18 @@ pub enum UntilEvent {
 }
 
 impl Effect {
+    /// The permissions to play cards this effect gives are permissions to cast them ("you
+    /// may cast that card"): a land can't be played with them (CR 305.9).
+    pub fn cast_only(self) -> Effect {
+        Effect::WithPlayTerms {
+            terms: PlayTerms {
+                spells_only: true,
+                ..Default::default()
+            },
+            effect: Box::new(self),
+        }
+    }
+
     pub fn seq(v: Vec<Effect>) -> Effect {
         let mut out = Vec::new();
         for e in v {

@@ -1827,6 +1827,14 @@ impl Game {
                     ctx.source,
                 );
             }
+            Effect::WithPlayTerms { terms, effect } => {
+                // The permissions the effect gives come with the terms.
+                let before = self.play_grants.len();
+                self.exec(effect, ctx);
+                for g in self.play_grants.iter_mut().skip(before) {
+                    g.terms.merge(terms);
+                }
+            }
             Effect::PreventDamage {
                 to,
                 amount,

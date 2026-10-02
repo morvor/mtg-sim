@@ -19,7 +19,6 @@
 //!   (CR 608.2g), lets them cast it prototyped too.
 
 use super::{KeywordRegistration, KeywordRules};
-use crate::ability::Cost;
 use crate::casting::CastOption;
 use crate::game::Game;
 use crate::keywords::{Keyword, KeywordKind};
@@ -102,7 +101,7 @@ impl KeywordRules for Prototype {
     /// CR 718.3: cast it normally or as a prototyped spell, from any zone it could be
     /// cast from.
     fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
-        let Some(mut opt) = prototyped(kw) else {
+        let Some(opt) = prototyped(kw) else {
             return vec![];
         };
         let o = g.obj(card);
@@ -118,13 +117,8 @@ impl KeywordRules for Prototype {
             }
         }
         // Casting it prototyped isn't an alternative cost: an effect letting its player
-        // cast it without paying its mana cost applies to it too (CR 118.9, 718.3).
-        if g.play_grants
-            .iter()
-            .any(|gr| gr.player == p && gr.object == card && gr.free)
-        {
-            opt.alt_cost = Some(Cost::free());
-        }
+        // cast it without paying its mana cost applies to it too (CR 118.9, 718.3), as
+        // the permission it's cast with (see `permissions.rs`).
         vec![opt]
     }
 
