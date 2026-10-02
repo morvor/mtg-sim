@@ -524,7 +524,18 @@ impl Game {
                 }
             }
             other => {
+                let uses_stack = matches!(other, Action::Cast { .. } | Action::Activate { .. });
+                let top_before = self.stack.last().copied();
                 if self.perform_action(p, other).is_ok() {
+                    // CR 807.5b: with priority for several stacks, the player chooses one.
+                    if let Some(new) = self
+                        .stack
+                        .last()
+                        .copied()
+                        .filter(|t| uses_stack && Some(*t) != top_before)
+                    {
+                        crate::multiplayer::grand_melee::choose_stack(self, p, new);
+                    }
                     // CR 117.3c: the player who acted receives priority again.
                     self.turn.passes = 0;
                     self.turn.priority = Some(p);
@@ -587,7 +598,10 @@ impl Game {
         if step == Step::EndOfCombat {
             // CR 511.3 / 500.5a
             crate::combat::end_combat(self);
-            self.expire_effects(|d| matches!(d, Duration::EndOfCombat));
+            let end_of_combat = |d: &Duration| matches!(d, Duration::EndOfCombat);
+            if !crate::multiplayer::grand_melee::expire_this_turns(self, end_of_combat) {
+                self.expire_effects(end_of_combat);
+            }
         }
         if step == Step::Cleanup && self.turn.cleanup_priority {
             // CR 514.3a: another cleanup step.
@@ -931,17 +945,27 @@ impl Game {
             // Saddled "until end of turn" (CR 702.171b).
             o.saddled = false;
         }
-        self.expire_effects(|d| matches!(d, Duration::EndOfTurn | Duration::ThisTurn));
+        // In Grand Melee, only the effects of this turn among those taken at the same time
+        // (CR 807.4, 514.2).
+        let this_turn = crate::multiplayer::grand_melee::current_turn_key(self);
+        let end_of_turn = |d: &Duration| matches!(d, Duration::EndOfTurn | Duration::ThisTurn);
+        if !crate::multiplayer::grand_melee::expire_this_turns(self, end_of_turn) {
+            self.expire_effects(end_of_turn);
+        }
         // "Until end of turn, you don't lose this mana as steps and phases end": the pool
         // empties as this step ends (CR 106.4).
         for p in self.players.iter_mut() {
             for m in p.mana_pool.mana.iter_mut() {
-                m.persistent = false;
+                if this_turn.is_none_or(|n| m.turn == n) {
+                    m.persistent = false;
+                }
             }
         }
         // "Until end of turn, whenever …" delayed triggered abilities (CR 603.7b).
-        self.delayed_triggers
-            .retain(|d| !matches!(d.trigger, crate::ability::TriggerCond::ThisTurn(_)));
+        self.delayed_triggers.retain(|d| {
+            !(matches!(d.trigger, crate::ability::TriggerCond::ThisTurn(_))
+                && this_turn.is_none_or(|n| d.created_turn == n))
+        });
         self.dirty = true;
     }
 
@@ -985,6 +1009,8 @@ impl Game {
                 && g.turn < turn
             {
                 g.duration = Duration::EndOfTurn;
+                // It now ends with this turn (CR 807.4: in Grand Melee, among others).
+                g.turn = turn;
             }
         }
         self.effects.retain(|e| !until(&e.duration, e.controller));
