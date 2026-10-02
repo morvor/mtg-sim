@@ -925,6 +925,9 @@ pub mod vars {
     /// The cards the most recent [`super::DigStep::Take`] chose, before they moved ("the
     /// revealed cards", "the chosen cards").
     pub const DUG_CHOSEN: Var = USER + 9203;
+    /// The cards of [`DUG`] the dig's selections took so far (cards rearranged within a
+    /// library stay the same objects, so they're told apart from "the rest" this way).
+    pub const DUG_TAKEN: Var = USER + 9204;
     /// The object a static ability's continuous effect is being applied to, while its
     /// values are evaluated ("each creature you control gets +1/+1 for each +1/+1 counter
     /// on it"), or a resolving effect's values are determined for (distinct from

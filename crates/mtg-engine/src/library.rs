@@ -221,10 +221,7 @@ pub fn dig(
         cards.iter().map(|o| Entity::Object(*o)).collect(),
     );
     // "From among them", "the rest" (`dig_steps.rs`).
-    ctx.set_var(
-        vars::DUG,
-        cards.iter().map(|o| Entity::Object(*o)).collect(),
-    );
+    crate::dig_steps::set_dug(ctx, cards.iter().map(|o| Entity::Object(*o)).collect());
     let cands: Vec<ObjectId> = cards
         .iter()
         .copied()
@@ -365,5 +362,5 @@ pub fn reveal_until(
         );
     }
     // All the cards revealed, for "the rest" (`dig_steps.rs`).
-    ctx.set_var(vars::DUG, dug);
+    crate::dig_steps::set_dug(ctx, dug);
 }

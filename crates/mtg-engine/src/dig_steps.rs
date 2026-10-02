@@ -45,7 +45,11 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
         DigStep::Rest { from, to } => {
             // What the text says next is about the cards chosen ("If you didn't put a card
             // into your hand this way"), not the rest.
-            let cards = remaining(g, from, ctx);
+            let taken = ctx.var_objects(vars::DUG_TAKEN);
+            let cards: Vec<ObjectId> = remaining(g, from, ctx)
+                .into_iter()
+                .filter(|o| !taken.contains(o))
+                .collect();
             let placed = place(g, cards, to, ctx);
             // "for each card put into your graveyard this way".
             ctx.nums.insert(vars::DUG, placed.len() as i64);
@@ -65,7 +69,7 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
             }
             ctx.prev_value = found.len() as i64;
             ctx.prev_happened = !all.is_empty();
-            ctx.set_var(vars::DUG, entities(&all));
+            set_dug(ctx, entities(&all));
             ctx.set_var(vars::REVEALED, entities(&all));
             ctx.set_var(vars::DUG_FOUND, entities(&found));
             // "Put those land cards onto the battlefield."
@@ -73,6 +77,13 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
             ctx.set_var(vars::IT, entities(&found));
         }
     }
+}
+
+/// Records the cards a dig looked at, revealed, milled or exiled ([`vars::DUG`]); none of
+/// them has been taken yet.
+pub fn set_dug(ctx: &mut Ctx, cards: Vec<Entity>) {
+    ctx.set_var(vars::DUG, cards);
+    ctx.set_var(vars::DUG_TAKEN, vec![]);
 }
 
 fn entities(v: &[ObjectId]) -> Vec<Entity> {
@@ -125,7 +136,8 @@ fn place(g: &mut Game, cards: Vec<ObjectId>, to: &Destination, ctx: &mut Ctx) ->
 }
 
 /// Puts cards that are in `owner`'s library at `pos` in it, in the order `orderer` (the
-/// player instructed to put them there) chooses, or a random order.
+/// player the text instructs to put them there, as Sealed Fate's ruling says) chooses, or
+/// in a random order.
 fn rearrange(
     g: &mut Game,
     owner: PlayerId,
@@ -272,6 +284,10 @@ fn take(
     ctx.set_var(vars::DUG_CHOSEN, entities(&chosen));
     let n = chosen.len();
     let placed = place(g, chosen, to, ctx);
+    // Not part of "the rest" (`DigStep::Rest`), even if they stay in the library.
+    let mut taken = ctx.vars.get(&vars::DUG_TAKEN).cloned().unwrap_or_default();
+    taken.extend(entities(&placed));
+    ctx.set_var(vars::DUG_TAKEN, taken);
     ctx.prev_value = n as i64;
     ctx.prev_happened = n > 0;
     ctx.prev_affected = entities(&placed);

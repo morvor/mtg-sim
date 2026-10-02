@@ -270,7 +270,10 @@ impl Game {
                 // "Exile the top N cards of your library. ... from among them"
                 // (`dig_steps.rs`).
                 if matches!(what, Sel::TopOfLibrary(..)) {
-                    ctx.set_var(vars::DUG, res.iter().map(|o| Entity::Object(*o)).collect());
+                    crate::dig_steps::set_dug(
+                        ctx,
+                        res.iter().map(|o| Entity::Object(*o)).collect(),
+                    );
                 }
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
@@ -1366,7 +1369,7 @@ impl Game {
                 }
                 ctx.prev_value = all.len() as i64;
                 // "From among them", "the milled cards" (`dig_steps.rs`).
-                ctx.set_var(vars::DUG, all.iter().map(|o| Entity::Object(*o)).collect());
+                crate::dig_steps::set_dug(ctx, all.iter().map(|o| Entity::Object(*o)).collect());
                 ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
             }
             Effect::GainLife { who, n } => {
@@ -1643,7 +1646,7 @@ impl Game {
                     ctx.set_var(vars::DUG_FOUND, found.clone());
                     ctx.set_var(vars::IT, found);
                     ctx.set_var(vars::REVEALED, rest);
-                    ctx.set_var(vars::DUG, dug);
+                    crate::dig_steps::set_dug(ctx, dug);
                 }
             }
             Effect::ExtraTurn { who } => {
