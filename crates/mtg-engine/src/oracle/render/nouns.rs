@@ -1182,6 +1182,12 @@ impl Renderer<'_> {
         // A complex union: each alternative gets the determiner ("~ or another creature");
         // a count applies to all of them ("up to two basic land cards and/or Gate cards").
         if let Filter::Or(v) = f {
+            // "creatures with flying or reach": alternatives that differ only in a keyword.
+            if let Some((shared, kws)) = keyword_alternatives(v) {
+                let n = self.noun_det(&shared, det.clone());
+                let k: Vec<String> = kws.iter().map(|k| self.keyword_kind_word(*k)).collect();
+                return format!("{n} with {}", join_list(&k, "or"));
+            }
             if !v.iter().all(Self::is_type_like) && !v.iter().all(|x| matches!(x, Filter::Color(_)))
             {
                 return match det.num() {
@@ -1353,6 +1359,32 @@ fn flatten_or(f: &Filter) -> Filter {
         }
         other => other.clone(),
     }
+}
+
+/// `[A and has K1, A and has K2, ...]`: (A, [K1, K2, ...]).
+fn keyword_alternatives(v: &[Filter]) -> Option<(Filter, Vec<crate::keywords::KeywordKind>)> {
+    if v.len() < 2 {
+        return None;
+    }
+    let mut shared: Option<Vec<Filter>> = None;
+    let mut kws = Vec::new();
+    for x in v {
+        let Filter::And(parts) = x else { return None };
+        let (k, rest): (Vec<&Filter>, Vec<&Filter>) = parts
+            .iter()
+            .partition(|p| matches!(p, Filter::HasKeyword(_)));
+        let [Filter::HasKeyword(k)] = k.as_slice() else {
+            return None;
+        };
+        kws.push(*k);
+        let rest: Vec<Filter> = rest.into_iter().cloned().collect();
+        match &shared {
+            None => shared = Some(rest),
+            Some(s) if format!("{s:?}") == format!("{rest:?}") => {}
+            Some(_) => return None,
+        }
+    }
+    Some((Filter::and(shared?), kws))
 }
 
 /// The creature types an outlaw has one of (CR 700.12).

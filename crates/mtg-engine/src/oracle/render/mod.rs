@@ -163,6 +163,7 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
     }
     merge_chapters(&mut out.lines);
     merge_shared_as_though(&mut out.lines);
+    merge_copy_exceptions(&mut out.lines);
     out.gaps = std::mem::take(&mut r.gaps);
     out
 }
@@ -460,6 +461,27 @@ fn is_changeling_cda(a: &Ability) -> bool {
 /// "~ saddles Mounts and crews Vehicles as though its power were two greater.": one
 /// sentence for two static abilities of the object that differ only in what it does
 /// ("~ saddles Mounts as though ..." and "~ crews Vehicles as though ...").
+/// "You may have ~ enter as a copy of any creature on the battlefield, except it has
+/// haste": the exceptions (CR 707.9b) are part of the copy effect's sentence.
+fn merge_copy_exceptions(lines: &mut Vec<String>) {
+    let mut i = 0;
+    while i + 1 < lines.len() {
+        let next = lines[i + 1].clone();
+        let rest = ["As ~it enters, except ", "As ~ enters, except "]
+            .iter()
+            .find_map(|p| next.strip_prefix(p));
+        if let Some(rest) = rest {
+            if lines[i].contains(" as a copy of ") && lines[i].ends_with('.') {
+                let head = lines[i].trim_end_matches('.').to_string();
+                lines[i] = format!("{head}, except {rest}");
+                lines.remove(i + 1);
+                continue;
+            }
+        }
+        i += 1;
+    }
+}
+
 pub(crate) fn merge_shared_as_though(lines: &mut Vec<String>) {
     let mut out: Vec<String> = Vec::new();
     for l in lines.drain(..) {

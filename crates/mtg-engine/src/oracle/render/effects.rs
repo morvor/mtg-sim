@@ -2225,6 +2225,30 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "An opponent gains control of ~": an opponent you choose, named once.
+            if let (
+                Some(Effect::Choose {
+                    who: PlayerRef::You,
+                    kind: ChoiceKind::Opponent,
+                }),
+                Some(next),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if !format!("{:?}", &v[i + 2..]).contains("ChosenOpponent") {
+                    let n = self.effect(next);
+                    if let Some(rest) = n.strip_prefix("the chosen opponent ") {
+                        if !rest.contains("chosen opponent") {
+                            parts.push(format!("an opponent {rest}"));
+                            i += 2;
+                            continue;
+                        }
+                    }
+                    parts.push("choose an opponent".into());
+                    parts.push(n);
+                    i += 2;
+                    continue;
+                }
+            }
             if let (Some(a), Some(b)) = (v.get(i), v.get(i + 1)) {
                 if let Some(s) = self.chosen_source_damage(a, b) {
                     parts.push(s);
@@ -4263,6 +4287,12 @@ impl Renderer<'_> {
         if let crate::mana::ManaRestriction::NotGeneric = r {
             return "This mana can't be spent to pay generic mana costs".into();
         }
+        // What the mana can't pay for: a sentence of its own.
+        if let crate::mana::ManaRestriction::NotNonartifactSpell
+        | crate::mana::ManaRestriction::NotCastSpell(_) = r
+        {
+            return self.mana_restriction_purpose(r);
+        }
         format!("Spend this mana only {}", self.mana_restriction_purpose(r))
     }
 
@@ -4280,7 +4310,10 @@ impl Renderer<'_> {
             }
             M::InstantOrSorcery => "to cast instant or sorcery spells".into(),
             M::NoncreatureSpell => "to cast noncreature spells".into(),
-            M::NotNonartifactSpell => "This mana can't be spent to cast a nonartifact spell".into(),
+            M::NotNonartifactSpell => {
+                "This mana can't be spent to cast {alt:a nonartifact spell|nonartifact spells}"
+                    .into()
+            }
             M::NotGeneric => "This mana can't be spent to pay generic mana costs".into(),
             M::AnyOf(v) => {
                 let parts: Vec<String> =
@@ -4301,8 +4334,13 @@ impl Renderer<'_> {
                 format!("to activate abilities of {n}")
             }
             M::ClassLevel => "to gain a Class level".into(),
+            // "This mana can't be spent to cast spells from your hand."
             M::NotCastSpell(f) => {
+                let saved = self.default_head.replace("spell");
                 let n = self.noun(&f.0, Num::Many);
+                self.default_head = saved;
+                let n = n.replace("permanents in your hand", "spells from your hand");
+                let n = n.replace(" in your hand", " from your hand");
                 format!("This mana can't be spent to cast {n}")
             }
         }

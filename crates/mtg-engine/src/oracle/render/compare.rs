@@ -136,6 +136,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               \"nonartifact, nonblack creature\" is a \"nonblack nonartifact creature\".",
     },
     Equivalence {
+        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(~it|~|it) (gets|gains) ([^.;",{]*?)(,? and|,? then) (deals)\b"#,
+        replacement: "$1$2 $3 $4$5 $2 $6",
+        why: "As for players above: \"~ gets +1/+0 until end of turn and deals 1 damage to \
+              you\" is \"~ gets +1/+0 until end of turn and ~ deals 1 damage to you\".",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \
@@ -1511,7 +1517,11 @@ fn shared_subject_match(oracle: &[String], starts: &[usize], units: &[Vec<String
                     continue;
                 }
                 let prev = &units[i - 1];
-                let lcp = prev.iter().zip(u).take_while(|(a, b)| a == b).count();
+                let lcp = prev
+                    .iter()
+                    .zip(u)
+                    .take_while(|(a, b)| token_eq(a, b))
+                    .count();
                 for k in (1..=lcp.min(6)).rev() {
                     // The dropped words must be the whole subject of both units: a predicate
                     // starts right after them in each ("creatures you control have haste and

@@ -1003,6 +1003,31 @@ impl Renderer<'_> {
                 Ev::new(e.subj, e.vp.replacen("damage", "noncombat damage", 1))
             }
             TriggerCond::TappedForMana { who, filter } => {
+                // "Whenever you tap a land for mana": only its controller can activate a
+                // permanent's mana abilities (CR 602.2), so it's a land you control that's
+                // tapped for mana.
+                let yours = match filter {
+                    Filter::And(v)
+                        if v.iter()
+                            .any(|x| matches!(x, Filter::ControlledBy(PlayerRel::You))) =>
+                    {
+                        Some(Filter::and(
+                            v.iter()
+                                .filter(|x| !matches!(x, Filter::ControlledBy(PlayerRel::You)))
+                                .cloned()
+                                .collect(),
+                        ))
+                    }
+                    _ => None,
+                };
+                if let (PlayerRel::Any, Some(rest)) = (who, yours) {
+                    let a = obj(self, filter);
+                    let n = self.noun_det(&rest, Det::A);
+                    return Ev::new(
+                        "",
+                        format!("{{alt:{a} is tapped for mana|you tap {n} for mana}}"),
+                    );
+                }
                 if matches!(who, PlayerRel::Any) {
                     Ev::new(obj(self, filter), "is tapped for mana")
                 } else {
