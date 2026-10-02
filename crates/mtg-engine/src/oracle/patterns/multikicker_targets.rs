@@ -25,10 +25,13 @@ fn choose_targets_for_each_kick(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let (mut spec, tail) = parse_any_target(first)?;
-    if !end(tail).is_empty() || spec.min != 1 || !matches!(spec.max, Value::Const(1)) {
+    if !end(tail).is_empty() || spec.fixed_min() != Some(1) || !matches!(spec.max, Value::Const(1)) {
         return None;
     }
-    spec.max = Value::Sum(vec![Value::c(1), Value::TimesKicked]);
+    // Exactly one more than the number of times it was kicked (CR 601.2c).
+    let n = Value::Sum(vec![Value::c(1), Value::TimesKicked]);
+    spec.min = n.clone();
+    spec.max = n;
     let slot = b.add_target(spec, first);
     b.it = Sel::Target(slot);
     Some(Effect::Noop)

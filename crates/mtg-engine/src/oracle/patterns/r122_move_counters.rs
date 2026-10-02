@@ -4,7 +4,10 @@
 //! second target creature." (Leech Bonder: a counter of a kind the player chooses), "move
 //! all counters from ~ onto target creature" (The Ozolith), "move any number of +1/+1
 //! counters from ~ onto another target creature" (Scrounging Bandar: the number is chosen
-//! as it resolves), "move X +1/+1 counters ...". The counters are removed from the first
+//! as it resolves), "move X +1/+1 counters ...", "move a +1/+1 counter from target
+//! creature onto another target creature with the same controller" (Simic Guildmage,
+//! Bioshift: the two targets must have the same controller as they're chosen and as the
+//! ability resolves, `TargetSpec::related_to`). The counters are removed from the first
 //! object and put on the second, so abilities that care about counters being removed or
 //! put on apply; if either can't happen, none is moved (`counter_rules::move_counters`).
 
@@ -28,24 +31,13 @@ fn object(s: &str, b: &mut Builder) -> Option<Sel> {
     if s == "that creature" && matches!(b.it, Sel::TriggerObject) {
         return Some(Sel::TriggerObject);
     }
-    // "another target creature with the same controller" (as the first target, CR
-    // 115.3): a target controlled by whoever controls the first one.
-    if let Some(head) = s.strip_suffix(" with the same controller") {
-        let first = b.targets.len().checked_sub(1)? as u8;
-        let sel = object(head, b)?;
-        let Sel::Target(slot) = sel else {
-            return None;
-        };
-        let spec = b.targets.get_mut(slot as usize)?;
-        if let TargetKind::Object(f) = &mut spec.what {
-            *f = Filter::and(vec![
-                f.clone(),
-                Filter::ControlledBy(PlayerRel::TargetOrController(first)),
-            ]);
-        }
-        spec.text = s.to_string();
-        return Some(sel);
-    }
+    // "another target creature with the same controller": a different object than the
+    // earlier target, controlled by the same player.
+    let (same_controller, s) = match s.strip_suffix(" with the same controller") {
+        Some(r) if r.starts_with("another target ") && !b.targets.is_empty() => (true, r),
+        Some(_) => return None,
+        None => (false, s),
+    };
     // "a second target creature": a different object than the earlier targets (which may
     // be the source, unlike "another target creature").
     let (second, text) = match s.strip_prefix("a second target ") {
@@ -54,7 +46,7 @@ fn object(s: &str, b: &mut Builder) -> Option<Sel> {
     };
     let (mut spec, tail) = parse_target(&text)?;
     if !end(tail).is_empty()
-        || spec.min != 1
+        || spec.fixed_min() != Some(1)
         || !matches!(spec.max, Value::Const(1))
         || !matches!(spec.what, TargetKind::Object(_))
     {
@@ -65,6 +57,11 @@ fn object(s: &str, b: &mut Builder) -> Option<Sel> {
         if spec.distinct_from.is_empty() {
             return None;
         }
+    }
+    if same_controller {
+        let first = b.targets.len() as u8 - 1;
+        spec.distinct_from = vec![first];
+        spec.related_to = Some((first, TargetGroup::SameController));
     }
     let slot = b.add_target(spec, s);
     Some(Sel::Target(slot))

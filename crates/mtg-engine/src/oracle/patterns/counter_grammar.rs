@@ -104,7 +104,7 @@ fn object_or_player_target(s: &str, b: &mut Builder) -> Option<Sel> {
     let mut spec = TargetSpec::any_target();
     spec.what = TargetKind::ObjectOrPlayer(f, pf);
     if up_to {
-        spec.min = 0;
+        spec.min = Value::c(0);
     }
     let slot = b.add_target(spec, s.trim());
     Some(Sel::Target(slot))

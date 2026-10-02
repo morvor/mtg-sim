@@ -128,6 +128,14 @@ pub struct Modal {
     pub per_mode_cost: bool,
     /// Modes chosen by an opponent (CR 700.2e) or at random.
     pub chooser: ModeChooser,
+    /// "Each mode must target a different player": no player is the target of two of
+    /// the chosen modes (see `mode_players.rs`).
+    #[serde(default)]
+    pub different_players: bool,
+    /// "You may choose two": the controller chooses that many modes or none (a triggered
+    /// ability with no mode chosen is removed from the stack, CR 700.2b).
+    #[serde(default)]
+    pub optional: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -601,7 +609,11 @@ pub enum LibraryPosition {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TargetSpec {
     pub what: TargetKind,
-    pub min: u32,
+    /// The fewest targets that must be chosen. Like `max`, it's evaluated as targets are
+    /// chosen, after X and the number of times the spell is kicked are announced
+    /// (CR 601.2b, 601.2c): "X target creatures" has exactly X targets (`min` and `max`
+    /// both X), never more than `max`.
+    pub min: Value,
     pub max: Value,
     /// Each target in this slot must be different from targets in these other slots
     /// ("another target creature").
@@ -621,6 +633,19 @@ pub struct TargetSpec {
     /// share a creature type"); see `target_groups.rs`.
     #[serde(default)]
     pub together: Option<TargetGroup>,
+    /// A relationship the targets of this instance of the word "target" must have with
+    /// those of an earlier one, slot `.0` ("move a counter from target creature onto
+    /// another target creature with the same controller"); see `target_groups.rs`.
+    #[serde(default)]
+    pub related_to: Option<(u8, TargetGroup)>,
+    /// "For each opponent, ... up to one target creature that player controls": this
+    /// instance of the word "target" is chosen once for each player in the game this
+    /// filter matches, `min` to `max` targets for each, where the object filter's
+    /// `PlayerRel::Iterated` is that player. A player with no legal choice gets no
+    /// target; on resolution each target must still match for the player it was chosen
+    /// for. See `per_player_targets.rs`.
+    #[serde(default)]
+    pub per_player: Option<PlayerFilter>,
 }
 
 /// A relationship the targets of one instance of the word "target" must have with each
@@ -638,15 +663,29 @@ pub enum TargetGroup {
     ShareCreatureType,
     /// There's a card type all of them have.
     ShareCardType,
+    /// There's one of these card types all of them have ("another target permanent that
+    /// shares one of those types with it", the types the first target was described by).
+    ShareCardTypeAmong(Vec<CardType>),
     /// There's a permanent type (artifact, battle, creature, enchantment, land,
     /// planeswalker) all of them have.
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
+    /// No two of them are controlled by the same player ("with different controllers").
+    DifferentControllers,
     /// No two of them have the same name ("with different names", CR 201.2).
     DifferentNames,
+    /// No two of them have the same mana value ("with different mana values").
+    DifferentManaValues,
+    /// No two of them have the same power ("with different powers").
+    DifferentPowers,
+    /// All have the same toughness ("with equal toughness").
+    EqualToughness,
+    /// Each stands for a different card type it has ("for each card type, ... a card of
+    /// that type"): an object with several card types counts as any one of them.
+    OnePerCardType,
     /// Their total of a value is at most the value ("with total mana value 6 or less",
-    /// "with total mana value X or less").
+    /// "with total mana value X or less", "with total power 10 or less").
     TotalAtMost(TotalStat, Box<Value>),
 }
 
@@ -664,7 +703,7 @@ impl TargetSpec {
     pub fn one(what: TargetKind, text: impl Into<String>) -> TargetSpec {
         TargetSpec {
             what,
-            min: 1,
+            min: Value::Const(1),
             max: Value::Const(1),
             distinct_from: vec![],
             divide: None,
@@ -672,11 +711,13 @@ impl TargetSpec {
             text: text.into(),
             condition: None,
             together: None,
+            related_to: None,
+            per_player: None,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
         TargetSpec {
-            min: 0,
+            min: Value::Const(0),
             max: Value::Const(n),
             ..TargetSpec::one(what, text)
         }
@@ -689,6 +730,13 @@ impl TargetSpec {
     }
     pub fn any_target() -> TargetSpec {
         TargetSpec::one(TargetKind::AnyTarget, "any target")
+    }
+    /// `min` when it's a fixed number (most target phrases: "target", "up to two").
+    pub fn fixed_min(&self) -> Option<i32> {
+        match self.min {
+            Value::Const(n) => Some(n),
+            _ => None,
+        }
     }
 }
 
@@ -785,6 +833,9 @@ pub enum Sel {
     TriggerPlayer,
     /// The permanent or player this object is attached to ("enchanted creature").
     AttachedTo,
+    /// The permanents or players the selected objects are attached to ("the permanent
+    /// target Aura is attached to").
+    HostOf(Box<Sel>),
     /// Objects attached to the source ("equipment attached to it").
     AttachedToThis,
     /// All objects matching the filter.
@@ -1150,6 +1201,12 @@ pub enum Filter {
     Objects(Vec<crate::types::ObjectId>),
     /// The object the source is attached to ("enchanted creature").
     AttachedToSource,
+    /// Attached to one of the selected permanents or players ("Auras attached to target
+    /// permanent").
+    AttachedTo(Box<Sel>),
+    /// An object each of the selected objects could legally be attached to right now
+    /// ("another permanent it can enchant", CR 301.5c, 303.4).
+    CanBeAttachedBy(Box<Sel>),
     /// Attached to something ("equipped", "enchanted").
     Attached,
     /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").
@@ -1226,8 +1283,10 @@ pub enum Filter {
     ValueCmp(Box<Value>, Cmp, Box<Value>),
     /// A requirement on the objects chosen together for one selection ("up to four cards
     /// with different names", "any number of creature cards with total mana value 6 or
-    /// less"). Every object matches it on its own; whatever chooses the objects (target
-    /// slots, searches, choices) checks the group (see `relational.rs`, `target_groups.rs`).
+    /// less", "sacrifice three artifact tokens with different names"). Every object
+    /// matches it on its own; whatever chooses the objects (target slots, searches,
+    /// choices, costs) checks the group (see `relational.rs`,
+    /// `target_groups::choose_together`).
     Together(TargetGroup),
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
@@ -2151,6 +2210,17 @@ pub enum Restriction {
     },
     /// "can attack as though it didn't have defender" (overrides CR 702.3b).
     AttackDespiteDefender(Filter),
+    /// "[attackers] can attack as though they had haste" (CR 302.6, 508.1a with 609.4):
+    /// they may attack though their controller hasn't controlled them continuously since
+    /// their most recent turn began. With `defender`, only those players and planeswalkers
+    /// they control ("can attack your opponents and planeswalkers your opponents control
+    /// as though those creatures had haste"). See `as_though::may_attack_as_though_haste`.
+    AttackAsThoughHaste {
+        attackers: Filter,
+        defender: Option<PlayerFilter>,
+    },
+    /// "[blockers] can block as though they were untapped" (CR 509.1a with 609.4).
+    BlockAsThoughUntapped(Filter),
     /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
     CantAttackAlone(Filter),
     CantBlockAlone(Filter),

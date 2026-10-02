@@ -440,6 +440,14 @@ impl Renderer<'_> {
             }
             Filter::Objects(_) => np.fixed = Some(self.gap("Filter::Objects")),
             Filter::AttachedToSource => np.fixed = Some(self.attached_noun()),
+            // "target Aura attached to a creature".
+            Filter::AttachedTo(s) => {
+                let s = self.sel(s, Case::Obj);
+                np.post.push(format!("attached to {s}"));
+            }
+            // What an Aura is moved to must be something it can enchant: the rules say so
+            // (CR 303.4j, 701.3b), and the card doesn't.
+            Filter::CanBeAttachedBy(_) => {}
             Filter::Attached => np.status.push("attached".into()),
             Filter::Enchanted => np.status.push("enchanted".into()),
             Filter::Equipped => np.status.push("equipped".into()),

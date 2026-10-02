@@ -89,7 +89,7 @@ fn distribute_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
         return None;
     }
-    spec.min = min;
+    spec.min = Value::c(min as i32);
     spec.max = max;
     spec.divide = Some(n);
     let text = r[..r.len() - tail.len()].trim().to_string();

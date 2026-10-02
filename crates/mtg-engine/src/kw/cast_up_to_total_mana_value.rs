@@ -7,6 +7,11 @@
 //! (CR 709.3a, 712.11c). The one cast second is on top of the stack and resolves first
 //! (CR 405.2). "Those spells" are the spells cast (`vars::IT`).
 //!
+//! "You may cast any number of spells from among cards exiled with this artifact with
+//! total mana value X or less without paying their mana costs." (Rod of Absorption): any
+//! number of them (`u32::MAX`), from the cards linked to the source (CR 607), with a total
+//! of the ability's X (see [`effect_name_with`]).
+//!
 //! The effect is an `Effect::Custom` named by [`effect_name`]; the oracle phrase is parsed
 //! in `oracle/patterns/r601_cast_up_to_total_mana_value.rs`.
 
@@ -23,28 +28,46 @@ const PREFIX: &str = "cast spells with total mana value at most:";
 /// value `total` or less from [zones] without paying their mana costs": `types` are the
 /// card types any one of which each spell must have (none: any spell).
 pub fn effect_name(n: u32, total: u32, zones: &[ZoneKind], types: &[CardType]) -> String {
+    effect_name_with(n, Some(total), zones, types)
+}
+
+/// [`effect_name`] with the total the ability's X when `total` is `None`; `n` is
+/// `u32::MAX` for "any number of spells"; `ZoneKind::Exile` names the cards exiled with
+/// the source (linked to the ability, CR 607).
+pub fn effect_name_with(
+    n: u32,
+    total: Option<u32>,
+    zones: &[ZoneKind],
+    types: &[CardType],
+) -> String {
     let zones: Vec<&str> = zones
         .iter()
         .map(|z| match z {
             ZoneKind::Graveyard => "graveyard",
+            ZoneKind::Exile => "linked",
             _ => "hand",
         })
         .collect();
     let types: Vec<String> = types.iter().map(|t| format!("{t:?}")).collect();
+    let total = total.map_or("x".to_string(), |t| t.to_string());
     format!("{PREFIX}{n}:{total}:{}:{}", zones.join(","), types.join(","))
 }
 
-type Parsed = (u32, u32, Vec<ZoneKind>, Vec<CardType>);
+type Parsed = (u32, Option<u32>, Vec<ZoneKind>, Vec<CardType>);
 
 fn parse_name(name: &str) -> Option<Parsed> {
     let mut parts = name.strip_prefix(PREFIX)?.split(':');
     let n = parts.next()?.parse().ok()?;
-    let total = parts.next()?.parse().ok()?;
+    let total = match parts.next()? {
+        "x" => None,
+        t => Some(t.parse().ok()?),
+    };
     let zones = parts
         .next()?
         .split(',')
         .map(|z| match z {
             "graveyard" => ZoneKind::Graveyard,
+            "linked" => ZoneKind::Exile,
             _ => ZoneKind::Hand,
         })
         .collect();
@@ -69,7 +92,7 @@ impl KeywordRules for CastUpToTotalManaValue {
             return false;
         };
         let p = ctx.controller;
-        let mut left = total;
+        let mut left = total.unwrap_or(ctx.x.max(0) as u32);
         let mut cast: Vec<Entity> = Vec::new();
         let mut used: Vec<ObjectId> = Vec::new();
         for _ in 0..n {
@@ -83,6 +106,13 @@ impl KeywordRules for CastUpToTotalManaValue {
             for z in &zones {
                 match z {
                     ZoneKind::Graveyard => cards.extend(g.player(p).graveyard.iter().copied()),
+                    // The cards exiled with the source that are still in exile.
+                    ZoneKind::Exile => cards.extend(
+                        g.eval_sel(&crate::ability::Sel::Linked, ctx)
+                            .into_iter()
+                            .filter_map(|e| e.object())
+                            .filter(|o| g.is_live(*o) && g.obj(*o).zone == crate::object::Zone::Exile),
+                    ),
                     _ => cards.extend(g.player(p).hand.iter().copied()),
                 }
             }
