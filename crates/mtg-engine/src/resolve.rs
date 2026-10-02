@@ -81,8 +81,10 @@ impl Game {
                     self.exec(then, ctx);
                 } else {
                     // "If it's a permanent card, you may put it onto the battlefield. If
-                    // you do, ...": an optional instruction that wasn't offered wasn't done.
-                    if matches!(**then, Effect::May { .. }) && matches!(**otherwise, Effect::Noop) {
+                    // you do, ...", "Then if it has three or more doom counters on it,
+                    // sacrifice ~. When you do, ...": an instruction that wasn't performed
+                    // wasn't done.
+                    if matches!(**otherwise, Effect::Noop) {
                         ctx.prev_happened = false;
                     }
                     self.exec(otherwise, ctx);
