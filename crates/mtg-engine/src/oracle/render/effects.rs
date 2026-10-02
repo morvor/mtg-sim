@@ -3694,7 +3694,12 @@ impl Renderer<'_> {
                 if p.all || p.up_to || !matches!(p.count, Value::Const(1)) {
                     many = true;
                 }
-                self.noun_det(&p.filter, det)
+                // What's searched for in a library, hand, or graveyard is a card ("a card
+                // named The Animus").
+                let saved = self.default_head.replace("card");
+                let n = self.noun_det(&p.filter, det);
+                self.default_head = saved;
+                n
             })
             .collect();
         if parts.len() > 1 {
