@@ -439,11 +439,7 @@ fn zone_word(s: &str) -> Option<(ZoneKind, &str)> {
 fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     // "Auras you control that are attached to creatures", "that's attached to a
     // creature": attached to an object of that kind.
-    for p in [
-        "that's attached to ",
-        "that are attached to ",
-        "attached to ",
-    ] {
+    for p in ["that's attached to ", "that are attached to ", "attached to "] {
         if let Some(r) = t.strip_prefix(p) {
             let r2 = r
                 .strip_prefix("a ")
@@ -476,11 +472,7 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     // delve, the cards exiled to pay for it (CR 702.66a).
     for p in ["exiled with ~", "exiled with it"] {
         if let Some(r) = t.strip_prefix(p) {
-            if b.ctx
-                .keywords
-                .iter()
-                .any(|k| k.eq_ignore_ascii_case("delve"))
-            {
+            if b.ctx.keywords.iter().any(|k| k.eq_ignore_ascii_case("delve")) {
                 return word_end(r).then(|| {
                     (
                         Filter::and(vec![
@@ -598,9 +590,7 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
         let (n, rest) = parse_number(r)?;
         let n = n.as_const()?;
         return Some((
-            Filter::Custom(
-                format!("{}{n}", crate::kw::value_counts::BASE_POWER_OR_TOUGHNESS).into(),
-            ),
+            Filter::Custom(format!("{}{n}", crate::kw::value_counts::BASE_POWER_OR_TOUGHNESS).into()),
             rest,
         ));
     }
@@ -610,11 +600,7 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
         let (p, q): (i32, i32) = (p.parse().ok()?, q.parse().ok()?);
         return Some((
             Filter::Custom(
-                format!(
-                    "{}{p}/{q}",
-                    crate::kw::value_counts::BASE_POWER_AND_TOUGHNESS
-                )
-                .into(),
+                format!("{}{p}/{q}", crate::kw::value_counts::BASE_POWER_AND_TOUGHNESS).into(),
             ),
             rest,
         ));
@@ -741,10 +727,7 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
         let words: Vec<&str> = s.splitn(4, ' ').collect();
         if words.len() >= 3
             && words[1] == "and"
-            && matches!(
-                head_noun(words[0]),
-                Some(Filter::Subtype(_) | Filter::Type(_))
-            )
+            && matches!(head_noun(words[0]), Some(Filter::Subtype(_) | Filter::Type(_)))
             && crate::types::Color::from_word(words[2]).is_some()
         {
             let rest = words.get(3).copied().unwrap_or("");
@@ -815,9 +798,7 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
     // "other creatures with the same name as that creature": other than that creature,
     // not other than the source.
     let referent = parts.iter().find_map(|p| match p {
-        Filter::SameNameAs(sel) | Filter::SharesCreatureType(sel)
-            if !matches!(**sel, Sel::This) =>
-        {
+        Filter::SameNameAs(sel) | Filter::SharesCreatureType(sel) if !matches!(**sel, Sel::This) => {
             Some(sel.clone())
         }
         _ => None,
@@ -1130,10 +1111,7 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         }
     }
     // CR 104.3: "players who have lost the game".
-    for p in [
-        "players who have lost the game",
-        "player who has lost the game",
-    ] {
+    for p in ["players who have lost the game", "player who has lost the game"] {
         if let Some(rest) = r.strip_prefix(p) {
             return Some((
                 Value::Custom(crate::kw::value_counts::PLAYERS_WHO_LOST.into()),
