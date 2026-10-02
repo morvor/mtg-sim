@@ -255,6 +255,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               the same thing.",
     },
     Equivalence {
+        pattern: r"\b(?:has|have) cast ([^.,;]*?) this turn\b",
+        replacement: "cast $1 this turn",
+        why: "\"If an opponent cast a blue spell this turn\" and \"if an opponent has cast a \
+              blue spell this turn\" ask the same thing (as \"you've\" above).",
+    },
+    Equivalence {
         pattern: r"\b(draws?) an additional card\b",
         replacement: "$1 a card",
         why: "A triggered draw is in addition to the normal draw anyway (CR 504.1).",

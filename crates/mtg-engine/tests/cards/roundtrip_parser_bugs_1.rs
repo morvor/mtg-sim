@@ -106,3 +106,28 @@ fn damage_equal_to_that_cards_mana_value_is_the_exiled_cards() {
     assert!(t.in_exile("Grizzly Bears"));
     assert_eq!(t.life(P1), 18);
 }
+
+#[test]
+fn ricochet_trap_needs_only_one_opponent_to_have_cast_a_blue_spell() {
+    cr!("118.9", "601.2b");
+    // Ricochet Trap: "If an opponent cast a blue spell this turn, you may pay {R} rather
+    // than pay this spell's mana cost." In a three-player game, one opponent's blue spell
+    // is enough.
+    use mtg_engine::object::CastMethod;
+    supported("Ricochet Trap");
+    let mut t = TestGame::new(3);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let trap = t.hand(P0, "Ricochet Trap");
+    t.lands(P0, "Mountain", 1);
+    let alt_castable = |t: &mut TestGame| {
+        t.cast_options(P0, trap)
+            .into_iter()
+            .any(|o| matches!(o.method, CastMethod::Alternative(_)))
+    };
+    assert!(!alt_castable(&mut t));
+    let opt = t.hand(P1, "Opt");
+    t.lands(P1, "Island", 1);
+    t.cast(P1, opt).go();
+    t.resolve_all();
+    assert!(alt_castable(&mut t));
+}
