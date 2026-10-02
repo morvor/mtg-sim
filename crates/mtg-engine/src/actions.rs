@@ -403,6 +403,17 @@ impl Game {
             list.retain(|x| *x != old_id);
         }
         if from == Zone::Battlefield {
+            // Last known information about its status (CR 603.10a, 608.2h).
+            let attached = self.attachments_of(Entity::Object(old_id));
+            let has = |g: &Self, s: &str| attached.iter().any(|a| g.obj(*a).chars.has_subtype(s));
+            let status = crate::object::LeftBattlefield {
+                attacking: self.is_attacking(old_id),
+                blocking: self.is_blocking(old_id),
+                blocked: self.combat.as_ref().is_some_and(|c| c.is_blocked(old_id)),
+                enchanted: has(self, "Aura"),
+                equipped: has(self, "Equipment"),
+            };
+            self.objects[old_id.0 as usize].left_battlefield = Some(Box::new(status));
             crate::combat::remove_from_combat(self, old_id);
             // Unpair soulbond partners.
             if let Some(p) = self.obj(old_id).paired_with {
