@@ -12,6 +12,11 @@ use crate::types::*;
 
 /// `Filter::Custom`: dealt damage to the controller of the ability this turn.
 pub const DEALT_DAMAGE_TO_YOU_THIS_TURN: &str = "dealt damage to you this turn";
+/// `Filter::Custom`: a permanent whose controller was dealt combat damage by the source
+/// (as the same object) this turn ("whose controller was dealt combat damage by ~ this
+/// turn", Steel Hellkite).
+pub const CONTROLLER_DEALT_COMBAT_DAMAGE_BY_SOURCE: &str =
+    "controller was dealt combat damage by source this turn";
 
 pub struct DealtDamageToYou;
 
@@ -30,11 +35,23 @@ impl KeywordRules for DealtDamageToYou {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
-        (name == DEALT_DAMAGE_TO_YOU_THIS_TURN).then(|| {
-            g.history
-                .damage_to_players_by_source
-                .contains(&(id, ctx.controller))
-        })
+        if name == DEALT_DAMAGE_TO_YOU_THIS_TURN {
+            return Some(
+                g.history
+                    .damage_to_players_by_source
+                    .contains(&(id, ctx.controller)),
+            );
+        }
+        if name == CONTROLLER_DEALT_COMBAT_DAMAGE_BY_SOURCE {
+            let controller = g.obj(id).controller;
+            return Some(ctx.source.is_some_and(|s| {
+                g.history
+                    .combat_damage_to_players
+                    .iter()
+                    .any(|r| r.source == s && r.player == controller)
+            }));
+        }
+        None
     }
 }
 

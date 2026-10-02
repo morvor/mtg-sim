@@ -25,7 +25,17 @@ const FOUND: Var = vars::USER + 2311;
 
 fn search_same_name(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("search ")?;
-    let r = r.strip_prefix("its controller's ")?;
+    // "its owner's graveyard, ...": a target card in a graveyard, whose owner is the
+    // player whose zones are searched (a card outside the battlefield and the stack is
+    // controlled by no one, and is looked at through its owner, CR 108.4a).
+    let in_graveyard = b.targets.last().is_some_and(|t| {
+        matches!(&t.what, TargetKind::Object(f) if f.zone() == Some(ZoneKind::Graveyard))
+    });
+    let r = r.strip_prefix("its controller's ").or_else(|| {
+        in_graveyard
+            .then(|| r.strip_prefix("its owner's "))
+            .flatten()
+    })?;
     let r = r.strip_prefix("graveyard, hand, and library for ")?;
     // "any number of cards": the searcher may leave some in the graveyard too.
     let (any, r) = if let Some(x) = r.strip_prefix("all cards with the same name as that ") {

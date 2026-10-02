@@ -566,3 +566,169 @@ fn reciprocate_exiles_only_a_creature_that_dealt_damage_to_you_this_turn() {
     t.resolve();
     assert!(t.in_exile("Grizzly Bears"));
 }
+
+// ---------------------------------------------------------------------------
+// Groups related to a target or the source
+// ---------------------------------------------------------------------------
+
+#[test]
+fn legions_to_ashes_exiles_the_target_and_that_players_tokens_with_its_name() {
+    cr!("201.2", "608.2c");
+    ruling!("Legions to Ashes", "The target permanent need not be a token");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let other = t.battlefield(P1, "Grizzly Bears"); // not a token: stays
+    let mine = t.battlefield(P0, "Grizzly Bears"); // not that player's
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Swamp", 2);
+    let c = t.hand(P0, "Legions to Ashes");
+    t.cast(P0, c).target(bears).go();
+    t.resolve();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(other), "only tokens with that name");
+    assert!(t.on_battlefield(mine));
+}
+
+#[test]
+fn deputy_of_detention_exiles_that_players_other_permanents_with_the_name() {
+    cr!("201.2", "610.3");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[a.into()]);
+    t.enter(P0, "Deputy of Detention");
+    t.resolve_all();
+    assert!(!t.on_battlefield(a));
+    assert!(!t.on_battlefield(b));
+    assert!(t.on_battlefield(giant));
+    assert!(t.on_battlefield(mine), "an opponent's only");
+}
+
+#[test]
+fn surgical_extraction_may_leave_cards_even_in_the_graveyard() {
+    cr!("701.23b", "201.2");
+    ruling!(
+        "Surgical Extraction",
+        "you can choose to leave some or all of the cards with the same name"
+    );
+    let mut t = TestGame::new(2);
+    let a = t.graveyard(P1, "Grizzly Bears");
+    let b = t.graveyard(P1, "Grizzly Bears");
+    t.hand(P1, "Grizzly Bears");
+    let lib = t.library_top(P1, "Grizzly Bears");
+    t.lands(P0, "Swamp", 1);
+    let s = t.hand(P0, "Surgical Extraction");
+    // The graveyard: leave the other copy. The hand: take it. The library: leave it.
+    t.answer_choose(P0, &[]);
+    let in_hand = t.g.player(P1).hand[0];
+    t.answer_choose(P0, &[in_hand.into()]);
+    t.answer_choose(P0, &[]);
+    t.cast(P0, s).target(a).go();
+    t.resolve();
+    assert_eq!(t.zone(t.g.current(b)), mtg_engine::object::Zone::Graveyard(P1));
+    assert!(!t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.g.player(P1).library.contains(&t.g.current(lib)));
+}
+
+#[test]
+fn extirpate_exiles_every_copy_in_the_graveyard() {
+    cr!("701.23b", "201.2");
+    ruling!(
+        "Extirpate",
+        "but you do have to exile the cards from the player's graveyard"
+    );
+    let mut t = TestGame::new(2);
+    let a = t.graveyard(P1, "Grizzly Bears");
+    let b = t.graveyard(P1, "Grizzly Bears");
+    let giant = t.graveyard(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 1);
+    let s = t.hand(P0, "Extirpate");
+    t.cast(P0, s).target(a).go();
+    t.resolve();
+    assert!(t.in_exile("Grizzly Bears"));
+    assert_ne!(t.zone(t.g.current(b)), mtg_engine::object::Zone::Graveyard(P1));
+    assert_eq!(t.zone(giant), mtg_engine::object::Zone::Graveyard(P1));
+}
+
+#[test]
+fn steel_hellkite_destroys_only_permanents_of_players_it_dealt_combat_damage() {
+    cr!("510.2", "107.3a");
+    ruling!(
+        "Steel Hellkite",
+        "destroys only nonland permanents whose mana value is exactly equal to X"
+    );
+    let mut t = TestGame::new(3);
+    let hellkite = t.battlefield(P0, "Steel Hellkite");
+    let bears = t.battlefield(P1, "Grizzly Bears"); // mana value 2
+    let giant = t.battlefield(P1, "Hill Giant"); // 4
+    let other = t.battlefield(P2, "Grizzly Bears"); // P2 wasn't dealt damage
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(hellkite, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 15);
+    t.lands(P0, "Plains", 2);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.activate(P0, hellkite, 1, &[]).unwrap();
+    t.resolve();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(giant), "mana value isn't X");
+    assert!(t.on_battlefield(other));
+}
+
+#[test]
+fn yorvo_gets_a_second_counter_only_if_the_creature_is_still_stronger() {
+    cr!("608.2c");
+    ruling!(
+        "Yorvo, Lord of Garenbrig",
+        "compares the power of the entering green creature only after putting a +1/+1 counter"
+    );
+    let mut t = TestGame::new(2);
+    let yorvo = t.enter(P0, "Yorvo, Lord of Garenbrig"); // 0/0 with four +1/+1 counters
+    let base = t.counters(yorvo, "+1/+1");
+    // A 6/4 green creature: greater than Yorvo's power even after the first counter.
+    t.enter(P0, "Craw Wurm");
+    t.resolve_all();
+    assert_eq!(t.counters(yorvo, "+1/+1"), base + 2);
+    // A 1/1: not greater.
+    t.enter(P0, "Llanowar Elves");
+    t.resolve_all();
+    assert_eq!(t.counters(yorvo, "+1/+1"), base + 3);
+}
+
+#[test]
+fn cloudstone_curio_returns_a_permanent_sharing_a_permanent_type() {
+    cr!("110.4", "608.2c");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Cloudstone Curio");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let forest = t.battlefield(P0, "Forest");
+    t.answer_yes(P0, true);
+    let giant = t.enter(P0, "Hill Giant");
+    t.resolve_all();
+    // Only a creature (another permanent sharing a permanent type with it) could return.
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert!(t.on_battlefield(forest));
+    assert!(t.on_battlefield(giant));
+    let _ = bears;
+}
+
+#[test]
+fn spawnbroker_compares_with_the_first_targets_power() {
+    cr!("115.1", "608.2b");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Hill Giant"); // power 3
+    let small = t.battlefield(P1, "Grizzly Bears"); // 2
+    let big = t.battlefield(P1, "Craw Wurm"); // 6
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[mine.into()]);
+    t.answer_targets(P0, &[small.into()]);
+    t.enter(P0, "Spawnbroker");
+    t.settle();
+    let cands = last_target_candidates(&t, P0);
+    assert!(cands.contains(&small.into()));
+    assert!(!cands.contains(&big.into()));
+    t.resolve_all();
+    assert_eq!(t.obj_now(small).controller, P0);
+    assert_eq!(t.obj_now(mine).controller, P1);
+}

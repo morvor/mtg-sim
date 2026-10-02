@@ -231,10 +231,19 @@ pub fn value_in(t: &str) -> Option<(Value, &str)> {
             return Some((Value::EventAmount, r));
         }
     }
-    let (v, rest) = with_builder(|b| super::r107_numbers::value_phrase(t, b))?;
-    // A value naming an object ("the number of counters on it") ends at the object.
-    let rest = tail_of(t, &rest)?;
-    Some((v, rest))
+    if let Some((v, rest)) = with_builder(|b| super::r107_numbers::value_phrase(t, b)) {
+        // A value naming an object ("the number of counters on it") ends at the object.
+        let rest = tail_of(t, &rest)?;
+        return Some((v, rest));
+    }
+    // "that creature's power", "the chosen creature's toughness".
+    let (obj, after) = t.split_once("'s ")?;
+    let (stat, rest) = stat_word(after)?;
+    let (sel, r) = object_in(obj)?;
+    if !r.trim().is_empty() || matches!(sel, Sel::All(_)) {
+        return None;
+    }
+    Some((stat_of(stat, sel), rest))
 }
 
 fn exiled_with_source() -> Filter {
@@ -268,6 +277,14 @@ pub fn object_in(t: &str) -> Option<(Sel, &str)> {
     if let Some(r) = t.strip_prefix("a ").or_else(|| t.strip_prefix("an ")) {
         let (f, plural, rest) = parse_object_phrase(r)?;
         if plural {
+            return None;
+        }
+        return Some((Sel::All(f), rest));
+    }
+    // "another creature you control": any of them other than the source.
+    if t.starts_with("another ") {
+        let (f, plural, rest) = parse_object_phrase(t)?;
+        if plural || mentions_referent(&f) {
             return None;
         }
         return Some((Sel::All(f), rest));
@@ -578,7 +595,9 @@ fn shares_with<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     } else {
         return None;
     };
-    let (kind, r) = if let Some(x) = r.strip_prefix("creature type with ") {
+    let (kind, r) = if let Some(x) = r.strip_prefix("permanent type with ") {
+        (3, x)
+    } else if let Some(x) = r.strip_prefix("creature type with ") {
         (0, x)
     } else if let Some(x) = r.strip_prefix("card type with ") {
         (1, x)
@@ -592,6 +611,29 @@ fn shares_with<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     let f = match kind {
         0 => Filter::SharesCreatureType(sel),
         1 => Filter::SharesCardType(sel),
+        // A permanent type (artifact, battle, creature, enchantment, land, planeswalker)
+        // both have.
+        3 => Filter::Or(
+            [
+                CardType::Artifact,
+                CardType::Battle,
+                CardType::Creature,
+                CardType::Enchantment,
+                CardType::Land,
+                CardType::Planeswalker,
+            ]
+            .into_iter()
+            .map(|t| {
+                Filter::and(vec![
+                    Filter::Type(t),
+                    Filter::SharesCardType(Box::new(Sel::All(Filter::and(vec![
+                        Filter::Type(t),
+                        Filter::In(sel.clone()),
+                    ])))),
+                ])
+            })
+            .collect(),
+        ),
         _ => Filter::SharesColor(sel),
     };
     Some((if negate { Filter::not(f) } else { f }, rest))
@@ -689,10 +731,15 @@ pub fn resolve_in_sentence(e: Effect, b: &Builder, before: (Sel, usize)) -> Opti
 /// target is illegal as the spell or ability resolves, nothing is affected (CR 608.2b).
 fn target_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let (head, after, sep) = [" and each other ", " and all other "]
-        .iter()
-        .find_map(|sep| l.split_once(sep).map(|(h, a)| (h, a, *sep)))?;
-    let _ = sep;
+    // "and all other creatures ...", or "and all tokens that player controls with the same
+    // name as that permanent" (the group may include the target itself).
+    let (head, after, others_only) = [
+        (" and each other ", true),
+        (" and all other ", true),
+        (" and all ", false),
+    ]
+    .iter()
+    .find_map(|(sep, o)| l.split_once(sep).map(|(h, a)| (h, a, *o)))?;
     // The target is the last thing the head names: "deals 1 damage to target creature".
     let ti = head.rfind("target ")?;
     let target_text = &head[ti..];
@@ -707,7 +754,12 @@ fn target_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
     let mut rest = rest;
     let slot = b.targets.len() as u8;
     let t = rest.trim_start();
-    if let Some(r) = t.strip_prefix("its controller controls") {
+    // "its controller controls", "that player controls" (the target's controller, an
+    // opponent named in the target's description).
+    let controller_phrase = t
+        .strip_prefix("its controller controls")
+        .or_else(|| t.strip_prefix("that player controls"));
+    if let Some(r) = controller_phrase {
         let probe = format!("cards{r}");
         let (more, _, tail) = parse_object_phrase(&probe)?;
         let more = match more {
@@ -737,7 +789,9 @@ fn target_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
             .into_iter()
             .filter(|p| !matches!(p, Filter::Other))
             .collect();
-        v.push(Filter::not(Filter::In(Box::new(Sel::Target(slot)))));
+        if others_only {
+            v.push(Filter::not(Filter::In(Box::new(Sel::Target(slot)))));
+        }
         Filter::and(v)
     };
     let mut group_filter = others(f);
@@ -1378,3 +1432,106 @@ fn dealt_damage_to_you<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a 
 }
 
 inventory::submit! { FilterSuffixPattern { name: "relational: that dealt damage to you this turn", priority: 100, parse: dealt_damage_to_you } }
+
+/// "whose controller was dealt combat damage by ~ this turn" (Steel Hellkite): see
+/// `kw/dealt_damage_to_you.rs`.
+fn controller_dealt_combat_damage_by_source<'a>(
+    t: &'a str,
+    _so_far: &Filter,
+) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("whose controller was dealt combat damage by ~ this turn")?;
+    word_end(r).then(|| {
+        (
+            Filter::Custom(
+                crate::kw::dealt_damage_to_you::CONTROLLER_DEALT_COMBAT_DAMAGE_BY_SOURCE.into(),
+            ),
+            r,
+        )
+    })
+}
+
+inventory::submit! { FilterSuffixPattern { name: "relational: whose controller was dealt combat damage by ~ this turn", priority: 100, parse: controller_dealt_combat_damage_by_source } }
+
+/// "if that creature's power is greater than ~'s power" (Yorvo, Lord of Garenbrig): two
+/// values compared as the instruction is performed.
+fn compare_values(c: &str) -> Option<Condition> {
+    let c = end(c);
+    for (p, cmp) in [
+        (" is greater than or equal to ", Cmp::Ge),
+        (" is less than or equal to ", Cmp::Le),
+        (" is greater than ", Cmp::Gt),
+        (" is less than ", Cmp::Lt),
+        (" is equal to ", Cmp::Eq),
+    ] {
+        let Some((a, b)) = c.split_once(p) else {
+            continue;
+        };
+        let (va, ra) = value_in(a)?;
+        let (vb, rb) = value_in(b)?;
+        if !ra.trim().is_empty() || !rb.trim().is_empty() {
+            return None;
+        }
+        // Only values of objects ("that creature's power", "~'s power"): other comparisons
+        // ("your life total is less than ...") are the core's.
+        let of_object = |v: &Value| {
+            matches!(
+                v,
+                Value::PowerOf(_) | Value::ToughnessOf(_) | Value::ManaValueOf(_)
+            )
+        };
+        if !(of_object(&va) && of_object(&vb)) {
+            return None;
+        }
+        return Some(Condition::Compare(va, cmp, vb));
+    }
+    None
+}
+
+inventory::submit! { super::ConditionPattern { name: "relational: [object's stat] is greater than [object's stat]", priority: 100, parse: compare_values } }
+
+/// "return another permanent you control that shares a permanent type with it to its
+/// owner's hand" (Cloudstone Curio): the controller chooses one such permanent as the
+/// instruction is carried out.
+fn return_one_to_hand(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("return ")?;
+    if !(r.starts_with("a ") || r.starts_with("an ") || r.starts_with("another ")) {
+        return None;
+    }
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")).unwrap_or(r);
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    if plural || rest.trim() != "to its owner's hand" {
+        return None;
+    }
+    // Only relational descriptions here; plain ones are other patterns'.
+    if !mentions_referent(&f) {
+        return None;
+    }
+    let f = resolve_referent(f, b)?;
+    if f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+        return None;
+    }
+    Some(Effect::Move {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![Filter::Permanent, f]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        to: Destination::zone(ZoneKind::Hand),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "relational: return a [related permanent] to its owner's hand", priority: 150, parse: return_one_to_hand } }
+
+/// "put another +1/+1 counter on ~" (after an instruction that put one there): one more
+/// counter of that kind.
+fn put_another_counter(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("put another ")?;
+    if !r.contains(" counter on ") || r.contains(" counters ") {
+        return None;
+    }
+    crate::oracle::effects::parse_simple(&format!("put a {r}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "relational: put another [kind] counter on [object]", priority: 150, parse: put_another_counter } }
