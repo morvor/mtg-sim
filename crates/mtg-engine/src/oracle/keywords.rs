@@ -232,7 +232,15 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
         KeywordKind::Enchant => {
             // CR 702.5d: "Enchant player" / "Enchant opponent" Auras enchant players only;
             // they have no object filter (see `attach::enchant_player`).
-            if rest != "player" && rest != "opponent" {
+            if let Some(q) = rest.strip_suffix(" put onto the battlefield with ~") {
+                // "Enchant creature put onto the battlefield with ~" (Animate Dead): only
+                // an object the linked ability of this object put onto the battlefield
+                // (CR 607.2c; see `Game::link_to_creator`).
+                kw.filter = Some(Filter::and(vec![
+                    quality_phrase(q)?,
+                    Filter::In(Box::new(Sel::Linked)),
+                ]));
+            } else if rest != "player" && rest != "opponent" {
                 kw.filter = Some(quality_phrase(rest)?);
             }
         }
