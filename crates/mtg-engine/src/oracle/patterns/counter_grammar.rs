@@ -1,0 +1,593 @@
+//! The counter grammar (CR 122): putting and removing counters, read compositionally.
+//!
+//! ```text
+//! remove  := "remove" quantity counters "from" holder
+//! put     := "put" quantity counters "on" holder [("for each" | "equal to") value]
+//! quantity:= "all" | "up to" number | "any number of" | number | "twice" value
+//!          | "a number of" (with "equal to" after the holder) | "another" | "an additional"
+//! counters:= ["kind"] "counter" | ["kind"] "counters"   (no kind: counters of any kind)
+//! holder  := an object reference (`object_ref`: "~", "it", "target creature", "each
+//!            creature you control", "creatures your opponents control", ...)
+//!          | "target" objects "or opponent" | "target" objects "or player"
+//!          | ("a" | "an") objects                (chosen as the instruction is performed)
+//!          | "each of" ("any number of" | "up to" N | N) objects     (chosen likewise)
+//!          | holder "and each" holder
+//! ```
+//!
+//! Removing N counters with no kind named removes N counters in all, of the kinds the
+//! player removing them chooses ([`crate::counter_rules::remove_chosen_counters`]); "up to
+//! N" and "any number of" let that player choose how many (`Effect::RemoveCountersUpTo`).
+
+use super::{EffectPattern, FollowupPattern};
+use crate::ability::*;
+use crate::oracle::costs::counter_kind;
+use crate::oracle::effects::{object_ref, Builder};
+use crate::oracle::phrases::*;
+use crate::types::CounterKind;
+
+/// How many counters.
+#[derive(Clone, Debug)]
+pub enum Qty {
+    Exact(Value),
+    UpTo(Value),
+    AnyNumber,
+    All,
+}
+
+/// A quantity at the start of `s`.
+pub fn quantity<'a>(s: &'a str, b: &mut Builder) -> Option<(Qty, String)> {
+    let s = s.trim_start();
+    if let Some(r) = s.strip_prefix("all ") {
+        return Some((Qty::All, r.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("any number of ") {
+        return Some((Qty::AnyNumber, r.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("up to ") {
+        let (n, r) = number(r, b)?;
+        return Some((Qty::UpTo(n), r));
+    }
+    let (n, r) = number(s, b)?;
+    Some((Qty::Exact(n), r))
+}
+
+/// "a", "two", "x", "twice x", "that many": a number of counters.
+fn number(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if s.starts_with("twice ") {
+        let (v, r) = super::value_grammar::parse_value(s, b)?;
+        return Some((v, r));
+    }
+    let (n, r) = parse_number(s)?;
+    if matches!(n, Value::X) && !super::value_grammar::x_defined() {
+        // X defined later in the sentence ("..., where X is ...") or by the cost.
+        return Some((n, r.to_string()));
+    }
+    Some((n, r.to_string()))
+}
+
+/// "counters", "counter", "+1/+1 counters", "a time counter": the kind (None: any).
+pub fn counter_noun(s: &str) -> Option<(Option<CounterKind>, &str)> {
+    if let Some(r) = strip(s, "counters").or_else(|| strip(s, "counter")) {
+        return Some((None, r));
+    }
+    let (k, r) = counter_kind(s)?;
+    let r = strip(r, "counters").or_else(|| strip(r, "counter"))?;
+    Some((Some(k), r))
+}
+
+/// "target permanent or opponent", "target artifact, creature, planeswalker, or
+/// opponent", "target permanent or player": an object or a player.
+fn object_or_player_target(s: &str, b: &mut Builder) -> Option<Sel> {
+    let r = s.trim().strip_prefix("up to one ").unwrap_or(s.trim());
+    let up_to = r.len() != s.trim().len();
+    let r = r.strip_prefix("target ")?;
+    let (objs, pf) = if let Some(o) = r.strip_suffix(", or opponent") {
+        (o, PlayerFilter::Opponent)
+    } else if let Some(o) = r.strip_suffix(" or opponent") {
+        (o, PlayerFilter::Opponent)
+    } else if let Some(o) = r.strip_suffix(", or player") {
+        (o, PlayerFilter::Any)
+    } else if let Some(o) = r.strip_suffix(" or player") {
+        (o, PlayerFilter::Any)
+    } else {
+        return None;
+    };
+    // "artifact, creature, planeswalker": the list without its last item's "or".
+    let listed = match objs.rsplit_once(", ") {
+        Some((a, z)) => format!("{a}, or {z}"),
+        None => objs.to_string(),
+    };
+    let (f, _, tail) = parse_object_phrase(&listed)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let mut spec = TargetSpec::any_target();
+    spec.what = TargetKind::ObjectOrPlayer(f, pf);
+    if up_to {
+        spec.min = 0;
+    }
+    let slot = b.add_target(spec, s.trim());
+    Some(Sel::Target(slot))
+}
+
+/// The holder of the counters, with nothing after it.
+pub fn holder(s: &str, b: &mut Builder) -> Option<Sel> {
+    let s = end(s.trim());
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+        b.it_player = saved.2.clone();
+    };
+    if let Some(sel) = object_or_player_target(s, b) {
+        return Some(sel);
+    }
+    restore(b);
+    // "each permanent and each suspended card".
+    if let Some((x, y)) = s.split_once(" and each ") {
+        if let (Some(a), Some(c)) = (holder(x, b), holder(&format!("each {y}"), b)) {
+            if let (Sel::All(f1), Sel::All(f2)) = (&a, &c) {
+                return Some(Sel::All(Filter::Or(vec![f1.clone(), f2.clone()])));
+            }
+        }
+        restore(b);
+    }
+    if let Some((sel, rest)) = object_ref(s, b) {
+        if end(&rest).is_empty() {
+            return Some(sel);
+        }
+    }
+    restore(b);
+    // "each suspended card", "permanents that player controls".
+    if let Some(r) = s.strip_prefix("each ").or_else(|| s.strip_prefix("all ")) {
+        if let Some((f, rest)) = super::value_grammar::objects(r, b) {
+            if end(&rest).is_empty() {
+                return Some(Sel::All(on_battlefield_unless_zoned(f)));
+            }
+        }
+        restore(b);
+    }
+    // "a creature you control", "a creature or planeswalker you control": chosen as the
+    // instruction is performed (CR 608.2c), not targeted.
+    if let Some(r) = s.strip_prefix("a ").or_else(|| s.strip_prefix("an ")) {
+        if let Some(sel) = chosen(r, Value::c(1), false, b) {
+            return Some(sel);
+        }
+        restore(b);
+    }
+    // "each of any number of Sagas you control", "each of up to two Soldiers you
+    // control", "each of two creatures you control".
+    if let Some(r) = s.strip_prefix("each of ") {
+        let parsed = if let Some(r) = r.strip_prefix("any number of ") {
+            Some((Value::c(1000), true, r.to_string()))
+        } else if let Some(r) = r.strip_prefix("up to ") {
+            parse_number(r).map(|(n, r)| (n, true, r.to_string()))
+        } else {
+            parse_number(r).map(|(n, r)| (n, false, r.to_string()))
+        };
+        if let Some((n, up_to, r)) = parsed {
+            if !r.starts_with("target") {
+                if let Some(sel) = chosen(&r, n, up_to, b) {
+                    return Some(sel);
+                }
+            }
+        }
+        restore(b);
+    }
+    None
+}
+
+/// Objects on the battlefield unless the phrase names another zone.
+fn on_battlefield_unless_zoned(f: Filter) -> Filter {
+    if mentions_zone(&f) {
+        f
+    } else {
+        Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)])
+    }
+}
+
+fn mentions_zone(f: &Filter) -> bool {
+    match f {
+        Filter::InZone(_) => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(mentions_zone),
+        _ => false,
+    }
+}
+
+/// `n` objects the controller chooses as the instruction is performed.
+fn chosen(r: &str, n: Value, up_to: bool, b: &mut Builder) -> Option<Sel> {
+    let (f, rest) = super::value_grammar::objects(r, b)?;
+    if !end(&rest).is_empty() {
+        return None;
+    }
+    Some(Sel::Choose {
+        chooser: PlayerRef::You,
+        filter: on_battlefield_unless_zoned(f),
+        count: n,
+        up_to,
+        store: None,
+    })
+}
+
+/// "remove [quantity] [kind] counter(s) from [holder]".
+fn remove_counters(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("remove ")?;
+    let (q, r) = quantity(r, b)?;
+    let (kind, r) = counter_noun(&r)?;
+    let r = r.strip_prefix("from ")?;
+    let what = match holder(r, b)? {
+        // "Remove a counter from a creature you control": one with such a counter.
+        Sel::Choose {
+            chooser,
+            filter,
+            count,
+            up_to,
+            store,
+        } => {
+            // "Remove a +1/+1 counter from each of two creatures you control. If you do,
+            // ...": whether it was done depends on both; not read.
+            if !up_to && !matches!(count, Value::Const(1)) {
+                return None;
+            }
+            Sel::Choose {
+                chooser,
+                filter: Filter::and(vec![filter, Filter::HasCounter(kind.clone())]),
+                count,
+                up_to,
+                store,
+            }
+        }
+        other => other,
+    };
+    Some(match q {
+        Qty::Exact(n) => Effect::RemoveCounters { what, kind, n },
+        Qty::All => Effect::RemoveCounters {
+            what,
+            kind,
+            n: Value::Const(i32::MAX),
+        },
+        Qty::UpTo(n) => Effect::RemoveCountersUpTo {
+            what,
+            kind,
+            max: Some(n),
+        },
+        Qty::AnyNumber => Effect::RemoveCountersUpTo {
+            what,
+            kind,
+            max: None,
+        },
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: remove [quantity] counters from [holder]", priority: 400, parse: remove_counters } }
+
+
+/// The variable a chosen holder is stored in ("Put a +1/+1 counter on a creature you
+/// control. It gains double strike until end of turn.").
+pub const CHOSEN: Var = vars::USER + 4123;
+
+/// One counter item of a put: (quantity, kind).
+fn put_item(s: &str, b: &mut Builder) -> Option<(Qty, CounterKind)> {
+    let s = s.trim();
+    // "another +1/+1 counter", "an additional +1/+1 counter": one more.
+    let s2;
+    let s = match s
+        .strip_prefix("another ")
+        .or_else(|| s.strip_prefix("an additional "))
+    {
+        Some(r) => {
+            s2 = format!("a {r}");
+            s2.as_str()
+        }
+        None => s,
+    };
+    let (q, r) = quantity(s, b)?;
+    if matches!(q, Qty::All | Qty::AnyNumber) {
+        return None;
+    }
+    let (kind, r) = counter_noun(&r)?;
+    if !r.trim().is_empty() {
+        return None;
+    }
+    Some((q, kind?))
+}
+
+/// "a +1/+1 counter or a loyalty counter", "a flying, lifelink, or +1/+1 counter", "two
+/// +1/+1 counters or two charge counters": the options of a choice among counters
+/// (CR 122.1b keyword counters among them), at least two.
+fn put_options(s: &str, b: &mut Builder) -> Option<Vec<(Qty, CounterKind)>> {
+    let s = s.trim();
+    let parts: Vec<&str> = s
+        .split(", or ")
+        .flat_map(|p| p.split(" or "))
+        .flat_map(|p| p.split(", "))
+        .map(str::trim)
+        .collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    // Each option in full ("a +1/+1 counter or a loyalty counter") ...
+    let full: Option<Vec<_>> = parts.iter().map(|p| put_item(p, b)).collect();
+    if let Some(v) = full {
+        return Some(v);
+    }
+    // ... or the quantity on the first and the noun on the last ("a flying, lifelink,
+    // or +1/+1 counter", "that many +1/+1 counters or charge counters").
+    let (q, first) = quantity(parts[0], b)?;
+    let last = parts[parts.len() - 1];
+    let noun = if last.ends_with(" counters") {
+        " counters"
+    } else if last.ends_with(" counter") {
+        " counter"
+    } else {
+        return None;
+    };
+    let mut out = Vec::new();
+    for (i, p) in parts.iter().enumerate() {
+        let name = if i == 0 { first.as_str() } else { p };
+        let name = name.strip_suffix(noun).unwrap_or(name).trim();
+        if name.is_empty() || name.contains(' ') && crate::layers::keyword_counter(name).is_none() {
+            return None;
+        }
+        let named = format!("{name}{noun}");
+        let (k, rest) = counter_noun(&named)?;
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        out.push((q.clone(), k?));
+    }
+    Some(out)
+}
+
+/// The effect putting `q` counters of `kind` on `what`.
+fn add(what: &Sel, q: &Qty, kind: CounterKind) -> Option<Effect> {
+    Some(match q {
+        Qty::Exact(n) => Effect::AddCounters {
+            what: what.clone(),
+            kind,
+            n: n.clone(),
+        },
+        // "put up to three lore counters on it": how many is chosen as it's put.
+        Qty::UpTo(Value::Const(n)) => Effect::seq(vec![
+            Effect::Choose {
+                who: PlayerRef::You,
+                kind: ChoiceKind::Number { min: 0, max: *n },
+            },
+            Effect::AddCounters {
+                what: what.clone(),
+                kind,
+                n: Value::Chosen,
+            },
+        ]),
+        _ => return None,
+    })
+}
+
+/// "put [items] on [holder] [equal to V]": one put instruction.
+fn put_one(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("put ")?;
+    // "put your choice of a +1/+1 counter or two charge counters on ..."
+    let (choice, r) = match r.strip_prefix("your choice of ") {
+        Some(r) => (true, r),
+        None => (false, r),
+    };
+    // "put a number of +1/+1 counters equal to ~'s power on ...", "put a number of
+    // +1/+1 counters on ~ equal to ...".
+    let (equal, r) = match r.strip_prefix("a number of ") {
+        Some(r) => (true, r),
+        None => (false, r),
+    };
+    let (items, holder_s) = r.split_once(" on ")?;
+    let (items, amount_before) = match items.split_once(" equal to ") {
+        Some((i, a)) if equal => (format!("x {i}"), Some(a.to_string())),
+        _ if equal => (format!("x {items}"), None),
+        _ => (items.to_string(), None),
+    };
+    let (holder_s, amount_after) = match holder_s.rsplit_once(" equal to ") {
+        Some((h, a)) if equal && amount_before.is_none() => (h, Some(a.to_string())),
+        _ => (holder_s, None),
+    };
+    let amount = amount_before.or(amount_after);
+    if equal != amount.is_some() {
+        return None;
+    }
+    let options = if choice {
+        put_options(&items, b)?
+    } else {
+        match put_item(&items, b) {
+            Some(i) => vec![i],
+            None => put_options(&items, b)?,
+        }
+    };
+    let mut what = holder(holder_s, b)?;
+    if let Sel::Choose {
+        count: Value::Const(1),
+        up_to: false,
+        store,
+        ..
+    } = &mut what
+    {
+        *store = Some(CHOSEN);
+        b.it = Sel::Var(CHOSEN);
+    }
+    let amount = match amount {
+        Some(a) => {
+            let (v, rest) = super::value_grammar::parse_value(&a, b)?;
+            if !end(&rest).is_empty() {
+                return None;
+            }
+            Some(v)
+        }
+        None => None,
+    };
+    let mut effects = Vec::new();
+    for (q, kind) in options {
+        let mut e = add(&what, &q, kind.clone())?;
+        if let Some(v) = &amount {
+            e = super::r107_numbers::substitute_x(&e, v)?;
+        }
+        effects.push((format!("{kind} counter"), e));
+    }
+    if effects.len() == 1 {
+        return effects.pop().map(|(_, e)| e);
+    }
+    // A choice among counters: the choice is made as the instruction is carried out; a
+    // chosen holder is chosen first.
+    Some(Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: effects,
+    })
+}
+
+/// "put [counters] on [holder], [counters] on [holder], and [counters] on [holder]":
+/// several puts in one instruction ("Put a +1/+1 counter on target creature, two +1/+1
+/// counters on another target creature, and three +1/+1 counters on a third target
+/// creature.", "Put a +1/+1 counter on that Hero and a +1/+1 counter on ~.").
+fn put_counters(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("put ")?;
+    let r = r.replace(" a second target ", " another target ");
+    let r = r.replace(" a third target ", " another target ");
+    if let Some(e) = put_one(&format!("put {r}"), b) {
+        return Some(e);
+    }
+    // Split before a later "[counters] on": each part is a put of its own.
+    for sep in [", and ", " and ", ", "] {
+        let mut from = 0;
+        while let Some(i) = r[from..].find(sep).map(|i| i + from) {
+            from = i + sep.len();
+            let (a, c) = (&r[..i], &r[i + sep.len()..]);
+            if !a.contains(" on ") || !c.contains(" on ") {
+                continue;
+            }
+            let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+            if let Some(ea) = crate::oracle::effects::parse_clause(&format!("put {a}"), b) {
+                if let Some(ec) = put_counters(&format!("put {c}"), b) {
+                    return Some(Effect::seq(vec![ea, ec]));
+                }
+            }
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            b.it_player = saved.2;
+        }
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: put [counters] on [holder]", priority: 400, parse: put_counters } }
+
+/// How many counters the latest removal removed ("for each counter removed this way").
+pub const REMOVED: Var = vars::USER + 4122;
+
+/// The last instruction of `e` if it removes counters.
+fn last_removal(e: &mut Effect) -> Option<&mut Effect> {
+    if matches!(
+        e,
+        Effect::RemoveCounters { .. } | Effect::RemoveCountersUpTo { .. }
+    ) {
+        return Some(e);
+    }
+    match e {
+        Effect::Seq(v) => v.last_mut().and_then(last_removal),
+        Effect::May { effect, .. } => last_removal(effect),
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => last_removal(then),
+        _ => None,
+    }
+}
+
+/// "[kind] counter(s) removed this way", "counters were removed this way".
+fn removed_this_way(thing: &str) -> bool {
+    let Some(t) = thing
+        .strip_suffix(" removed this way")
+        .or_else(|| thing.strip_suffix(" were removed this way"))
+        .or_else(|| thing.strip_suffix(" was removed this way"))
+    else {
+        return false;
+    };
+    counter_noun(t).is_some_and(|(_, r)| r.trim().is_empty())
+}
+
+/// After an instruction that removed counters: "[instruction] for each counter removed
+/// this way", "For each [kind] counter removed this way, [instruction]", "[instruction]
+/// that many [...]", "If no counters were removed this way, [instruction]": the number
+/// of counters it removed (CR 608.2c).
+fn after_removal(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if last_removal(prev).is_none() {
+        return false;
+    }
+    let l = end(l);
+    let count = Value::Var(REMOVED);
+    let e = if let Some(r) = l.strip_prefix("if no ") {
+        let Some((thing, clause)) = r.split_once(", ") else {
+            return false;
+        };
+        if !removed_this_way(thing) {
+            return false;
+        }
+        let Some(e) = crate::oracle::effects::parse_clause(clause, b) else {
+            return false;
+        };
+        Effect::If {
+            cond: Condition::Compare(count, Cmp::Eq, Value::c(0)),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        }
+    } else if let Some(r) = l.strip_prefix("for each ") {
+        let Some((thing, clause)) = r.split_once(", ") else {
+            return false;
+        };
+        if !removed_this_way(thing) {
+            return false;
+        }
+        let Some(e) = crate::oracle::effects::parse_clause(clause, b)
+            .and_then(|e| super::damage_removal_foreach::multiply(e, count))
+        else {
+            return false;
+        };
+        e
+    } else if let Some((clause, thing)) = l.rsplit_once(" for each ") {
+        if !removed_this_way(thing) {
+            return false;
+        }
+        let Some(e) = crate::oracle::effects::parse_clause(clause, b)
+            .and_then(|e| super::damage_removal_foreach::multiply(e, count))
+        else {
+            return false;
+        };
+        e
+    } else if l.contains(" that many ") {
+        // "Draw that many cards."
+        let Some(e) = crate::oracle::effects::parse_clause(&l.replace(" that many ", " x "), b)
+            .and_then(|e| super::r107_numbers::substitute_x(&e, &count))
+        else {
+            return false;
+        };
+        e
+    } else {
+        return false;
+    };
+    let Some(removal) = last_removal(prev) else {
+        return false;
+    };
+    let r = std::mem::take(removal);
+    *removal = Effect::Seq(vec![
+        r,
+        Effect::StoreValue {
+            var: REMOVED,
+            value: Value::Prev,
+        },
+    ]);
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        Effect::StoreValue {
+            var: REMOVED,
+            value: Value::c(0),
+        },
+        old,
+        e,
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "counter grammar: ... counters removed this way", priority: 50, apply: after_removal } }

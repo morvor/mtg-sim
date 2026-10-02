@@ -352,3 +352,99 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &crate::eval::Ctx) -> bool {
     }
     true
 }
+
+/// The counters on an object or player: (kind, number), in a fixed order.
+fn counters_of(g: &Game, target: Entity) -> Vec<(CounterKind, u32)> {
+    let map = match target {
+        // Counters can't be removed from an object's last known information (CR 400.7).
+        Entity::Object(o) if !g.is_live(o) => return vec![],
+        Entity::Object(o) => &g.obj(o).counters,
+        Entity::Player(p) => &g.player(p).counters,
+    };
+    map.iter()
+        .filter(|(_, n)| **n > 0)
+        .map(|(k, n)| (k.clone(), *n))
+        .collect()
+}
+
+/// "Remove N counters from [target]" with no kind named, or "remove N [kind] counters"
+/// (`kind`): N counters in all (every one if it has N or fewer). Where it has counters of
+/// several kinds and N is fewer than it has, `chooser` (the controller of the spell or
+/// ability) chooses which, one counter at a time. Returns how many were removed.
+pub fn remove_chosen_counters(
+    g: &mut Game,
+    target: Entity,
+    kind: Option<&CounterKind>,
+    n: u32,
+    chooser: PlayerId,
+    source: Option<ObjectId>,
+) -> u32 {
+    let mut present: Vec<(CounterKind, u32)> = counters_of(g, target)
+        .into_iter()
+        .filter(|(k, _)| kind.is_none_or(|x| x == k))
+        .collect();
+    let have: u32 = present.iter().map(|(_, c)| c).sum();
+    let mut plan: Vec<(CounterKind, u32)> = Vec::new();
+    if have <= n || present.len() <= 1 {
+        let mut left = n;
+        for (k, c) in present {
+            let take = c.min(left);
+            left -= take;
+            plan.push((k, take));
+        }
+    } else {
+        for _ in 0..n {
+            let labels: Vec<String> = present
+                .iter()
+                .map(|(k, _)| format!("{k} counter"))
+                .collect();
+            let i = g.ask_option(chooser, source, "Choose a counter to remove", labels);
+            let i = i.min(present.len() - 1);
+            let k = present[i].0.clone();
+            present[i].1 -= 1;
+            if present[i].1 == 0 {
+                present.remove(i);
+            }
+            match plan.iter_mut().find(|(pk, _)| *pk == k) {
+                Some(e) => e.1 += 1,
+                None => plan.push((k, 1)),
+            }
+        }
+    }
+    let mut total = 0;
+    for (k, c) in plan {
+        if c > 0 {
+            total += g.remove_counters_by(target, &k, c, Some(chooser));
+        }
+    }
+    total
+}
+
+/// "Remove up to N [kind] counters from [target]" (`max`), "remove any number of counters
+/// from [target]" (`max: None`): `chooser` chooses how many (CR 107.1c), then which.
+pub fn remove_up_to_counters(
+    g: &mut Game,
+    target: Entity,
+    kind: Option<&CounterKind>,
+    max: Option<u32>,
+    chooser: PlayerId,
+    source: Option<ObjectId>,
+) -> u32 {
+    let have: u32 = counters_of(g, target)
+        .iter()
+        .filter(|(k, _)| kind.is_none_or(|x| x == k))
+        .map(|(_, c)| c)
+        .sum();
+    let most = max.map_or(have, |m| m.min(have));
+    if most == 0 {
+        return 0;
+    }
+    let n = g.ask_number(
+        chooser,
+        source,
+        "Choose how many counters to remove",
+        0,
+        most as i64,
+    );
+    remove_chosen_counters(g, target, kind, n.max(0) as u32, chooser, source)
+}

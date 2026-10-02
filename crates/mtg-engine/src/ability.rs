@@ -3043,10 +3043,21 @@ pub enum Effect {
         kind: CounterKind,
         n: Value,
     },
+    /// "Remove N [kind] counters from [what]" (CR 122). `kind: None`: N counters in all,
+    /// of the kinds the controller of the spell or ability chooses where the object has
+    /// several (every counter if N is at least how many it has: "remove all counters").
     RemoveCounters {
         what: Sel,
         kind: Option<CounterKind>,
         n: Value,
+    },
+    /// "Remove up to N [kind] counters from [what]", "remove any number of counters from
+    /// [what]" (`max: None`): for each object, the controller of the spell or ability
+    /// chooses how many to remove (at most `max`) and, of several kinds, which.
+    RemoveCountersUpTo {
+        what: Sel,
+        kind: Option<CounterKind>,
+        max: Option<Value>,
     },
     /// "Move [n / all] [kind] counters from [from] onto [to]" (CR 122.5). `kind: None`:
     /// counters of each kind; `n: None`: all of them.
