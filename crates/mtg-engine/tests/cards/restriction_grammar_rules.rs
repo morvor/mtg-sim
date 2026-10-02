@@ -193,6 +193,35 @@ fn players_cant_gain_life_or_search_this_turn() {
     assert!(t
         .g
         .player_restricted(P1, |r| matches!(r, Restriction::CantSearch(_))));
+    // A search P1 would make this turn finds nothing.
+    let wilds = t.battlefield(P1, "Evolving Wilds");
+    let forest = t.library_top(P1, "Forest");
+    t.activate(P1, wilds, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.zone(forest), Zone::Library(P1));
+    assert!(!t.on_battlefield(wilds));
+}
+
+#[test]
+fn that_player_cant_gain_life_for_the_rest_of_the_game() {
+    cr!("119.7");
+    compiles("Stigma Lasher");
+    let mut t = TestGame::new(2);
+    let lasher = t.battlefield(P0, "Stigma Lasher");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(lasher, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    t.g.gain_life(P1, 3);
+    t.g.gain_life(P0, 3);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 23);
+    // Turns later, still not.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::Upkeep);
+    t.g.gain_life(P1, 3);
+    assert_eq!(t.life(P1), 18);
 }
 
 #[test]
@@ -231,6 +260,57 @@ fn spells_cant_be_countered_effects() {
     t.resolve();
     t.resolve();
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+}
+
+#[test]
+fn creature_spells_you_cast_this_turn_cant_be_countered() {
+    cr!("701.6a", "611.2c");
+    ruling!("Domri, Anarch of Bolas", "not just the one you spend the mana on");
+    ruling!("Domri, Anarch of Bolas", "can still target a creature spell you control");
+    let mut t = TestGame::new(2);
+    let domri = t.battlefield(P0, "Domri, Anarch of Bolas");
+    t.activate(P0, domri, 0, &[]).unwrap();
+    t.resolve();
+    t.lands(P0, "Forest", 6);
+    t.lands(P1, "Island", 12);
+    for _ in 0..4 {
+        t.library_top(P1, "Island");
+        t.library_top(P0, "Island");
+    }
+    // Two creature spells cast later this turn: neither can be countered, and a spell that
+    // counters creature spells can still target one and its other effects happen.
+    for name in ["Grizzly Bears", "Centaur Courser"] {
+        let c = t.hand(P0, name);
+        let spell = t.cast(P0, c).go();
+        let deny = t.hand(P1, "Deny Entry");
+        let gy = t.graveyard_size(P1);
+        t.cast(P1, deny).target(spell).go();
+        t.resolve();
+        // Deny Entry and the card it discarded after drawing.
+        assert_eq!(t.graveyard_size(P1), gy + 2);
+        t.resolve();
+        assert_eq!(t.named_on_battlefield(name).len(), 1);
+    }
+    // A noncreature spell can still be countered.
+    t.lands(P0, "Mountain", 1);
+    let shock = t.hand(P0, "Shock");
+    let spell = t.cast(P0, shock).target(Entity::Player(P1)).go();
+    let cancel = t.hand(P1, "Cancel");
+    t.cast(P1, cancel).target(spell).go();
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.life(P1), 20);
+    // Next turn, creature spells can be countered again.
+    t.advance_to(P1, Step::Upkeep);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Forest", 2);
+    let c = t.hand(P0, "Grizzly Bears");
+    let spell = t.cast(P0, c).go();
+    let deny = t.hand(P1, "Deny Entry");
+    t.cast(P1, deny).target(spell).go();
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
 }
 
 #[test]
@@ -289,4 +369,120 @@ fn its_activated_abilities_cant_be_activated_this_turn() {
     // Next turn, it can.
     t.advance_to(P1, Step::Upkeep);
     assert!(can_activate(&mut t, P1, pinger));
+}
+
+#[test]
+fn display_of_dominance_modes() {
+    cr!("700.2a", "115.4");
+    compiles("Display of Dominance");
+    // "Destroy target blue or black noncreature permanent": noncreature applies to both
+    // colors.
+    let mut t = TestGame::new(2);
+    let display = t.hand(P0, "Display of Dominance");
+    t.lands(P0, "Forest", 2);
+    let blue_creature = t.battlefield(P1, "Coral Merfolk");
+    let black_creature = t.battlefield(P1, "Vampire Bats");
+    let blue_enchantment = t.battlefield(P1, "Propaganda");
+    let black_enchantment = t.battlefield(P1, "Bad Moon");
+    let red_enchantment = t.battlefield(P1, "Pyrohemia");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    let c = target_candidates(&mut t, P0, display);
+    assert!(c.contains(&Entity::Object(blue_enchantment)));
+    assert!(c.contains(&Entity::Object(black_enchantment)));
+    assert!(!c.contains(&Entity::Object(blue_creature)));
+    assert!(!c.contains(&Entity::Object(black_creature)));
+    assert!(!c.contains(&Entity::Object(red_enchantment)));
+
+    // "Permanents you control can't be the targets of blue or black spells your opponents
+    // control this turn."
+    let mut t = TestGame::new(2);
+    let display = t.hand(P0, "Display of Dominance");
+    t.lands(P0, "Forest", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.cast(P0, display).modes(&[1]).go();
+    t.resolve();
+    t.lands(P1, "Swamp", 2);
+    let own = t.battlefield(P1, "Hill Giant");
+    let blade = t.hand(P1, "Doom Blade");
+    let c = target_candidates(&mut t, P1, blade);
+    assert!(c.contains(&Entity::Object(own)));
+    assert!(!c.contains(&Entity::Object(bears)));
+    let mut t2 = TestGame::new(2);
+    let display = t2.hand(P0, "Display of Dominance");
+    t2.lands(P0, "Forest", 2);
+    let bears = t2.battlefield(P0, "Grizzly Bears");
+    t2.cast(P0, display).modes(&[1]).go();
+    t2.resolve();
+    t2.lands(P1, "Mountain", 1);
+    let shock = t2.hand(P1, "Shock");
+    assert!(target_candidates(&mut t2, P1, shock).contains(&Entity::Object(bears)));
+}
+
+#[test]
+fn the_next_spell_you_cast_this_turn_cant_be_countered() {
+    cr!("611.2f", "701.6a");
+    compiles("Mistrise Village");
+    let mut t = TestGame::new(2);
+    let village = t.battlefield(P0, "Mistrise Village");
+    t.g.untap(village);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Mountain", 2);
+    t.lands(P1, "Island", 6);
+    t.activate(P0, village, 1, &[]).unwrap();
+    t.resolve();
+    // An instant: the next spell of any kind.
+    let shock = t.hand(P0, "Shock");
+    let spell = t.cast(P0, shock).target(Entity::Player(P1)).go();
+    let cancel = t.hand(P1, "Cancel");
+    t.cast(P1, cancel).target(spell).go();
+    t.resolve();
+    t.resolve();
+    assert_eq!(t.life(P1), 18);
+    // Only the next one.
+    let shock = t.hand(P0, "Shock");
+    let spell = t.cast(P0, shock).target(Entity::Player(P1)).go();
+    let cancel = t.hand(P1, "Cancel");
+    t.cast(P1, cancel).target(spell).go();
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn permanents_cant_phase_in() {
+    cr!("702.26a");
+    // Disciple of Caelus Nin: "Permanents can't phase in." (its enters ability isn't
+    // compiled yet; the static is).
+    let def = card("Disciple of Caelus Nin");
+    assert!(!def
+        .unsupported_text()
+        .iter()
+        .any(|t| t.contains("can't phase in")));
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let disciple = t.battlefield(P0, "Disciple of Caelus Nin");
+    mtg_engine::kw::phasing::phase_out(&mut t.g, vec![bears]);
+    assert!(t.g.obj(bears).phased_out);
+    // P1's untap step doesn't phase it in.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.g.obj(bears).phased_out);
+    // Once the Disciple is gone, it phases in during its controller's next untap step.
+    t.g.destroy(disciple, None);
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!t.g.obj(bears).phased_out);
+}
+
+#[test]
+fn enchanted_permanent_cant_transform() {
+    cr!("701.27a");
+    compiles("Bound by Moonsilver");
+    let mut t = TestGame::new(2);
+    let messenger = t.battlefield(P1, "Village Messenger // Moonrise Intruder");
+    let other = t.battlefield(P1, "Village Messenger // Moonrise Intruder");
+    let aura = t.battlefield(P0, "Bound by Moonsilver");
+    t.g.attach(aura, Entity::Object(messenger));
+    t.g.recompute();
+    assert!(!mtg_engine::transform_rules::can_transform(&t.g, messenger));
+    assert!(mtg_engine::transform_rules::can_transform(&t.g, other));
 }

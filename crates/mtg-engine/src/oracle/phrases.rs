@@ -321,6 +321,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     }
     items.retain(|v| !v.is_empty());
     if disjunctive && items.len() > 1 {
+        // "blue or black noncreature permanent": adjectives after the last alternative
+        // describe them all.
+        if let Some(last) = items.last_mut().filter(|v| v.len() > 1) {
+            let shared = last.split_off(1);
+            parts.extend(shared);
+        }
         parts.push(Filter::Or(
             items.into_iter().map(Filter::and).collect::<Vec<_>>(),
         ));

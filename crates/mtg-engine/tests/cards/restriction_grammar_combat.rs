@@ -79,6 +79,80 @@ fn no_more_than_n_creatures_can_attack_you() {
         &opts,
         &[(a, p1), (b, p1), (c, p2)]
     ));
+
+    // Planeswalkers its controller controls can be attacked by any number of creatures.
+    ruling!("Crawlspace", "attack planeswalkers you control with any number");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Crawlspace");
+    let walker = t.battlefield(P1, "Ajani Goldmane");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let c = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    let opts = attack_options(&t.g);
+    let (p1, w) = (Entity::Player(P1), Entity::Object(walker));
+    assert!(attack_declaration_legal(
+        &t.g,
+        &opts,
+        &[(a, p1), (b, p1), (c, w)]
+    ));
+    assert!(attack_declaration_legal(
+        &t.g,
+        &opts,
+        &[(a, w), (b, w), (c, w)]
+    ));
+    assert!(!attack_declaration_legal(
+        &t.g,
+        &opts,
+        &[(a, p1), (b, p1), (c, p1)]
+    ));
+}
+
+#[test]
+fn each_opponent_cant_block_with_more_than_one_creature_this_combat() {
+    cr!("509.1b", "508.1c");
+    compiles("Mirri, Weatherlight Duelist");
+    let mut t = TestGame::new(2);
+    let mirri = t.battlefield(P0, "Mirri, Weatherlight Duelist");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let x = t.battlefield(P1, "Grizzly Bears");
+    let y = t.battlefield(P1, "Grizzly Bears");
+    attack_with(
+        &mut t,
+        &[(mirri, Entity::Player(P1)), (bears, Entity::Player(P1))],
+    );
+    t.resolve_all();
+    let opts = block_options(&t.g, &[P1]);
+    assert!(block_declaration_legal(&t.g, &opts, &[(x, bears)]));
+    assert!(block_declaration_legal(&t.g, &opts, &[(y, mirri)]));
+    assert!(!block_declaration_legal(&t.g, &opts, &[(x, bears), (y, mirri)]));
+    assert!(!block_declaration_legal(&t.g, &opts, &[(x, mirri), (y, mirri)]));
+
+    // Without the trigger, both may block.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mirri, Weatherlight Duelist");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let x = t.battlefield(P1, "Grizzly Bears");
+    let y = t.battlefield(P1, "Grizzly Bears");
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.resolve_all();
+    let opts = block_options(&t.g, &[P1]);
+    assert!(block_declaration_legal(&t.g, &opts, &[(x, bears), (y, bears)]));
+
+    // "As long as Mirri is tapped, no more than one creature can attack you each combat."
+    let mut t = TestGame::new(2);
+    let mirri = t.battlefield(P0, "Mirri, Weatherlight Duelist");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    let opts = attack_options(&t.g);
+    let p0 = Entity::Player(P0);
+    assert!(attack_declaration_legal(&t.g, &opts, &[(a, p0), (b, p0)]));
+    t.g.tap(mirri);
+    t.g.recompute();
+    let opts = attack_options(&t.g);
+    assert!(attack_declaration_legal(&t.g, &opts, &[(a, p0)]));
+    assert!(!attack_declaration_legal(&t.g, &opts, &[(a, p0), (b, p0)]));
 }
 
 #[test]
@@ -180,7 +254,7 @@ fn blocks_additional_creatures_and_min_blockers() {
     compiles("Watcher in the Web");
     compiles("Hexmark Destroyer");
     let mut t = TestGame::new(2);
-    let attackers: Vec<ObjectId> = (0..8)
+    let attackers: Vec<ObjectId> = (0..9)
         .map(|_| t.battlefield(P0, "Grizzly Bears"))
         .collect();
     let watcher = t.battlefield(P1, "Watcher in the Web");
@@ -191,7 +265,9 @@ fn blocks_additional_creatures_and_min_blockers() {
     attack_with(&mut t, &decl);
     let opts = block_options(&t.g, &[P1]);
     let all: Vec<(ObjectId, ObjectId)> = attackers.iter().map(|a| (watcher, *a)).collect();
-    assert!(block_declaration_legal(&t.g, &opts, &all));
+    // One creature plus an additional seven: eight, not nine.
+    assert!(!block_declaration_legal(&t.g, &opts, &all));
+    assert!(block_declaration_legal(&t.g, &opts, &all[..8]));
     assert!(block_declaration_legal(&t.g, &opts, &all[..7]));
 
     let mut t = TestGame::new(2);
@@ -348,7 +424,7 @@ fn requirements_with_a_player_or_an_object() {
 }
 
 #[test]
-fn opponents_cant_block_with_more_than_one_creature() {
+fn opponents_cant_block_with_creatures_with_even_mana_values() {
     cr!("509.1b");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Void Winnower");

@@ -274,7 +274,7 @@ fn a_list_of_clauses_all_apply() {
 
 #[test]
 fn activate_only_if_and_only_once() {
-    cr!("602.5b", "702.2");
+    cr!("602.5b");
     compiles("Thought Shucker");
     compiles("In the Trenches");
     let mut t = TestGame::new(2);
