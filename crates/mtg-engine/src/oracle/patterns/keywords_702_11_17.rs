@@ -68,6 +68,10 @@ fn player_mods(s: &str) -> Option<Vec<PlayerModification>> {
         // CR 702.11c
         return Some(vec![PlayerModification::Hexproof]);
     }
+    if s == "shroud" {
+        // CR 702.18a
+        return Some(vec![PlayerModification::Shroud]);
+    }
     let q = s.strip_prefix("protection from ")?;
     Some(
         protection_qualities(q)?

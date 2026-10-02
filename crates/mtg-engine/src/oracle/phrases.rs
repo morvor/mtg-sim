@@ -220,6 +220,19 @@ pub fn adjective(w: &str) -> Option<Filter> {
         if rest == "commander" {
             return Some(Filter::not(Filter::Commander));
         }
+        // "nonattacking", "nonblocking": not in that combat state.
+        if matches!(rest, "attacking" | "blocking") {
+            return adjective(rest).map(Filter::not);
+        }
+    }
+    // "1/1 creature": a creature with exactly that power and toughness.
+    if let Some((p, t)) = w.split_once('/') {
+        if let (Ok(p), Ok(t)) = (p.parse::<i32>(), t.parse::<i32>()) {
+            return Some(Filter::and(vec![
+                Filter::Power(Cmp::Eq, Box::new(Value::Const(p))),
+                Filter::Toughness(Cmp::Eq, Box::new(Value::Const(t))),
+            ]));
+        }
     }
     if let Some(s) = Supertype::from_word(w) {
         return Some(Filter::Supertype(s));
@@ -690,6 +703,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             Some((f, &t[t.len() - n..]))
         }) {
             (f, r)
+        } else if let Some(r) = t.strip_prefix("that's attacking alone") {
+            // CR 506.5: the only creature declared as an attacker.
+            (Filter::AttackingAlone, r)
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
             .or_else(|| t.strip_prefix("that is attacking"))

@@ -525,7 +525,22 @@ impl Game {
     fn expire_dependent_effects(&mut self) {
         let mut remove: Vec<u32> = Vec::new();
         for e in &self.effects {
-            if self.effect_expired(&e.duration, e.source, e.controller) {
+            // "For as long as that creature has a bounty counter on it, it has ...": a
+            // condition about the objects the effect applies to (CR 611.2b).
+            let about_affected = match (&e.duration, &e.affected) {
+                (Duration::WhileCondition(c), Affected::Objects(v)) => {
+                    let mut ctx = Ctx::new(e.source, e.controller);
+                    ctx.set_var(
+                        vars::AFFECTED,
+                        v.iter().map(|o| Entity::Object(*o)).collect(),
+                    );
+                    Some(!self.eval_cond(c, &ctx))
+                }
+                _ => None,
+            };
+            if about_affected
+                .unwrap_or_else(|| self.effect_expired(&e.duration, e.source, e.controller))
+            {
                 remove.push(e.id);
             } else if matches!(&e.affected, Affected::Objects(v) if v.iter().all(|o| !self.is_live(*o)))
             {

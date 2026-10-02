@@ -20,6 +20,9 @@ pub const SACRIFICED_THIS_TURN: &str = "you_sacrificed_this_turn:";
 /// "you've surveilled this turn": a named action (`Event::Custom`) the controller
 /// performed this turn, evaluated by `kw/grant_conditions.rs`.
 pub const ACTION_THIS_TURN: &str = "you_did_this_turn:";
+/// The effect's source card, followed through its zone changes, has been cast from
+/// exile: evaluated by `kw/grant_conditions.rs`.
+pub const SOURCE_CAST_FROM_EXILE: &str = "source_cast_from_exile";
 /// "you've committed a crime this turn": evaluated by `kw/grant_conditions.rs`.
 pub const COMMITTED_CRIME_THIS_TURN: &str = "you_committed_a_crime_this_turn";
 

@@ -9,7 +9,7 @@ use crate::events::Event;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::oracle::patterns::grant_conditions::{
-    ACTION_THIS_TURN, COMMITTED_CRIME_THIS_TURN, SACRIFICED_THIS_TURN,
+    ACTION_THIS_TURN, COMMITTED_CRIME_THIS_TURN, SACRIFICED_THIS_TURN, SOURCE_CAST_FROM_EXILE,
 };
 use crate::types::CardType;
 
@@ -33,6 +33,20 @@ impl KeywordRules for GrantConditions {
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        if name == SOURCE_CAST_FROM_EXILE {
+            // The card now: a spell, or the permanent that spell became, cast from exile.
+            let Some(src) = ctx.source else {
+                return Some(false);
+            };
+            let o = g.obj(g.current(src));
+            let from_exile = |c: &crate::object::CastInfo| {
+                c.was_cast && c.from == Some(crate::ability::ZoneKind::Exile)
+            };
+            return Some(
+                o.stack.as_deref().is_some_and(|si| from_exile(&si.cast))
+                    || o.cast.as_deref().is_some_and(from_exile),
+            );
+        }
         if let Some(action) = name.strip_prefix(ACTION_THIS_TURN) {
             return Some(
                 g.history

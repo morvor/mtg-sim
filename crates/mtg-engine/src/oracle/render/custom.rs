@@ -203,6 +203,7 @@ impl Renderer<'_> {
             }
             "attached to a creature you control" => rel("attached to a creature you control"),
             crate::kw::grant_filters::ATTACKING_YOU => rel("attacking you"),
+            crate::kw::grant_filters::DEALT_DAMAGE_THIS_TURN => rel("that dealt damage this turn"),
             crate::kw::grant_filters::ATTACKING_OPPONENT => rel("attacking your opponents"),
             crate::kw::grant_filters::ATTACKING_ENCHANTED_PLAYER => {
                 rel("attacking enchanted player")

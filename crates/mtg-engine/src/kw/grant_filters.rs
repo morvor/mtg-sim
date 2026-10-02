@@ -18,6 +18,9 @@ pub const ATTACKING_OPPONENT: &str = "attacking_player:opponent";
 /// player").
 pub const ATTACKING_ENCHANTED_PLAYER: &str = "attacking_player:enchanted";
 
+/// "that dealt damage this turn": the object was the source of damage this turn (CR 120).
+pub const DEALT_DAMAGE_THIS_TURN: &str = "dealt_damage_this_turn";
+
 pub struct GrantFilters;
 
 impl KeywordRules for GrantFilters {
@@ -26,6 +29,9 @@ impl KeywordRules for GrantFilters {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == DEALT_DAMAGE_THIS_TURN {
+            return Some(g.history.damage_sources.iter().any(|(s, _)| *s == id));
+        }
         if !matches!(
             name,
             ATTACKING_YOU | ATTACKING_OPPONENT | ATTACKING_ENCHANTED_PLAYER

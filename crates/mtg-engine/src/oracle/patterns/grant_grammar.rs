@@ -10,7 +10,7 @@
 //!   predicate.
 
 use super::statics::mask_quotes;
-use super::{EffectPattern, StaticPattern};
+use super::{EffectPattern, FilterSuffixPattern, FollowupPattern, StaticPattern};
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::CompileContext;
@@ -542,7 +542,10 @@ fn compound_subject_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = crate::oracle::phrases::end(l);
     let (lead, body) = match l.strip_prefix("until end of turn, ") {
         Some(r) => (" until end of turn", r),
-        None => ("", l),
+        None => match l.strip_prefix("until your next turn, ") {
+            Some(r) => (" until your next turn", r),
+            None => ("", l),
+        },
     };
     let (masked, _) = mask_quotes(body)?;
     let (i, plural, singular, vlen) = find_verb(&masked, EFFECT_VERBS)?;
@@ -556,9 +559,27 @@ fn compound_subject_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let pred = &body[i + vlen..];
     let saved = (b.targets.len(), b.it.clone());
     let mut sels = Vec::new();
+    let mut players = Vec::new();
     let mut key: Option<(String, Duration, Vec<Modification>)> = None;
     for part in parts {
         let part = part.as_str();
+        // "you and planeswalkers you control gain protection from that player": the
+        // player gains it too (CR 702.11c, 702.16b).
+        if part == "you" {
+            let e = crate::oracle::effects::parse_sentence(&format!("you {plural} {pred}{lead}"), b);
+            match e {
+                Some(e @ Effect::AddPlayerEffect { .. }) => players.push(e),
+                Some(Effect::Seq(v)) if v.iter().all(|x| matches!(x, Effect::AddPlayerEffect { .. })) => {
+                    players.extend(v)
+                }
+                _ => {
+                    b.targets.truncate(saved.0);
+                    b.it = saved.1;
+                    return None;
+                }
+            }
+            continue;
+        }
         let forms: &[&str] = if part == "~" || part.starts_with("target ") || part == "it" {
             &[singular, plural]
         } else {
@@ -594,12 +615,20 @@ fn compound_subject_effect(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         sels.push(what);
     }
-    let (_, duration, mods) = key?;
-    Some(Effect::Modify {
-        what: Sel::Union(sels),
-        mods,
-        duration,
-    })
+    let modify = match key {
+        Some((_, duration, mods)) => Effect::Modify {
+            what: if sels.len() == 1 {
+                sels.pop()?
+            } else {
+                Sel::Union(sels)
+            },
+            mods,
+            duration,
+        },
+        None => return None,
+    };
+    players.push(modify);
+    Some(Effect::seq(players))
 }
 
 inventory::submit! { EffectPattern { name: "grants: compound subjects", priority: 210, parse: compound_subject_effect } }
@@ -651,3 +680,153 @@ fn group_subject_effect(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "grants: group subjects", priority: 220, parse: group_subject_effect } }
+
+/// "that dealt damage this turn" (Executioner's Swing): an object that was the source of
+/// damage this turn.
+fn dealt_damage_suffix<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("that dealt damage this turn")?;
+    if !(r.is_empty() || r.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    Some((
+        Filter::Custom(crate::kw::grant_filters::DEALT_DAMAGE_THIS_TURN.into()),
+        r,
+    ))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "grants: that dealt damage this turn", priority: 100, parse: dealt_damage_suffix } }
+
+/// "~ deals 2 damage to target player and gains indestructible until end of turn." (Ellie,
+/// Vengeful Hunter): two predicates of the same object, the second read as its own
+/// sentence about it.
+fn shared_object_subject(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let rest = l.strip_prefix("~ ")?;
+    if l.contains('"') {
+        return None;
+    }
+    let (first, verb, second) = [" and gains ", " and gets "]
+        .iter()
+        .find_map(|v| rest.rsplit_once(v).map(|(a, c)| (a, v.trim_start_matches(" and "), c)))?;
+    if !first.starts_with("deals ") {
+        return None;
+    }
+    let e1 = crate::oracle::effects::parse_sentence(&format!("~ {first}"), b)?;
+    let e2 = crate::oracle::effects::parse_sentence(&format!("~ {verb}{second}"), b)?;
+    if !matches!(e2, Effect::Modify { what: Sel::This, .. }) {
+        return None;
+    }
+    Some(Effect::seq(vec![e1, e2]))
+}
+
+inventory::submit! { EffectPattern { name: "grants: ~ deals ... and gains ...", priority: 220, parse: shared_object_subject } }
+
+// ---------------------------------------------------------------------------
+// Durations of grants
+// ---------------------------------------------------------------------------
+
+/// "For as long as that creature has a bounty counter on it, it has \"When this
+/// creature dies, ...\"" (Mathas, Fiend Seeker; Makeshift Mannequin; Obsidian Fireheart;
+/// Ultima): the effect lasts while the object it applies to has a counter of that kind
+/// (CR 611.2b); once the counter is gone, it ends for good.
+fn while_it_has_counter(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let r = l.strip_prefix("for as long as ")?;
+    let (cond, clause) = r.split_once(", ")?;
+    let (subject, kind) = cond.split_once(" has a ")?;
+    let kind = kind.strip_suffix(" counter on it")?;
+    if kind.contains(' ') {
+        return None;
+    }
+    let (sel, rest) = crate::oracle::effects::object_ref(subject, b)?;
+    if !rest.trim().is_empty() || !matches!(sel, Sel::Target(_) | Sel::Var(_)) {
+        return None;
+    }
+    // A one-shot effect giving an object an ability: "it has" is "it gains".
+    let clause = match clause.strip_prefix("it has ") {
+        Some(x) => format!("it gains {x}"),
+        None => clause.to_string(),
+    };
+    let Effect::Modify {
+        what,
+        mods,
+        duration: Duration::Permanent,
+    } = crate::oracle::effects::parse_sentence(&clause, b)?
+    else {
+        return None;
+    };
+    if format!("{what:?}") != format!("{sel:?}") {
+        return None;
+    }
+    Some(Effect::Modify {
+        what,
+        mods,
+        duration: Duration::WhileCondition(Condition::SelMatches(
+            Sel::Var(vars::AFFECTED),
+            Filter::HasCounter(Some(kind.into())),
+        )),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "grants: for as long as it has a counter", priority: 120, parse: while_it_has_counter } }
+
+/// "{2}, Exile ~ from your hand: Target land gains \"{T}: Add {B}, {R}, or {G}\" until ~
+/// is cast from exile." (Masked Bandits and its cycle): the effect lasts until the card
+/// (followed through its zone changes, CR 400.7) is cast from exile (CR 601.2a); if it
+/// never is, the effect never ends.
+fn until_cast_from_exile(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let r = l.strip_suffix(" until ~ is cast from exile")?;
+    let Effect::Modify {
+        what,
+        mods,
+        duration: Duration::Permanent,
+    } = crate::oracle::effects::parse_sentence(r, b)?
+    else {
+        return None;
+    };
+    Some(Effect::Modify {
+        what,
+        mods,
+        duration: Duration::WhileCondition(Condition::Not(Box::new(Condition::Custom(
+            super::grant_conditions::SOURCE_CAST_FROM_EXILE.into(),
+        )))),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "grants: until ~ is cast from exile", priority: 120, parse: until_cast_from_exile } }
+
+/// "You may cast ~ for as long as it remains exiled." after an activation cost "Exile ~
+/// from your hand" (Masked Bandits and its cycle): a permission to cast the card the cost
+/// exiled (the new object it became, CR 400.7j), which ends when it leaves exile.
+fn may_cast_self_while_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if crate::oracle::phrases::end(l) != "you may cast ~ for as long as it remains exiled" {
+        return false;
+    }
+    const CARD: Var = vars::USER + 1773;
+    let card = Sel::Var(CARD);
+    let grant = Effect::ForEach {
+        sel: Sel::Var(crate::zones::COST_MOVED),
+        var: CARD,
+        effect: Box::new(Effect::If {
+            cond: Condition::SelMatches(card.clone(), Filter::InZone(ZoneKind::Exile)),
+            then: Box::new(Effect::WithPlayTerms {
+                terms: PlayTerms {
+                    spells_only: true,
+                    ..Default::default()
+                },
+                effect: Box::new(Effect::GrantPlayPermission {
+                    who: PlayerRef::You,
+                    what: card,
+                    duration: Duration::Permanent,
+                    free: false,
+                }),
+            }),
+            otherwise: Box::new(Effect::Noop),
+        }),
+    };
+    *prev = Effect::seq(vec![std::mem::take(prev), grant]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "grants: you may cast ~ for as long as it remains exiled", priority: 120, apply: may_cast_self_while_exiled } }
