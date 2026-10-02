@@ -405,6 +405,7 @@ impl Game {
                     _ => false,
                 };
                 ok && !self.player_untargetable(p, ctx.controller, source_obj)
+                    && !crate::kw::target_forbidden(self, spec, e, source_obj)
             }
             Entity::Object(o) => {
                 if !self.is_live(o) {
@@ -440,6 +441,7 @@ impl Game {
                     TargetKind::Player(_) => false,
                 };
                 ok && !self.object_untargetable(o, ctx.controller, source_obj)
+                    && !crate::kw::target_forbidden(self, spec, e, source_obj)
             }
         }
     }

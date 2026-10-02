@@ -307,6 +307,18 @@ pub trait KeywordRules: Sync + Send {
     fn damage_source_colors(&self, g: &Game, source: ObjectId) -> Option<ColorSet> {
         None
     }
+    /// Whether a rule this implementation defines forbids `e` as a target of the target
+    /// slot `spec` of the spell or ability `source` (CR 115.4), e.g. "can't be the target
+    /// of spells that can target only Walls". Called for every registered implementation.
+    fn target_forbidden(
+        &self,
+        g: &Game,
+        spec: &TargetSpec,
+        e: Entity,
+        source: Option<ObjectId>,
+    ) -> bool {
+        false
+    }
     /// Whether the step or phase `step` of `active`'s turn that's about to begin is
     /// skipped (CR 614.1b, 614.10) because of a rule this implementation defines (for a
     /// skipped combat phase, each of its steps).
@@ -905,6 +917,13 @@ pub fn damage_source_matches(g: &Game, source: ObjectId, f: &Filter, ctx: &Ctx) 
             crate::casting::matches_with_chars(g, source, &chars, f, ctx)
         }
     }
+}
+
+/// See [`KeywordRules::target_forbidden`].
+pub fn target_forbidden(g: &Game, spec: &TargetSpec, e: Entity, source: Option<ObjectId>) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.target_forbidden(g, spec, e, source))
 }
 
 /// See [`KeywordRules::skips_step`].
