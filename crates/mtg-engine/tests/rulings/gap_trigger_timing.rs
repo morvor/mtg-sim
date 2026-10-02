@@ -415,6 +415,10 @@ fn ulamog_annihilator_counts_counters_as_the_ability_resolves() {
         "Ulamog, the Defiler",
         "Use the number of +1/+1 counters on Ulamog at the time its annihilator ability resolves to determine how many permanents defending player should sacrifice."
     );
+    ruling!(
+        "Ulamog, the Defiler",
+        "Annihilator abilities trigger and resolve during the declare attackers step."
+    );
     let mut t = TestGame::new(2);
     let ulamog = t.battlefield(P0, "Ulamog, the Defiler");
     t.g.add_counters(Entity::Object(ulamog), "+1/+1", 2, None);
@@ -431,6 +435,8 @@ fn ulamog_annihilator_counts_counters_as_the_ability_resolves() {
     t.resolve();
     let left = t.g.permanents().filter(|o| o.controller == P1).count();
     assert_eq!(left, 2, "the defending player sacrificed three permanents");
+    // All of this happened in the declare attackers step, before blockers.
+    assert_eq!(t.g.turn.step, Step::DeclareAttackers);
 }
 
 #[test]
@@ -578,4 +584,38 @@ fn amassed_army_tokens_enter_as_0_0() {
     assert!(t.obj_now(army).chars.has_subtype("Sliver"));
     assert_eq!(triggered(&t, "power 2 or less"), 1);
     assert_eq!(triggered(&t, "power 2 or greater"), 0);
+}
+
+#[test]
+fn kodama_soulshift_x_is_determined_as_it_dies_and_counts_itself() {
+    cr!("702.46a", "603.10a", "702.1b");
+    ruling!(
+        "Kodama of the Center Tree",
+        "Soulshift is a leaves the battlefield trigger, so the gamestate is referenced immediately before the Soulshift trigger to determine the value of X. Soulshift X includes Kodama of the Center Tree. So, X is always at least 1."
+    );
+    ruling!(
+        "Kodama of the Center Tree",
+        "Kodama of the Center Tree can return itself to its owner’s hand if you control five or more Spirits when it is put into a graveyard from the battlefield."
+    );
+    supported("Kodama of the Center Tree");
+    let mut t = TestGame::new(2);
+    // "Kodama of the Center Tree has soulshift X, where X is the number of Spirits you
+    // control." Itself and four other Spirits: X is 5 as it dies (its mana value is 5),
+    // although only four Spirits are left afterward.
+    let kodama = t.battlefield(P0, "Kodama of the Center Tree");
+    for _ in 0..4 {
+        t.battlefield(P0, "Kami of Ancient Law");
+    }
+    assert_eq!(t.pt(kodama), (5, 5));
+    t.lands(P1, "Swamp", 2);
+    t.lands(P1, "Wastes", 1);
+    let murder = t.hand(P1, "Murder");
+    t.cast(P1, murder).target(kodama).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Kodama of the Center Tree"));
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "soulshift 5 triggered and targeted Kodama itself");
+    t.answer_yes(P0, true);
+    t.resolve();
+    assert!(t.in_hand(P0, "Kodama of the Center Tree"));
 }
