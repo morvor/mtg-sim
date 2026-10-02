@@ -824,6 +824,16 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 }
                 // Not a group an earlier instruction affected: that's "they".
                 let it = super::patterns::pronoun_groups::singular_it(b);
+                // "Whenever ~ becomes blocked by a creature, it deals 2 damage to that
+                // creature": "that creature" is the other object, so "it" in the same
+                // sentence isn't; in a triggered ability that's the source.
+                if p == "it"
+                    && b.in_trigger
+                    && matches!(it, Sel::TriggerObject | Sel::TriggerLki)
+                    && rest.contains(" that creature")
+                {
+                    return Some((Sel::This, rest.to_string()));
+                }
                 // No antecedent (a spell's first mention), or "that creature" meaning the
                 // source, which oracle text calls "~" (except "that card" for what the
                 // source became in its own trigger: "When ~ dies, return that card ..."):

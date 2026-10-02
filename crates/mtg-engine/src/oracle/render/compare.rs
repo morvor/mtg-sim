@@ -99,6 +99,44 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               graveyard\" and \"a creature card in your graveyard\" describe the same cards.",
     },
     Equivalence {
+        pattern: r"\b(discards?) all the cards in (your|their) hand\b",
+        replacement: "$1 $2 hand",
+        why: "A player's hand is the cards they hold (CR 402.1): discarding all the cards \
+              in it is discarding that hand.",
+    },
+    Equivalence {
+        pattern: r"\bactivate no more than\b",
+        replacement: "activate only",
+        why: "\"Activate no more than twice each turn\" and \"Activate only twice each \
+              turn\" state the same restriction on activating the ability (CR 602.5b).",
+    },
+    Equivalence {
+        pattern: r"\bone of your opponents\b",
+        replacement: "an opponent",
+        why: "Your opponents are the players you're playing against (CR 102.2, 102.3): \
+              \"one of your opponents\" is \"an opponent\".",
+    },
+    Equivalence {
+        pattern: r"\b(if [^.,;]+?) or if\b",
+        replacement: "$1 or",
+        why: "\"Activate only if A or if B\" is \"only if A or B\": the second \"if\" \
+              repeats the conjunction's condition word.",
+    },
+    Equivalence {
+        pattern: r"\b(discards?|draws?|mills?) x cards, where x is the number of ([^.;]+)",
+        replacement: "$1 a card for each $2",
+        why: "\"Discard a card for each Swamp you control\" is discarding X cards, where X \
+              is the number of Swamps you control (the number is counted once, as the \
+              instruction is followed, CR 608.2h).",
+    },
+    Equivalence {
+        pattern: r"\bx times, where x is the number of ([^.;]+)",
+        replacement: "for each $1",
+        why: "Doing something X times, where X is the number of things, is doing it once \
+              for each of them: \"copy it for each time you've cast your commander\", \
+              \"unless you pay {1} for each card in your hand\".",
+    },
+    Equivalence {
         pattern: r"\bfrom graveyards\b",
         replacement: "in graveyards",
         why: "See \"from your graveyard\".",

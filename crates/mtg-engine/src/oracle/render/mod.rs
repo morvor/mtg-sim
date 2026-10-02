@@ -569,6 +569,10 @@ pub struct Renderer<'a> {
     /// The trigger condition is about the object itself ("Whenever ~ attacks"), so the
     /// triggering object is the object itself.
     pub(crate) trigger_is_self: bool,
+    /// The trigger condition names the object itself and another object ("Whenever ~
+    /// becomes blocked by a creature"): "it" is the object itself, "that creature" the
+    /// other.
+    pub(crate) trigger_self_and_other: bool,
     /// Numbers remembered by `Effect::StoreValue` ("X ..., where X is ..."): the value,
     /// and whether a later mention (rendered "X") needs its definition.
     pub(crate) stored_values: Vec<(Var, Value, bool)>,
@@ -639,6 +643,7 @@ impl<'a> Renderer<'a> {
             attached_left: false,
             event_scope: false,
             trigger_is_self: false,
+            trigger_self_and_other: false,
             stored_values: Vec::new(),
             subject_types: Vec::new(),
             each_mode: false,

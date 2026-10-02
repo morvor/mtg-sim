@@ -747,6 +747,22 @@ impl Renderer<'_> {
                     let a = self.amount(amount);
                     (self.sel(to, Case::Obj), a)
                 };
+                // "Target creature deals damage to itself equal to its power."
+                if format!("{source:?}") == format!("{to:?}") && !matches!(to, Sel::This) {
+                    t = "itself".into();
+                }
+                // "Whenever ~ becomes blocked by a creature, it deals 2 damage to that
+                // creature": the object itself and the other object of the event.
+                let s = if matches!(source, Sel::This)
+                    && matches!(to, Sel::TriggerObject | Sel::TriggerLki)
+                    && self.trigger_self_and_other
+                    && t == "it"
+                {
+                    t = "that-object".into();
+                    "~it".to_string()
+                } else {
+                    s
+                };
                 // "deals 3 damage to each of up to two target creatures".
                 if let Sel::Target(i) = to {
                     let many = self
@@ -2845,8 +2861,8 @@ impl Renderer<'_> {
             return format!("shuffle {w} into {p}");
         }
         // A permanent put onto the battlefield is under the control of the player who put
-        // it there (CR 110.2a); "return" puts it under its owner's control instead.
-        let d = if verb == "put" {
+        // it there (CR 110.2a), "put" or "return": the instruction is yours.
+        let d = if to.zone == ZoneKind::Battlefield {
             d.replacen(" under your control", " {opt:under your control}", 1)
         } else {
             d
@@ -3190,9 +3206,10 @@ impl Renderer<'_> {
         let top = match n {
             Value::Const(1) => format!("the top card of {p} library"),
             Value::Const(k) => format!("the top {} cards of {p} library", number_word(*k)),
+            // "the top X cards of your library, where X is ...".
             other => {
-                let v = self.value(other);
-                format!("the top {v} cards of {p} library")
+                let (v, w) = self.amount(other);
+                format!("the top {v} cards of {p} library{}", w.unwrap_or_default())
             }
         };
         let look = if reveal { "reveal" } else { "look at" };

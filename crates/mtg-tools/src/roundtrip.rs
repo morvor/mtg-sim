@@ -214,6 +214,13 @@ fn print_card(r: &CardCheck) {
 }
 
 pub fn run(args: &[String]) {
+    // "--norm TEXT...": the normalized tokens of each text, as the comparison sees them.
+    if args.first().is_some_and(|a| a == "--norm") {
+        for t in &args[1..] {
+            println!("{}", normalize_unit(t).join(" "));
+        }
+        return;
+    }
     let o = parse(args);
     if o.ast {
         for c in mtg_data::cards().iter() {

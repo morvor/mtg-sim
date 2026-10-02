@@ -135,7 +135,7 @@ fn casts_chosen_color(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 /// the exiled card(s) to its/their owner's hand(s)", "put a creature card exiled with ~ onto
 /// the battlefield under your control", "the exiled card's owner may cast that card without
 /// paying its mana cost" (CR 607.2a, 607.3).
-fn linked_exile_effects(l: &str, _b: &mut Builder) -> Option<Effect> {
+fn linked_exile_effects(l: &str, b: &mut Builder) -> Option<Effect> {
     const V: Var = vars::USER + 80;
     let each = |to: Destination| Effect::ForEach {
         sel: Sel::Linked,
@@ -193,6 +193,9 @@ fn linked_exile_effects(l: &str, _b: &mut Builder) -> Option<Effect> {
                     Filter::InZone(ZoneKind::Exile),
                 ])
             };
+            // "It gains haste until end of turn": the permanent the card became (CR
+            // 400.7), which the move records.
+            b.it = Sel::Var(vars::IT);
             Some(Effect::Move {
                 what: Sel::Choose {
                     chooser: PlayerRef::You,

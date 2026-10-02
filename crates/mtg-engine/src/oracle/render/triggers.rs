@@ -113,6 +113,10 @@ impl Renderer<'_> {
         // The event is about the object itself ("Whenever ~ attacks"): the triggering
         // object is the object itself.
         let saved_is_self = std::mem::replace(&mut self.trigger_is_self, self.self_salient);
+        let saved_self_other = std::mem::replace(
+            &mut self.trigger_self_and_other,
+            trig.contains('~') && self.other_salient,
+        );
         let mut s = trig;
         if let Some(c) = &t.intervening_if {
             let c = self.condition(c);
@@ -123,6 +127,7 @@ impl Renderer<'_> {
         self.other_salient = saved_other;
         self.self_named_in_clause = saved_named;
         self.trigger_is_self = saved_is_self;
+        self.trigger_self_and_other = saved_self_other;
         self.zone = saved_zone;
         self.attached_left = saved_attached_left;
         s = format!("{s}, {}", lower_first(&body));
@@ -175,6 +180,14 @@ impl Renderer<'_> {
                 format!("at {}", e.text())
             }
             TriggerCond::BeginningOf { .. } => {
+                let e = self.trigger_event(t, Det::A);
+                format!("at {}", e.text())
+            }
+            // "At the beginning of your upkeep or whenever ...": the first event's word.
+            TriggerCond::AnyOf(v)
+                if v.first()
+                    .is_some_and(|x| matches!(x, TriggerCond::BeginningOf { .. })) =>
+            {
                 let e = self.trigger_event(t, Det::A);
                 format!("at {}", e.text())
             }
@@ -763,8 +776,10 @@ impl Renderer<'_> {
                             .is_some_and(|x| matches!(x, TriggerCond::BeginningOf { .. }));
                         if i > 0 {
                             let word = if begins { "at" } else { "whenever" };
+                            // "At the beginning of your upkeep or whenever you cast a
+                            // black spell".
                             let or = if i + 1 == n { "or" } else { "" };
-                            s.push_str(&format!(" {{alt:{or}|and {word}}} "));
+                            s.push_str(&format!(" {{alt:{or}|and {word}|or {word}}} "));
                         }
                         s.push_str(&t);
                     }
@@ -1133,6 +1148,11 @@ fn names_another_object(trig: &str) -> bool {
         "sources",
         "time",
         "turn",
+        // Zones aren't objects ("Whenever ~ enters from a graveyard").
+        "graveyard",
+        "graveyards",
+        "library",
+        "hand",
     ];
     for (i, w) in words.iter().enumerate() {
         let quantity = (*w == "more" && i >= 2 && words[i - 1] == "or")

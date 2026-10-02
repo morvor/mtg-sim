@@ -1974,9 +1974,19 @@ impl Renderer<'_> {
                 let w = if w == "players" { "a player".into() } else { w };
                 let poss = nouns::possessive(&w);
                 match action {
-                    A::Multiply(2) => format!(
-                        "if an effect would create one or more tokens under {poss} control, it creates twice that many of those tokens instead"
-                    ),
+                    // Current Oracle wording says what's created, older wording what an
+                    // effect creates; tokens created under any player's control need no
+                    // "under ... control".
+                    A::Multiply(2) => {
+                        let c = if w == "a player" {
+                            String::new()
+                        } else {
+                            format!(" under {poss} control")
+                        };
+                        format!(
+                            "if {{alt:one or more tokens would be created{c}, twice that many of those tokens are created|an effect would create one or more tokens{c}, it creates twice that many of those tokens}} instead"
+                        )
+                    }
                     A::PlusTokens { spec, count } => {
                         let (d, tail) = self.token_desc(spec);
                         let c = match count {

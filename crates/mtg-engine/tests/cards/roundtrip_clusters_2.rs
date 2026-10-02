@@ -36,3 +36,43 @@ fn a_search_for_up_to_x_cards_may_find_fewer() {
     assert_eq!(t.hand_size(P0), 1);
     assert!(t.in_hand(P0, "Grizzly Bears"));
 }
+
+#[test]
+fn yggdrasil_gives_haste_to_the_creature_it_puts_onto_the_battlefield() {
+    cr!("400.7", "607.2a");
+    // "Put a creature card exiled with ~ onto the battlefield under your control. It
+    // gains haste until end of turn.": "it" is the creature put onto the battlefield; it
+    // was compiled as Yggdrasil itself.
+    supported("Yggdrasil, Rebirth Engine");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.graveyard(P0, "Grizzly Bears");
+    let ygg = t.enter(P0, "Yggdrasil, Rebirth Engine");
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    t.lands(P0, "Forest", 4);
+    t.activate(P0, ygg, 1, &[]).expect("activate");
+    t.resolve_all();
+    let bears = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(bears.len(), 1);
+    use mtg_engine::keywords::KeywordKind;
+    assert!(t.obj_now(bears[0]).has_keyword(KeywordKind::Haste));
+    assert!(!t.obj_now(ygg).has_keyword(KeywordKind::Haste));
+}
+
+#[test]
+fn acolyte_of_the_inferno_deals_the_damage_to_its_blocker() {
+    cr!("509.3d", "702.2b");
+    // "Whenever ~ becomes blocked by a creature, it deals 2 damage to that creature.": "it"
+    // is Acolyte; it was compiled as the blocker, which dealt the damage to itself. A
+    // deathtouch blocker then destroyed itself before combat damage, and Acolyte lived.
+    supported("Acolyte of the Inferno");
+    let mut t = TestGame::new(2);
+    let acolyte = t.battlefield(P0, "Acolyte of the Inferno");
+    let hawk = t.battlefield(P1, "Vampire Nighthawk");
+    t.attack(&[(acolyte, Entity::Player(P1))], &[(hawk, acolyte)]);
+    // The trigger's 2 damage and 3 combat damage kill Nighthawk; its deathtouch combat
+    // damage kills Acolyte.
+    assert!(t.in_graveyard(P1, "Vampire Nighthawk"));
+    assert!(t.in_graveyard(P0, "Acolyte of the Inferno"));
+}

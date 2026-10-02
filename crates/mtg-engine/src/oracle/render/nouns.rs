@@ -122,6 +122,34 @@ pub(crate) fn cmp_phrase(cmp: Cmp, v: &str) -> String {
 }
 
 impl Renderer<'_> {
+    /// "with lesser mana value", "with greater power": compared with the same quality of
+    /// the object the ability is about (itself, or the object or spell that triggered
+    /// it), which the card leaves unsaid.
+    fn lesser_greater(&mut self, c: Cmp, v: &Value, quality: &str) -> Option<String> {
+        let s = match (quality, v) {
+            ("power", Value::PowerOf(s))
+            | ("toughness", Value::ToughnessOf(s))
+            | ("mana value", Value::ManaValueOf(s)) => s,
+            _ => return None,
+        };
+        if !matches!(
+            s.as_ref(),
+            Sel::This | Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell
+        ) {
+            return None;
+        }
+        let word = match c {
+            Cmp::Lt => "lesser",
+            Cmp::Gt => "greater",
+            _ => return None,
+        };
+        let v = self.value(v);
+        Some(format!(
+            "{{alt:{quality} {}|{word} {quality}}}",
+            cmp_phrase(c, &v)
+        ))
+    }
+
     /// The noun used for "enchanted [thing]" / "equipped creature" on this face.
     pub(crate) fn attached_noun(&mut self) -> String {
         if self.info.has_subtype("Equipment") {
@@ -439,20 +467,38 @@ impl Renderer<'_> {
             Filter::AttackingPlayerAlone => np.post.push("attacking a player alone".into()),
             Filter::HadToAttack => np.rel.push("that had to attack".into()),
             Filter::Power(c, v) => {
-                let v = self.value(v);
-                np.with.push(format!("power {}", cmp_phrase(*c, &v)));
+                let q = match self.lesser_greater(*c, v, "power") {
+                    Some(q) => q,
+                    None => {
+                        let v = self.value(v);
+                        format!("power {}", cmp_phrase(*c, &v))
+                    }
+                };
+                np.with.push(q);
             }
             Filter::Toughness(c, v) => {
-                let v = self.value(v);
-                np.with.push(format!("toughness {}", cmp_phrase(*c, &v)));
+                let q = match self.lesser_greater(*c, v, "toughness") {
+                    Some(q) => q,
+                    None => {
+                        let v = self.value(v);
+                        format!("toughness {}", cmp_phrase(*c, &v))
+                    }
+                };
+                np.with.push(q);
             }
             Filter::PowerVsBase(c) => {
                 np.with
                     .push(format!("power {}", cmp_phrase(*c, "its base power")));
             }
             Filter::ManaValue(c, v) => {
-                let v = self.value(v);
-                np.with.push(format!("mana value {}", cmp_phrase(*c, &v)));
+                let q = match self.lesser_greater(*c, v, "mana value") {
+                    Some(q) => q,
+                    None => {
+                        let v = self.value(v);
+                        format!("mana value {}", cmp_phrase(*c, &v))
+                    }
+                };
+                np.with.push(q);
             }
             Filter::Loyalty(c, v) => {
                 let v = self.value(v);
@@ -517,7 +563,7 @@ impl Renderer<'_> {
             // (CR 607.2a).
             Filter::In(s) if matches!(s.as_ref(), Sel::Linked) => {
                 np.zone_said = true;
-                np.post.push("exiled with ~".into());
+                np.post.push("exiled with ~it".into());
             }
             // "for each creature card exiled this way": the cards the instruction before
             // exiled.
