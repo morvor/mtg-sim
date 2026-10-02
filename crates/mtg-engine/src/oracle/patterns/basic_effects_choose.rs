@@ -205,9 +205,17 @@ fn may_pay_action(l: &str, b: &mut Builder) -> Option<Effect> {
     if cost.mana.is_some()
         || cost.parts.is_empty()
         || !cost.parts.iter().all(|p| {
+            // Exiling from the battlefield only: an exiled card from a hand or graveyard is
+            // what later instructions are about ("create a token that's a copy of the
+            // exiled card"), which a cost doesn't record.
             matches!(
                 p,
-                CostPart::TapUntapped { .. } | CostPart::Sacrifice { .. } | CostPart::Exile { .. }
+                CostPart::TapUntapped { .. }
+                    | CostPart::Sacrifice { .. }
+                    | CostPart::Exile {
+                        zone: ZoneKind::Battlefield,
+                        ..
+                    }
             )
         })
     {

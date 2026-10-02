@@ -37,7 +37,8 @@ fn that_much_mana_compiles() {
     assert!(!card("Neheb, Dreadhorde Champion")
         .unsupported_text()
         .is_empty());
-    assert!(!card("Mana Seism").unsupported_text().is_empty());
+    // Mana Seism ("Sacrifice any number of lands, then add that much {C}.") is the number
+    // of lands sacrificed: see `basic_effects_choose.rs`.
 }
 
 #[test]

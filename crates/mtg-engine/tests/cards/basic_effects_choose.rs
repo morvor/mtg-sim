@@ -226,3 +226,24 @@ fn gut_sacrifices_another_creature_or_an_artifact() {
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
     assert_eq!(t.named_on_battlefield("Skeleton Token").len(), 1);
 }
+
+#[test]
+fn mana_seism_adds_mana_for_each_land_sacrificed() {
+    cr!("701.21a", "106.4");
+    assert_supported("Mana Seism");
+    let mut t = TestGame::new(2);
+    let lands = t.lands(P0, "Mountain", 4);
+    let spell = t.hand(P0, "Mana Seism");
+    // {1}{R}: two Mountains pay for it; the other two are sacrificed.
+    t.cast(P0, spell).go();
+    let lands_left: Vec<ObjectId> = lands
+        .iter()
+        .copied()
+        .filter(|l| !t.obj_now(*l).tapped)
+        .collect();
+    assert_eq!(lands_left.len(), 2);
+    t.answer_choose(P0, &objs(&lands_left));
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Mountain").len(), 2);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 2);
+}
