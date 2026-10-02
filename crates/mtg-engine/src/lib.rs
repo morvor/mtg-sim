@@ -20,6 +20,7 @@
 //! * [`testing`] provides a harness for rules tests.
 
 pub mod ability;
+pub mod ability_grants;
 pub mod actions;
 pub mod activation_costs;
 pub mod adventure;
@@ -84,6 +85,7 @@ pub mod layers;
 pub mod legend_rule;
 pub mod library;
 pub mod life_totals;
+pub mod linked_notes;
 pub mod mana;
 pub mod mana_abilities;
 pub mod mana_value;
@@ -101,12 +103,14 @@ pub mod object;
 pub mod opening_hand;
 pub mod oracle;
 pub mod oracle_ext;
+pub mod payment_rules;
 pub mod per_player_targets;
 pub mod permissions;
 pub mod piles;
 pub mod planechase;
 pub mod player_control;
 pub mod prevention;
+pub mod prohibitions;
 pub mod radiation;
 pub mod relational;
 pub mod repeat_process;

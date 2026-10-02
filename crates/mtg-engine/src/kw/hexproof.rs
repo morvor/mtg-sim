@@ -6,7 +6,10 @@
 //! permanents or players didn't have hexproof; like the rule says, they also ignore
 //! "hexproof from [quality]" (CR 702.11e).
 
+use crate::ability::Filter;
+use crate::eval::Ctx;
 use crate::game::Game;
+use crate::game_terms::{ACTIVATED_ABILITY, TRIGGERED_ABILITY};
 use crate::types::*;
 
 /// Static ability (a `StaticEffect::Custom`): "Creatures your opponents control with
@@ -41,4 +44,41 @@ pub fn hexproof_ignored(g: &Game, target: Entity, by: PlayerId) -> bool {
             }
         }
     })
+}
+
+/// The quality of "hexproof from activated abilities", "hexproof from triggered
+/// abilities", "hexproof from activated and triggered abilities": the kind of the
+/// targeting ability itself, not of its source (CR 702.11d).
+pub fn ability_quality(s: &str) -> Option<Filter> {
+    let activated = || Filter::Custom(ACTIVATED_ABILITY.into());
+    let triggered = || Filter::Custom(TRIGGERED_ABILITY.into());
+    Some(match s.trim() {
+        "activated abilities" => activated(),
+        "triggered abilities" => triggered(),
+        "activated and triggered abilities" | "activated abilities and triggered abilities" => {
+            Filter::Or(vec![activated(), triggered()])
+        }
+        _ => return None,
+    })
+}
+
+/// Whether a hexproof quality describes the kind of an ability on the stack.
+fn describes_ability(f: &Filter) -> bool {
+    match f {
+        Filter::Custom(n) => n.as_str() == ACTIVATED_ABILITY || n.as_str() == TRIGGERED_ABILITY,
+        Filter::Or(v) | Filter::And(v) => v.iter().any(describes_ability),
+        _ => false,
+    }
+}
+
+/// Whether a "hexproof from [quality]" ability of `holder` stops the spell or ability
+/// `targeting` (the object on the stack, or the source of an ability not yet there) from
+/// targeting it (CR 702.11d): a spell with the quality, an ability from a source with the
+/// quality, or an ability that is itself of the kind the quality names.
+pub fn quality_stops(g: &Game, quality: &Filter, holder: ObjectId, targeting: ObjectId) -> bool {
+    let ctx = Ctx::new(Some(holder), g.obj(holder).controller);
+    if describes_ability(quality) {
+        return g.obj(targeting).is_stack_ability() && g.matches(targeting, quality, &ctx);
+    }
+    g.matches(g.ability_source_of(targeting), quality, &ctx)
 }

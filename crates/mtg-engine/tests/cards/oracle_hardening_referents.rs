@@ -131,10 +131,21 @@ fn a_spells_pronoun_without_an_antecedent_is_unsupported() {
         "{1}: ~ gets +1/+1 until end of turn. It gains flying until end of turn."
     )
     .is_ok());
-    // Real cards: the player an earlier ability targeted isn't tracked (it used to compile
-    // as you). (Each creature's own controller, Rakdos Charm, is: see
-    // `basic_effects_damage.rs`.)
-    assert_unsupported("Laquatus's Champion", "that player gains 6 life");
+    // Real cards: the player an earlier ability of the card targeted is tracked as a
+    // linked note (CR 607.1, `linked_notes.rs`; played out in
+    // `tests/cr/r607_linked_notes.rs`), never as "you". (Each creature's own controller,
+    // Rakdos Charm, is tracked too: see `basic_effects_damage.rs`.)
+    assert_supported(&["Laquatus's Champion"]);
+    let champion = card("Laquatus's Champion");
+    let gains = champion
+        .faces[0]
+        .chars
+        .abilities
+        .iter()
+        .find(|a| a.text.contains("that player gains"))
+        .expect("the leaves-the-battlefield ability");
+    let d = format!("{:?}", gains.kind);
+    assert!(d.contains("LinkedNoted") && !d.contains("You"), "{d}");
 }
 
 #[test]

@@ -423,6 +423,7 @@ impl Game {
                 .into_iter()
                 .collect(),
             PlayerRef::Monarch => self.monarch.into_iter().collect(),
+            PlayerRef::LinkedNoted => crate::linked_notes::players(self, ctx),
         }
     }
 
@@ -1051,6 +1052,8 @@ impl Game {
                 .map(Entity::Object)
                 .into_iter()
                 .collect(),
+            // CR 607.1, 607.2e (see `linked_notes.rs`).
+            Sel::LinkedNoted => crate::linked_notes::entities(self, ctx),
             Sel::TopOfLibrary(r, n) => {
                 let k = self.eval_value(n, ctx).max(0) as usize;
                 self.eval_players(r, ctx)

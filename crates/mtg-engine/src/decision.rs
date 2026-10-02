@@ -77,8 +77,14 @@ pub enum Decision {
         #[serde(default)]
         pawprint_budget: Option<u32>,
     },
-    /// Announce X (CR 107.3). Answer `Number`.
-    ChooseX { source: ObjectId, max: i64 },
+    /// Announce X (CR 107.3). Answer `Number`, from `min` to `max`: the text of the
+    /// spell or ability may limit it ("X can't be 0", CR 107.3a).
+    ChooseX {
+        source: ObjectId,
+        #[serde(default)]
+        min: i64,
+        max: i64,
+    },
     /// Choose a casting method / alternative cost. Answer `Index`.
     ChooseCastingMethod {
         card: ObjectId,

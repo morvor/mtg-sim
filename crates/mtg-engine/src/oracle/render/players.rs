@@ -69,6 +69,13 @@ impl Renderer<'_> {
             return self.gap(format!("target slot {i} out of range"));
         };
         let other = !t.distinct_from.is_empty();
+        // "N damage divided as you choose among any number of targets" or "... among up to
+        // N targets": each target gets at least one (CR 601.2d), so "any number" (CR
+        // 107.1c) is at most N.
+        let divided_any = t.fixed_min() == Some(0)
+            && t.divide
+                .as_ref()
+                .is_some_and(|d| format!("{d:?}") == format!("{:?}", t.max));
         let count = match (t.fixed_min(), t.max.as_const()) {
             // "X target creatures": exactly that many (the minimum is the maximum).
             (None, _) if format!("{:?}", t.min) == format!("{:?}", t.max) => {
@@ -97,6 +104,13 @@ impl Renderer<'_> {
                 }
             }
             (_, Some(m)) => Some(m.to_string()),
+        };
+        // Cards say either.
+        let count = match count {
+            Some(c) if divided_any && c != "any number of" => {
+                Some(format!("{{alt:any number of|{c}}}"))
+            }
+            c => c,
         };
         let many = count.as_deref().is_some_and(|c| c != "up to one");
         let num = if many { Num::Many } else { Num::One };
@@ -158,6 +172,9 @@ impl Renderer<'_> {
                 };
                 self.stack_object_noun(f, base)
             }
+            // "target instant spell, sorcery spell, or triggered ability": the
+            // alternatives name what they are.
+            TargetKind::SpellOrAbility(f @ Filter::Or(_)) => self.noun(f, num),
             TargetKind::SpellOrAbility(f) => {
                 let base = match num {
                     Num::One => "spell or ability",
@@ -325,8 +342,12 @@ impl Renderer<'_> {
         }
         if !self.introduced[idx] {
             self.introduced[idx] = true;
-            self.self_salient = false;
+            // "~ deals 1 damage to target creature blocking it": the object itself, just
+            // named, may still be "it" in a target's blocking relation to it.
+            let was = std::mem::replace(&mut self.self_salient, false);
+            let saved = std::mem::replace(&mut self.self_before_target, was && !self.other_salient);
             let p = self.target_phrase(i);
+            self.self_before_target = saved;
             return decline(p, case);
         }
         if self.slot_is_player(i) {
@@ -366,6 +387,7 @@ impl Renderer<'_> {
         };
         match s {
             Sel::None => self.gap("Sel::None"),
+            Sel::This if self.granted_keyword => it(case),
             Sel::This => {
                 let m = self.me();
                 decline(m, case)
@@ -392,6 +414,16 @@ impl Renderer<'_> {
                 let s = self.var_defs[i].1.clone();
                 self.sel(&s, case)
             }
+            Sel::Var(v) if self.target_vars.iter().any(|(x, _, used)| x == v && !used) => {
+                let i = self
+                    .target_vars
+                    .iter()
+                    .position(|(x, _, used)| x == v && !used)
+                    .unwrap_or(0);
+                self.target_vars[i].2 = true;
+                decline(self.target_vars[i].1.clone(), case)
+            }
+            Sel::Var(v) if self.plural_vars.contains(v) => them(case),
             Sel::Var(v) => match *v {
                 vars::SACRIFICED => {
                     let n = self.sacrificed.clone().unwrap_or_else(|| "creature".into());
@@ -437,6 +469,28 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Subj);
                 decline(format!("the permanent {s} is attached to"), case)
             }
+            // "Reveal it and put it into your hand": the card, unless it has since become a
+            // permanent (a new object, CR 400.7), which the instruction can't find.
+            Sel::All(Filter::And(v))
+                if matches!(v.as_slice(), [Filter::In(_), Filter::Not(z)]
+                    if matches!(z.as_ref(), Filter::InZone(ZoneKind::Battlefield))) =>
+            {
+                let Filter::In(x) = &v[0] else {
+                    return self.gap("Sel::All");
+                };
+                let x = (**x).clone();
+                self.sel(&x, case)
+            }
+            // The cards exiled with this object that are still in exile: "the exiled card"
+            // (an object that exiles one card, as with imprint) or "each card exiled with
+            // ~".
+            Sel::All(Filter::And(v))
+                if v.len() == 2
+                    && matches!(&v[0], Filter::In(s) if matches!(s.as_ref(), Sel::Linked))
+                    && matches!(v[1], Filter::InZone(ZoneKind::Exile)) =>
+            {
+                decline("{alt:the exiled card|each card exiled with ~}".into(), case)
+            }
             Sel::All(f) => {
                 if let Some(z) = whole_zone(f) {
                     let s = self.whole_zone_phrase(z.0, z.1);
@@ -459,6 +513,40 @@ impl Renderer<'_> {
                 decline(s, case)
             }
             Sel::Players(p) => self.player(p, case),
+            // "You choose one of them": one of the cards revealed.
+            Sel::Choose {
+                chooser,
+                filter: Filter::In(from),
+                count,
+                ..
+            } if matches!(
+                from.as_ref(),
+                Sel::Var(crate::kw::reveal_from_hand::REVEALED)
+            ) =>
+            {
+                let n = match count {
+                    Value::Const(n) => number_word(*n),
+                    other => self.value(other),
+                };
+                let mut s = format!("{n} of them");
+                if !matches!(chooser, PlayerRef::You) {
+                    let c = self.player(chooser, Case::Poss);
+                    s = format!("{s} of {c} choice");
+                }
+                decline(s, case)
+            }
+            // "Reveal any number of green cards in your hand": up to all of them.
+            Sel::Choose {
+                chooser: PlayerRef::You,
+                filter,
+                count: Value::CountSel(all),
+                up_to: true,
+                ..
+            } if matches!(all.as_ref(), Sel::All(f) if format!("{f:?}") == format!("{filter:?}")) =>
+            {
+                let n = self.noun_det(filter, Det::Plural);
+                decline(format!("any number of {n}"), case)
+            }
             Sel::Choose {
                 chooser,
                 filter,
@@ -466,7 +554,17 @@ impl Renderer<'_> {
                 up_to,
                 ..
             } => {
-                let det = if *up_to {
+                // "Put one of them into their graveyard": one of the cards just named.
+                if let (Filter::In(g), Value::Const(n), false, PlayerRef::You) =
+                    (filter, count, *up_to, chooser)
+                {
+                    if matches!(g.as_ref(), Sel::Var(v) if *v == vars::IT) {
+                        return decline(format!("{} of them", number_word(*n)), case);
+                    }
+                }
+                let det = if *up_to && unbounded_choice(filter, count) {
+                    Det::Count("any number of".into())
+                } else if *up_to {
                     let n = match count {
                         Value::Const(n) => number_word(*n),
                         other => self.value(other),
@@ -488,6 +586,7 @@ impl Renderer<'_> {
                 decline(format!("{s} chosen at random"), case)
             }
             Sel::Linked => decline("each card exiled with ~".into(), case),
+            Sel::LinkedNoted => decline("the last chosen card".into(), case),
             Sel::CreatorLinked => decline("the exiled card".into(), case),
             Sel::ExiledWithCardsNamed(n) => {
                 decline(format!("a card you exiled with cards named {n}"), case)
@@ -585,10 +684,29 @@ impl Renderer<'_> {
                     Case::Poss => "{alt:that player's|their}".into(),
                 }
             }
+            PlayerRef::Var(v) if self.target_vars.iter().any(|(x, _, used)| x == v && !used) => {
+                let i = self
+                    .target_vars
+                    .iter()
+                    .position(|(x, _, used)| x == v && !used)
+                    .unwrap_or(0);
+                self.target_vars[i].2 = true;
+                self.target_vars[i].1.clone()
+            }
             PlayerRef::Var(_) => "that player".into(),
             PlayerRef::ActivePlayer => "that player".into(),
             PlayerRef::DefendingPlayer => "defending player".into(),
             PlayerRef::ChosenPlayer(_) => "the chosen player".into(),
+            // "the player with the most life" (the one an intervening "if a player has more
+            // life than each other player" makes it).
+            PlayerRef::Each(pf) if self.most_of(pf).is_some() => {
+                let (stat, _) = self.most_of(pf).unwrap_or_default();
+                match stat.as_str() {
+                    "life" => "the player with the most life".into(),
+                    "cards in hand" => "the player who has the most cards in hand".into(),
+                    noun => format!("the player who controls the most {noun}"),
+                }
+            }
             PlayerRef::Each(pf) => {
                 let n = self.player_filter_noun(pf, Num::One);
                 format!("each {n}")
@@ -596,8 +714,26 @@ impl Renderer<'_> {
             PlayerRef::Owner => "~'s owner".into(),
             PlayerRef::ChosenOpponent => "the chosen opponent".into(),
             PlayerRef::Monarch => "the monarch".into(),
+            PlayerRef::LinkedNoted => "that player".into(),
         };
         decline(s, case)
+    }
+
+    /// For a filter "has the greatest [life / cards in hand / number of objects]" (the
+    /// most of it among all players): the stat ("life", "cards in hand", or the plural
+    /// noun), and whether it's the controlled-objects form.
+    pub(crate) fn most_of(&mut self, pf: &PlayerFilter) -> Option<(String, bool)> {
+        let is_max = |v: &Value| matches!(v, Value::OverPlayers(AggOp::Max, PlayerFilter::Any, _));
+        match pf {
+            PlayerFilter::Life(Cmp::Eq, v) if is_max(v) => Some(("life".into(), false)),
+            PlayerFilter::HandSize(Cmp::Eq, v) if is_max(v) => {
+                Some(("cards in hand".into(), false))
+            }
+            PlayerFilter::Controls(f, Cmp::Eq, v) if is_max(v) => {
+                Some((self.noun(f, Num::Many), true))
+            }
+            _ => None,
+        }
     }
 
     /// "player", "opponent", "player with 10 or less life".
@@ -751,7 +887,31 @@ impl Renderer<'_> {
                 format!("{q} {n}")
             }
             (c, other) => {
-                let v = self.value(other);
+                // "more lands than you": than the number of those the player controls.
+                let conj = |f: &Filter| -> Vec<Filter> {
+                    match f {
+                        Filter::And(v) => v.clone(),
+                        other => vec![other.clone()],
+                    }
+                };
+                let theirs = match other {
+                    Value::Count(g) => {
+                        let (fc, gc) = (conj(f), conj(g));
+                        let extra: Vec<&Filter> = gc
+                            .iter()
+                            .filter(|x| !fc.iter().any(|y| format!("{x:?}") == format!("{y:?}")))
+                            .collect();
+                        match extra.as_slice() {
+                            [Filter::ControlledBy(r)] if gc.len() == fc.len() + 1 => Some(*r),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
+                let v = match theirs {
+                    Some(r) => self.rel_object(r),
+                    None => self.value(other),
+                };
                 let n = self.noun(f, Num::Many);
                 match c {
                     Cmp::Gt => format!("more {n} than {v}"),
@@ -763,5 +923,40 @@ impl Renderer<'_> {
                 }
             }
         }
+    }
+}
+
+/// Whether "up to [count]" of the objects `filter` matches is never fewer than all of them
+/// (the count is at least the number of such objects there can be), so the choice is of
+/// "any number of" them (CR 107.1c).
+fn unbounded_choice(filter: &Filter, count: &Value) -> bool {
+    let conj = |f: &Filter| -> Vec<String> {
+        match f {
+            Filter::And(v) => v.iter().map(|x| format!("{x:?}")).collect(),
+            Filter::Any => vec![],
+            other => vec![format!("{other:?}")],
+        }
+    };
+    match count {
+        Value::Const(n) => *n >= 99,
+        // Every object the choice is from is one of those counted.
+        Value::Count(g) => {
+            let f = conj(filter);
+            conj(g).iter().all(|c| f.contains(c))
+        }
+        Value::CountSel(s) => match s.as_ref() {
+            Sel::All(g) => {
+                let f = conj(filter);
+                conj(g).iter().all(|c| f.contains(c))
+            }
+            _ => false,
+        },
+        // "any number of cards from your hand"
+        Value::HandSize(PlayerRef::You) => {
+            let f = conj(filter);
+            f.contains(&format!("{:?}", Filter::InZone(ZoneKind::Hand)))
+                && f.contains(&format!("{:?}", Filter::OwnedBy(PlayerRel::You)))
+        }
+        _ => false,
     }
 }

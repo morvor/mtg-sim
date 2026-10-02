@@ -846,6 +846,10 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: that many", 
 /// way": how many of the cards the earlier action affected match the description (they
 /// are counted where they went, CR 400.7).
 pub fn this_way_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "Swamps returned this way" (see `zone_move_grammar`).
+    if let Some(v) = super::zone_move_grammar::returned_this_way(r, b) {
+        return Some(v);
+    }
     let i = r.find(" this way")?;
     let (head, rest) = (&r[..i], &r[i + " this way".len()..]);
     if !word_end(rest) {
@@ -969,6 +973,11 @@ fn scale(e: Effect, count: Value) -> Option<Effect> {
             to,
         }),
         Effect::AsPlayer { who, effect } => Some(Effect::AsPlayer {
+            who,
+            effect: Box::new(scale(*effect, count)?),
+        }),
+        // "each opponent loses 1 life": each of them loses that much.
+        Effect::ForEachPlayer { who, effect } => Some(Effect::ForEachPlayer {
             who,
             effect: Box::new(scale(*effect, count)?),
         }),

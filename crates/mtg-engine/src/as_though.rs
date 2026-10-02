@@ -18,6 +18,11 @@ fn has(g: &Game, p: PlayerId, name: &str) -> bool {
         .has_mod(|m| matches!(m, PlayerModification::Custom(n) if n == name))
 }
 
+/// Whether `p` may spend mana as though it were mana of any color (CR 609.4b).
+pub fn spends_as_any_color(g: &Game, p: PlayerId) -> bool {
+    has(g, p, SPEND_AS_ANY_COLOR)
+}
+
 /// The mana a player needs to pay for a cost. If they may spend mana as though it were
 /// mana of any color, any mana can pay a colored symbol — but the cost itself and the
 /// mana actually spent don't change (CR 609.4b).

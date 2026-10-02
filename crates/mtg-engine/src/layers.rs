@@ -602,6 +602,20 @@ impl Game {
         self.rule_effects.retain(|e| !rm.contains(&e.id));
         self.player_effects.retain(|e| !pm.contains(&e.id));
         self.replacements.retain(|e| !rp.contains(&e.id));
+        // "You may play that card for as long as you control ~": once over, it's over,
+        // even if that player controls it again.
+        let ended: Vec<bool> = self
+            .play_grants
+            .iter()
+            .map(|g| self.effect_expired(&g.duration, g.source, g.player))
+            .collect();
+        if ended.contains(&true) {
+            let mut i = 0;
+            self.play_grants.retain(|_| {
+                i += 1;
+                !ended[i - 1]
+            });
+        }
     }
 
     /// The characteristics listed by the effects that turned the face-down permanent `id`
@@ -1112,6 +1126,7 @@ impl Game {
                     | Modification::AddKeyword(_)
                     | Modification::AddKeywordX(..)
                     | Modification::AddKeywordsOf { .. }
+                    | Modification::AddAbilitiesOf { .. }
             );
             if !trial && grants {
                 let after = self.obj(t).chars.abilities.len();
@@ -1335,8 +1350,15 @@ impl Game {
                 // "Until end of turn, you may play lands and cast spells from the top of
                 // your library."
                 (PlayerModification::PlayPermission(pp), Some(src)) => {
+                    // "You may cast a creature spell from your graveyard this turn": a
+                    // single use, this effect's own (see `permissions.rs`).
+                    let once = pp
+                        .terms
+                        .limit
+                        .map(|_| smol_str::SmolStr::from(format!("effect {}", e.id)));
                     for p in &e.players {
-                        st.play_permissions.push((src, *p, pp.clone(), None));
+                        st.play_permissions
+                            .push((src, *p, pp.clone(), once.clone()));
                     }
                 }
                 // "You may cast sorcery spells this turn as though they had flash."
@@ -1476,6 +1498,19 @@ fn mod_values(g: &Game, mods: &[Modification], layer: Layer, ctx: &Ctx) -> Vec<i
             Modification::ModifyPT(p, t) => {
                 out.push(g.eval_value(p, ctx));
                 out.push(g.eval_value(t, ctx));
+            }
+            // What abilities it gives depends on the abilities other objects have, which
+            // other layer-6 effects can change (CR 613.8a).
+            Modification::AddAbilitiesOf { from, which } => {
+                out.extend(crate::ability_grants::copied_uids(g, from, which, ctx))
+            }
+            Modification::AddKeywordsOf { kinds, from } => {
+                out.extend(keywords_of(g, kinds, from, ctx).iter().map(|k| {
+                    use std::hash::{Hash, Hasher};
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    format!("{k:?}").hash(&mut h);
+                    h.finish() as i64
+                }))
             }
             _ => {}
         }
@@ -1782,11 +1817,18 @@ pub fn apply_mod(
                 apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
             }
         }
+        Modification::AddAbilitiesOf { from, which } => c.abilities.extend(
+            crate::ability_grants::abilities_for(g, from, which, ctx, _target),
+        ),
         Modification::RemoveKeyword(k) => c
             .abilities
             .retain(|a| !matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == *k)),
         Modification::LoseKeyword(k) => c.abilities.retain(|a| {
             !matches!(&a.kind, AbilityKind::Keyword(kw) if crate::keywords::same_instance(kw, k))
+        }),
+        Modification::LoseKeywordWithQuality { kind, quality } => c.abilities.retain(|a| {
+            !matches!(&a.kind, AbilityKind::Keyword(kw)
+                if kw.kind == *kind && crate::keywords::has_quality(kw, quality.as_ref()))
         }),
         Modification::RemoveAllAbilities => c.abilities.clear(),
         Modification::CantHaveKeyword(k) => c

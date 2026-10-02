@@ -45,6 +45,21 @@ fn normalized_quotes(ctx: &CompileContext) -> Vec<String> {
     out
 }
 
+thread_local! {
+    /// The name of a named token being created ("create The Tiger God, a legendary ...
+    /// token with "The Tiger God can't be blocked ...""): its quoted abilities refer to
+    /// it by that name (CR 201.5).
+    static TOKEN_NAME: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with `name` as the name of the token whose description is being parsed.
+pub(crate) fn with_token_name<R>(name: &str, f: impl FnOnce() -> R) -> R {
+    let prev = TOKEN_NAME.with(|t| t.replace(Some(name.to_string())));
+    let r = f();
+    TOKEN_NAME.with(|t| *t.borrow_mut() = prev);
+    r
+}
+
 /// Compiles a quoted ability of a token (lowercase text as it appears in the effect).
 /// `~` in it means the token. Fails if the quote names the card itself, or if any part
 /// isn't understood.
@@ -59,9 +74,26 @@ pub(crate) fn token_quote_abilities(
     let orig = normalized_quotes(ctx)
         .into_iter()
         .find(|q| q.to_lowercase().trim().trim_end_matches(',') == want)?;
-    let orig = orig.trim().trim_end_matches(',').to_string();
+    let mut orig = orig.trim().trim_end_matches(',').to_string();
     if super::statics::quote_names_card(&orig, ctx) {
         return None;
+    }
+    // The token's own name means the token (CR 201.5).
+    if let Some(name) = TOKEN_NAME.with(|t| t.borrow().clone()) {
+        let lower = orig.to_lowercase();
+        let n = name.to_lowercase();
+        // Byte offsets agree only for ASCII text.
+        if !n.is_empty() && orig.is_ascii() && lower.contains(n.as_str()) {
+            let mut out = String::new();
+            let mut i = 0;
+            while let Some(j) = lower[i..].find(n.as_str()) {
+                out.push_str(&orig[i..i + j]);
+                out.push('~');
+                i += j + n.len();
+            }
+            out.push_str(&orig[i..]);
+            orig = out;
+        }
     }
     let mut tl = TypeLine::default();
     for t in types {
