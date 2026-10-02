@@ -111,6 +111,19 @@ impl Renderer<'_> {
                     true,
                 )
             }
+            // "Target opponent loses half their life, rounded up" (CR 107.1a).
+            Effect::LoseLife {
+                who,
+                n: Value::Div(total, 2, up),
+            } if matches!(total.as_ref(), Value::LifeTotal(p) if same_player(p, who)) => {
+                let poss = self.possessive_for(who);
+                let r = if *up { "up" } else { "down" };
+                (
+                    who.clone(),
+                    format!("lose half {poss} life, rounded {r}"),
+                    true,
+                )
+            }
             Effect::LoseLife { who, n } => {
                 let (a, w) = self.amount(n);
                 (
