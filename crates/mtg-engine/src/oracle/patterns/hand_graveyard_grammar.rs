@@ -2315,3 +2315,102 @@ fn p_gain_and_draw_equal(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: gain life and draw cards equal to [value]", priority: 960, parse: p_gain_and_draw_equal } }
+
+/// "each of that player's opponents may draw a card", "each of that player's opponents
+/// draws three cards": the opponents of that player (each in turn, CR 101.4) — read as
+/// "each opponent ..." from that player's point of view. Instructions that also mention
+/// "you" aren't read this way.
+fn p_each_of_that_players_opponents(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("each of that player's opponents ")?;
+    if r.split(|c: char| !c.is_alphanumeric()).any(|w| w == "you" || w == "your") {
+        return None;
+    }
+    use super::oracle_hardening_referents::is_no_player_referent;
+    if is_no_player_referent(&b.it_player) {
+        return None;
+    }
+    let who = b.it_player.clone();
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(e) = parse_clause(&format!("each opponent {r}"), b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    Some(Effect::AsPlayer {
+        who,
+        effect: Box::new(e),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: each of that player's opponents", priority: 960, parse: p_each_of_that_players_opponents } }
+
+/// "draw cards equal to the number of Zombies you control or the number of Zombie cards
+/// in your graveyard, whichever is greater".
+fn p_whichever_is_greater(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, up) = if let Some(h) = l.strip_suffix(", whichever is greater") {
+        (h, true)
+    } else {
+        (l.strip_suffix(", whichever is less")?, false)
+    };
+    let (clause, values) = head.split_once(" equal to ")?;
+    let (a, c) = values.split_once(" or ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let parsed = (|| {
+        let (va, ra) = crate::oracle::statics::parse_value_phrase(a, b)?;
+        let (vc, rc) = crate::oracle::statics::parse_value_phrase(c, b)?;
+        if !end(&ra).is_empty() || !end(&rc).is_empty() {
+            return None;
+        }
+        let v = if up {
+            Value::Max(Box::new(va), Box::new(vc))
+        } else {
+            Value::Min(Box::new(va), Box::new(vc))
+        };
+        let words: Vec<&str> = clause.split(' ').collect();
+        let (verb, noun) = (words.first()?, words.get(1..)?.join(" "));
+        clause_with_value(&format!("{verb} x {noun}"), &v, b)
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: A or B, whichever is greater", priority: 960, parse: p_whichever_is_greater } }
+
+/// "investigate once for each opponent who has more cards in hand than you".
+fn p_investigate_per_opponent_with_more_cards(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if end(l) != "investigate once for each opponent who has more cards in hand than you" {
+        return None;
+    }
+    Some(Effect::KeywordAction {
+        action: KeywordAction::Investigate,
+        who: PlayerRef::You,
+        what: Sel::None,
+        n: Value::CountPlayers(PlayerFilter::And(vec![
+            PlayerFilter::Opponent,
+            PlayerFilter::HandSize(Cmp::Gt, Box::new(Value::HandSize(PlayerRef::You))),
+        ])),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: investigate for each opponent with more cards in hand", priority: 960, parse: p_investigate_per_opponent_with_more_cards } }
+
+/// "you have more life than an opponent" (some opponent has less life than you), "you
+/// have more life than each opponent".
+fn c_more_life_than(c: &str) -> Option<Condition> {
+    let op = match end(c) {
+        "you have more life than an opponent" => AggOp::Min,
+        "you have more life than each opponent" => AggOp::Max,
+        _ => return None,
+    };
+    Some(Condition::Compare(
+        Value::LifeTotal(PlayerRef::You),
+        Cmp::Gt,
+        Value::OverPlayers(op, PlayerFilter::Opponent, Box::new(Value::LifeTotal(PlayerRef::Iterated))),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "hand/graveyard grammar: you have more life than an opponent", priority: 960, parse: c_more_life_than } }

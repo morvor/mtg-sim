@@ -1665,3 +1665,98 @@ fn balance_of_power_draws_the_difference() {
     t.resolve();
     assert_eq!(t.hand_size(P0), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Fifth batch: opponents of another player, whichever is greater, hand/life comparisons
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fifth_batch_compiles() {
+    assert_supported(&[
+        "Heartwood Storyteller",
+        "Standstill",
+        "Prophet of the Scarab",
+        "Wojek Investigator",
+        "Survival Cache",
+    ]);
+}
+
+#[test]
+fn standstill_the_casters_opponents_draw() {
+    cr!("102.2");
+    let mut t = TestGame::with_config(3, Default::default());
+    t.battlefield(P0, "Standstill");
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(P2).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Standstill"));
+    assert_eq!(t.hand_size(P0), 3);
+    assert_eq!(t.hand_size(P1), 0);
+    assert_eq!(t.hand_size(P2), 3);
+}
+
+#[test]
+fn heartwood_storyteller_each_opponent_of_the_caster_may_draw() {
+    cr!("102.2");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Heartwood Storyteller");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.answer_yes(P1, true);
+    t.cast(P0, bolt).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), 1);
+    assert_eq!(t.hand_size(P0), 0);
+}
+
+#[test]
+fn prophet_of_the_scarab_draws_the_greater_number() {
+    cr!("107.1");
+    let mut t = TestGame::new(2);
+    for _ in 0..3 {
+        t.graveyard(P0, "Gravecrawler");
+    }
+    t.battlefield(P0, "Gravecrawler");
+    t.enter(P0, "Prophet of the Scarab");
+    t.resolve_all();
+    // Zombies you control: Gravecrawler and the Prophet (2); Zombie cards: 3.
+    assert_eq!(t.hand_size(P0), 3);
+}
+
+#[test]
+fn wojek_investigator_counts_opponents_with_bigger_hands() {
+    cr!("701.16a");
+    let mut t = TestGame::with_config(3, Default::default());
+    t.battlefield(P0, "Wojek Investigator");
+    t.hand(P0, "Shock");
+    t.hand(P1, "Shock");
+    t.hand(P1, "Shock");
+    t.hand(P2, "Shock");
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    // P1 drew for their turn (3 cards), P2 too (2 cards); P0 has 1: two Clues.
+    assert_eq!(t.named_on_battlefield("Clue Token").len(), 2);
+}
+
+#[test]
+fn survival_cache_draws_with_more_life_than_an_opponent() {
+    cr!("119.1");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    let s = t.hand(P0, "Survival Cache");
+    t.g.players[P0.idx()].life = 19;
+    t.cast(P0, s).go();
+    t.resolve();
+    // 21 > 20.
+    assert_eq!(t.life(P0), 21);
+    assert_eq!(t.hand_size(P0), 1);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    let s = t.hand(P0, "Survival Cache");
+    t.g.players[P0.idx()].life = 17;
+    t.cast(P0, s).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 0);
+}
