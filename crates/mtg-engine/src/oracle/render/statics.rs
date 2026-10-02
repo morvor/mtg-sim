@@ -492,7 +492,23 @@ impl Renderer<'_> {
             Condition::YourTurn => "during your turn".into(),
             Condition::NotYourTurn => "during an opponent's turn".into(),
             Condition::Phase(PhaseCond::Combat) => "during combat".into(),
-            Condition::Phase(PhaseCond::Upkeep) => "during an opponent's upkeep".into(),
+            Condition::Phase(PhaseCond::Upkeep) => "during any upkeep step".into(),
+            Condition::And(v)
+                if matches!(
+                    v.as_slice(),
+                    [Condition::NotYourTurn, Condition::Phase(PhaseCond::Upkeep)]
+                ) =>
+            {
+                "during an opponent's upkeep".into()
+            }
+            Condition::And(v)
+                if matches!(
+                    v.as_slice(),
+                    [Condition::YourTurn, Condition::Phase(PhaseCond::Upkeep)]
+                ) =>
+            {
+                "during your upkeep".into()
+            }
             Condition::Phase(PhaseCond::DeclareAttackers) => {
                 "during the declare attackers step".into()
             }

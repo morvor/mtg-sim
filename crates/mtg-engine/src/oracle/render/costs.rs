@@ -372,6 +372,27 @@ impl Renderer<'_> {
                     restr.push("during your turn".into());
                 }
             }
+            // "Activate only during any upkeep step" / "... during your upkeep" / "...
+            // during an opponent's upkeep".
+            Some(Condition::Phase(PhaseCond::Upkeep)) => {
+                restr.push("during any upkeep step".into())
+            }
+            Some(Condition::And(v))
+                if matches!(
+                    v.as_slice(),
+                    [
+                        Condition::YourTurn | Condition::NotYourTurn,
+                        Condition::Phase(PhaseCond::Upkeep)
+                    ]
+                ) =>
+            {
+                let whose = if matches!(v[0], Condition::YourTurn) {
+                    "your"
+                } else {
+                    "an opponent's"
+                };
+                restr.push(format!("during {whose} upkeep"));
+            }
             Some(c) => {
                 let c = self.condition(c);
                 restr.push(format!("if {c}"));

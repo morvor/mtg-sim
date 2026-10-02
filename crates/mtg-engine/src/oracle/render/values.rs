@@ -500,7 +500,7 @@ impl Renderer<'_> {
             Condition::Phase(p) => match p {
                 PhaseCond::Combat => "it's combat".into(),
                 PhaseCond::MainPhase => "it's your main phase".into(),
-                PhaseCond::Upkeep => "it's your upkeep".into(),
+                PhaseCond::Upkeep => "it's an upkeep step".into(),
                 PhaseCond::DeclareAttackers => "it's the declare attackers step".into(),
                 PhaseCond::EndStep => "it's the end step".into(),
             },
