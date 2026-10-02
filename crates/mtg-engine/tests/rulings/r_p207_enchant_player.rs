@@ -169,3 +169,34 @@ fn curse_of_exhaustion_counts_spells_cast_before_it_entered() {
     t.advance_to(P1, mtg_engine::turn::Step::PrecombatMain);
     assert!(can_cast(&mut t, P1, gg2, CastMethod::Normal));
 }
+
+// ---------------------------------------------------------------------------------------
+// Fraying Sanity
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn fraying_sanity_counts_every_card_put_into_the_graveyard_this_turn() {
+    cr!("404.1", "701.17a", "111.1");
+    ruling!(
+        "Fraying Sanity",
+        "Fraying Sanity's triggered ability counts the number of cards that were put into the enchanted player's graveyard during the turn, even if Fraying Sanity wasn't on the battlefield at the time those cards were put there, and even if those cards have left that graveyard."
+    );
+    let mut t = TestGame::new(2);
+    // Before the Curse: two of P1's cards are put into their graveyard (one is then
+    // exiled), and a token of P1's dies (not a card).
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    destroy(&mut t, bears);
+    destroy(&mut t, giant);
+    crate::r_s05_common::move_to(&mut t, giant, mtg_engine::object::Zone::Exile);
+    let token = create_token(&mut t, P1, "Soldier");
+    destroy(&mut t, token);
+    // A card put into P0's graveyard doesn't count.
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    destroy(&mut t, mine);
+    curse(&mut t, "Fraying Sanity", P1);
+    let library = t.library_size(P1);
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert_eq!(t.library_size(P1), library - 2);
+}

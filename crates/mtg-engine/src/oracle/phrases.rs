@@ -1318,8 +1318,13 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
 /// "its controller", "its owner", "defending player". Returns (ref, target spec if any, rest).
 pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
-    let pairs: [(&str, PlayerRef); 12] = [
+    let pairs: [(&str, PlayerRef); 13] = [
         ("you ", PlayerRef::You),
+        // A Curse's player (CR 303.4).
+        (
+            "enchanted player ",
+            PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)),
+        ),
         ("each player ", PlayerRef::EachPlayer),
         ("each opponent ", PlayerRef::EachOpponent),
         ("each other player ", PlayerRef::EachOtherPlayer),
