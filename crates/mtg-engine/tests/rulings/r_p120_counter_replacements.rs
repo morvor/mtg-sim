@@ -405,3 +405,44 @@ fn bramblewood_paragon_gives_warriors_an_additional_counter() {
     let bears = t.enter(P0, "Grizzly Bears");
     assert_eq!(plus1(&t, bears), 0);
 }
+
+#[test]
+fn kami_of_whispered_hopes_adds_mana_equal_to_its_power() {
+    cr!("106.1", "605.1a");
+    let mut t = TestGame::new(2);
+    let kami = t.battlefield(P0, "Kami of Whispered Hopes");
+    give_plus1(&mut t, kami, 1);
+    // Two +1/+1 counters (one plus one): a 3/3, not enough for Hill Giant ({3}{R}).
+    assert_eq!(t.pt(kami).0, 3);
+    let giant = t.hand(P0, "Hill Giant");
+    assert!(t.cast_with(P0, giant, &[]).is_err());
+    give_plus1(&mut t, kami, 1);
+    assert_eq!(t.pt(kami).0, 5);
+    let giant = t.g.current(giant);
+    t.cast_with(P0, giant, &[]).expect("Kami pays {3}{R}");
+    assert!(t.obj_now(kami).tapped);
+}
+
+#[test]
+fn loading_zone_doubles_counters_on_a_spacecraft_and_has_warp() {
+    cr!("614.1a", "702.185a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Loading Zone");
+    let craft = t.battlefield(P0, "Wurmwall Sweeper");
+    put_counters(&mut t, craft, "charge", 2);
+    assert_eq!(t.counters(craft, "charge"), 4);
+    // Warp {G}: cast from hand for {G}, exiled at the beginning of the next end step.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 1);
+    let card = t.hand(P0, "Loading Zone");
+    t.cast(P0, card)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Warp,
+        ))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Loading Zone").len(), 1);
+    end_step(&mut t, P0);
+    assert!(t.named_on_battlefield("Loading Zone").is_empty());
+    assert!(t.in_exile("Loading Zone"));
+}
