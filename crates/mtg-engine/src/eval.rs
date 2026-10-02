@@ -506,7 +506,8 @@ impl Game {
                 let left = |e: &Entity| matches!(e, Entity::Object(h) if !self.is_live(*h));
                 o.attached_to.is_some_and(|e| hosts.contains(&e))
                     || (o.attached_to.is_none()
-                        && o.last_attached_to.is_some_and(|e| left(&e) && hosts.contains(&e)))
+                        && o.last_attached_to
+                            .is_some_and(|e| left(&e) && hosts.contains(&e)))
             }
             Filter::InZone(z) => o.zone.kind() == Some(*z),
             // Only permanents have status (CR 110.5d).

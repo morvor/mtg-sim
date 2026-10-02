@@ -59,6 +59,12 @@ mod probe {
             if l.is_empty() {
                 continue;
             }
+            if let Some(x) = l.strip_prefix("U:") {
+                let cd = crate::card::card(x);
+                let u = cd.unsupported_text();
+                eprintln!("U {x}: {}", if u.is_empty() { "OK".to_string() } else { u.join(" | ") });
+                continue;
+            }
             if let Some(x) = l.strip_prefix("P:") {
                 eprintln!("P {x:?} => {:?}", crate::oracle::phrases::parse_object_phrase(x));
                 continue;

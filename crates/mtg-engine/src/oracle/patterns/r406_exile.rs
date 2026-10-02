@@ -63,7 +63,12 @@ fn look_then_exile_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
     let (what, rest) = top_of_library(r, b)?;
     if !matches!(
         rest.as_str(),
-        ", then exile it face down" | " and exile it face down" | ", then exile them face down"
+        ", then exile it face down"
+            | " and exile it face down"
+            | ", then exile them face down"
+            | " and exile them face down"
+            | ", then exile those cards face down"
+            | " and exile those cards face down"
     ) {
         return None;
     }

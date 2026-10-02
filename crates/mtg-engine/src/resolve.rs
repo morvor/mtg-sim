@@ -1168,7 +1168,11 @@ impl Game {
             }
             Effect::TurnFaceUp { what } => {
                 for o in self.resolve_objects(what, ctx) {
-                    crate::facedown::turn_face_up(self, o, false);
+                    if self.obj(o).zone == Zone::Exile {
+                        crate::facedown::turn_exiled_face_up(self, o);
+                    } else {
+                        crate::facedown::turn_face_up(self, o, false);
+                    }
                 }
             }
             Effect::TurnFaceDown { what } => {

@@ -1,0 +1,386 @@
+//! Exiling cards face down (CR 406.3): "[instruction] face down" and "look at the top N
+//! cards of [a library], exile one of them face down, then put the rest ..." (patterns in
+//! `src/oracle/patterns/face_status_grammar.rs`).
+
+use mtg_engine::object::{CastMethod, Zone};
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::zones;
+use mtg_engine::*;
+
+fn assert_compiles(names: &[&str]) {
+    for n in names {
+        let u = card(n).unsupported_text().join(" | ");
+        assert!(u.is_empty(), "{n} has unsupported text: {u}");
+    }
+}
+
+/// Puts the named cards on top of `p`'s library, the last one on top; returns them.
+fn stack(t: &mut TestGame, p: PlayerId, names: &[&str]) -> Vec<ObjectId> {
+    names.iter().map(|n| t.library_top(p, n)).collect()
+}
+
+/// The face-down cards in exile.
+fn exiled_face_down(t: &TestGame) -> Vec<ObjectId> {
+    t.g.exile
+        .iter()
+        .copied()
+        .filter(|o| t.g.obj(*o).face_down)
+        .collect()
+}
+
+#[test]
+fn face_down_exile_cards_compile() {
+    assert_compiles(&[
+        "Bottled Cloister",
+        "Decadent Dragon // Expensive Taste",
+        "Vivien, Champion of the Wilds",
+        "Clone Shell",
+        "Extract Power",
+        "Discover the Impossible",
+        "Siphon Insight",
+        "Outrageous Robbery",
+        "Inverter of Truth",
+        "Lobelia, Defender of Bag End",
+        "Gonti, Lord of Luxury",
+        "Induced Amnesia",
+        "Thief of Sanity",
+        "Petty Larceny",
+        "Gandalf, Goblins' Bane // Flameshape",
+    ]);
+}
+
+#[test]
+fn bottled_cloister_exiles_the_hand_face_down_and_returns_it() {
+    cr!("406.3", "607.2a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bottled Cloister");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 0);
+    let exiled = exiled_face_down(&t);
+    assert_eq!(exiled.len(), 2);
+    // No player may look at them (CR 406.3).
+    for o in &exiled {
+        assert!(!zones::may_look(&t.g, P0, *o));
+        assert!(!zones::may_look(&t.g, P1, *o));
+    }
+    // At the beginning of P0's upkeep they come back, then P0 draws.
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), Zone::Hand(P0));
+    assert_eq!(t.zone(bears), Zone::Hand(P0));
+    assert_eq!(t.hand_size(P0), 3);
+}
+
+#[test]
+fn expensive_taste_exiles_the_top_two_cards_of_target_opponents_library_face_down() {
+    cr!("406.3");
+    let mut t = TestGame::new(2);
+    let top = stack(&mut t, P1, &["Grizzly Bears", "Shock"]);
+    let card = t.hand(P0, "Decadent Dragon // Expensive Taste");
+    t.lands(P0, "Swamp", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, card)
+        .method(CastMethod::Half(1))
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    for c in top {
+        let now = t.g.current(c);
+        assert_eq!(t.zone(now), Zone::Exile);
+        assert!(t.g.obj(now).face_down);
+        // "You may look at and play those cards for as long as they remain exiled."
+        assert!(zones::may_look(&t.g, P0, now));
+        assert!(!zones::may_look(&t.g, P1, now));
+    }
+}
+
+#[test]
+fn induced_amnesia_target_player_exiles_their_hand_face_down_and_draws_that_many() {
+    cr!("406.3", "121.1");
+    ruling!("Induced Amnesia", "No player may look at the exiled cards.");
+    let mut t = TestGame::new(2);
+    for n in ["Lightning Bolt", "Shock", "Grizzly Bears"] {
+        t.hand(P1, n);
+    }
+    let library = t.library_size(P1);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Induced Amnesia");
+    t.resolve_all();
+    let exiled = exiled_face_down(&t);
+    assert_eq!(exiled.len(), 3);
+    assert!(exiled.iter().all(|o| t.g.obj(*o).owner == P1));
+    assert!(exiled
+        .iter()
+        .all(|o| !zones::may_look(&t.g, P0, *o) && !zones::may_look(&t.g, P1, *o)));
+    assert_eq!(t.hand_size(P1), 3);
+    assert_eq!(t.library_size(P1), library - 3);
+}
+
+#[test]
+fn hoarding_broodlord_searches_for_a_card_and_exiles_it_face_down() {
+    cr!("406.3", "701.23a");
+    let mut t = TestGame::new(2);
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.enter(P0, "Hoarding Broodlord");
+    t.resolve_all();
+    let now = t.g.current(bolt);
+    assert_eq!(t.zone(now), Zone::Exile);
+    assert!(t.g.obj(now).face_down);
+}
+
+#[test]
+fn vivien_exiles_one_of_the_top_three_face_down_and_the_rest_go_to_the_bottom() {
+    cr!("406.3", "701.20b");
+    let mut t = TestGame::new(2);
+    let cards = stack(&mut t, P0, &["Grizzly Bears", "Shock", "Llanowar Elves"]);
+    let vivien = t.battlefield(P0, "Vivien, Champion of the Wilds");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(cards[0])]);
+    t.activate(P0, vivien, 1, &[]).unwrap();
+    t.resolve_all();
+    let exiled = t.g.current(cards[0]);
+    assert_eq!(t.zone(exiled), Zone::Exile);
+    assert!(t.g.obj(exiled).face_down);
+    // The other two are on the bottom of P0's library.
+    let lib = &t.g.player(P0).library;
+    let mut bottom = lib[..2].to_vec();
+    bottom.sort();
+    let mut expected = vec![cards[1], cards[2]];
+    expected.sort();
+    assert_eq!(bottom, expected);
+}
+
+#[test]
+fn clone_shell_must_exile_one_of_the_cards_even_if_none_is_a_creature() {
+    cr!("406.3", "607.2a");
+    ruling!(
+        "Clone Shell",
+        "As Clone Shell's first ability resolves, you must exile one of the cards you look at, even if none of them is a creature card."
+    );
+    let mut t = TestGame::new(2);
+    stack(&mut t, P0, &["Shock", "Lightning Bolt", "Counterspell", "Island"]);
+    let size = t.library_size(P0);
+    t.enter(P0, "Clone Shell");
+    t.resolve_all();
+    assert_eq!(exiled_face_down(&t).len(), 1);
+    assert_eq!(t.library_size(P0), size - 1);
+}
+
+#[test]
+fn gonti_its_controller_chooses_the_card_from_the_opponents_library() {
+    cr!("406.3", "608.2c");
+    ruling!(
+        "Gonti, Lord of Luxury",
+        "Gonti doesn't change when you can cast the exiled card."
+    );
+    let mut t = TestGame::new(2);
+    let cards = stack(
+        &mut t,
+        P1,
+        &["Grizzly Bears", "Shock", "Llanowar Elves", "Giant Growth"],
+    );
+    let size = t.library_size(P1);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[Entity::Object(cards[2])]);
+    t.enter(P0, "Gonti, Lord of Luxury");
+    t.resolve_all();
+    let elves = t.g.current(cards[2]);
+    assert_eq!(t.zone(elves), Zone::Exile);
+    assert!(t.g.obj(elves).face_down);
+    assert_eq!(t.library_size(P1), size - 1);
+    // The other three are on the bottom of P1's library.
+    let lib = t.g.player(P1).library.clone();
+    let mut bottom = lib[..3].to_vec();
+    bottom.sort();
+    let mut expected = vec![cards[0], cards[1], cards[3]];
+    expected.sort();
+    assert_eq!(bottom, expected);
+    // P0 (not the library's owner) chose the card.
+    assert!(t.asked().iter().any(|(p, d)| *p == P0
+        && matches!(d, mtg_engine::decision::Decision::ChooseEntities { candidates, .. }
+            if candidates.len() == 4)));
+    // P0 may cast it.
+    t.lands(P0, "Forest", 1);
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, elves).go();
+    t.resolve_all();
+    assert_eq!(t.g.obj(t.g.current(elves)).controller, P0);
+    assert!(t.on_battlefield(t.g.current(elves)));
+}
+
+#[test]
+fn thief_of_sanity_exiles_one_and_puts_the_rest_into_their_graveyard() {
+    cr!("406.3", "510.2");
+    let mut t = TestGame::new(2);
+    let cards = stack(&mut t, P1, &["Grizzly Bears", "Shock", "Llanowar Elves"]);
+    let thief = t.battlefield(P0, "Thief of Sanity");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(cards[1])]);
+    t.attack(&[(thief, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    let shock = t.g.current(cards[1]);
+    assert_eq!(t.zone(shock), Zone::Exile);
+    assert!(t.g.obj(shock).face_down);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+}
+
+#[test]
+fn siphon_insight_puts_the_other_card_on_the_bottom_of_that_library() {
+    cr!("406.3");
+    let mut t = TestGame::new(2);
+    let cards = stack(&mut t, P1, &["Grizzly Bears", "Shock"]);
+    let spell = t.hand(P0, "Siphon Insight");
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Swamp", 1);
+    t.answer_choose(P0, &[Entity::Object(cards[0])]);
+    t.cast(P0, spell).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    let bears = t.g.current(cards[0]);
+    assert_eq!(t.zone(bears), Zone::Exile);
+    assert!(t.g.obj(bears).face_down);
+    assert_eq!(t.g.player(P1).library[0], cards[1]);
+}
+
+#[test]
+fn lobelia_exiles_the_top_card_of_each_opponents_library_face_down() {
+    cr!("406.3");
+    let mut t = TestGame::new(3);
+    let a = t.library_top(P1, "Shock");
+    let b = t.library_top(P2, "Grizzly Bears");
+    let mine = t.library_top(P0, "Lightning Bolt");
+    t.enter(P0, "Lobelia, Defender of Bag End");
+    t.resolve_all();
+    for c in [a, b] {
+        let now = t.g.current(c);
+        assert_eq!(t.zone(now), Zone::Exile);
+        assert!(t.g.obj(now).face_down);
+        // Having looked at them, P0 may look at them in exile.
+        assert!(zones::may_look(&t.g, P0, now));
+    }
+    assert_eq!(t.zone(mine), Zone::Library(P0));
+}
+
+// ---------------------------------------------------------------------------
+// Turning face up
+// ---------------------------------------------------------------------------
+
+fn destroy(t: &mut TestGame, id: ObjectId) {
+    t.g.destroy(id, None);
+    t.g.flush_events();
+    t.settle();
+}
+
+#[test]
+fn face_up_cards_compile() {
+    assert_compiles(&[
+        "Clone Shell",
+        "The Creation of Avacyn",
+        "Hustle // Bustle",
+        "Showstopping Surprise",
+    ]);
+}
+
+#[test]
+fn clone_shell_turns_the_exiled_card_face_up_and_puts_a_creature_onto_the_battlefield() {
+    cr!("406.3", "607.2a", "603.10a");
+    let mut t = TestGame::new(2);
+    let cards = stack(&mut t, P0, &["Grizzly Bears", "Shock", "Island", "Swamp"]);
+    t.answer_choose(P0, &[Entity::Object(cards[0])]);
+    let shell = t.enter(P0, "Clone Shell");
+    t.resolve_all();
+    let exiled = t.g.current(cards[0]);
+    assert!(t.g.obj(exiled).face_down);
+    destroy(&mut t, shell);
+    t.resolve_all();
+    let bears = t.g.current(cards[0]);
+    assert!(t.on_battlefield(bears));
+    assert!(!t.g.obj(bears).face_down);
+    assert_eq!(t.g.obj(bears).controller, P0);
+}
+
+#[test]
+fn clone_shell_leaves_a_noncreature_card_face_up_in_exile() {
+    cr!("406.3");
+    ruling!(
+        "Clone Shell",
+        "As Clone Shell's second ability resolves, if the exiled card is not a creature card, it simply remains in exile face up."
+    );
+    let mut t = TestGame::new(2);
+    let cards = stack(&mut t, P0, &["Shock", "Island", "Swamp", "Plains"]);
+    t.answer_choose(P0, &[Entity::Object(cards[0])]);
+    let shell = t.enter(P0, "Clone Shell");
+    t.resolve_all();
+    destroy(&mut t, shell);
+    t.resolve_all();
+    let shock = t.g.current(cards[0]);
+    assert_eq!(t.zone(shock), Zone::Exile);
+    assert!(!t.g.obj(shock).face_down);
+    // Face up in exile: any player may examine it (CR 406.3).
+    assert!(mtg_engine::facedown::can_look_at(&t.g, P1, shock));
+}
+
+#[test]
+fn creation_of_avacyn_turns_the_exiled_card_face_up_and_you_lose_life() {
+    cr!("406.3", "714.2b");
+    let mut t = TestGame::new(2);
+    let angel = t.library_top(P0, "Serra Angel");
+    t.answer_choose(P0, &[Entity::Object(angel)]);
+    let saga = t.enter(P0, "The Creation of Avacyn");
+    t.resolve_all();
+    let exiled = t.g.current(angel);
+    assert!(t.g.obj(exiled).face_down);
+    // Chapter II.
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    let exiled = t.g.current(angel);
+    assert_eq!(t.zone(exiled), Zone::Exile);
+    assert!(!t.g.obj(exiled).face_down);
+    assert_eq!(t.life(P0), 20 - 5);
+}
+
+#[test]
+fn showstopping_surprise_turns_a_face_down_creature_face_up_before_it_deals_damage() {
+    cr!("708.8", "120.3");
+    let mut t = TestGame::new(2);
+    let ogre = t.battlefield(P0, "Hill Giant");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, ogre));
+    t.g.recompute();
+    assert_eq!(t.pt(ogre), (2, 2));
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    let spell = t.hand(P0, "Showstopping Surprise");
+    t.lands(P0, "Mountain", 5);
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, spell).target(Entity::Object(ogre)).go();
+    t.resolve_all();
+    assert!(!t.g.obj(ogre).face_down);
+    // A 3/3 deals 3 damage.
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(t.g.obj(wall).damage, 3);
+}
+
+#[test]
+fn bustle_may_turn_a_creature_you_control_face_up() {
+    cr!("708.8");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, giant));
+    t.g.recompute();
+    let spell = t.hand(P0, "Hustle // Bustle");
+    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Mountain", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, spell).method(CastMethod::Half(1)).go();
+    t.resolve_all();
+    assert!(!t.g.obj(giant).face_down);
+    assert_eq!(t.pt(giant), (5, 5));
+}

@@ -251,6 +251,20 @@ pub fn reveal_all(g: &mut Game, owner: Option<PlayerId>) {
     }
 }
 
+/// Turns a card exiled face down face up ("turn the exiled card face up"): from then on
+/// it's an ordinary exiled card that any player may examine (CR 406.3). Returns true if
+/// it did.
+pub fn turn_exiled_face_up(g: &mut Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    if !o.face_down || o.zone != Zone::Exile || !g.is_live(id) {
+        return false;
+    }
+    g.objects[id.0 as usize].face_down = false;
+    g.dirty = true;
+    g.recompute();
+    true
+}
+
 /// Turns a face-down permanent face up (CR 708.8). Returns true if it did.
 pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
     let o = g.obj(id);
