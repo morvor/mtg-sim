@@ -885,6 +885,10 @@ fn choice_kind(s: &str) -> Option<ChoiceKind> {
         "a creature type" => ChoiceKind::CreatureType,
         "a card name" | "any card name" => ChoiceKind::CardName,
         "a nonland card name" => ChoiceKind::CardNameFiltered("nonland".into()),
+        // Any name but those of basic land cards (Desperate Research, Booby Trap).
+        "a card name other than a basic land card name" => {
+            ChoiceKind::CardNameFiltered("not:basic land".into())
+        }
         "a creature card name" => ChoiceKind::CardNameFiltered("creature".into()),
         "an opponent" | "one of your opponents" => ChoiceKind::Opponent,
         "a player" => ChoiceKind::Player,

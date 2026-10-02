@@ -123,14 +123,14 @@ fn legal_at(g: &Game, id: ObjectId, body: &Body, chosen: &[ChosenMode], i: Insta
     {
         return false;
     }
+    let mut ctx = g.stack_ctx(id);
+    ctx.targets = cm.targets.clone();
     // Targets that must have a relationship with each other ("from a single graveyard").
-    if let Some(grp) = spec.together {
-        if !crate::target_groups::group_ok(g, grp, &cm.targets[i.slot]) {
+    if let Some(grp) = &spec.together {
+        if !crate::target_groups::group_ok(g, grp, &cm.targets[i.slot], &ctx) {
             return false;
         }
     }
-    let mut ctx = g.stack_ctx(id);
-    ctx.targets = cm.targets.clone();
     g.is_legal_target(spec, e, &ctx, id)
 }
 

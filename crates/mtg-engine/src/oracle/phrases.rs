@@ -9,6 +9,21 @@ use crate::keywords::KeywordKind;
 use crate::types::*;
 use smol_str::SmolStr;
 
+/// A filter parsed from a probe phrase "card [qualifiers]" without the probe's own head
+/// noun: only the qualifiers are meant ("you control", "of the chosen type"). `Card`
+/// would exclude tokens (CR 108.2), which the qualifiers don't.
+pub fn without_probe_card(f: Filter) -> Filter {
+    match f {
+        Filter::Card => Filter::Any,
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|x| !matches!(x, Filter::Card))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 /// Parses a number word or digits at the start of `s`. Returns (value, rest).
 pub fn parse_number(s: &str) -> Option<(Value, &str)> {
     let s = s.trim_start();
@@ -30,6 +45,7 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "fourteen" | "14" => 14,
         "fifteen" | "15" => 15,
         "twenty" | "20" => 20,
+        "thirty" => 30,
         "fifty" | "50" => 50,
         "x" => return Some((Value::X, rest)),
         other => {
@@ -298,10 +314,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     let mut group_start = 0;
     let mut plural = false;
     let mut head_subtypes_only = true;
+    // The heads are a comma list ("artifact, enchantment, or creature").
+    let mut comma_list = false;
     loop {
         let (w, rest) = split_word(s);
         let w2 = w.trim_end_matches(',');
         let Some(f) = head_noun(w2) else { break };
+        if w.ends_with(',') {
+            comma_list = true;
+        }
         if !matches!(f, Filter::Subtype(_)) {
             head_subtypes_only = false;
         }
@@ -467,6 +488,32 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 heads.push(Filter::and(vec![last, f]));
                 s = r;
             }
+        }
+    } else if heads.len() > 1 && comma_list {
+        // "target artifact, enchantment, or creature with flying", "artifact, enchantment,
+        // or creature with power 4 or greater": an ability or a power/toughness after a
+        // comma list describes its last item only (the others don't have one). Other
+        // qualifiers ("with mana value 3 or less", "you control") describe them all.
+        let t = s.trim_start();
+        let keyword = |f: &Filter| match f {
+            Filter::HasKeyword(_) => true,
+            Filter::Not(x) => matches!(**x, Filter::HasKeyword(_)),
+            _ => false,
+        };
+        let last_only = parse_with_suffix(t)
+            .filter(|(f, _)| keyword(f))
+            .or_else(|| {
+                parse_stat_suffix(t).filter(|(f, _)| {
+                    matches!(
+                        f,
+                        Filter::Power(..) | Filter::Toughness(..) | Filter::PowerVsBase(_)
+                    )
+                })
+            });
+        if let Some((f, r)) = last_only {
+            let last = heads.pop().unwrap();
+            heads.push(Filter::and(vec![last, f]));
+            s = r;
         }
     }
     let head = if heads.len() == 1 {
@@ -719,13 +766,23 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 Filter::Custom(crate::attach::ENCHANTED_BY_YOUR_AURA.into()),
                 r,
             )
+        } else if let Some((f, r)) = {
+            let so_far = Filter::and(parts.clone());
+            super::patterns::filter_suffix_patterns()
+                .iter()
+                .find_map(|p| (p.parse)(t, &so_far))
+        } {
+            // Qualifiers registered by pattern files (`FilterSuffixPattern`).
+            (f, r)
         } else {
             break;
         };
         parts.push(f);
         s = rest;
     }
-    Some((Filter::and(parts), plural, s))
+    // "each other creature that shares a color with it": other than "it".
+    let f = super::patterns::filters_relational::other_than_referent(Filter::and(parts));
+    Some((f, plural, s))
 }
 
 /// "target player controls" / "target opponent controls" after an object phrase. The
@@ -924,6 +981,10 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         // "with no counters on them" (Damning Verdict, Hazardous Conditions).
         if let Some(tail) = rest.strip_prefix("no counters on them") {
             return Some((Filter::not(Filter::HasCounter(None)), tail));
+        }
+        // "creatures you control with counters on them" (Synchronized Charge): any kind.
+        if let Some(tail) = rest.strip_prefix("counters on them") {
+            return Some((Filter::HasCounter(None), tail));
         }
         let (kind, r2) = split_word(rest);
         if let Some(tail) = r2.strip_prefix("counters on them") {
@@ -1219,7 +1280,21 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         (TargetKind::Ability(f), r)
     } else {
         let (f, _plural, r) = parse_object_phrase(s)?;
+        // Requirements on the targets taken together ("with different names", "with
+        // total mana value 6 or less") belong to the target slot.
+        let (f, groups) = crate::relational::split_groups(f);
+        if groups.len() > 1 || crate::relational::has_nested_group(&f) {
+            return None;
+        }
+        let lifted = groups.into_iter().next();
         let (f, r) = target_group_suffix(f, &s[..s.len() - r.len()], r, &mut together)?;
+        if lifted.is_some() {
+            // Only one requirement per slot.
+            if together.is_some() {
+                return None;
+            }
+            together = lifted;
+        }
         // "target planeswalker that was activated this turn or tapped creature": an
         // alternative description after the first one's suffixes, ending the phrase. Not
         // after a list ("target Spirit, creature with disturb, or enchantment"), whose
@@ -1302,7 +1377,7 @@ fn target_group_suffix<'a>(
     ];
     let Some((rest, grp)) = groups
         .iter()
-        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, *g)))
+        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, g.clone())))
     else {
         return Some((f, r));
     };

@@ -147,7 +147,13 @@ fn parse_triggered_at(
     if matches!(it_player, PlayerRef::Iterated) && eff.to_lowercase().contains("that player") {
         return None;
     }
-    let body = parse_trigger_body(eff, ctx, it, it_player)?;
+    let mut body = parse_trigger_body(eff, ctx, it, it_player)?;
+    // "Whenever you cast your first spell with {X} in its mana cost each turn, put X +1/+1
+    // counters on ~": a triggered ability has no X of its own; X is the spell's (CR 107.3e).
+    if casts_spell_with_x(&trigger) {
+        let x = Value::XOf(Box::new(Sel::TriggerSpell));
+        body.effect = super::patterns::r107_numbers::substitute_x(&body.effect, &x)?;
+    }
     // CR 605.1b: a triggered ability without targets that triggers from resolving a mana
     // ability and could add mana is a mana ability (it resolves immediately, CR 605.4a).
     let is_mana_ability = is_triggered_mana_ability(&trigger, &body);
@@ -724,4 +730,20 @@ fn spell_caster(r: &str) -> Option<(PlayerRel, &str)> {
         return Some((PlayerRel::Any, x));
     }
     None
+}
+
+/// A trigger on casting a spell with {X} in its mana cost.
+fn casts_spell_with_x(t: &TriggerCond) -> bool {
+    fn has_x(f: &Filter) -> bool {
+        match f {
+            Filter::HasX => true,
+            Filter::And(v) => v.iter().any(has_x),
+            _ => false,
+        }
+    }
+    match t {
+        TriggerCond::CastSpell { filter, .. } => has_x(filter),
+        TriggerCond::FirstTimeEachTurn(t) => casts_spell_with_x(t),
+        _ => false,
+    }
 }

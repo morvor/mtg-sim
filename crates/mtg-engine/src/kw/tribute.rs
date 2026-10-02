@@ -105,8 +105,10 @@ fn tribute(g: &mut Game, ctx: &mut Ctx, this: ObjectId, n: u32) {
         )
     });
     if paid {
-        if let Some(em) = ctx.entering.as_mut() {
-            em.counters.push((SmolStr::new(counters::PLUS1), n));
+        // CR 122.6a: the effect specifies who puts them: the player chosen to pay tribute
+        // ("For effects that check which player put counters on the entering creature").
+        if let (Some(em), Some(q)) = (ctx.entering.as_mut(), chosen) {
+            em.counters_by.push((SmolStr::new(counters::PLUS1), n, q));
         }
     }
     let rec = g.objects[this.0 as usize]

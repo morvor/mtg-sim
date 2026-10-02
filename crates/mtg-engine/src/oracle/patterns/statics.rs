@@ -448,7 +448,7 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             if let Some((g, _, r)) = parse_object_phrase(&probe) {
                 let consumed = t.len().saturating_sub(r.len());
                 if consumed > 0 && r.len() <= t.len() {
-                    parts.push(g);
+                    parts.push(crate::oracle::phrases::without_probe_card(g));
                     rest = &t[consumed..];
                     continue;
                 }
@@ -831,9 +831,17 @@ fn counter_words(body: &str) -> Option<Option<CounterKind>> {
 /// What's counted by "for each [...]" or "the number of [...]" (singular or plural
 /// nouns). `it` is the single object the subject is, if any.
 pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
-    parse_for_each_inner(s, it)
+    let v = parse_for_each_inner(s, it)
         .or_else(|| super::value_grammar::whole_count(s, it))
-        .or_else(|| super::cost_parts::paid_this_way(s))
+        .or_else(|| super::cost_parts::paid_this_way(s))?;
+    // "for each other creature you control with the same name as that creature" (Mirror
+    // Box): a relational qualifier's "it" is what "it" means here (each affected object).
+    match it {
+        Some(sel) if super::filters_relational::mentions_referent(&v) => {
+            super::filters_relational::substitute(&v, sel)
+        }
+        _ => Some(v),
+    }
 }
 
 fn parse_for_each_inner(s: &str, it: Option<&Sel>) -> Option<Value> {
@@ -1948,6 +1956,13 @@ fn single_restriction(p: &str, f: &Filter) -> Option<Restriction> {
                 return None;
             }
             let (b, _) = whole_object_phrase(r)?;
+            // "~ can't be blocked by creatures with greater power": than ~ (the referent of
+            // a relational qualifier, see `filters_relational`).
+            let b = if matches!(f, Filter::Source) {
+                super::filters_relational::substitute(&b, &Sel::This)?
+            } else {
+                b
+            };
             Restriction::CantBeBlockedBy {
                 attacker: f,
                 blocker: b,
