@@ -2,7 +2,7 @@
 //! and triggered abilities were offered, activated, triggered and resolved (counted
 //! through the game's events), and an agent that prefers using a focus card.
 
-use mtg_engine::ability::{AbilityDef, AbilityKind};
+use mtg_engine::ability::{AbilityDef, AbilityKind, FunctionZone};
 use mtg_engine::agents::RandomAgent;
 use mtg_engine::decision::SpecialAction;
 use mtg_engine::events::Event;
@@ -255,16 +255,24 @@ impl Focus {
     /// engine only lists other actions.
     fn mana_actions(&self, g: &Game, p: PlayerId) -> Vec<Action> {
         let mut out = Vec::new();
-        for &id in &g.battlefield {
+        // Permanents it controls, and cards in its hand (Simian Spirit Guide).
+        let hand = &g.player(p).hand;
+        for &id in g.battlefield.iter().chain(hand) {
             let o = g.obj(id);
-            if o.controller != p || !self.is_focus_card(g, id) {
+            let in_hand = o.zone == Zone::Hand(p);
+            if (!in_hand && o.controller != p) || !self.is_focus_card(g, id) {
                 continue;
             }
             for a in &o.chars.abilities {
-                if matches!(a.kind, AbilityKind::Activated(_))
-                    && a.is_mana_ability()
-                    && self.uids.contains(&a.uid)
-                {
+                let AbilityKind::Activated(act) = &a.kind else {
+                    continue;
+                };
+                let zone_ok = if in_hand {
+                    act.zone == FunctionZone::Hand
+                } else {
+                    act.zone == FunctionZone::Battlefield
+                };
+                if zone_ok && a.is_mana_ability() && self.uids.contains(&a.uid) {
                     out.push(Action::Activate {
                         source: id,
                         ability: a.uid,

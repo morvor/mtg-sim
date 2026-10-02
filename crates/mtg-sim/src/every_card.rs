@@ -939,7 +939,7 @@ fn reasons(c: &PoolCard, abilities: &[Tracked], u: &Usage) -> Vec<String> {
                 t.trigger.as_deref().unwrap_or("?")
             ),
         };
-        out.push(format!("{face}{r}\t{}", t.text));
+        out.push(format!("{face}{r}\t{}", t.text.replace('\n', " / ")));
     }
     out
 }
