@@ -106,7 +106,7 @@ fn betrayal_falls_off_a_creature_not_controlled_by_an_opponent() {
 
 #[test]
 fn journey_to_eternity_returns_a_creature_you_dont_own_under_your_control() {
-    cr!("303.4e", "608.2c", "800.4a", "712.14");
+    cr!("303.4e", "608.2c", "800.4a", "712.14a");
     ruling!(
         "Journey to Eternity",
         "If Journey to Eternity enchants a creature you control but don't own, the creature will return to the battlefield under your control from its owner's graveyard when it dies."

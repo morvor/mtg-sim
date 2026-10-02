@@ -52,7 +52,7 @@ fn relic_putrescence_trigger_after_a_mana_ability_and_before_other_abilities() {
 
 #[test]
 fn disruption_aura_x_in_the_artifacts_mana_cost_is_zero() {
-    cr!("107.3b", "202.1", "118.5");
+    cr!("107.3h", "202.1", "118.5");
     ruling!(
         "Disruption Aura",
         "If the enchanted artifact has X in its mana cost, X is 0."
@@ -74,7 +74,7 @@ fn disruption_aura_x_in_the_artifacts_mana_cost_is_zero() {
 
 #[test]
 fn illusory_gains_stays_put_when_it_cant_enchant_the_entering_creature() {
-    cr!("303.4d", "702.16c", "701.3b");
+    cr!("303.4j", "702.16c", "701.3b");
     ruling!(
         "Illusory Gains",
         "If Illusory Gains can't legally enchant the creature that enters the battlefield (perhaps because it has protection from blue), it remains where it is. You retain control of the creature it's currently enchanting."

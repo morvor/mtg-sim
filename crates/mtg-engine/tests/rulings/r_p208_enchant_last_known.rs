@@ -175,7 +175,7 @@ fn ghostly_wings_returns_the_creature_enchanted_when_it_left() {
 
 #[test]
 fn dreadful_apathy_exiles_the_permanent_it_last_enchanted_even_if_not_a_creature() {
-    cr!("608.2h", "113.7a", "303.4d", "704.5m");
+    cr!("608.2h", "113.7a", "303.4c", "704.5m");
     ruling!(
         "Dreadful Apathy",
         "If Dreadful Apathy leaves the battlefield while its last ability is on the stack, the permanent that's exiled is the one Dreadful Apathy enchanted before leaving the battlefield, even if that permanent is no longer a creature."
@@ -359,7 +359,7 @@ fn followed_footsteps_leaving_with_its_creature_copies_that_creature() {
 
 #[test]
 fn caught_in_the_brights_exiles_the_creature_it_enchanted_as_it_left() {
-    cr!("608.2h", "113.7a", "301.7a");
+    cr!("608.2h", "113.7a");
     ruling!(
         "Caught in the Brights",
         "If Caught in the Brights leaves the battlefield in response to its triggered ability, the resolving ability will exile the creature Caught in the Brights was enchanting as it left the battlefield."

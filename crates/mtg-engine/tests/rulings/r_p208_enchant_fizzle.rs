@@ -37,7 +37,7 @@ fn fizzles(aura: &str, host: &str) {
 
 #[test]
 fn aura_spells_with_an_illegal_target_dont_resolve_or_trigger() {
-    cr!("608.2b", "303.4d", "603.6a", "603.6c", "701.6a");
+    cr!("608.2b", "608.3b", "303.4a", "603.6a", "603.6c");
     ruling!(
         "Aspect of Lamprey",
         "If the creature Aspect of Lamprey would enchant is an illegal target by the time the Aura spell resolves, the entire spell doesn't resolve."
@@ -144,7 +144,7 @@ fn aura_spells_with_an_illegal_target_dont_resolve_or_trigger() {
 
 #[test]
 fn the_same_auras_resolve_and_trigger_with_a_legal_target() {
-    cr!("608.3a", "303.4f");
+    cr!("608.3c", "603.6a", "603.6c");
     supported("Grizzly Bears");
     // Control: with the target still there, Rousing Read resolves and draws.
     let mut t = TestGame::new(2);

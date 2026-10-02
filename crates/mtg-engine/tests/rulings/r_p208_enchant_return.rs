@@ -168,3 +168,39 @@ fn kayas_ghostform_falls_off_when_another_player_gains_control_of_the_permanent(
     give_control(&mut t, bears, P1);
     assert!(t.in_graveyard(P0, GHOSTFORM));
 }
+
+#[test]
+fn athreos_returns_a_creature_with_a_coin_counter_that_dies_or_is_exiled() {
+    cr!("603.10a", "603.6c", "110.2a");
+    // "Whenever another creature with a coin counter on it dies or is put into exile,
+    // return that card to the battlefield under your control." (Kaya's Ghostform's
+    // trigger, with a non-Aura subject).
+    supported("Athreos, Shroud-Veiled");
+    supported("Swords to Plowshares");
+    for exile in [false, true] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Athreos, Shroud-Veiled");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let plain = t.battlefield(P1, "Hill Giant");
+        t.g.add_counters(Entity::Object(bears), "coin", 1, None);
+        for c in [bears, plain] {
+            if exile {
+                cast_spell(&mut t, P0, "Swords to Plowshares", &[Entity::Object(c)]);
+            } else {
+                destroy(&mut t, c);
+            }
+            t.resolve_all();
+        }
+        let back = t.named_on_battlefield("Grizzly Bears");
+        assert_eq!(back.len(), 1, "exile: {exile}");
+        assert_eq!(t.g.obj(back[0]).controller, P0);
+        assert_eq!(t.g.obj(back[0]).owner, P1);
+        // No coin counter: the Hill Giant stays where it went.
+        assert!(t.named_on_battlefield("Hill Giant").is_empty(), "exile: {exile}");
+        if exile {
+            assert!(t.in_exile("Hill Giant"));
+        } else {
+            assert!(t.in_graveyard(P1, "Hill Giant"));
+        }
+    }
+}

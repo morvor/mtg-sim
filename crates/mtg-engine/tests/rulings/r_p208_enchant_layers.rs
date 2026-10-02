@@ -88,7 +88,7 @@ fn earthbind_flying_gained_later_applies_in_timestamp_order() {
 
 #[test]
 fn trapped_in_the_tower_falls_off_a_creature_that_gains_flying() {
-    cr!("303.4d", "704.5m");
+    cr!("303.4c", "704.5m");
     ruling!(
         "Trapped in the Tower",
         "If the enchanted creature gains flying, Trapped in the Tower is put into your graveyard as a state-based action. The creature won't get stuck in the tower again when it loses flying."
@@ -246,7 +246,7 @@ fn one_with_the_stars_on_a_plain_enchantment_changes_nothing() {
 
 #[test]
 fn enchant_restrictions_that_stop_being_met_put_the_aura_into_the_graveyard() {
-    cr!("303.4d", "704.5m", "305.7");
+    cr!("303.4c", "704.5m", "305.7");
     ruling!(
         "Call to Serve",
         "If the enchanted creature becomes black, Call to Serve will be put into its owner’s graveyard the next time state-based actions are performed."
@@ -350,7 +350,7 @@ fn domestication_checks_the_modified_power_at_end_step() {
 
 #[test]
 fn psychic_possession_controlled_by_the_enchanted_player_falls_off() {
-    cr!("303.4d", "704.5m", "303.4e");
+    cr!("303.4c", "704.5m", "303.4e");
     ruling!(
         "Psychic Possession",
         "If Psychic Possession's controller ever happens to be the player it's enchanting, Psychic Possession will be put into its owner's graveyard as a state-based action."

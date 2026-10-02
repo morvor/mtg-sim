@@ -37,6 +37,28 @@ fn setons_desire_forces_only_creatures_able_to_block() {
     // With only tapped creatures, no block is required.
     crate::r_p209_common::tap(&mut t, giant);
     assert!(legal_blocks(&mut t, P1, &[]));
+
+    // Blocking costs {1} (Archangel of Tithes is attacking): the defending player isn't
+    // forced to pay, so the untapped Hill Giant needn't block.
+    supported("Archangel of Tithes");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Seton's Desire", bears);
+    for _ in 0..7 {
+        t.graveyard(P0, "Grizzly Bears");
+    }
+    let angel = t.battlefield(P0, "Archangel of Tithes");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P1, "Wastes", 1);
+    attack_with(
+        &mut t,
+        &[(bears, Entity::Player(P1)), (angel, Entity::Player(P1))],
+    );
+    assert!(legal_blocks(&mut t, P1, &[]));
+    assert!(legal_blocks(&mut t, P1, &[(giant, bears)]));
+    block_and_finish(&mut t, P1, &[]);
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P1), 0);
+    assert!(t.on_battlefield(giant));
 }
 
 #[test]
@@ -60,6 +82,25 @@ fn predatory_impetus_creature_is_unblocked_when_nothing_can_block() {
     assert!(legal_blocks(&mut t, P1, &[]));
     block_and_finish(&mut t, P1, &[]);
     assert_eq!(t.life(P1), 15);
+
+    // Blocking costs {1} (Archangel of Tithes is attacking): the defending player isn't
+    // forced to pay, so the creature needn't be blocked.
+    supported("Archangel of Tithes");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Predatory Impetus", bears);
+    let angel = t.battlefield(P0, "Archangel of Tithes");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P1, "Wastes", 1);
+    attack_with(
+        &mut t,
+        &[(bears, Entity::Player(P1)), (angel, Entity::Player(P1))],
+    );
+    assert!(legal_blocks(&mut t, P1, &[]));
+    assert!(legal_blocks(&mut t, P1, &[(giant, bears)]));
+    block_and_finish(&mut t, P1, &[]);
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P1), 0);
+    assert_eq!(t.life(P1), 20 - 5 - 3);
 }
 
 #[test]
