@@ -503,6 +503,12 @@ fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
     if c.zone.is_some_and(|z| z != ZoneKind::Hand) || c.any_owner {
         return None;
     }
+    // "discard all cards in target player's hand" isn't something a player can do.
+    if let Some(o) = &c.owner {
+        if format!("{o:?}") != format!("{who:?}") && !matches!(o, PlayerRef::Iterated) {
+            return None;
+        }
+    }
     let (adj, _, _) = split_zone(c.filter.clone());
     let e = match &c.qty {
         Qty::Exactly(n) => Effect::Discard {
@@ -2934,3 +2940,103 @@ fn p_if_top_card_of_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: if the top card of a graveyard is ...", priority: 960, parse: p_if_top_card_of_graveyard } }
+
+#[cfg(test)]
+mod grammar {
+    use crate::card::Layout;
+    use crate::oracle::{compile, CompileContext};
+    use crate::types::TypeLine;
+
+    /// The compiled abilities of `text` on a card of type `ty`, or None if any of it is
+    /// unsupported.
+    fn compiled(ty: &str, text: &str) -> Option<String> {
+        let tl = TypeLine::parse(ty);
+        let ctx = CompileContext {
+            card_name: "Test Card",
+            full_name: "Test Card",
+            type_line: &tl,
+            layout: Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        let r = compile(text, &ctx);
+        r.unsupported.is_empty().then(|| format!("{:?}", r.abilities))
+    }
+
+    #[test]
+    fn card_actions_on_hands_graveyards_and_libraries() {
+        for (ty, text) in [
+            // Discard variants.
+            ("Sorcery", "Discard any number of cards, then draw that many cards."),
+            ("Sorcery", "Target player discards any number of cards, then draws that many cards plus one."),
+            ("Sorcery", "You discard your hand."),
+            ("Sorcery", "Discard up to two creature cards. Draw a card for each card discarded this way."),
+            ("Sorcery", "Each player discards all the cards in their hand, then draws that many cards."),
+            ("Sorcery", "Target player discards two cards, then draws as many cards as they discarded this way."),
+            ("Creature", "When ~ enters, you may discard any number of land cards. Put that many +1/+1 counters on ~."),
+            // Exile from graveyards.
+            ("Sorcery", "Exile up to three target cards from a single graveyard."),
+            ("Sorcery", "Exile two target cards from target opponent's graveyard."),
+            ("Sorcery", "Exile all cards from target player's graveyard other than land cards."),
+            ("Sorcery", "Exile all cards that are white or blue from all graveyards."),
+            ("Creature", "When ~ enters, exile target creature card from a graveyard that was put there this turn."),
+            ("Sorcery", "Exile up to two target cards from graveyards. For each creature card exiled this way, you gain 1 life and each opponent loses 1 life."),
+            // Reveal from a hand.
+            ("Instant", "Reveal any number of red cards in your hand. Add {R}{R} for each card revealed this way."),
+            ("Creature", "When ~ enters, you may reveal an Elf card from your hand. If you do or if you control another Elf, draw a card."),
+            // Hand and library moves.
+            ("Sorcery", "Put any number of cards from your hand on the bottom of your library, then draw that many cards."),
+            ("Sorcery", "Look at the top three cards of your library. Put one of them into your hand, one into your graveyard, and one on top of your library."),
+            ("Sorcery", "Look at the top card of each opponent's library."),
+            ("Sorcery", "Target player mills four cards, then puts each land card milled this way into their hand."),
+            // Statics about graveyards and hands.
+            ("Creature", "~ gets +1/+1 for every five cards in your graveyard."),
+            ("Creature", "~ gets +2/+2 as long as there are eight or more cards in a single graveyard."),
+            ("Creature", "~ has all activated abilities of all artifact cards in all graveyards."),
+            // Other instruction forms.
+            ("Sorcery", "Target player mills twice X cards."),
+            ("Sorcery", "You gain half X life, rounded up."),
+            ("Sorcery", "If you control a Goblin, Orc, or Ogre, draw two cards."),
+        ] {
+            assert!(compiled(ty, text).is_some(), "{text}");
+        }
+    }
+
+    #[test]
+    fn unfaithful_wordings_are_rejected() {
+        for (ty, text) in [
+            // "That many" with nothing counted before it.
+            ("Sorcery", "Draw that many cards."),
+            // Another player's hand isn't something you discard from.
+            ("Sorcery", "Discard all cards in target player's hand."),
+            // Revealing from someone else's hand isn't the revealing player's choice.
+            ("Sorcery", "Reveal any number of cards in target opponent's hand."),
+            // "For every" with an unknown thing.
+            ("Creature", "~ gets +1/+1 for every seven blorps."),
+        ] {
+            assert!(compiled(ty, text).is_none(), "{text}");
+        }
+    }
+
+    #[test]
+    fn that_many_is_per_player_when_each_player_acts() {
+        let e = compiled(
+            "Sorcery",
+            "Each player discards all the cards in their hand, then draws that many cards.",
+        )
+        .unwrap();
+        assert!(e.contains("record that many for the iterated player"), "{e}");
+        assert!(e.contains("Custom(\"that many\")"), "{e}");
+    }
+
+    #[test]
+    fn the_player_is_chosen_before_cards_in_their_graveyard() {
+        let e = compiled("Sorcery", "Exile X target cards from target player's graveyard.").unwrap();
+        // The player's slot comes first and the cards are owned by it.
+        let player = e.find("Player(Any)").unwrap();
+        let cards = e.find("OwnedBy(Target(0))").unwrap();
+        assert!(player < cards, "{e}");
+    }
+}
