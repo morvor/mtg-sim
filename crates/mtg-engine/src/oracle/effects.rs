@@ -606,6 +606,10 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         }
         return Some((sel, rest));
     }
+    // "the creature with the least power" (see `patterns::filters_relational`).
+    if let Some(r) = super::patterns::filters_relational::definite_extreme(s, b) {
+        return Some(r);
+    }
     if let Some((slot, text)) = &b.chosen_creature {
         let still_there = b
             .targets

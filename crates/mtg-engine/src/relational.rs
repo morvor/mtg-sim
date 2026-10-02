@@ -107,6 +107,29 @@ pub fn split_groups(f: Filter) -> (Filter, Vec<TargetGroup>) {
     }
 }
 
+/// The number of objects matching a filter with group requirements: the most of them that
+/// meet the requirements together ("four or more Demons with different names", CR
+/// 201.2b). None for a filter without requirements, or with requirements other than
+/// different names.
+pub fn count(g: &Game, f: &Filter, ctx: &Ctx) -> Option<i64> {
+    if !countable(f) {
+        return None;
+    }
+    let objs = g.objects_matching(f, ctx);
+    Some(crate::names::distinct_name_count(objs.iter().map(|o| &g.obj(*o).chars)) as i64)
+}
+
+/// Whether [`count`] counts objects matching the filter (it has group requirements, all
+/// of them different names).
+pub fn countable(f: &Filter) -> bool {
+    let groups = groups_of(f);
+    !groups.is_empty()
+        && !has_nested_group(f)
+        && groups
+            .iter()
+            .all(|x| matches!(x, TargetGroup::DifferentNames))
+}
+
 /// Whether the objects chosen together for a selection with filter `f` meet its group
 /// requirements.
 pub fn selection_ok(g: &Game, f: &Filter, chosen: &[Entity], ctx: &Ctx) -> bool {

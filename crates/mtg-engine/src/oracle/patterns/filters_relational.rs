@@ -19,7 +19,7 @@
 //! An ability that still contains the placeholder, or a group requirement where nothing
 //! checks it, isn't understood ([`unresolved`]).
 
-use super::FilterSuffixPattern;
+use super::{EffectPattern, FilterSuffixPattern};
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
@@ -32,6 +32,50 @@ pub const REFERENT: Var = 0x7ffd;
 
 pub fn referent() -> Sel {
     Sel::Var(REFERENT)
+}
+
+/// "They" in "among creatures they control": the player the instruction is performed
+/// for, until the effect parser resolves it ([`resolve_they`]).
+pub const THEY: PlayerRel = PlayerRel::Target(0xfe);
+
+fn they_needle() -> String {
+    serde_json::to_string(&Filter::ControlledBy(THEY)).unwrap_or_default()
+}
+
+/// Replaces "they" in the filters of instructions each player performs for themselves
+/// ("each opponent sacrifices a creature with the greatest power among creatures they
+/// control") with that player ([`PlayerRel::Iterated`]).
+pub fn resolve_they(e: Effect) -> Effect {
+    let needle = they_needle();
+    let Ok(mut v) = serde_json::to_value(&e) else {
+        return e;
+    };
+    if !v.to_string().contains(&needle) {
+        return e;
+    }
+    let iterated = serde_json::to_string(&Filter::ControlledBy(PlayerRel::Iterated))
+        .unwrap_or_default();
+    fn walk(v: &mut serde_json::Value, needle: &str, with: &str) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for key in ["Sacrifice", "ForEachPlayer"] {
+                    if let Some(inner) = m.get_mut(key) {
+                        let s = inner.to_string().replace(needle, with);
+                        if let Ok(x) = serde_json::from_str(&s) {
+                            *inner = x;
+                        }
+                    }
+                }
+                for x in m.values_mut() {
+                    walk(x, needle, with);
+                }
+            }
+            serde_json::Value::Array(xs) => xs.iter_mut().for_each(|x| walk(x, needle, with)),
+            _ => {}
+        }
+    }
+    walk(&mut v, &needle, &iterated);
+    serde_json::from_value(v).unwrap_or(e)
 }
 
 fn referent_needle() -> String {
@@ -60,12 +104,36 @@ pub fn substitute<T: serde::Serialize + serde::de::DeserializeOwned>(x: &T, it: 
 }
 
 /// Replaces the placeholder in a filter the effect parser is about to use with what "it"
-/// means there (`b.it`). Returns None if "it" has no antecedent.
+/// means there (`b.it`). Returns None if "it" has no antecedent. "Other" in a phrase
+/// related to "it" means other than it ("each other creature that shares a color with
+/// it", "other creatures you control that share a creature type with it").
 pub fn resolve_referent(f: Filter, b: &Builder) -> Option<Filter> {
     if !mentions_referent(&f) {
         return Some(f);
     }
+    let f = if matches!(b.it, Sel::This) {
+        f
+    } else {
+        other_than_it(f, &b.it)
+    };
     substitute(&f, &b.it)
+}
+
+/// A filter whose top-level "other" (not the source) means other than `it`.
+fn other_than_it(f: Filter, it: &Sel) -> Filter {
+    let not_it = || Filter::not(Filter::In(Box::new(it.clone())));
+    match f {
+        Filter::Other => not_it(),
+        Filter::And(v) => Filter::And(
+            v.into_iter()
+                .map(|x| match x {
+                    Filter::Other => not_it(),
+                    x => x,
+                })
+                .collect(),
+        ),
+        f => f,
+    }
 }
 
 /// Whether a compiled ability still contains the placeholder, or a group requirement
@@ -76,7 +144,7 @@ pub fn unresolved(a: &AbilityDef) -> bool {
         return false;
     };
     let s = v.to_string();
-    if s.contains(&referent_needle()) {
+    if s.contains(&referent_needle()) || s.contains(&they_needle()) {
         return true;
     }
     if !s.contains("\"Together\"") {
@@ -85,6 +153,15 @@ pub fn unresolved(a: &AbilityDef) -> bool {
     fn strip_checked(v: &mut serde_json::Value) {
         match v {
             serde_json::Value::Object(m) => {
+                // Counting objects "with different names" counts the most of them that
+                // have different names (`relational::count`).
+                if let Some(f) = m.get("Count") {
+                    let ok = serde_json::from_value::<Filter>(f.clone())
+                        .is_ok_and(|f| crate::relational::countable(&f));
+                    if ok {
+                        m.remove("Count");
+                    }
+                }
                 for key in ["Search", "Choose"] {
                     if let Some(serde_json::Value::Object(inner)) = m.get_mut(key) {
                         if let Some(f) = inner.get("filter") {
@@ -402,10 +479,7 @@ fn with_extreme<'a>(t: &'a str, so_far: &Filter) -> Option<(Filter, &'a str)> {
                 .strip_prefix("they control")
                 .or_else(|| t2.strip_prefix("that player controls"))
             {
-                Some(r2) if word_end(r2) => (
-                    Filter::and(vec![f, Filter::ControlledBy(PlayerRel::Iterated)]),
-                    r2,
-                ),
+                Some(r2) if word_end(r2) => (Filter::and(vec![f, Filter::ControlledBy(THEY)]), r2),
                 _ => (f, rest),
             };
             (f, true, rest)
@@ -520,6 +594,7 @@ inventory::submit! { FilterSuffixPattern { name: "relational: other than", prior
 /// or add targets (then which object is meant isn't clear, and the placeholder stays, so
 /// the ability isn't understood). `before` is "it" and the number of targets before.
 pub fn resolve_in_sentence(e: Effect, b: &Builder, before: (Sel, usize)) -> Option<Effect> {
+    let e = resolve_they(e);
     if !mentions_referent(&e) {
         return Some(e);
     }
@@ -530,3 +605,354 @@ pub fn resolve_in_sentence(e: Effect, b: &Builder, before: (Sel, usize)) -> Opti
     }
     Some(substitute(&e, &it).unwrap_or(e))
 }
+
+// ---------------------------------------------------------------------------
+// "[target] and each other [objects] [related to it]"
+// ---------------------------------------------------------------------------
+
+/// "~ deals 1 damage to target creature and each other creature with the same name as
+/// that creature", "Return target nonland permanent and each other nonland permanent with
+/// the same mana value as that permanent to their owners' hands", "Exile target creature
+/// and all other creatures its controller controls with the same name as that creature":
+/// the instruction is parsed as if it named only the target, then what it affects is
+/// widened to the target and the other objects of the kind that are related to it as the
+/// instruction is carried out (CR 608.2c). The others are in the target's zone. If the
+/// target is illegal as the spell or ability resolves, nothing is affected (CR 608.2b).
+fn target_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, after, sep) = [" and each other ", " and all other "]
+        .iter()
+        .find_map(|sep| l.split_once(sep).map(|(h, a)| (h, a, *sep)))?;
+    let _ = sep;
+    // The target is the last thing the head names: "deals 1 damage to target creature".
+    let ti = head.rfind("target ")?;
+    let target_text = &head[ti..];
+    let (spec, t_rest) = parse_target(target_text)?;
+    if !end(t_rest).trim().is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+        return None;
+    }
+    // The group: an object phrase whose qualifiers mention the target ("that creature",
+    // "it"); "its controller controls" is said of the target's controller.
+    let (f, _plural, rest) = parse_object_phrase(after)?;
+    let mut f = f;
+    let mut rest = rest;
+    let slot = b.targets.len() as u8;
+    let t = rest.trim_start();
+    if let Some(r) = t.strip_prefix("its controller controls") {
+        let probe = format!("cards{r}");
+        let (more, _, tail) = parse_object_phrase(&probe)?;
+        let more = match more {
+            Filter::Card => Filter::Any,
+            Filter::And(v) => Filter::and(v.into_iter().filter(|x| !matches!(x, Filter::Card)).collect()),
+            other => other,
+        };
+        f = Filter::and(vec![
+            f,
+            Filter::ControlledBy(PlayerRel::TargetOrController(slot)),
+            more,
+        ]);
+        rest = &r[r.len() - tail.len()..];
+    }
+    if !mentions_referent(&f) {
+        return None;
+    }
+    let target = Sel::Target(slot);
+    let f = substitute(&f, &target)?;
+    // "other": other than the target (not the source).
+    let others = |f: Filter| -> Filter {
+        let parts = match f {
+            Filter::And(v) => v,
+            x => vec![x],
+        };
+        let mut v: Vec<Filter> = parts
+            .into_iter()
+            .filter(|p| !matches!(p, Filter::Other))
+            .collect();
+        v.push(Filter::not(Filter::In(Box::new(Sel::Target(slot)))));
+        Filter::and(v)
+    };
+    let mut group_filter = others(f);
+    if crate::relational::has_nested_group(&group_filter)
+        || !crate::relational::groups_of(&group_filter).is_empty()
+    {
+        return None;
+    }
+    // The rest of the instruction, said of the one target.
+    let tail = rest.trim_start();
+    let tail = match tail {
+        "to their owners' hands" => "to its owner's hand".to_string(),
+        t => match t.strip_prefix("get ") {
+            Some(r) => format!("gets {r}"),
+            None => match t.strip_prefix("gain ") {
+                Some(r) => format!("gains {r}"),
+                None => t.to_string(),
+            },
+        },
+    };
+    let rewritten = if tail.is_empty() {
+        head.to_string()
+    } else {
+        format!("{head} {tail}")
+    };
+    let saved_it = b.it.clone();
+    let effect = crate::oracle::effects::parse_clause(&rewritten, b);
+    let replaced = effect
+        .filter(|_| b.targets.len() == slot as usize + 1)
+        .and_then(|e| {
+            // The others are in the target's zone ("target creature card and all other
+            // cards with the same name as that card from your graveyard").
+            if let TargetKind::Object(tf) = &b.targets[slot as usize].what {
+                if let Some(zone) = tf.zone().filter(|z| *z != ZoneKind::Battlefield) {
+                    if group_filter.zone().is_none() {
+                        group_filter = Filter::and(vec![group_filter.clone(), Filter::InZone(zone)]);
+                    }
+                }
+            }
+            let group = Sel::Union(vec![target.clone(), Sel::All(group_filter.clone())]);
+            // The target must be named exactly once, as what the instruction affects.
+            let json = serde_json::to_string(&e).ok()?;
+            let needle = serde_json::to_string(&target).ok()?;
+            if json.matches(&needle).count() != 1 {
+                return None;
+            }
+            let group = serde_json::to_string(&group).ok()?;
+            serde_json::from_str::<Effect>(&json.replace(&needle, &group)).ok()
+        });
+    if replaced.is_none() {
+        b.targets.truncate(slot as usize);
+        b.it = saved_it;
+    }
+    replaced
+}
+
+inventory::submit! { EffectPattern { name: "relational: [target] and each other [objects] related to it", priority: 90, parse: target_and_others } }
+
+// ---------------------------------------------------------------------------
+// Edicts with relational qualifiers
+// ---------------------------------------------------------------------------
+
+/// "Each opponent sacrifices a creature they control with the greatest power", "Target
+/// opponent exiles a creature or planeswalker they control with the greatest mana value
+/// among creatures and planeswalkers they control", "Each opponent returns a nonland
+/// permanent they control with the greatest mana value among permanents they control to
+/// its owner's hand": each player chooses one of their own objects that has the quality
+/// as the instruction is performed (CR 608.2d), among tied ones too.
+fn player_edict(l: &str, b: &mut Builder) -> Option<Effect> {
+    use crate::oracle::effects::player_ref;
+    let l = end(l);
+    let before = b.targets.len();
+    let saved = (b.it.clone(), b.it_player.clone());
+    let parsed = (|| {
+        let (who, rest) = player_ref(l, b)?;
+        let rest = rest.trim_start();
+        let (verb, r) = [
+            ("sacrifices ", 0),
+            ("sacrifice ", 0),
+            ("exiles ", 1),
+            ("exile ", 1),
+            ("returns ", 2),
+            ("return ", 2),
+        ]
+        .iter()
+        .find_map(|(p, v)| rest.strip_prefix(p).map(|r| (*v, r)))?;
+        let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+        let (f, plural, tail) = parse_object_phrase(r)?;
+        if plural {
+            return None;
+        }
+        // "a creature they control with the greatest power": the phrase continues after
+        // "they control".
+        let t = tail.trim_start();
+        let (f, tail) = match t
+            .strip_prefix("they control")
+            .or_else(|| t.strip_prefix("that player controls"))
+        {
+            Some(r2) => {
+                let so_far = Filter::and(vec![f.clone(), Filter::ControlledBy(THEY)]);
+                // "with the greatest power": among the objects described so far, which
+                // are the player's.
+                let (ext, r2) = match with_extreme(r2.trim_start(), &so_far) {
+                    Some((m, r3)) => (m, r3),
+                    None => (Filter::Any, r2),
+                };
+                let probe = format!("cards{r2}");
+                let (more, _, tail2) = parse_object_phrase(&probe)?;
+                let more = match more {
+                    Filter::Card => Filter::Any,
+                    Filter::And(v) => Filter::and(
+                        v.into_iter()
+                            .filter(|x| !matches!(x, Filter::Card))
+                            .collect(),
+                    ),
+                    other => other,
+                };
+                (
+                    Filter::and(vec![so_far, ext, more]),
+                    &r2[r2.len() - tail2.len()..],
+                )
+            }
+            None => (f, tail),
+        };
+        let tail = tail.trim();
+        let json = serde_json::to_string(&f).ok()?;
+        // Only qualifiers this file adds (other edicts are core patterns).
+        if !json.contains("\"Extreme\"") && !json.contains(&they_needle()) {
+            return None;
+        }
+        let many = matches!(
+            who,
+            PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
+        );
+        let player_rel = |who: &PlayerRef| -> Option<PlayerRel> {
+            Some(match who {
+                PlayerRef::Target(n) => PlayerRel::Target(*n),
+                PlayerRef::TriggerPlayer => PlayerRel::TriggerPlayer,
+                PlayerRef::You => PlayerRel::You,
+                PlayerRef::DefendingPlayer => PlayerRel::Defending,
+                _ => return None,
+            })
+        };
+        let rel = if many || verb == 0 {
+            PlayerRel::Iterated
+        } else {
+            player_rel(&who)?
+        };
+        let filter = {
+            let s = serde_json::to_string(&f).ok()?;
+            let with = serde_json::to_string(&Filter::ControlledBy(rel)).ok()?;
+            let f: Filter = serde_json::from_str(&s.replace(&they_needle(), &with)).ok()?;
+            Filter::and(vec![f, Filter::ControlledBy(rel)])
+        };
+        let chooser = if many { PlayerRef::Iterated } else { who.clone() };
+        let pick = Sel::Choose {
+            chooser,
+            filter: filter.clone(),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        };
+        let e = match verb {
+            0 => {
+                if !tail.is_empty() {
+                    return None;
+                }
+                return Some(Effect::Sacrifice {
+                    who,
+                    filter,
+                    count: Value::c(1),
+                });
+            }
+            1 => {
+                if !tail.is_empty() {
+                    return None;
+                }
+                Effect::Exile {
+                    what: pick,
+                    face_down: false,
+                    link: false,
+                }
+            }
+            _ => {
+                if tail != "to its owner's hand" {
+                    return None;
+                }
+                Effect::Move {
+                    what: pick,
+                    to: Destination::zone(ZoneKind::Hand),
+                }
+            }
+        };
+        Some(if many {
+            Effect::ForEachPlayer {
+                who,
+                effect: Box::new(e),
+            }
+        } else {
+            e
+        })
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(before);
+        (b.it, b.it_player) = saved;
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "relational: [players] sacrifice/exile/return [an object with the greatest ...]", priority: 30, parse: player_edict } }
+
+// ---------------------------------------------------------------------------
+// "the creature with the least power"
+// ---------------------------------------------------------------------------
+
+/// "the creature with the least power", "the creature card in your graveyard with the
+/// greatest power": the one object with the extreme value, which the controller chooses
+/// among tied ones as the instruction is performed ("If two or more creatures are tied
+/// for least power, you choose one of them.").
+pub fn definite_extreme(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
+    let r = s.strip_prefix("the ")?;
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    if plural || !serde_json::to_string(&f).is_ok_and(|j| j.contains("\"Extreme\"")) {
+        return None;
+    }
+    let f = resolve_referent(f, b)?;
+    Some((
+        Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: f,
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        rest.to_string(),
+    ))
+}
+
+/// "If two or more creatures are tied for least power, you choose one of them." after an
+/// instruction about "the creature with the least power": the controller already chooses
+/// among tied objects (`definite_extreme`).
+fn tied_you_choose(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let s = end(s);
+    let Some(r) = s.strip_prefix("if two or more ") else {
+        return false;
+    };
+    let Some((_, r)) = r.split_once(" are tied for ") else {
+        return false;
+    };
+    if !r.ends_with(", you choose one of them") {
+        return false;
+    }
+    serde_json::to_string(prev)
+        .is_ok_and(|j| j.contains("\"Extreme\"") && j.contains("\"Choose\""))
+}
+
+inventory::submit! { super::FollowupPattern { name: "relational: tied for greatest, you choose", priority: 100, apply: tied_you_choose } }
+
+/// "Return to their owners' hands all creatures with toughness less than or equal to the
+/// number of Islands you control", "return to your hand the creature card in your
+/// graveyard with the greatest power", "Return to the battlefield target nonland permanent
+/// card in your graveyard with ...": the destination before a long object phrase, read as
+/// "return [objects] to [destination]".
+fn return_to_destination_first(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("return to ")?;
+    for dest in [
+        "their owners' hands",
+        "its owner's hand",
+        "your hand",
+        "the battlefield tapped under your control",
+        "the battlefield under your control",
+        "the battlefield tapped",
+        "the battlefield",
+    ] {
+        if let Some(obj) = r.strip_prefix(dest).and_then(|x| x.strip_prefix(' ')) {
+            // The object phrase must be the whole rest (a later clause would be ambiguous).
+            if obj.contains(", ") || obj.contains(" and ") {
+                return None;
+            }
+            let rewritten = format!("return {obj} to {dest}");
+            return crate::oracle::effects::parse_simple(&rewritten, b);
+        }
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "relational: return to [destination] [objects]", priority: 100, parse: return_to_destination_first } }

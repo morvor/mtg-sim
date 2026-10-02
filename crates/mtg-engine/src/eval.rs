@@ -977,7 +977,8 @@ impl Game {
         match v {
             Value::Const(n) => *n as i64,
             Value::X => ctx.x as i64,
-            Value::Count(f) => self.objects_matching(f, ctx).len() as i64,
+            Value::Count(f) => crate::relational::count(self, f, ctx)
+                .unwrap_or_else(|| self.objects_matching(f, ctx).len() as i64),
             Value::CountSel(s) => self.eval_sel(s, ctx).len() as i64,
             Value::CountPlayers(f) => self
                 .players_in_game()
