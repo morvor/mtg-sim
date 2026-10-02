@@ -132,6 +132,50 @@ pub fn holder(s: &str, b: &mut Builder) -> Option<Sel> {
         }
         restore(b);
     }
+    // "one of them", "either of them": one of the objects the pronoun refers to, chosen
+    // as the instruction is performed.
+    if let Some(r) = s
+        .strip_prefix("one of ")
+        .or_else(|| s.strip_prefix("either of "))
+    {
+        if matches!(r, "them" | "those creatures" | "those permanents") {
+            if let Some((sel, rest)) = object_ref(r, b) {
+                if end(&rest).is_empty() && !matches!(sel, Sel::None) {
+                    return Some(Sel::Choose {
+                        chooser: PlayerRef::You,
+                        filter: Filter::In(Box::new(sel)),
+                        count: Value::c(1),
+                        up_to: false,
+                        store: None,
+                    });
+                }
+            }
+        }
+        restore(b);
+    }
+    // "each of up to one target land and up to one target creature": both targets.
+    if let Some(r) = s.strip_prefix("each of ") {
+        if let Some((x, y)) = r.split_once(" and ") {
+            if x.contains("target ") && y.contains("target ") {
+                if let (Some((s1, r1)), Some((s2, r2))) = (object_ref(x, b), object_ref(y, b)) {
+                    if end(&r1).is_empty() && end(&r2).is_empty() {
+                        if let (Sel::Target(_), Sel::Target(_)) = (&s1, &s2) {
+                            return Some(Sel::Union(vec![s1, s2]));
+                        }
+                    }
+                }
+                restore(b);
+            }
+        }
+    }
+    // "each creature each opponent controls": the creatures opponents control.
+    let each_opp;
+    let s = if s.starts_with("each ") && s.ends_with(" each opponent controls") {
+        each_opp = s.replace(" each opponent controls", " your opponents control");
+        &each_opp[..]
+    } else {
+        s
+    };
     if let Some((sel, rest)) = object_ref(s, b) {
         // A spell that was cast isn't what counters are put on or removed from ("Whenever
         // an opponent casts a spell, ... remove a time counter from it": not understood).
@@ -154,6 +198,17 @@ pub fn holder(s: &str, b: &mut Builder) -> Option<Sel> {
     if let Some(r) = s.strip_prefix("a ").or_else(|| s.strip_prefix("an ")) {
         if let Some(sel) = chosen(r, Value::c(1), false, b) {
             return Some(sel);
+        }
+        restore(b);
+    }
+    // "up to one creature": chosen likewise.
+    if let Some(r) = s.strip_prefix("up to ") {
+        if let Some((n, r)) = parse_number(r) {
+            if !r.starts_with("target") && !r.contains(" target ") {
+                if let Some(sel) = chosen(r, n, true, b) {
+                    return Some(sel);
+                }
+            }
         }
         restore(b);
     }
@@ -417,13 +472,16 @@ fn put_one(l: &str, b: &mut Builder) -> Option<Effect> {
     let mut what = holder(holder_s, b)?;
     if let Sel::Choose {
         count: Value::Const(1),
-        up_to: false,
         store,
+        filter,
         ..
     } = &mut what
     {
-        *store = Some(CHOSEN);
-        b.it = Sel::Var(CHOSEN);
+        // Not "one of them": "them" are still the objects they were.
+        if !matches!(filter, Filter::In(_)) {
+            *store = Some(CHOSEN);
+            b.it = Sel::Var(CHOSEN);
+        }
     }
     if !before {
         if let Some(a) = &amount {
