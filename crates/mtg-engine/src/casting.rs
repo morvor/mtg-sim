@@ -86,6 +86,11 @@ pub fn grant_play_permission(
     }
 }
 
+/// The [`CastMethod::Alternative`] id of a spell cast for the cost a play permission
+/// sets ("If you cast a spell this way, pay life equal to its mana value rather than pay
+/// its mana cost."), not for an alternative cost of its own.
+pub const PERMISSION_COST: u64 = u64::MAX - 0x5045524d;
+
 /// The faces or halves a card could be cast with: either half of a split card
 /// (CR 709.3), the card or its Adventure (CR 715.3) or Omen (CR 720.3), either face of a
 /// modal double-faced card (CR 712.11b); a copy of such a card too (CR 709.3c). Faces
@@ -95,7 +100,8 @@ pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
     use crate::card::Layout;
     let o = g.obj(card);
     let faces = match o.card.as_ref().map(|d| (d.layout, d.faces.len())) {
-        Some((Layout::Split, 2)) => vec![FaceState::Half(0), FaceState::Half(1)],
+        // A split card with three halves too (There // They're // Their).
+        Some((Layout::Split, n)) if n >= 2 => (0..n as u8).map(FaceState::Half).collect(),
         Some((Layout::Adventure, 2)) => vec![FaceState::Front, FaceState::Half(1)],
         Some((Layout::ModalDfc, 2)) => vec![FaceState::Front, FaceState::Back],
         _ => vec![FaceState::Front],
@@ -121,8 +127,17 @@ pub fn face_method(face: FaceState) -> CastMethod {
 }
 
 /// The face or half `p` chooses to cast `card` with (CR 709.3, 712.11b, 715.3, 720.3).
-fn choose_face_to_cast(g: &mut Game, p: PlayerId, card: ObjectId) -> FaceState {
+fn choose_face_to_cast(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    only: Option<&[FaceState]>,
+) -> FaceState {
     let mut faces = castable_faces(g, card);
+    // Only the faces an effect lets the player cast (CR 601.3e).
+    if let Some(only) = only {
+        faces.retain(|f| only.contains(f));
+    }
     // Not a face a keyword's rule prohibits casting from here (e.g. aftermath,
     // CR 702.127a).
     let allowed: Vec<FaceState> = faces
@@ -155,12 +170,24 @@ pub fn cast_during_resolution(
     card: ObjectId,
     method: CastMethod,
 ) -> Result<ObjectId, Illegal> {
+    cast_during_resolution_as(g, p, card, method, None)
+}
+
+/// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
+/// the characteristics the effect allows, CR 601.3e), if given.
+pub fn cast_during_resolution_as(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    method: CastMethod,
+    only: Option<&[FaceState]>,
+) -> Result<ObjectId, Illegal> {
     // CR 702.61a: while a spell with split second is on the stack, no other spell can be
     // cast, even as part of a resolving ability's effect.
     if g.split_second_on_stack() {
         return Err(Illegal("a spell with split second is on the stack".into()));
     }
-    let face = choose_face_to_cast(g, p, card);
+    let face = choose_face_to_cast(g, p, card, only);
     let mut opt = CastOption::normal(face);
     opt.method = face_method(face);
     // Ways to cast it that aren't alternative costs (e.g. prototyped, CR 718.3), which
@@ -296,6 +323,9 @@ impl Game {
         // Lands (CR 305.1, 505.6b).
         if self.can_play_land_now(p) {
             for c in self.playable_land_cards(p) {
+                if !self.can_pay_land_play_cost(p, c) {
+                    continue;
+                }
                 out.push(Action::PlayLand { card: c });
             }
         }
@@ -386,6 +416,7 @@ impl Game {
                 .rule_effects
                 .iter()
                 .any(|e| check(&e.restriction, e.source, e.controller))
+            || crate::kw::land_play_prohibited(self, p, card)
     }
 
     /// Characteristics of the face a card would be played with as a land.
@@ -452,43 +483,92 @@ impl Game {
             return false;
         }
         for (src, ctl, perm) in &self.statics.play_permissions {
-            if (land && !perm.lands) || (!land && !perm.spells) {
+            // A permission to cast spells only for a cost of its own ("If you cast a spell
+            // this way, pay life equal to its mana value rather than pay its mana cost")
+            // allows casting them only that way (CR 118.9; see
+            // [`Game::permission_cost_options`]).
+            if !land && perm.cost.as_ref().is_some_and(|c| !c.is_free()) {
                 continue;
             }
-            let ctx = Ctx::new(Some(*src), *ctl);
-            if !self.player_rel_matches(perm.who, p, &ctx) {
-                continue;
-            }
-            let in_zone = match perm.zone {
-                ZoneKind::Library => {
-                    if perm.top_only {
-                        self.library_top(p) == Some(card)
-                    } else {
-                        o.zone == Zone::Library(p)
-                    }
-                }
-                ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
-                ZoneKind::Exile => o.zone == Zone::Exile,
-                ZoneKind::Hand => o.zone == Zone::Hand(p),
-                ZoneKind::Command => o.zone == Zone::Command,
-                _ => false,
-            };
-            if !in_zone {
-                continue;
-            }
-            // CR 601.3e: the alternative characteristics the card would have as it's
-            // played are what the permission checks.
-            let f = if land {
-                perm.what.clone()
-            } else {
-                as_spell_filter(&perm.what)
-            };
-            let view = WithChars { id: card, chars };
-            if self.matches_view(&view, card, &f, &ctx) {
+            if self.static_permission_matches(*src, *ctl, perm, p, card, chars, land) {
                 return true;
             }
         }
         false
+    }
+
+    /// Whether the static play permission `perm` of `src` (controlled by `ctl`) lets `p`
+    /// play `card` with the characteristics `chars`, as a land or as a spell, ignoring any
+    /// cost of its own.
+    #[allow(clippy::too_many_arguments)]
+    fn static_permission_matches(
+        &self,
+        src: ObjectId,
+        ctl: PlayerId,
+        perm: &PlayPermission,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        land: bool,
+    ) -> bool {
+        let o = self.obj(card);
+        if (land && !perm.lands) || (!land && !perm.spells) {
+            return false;
+        }
+        let ctx = Ctx::new(Some(src), ctl);
+        if !self.player_rel_matches(perm.who, p, &ctx) {
+            return false;
+        }
+        let in_zone = match perm.zone {
+            ZoneKind::Library => {
+                if perm.top_only {
+                    self.library_top(p) == Some(card)
+                } else {
+                    o.zone == Zone::Library(p)
+                }
+            }
+            ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
+            ZoneKind::Exile => o.zone == Zone::Exile,
+            ZoneKind::Hand => o.zone == Zone::Hand(p),
+            ZoneKind::Command => o.zone == Zone::Command,
+            _ => false,
+        };
+        if !in_zone {
+            return false;
+        }
+        // CR 601.3e: the alternative characteristics the card would have as it's
+        // played are what the permission checks.
+        let f = if land {
+            perm.what.clone()
+        } else {
+            as_spell_filter(&perm.what)
+        };
+        let view = WithChars { id: card, chars };
+        self.matches_view(&view, card, &f, &ctx)
+    }
+
+    /// Ways to cast `card` outside the hand that static permissions with a cost of their
+    /// own allow ("You may play lands and cast spells from the top of your library. If you
+    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
+    /// cost."): that cost is an alternative cost (CR 118.9), so the spell can't be cast
+    /// that way with another one (CR 118.9a).
+    fn permission_cost_options(&self, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+        let mut out = Vec::new();
+        for face in castable_faces(self, card) {
+            let chars = self.face_characteristics(card, face);
+            for (src, ctl, perm) in &self.statics.play_permissions {
+                let Some(cost) = perm.cost.as_ref().filter(|c| !c.is_free()) else {
+                    continue;
+                };
+                if self.static_permission_matches(*src, *ctl, perm, p, card, &chars, false) {
+                    let mut opt = CastOption::normal(face);
+                    opt.method = CastMethod::Alternative(PERMISSION_COST);
+                    opt.alt_cost = Some(cost.clone());
+                    out.push(opt);
+                }
+            }
+        }
+        out
     }
 
     /// Whether a static permission lets `p` cast `card` from their hand without paying its
@@ -707,6 +787,7 @@ impl Game {
                     let free = opt.method == CastMethod::Free;
                     self.permission_allows_with(p, card, &chars, false, free)
                 });
+                out.extend(self.permission_cost_options(p, card));
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
@@ -1008,8 +1089,46 @@ impl Game {
         if !self.playable_land_cards(p).contains(&card) {
             return Err(Illegal("not a playable land".into()));
         }
+        self.pay_land_play_cost(p, card)?;
         self.perform_land_play(p, card);
         Ok(())
+    }
+
+    /// The mana a player pays to play a land card that has a mana cost (Glade of the
+    /// Pump Spells: "You have to pay {2}{G} to play this land as your land drop"). Lands
+    /// normally have no mana cost; one put onto the battlefield by an effect isn't played,
+    /// so nothing is paid.
+    fn land_play_cost(&self, card: ObjectId) -> Option<ManaCost> {
+        let o = self.try_obj(card)?;
+        if !o.chars.is_land() {
+            return None;
+        }
+        o.chars.mana_cost.clone().filter(|m| !m.symbols.is_empty())
+    }
+
+    fn can_pay_land_play_cost(&self, p: PlayerId, card: ObjectId) -> bool {
+        let Some(m) = self.land_play_cost(card) else {
+            return true;
+        };
+        let spend = SpendContext {
+            check_only: true,
+            source: Some(card),
+            ..Default::default()
+        };
+        crate::mana_abilities::plan_payment(self, p, &m, &spend, Some(card)).is_some()
+    }
+
+    fn pay_land_play_cost(&mut self, p: PlayerId, card: ObjectId) -> Result<(), Illegal> {
+        let Some(m) = self.land_play_cost(card) else {
+            return Ok(());
+        };
+        let spend = SpendContext {
+            source: Some(card),
+            ..Default::default()
+        };
+        crate::mana_abilities::pay_mana(self, p, &m, &spend, Some(card))
+            .map(|_| ())
+            .ok_or_else(|| Illegal("can't pay the land's mana cost".into()))
     }
 
     /// Plays a land during the resolution of a spell or ability that instructs `p` to
@@ -1038,6 +1157,7 @@ impl Game {
         if self.land_play_prohibited(p, card) {
             return Err(Illegal("can't play that land".into()));
         }
+        self.pay_land_play_cost(p, card)?;
         self.perform_land_play(p, card);
         Ok(())
     }
@@ -1556,6 +1676,7 @@ impl Game {
             crate::designations::prepare_spell_cast(self, card, id);
             crate::designations::prepared_copy_left_exile(self, card);
         }
+        crate::next_spell::recheck_static_cast_grants(self, id);
         self.log(|g| format!("{p} casts {}", g.describe(id)));
         crate::structure::record_cast(self, id);
         self.emit(Event::SpellCast {
@@ -1677,6 +1798,8 @@ impl Game {
             crate::cost_rules::chosen_half(self, card, i, cur, s)
         });
         crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
+        // Changes applied after all others (e.g. a minimum total cost).
+        crate::kw::global_spell_cost(self, p, card, &mut cost);
         cost
     }
 
@@ -2535,6 +2658,7 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 crate::draw_rules::can_choose(self, e, &c)
+                    && crate::life_totals::cost_life_gain_possible(self, e, &c)
             }
             CostPart::PayManaCostOf(s) => {
                 crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
@@ -2957,6 +3081,12 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 self.exec(e, &mut c);
+                // CR 119.7: a cost that has a player who can't gain life gain life can't be
+                // paid — "have an opponent gain 3 life" with an opponent chosen as it's
+                // paid who can't.
+                if !crate::life_totals::cost_life_gain_possible(self, e, &c) {
+                    return bad("that player can't gain life");
+                }
             }
             CostPart::PayManaCostOf(s) => {
                 if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {

@@ -46,6 +46,10 @@ pub enum MoveCause {
 pub struct LookbackSnapshot {
     /// (source object, its controller, triggered ability)
     pub sources: Vec<(ObjectId, PlayerId, Ability)>,
+    /// The "triggers an additional time" effects that applied (CR 603.2d, 603.10a: an
+    /// effect of a permanent leaving at the same time still applies to abilities that
+    /// trigger on that event).
+    pub additional_triggers: Vec<(ObjectId, PlayerId, crate::ability::StaticEffect)>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

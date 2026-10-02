@@ -6,12 +6,17 @@ use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
 
-/// "copy target instant or sorcery spell", "copy target spell you control".
+/// "copy target instant or sorcery spell", "copy target spell you control", "copy target
+/// instant or sorcery spell twice".
 fn copy_target_spell(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("copy ")?;
     if !r.starts_with("target ") {
         return None;
     }
+    let (r, count) = match r.strip_suffix(" twice") {
+        Some(r) => (r, 2),
+        None => (r, 1),
+    };
     let (spec, tail) = parse_target(r)?;
     if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Spell(_)) {
         return None;
@@ -20,7 +25,7 @@ fn copy_target_spell(l: &str, b: &mut Builder) -> Option<Effect> {
     let slot = b.add_target(spec, &text);
     Some(Effect::CopySpell {
         what: Sel::Target(slot),
-        count: Value::c(1),
+        count: Value::c(count),
         new_targets: false,
     })
 }
@@ -41,6 +46,32 @@ fn copy_trigger_spell(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "copy the triggering spell", priority: 100, parse: copy_trigger_spell } }
+
+/// "copy that spell" after a sentence about a target spell ("You may choose new targets
+/// for target instant or sorcery spell. Then copy that spell."): that target spell.
+fn copy_that_target_spell(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if !matches!(l, "copy it" | "copy that spell") {
+        return None;
+    }
+    let Sel::Target(n) = b.it else {
+        return None;
+    };
+    if !matches!(
+        b.targets.get(n as usize).map(|t| &t.what),
+        Some(TargetKind::Spell(_))
+    ) {
+        return None;
+    }
+    Some(Effect::CopySpell {
+        what: Sel::Target(n),
+        count: Value::c(1),
+        new_targets: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "copy that target spell", priority: 100, parse: copy_that_target_spell } }
 
 /// "You may choose new targets for the copy." after copying a spell (CR 707.10c).
 fn new_targets_for_copy(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {

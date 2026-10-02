@@ -117,6 +117,8 @@ pub struct FaceDef {
     pub chars: Characteristics,
     /// Oracle text sentences the compiler could not understand.
     pub unsupported: Vec<String>,
+    /// Oracle ability blocks implemented by hand-written definitions ([`crate::cards`]).
+    pub manual: Vec<String>,
     /// Printed P/T contained `*` (defined by a characteristic-defining ability).
     pub star_power: bool,
     pub star_toughness: bool,
@@ -164,6 +166,14 @@ impl CardDef {
         self.faces
             .iter()
             .flat_map(|f| f.unsupported.iter().map(String::as_str))
+            .collect()
+    }
+
+    /// Oracle ability blocks implemented by hand-written definitions ([`crate::cards`]).
+    pub fn manual_text(&self) -> Vec<&str> {
+        self.faces
+            .iter()
+            .flat_map(|f| f.manual.iter().map(String::as_str))
             .collect()
     }
 
@@ -295,6 +305,7 @@ impl CardDef {
                     printed: None,
                 },
                 unsupported: compiled.unsupported,
+                manual: compiled.manual,
                 star_power,
                 star_toughness,
             });
@@ -350,6 +361,7 @@ impl CardDef {
             faces: vec![FaceDef {
                 chars,
                 unsupported: vec![],
+                manual: vec![],
                 star_power: false,
                 star_toughness: false,
             }],

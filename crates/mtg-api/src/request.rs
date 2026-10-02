@@ -720,6 +720,8 @@ pub fn prepare(
                             *c == a && matches!(t, Entity::Player(p) if !ps.contains(&p))
                         }
                         R::AttacksPlayer(c, p) => *c == a && t == Entity::Player(*p),
+                        // Required only if one of the others attacks.
+                        R::AttacksIfAnyAttacks(..) => false,
                     })
                 };
                 let mut views = Vec::new();

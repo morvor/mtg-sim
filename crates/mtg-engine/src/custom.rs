@@ -263,6 +263,10 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> bool {
     if let Some(b) = crate::spell_costs::custom_condition(g, name, ctx) {
         return b;
     }
+    // "Each player may search their library": whether that player can search.
+    if let Some(b) = crate::search_rules::custom_condition(g, name, ctx) {
+        return b;
+    }
     // CR 307.5a: cast as though it had flash with its own ability, any time a sorcery
     // couldn't have been cast.
     if name == crate::oracle::patterns::r307_sorcery_timing::CAST_BY_OWN_FLASH_AT_INSTANT_TIMING {
