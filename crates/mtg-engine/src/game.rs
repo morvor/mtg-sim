@@ -115,6 +115,12 @@ pub struct GameConfig {
     /// rules.
     #[serde(default)]
     pub archenemy: bool,
+    /// A stacked start, for simulations and tests: after the libraries are shuffled to
+    /// start the game (CR 103.3), the cards with these names (per player, top first; each
+    /// name finds one more card) are put on top of that player's library, so they're
+    /// drawn in the opening hand.
+    #[serde(default)]
+    pub top_of_library: Vec<Vec<SmolStr>>,
 }
 
 impl Default for GameConfig {
@@ -144,6 +150,7 @@ impl Default for GameConfig {
             player_ranges: vec![],
             planechase: false,
             archenemy: false,
+            top_of_library: vec![],
         }
     }
 }
@@ -355,10 +362,20 @@ pub struct DelayedTrigger {
     pub created_turn: u32,
     /// For "at the beginning of the next end step": don't fire in the step it was created in.
     pub created_step: Option<crate::turn::Step>,
+    /// How many steps had begun this turn when it was created: an additional step of the
+    /// same kind that begins later (CR 500.8) is "the next" one.
+    #[serde(default)]
+    pub created_steps: usize,
     /// A delayed trigger that can trigger more than once lasts "for the rest of the game"
     /// rather than for the turn (e.g. epic, CR 702.50a).
     #[serde(default)]
     pub for_rest_of_game: bool,
+    /// The player who performs it, when another player performed the instruction that
+    /// created it ("they draw a card at the beginning of the next end step"): "you" in
+    /// its trigger condition and effect is that player, while `controller` controls it
+    /// (CR 603.7d–e).
+    #[serde(default)]
+    pub performer: Option<PlayerId>,
 }
 
 /// A triggered ability waiting to be put on the stack (CR 603.3).
@@ -479,6 +496,37 @@ impl std::fmt::Debug for Agents {
     }
 }
 
+/// Callbacks that see every event as [`Game::flush_events`] processes it, with the game
+/// as it is then (before triggered abilities are detected for it), and each return to an
+/// earlier state after an illegal action (CR 733.1), whose events never happened. For
+/// simulations and coverage tools: they don't change the game. Cloning a [`Game`] shares
+/// the observer; clear it on a clone used to look ahead.
+#[derive(Clone)]
+pub struct EventObserver {
+    pub on_event: Arc<dyn Fn(&Game, &Event) + Send + Sync>,
+    pub on_rollback: Option<Arc<dyn Fn(&Game) + Send + Sync>>,
+}
+
+impl EventObserver {
+    pub fn new(on_event: impl Fn(&Game, &Event) + Send + Sync + 'static) -> Self {
+        EventObserver {
+            on_event: Arc::new(on_event),
+            on_rollback: None,
+        }
+    }
+
+    pub fn with_rollback(mut self, f: impl Fn(&Game) + Send + Sync + 'static) -> Self {
+        self.on_rollback = Some(Arc::new(f));
+        self
+    }
+}
+
+impl std::fmt::Debug for EventObserver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EventObserver")
+    }
+}
+
 /// Active static abilities after layer computation, for fast rule queries.
 #[derive(Clone, Debug, Default)]
 pub struct ActiveStatics {
@@ -524,6 +572,9 @@ pub struct Game {
     pub events: Vec<Event>,
     /// All events this turn (for look-back queries).
     pub turn_events: Vec<Event>,
+    /// While positive, the events of the instructions being performed form one batch
+    /// (see [`Game::end_event_batch`]).
+    pub batch_hold: u32,
     pub log: Vec<LogEntry>,
     pub logging: bool,
     pub next_timestamp: Timestamp,
@@ -653,6 +704,9 @@ pub struct Game {
     pub cards: crate::cards::CardState,
     /// Every event, for observers outside the engine (off unless enabled).
     pub event_feed: crate::event_feed::EventFeed,
+    /// Watches every event as it's processed, with the game as it is then (see
+    /// [`EventObserver`]; [`Game::event_feed`] keeps the events for later reading).
+    pub observer: Option<EventObserver>,
 }
 
 impl Game {
@@ -702,6 +756,7 @@ impl Game {
             agents: Agents(Arc::new(Mutex::new(agents))),
             events: vec![],
             turn_events: vec![],
+            batch_hold: 0,
             log: vec![],
             logging: false,
             next_timestamp: 1,
@@ -761,6 +816,7 @@ impl Game {
             planechase: Default::default(),
             cards: Default::default(),
             event_feed: Default::default(),
+            observer: None,
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -799,6 +855,17 @@ impl Game {
     }
 
     /// Replaces the agents (e.g. on a cloned game used for search).
+    /// Returns to `snapshot`, a copy of the game taken before an action that turned out
+    /// to be illegal (CR 733.1), keeping the agents.
+    pub fn roll_back(&mut self, snapshot: Game) {
+        let agents = self.agents.clone();
+        *self = snapshot;
+        self.agents = agents;
+        if let Some(f) = self.observer.as_ref().and_then(|o| o.on_rollback.clone()) {
+            f(self);
+        }
+    }
+
     pub fn set_agents(&mut self, agents: Vec<Box<dyn Agent>>) {
         self.agents = Agents(Arc::new(Mutex::new(agents)));
     }
@@ -1081,6 +1148,7 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        crate::game_end::note_decision(self, &decision);
         self.actions_taken += 1;
         self.note_forced_decision(&decision);
         // CR 800.4g, 800.4h: another player makes a choice a player who left would make.

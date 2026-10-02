@@ -155,19 +155,27 @@ impl Game {
             // Recorded before detection so "for the first time each turn" can see which
             // events of this turn precede this one.
             self.turn_events.push(ev.clone());
+            if let Some(f) = self.observer.as_ref().map(|o| o.on_event.clone()) {
+                f(self, ev);
+            }
             once_delayed.extend(self.detect_triggers(ev, &recent));
         }
         self.check_batch_triggers(&events[batch_start..]);
         self.fire_once_delayed(once_delayed);
+        // Static abilities' conditions can depend on what happened this turn ("as long as
+        // you've cast two or more spells this turn"): characteristics must be computed
+        // again (CR 611.3a, 613.1).
+        self.dirty = true;
         // Events emitted while detecting triggers (rare) are handled on the next flush.
     }
 
     /// Marks the end of a group of simultaneous events (see [`Event::BatchBoundary`]).
     pub fn end_event_batch(&mut self) {
-        if self
-            .events
-            .last()
-            .is_some_and(|e| !matches!(e, Event::BatchBoundary))
+        if self.batch_hold == 0
+            && self
+                .events
+                .last()
+                .is_some_and(|e| !matches!(e, Event::BatchBoundary))
         {
             self.events.push(Event::BatchBoundary);
         }
@@ -199,9 +207,12 @@ impl Game {
         crate::monarch_initiative::detect_batch(self, batch);
         let mut sources = self.current_trigger_sources();
         // Leaves-the-battlefield look back in time (CR 603.10a): permanents that left in
-        // this batch still see the batch.
+        // this batch still see the batch's events that look back. (A permanent that left
+        // keeps its last known information, zone included, under its old id; it's no
+        // longer live.)
         let mut seen: BTreeSet<(ObjectId, u64)> =
             sources.iter().map(|(id, _, a)| (*id, a.uid)).collect();
+        let mut looking_back: BTreeSet<(ObjectId, u64)> = BTreeSet::new();
         for ev in batch {
             if let Event::ZoneChange {
                 from: Zone::Battlefield,
@@ -210,7 +221,9 @@ impl Game {
             } = ev
             {
                 for (id, ctl, a) in &lb.sources {
-                    if self.obj(*id).zone != Zone::Battlefield && seen.insert((*id, a.uid)) {
+                    let gone = !self.is_live(*id) || self.obj(*id).zone != Zone::Battlefield;
+                    if gone && seen.insert((*id, a.uid)) {
+                        looking_back.insert((*id, a.uid));
                         sources.push((*id, *ctl, a.clone()));
                     }
                 }
@@ -229,7 +242,11 @@ impl Game {
             base.link = a.link;
             base.ability_uid = a.uid;
             let mut infos: Vec<EventInfo> = Vec::new();
+            let gone = looking_back.contains(&(src, a.uid));
             for ev in batch {
+                if gone && !looks_back(trigger, ev) {
+                    continue;
+                }
                 infos.extend(self.trigger_matches_ctx(trigger, &base, ev));
             }
             if infos.is_empty() {
@@ -571,10 +588,12 @@ impl Game {
                 // "at the beginning of the next end step" doesn't fire in the step it was
                 // created in (CR 513.2).
                 // A cleanup step can be followed by another cleanup step in the same turn,
-                // which is "the next cleanup step" (CR 514.3a).
+                // which is "the next cleanup step" (CR 514.3a); likewise an additional end
+                // step that begins later (CR 500.8).
                 if let Event::StepBegan { step, .. } = ev {
                     if d.created_step == Some(*step)
                         && d.created_turn == self.turn.number
+                        && d.created_steps == self.turn.step_log.len()
                         && *step != Step::Cleanup
                     {
                         continue;
@@ -585,7 +604,8 @@ impl Game {
             // effect that created it.
             let mut base = d.ctx.clone();
             base.source = d.source;
-            base.controller = d.controller;
+            // "you" in its trigger condition is the player who performs it.
+            base.controller = d.performer.unwrap_or(d.controller);
             for info in self.trigger_matches_ctx(&d.trigger, &base, ev) {
                 if d.once {
                     once_matches.push((d.id, info));
@@ -609,7 +629,11 @@ impl Game {
     }
 
     fn delayed_pending(&self, d: &DelayedTrigger, info: EventInfo) -> PendingTrigger {
-        let mut tr = TriggeredAbility::new(d.trigger.clone(), d.body.clone());
+        let body = match d.performer {
+            Some(p) => crate::resolve::performed_by(d.body.clone(), p),
+            None => d.body.clone(),
+        };
+        let mut tr = TriggeredAbility::new(d.trigger.clone(), body.clone());
         // "Until end of turn, whenever a player taps an Island for mana, that player adds
         // an additional {U}" is a mana ability too (CR 605.1b).
         tr.is_mana_ability = is_triggered_mana_ability(&d.trigger, &d.body);
@@ -621,7 +645,7 @@ impl Game {
             event: info,
             source_lki: None,
             saved: Some(d.ctx.clone()),
-            body: Some(d.body.clone()),
+            body: Some(body),
             order: self.trigger_order,
         }
     }
@@ -1209,7 +1233,7 @@ impl Game {
                 }
             }
             (
-                TriggerCond::CountersPut { filter, kind },
+                TriggerCond::CountersPut { filter, kind, each },
                 Event::CountersAdded {
                     target: Entity::Object(o),
                     kind: k,
@@ -1217,11 +1241,15 @@ impl Game {
                 },
             ) => {
                 if kind.as_ref().is_none_or(|x| x == k) && self.matches(*o, filter, &ctx) {
-                    one(EventInfo {
-                        object: Some(*o),
-                        amount: *n as i32,
-                        ..Default::default()
-                    })
+                    // "Whenever a [kind] counter is put on …" triggers for each counter.
+                    let (times, amount) = if *each { (*n, 1) } else { (1, *n as i32) };
+                    (0..times)
+                        .map(|_| EventInfo {
+                            object: Some(*o),
+                            amount,
+                            ..Default::default()
+                        })
+                        .collect()
                 } else {
                     none()
                 }
@@ -2065,6 +2093,12 @@ impl Game {
         ctx.source = Some(t.source);
         ctx.controller = t.controller;
         ctx.event = Some(t.event.clone());
+        // CR 605.4a: it resolves now; count it like a resolution from the stack.
+        if let Some(o) = self.objects.get_mut(t.source.0 as usize) {
+            *o.triggers_this_turn
+                .entry(t.ability.uid | turn_keys::RESOLVED)
+                .or_insert(0) += 1;
+        }
         self.exec(&body.effect, &mut ctx);
         crate::structure::record(&t.ability, &self.obj(t.source).chars.name, "resolved");
     }

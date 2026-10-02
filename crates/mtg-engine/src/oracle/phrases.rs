@@ -573,6 +573,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         {
             // "target creature you control other than enchanted creature" (Due Diligence).
             (Filter::not(Filter::AttachedToSource), r)
+        } else if let Some(r) = t
+            .strip_prefix("that's attached to a creature")
+            .or_else(|| t.strip_prefix("that are attached to creatures"))
+        {
+            // "each Aura you control that's attached to a creature" (Sage's Reverie).
+            (
+                Filter::Custom(crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE.into()),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("that didn't attack this turn") {
             // "untapped creatures that player controls that didn't attack this turn".
             (Filter::not(Filter::AttackedThisTurn), r)
@@ -656,6 +665,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             )
         } else if let Some(r) = t.strip_prefix("defending player controls") {
             (Filter::ControlledBy(PlayerRel::Defending), r)
+        } else if let Some(r) = t.strip_prefix("the monarch controls") {
+            // CR 725: none while there's no monarch.
+            (
+                Filter::ControllerMatches(Box::new(PlayerFilter::Monarch)),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("blocking or blocked by ~") {
             (
                 Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]),
@@ -1312,8 +1327,13 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
 /// "its controller", "its owner", "defending player". Returns (ref, target spec if any, rest).
 pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
-    let pairs: [(&str, PlayerRef); 12] = [
+    let pairs: [(&str, PlayerRef); 13] = [
         ("you ", PlayerRef::You),
+        // A Curse's player (CR 303.4).
+        (
+            "enchanted player ",
+            PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)),
+        ),
         ("each player ", PlayerRef::EachPlayer),
         ("each opponent ", PlayerRef::EachOpponent),
         ("each other player ", PlayerRef::EachOtherPlayer),

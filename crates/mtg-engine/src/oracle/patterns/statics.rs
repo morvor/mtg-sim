@@ -831,6 +831,10 @@ fn counter_words(body: &str) -> Option<Option<CounterKind>> {
 /// What's counted by "for each [...]" or "the number of [...]" (singular or plural
 /// nouns). `it` is the single object the subject is, if any.
 pub(crate) fn parse_for_each(s: &str, it: Option<&Sel>) -> Option<Value> {
+    parse_for_each_inner(s, it).or_else(|| super::value_grammar::whole_count(s, it))
+}
+
+fn parse_for_each_inner(s: &str, it: Option<&Sel>) -> Option<Value> {
     let s = end(s);
     // "instant and sorcery cards you own in exile and in your graveyard" (Crackling
     // Drake): the cards in either zone.
@@ -1310,9 +1314,12 @@ fn grant_list(
 /// "N/N" base P/T.
 fn base_pt(s: &str) -> Option<(Value, Value)> {
     let (p, t) = s.split_once('/')?;
-    let p: i32 = p.parse().ok()?;
-    let t: i32 = t.parse().ok()?;
-    Some((Value::c(p), Value::c(t)))
+    // "becomes an X/X creature" where the ability defines X (its cost, "where X is").
+    let num = |v: &str| match v {
+        "x" if super::value_grammar::x_defined() => Some(Value::X),
+        v => v.parse::<i32>().ok().map(Value::c),
+    };
+    Some((num(p)?, num(t)?))
 }
 
 /// Type words after "is"/"are": colors, card types and subtypes ("a blue Frog
@@ -1959,14 +1966,27 @@ fn parse_predicate(
         if let Some(fe) = tail.strip_prefix("for each ") {
             // In a group, "it" is each affected object.
             let each = Sel::Var(vars::AFFECTED);
-            let n = parse_for_each(fe, Some(subj.it.as_ref().unwrap_or(&each)))?;
-            let mul = |v: Value| match v {
+            let it = subj.it.as_ref().unwrap_or(&each);
+            // "+1/+1 for each creature you control and +1/+1 for each Aura you control":
+            // both bonuses.
+            let (fe, more) = match fe.split_once(" and +") {
+                Some((a, b)) if b.contains(" for each ") => (a, Some(format!("+{b}"))),
+                _ => (fe, None),
+            };
+            let times = |v: Value, n: &Value| match v {
                 Value::Const(0) => Value::Const(0),
                 Value::Const(1) => n.clone(),
                 other => Value::Mul(Box::new(other), Box::new(n.clone())),
             };
-            pv = mul(pv);
-            tv = mul(tv);
+            let n = parse_for_each(fe, Some(it))?;
+            pv = times(pv, &n);
+            tv = times(tv, &n);
+            if let Some(m) = more {
+                let (p2, t2, tail2) = crate::oracle::effects::parse_pt_mod(&m)?;
+                let n2 = parse_for_each(tail2.trim().strip_prefix("for each ")?, Some(it))?;
+                pv = Value::Sum(vec![pv, times(p2, &n2)]);
+                tv = Value::Sum(vec![tv, times(t2, &n2)]);
+            }
         } else if !tail.is_empty() {
             return None;
         }
@@ -1999,6 +2019,14 @@ fn parse_predicate(
                 return Some(vec![Out::Mod(Modification::SetPT(
                     Some(v.clone()),
                     Some(v),
+                ))]);
+            }
+            // "has base power and toughness X/X, where X is your life total".
+            if let (Some("x/x"), Some(x)) = (Some(pt), x) {
+                used_x.set(true);
+                return Some(vec![Out::Mod(Modification::SetPT(
+                    Some(x.clone()),
+                    Some(x.clone()),
                 ))]);
             }
             let (bp, bt) = base_pt(pt)?;
@@ -2061,6 +2089,13 @@ fn parse_predicate(
         } else {
             r
         };
+        // "is a colorless land with "{T}: Add {C}"": the types, and the quoted ability
+        // is granted (Imprisoned in the Moon, Minimus Containment).
+        if let Some((types, q)) = r.split_once(" with \"#") {
+            let mut out = type_predicate(types, subj)?;
+            out.extend(grant_list(&format!("\"#{q}"), subj, quotes, text, ctx)?);
+            return Some(out);
+        }
         return type_predicate(&r, subj);
     }
     Some(
@@ -2184,16 +2219,33 @@ fn parse_body(
         let used_x = std::cell::Cell::new(false);
         // "is an enchantment and loses all other card types": setting an object's card
         // types replaces the old ones anyway (CR 205.1a); the clause only says so.
-        let (rest, loses_other_types) = match [
-            " and loses all other card types",
-            " and it loses all other card types",
+        // "... and loses all other card types and abilities" (Imprisoned in the Moon),
+        // "..., and it loses all other abilities, card types, and creature types"
+        // (Darksteel Mutation), "... and it loses all other abilities" (Minimus
+        // Containment): the abilities this effect grants are kept (the removal is ordered
+        // first, see [`build`]).
+        let (rest, loses_other_types, loses_other_abilities) = match [
+            (" and loses all other card types", true, false),
+            (" and it loses all other card types", true, false),
+            (" and loses all other card types and abilities", true, true),
+            (" and it loses all other card types and abilities", true, true),
+            (
+                ", and it loses all other abilities, card types, and creature types",
+                true,
+                true,
+            ),
+            (", and it loses all other abilities", false, true),
+            (" and it loses all other abilities", false, true),
         ]
         .into_iter()
-        .find_map(|tail| rest.strip_suffix(tail))
+        .find_map(|(tail, ty, ab)| rest.strip_suffix(tail).map(|r| (r, ty, ab)))
         {
-            Some(r) => (r, true),
-            None => (rest, false),
+            Some(r) => r,
+            None => (rest, false, false),
         };
+        if loses_other_abilities {
+            outs.push(Out::Mod(Modification::RemoveAllAbilities));
+        }
         for p in split_predicates(rest) {
             match parse_predicate(p, &subject, x.as_ref(), &used_x, quotes, text, ctx) {
                 Some(v) => outs.extend(v),
@@ -2206,6 +2258,9 @@ fn parse_body(
         // A "where X is ..." that nothing used means X appeared somewhere we don't bind.
         if x.is_some() && !used_x.get() {
             ok = false;
+        }
+        if loses_other_types {
+            set_other_types_lost(&mut outs);
         }
         if loses_other_types
             && !outs
@@ -2223,6 +2278,42 @@ fn parse_body(
         }
     }
     None
+}
+
+/// "is an Insect artifact creature ... and it loses all other card types and creature
+/// types": the card types and creature types added replace the object's (CR 205.1a).
+fn set_other_types_lost(outs: &mut Vec<Out>) {
+    if outs
+        .iter()
+        .any(|o| matches!(o, Out::Mod(Modification::SetTypes { .. })))
+    {
+        return;
+    }
+    let Some(i) = outs
+        .iter()
+        .position(|o| matches!(o, Out::Mod(Modification::AddTypes(_))))
+    else {
+        return;
+    };
+    let Out::Mod(Modification::AddTypes(types)) = &outs[i] else {
+        return;
+    };
+    let types = types.clone();
+    let mut subtypes = Vec::new();
+    outs.retain(|o| match o {
+        Out::Mod(Modification::AddSubtypes(s)) => {
+            subtypes.extend(s.iter().cloned());
+            false
+        }
+        Out::Mod(Modification::RemoveAllCreatureTypes) => false,
+        _ => true,
+    });
+    if let Some(j) = outs
+        .iter()
+        .position(|o| matches!(o, Out::Mod(Modification::AddTypes(_))))
+    {
+        outs[j] = Out::Mod(Modification::SetTypes { types, subtypes });
+    }
 }
 
 /// "during your turn" / "during turns other than yours".
@@ -2495,6 +2586,19 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
             masked = format!("{b}{repl}");
         }
     }
+    // "Enchanted creature gets +1/+1 .... It's a Dragon in addition to its other types."
+    // (Draconic Destiny): "it" is the enchanted creature, a creature.
+    // (A quoted ability ends its sentence with the period inside the quotes.)
+    for it in ["\" it's ", "\" it is "] {
+        masked = masked.replace(it, &format!("\". {}", &it[2..]));
+    }
+    for subject in ["enchanted creature ", "equipped creature "] {
+        if masked.starts_with(subject) {
+            for it in [". it's ", ". it is "] {
+                masked = masked.replace(it, &format!(". {subject}is "));
+            }
+        }
+    }
     let mut sentences = masked.split(". ");
     let (mut body, cond) = parse_line(sentences.next()?, vec![], None, &quotes, text, ctx)?;
     let same_subject =
@@ -2759,6 +2863,11 @@ fn parse_player_body(s: &str) -> Option<Body> {
     let (who, rest) = [
         (
             "enchanted creature's controller ",
+            PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
+        ),
+        // A Curse's player (CR 303.4: the Aura is attached to that player).
+        (
+            "enchanted player ",
             PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo)))),
         ),
         ("you ", PlayerFilter::You),
