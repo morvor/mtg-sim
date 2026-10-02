@@ -176,6 +176,23 @@ impl Renderer<'_> {
             TriggerCond::EntersBattlefield(f) => Ev::new(obj(self, f), "enters"),
             TriggerCond::LeavesBattlefield(f) => Ev::new(obj(self, f), "leaves the battlefield"),
             TriggerCond::Dies(f) => Ev::new(obj(self, f), "dies"),
+            // "Whenever a spell or ability an opponent controls destroys a land you
+            // control" (CR 701.8).
+            TriggerCond::DestroyedBy { filter, by } => {
+                let s = self.spell_or_ability_of(*by);
+                let o = obj(self, filter);
+                Ev::new(s, format!("destroys {o}"))
+            }
+            // "Whenever a spell you control is countered by a spell or ability an opponent
+            // controls" (CR 701.6).
+            TriggerCond::CounteredBy { filter, by } => {
+                let s = self.spell_or_ability_of(*by);
+                Ev::new(obj(self, filter), format!("is countered by {s}"))
+            }
+            TriggerCond::CountersPutBy { .. } => {
+                let g = self.gap("counters put by a player");
+                Ev::new(g, "")
+            }
             TriggerCond::ZoneChange { filter, from, to } => {
                 // "one or more cards leave your graveyard": the owner is in the zone.
                 let shown = match filter {
@@ -973,4 +990,17 @@ fn names_another_object(trig: &str) -> bool {
         return true;
     }
     false
+}
+
+impl Renderer<'_> {
+    /// "a spell or ability", "a spell or ability an opponent controls".
+    fn spell_or_ability_of(&mut self, by: PlayerRel) -> String {
+        match by {
+            PlayerRel::Any => "a spell or ability".into(),
+            r => {
+                let c = self.controls_phrase(r, Num::One);
+                format!("a spell or ability {c}")
+            }
+        }
+    }
 }
