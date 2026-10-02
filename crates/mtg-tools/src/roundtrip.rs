@@ -37,7 +37,8 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"Equipped creature gets +X/+X, where X is its mana value\" used the Equipment's mana value | Hedron Matrix | `r107_numbers::enchanted_gets_xy` (tests in `tests/cards/roundtrip_parser_bugs_1.rs`, as below) |\n\
 | \"Target creature ... gets +X/+X ..., where X is its power\" used the source's power, not the target's | Winged Temple of Orazca (Fatal Frenzy now compiles) | `r107_numbers::where_x_is_parts` |\n\
 | \"Whenever ... this turn, put three +1/+1 counters on it. It gains trample ...\": the second sentence was the creating ability's own instruction (about the source) | The Last Ronin | `patterns/this_turn_trigger_followup.rs` |\n\
-| \"~ deals damage to any target equal to that card's mana value\": \"that card\" was the damage's target | Undying Flames | `damage_removal::damage_part` |\n\n\
+| \"~ deals damage to any target equal to that card's mana value\": \"that card\" was the damage's target | Undying Flames | `damage_removal::damage_part` |\n\
+| \"Whenever a creature enters from your graveyard\" triggered for creatures entering from any graveyard (also \"from your hand\") | Dredging Claw, Flayer of the Hatebound | `patterns/triggers.rs` (owned by you) |\n\n\
 Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
 triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
 cycled card (CR 702.29d), so the two are the same.\n\n";

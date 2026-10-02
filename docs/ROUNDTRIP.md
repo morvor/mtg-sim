@@ -27,6 +27,7 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | "Target creature ... gets +X/+X ..., where X is its power" used the source's power, not the target's | Winged Temple of Orazca (Fatal Frenzy now compiles) | `r107_numbers::where_x_is_parts` |
 | "Whenever ... this turn, put three +1/+1 counters on it. It gains trample ...": the second sentence was the creating ability's own instruction (about the source) | The Last Ronin | `patterns/this_turn_trigger_followup.rs` |
 | "~ deals damage to any target equal to that card's mana value": "that card" was the damage's target | Undying Flames | `damage_removal::damage_part` |
+| "Whenever a creature enters from your graveyard" triggered for creatures entering from any graveyard (also "from your hand") | Dredging Claw, Flayer of the Hatebound | `patterns/triggers.rs` (owned by you) |
 
 Approximation the comparison accepts: "cycle or discard" triggers are compiled as discard triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a cycled card (CR 702.29d), so the two are the same.
 
