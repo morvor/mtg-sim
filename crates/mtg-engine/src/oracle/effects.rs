@@ -469,7 +469,27 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             effect: Box::new(e),
         });
     }
-    if let Some((cond, rest)) = parse_leading_if(l, b) {
+    // "If you control a Fish, Octopus, or Otter, draw a card.": when the text after the
+    // first comma isn't an instruction, the condition may go on (read by the patterns).
+    let leading_if = parse_leading_if(l, b).and_then(|(cond, rest)| {
+        if !rest.contains(", ") {
+            return Some((cond, rest));
+        }
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let subject_is_source;
+        let rest2 = match rest.strip_prefix("it ") {
+            Some(r) if l.starts_with("if ~ ") => {
+                subject_is_source = format!("~ {r}");
+                subject_is_source.as_str()
+            }
+            _ => rest,
+        };
+        let ok = parse_clause(rest2, b).is_some();
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        ok.then_some((cond, rest))
+    });
+    if let Some((cond, rest)) = leading_if {
         // "If ~ was kicked, it deals 2 damage ...": the subject "it" is the condition's.
         let subject_is_source;
         let rest = match rest.strip_prefix("it ") {

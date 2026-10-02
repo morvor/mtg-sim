@@ -2122,3 +2122,48 @@ fn skyfisher_spider_may_exile_itself_from_the_graveyard() {
     assert_eq!(t.life(P0), 22);
     assert!(t.in_exile("Skyfisher Spider"));
 }
+
+#[test]
+fn listed_kind_conditions_and_optional_target_players_compile() {
+    assert_supported(&["Unagi's Spray", "Splash Portal", "Veteran Ice Climber"]);
+}
+
+#[test]
+fn unagis_spray_draws_with_a_listed_creature_type() {
+    cr!("608.2c");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let s = t.hand(P0, "Unagi's Spray");
+    t.cast(P0, s).target(bears).go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (-2, 2));
+    assert_eq!(t.hand_size(P0), 0);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    let otter = t.battlefield(P0, "Elusive Otter // Grove's Bounty");
+    t.g.recompute();
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let s = t.hand(P0, "Unagi's Spray");
+    t.cast(P0, s).target(bears).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 1, "{:?}", t.obj_now(otter).chars.subtypes);
+}
+
+#[test]
+fn veteran_ice_climber_may_target_no_player() {
+    cr!("115.1");
+    let mut t = TestGame::new(2);
+    let v = t.battlefield(P0, "Veteran Ice Climber");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.attack(&[(v, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P1), 1);
+    let mut t = TestGame::new(2);
+    let v = t.battlefield(P0, "Veteran Ice Climber");
+    t.answer_targets(P0, &[]);
+    t.attack(&[(v, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P1), 0);
+    assert_eq!(t.graveyard_size(P0), 0);
+}

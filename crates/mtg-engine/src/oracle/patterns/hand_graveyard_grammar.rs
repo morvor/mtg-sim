@@ -1741,6 +1741,8 @@ fn card_qualifiers(f: Filter, rest: &str) -> Option<(Filter, &str)> {
     }
     for (p, var) in [
         ("milled this way", vars::IT),
+        ("put into graveyards this way", vars::IT),
+        ("put into a graveyard this way", vars::IT),
         ("discarded this way", crate::discard_rules::DISCARDED),
     ] {
         if let Some(r) = t.strip_prefix(p) {
@@ -2799,3 +2801,85 @@ fn p_exile_self_from_graveyard(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile ~ from your graveyard", priority: 960, parse: p_exile_self_from_graveyard } }
+
+/// "If you control a Fish, Octopus, Otter, Seal, Serpent, or Whale, draw a card.": a
+/// condition containing commas (the condition ends at the comma where both it and the
+/// instruction after it can be read).
+fn p_if_condition_with_commas(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if ")?;
+    let first = r.find(", ")?;
+    let mut at = first + 2;
+    while let Some(i) = r[at..].find(", ") {
+        let split = at + i;
+        at = split + 2;
+        let (c, rest) = (&r[..split], &r[split + 2..]);
+        let cond = super::conditions_referents::parse_condition_with(c, b)
+            .or_else(|| crate::oracle::statics::parse_condition(c, b.ctx));
+        let Some(cond) = cond else { continue };
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        match crate::oracle::effects::parse_sentence(rest, b) {
+            Some(then) => {
+                return Some(Effect::If {
+                    cond,
+                    then: Box::new(then),
+                    otherwise: Box::new(Effect::Noop),
+                })
+            }
+            None => {
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1, saved.2);
+            }
+        }
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: if [condition with commas], ...", priority: 990, parse: p_if_condition_with_commas } }
+
+/// "up to one target player mills cards equal to ~'s power": the instruction for a
+/// target player that may be left unchosen (then nothing happens).
+fn p_up_to_one_target_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (r, who) = if let Some(r) = l.strip_prefix("up to one target player ") {
+        (r, "target player")
+    } else {
+        (l.strip_prefix("up to one target opponent ")?, "target opponent")
+    };
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(e) = parse_clause(&format!("{who} {r}"), b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    // Exactly one new target: the player.
+    if b.targets.len() != saved.0 + 1 || !matches!(b.targets[saved.0].what, TargetKind::Player(_)) {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    }
+    b.targets[saved.0].min = 0;
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: up to one target player [instruction]", priority: 990, parse: p_up_to_one_target_player } }
+
+/// "you control a Fish, Octopus, Otter, Seal, Serpent, or Whale": a permanent of any of
+/// the listed kinds.
+fn c_you_control_listed(c: &str) -> Option<Condition> {
+    let r = end(c).strip_prefix("you control ")?;
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    if !r.contains(", ") {
+        return None;
+    }
+    let (f, _, tail) = parse_object_phrase(r)?;
+    if !tail.trim().is_empty() || super::statics::mentions_other_zones(&f) {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)])),
+        Cmp::Ge,
+        Value::Const(1),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "hand/graveyard grammar: you control a [A, B, or C]", priority: 960, parse: c_you_control_listed } }
