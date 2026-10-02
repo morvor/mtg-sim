@@ -617,9 +617,16 @@ impl Renderer<'_> {
                 && options.iter().all(|(_, e)| {
                     matches!(
                         e,
-                        Effect::Sacrifice { who: PlayerRef::You, .. }
-                            | Effect::Discard { who: PlayerRef::You, .. }
-                            | Effect::LoseLife { who: PlayerRef::You, .. }
+                        Effect::Sacrifice {
+                            who: PlayerRef::You,
+                            ..
+                        } | Effect::Discard {
+                            who: PlayerRef::You,
+                            ..
+                        } | Effect::LoseLife {
+                            who: PlayerRef::You,
+                            ..
+                        }
                     )
                 }) =>
             {
@@ -2108,7 +2115,8 @@ impl Renderer<'_> {
             Effect::Piles(p) => match p.as_ref() {
                 crate::piles::PileAction::SeparateFaceDown { what, separator } => {
                     let w = self.sel(what, Case::Obj);
-                    let s = self.player(separator, Case::Subj);
+                    // One player: "an opponent" is the opponent of your choice.
+                    let s = self.some_player(separator);
                     let vp = format!("separate {w} into a face-down pile and a face-up pile");
                     if s == "you" {
                         vp
@@ -2118,7 +2126,7 @@ impl Renderer<'_> {
                 }
                 crate::piles::PileAction::Separate { what, separator } => {
                     let w = self.sel(what, Case::Obj);
-                    let s = self.player(separator, Case::Subj);
+                    let s = self.some_player(separator);
                     let vp = format!("separate {w} into two piles");
                     if s == "you" {
                         vp
@@ -2127,8 +2135,12 @@ impl Renderer<'_> {
                     }
                 }
                 crate::piles::PileAction::Choose { chooser } => {
-                    let c = self.player(chooser, Case::Subj);
-                    format!("{c} chooses one of those piles")
+                    let c = self.some_player(chooser);
+                    if c == "you" {
+                        "choose one of those piles".to_string()
+                    } else {
+                        format!("{c} chooses one of {{alt:those|the}} piles")
+                    }
                 }
             },
             Effect::Exchange(x) => self.exchange(x),
@@ -2278,6 +2290,39 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Put that pile into your hand and the other into your graveyard."
+            if let (
+                Some(Effect::Move {
+                    what: Sel::Var(a),
+                    to: ta,
+                }),
+                Some(Effect::Move {
+                    what: Sel::Var(b),
+                    to: tb,
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if *a == crate::piles::CHOSEN && *b == crate::piles::OTHER {
+                    let da = self.destination_phrase(ta, false, true);
+                    let db = self.destination_phrase(tb, false, true);
+                    // "Choose one of those piles. Put that pile ..." is "put one pile ..."
+                    // when you choose.
+                    let you_chose = i > 0
+                        && matches!(&v[i - 1], Effect::Piles(p) if matches!(p.as_ref(), crate::piles::PileAction::Choose { chooser: PlayerRef::You }));
+                    if you_chose
+                        && parts
+                            .last()
+                            .is_some_and(|p| p == "choose one of those piles")
+                    {
+                        parts.pop();
+                        parts.push(format!("put one pile {da} and the other {db}"));
+                    } else {
+                        parts.push(format!("put that pile {da} and the other {db}"));
+                    }
+                    i += 2;
+                    continue;
+                }
+            }
             // "An opponent gains control of ~": an opponent you choose, named once.
             if let (
                 Some(Effect::Choose {
