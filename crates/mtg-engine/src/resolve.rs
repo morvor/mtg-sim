@@ -904,6 +904,8 @@ impl Game {
                 }
                 self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
+                // "Create a ... token. When you do, ...": whether one was created.
+                ctx.prev_happened = !created.is_empty();
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),
@@ -963,6 +965,8 @@ impl Game {
                 }
                 self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
+                // "Create a ... token. When you do, ...": whether one was created.
+                ctx.prev_happened = !created.is_empty();
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),

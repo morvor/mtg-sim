@@ -83,3 +83,27 @@ fn tovolar_transforms_any_number_of_human_werewolves() {
     assert_eq!(t.obj_now(a).face, FaceState::Back);
     assert_eq!(t.obj_now(b).face, FaceState::Front);
 }
+
+#[test]
+fn seedpod_caretaker_transforms_target_incubator_token() {
+    cr!("701.27a", "701.53b");
+    let mut t = TestGame::new(2);
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    let incubator = mtg_engine::kwa::incubate::incubate(&mut t.g, P0, 2, &mut ctx)[0];
+    t.g.flush_events();
+    assert!(!t
+        .obj_now(incubator)
+        .chars
+        .card_types
+        .contains(mtg_engine::types::CardType::Creature));
+    t.answer(
+        P0,
+        DecisionKind::Modes,
+        mtg_engine::decision::Answer::Indices(vec![1]),
+    );
+    t.answer_targets(P0, &[Entity::Object(incubator)]);
+    t.enter(P0, "Seedpod Caretaker");
+    t.resolve_all();
+    assert_eq!(t.obj_now(incubator).face, FaceState::Back);
+    assert_eq!(t.pt(incubator), (2, 2));
+}

@@ -230,3 +230,23 @@ fn magnetic_snuffler_returns_target_equipment_attached_to_it() {
     assert!(t.on_battlefield(blade));
     assert_eq!(attached(&t, blade), Some(Entity::Object(snuffler)));
 }
+
+#[test]
+fn forum_filibuster_returns_an_aura_attached_to_the_new_token() {
+    cr!("603.12", "303.4f");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Forum Filibuster");
+    let strength = t.graveyard(P0, "Holy Strength");
+    t.answer_targets(P0, &[Entity::Object(strength)]);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let strength = t.g.current(strength);
+    assert!(t.on_battlefield(strength));
+    let host = match attached(&t, strength) {
+        Some(Entity::Object(h)) => h,
+        other => panic!("not attached to a permanent: {other:?}"),
+    };
+    assert!(t.g.obj(host).is_token());
+    assert!(t.g.obj(host).chars.has_subtype("Inkling"));
+    assert_eq!(t.pt(host), (3, 3));
+}

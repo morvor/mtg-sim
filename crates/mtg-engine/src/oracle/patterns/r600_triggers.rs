@@ -18,7 +18,12 @@ pub(crate) fn reflexive_body(text: &str, b: &Builder) -> Option<Body> {
         .replace("that creature's toughness", "its toughness");
     let mut sub = Builder::new(b.ctx);
     sub.in_trigger = true;
-    sub.it = Sel::Var(vars::IT);
+    // "Create a 2/1 ... token. When you do, ... attached to that token": the token
+    // created (the objects an instruction acted on are otherwise "it").
+    sub.it = match b.it {
+        Sel::Var(v) if v == vars::CREATED => Sel::Var(vars::CREATED),
+        _ => Sel::Var(vars::IT),
+    };
     sub.it_player = b.it_player.clone();
     let effect = parse_effect_text(&text, &mut sub)?;
     Some(Body {
