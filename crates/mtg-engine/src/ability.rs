@@ -2306,6 +2306,10 @@ pub enum Restriction {
     SourceDamageCantBePrevented(Filter),
     /// "can't transform".
     CantTransform(Filter),
+    /// "[permanents] can't be turned face up" (CR 708.7): not by a special action
+    /// (morph, disguise, a manifested or cloaked creature's mana cost, CR 702.37e,
+    /// 702.168d, 701.40b, 701.58b) nor by an effect. See `rule_statics::face_up`.
+    CantTurnFaceUp(Filter),
     /// "can't search libraries".
     CantSearch(PlayerFilter),
     /// Cast spells only at sorcery speed etc.

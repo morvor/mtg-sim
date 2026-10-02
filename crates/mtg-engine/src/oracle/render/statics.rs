@@ -1206,6 +1206,19 @@ impl Renderer<'_> {
                 }
             }
             Restriction::CantTransform(f) => format!("{} can't transform", subj(self, f)),
+            // "As long as enchanted creature is face down, it can't be turned face up."
+            Restriction::CantTurnFaceUp(Filter::And(v))
+                if v.len() >= 2 && matches!(v.last(), Some(Filter::FaceDown)) =>
+            {
+                let rest = Filter::and(v[..v.len() - 1].to_vec());
+                format!(
+                    "as long as {} is face down, it can't be turned face up",
+                    subj(self, &rest)
+                )
+            }
+            Restriction::CantTurnFaceUp(f) => {
+                format!("{} can't be turned face up", subj(self, f))
+            }
             Restriction::CantSearch(p) => {
                 format!("{} can't search libraries", self.player_filter_subject(p))
             }

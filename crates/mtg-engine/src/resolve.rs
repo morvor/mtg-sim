@@ -2895,6 +2895,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::CantBeCountered(f)
         | Restriction::CantBeSacrificed(f)
         | Restriction::CantBeRegenerated(f)
+        | Restriction::CantTurnFaceUp(f)
         | Restriction::SourceDamageCantBePrevented(f)
         | Restriction::AttackDespiteDefender(f)
         | Restriction::BlockAsThoughUntapped(f)

@@ -111,3 +111,39 @@ fn cant_cast_during_early_turns(l: &str, text: &str, _ctx: &CompileContext) -> O
 
 inventory::submit! { ConditionPattern { name: "it's your first, second, or third turn of the game", priority: 60, parse: early_turn_condition } }
 inventory::submit! { StaticPattern { name: "you can't cast ~ during your first turns", priority: 100, parse: cant_cast_during_early_turns } }
+
+/// "Permanents your opponents control can't be turned face up during your turn", "As long
+/// as enchanted creature is face down, it can't be turned face up" (CR 708.7).
+fn cant_be_turned_face_up(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if ctx.is_spell() {
+        return None;
+    }
+    let l = end(l).trim();
+    // "As long as [permanent] is face down, it can't be turned face up": only a face-down
+    // permanent can be turned face up anyway.
+    if let Some(r) = l.strip_prefix("as long as ") {
+        let subject = r.strip_suffix(" is face down, it can't be turned face up")?;
+        let f = match subject {
+            "enchanted creature" | "enchanted permanent" => Filter::AttachedToSource,
+            _ => permanents_phrase(subject)?,
+        };
+        return Some(static_ability(
+            StaticAbility::new(StaticEffect::Restriction(Restriction::CantTurnFaceUp(
+                Filter::and(vec![f, Filter::FaceDown]),
+            ))),
+            text,
+        ));
+    }
+    let (subject, during_your_turn) = match l.strip_suffix(" can't be turned face up during your turn") {
+        Some(s) => (s, true),
+        None => (l.strip_suffix(" can't be turned face up")?, false),
+    };
+    let f = permanents_phrase(subject)?;
+    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantTurnFaceUp(f)));
+    if during_your_turn {
+        s.condition = Some(Condition::YourTurn);
+    }
+    Some(static_ability(s, text))
+}
+
+inventory::submit! { StaticPattern { name: "can't be turned face up", priority: 100, parse: cant_be_turned_face_up } }
