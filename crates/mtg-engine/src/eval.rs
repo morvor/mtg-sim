@@ -837,6 +837,22 @@ impl Game {
                     .collect();
             }
         }
+        // "All cards from target player's hand and graveyard": several zones.
+        if f.zone().is_none() {
+            if let Some(mut zones) = alternative_zones(f) {
+                let mut seen = Vec::new();
+                zones.retain(|z| {
+                    let new = !seen.contains(z);
+                    seen.push(*z);
+                    new
+                });
+                return zones
+                    .into_iter()
+                    .flat_map(|z| self.objects_in_zone_kind(z))
+                    .filter(|id| self.matches(*id, f, ctx))
+                    .collect();
+            }
+        }
         let zone = f.zone().unwrap_or(ZoneKind::Battlefield);
         self.objects_in_zone_kind(zone)
             .into_iter()
@@ -1469,5 +1485,21 @@ impl Game {
                 .is_some_and(|t| t.eq_ignore_ascii_case(w)),
             Condition::Custom(name) => crate::custom::custom_condition(self, name, ctx),
         }
+    }
+}
+
+/// The zones of a filter that requires one of several zones (`Or` of `InZone`s, possibly
+/// inside an `And`).
+fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
+    match f {
+        Filter::Or(v) if !v.is_empty() => v
+            .iter()
+            .map(|x| match x {
+                Filter::InZone(z) => Some(*z),
+                _ => None,
+            })
+            .collect(),
+        Filter::And(v) => v.iter().find_map(alternative_zones),
+        _ => None,
     }
 }

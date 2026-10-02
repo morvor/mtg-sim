@@ -425,7 +425,17 @@ pub fn mana(s: &str) -> Cost {
 }
 
 /// Equip restrictions such as "Equip legendary creature" (CR 702.6) are enforced on the
-/// equip ability's target; attachment legality otherwise only requires a creature.
-pub fn equip_restriction_ok(_g: &Game, _equipment: ObjectId, _creature: ObjectId) -> bool {
-    true
+/// equip ability's target; attachment legality otherwise only requires a creature, unless
+/// the Equipment says "~ can be attached only to a [filter]" (CR 301.5, 701.3b, 704.5n).
+pub fn equip_restriction_ok(g: &Game, equipment: ObjectId, creature: ObjectId) -> bool {
+    let o = g.obj(equipment);
+    o.chars.abilities.iter().all(|a| match &a.kind {
+        AbilityKind::Static(s) => match &s.effect {
+            StaticEffect::AttachOnlyTo(f) => {
+                g.matches(creature, f, &Ctx::new(Some(equipment), o.controller))
+            }
+            _ => true,
+        },
+        _ => true,
+    })
 }

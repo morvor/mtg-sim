@@ -243,12 +243,24 @@ fn split_at_comma(s: &str) -> Option<(&str, &str)> {
 fn delayed_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (trigger, inner) = split_delay(l)?;
+    // "You gain 2 life, and you return ~ from your graveyard to your hand at the beginning
+    // of the next end step.": only the last instruction of the list waits (Mangara's
+    // Blessing rulings); the others happen now.
+    let mut now = None;
+    let inner = match inner.rsplit_once(", and ") {
+        Some((head, last)) if l.starts_with(inner) => {
+            now = Some(parse_sentence(head, b)?);
+            last
+        }
+        _ => inner,
+    };
     if inner.is_empty() || has_object_pronoun(inner) {
         return None;
     }
     let effect = parse_sentence(inner, b)?;
     let (stores, effect) = capture(&effect)?;
-    let mut seq = stores;
+    let mut seq: Vec<Effect> = now.into_iter().collect();
+    seq.extend(stores);
     seq.push(Effect::DelayedTrigger {
         trigger,
         body: Box::new(Body::effect(effect)),

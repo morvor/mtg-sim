@@ -33,18 +33,21 @@ fn no_regeneration(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 /// Athreos; Grafdigger's Cage): the card is checked as it exists in that zone.
 fn cant_enter(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let what = l.strip_suffix(" can't enter the battlefield")?;
+    // The zones are read here (the object phrase alone could read "in graveyards").
+    let (what, zones) = if let Some(w) = what.strip_suffix(" in graveyards and libraries") {
+        (w, Some(vec![ZoneKind::Graveyard, ZoneKind::Library]))
+    } else if let Some(w) = what.strip_suffix(" in graveyards") {
+        (w, Some(vec![ZoneKind::Graveyard]))
+    } else {
+        (what, None)
+    };
     let (f, _, tail) = parse_object_phrase(what)?;
-    let r = match end(tail) {
-        "" => Restriction::CantEnterBattlefield(f),
-        "in graveyards" => Restriction::CantEnterFrom {
-            what: f,
-            zones: vec![ZoneKind::Graveyard],
-        },
-        "in graveyards and libraries" => Restriction::CantEnterFrom {
-            what: f,
-            zones: vec![ZoneKind::Graveyard, ZoneKind::Library],
-        },
-        _ => return None,
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let r = match zones {
+        None => Restriction::CantEnterBattlefield(f),
+        Some(zones) => Restriction::CantEnterFrom { what: f, zones },
     };
     let s = StaticAbility::new(StaticEffect::Restriction(r));
     Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])

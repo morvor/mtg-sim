@@ -115,6 +115,22 @@ impl Renderer<'_> {
                 let e = self.static_effect(&s.effect);
                 format!("as long as {c}, {}", lower_first(&e))
             }
+            // "As long as ~ isn't on the battlefield, it's a 1/1 Insect creature in
+            // addition to its other types." (CR 113.6c)
+            None if s.zone == FunctionZone::AnywhereExcept(ZoneKind::Battlefield) => {
+                // What it is elsewhere isn't known: "in addition to its other types".
+                self.subject_types.clear();
+                let me = self.me();
+                let e = self.static_effect(&s.effect);
+                let e = match e
+                    .strip_prefix(&format!("{me} is "))
+                    .or_else(|| e.strip_prefix("~it is "))
+                {
+                    Some(rest) => format!("it's {rest}"),
+                    None => lower_first(&e),
+                };
+                format!("as long as {me} isn't on the battlefield, {e}")
+            }
             None => self.static_effect(&s.effect),
         };
         self.subject_types.clear();
@@ -387,6 +403,10 @@ impl Renderer<'_> {
                 }
             }
             StaticEffect::Dice(d) => self.dice_static(d),
+            StaticEffect::AttachOnlyTo(f) => {
+                let n = self.noun_det(f, super::nouns::Det::A);
+                format!("~ can be attached only to {n}")
+            }
             // "You can't cast ~ during your first, second, or third turns of the game."
             StaticEffect::CastOnlyIf(Condition::Not(inner))
                 if crate::rule_statics::turns_taken::early_turns_n(inner).is_some() =>

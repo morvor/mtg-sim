@@ -2690,6 +2690,9 @@ pub enum StaticEffect {
     /// "Cast this spell only [condition]" — e.g. "only during combat before blockers are
     /// declared" (CR 506.8). Checked from the card itself while it's being cast.
     CastOnlyIf(Condition),
+    /// "~ can be attached only to a [filter]" (Gate Smasher, Konda's Banner): an Equipment
+    /// that can't legally be attached to other objects (CR 301.5, 701.3b, 704.5n).
+    AttachOnlyTo(Filter),
     /// An optional cost to attack with the source, paid "as it attacks" (CR 508.1g), e.g.
     /// "You may exert this creature as it attacks. When you do, [then]."
     OptionalAttackCost {

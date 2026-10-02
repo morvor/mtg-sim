@@ -94,6 +94,72 @@ pub fn copy_spell(
     Some(id)
 }
 
+/// CR 405.3: several copies put on the stack at the same time by one effect are put
+/// there in the order their controller chooses. `copies` are the new objects, which
+/// sit together on top of the stack in creation order; the controller is asked for
+/// their relative order (unless they're indistinguishable: copies of the same spell or
+/// ability with the same modes and targets).
+pub fn order_copies(g: &mut Game, controller: PlayerId, copies: &[ObjectId]) {
+    if copies.len() < 2 {
+        return;
+    }
+    let choices = |g: &Game, id: ObjectId| {
+        g.obj(id)
+            .stack
+            .as_deref()
+            .map(|si| {
+                si.chosen
+                    .iter()
+                    .map(|m| (m.mode, m.targets.clone(), m.divided.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
+    // Copies of the same spell or ability (by name) with the same choices can't be told
+    // apart.
+    let key = |g: &Game, id: ObjectId| (g.obj(id).name().to_string(), choices(g, id));
+    let first = key(g, copies[0]);
+    if copies.iter().all(|c| key(g, *c) == first) {
+        return;
+    }
+    // Their positions on the stack, bottom first.
+    let mut slots: Vec<usize> = copies
+        .iter()
+        .filter_map(|c| g.stack.iter().position(|s| s == c))
+        .collect();
+    if slots.len() != copies.len() {
+        return;
+    }
+    slots.sort();
+    let items = copies
+        .iter()
+        .map(|c| {
+            let targets: Vec<String> = choices(g, *c)
+                .iter()
+                .flat_map(|(_, t, _)| t.iter().flatten().map(|e| format!("{e:?}")))
+                .collect();
+            format!("{} targeting [{}]", g.obj(*c).name(), targets.join(", "))
+        })
+        .collect();
+    let Answer::Indices(order) = g.ask(
+        controller,
+        Decision::Order {
+            prompt: "Order the copies (first is put onto the stack first)".into(),
+            items,
+        },
+    ) else {
+        return;
+    };
+    let mut sorted = order.clone();
+    sorted.sort();
+    if sorted != (0..copies.len()).collect::<Vec<_>>() {
+        return;
+    }
+    for (slot, i) in slots.into_iter().zip(order) {
+        g.stack[slot] = copies[i];
+    }
+}
+
 /// "[objects] become(s) a copy of [object] [for the duration], [except ...]" (CR 707.2,
 /// 613.2a): a layer-1 copy effect giving the objects the other object's copiable values
 /// with the exceptions (CR 707.9b), which are part of their copiable values then.
