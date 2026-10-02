@@ -839,6 +839,8 @@ pub fn this_way_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         "discarded" => crate::discard_rules::DISCARDED,
         "revealed" if acted(b) => crate::kw::reveal_from_hand::REVEALED,
         "exiled" if acted(b) => AFFECTED,
+        // The cards the latest draw instruction drew (see `Effect::Draw`).
+        "drawn" => vars::REVEALED,
         _ => return None,
     };
     let (f, _, tail) = parse_object_phrase(noun)?;
@@ -2067,12 +2069,22 @@ pub fn count_phrase(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 
 /// "there are ten or more cards in a single graveyard": some graveyard has that many.
 fn c_single_graveyard(c: &str) -> Option<Condition> {
-    let r = end(c).strip_prefix("there are ")?;
-    let (n, r) = parse_number(r)?;
-    let r = r.trim_start().strip_prefix("or more cards in a single graveyard")?;
-    if !r.trim().is_empty() {
-        return None;
-    }
+    // "a graveyard has twenty or more cards in it".
+    let n = if let Some(r) = end(c).strip_prefix("a graveyard has ") {
+        let (n, r) = parse_number(r)?;
+        if r.trim() != "or more cards in it" {
+            return None;
+        }
+        n
+    } else {
+        let r = end(c).strip_prefix("there are ")?;
+        let (n, r) = parse_number(r)?;
+        let r = r.trim_start().strip_prefix("or more cards in a single graveyard")?;
+        if !r.trim().is_empty() {
+            return None;
+        }
+        n
+    };
     Some(Condition::Compare(
         Value::OverPlayers(
             AggOp::Max,
@@ -2579,3 +2591,133 @@ fn p_if_you_do_or_if(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: if you do or if [condition], ...", priority: 960, parse: p_if_you_do_or_if } }
+
+/// "you return a land card from your graveyard to your hand" (after ", then" following
+/// another player's instruction): the imperative with "you" as its subject.
+fn p_you_verb(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you ")?;
+    let verb = r.split(' ').next()?;
+    if ![
+        "return", "put", "exile", "sacrifice", "search", "shuffle", "reveal", "look", "create",
+        "destroy", "tap", "untap", "mill", "scry", "surveil", "investigate",
+    ]
+    .contains(&verb)
+    {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let e = parse_clause(r, b);
+    if e.is_none() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    e
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: you [verb] ...", priority: 990, parse: p_you_verb } }
+
+/// "If a red card is discarded this way, ~ deals 4 damage to any target.", "If fewer than
+/// two cards were discarded this way, you draw cards equal to the difference.": about the
+/// cards the earlier instruction discarded (revealed, exiled).
+fn p_if_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if ")?;
+    let (c, rest) = r.split_once(" this way, ")?;
+    // "fewer than two cards were discarded", "a red card is discarded".
+    let (fewer, c) = match c.strip_prefix("fewer than ") {
+        Some(x) => {
+            let (n, x) = parse_number(x)?;
+            (Some(n.as_const()?), x.trim_start().to_string())
+        }
+        None => (None, c.to_string()),
+    };
+    let (noun, verb) = c
+        .split_once(" is ")
+        .or_else(|| c.split_once(" was "))
+        .or_else(|| c.split_once(" were "))
+        .or_else(|| c.split_once(" are "))?;
+    let noun = match fewer {
+        Some(_) => noun,
+        None => noun
+            .strip_prefix("a ")
+            .or_else(|| noun.strip_prefix("an "))?,
+    };
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let (count, tail) = this_way_count(&format!("{noun} {verb} this way"), b)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let parsed = match fewer {
+        // "you draw cards equal to the difference".
+        Some(n) => {
+            let diff = Value::Diff(Box::new(Value::Const(n)), Box::new(count.clone()));
+            let r = rest.strip_prefix("you ").unwrap_or(rest);
+            let r = r.strip_suffix(" equal to the difference")?;
+            let words: Vec<&str> = r.split(' ').collect();
+            let clause = format!("{} x {}", words.first()?, words.get(1..)?.join(" "));
+            clause_with_value(&clause, &diff, b).map(|e| (Condition::Compare(count, Cmp::Lt, Value::Const(n)), e))
+        }
+        None => parse_clause(rest, b).map(|e| (Condition::Compare(count, Cmp::Ge, Value::Const(1)), e)),
+    };
+    let Some((cond, then)) = parsed else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    Some(Effect::If {
+        cond,
+        then: Box::new(then),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: if a [card] is [verb] this way, ...", priority: 960, parse: p_if_this_way } }
+
+/// "Exile the bottom card of target player's graveyard." (CR 404.2: a graveyard's order
+/// can't change; its bottom card is the one put there earliest), "Exile all but the bottom
+/// card of target player's library."
+fn p_bottom_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let fail = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+        None
+    };
+    if let Some(r) = l.strip_prefix("exile the bottom card of ") {
+        let who = r.strip_suffix("'s graveyard")?;
+        let (who, rest) = player_ref(who, b)?;
+        if !rest.trim().is_empty() {
+            return fail(b);
+        }
+        let owner = super::value_grammar::owned_by(&who);
+        return Some(record(
+            Effect::Exile {
+                what: Sel::All(Filter::and(vec![
+                    Filter::Card,
+                    Filter::InZone(ZoneKind::Graveyard),
+                    owner,
+                    Filter::Custom(SmolStr::new(crate::kw::hand_graveyard_actions::BOTTOM_OF_GRAVEYARD)),
+                ])),
+                face_down: false,
+                link: false,
+            },
+            b,
+        ));
+    }
+    if let Some(r) = l.strip_prefix("exile all but the bottom card of ") {
+        let who = r.strip_suffix("'s library")?;
+        let (who, rest) = player_ref(who, b)?;
+        if !rest.trim().is_empty() {
+            return fail(b);
+        }
+        let n = Value::Diff(Box::new(Value::LibrarySize(who.clone())), Box::new(Value::Const(1)));
+        return Some(Effect::Exile {
+            what: Sel::TopOfLibrary(who, n),
+            face_down: false,
+            link: false,
+        });
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: the bottom card of a graveyard or library", priority: 960, parse: p_bottom_card } }

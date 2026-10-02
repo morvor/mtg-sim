@@ -1896,3 +1896,152 @@ fn armored_kincaller_reveal_or_another_dinosaur() {
     t.resolve_all();
     assert_eq!(t.life(P0), 23);
 }
+
+// ---------------------------------------------------------------------------
+// Sixth batch
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sixth_batch_compiles() {
+    assert_supported(&[
+        "Witherbloom Command",
+        "Rise of the Deathbringer",
+        "Skull Raid",
+        "Jace, the Perfected Mind",
+        "Phyrexian Furnace",
+        "Nicol Bolas, the Ravager // Nicol Bolas, the Arisen",
+    ]);
+}
+
+#[test]
+fn witherbloom_command_mill_then_you_return_a_land() {
+    cr!("701.17a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Forest", 1);
+    let land = t.graveyard(P0, "Forest");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let w = t.hand(P0, "Witherbloom Command");
+    t.answer_choose(P0, &objs(&[land]));
+    t.cast(P0, w).modes(&[0, 2]).target(P1).target(bears).go();
+    t.resolve();
+    assert_eq!(t.graveyard_size(P1), 3);
+    assert_eq!(t.pt(bears), (-1, 1));
+    assert_eq!(t.zone(land), Zone::Hand(P0));
+}
+
+#[test]
+fn rise_of_the_deathbringer_loses_life_per_card_drawn() {
+    cr!("121.1");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 5);
+    t.battlefield(P0, "Hill Giant");
+    let r = t.hand(P0, "Rise of the Deathbringer");
+    t.cast(P0, r).modes(&[0]).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 3);
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
+fn skull_raid_draws_the_shortfall() {
+    cr!("701.9a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    t.hand(P1, "Shock");
+    let s = t.hand(P0, "Skull Raid");
+    t.cast(P0, s).target(P1).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P1), 0);
+    assert_eq!(t.hand_size(P0), 1);
+    // Two discarded: no draw.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    t.hand(P1, "Shock");
+    t.hand(P1, "Shock");
+    let s = t.hand(P0, "Skull Raid");
+    t.cast(P0, s).target(P1).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 0);
+}
+
+#[test]
+fn chandra_ablaze_red_discard_condition() {
+    cr!("701.9a");
+    let mut t = TestGame::new(2);
+    let s = t.custom(
+        P0,
+        sorcery(
+            "Ablaze Probe",
+            "Discard a card. If a red card is discarded this way, ~ deals 4 damage to any target.",
+        ),
+        Zone::Hand(P0),
+    );
+    t.hand(P0, "Shock");
+    t.cast(P0, s).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 16);
+    let mut t = TestGame::new(2);
+    let s = t.custom(
+        P0,
+        sorcery(
+            "Ablaze Probe",
+            "Discard a card. If a red card is discarded this way, ~ deals 4 damage to any target.",
+        ),
+        Zone::Hand(P0),
+    );
+    t.hand(P0, "Grizzly Bears");
+    t.cast(P0, s).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn jace_perfected_mind_twenty_cards_in_a_graveyard() {
+    cr!("701.17a");
+    let mut t = TestGame::new(2);
+    let j = t.battlefield(P0, "Jace, the Perfected Mind");
+    t.g.objects[j.0 as usize].counters.insert("loyalty".into(), 5);
+    for _ in 0..17 {
+        t.graveyard(P1, "Shock");
+    }
+    t.activate(P0, j, 1, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P1), 20);
+    assert_eq!(t.hand_size(P0), 3);
+    let mut t = TestGame::new(2);
+    let j = t.battlefield(P0, "Jace, the Perfected Mind");
+    t.g.objects[j.0 as usize].counters.insert("loyalty".into(), 5);
+    t.activate(P0, j, 1, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 1);
+}
+
+#[test]
+fn phyrexian_furnace_exiles_the_bottom_card() {
+    cr!("404.2");
+    let mut t = TestGame::new(2);
+    let f = t.battlefield(P0, "Phyrexian Furnace");
+    let first = t.graveyard(P1, "Grizzly Bears");
+    let second = t.graveyard(P1, "Shock");
+    t.activate(P0, f, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(first), Zone::Exile);
+    assert_eq!(t.zone(second), Zone::Graveyard(P1));
+}
+
+#[test]
+fn nicol_bolas_exiles_all_but_the_bottom_card() {
+    cr!("401.1");
+    let mut t = TestGame::new(2);
+    let bottom = t.g.player(P1).library[0];
+    let s = t.custom(
+        P0,
+        sorcery("Bolas Probe", "Exile all but the bottom card of target player's library."),
+        Zone::Hand(P0),
+    );
+    t.cast(P0, s).target(P1).go();
+    t.resolve();
+    assert_eq!(t.library_size(P1), 1);
+    assert_eq!(t.g.player(P1).library[0], bottom);
+}

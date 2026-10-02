@@ -32,6 +32,10 @@ pub const PUT_THERE_THIS_TURN: &str = "put into its graveyard this turn from:";
 /// the card type or subtype word.
 pub const ACTIVATED_ABILITIES_OF_GRAVEYARD: &str = "has all activated abilities of cards in graveyards:";
 
+/// `Filter::Custom`: the bottom card of its graveyard (the one put there earliest, CR
+/// 404.2).
+pub const BOTTOM_OF_GRAVEYARD: &str = "the bottom card of its graveyard";
+
 pub struct HandGraveyardActions;
 
 impl KeywordRules for HandGraveyardActions {
@@ -51,6 +55,13 @@ impl KeywordRules for HandGraveyardActions {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: crate::types::ObjectId, _ctx: &Ctx) -> Option<bool> {
+        if name == BOTTOM_OF_GRAVEYARD {
+            let o = g.obj(id);
+            let crate::object::Zone::Graveyard(p) = o.zone else {
+                return Some(false);
+            };
+            return Some(g.player(p).graveyard.first() == Some(&id));
+        }
         let from = name.strip_prefix(PUT_THERE_THIS_TURN)?;
         let o = g.obj(id);
         if !matches!(o.zone, crate::object::Zone::Graveyard(_)) || o.entered_turn != g.turn.number {
