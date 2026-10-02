@@ -942,7 +942,23 @@ impl Game {
         if let StackKind::Triggered { ability, .. } = &si.kind {
             if let AbilityKind::Triggered(t) = &ability.kind {
                 if let Some(c) = &t.intervening_if {
-                    if !self.eval_cond(c, &ctx) {
+                    // The source as it last existed: an Aura whose enchanted permanent
+                    // left the battlefield first wasn't enchanting anything. (A trigger on
+                    // that permanent leaving looks back in time, CR 603.10a.)
+                    let detach = !matches!(
+                        t.trigger,
+                        TriggerCond::LeavesBattlefield(_) | TriggerCond::Dies(_)
+                    ) && crate::attach::attached_to_nothing(self, src);
+                    let saved = if detach {
+                        self.objects[src.0 as usize].attached_to.take()
+                    } else {
+                        None
+                    };
+                    let holds = self.eval_cond(c, &ctx);
+                    if detach {
+                        self.objects[src.0 as usize].attached_to = saved;
+                    }
+                    if !holds {
                         self.remove_from_stack(id);
                         self.state_triggers_active.remove(&(src, uid));
                         return;

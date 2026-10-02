@@ -96,6 +96,27 @@ pub fn aura_target_spec(chars: &Characteristics) -> Option<TargetSpec> {
 }
 
 /// Whether `obj` could legally be attached to `to` right now (CR 301.5c, 303.4d, 701.3).
+/// An Aura, Equipment or Fortification that was attached to nothing as it last existed on
+/// the battlefield (or is attached to nothing now), although it still records what it was
+/// attached to: that object left the battlefield before it did (CR 608.2h, 704.5m). Effects
+/// of its abilities that have that object do something still find it (CR 113.7a), but a
+/// condition about "enchanted [permanent]" is false.
+pub fn attached_to_nothing(g: &Game, obj: ObjectId) -> bool {
+    let o = g.obj(obj);
+    let Some(to) = o.attached_to else {
+        return false;
+    };
+    if g.is_live(obj) {
+        o.zone == Zone::Battlefield
+            && match to {
+                Entity::Object(x) => !(g.is_live(x) && g.obj(x).zone == Zone::Battlefield),
+                Entity::Player(_) => false,
+            }
+    } else {
+        o.left_battlefield.as_ref().is_some_and(|l| !l.attached)
+    }
+}
+
 pub fn can_attach(g: &Game, obj: ObjectId, to: Entity) -> bool {
     can_attach_as(g, obj, to, false)
 }

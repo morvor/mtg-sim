@@ -707,6 +707,14 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             )
         } else if let Some(r) = t.strip_prefix("defending player controls") {
             (Filter::ControlledBy(PlayerRel::Defending), r)
+        } else if let Some(r) = t.strip_prefix("enchanted player controls") {
+            // A Curse's player (CR 303.4).
+            (
+                Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(Box::new(
+                    Sel::AttachedTo,
+                )))),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("the monarch controls") {
             // CR 725: none while there's no monarch.
             (
