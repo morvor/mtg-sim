@@ -401,3 +401,28 @@ fn resistance_reunited_equipped_set_is_fixed_as_it_resolves() {
     assert!(indestructible(&t, bears), "keeps it unequipped");
     assert!(!indestructible(&t, giant), "doesn't gain it equipped");
 }
+
+#[test]
+fn paladin_danse_affects_artifact_or_human_creatures_as_it_resolves() {
+    cr!("611.2c", "602.2");
+    ruling!(
+        "Paladin Danse, Steel Maverick",
+        "The set of creatures affected by Paladin Danse's last ability is determined as the ability resolves."
+    );
+    supported("Paladin Danse, Steel Maverick");
+    let mut t = TestGame::new(2);
+    let danse = t.battlefield(P0, "Paladin Danse, Steel Maverick");
+    let thopter = t.battlefield(P0, "Ornithopter");
+    let human = t.battlefield(P0, "Prodigal Sorcerer");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.activate(P0, danse, 0, &[]).expect("activate");
+    assert!(t.in_exile("Paladin Danse, Steel Maverick"));
+    t.resolve_all();
+    assert!(indestructible(&t, thopter), "an artifact creature");
+    assert!(indestructible(&t, human), "a Human creature");
+    assert!(!indestructible(&t, bears), "neither");
+    let later_thopter = t.battlefield(P0, "Ornithopter");
+    let later_human = t.battlefield(P0, "Prodigal Sorcerer");
+    assert!(!indestructible(&t, later_thopter));
+    assert!(!indestructible(&t, later_human));
+}
