@@ -83,7 +83,7 @@ impl Game {
                     // "If it's a permanent card, you may put it onto the battlefield. If
                     // you do, ...", "Then if there are three or more collection counters
                     // on it, sacrifice it. If you do, ...": an instruction whose condition
-                    // didn't hold wasn't done.
+                    // didn't hold wasn't done (also "... sacrifice ~. When you do, ...").
                     if matches!(**otherwise, Effect::Noop) {
                         ctx.prev_happened = false;
                     }
@@ -544,21 +544,44 @@ impl Game {
                         Some(kind) => {
                             total += self.remove_counters_by(t, kind, k, Some(ctx.controller))
                         }
+                        // N counters of the kinds the controller chooses.
                         None => {
-                            let kinds: Vec<CounterKind> = match t {
-                                Entity::Object(o) => self.obj(o).counters.keys().cloned().collect(),
-                                Entity::Player(p) => {
-                                    self.player(p).counters.keys().cloned().collect()
-                                }
-                            };
-                            for kk in kinds {
-                                total += self.remove_counters_by(t, &kk, k, Some(ctx.controller));
-                            }
+                            total += crate::counter_rules::remove_chosen_counters(
+                                self,
+                                t,
+                                None,
+                                k,
+                                ctx.controller,
+                                ctx.source,
+                            )
                         }
                     }
                 }
                 ctx.prev_value = total as i64;
                 // "Remove a counter from it. If you do, …" (CR 608.2c).
+                ctx.prev_happened = total > 0;
+            }
+            Effect::ChooseCounterKind { from, then } => {
+                if let Some(e) =
+                    crate::counter_rules::with_chosen_counter_kind(self, from, then, ctx)
+                {
+                    self.exec(&e, ctx);
+                }
+            }
+            Effect::RemoveCountersUpTo { what, kind, max } => {
+                let max = max.as_ref().map(|v| self.eval_value(v, ctx).max(0) as u32);
+                let mut total = 0;
+                for t in self.resolve_sel(what, ctx) {
+                    total += crate::counter_rules::remove_up_to_counters(
+                        self,
+                        t,
+                        kind.as_ref(),
+                        max,
+                        ctx.controller,
+                        ctx.source,
+                    );
+                }
+                ctx.prev_value = total as i64;
                 ctx.prev_happened = total > 0;
             }
             Effect::MoveCounters { from, to, kind, n } => {

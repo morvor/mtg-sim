@@ -622,6 +622,13 @@ impl Game {
                 Some(k) => o.counter(k) > 0,
                 None => o.counters.values().any(|n| *n > 0),
             },
+            Filter::CounterCount(k, cmp, v) => {
+                let n = match k {
+                    Some(k) => o.counter(k),
+                    None => o.counters.values().sum(),
+                };
+                cmp.eval(n as i64, self.eval_value(v, ctx))
+            }
             Filter::HasAbilities => !c.has_no_abilities(),
             Filter::Source => ctx.source == Some(id),
             // "Another": not the source, nor the card it became after it left

@@ -417,6 +417,23 @@ impl Renderer<'_> {
                 Some(k) => counter_name(k),
                 None => "counter".into(),
             }),
+            // "with three or more +1/+1 counters on it", "with exactly one tide counter on it".
+            Filter::CounterCount(k, cmp, v) => {
+                let noun = match k {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let n = self.value(v);
+                let amount = match cmp {
+                    Cmp::Ge => format!("{n} or more"),
+                    Cmp::Le => format!("{n} or fewer"),
+                    Cmp::Eq => format!("exactly {n}"),
+                    Cmp::Gt => format!("more than {n}"),
+                    Cmp::Lt => format!("fewer than {n}"),
+                    Cmp::Ne => format!("other than {n}"),
+                };
+                np.with.push(format!("{amount} {} on it", plural(&noun)));
+            }
             Filter::HasAbilities => np.with.push("an ability".into()),
             Filter::Source => np.is_self = true,
             Filter::Other => np.other = true,
