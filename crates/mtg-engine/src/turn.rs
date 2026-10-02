@@ -917,6 +917,9 @@ impl Game {
         }
         // CR 514.2: remove damage; end "until end of turn" effects.
         crate::special_actions::end_of_turn(self);
+        if self.dirty {
+            self.recompute();
+        }
         for id in self.battlefield.clone() {
             if crate::kw::keeps_damage_in_cleanup(self, id) {
                 continue;

@@ -2569,6 +2569,12 @@ pub enum StaticEffect {
     /// permanents matching the filter (relative to the source) are left out of the legend
     /// rule (see `legend_rule.rs`).
     LegendRuleExempt(Filter),
+    /// "Damage isn't removed from [permanents matching the filter] during cleanup steps"
+    /// (an exception to CR 514.2; see `rule_statics::cleanup_damage`).
+    DamageNotRemoved(Filter),
+    /// "Counters remain on ~ as it moves to any zone other than a player's hand or library"
+    /// (an exception to CR 122.2 and 400.7; see `rule_statics::counters_remain`).
+    CountersRemain,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

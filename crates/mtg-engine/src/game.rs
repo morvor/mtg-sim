@@ -1137,6 +1137,7 @@ impl Game {
         crate::stickers::follow(self, old, id, zone);
         crate::rooms::entering(self, old, id, zone);
         crate::merge::incarnation(self, old, id);
+        crate::rule_statics::counters_remain::follow(self, old, id, zone);
         id
     }
 

@@ -414,6 +414,16 @@ impl Renderer<'_> {
                 let n = self.noun(f, Num::Many);
                 format!("the \"legend rule\" doesn't apply to {n}")
             }
+            StaticEffect::DamageNotRemoved(f) => {
+                let n = self.affected_subject(f);
+                format!("damage isn't removed from {n} during cleanup steps")
+            }
+            StaticEffect::CountersRemain => {
+                let me = self.me();
+                format!(
+                    "counters remain on {me} as it moves to any zone other than a player's hand or library"
+                )
+            }
         }
     }
 
