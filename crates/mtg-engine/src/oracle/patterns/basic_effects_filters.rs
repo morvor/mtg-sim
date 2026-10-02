@@ -94,7 +94,7 @@ fn except_for<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     Some((Filter::not(f), ""))
 }
 
-/// "that's a Wolf or a Werewolf", "that's an artifact": the object is one of them.
+/// "that's a Wolf or a Werewolf": the object is one of them.
 fn thats_a<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     let mut r = t.strip_prefix("that's ")?;
     let mut alts = Vec::new();
@@ -112,15 +112,14 @@ fn thats_a<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
             None => break,
         }
     }
-    let f = if alts.len() == 1 {
-        alts.pop()?
-    } else {
-        Filter::Or(alts)
-    };
-    Some((f, r))
+    // A list ("that's a Cat, Elemental, or Beast") is read elsewhere.
+    if alts.len() < 2 || r.trim_start().starts_with(',') {
+        return None;
+    }
+    Some((Filter::Or(alts), r))
 }
 
-inventory::submit! { FilterSuffixPattern { name: "basic effects: that's a X or a Y", priority: 90, parse: thats_a } }
+inventory::submit! { FilterSuffixPattern { name: "basic effects: that's a X or a Y", priority: 110, parse: thats_a } }
 inventory::submit! { FilterSuffixPattern { name: "basic effects: this turn (dealt damage, blocked, entered)", priority: 90, parse: this_turn } }
 inventory::submit! { FilterSuffixPattern { name: "basic effects: except for", priority: 90, parse: except_for } }
 
