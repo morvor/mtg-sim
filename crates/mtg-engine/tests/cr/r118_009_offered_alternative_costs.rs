@@ -262,7 +262,7 @@ fn an_offered_cost_applies_to_a_spell_cast_with_jump_start() {
 
 #[test]
 fn a_once_each_turn_alternative_cost_is_used_up() {
-    cr!("118.9", "601.2b");
+    cr!("118.9", "118.9a", "118.8", "601.2b");
     ruling!(
         "Darksteel Monolith",
         "If you cast a card for an alternative cost of {0}, you can't pay any other alternative costs. You can, however, pay additional costs like kicker."
@@ -298,6 +298,29 @@ fn a_once_each_turn_alternative_cost_is_used_up() {
     // Only from the hand.
     let in_gy = t.graveyard(P0, "Juggernaut");
     assert!(offered(&mut t, P0, in_gy).is_empty());
+    // With {0} instead of its mana cost, a kicker cost may still be paid: Skyclave
+    // Sentinel {3}, kicker {4}, for {4} alone, enters with two +1/+1 counters.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Darksteel Monolith");
+    let sentinel = t.hand(P0, "Skyclave Sentinel");
+    add_mana(&mut t, P0, ManaType::C, 4);
+    t.cast(P0, sentinel).method(OFFERED).kicked(true).go();
+    assert_eq!(pool_total(&t, P0), 0);
+    t.resolve_all();
+    let s = t.named_on_battlefield("Skyclave Sentinel")[0];
+    assert_eq!(t.counters(s, "+1/+1"), 2);
+    // Its emerge cost (an alternative cost of its own) can't be combined with the
+    // Monolith's: Vexing Scuttler {8} is offered {0} only for its mana cost.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Darksteel Monolith");
+    t.battlefield(P0, "Grizzly Bears");
+    let scuttler = t.hand(P0, "Vexing Scuttler");
+    let emerge = CastMethod::Keyword(keywords::KeywordKind::Emerge);
+    t.g.recompute();
+    assert!(t.g.cast_options(P0, scuttler).iter().any(|o| o.method == emerge));
+    let ways = offered(&mut t, P0, scuttler);
+    assert_eq!(ways.len(), 1);
+    assert_eq!(ways[0].method, OFFERED);
 }
 
 #[test]
