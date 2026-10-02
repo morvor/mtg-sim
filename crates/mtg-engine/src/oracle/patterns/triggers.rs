@@ -598,6 +598,19 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
         ]);
         return Some((c, Sel::TriggerSpell, tp()));
     }
+    // "copy an instant spell" (Kalamax, the Stormsire; CR 707.10).
+    if let Some(t) = rest
+        .strip_prefix("copy ")
+        .or_else(|| rest.strip_prefix("copies "))
+    {
+        let x = end(t);
+        let x = x.strip_prefix("a ").or_else(|| x.strip_prefix("an "))?;
+        let (filter, cond) = parse_spell_phrase(x)?;
+        if cond.is_some() {
+            return None;
+        }
+        return Some((TriggerCond::SpellCopied { who, filter }, Sel::TriggerSpell, tp()));
+    }
     // Casting spells.
     if let Some(t) = verb(rest, "cast") {
         return parse_cast(who, t);

@@ -492,3 +492,93 @@ fn double_down_copies_a_kindred_rogue_spell() {
     assert_eq!(t.life(P1), 14);
     assert_eq!(t.life(P0), 26);
 }
+
+// --- "When you cast your next ..." and "copy the next spell you cast" ------------------------
+
+#[test]
+fn twinferno_s_copy_of_fling_deals_the_sacrificed_power() {
+    cr!("707.10", "118.8", "603.7b");
+    ruling!(
+        "Twinferno",
+        "You can't choose to pay any additional costs for the copy created by Twinferno's delayed triggered ability. However, effects based on any additional costs that were paid for the original spell are copied as though those same costs were paid for the copy too."
+    );
+    supported("Twinferno");
+    // "Choose one — • When you cast your next instant or sorcery spell this turn, copy that
+    // spell. You may choose new targets for the copy. • ..."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    let tf = t.hand(P0, "Twinferno");
+    t.cast(P0, tf).modes(&[0]).go();
+    t.resolve_all();
+    fling_giant(&mut t, P0, Entity::Player(P1));
+    keep_copy_targets(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    // Only the next spell is copied.
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 11);
+}
+
+#[test]
+fn flamehold_grappler_copies_the_next_spell_with_or_without_targets() {
+    cr!("707.10", "603.7b");
+    ruling!(
+        "Flamehold Grappler",
+        "After Flamehold Grappler’s last ability resolves, the next spell you cast that turn will be copied whether or not it has targets."
+    );
+    supported("Flamehold Grappler");
+    // "When this creature enters, copy the next spell you cast this turn when you cast it.
+    // You may choose new targets for the copy."
+    let mut t = TestGame::new(2);
+    t.enter(P0, "Flamehold Grappler");
+    t.resolve_all();
+    let hand = t.hand_size(P0);
+    cast_new(&mut t, P0, "Divination", &[]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 4);
+    cast_new(&mut t, P0, "Divination", &[]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 6);
+}
+
+#[test]
+fn flamehold_grappler_s_copy_resolves_even_if_the_original_is_countered() {
+    cr!("707.10", "608.2h");
+    ruling!(
+        "Flamehold Grappler",
+        "The copy created by Flamehold Grappler’s last ability resolves before the spell it’s copying. It resolves even if the original spell is countered before the copy is created."
+    );
+    let mut t = TestGame::new(2);
+    t.enter(P0, "Flamehold Grappler");
+    t.resolve_all();
+    let bolt = cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.settle();
+    cast_new(&mut t, P1, "Counterspell", &[obj(bolt)]);
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    keep_copy_targets(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn kalamax_s_copy_of_fling_deals_the_sacrificed_power() {
+    cr!("707.10", "118.8", "603.4");
+    ruling!(
+        "Kalamax, the Stormsire",
+        "You can't choose to pay any additional costs for the copy created by Kalamax's first ability. However, effects based on any additional costs that were paid for the original spell are copied as though those same costs were paid for the copy too."
+    );
+    supported("Kalamax, the Stormsire");
+    // "Whenever you cast your first instant spell each turn, if Kalamax is tapped, copy that
+    // spell. You may choose new targets for the copy. Whenever you copy an instant spell,
+    // put a +1/+1 counter on Kalamax."
+    let mut t = TestGame::new(2);
+    let k = t.battlefield(P0, "Kalamax, the Stormsire");
+    t.g.tap(k);
+    fling_giant(&mut t, P0, Entity::Player(P1));
+    keep_copy_targets(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    assert_eq!(t.counters(k, counters::PLUS1), 1);
+}
