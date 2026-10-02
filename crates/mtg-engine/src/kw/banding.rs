@@ -21,15 +21,17 @@ pub fn is_plain_banding(kw: &Keyword) -> bool {
 /// Whether the object has banding (a "bands with other" ability isn't banding, CR
 /// 702.22c).
 pub fn has_banding(g: &Game, id: ObjectId) -> bool {
-    g.obj(id).chars.keywords().any(is_plain_banding)
+    g.obj(id)
+        .chars
+        .keywords_of(KeywordKind::Banding)
+        .any(is_plain_banding)
 }
 
 /// The qualities of the object's "bands with other" abilities.
 pub fn bands_with_other(g: &Game, id: ObjectId) -> Vec<Filter> {
     g.obj(id)
         .chars
-        .keywords()
-        .filter(|k| k.kind == KeywordKind::Banding)
+        .keywords_of(KeywordKind::Banding)
         .filter_map(|k| k.filter.clone())
         .collect()
 }

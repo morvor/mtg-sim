@@ -4,7 +4,9 @@
 use crate::checks::{self, CheckingAgent, Ledger, Violation};
 use crate::coverage::{Focus, FocusAgent, Usage};
 use crate::decks::DeckList;
+use mtg_api::{spawn_external, ChildTransport, ProtocolOptions};
 use mtg_engine::agents::RandomAgent;
+use mtg_engine::decision::PassiveAgent;
 use mtg_engine::events::Event;
 use mtg_engine::turn::Stage;
 use mtg_engine::*;
@@ -51,10 +53,42 @@ pub enum Outcome {
     },
 }
 
+/// Who plays a seat.
+#[derive(Clone, Debug)]
+pub enum AgentSpec {
+    Random,
+    Passive,
+    /// An external program speaking the JSON protocol.
+    Command(String),
+}
+
+impl AgentSpec {
+    pub fn parse(s: &str) -> AgentSpec {
+        match s {
+            "random" => AgentSpec::Random,
+            "passive" => AgentSpec::Passive,
+            _ => match s.strip_prefix("cmd:") {
+                Some(c) if !c.trim().is_empty() => AgentSpec::Command(c.to_string()),
+                _ => panic!("unknown agent {s:?} (random, passive or cmd:COMMAND)"),
+            },
+        }
+    }
+}
+
+/// How the external agents are run.
+#[derive(Clone, Default)]
+pub struct ExternalSettings {
+    pub transcript: Option<String>,
+    pub auto_pass: bool,
+}
+
 /// Everything needed to play one game.
 pub struct GameSpec {
     pub config: GameConfig,
     pub decks: Vec<DeckList>,
+    /// Who plays each seat (random players for seats not listed).
+    pub specs: Vec<AgentSpec>,
+    pub external: ExternalSettings,
     pub agent_seed: u64,
     pub logging: bool,
     /// Check every `check`th priority decision (0: no checks).
@@ -65,6 +99,20 @@ pub struct GameSpec {
     pub focus: Option<Arc<Focus>>,
     /// Records card and ability use.
     pub usage: Option<Arc<Mutex<Usage>>>,
+}
+
+/// `a`, checked every `check`th priority decision (unless `check` is 0).
+fn checked<A: Agent + 'static>(
+    a: A,
+    check: u32,
+    violations: &Arc<Mutex<Vec<Violation>>>,
+    ledger: &Arc<Mutex<Ledger>>,
+) -> Box<dyn Agent> {
+    if check > 0 {
+        Box::new(CheckingAgent::new(a, check, violations.clone()).with_ledger(ledger.clone()))
+    } else {
+        Box::new(a)
+    }
 }
 
 /// Plays one game on its own thread (with a large stack), catching a panic. Returns
@@ -86,6 +134,8 @@ pub fn play(
             let GameSpec {
                 config,
                 decks,
+                specs,
+                external,
                 agent_seed,
                 logging,
                 check,
@@ -95,35 +145,42 @@ pub fn play(
             } = spec;
             let ledger: Arc<Mutex<Ledger>> = Arc::default();
             let mut game: Option<Game> = None;
+            let mut connections: Vec<(PlayerId, ChildTransport)> = Vec::new();
             let r = panic::catch_unwind(AssertUnwindSafe(|| {
                 let agents: Vec<Box<dyn Agent>> = (0..decks.len())
                     .map(|p| {
+                        let seat = PlayerId(p as u8);
                         let seed = agent_seed.wrapping_add(p as u64);
-                        let a: Box<dyn Agent> = match (&focus, &usage) {
-                            (Some(f), Some(u)) => {
-                                let a = FocusAgent::new(seed, f.clone(), u.clone());
-                                if check > 0 {
-                                    Box::new(
-                                        CheckingAgent::new(a, check, violations2.clone())
-                                            .with_ledger(ledger.clone()),
-                                    )
-                                } else {
-                                    Box::new(a)
+                        match specs.get(p).cloned().unwrap_or(AgentSpec::Random) {
+                            AgentSpec::Random => match (&focus, &usage) {
+                                (Some(f), Some(u)) => checked(
+                                    FocusAgent::new(seed, f.clone(), u.clone()),
+                                    check,
+                                    &violations2,
+                                    &ledger,
+                                ),
+                                _ => checked(RandomAgent::new(seed), check, &violations2, &ledger),
+                            },
+                            AgentSpec::Passive => Box::new(PassiveAgent) as Box<dyn Agent>,
+                            AgentSpec::Command(cmd) => {
+                                let options = ProtocolOptions {
+                                    auto_pass: external.auto_pass,
+                                    ..Default::default()
+                                };
+                                let (agent, conn) = spawn_external(&cmd, seat, options)
+                                    .unwrap_or_else(|e| panic!("can't start {cmd:?}: {e}"));
+                                if let Some(path) = &external.transcript {
+                                    let file = std::fs::OpenOptions::new()
+                                        .create(true)
+                                        .append(true)
+                                        .open(path)
+                                        .unwrap_or_else(|e| panic!("can't open {path}: {e}"));
+                                    conn.transcript(file);
                                 }
+                                connections.push((seat, conn));
+                                Box::new(agent)
                             }
-                            _ => {
-                                let a = RandomAgent::new(seed);
-                                if check > 0 {
-                                    Box::new(
-                                        CheckingAgent::new(a, check, violations2.clone())
-                                            .with_ledger(ledger.clone()),
-                                    )
-                                } else {
-                                    Box::new(a)
-                                }
-                            }
-                        };
-                        a
+                        }
                     })
                     .collect();
                 let g = game.insert(Game::new(
@@ -131,6 +188,9 @@ pub fn play(
                     decks.iter().map(|d| d.main.clone()).collect(),
                     agents,
                 ));
+                if !connections.is_empty() {
+                    mtg_api::prepare_game(g);
+                }
                 // Sideboards stay outside the game (a companion may be revealed from them).
                 for (i, d) in decks.iter().enumerate() {
                     if !d.sideboard.is_empty() {
@@ -172,6 +232,13 @@ pub fn play(
                 }
                 g.result.clone()
             }));
+            // Tell the external agents how the game ended, and let them exit.
+            for (seat, mut conn) in connections {
+                if let Some(g) = game.as_ref() {
+                    mtg_api::Transport::game_over(&mut conn, &mtg_api::GameOver::new(g, seat));
+                }
+                conn.shut_down();
+            }
             let turn = game.as_ref().map_or(0, |g| g.turn.number);
             let log: Vec<String> = game.as_ref().map_or(Vec::new(), |g| {
                 g.log

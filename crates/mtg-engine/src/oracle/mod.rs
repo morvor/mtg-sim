@@ -51,9 +51,12 @@ impl CompileContext<'_> {
 pub struct Compiled {
     pub abilities: Vec<Ability>,
     pub unsupported: Vec<String>,
+    /// Blocks replaced by hand-written definitions ([`crate::cards`]).
+    pub manual: Vec<String>,
 }
 
 thread_local! {
+    static NO_MANUAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static RAW_TEXT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
 }
 
@@ -65,16 +68,38 @@ pub fn raw_text() -> String {
     RAW_TEXT.with(|r| r.borrow().clone())
 }
 
+/// Runs `f` with hand-written definitions ([`crate::cards`]) disabled on this thread, so
+/// that what the compiler parses on its own can be checked (`manual-check`).
+pub fn without_manual<T>(f: impl FnOnce() -> T) -> T {
+    let prev = NO_MANUAL.with(|c| c.replace(true));
+    let r = f();
+    NO_MANUAL.with(|c| c.set(prev));
+    r
+}
+
 /// Compiles a face's oracle text.
 pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     RAW_TEXT.with(|r| *r.borrow_mut() = text.to_string());
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
+    let manual_ok = !NO_MANUAL.with(|c| c.get());
     for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {
-        // A pronoun left without an antecedent means the text wasn't understood.
+        // A genuinely unique ability written by hand (compile-first policy, see `cards`).
+        if let Some(m) = manual_ok
+            .then(|| crate::cards::lookup(ctx.full_name, ctx.face_index, &block))
+            .flatten()
+        {
+            out.abilities.append(&mut (m.build)(ctx));
+            out.manual.push(block);
+            continue;
+        }
+        // A pronoun left without an antecedent, or an instruction to repeat a process
+        // outside any process, means the text wasn't understood.
         let parsed = parse_ability(&block, ctx).filter(|v| {
-            !v.iter()
-                .any(|a| patterns::oracle_hardening_referents::has_no_referent(a))
+            !v.iter().any(|a| {
+                patterns::oracle_hardening_referents::has_no_referent(a)
+                    || crate::repeat_process::has_stray_repeat(a)
+            })
         });
         match parsed {
             Some(mut abilities) => out.abilities.append(&mut abilities),
@@ -105,7 +130,10 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         .replace('\u{201C}', "\"")
         .replace('\u{201D}', "\"")
         // Older wording, still in the Oracle text of a few playtest cards (CR 202.3).
-        .replace("converted mana cost", "mana value");
+        .replace("converted mana cost", "mana value")
+        // A comma inside a closing quote before "where X is" belongs to the sentence:
+        // `tokens with "[ability]," where X is ...` (Vren, the Relentless).
+        .replace(",\" where X is ", "\", where X is ");
     // Self references.
     let mut names: Vec<String> = vec![ctx.card_name.to_string()];
     if ctx.full_name != ctx.card_name {
@@ -327,7 +355,14 @@ pub fn parse_ability(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
     // Triggered abilities.
     let lower = text.to_lowercase();
     if lower.starts_with("when ") || lower.starts_with("whenever ") || lower.starts_with("at ") {
-        return triggers::parse_triggered(text, ctx).map(|a| vec![a]);
+        if let Some(a) = triggers::parse_triggered(text, ctx) {
+            return Some(vec![a]);
+        }
+        // An instant or sorcery's "Whenever a creature attacks this turn, ..." is a spell
+        // ability creating a delayed triggered ability (CR 603.7b).
+        if !ctx.is_spell() {
+            return None;
+        }
     }
     // Spell abilities for instants and sorceries.
     if ctx.is_spell() {

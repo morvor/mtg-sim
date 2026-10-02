@@ -131,6 +131,7 @@ impl Game {
             self.recompute();
         }
         let events = std::mem::take(&mut self.events);
+        self.event_feed.record(&events);
         // Snapshots taken just before zone changes, for events that follow them and look
         // back in time (sacrifices, countering, becoming unattached).
         let mut recent: Vec<(ObjectId, Arc<LookbackSnapshot>)> = Vec::new();
@@ -545,7 +546,7 @@ impl Game {
                         .or_insert(0) += 1;
                 }
                 // CR 603.2d: effects may make an ability trigger additional times.
-                let times = 1 + self.additional_triggers(src, ev);
+                let times = 1 + self.additional_triggers(src, &t.trigger, ev, lookback.as_deref());
                 for _ in 0..times {
                     self.trigger_order += 1;
                     found.push(PendingTrigger {
@@ -678,18 +679,43 @@ impl Game {
 
     /// How many additional times an ability of `src` triggers because of effects such as
     /// "that ability triggers an additional time" (CR 603.2d). Each such effect adds one;
-    /// they don't apply to delayed or reflexive triggered abilities.
-    fn additional_triggers(&self, src: ObjectId, ev: &Event) -> usize {
-        self.statics
-            .other
-            .iter()
+    /// they don't apply to delayed or reflexive triggered abilities. For an event that
+    /// looks back in time (a permanent leaving the battlefield, CR 603.10a), the effects
+    /// that applied immediately before it count, including those of permanents leaving
+    /// at the same time (Teysa Karlov dying with other creatures).
+    fn additional_triggers(
+        &self,
+        src: ObjectId,
+        trigger: &TriggerCond,
+        ev: &Event,
+        lookback: Option<&LookbackSnapshot>,
+    ) -> usize {
+        let effects: Vec<&(ObjectId, PlayerId, StaticEffect)> = match lookback {
+            Some(lb)
+                if matches!(
+                    ev,
+                    Event::ZoneChange {
+                        from: Zone::Battlefield,
+                        ..
+                    }
+                ) =>
+            {
+                lb.additional_triggers.iter().collect()
+            }
+            _ => self.statics.other.iter().collect(),
+        };
+        effects
+            .into_iter()
             .filter(|(s, c, e)| match e {
                 StaticEffect::AdditionalTrigger { sources, cause } => {
                     let ctx = Ctx::new(Some(*s), *c);
                     self.matches(src, sources, &ctx)
-                        && cause
-                            .as_ref()
-                            .is_none_or(|cond| !self.trigger_matches(cond, *s, *c, ev).is_empty())
+                        && cause.as_ref().is_none_or(|cond| {
+                            // An ability that triggers on what caused a creature to die
+                            // (sacrificing it) doesn't trigger on its dying.
+                            !(matches!(**cond, TriggerCond::Dies(_)) && on_sacrifice(trigger))
+                                && !self.trigger_matches(cond, *s, *c, ev).is_empty()
+                        })
                 }
                 _ => false,
             })
@@ -2053,5 +2079,22 @@ impl Game {
                 .or_insert(0) += 1;
         }
         self.exec(&body.effect, &mut ctx);
+        crate::structure::record(&t.ability, &self.obj(t.source).chars.name, "resolved");
+    }
+}
+
+/// Whether a trigger condition is about sacrificing ("whenever you sacrifice a creature"),
+/// the event that causes a creature to die rather than its dying (CR 603.2d).
+fn on_sacrifice(t: &TriggerCond) -> bool {
+    match t {
+        TriggerCond::Sacrificed(_) | TriggerCond::YouSacrifice(_) => true,
+        TriggerCond::Where { trigger, .. }
+        | TriggerCond::FirstTimeEachTurn(trigger)
+        | TriggerCond::Batched { trigger, .. }
+        | TriggerCond::ThisTurn(trigger)
+        | TriggerCond::UntilYourNextTurn(trigger)
+        | TriggerCond::Noncombat(trigger) => on_sacrifice(trigger),
+        TriggerCond::AnyOf(ts) => ts.iter().all(on_sacrifice),
+        _ => false,
     }
 }

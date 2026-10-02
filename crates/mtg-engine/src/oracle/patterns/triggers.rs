@@ -287,6 +287,8 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
         ("each opponent's ", Whose::Rel(PlayerRel::Opponent)),
         ("each other player's ", Whose::Rel(PlayerRel::NotYou)),
         ("each ", Whose::Rel(PlayerRel::Any)),
+        // "the chosen player's upkeep" (Black Vise; CR 607.2d)
+        ("the chosen player's ", Whose::Rel(PlayerRel::Chosen)),
         ("the ", Whose::Rel(PlayerRel::Any)),
         (
             "enchanted player's ",
@@ -598,6 +600,19 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
         ]);
         return Some((c, Sel::TriggerSpell, tp()));
     }
+    // "copy an instant spell" (Kalamax, the Stormsire; CR 707.10).
+    if let Some(t) = rest
+        .strip_prefix("copy ")
+        .or_else(|| rest.strip_prefix("copies "))
+    {
+        let x = end(t);
+        let x = x.strip_prefix("a ").or_else(|| x.strip_prefix("an "))?;
+        let (filter, cond) = parse_spell_phrase(x)?;
+        if cond.is_some() {
+            return None;
+        }
+        return Some((TriggerCond::SpellCopied { who, filter }, Sel::TriggerSpell, tp()));
+    }
     // Casting spells.
     if let Some(t) = verb(rest, "cast") {
         return parse_cast(who, t);
@@ -763,6 +778,19 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
             who,
             filter: Filter::Any,
         },
+        // "Whenever you play a land or cast a spell" (The Endstone, Cemetery Protector):
+        // either event; "it" is the land or the spell.
+        "play a land or cast a spell" | "plays a land or casts a spell" => {
+            let (cast, _, _) = parse_cast(who, "a spell")?;
+            let c = TriggerCond::AnyOf(vec![
+                TriggerCond::LandPlayed {
+                    who,
+                    filter: Filter::Any,
+                },
+                cast,
+            ]);
+            return Some((c, Sel::TriggerObject, tp()));
+        }
         "loses the game" if who == PlayerRel::Any => TriggerCond::PlayerLoses,
         "scry" | "scries" => action("scry"),
         "surveil" | "surveils" => action("surveil"),
@@ -841,12 +869,15 @@ fn parse_cast(who: PlayerRel, t: &str) -> Option<Parsed> {
         }
         let base = TriggerCond::NthSpellCast { who, n };
         let c = match x {
-            "spell each turn" => base,
+            // "your third spell in a turn" (Vance's Blasting Cannons): the same.
+            "spell each turn" | "spell in a turn" => base,
             "spell during each opponent's turn" | "spell during an opponent's turn" => {
-                TriggerCond::Where {
+                // "That player" is the opponent whose turn it is (Blightwing Bandit).
+                let c = TriggerCond::Where {
                     trigger: Box::new(base),
                     cond: Condition::NotYourTurn,
-                }
+                };
+                return Some((c, spell(), PlayerRef::ActivePlayer));
             }
             "spell during your turn" | "spell each turn during your turn" => TriggerCond::Where {
                 trigger: Box::new(base),
@@ -946,6 +977,11 @@ pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
         }
         if let Some(r) = t.strip_prefix("from anywhere other than your hand") {
             parts.push(Filter::not(Filter::CastFrom(ZoneKind::Hand)));
+            rest = r;
+            continue;
+        }
+        if let Some(r) = t.strip_prefix("from your library") {
+            parts.push(Filter::CastFrom(ZoneKind::Library));
             rest = r;
             continue;
         }
@@ -1090,10 +1126,29 @@ pub(crate) fn parse_subject(s: &str) -> Option<Subject> {
             false,
         );
     }
+    // "~ or an instant or sorcery spell you control" (Syr Carah, the Bold): either.
+    if let Some(r) = s
+        .strip_prefix("~ or ")
+        .filter(|r| !r.starts_with("another "))
+    {
+        let other = parse_subject(r)?;
+        if other.self_only || other.one_or_more {
+            return None;
+        }
+        return mk(Filter::Or(vec![Filter::Source, other.filter]), false, false);
+    }
     if let Some(r) = s.strip_prefix("~ or another ") {
-        let (f, plural, tail) = parse_object_phrase(r)?;
+        // "~ or another creature with the same name" (as ~; Pirated Copy, CR 201.2a).
+        let (r, same_name) = match r.strip_suffix(" with the same name") {
+            Some(x) => (x, true),
+            None => (r, false),
+        };
+        let (mut f, plural, tail) = parse_object_phrase(r)?;
         if plural || !end(tail).is_empty() {
             return None;
+        }
+        if same_name {
+            f = Filter::and(vec![f, Filter::SameNameAs(Box::new(Sel::This))]);
         }
         return mk(
             Filter::Or(vec![Filter::Source, Filter::and(vec![f, Filter::Other])]),
@@ -1442,6 +1497,8 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             let mut cond = TriggerCond::Attacks(f.clone());
             let mut r = r;
             let t = r.trim_start();
+            // "one or more creatures attack a player": once for each player attacked.
+            let mut per_defender = false;
             if let Some(x) = t.strip_prefix("alone") {
                 // CR 506.5: a creature attacks alone if it's the only creature declared as
                 // an attacker.
@@ -1484,6 +1541,7 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                 (x.is_empty() || x.starts_with(' ')).then_some((x, who))
             }) {
                 // CR 508.3a: attacking that player (not a planeswalker or battle).
+                per_defender = true;
                 cond = TriggerCond::Where {
                     trigger: Box::new(cond),
                     cond: Condition::And(vec![
@@ -1529,7 +1587,7 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                 r = "";
             }
             if subj.one_or_more {
-                return Some((batch(cond, false, PlayerRef::TriggerPlayer), r));
+                return Some((batch(cond, per_defender, PlayerRef::TriggerPlayer), r));
             }
             return Some((
                 (cond, this_or(Sel::TriggerObject), PlayerRef::TriggerPlayer),

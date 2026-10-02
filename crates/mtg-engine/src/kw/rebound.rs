@@ -49,6 +49,17 @@ impl KeywordRules for Rebound {
         rebounds(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
     }
 
+    fn permanent_resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        _kw: &Keyword,
+    ) -> Option<(Zone, LibraryPosition)> {
+        // A permanent spell with rebound (Jeskai Baller) cast from hand is exiled
+        // instead of entering the battlefield.
+        rebounds(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
+    }
+
     fn after_spell_resolved(&self, g: &mut Game, spell: ObjectId, _kw: &Keyword, new: ObjectId) {
         if !rebounds(g, spell) || g.obj(new).zone != Zone::Exile {
             return;

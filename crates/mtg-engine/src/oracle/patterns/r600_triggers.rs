@@ -3,9 +3,9 @@
 //! the third time this turn, ...", CR 603.7h), "Do this only once each turn" (CR 603.2h),
 //! and "sacrifice another [object]".
 
-use super::{AbilityPattern, EffectPattern};
+use super::{AbilityPattern, EffectPattern, FollowupPattern};
 use crate::ability::*;
-use crate::oracle::effects::{parse_effect_text, Builder};
+use crate::oracle::effects::{parse_effect_text, parse_sentence, Builder};
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 
@@ -51,6 +51,73 @@ fn when_you_do(l: &str, b: &mut Builder) -> Option<Effect> {
         then: Box::new(reflexive),
         otherwise: Box::new(Effect::Noop),
     })
+}
+
+/// The last instruction of an effect (looking into sequences).
+fn last_instruction(e: &Effect) -> &Effect {
+    match e {
+        Effect::Seq(v) => v.last().map_or(e, last_instruction),
+        _ => e,
+    }
+}
+
+/// "When you do, create a token that's a copy of target permanent you control, except
+/// .... Sacrifice it at the beginning of the next end step." (Saheeli, Radiant Creator):
+/// a sentence following a reflexive triggered ability that creates tokens and refers to
+/// them ("it", "them", "the token") continues that triggered ability's effect, after the
+/// tokens were created (CR 603.12).
+fn f_reflexive_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let refers = l
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|w| matches!(w, "it" | "them" | "token" | "tokens"));
+    if !refers || l.contains("target") {
+        return false;
+    }
+    let Effect::If {
+        cond,
+        then,
+        otherwise,
+    } = prev
+    else {
+        return false;
+    };
+    let did = match &*cond {
+        Condition::PrevHappened => true,
+        Condition::Not(c) => matches!(**c, Condition::PrevHappened),
+        _ => false,
+    };
+    if !did || !matches!(**otherwise, Effect::Noop) {
+        return false;
+    }
+    let Effect::Reflexive { body } = &mut **then else {
+        return false;
+    };
+    if !matches!(
+        last_instruction(&body.effect),
+        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. }
+    ) {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.it = Sel::Var(vars::CREATED);
+    sub.it_player = b.it_player.clone();
+    sub.sentences = 1;
+    // A sentence that modifies the body's last instruction ("Sacrifice it at the
+    // beginning of the next end step." after "create a token ..."), or another
+    // instruction about the tokens.
+    if crate::oracle_ext::apply_followup_ext(l, &mut body.effect, &mut sub) {
+        return sub.targets.is_empty();
+    }
+    let Some(e) = parse_sentence(l, &mut sub) else {
+        return false;
+    };
+    if !sub.targets.is_empty() {
+        return false;
+    }
+    let old = std::mem::replace(&mut body.effect, Effect::Noop);
+    body.effect = Effect::seq(vec![old, e]);
+    true
 }
 
 /// "When this ability resolves for the Nth time this turn, [effect]" (CR 603.7h): a
@@ -192,8 +259,34 @@ fn do_this_only_once(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
 }
 
 inventory::submit! { EffectPattern { name: "reflexive: when you do", priority: 0, parse: when_you_do } }
+inventory::submit! { FollowupPattern { name: "reflexive: continues after creating tokens", priority: 0, apply: f_reflexive_continues } }
 inventory::submit! { EffectPattern { name: "resolves for the nth time", priority: 0, parse: resolves_for_the_nth_time } }
 inventory::submit! { EffectPattern { name: "pay any number of times", priority: 0, parse: pay_any_number_of_times } }
 inventory::submit! { EffectPattern { name: "reflexive: when you pay this cost", priority: 0, parse: when_you_pay_this_cost } }
 inventory::submit! { EffectPattern { name: "sacrifice another", priority: 0, parse: sacrifice_another } }
 inventory::submit! { AbilityPattern { name: "do this only once each turn", priority: 0, parse: do_this_only_once } }
+
+/// "this is the third time this ability has resolved this turn" (Inner-Flame Igniter; the
+/// count includes this resolution).
+fn nth_time_resolved(c: &str) -> Option<Condition> {
+    let r = c.strip_prefix("this is the ")?;
+    let (w, rest) = split_word(r);
+    let n = match w {
+        "first" => 1,
+        "second" => 2,
+        "third" => 3,
+        "fourth" => 4,
+        "fifth" => 5,
+        _ => return None,
+    };
+    if end(rest) != "time this ability has resolved this turn" {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::TimesResolvedThisTurn,
+        Cmp::Eq,
+        Value::c(n),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "this is the nth time this ability has resolved this turn", priority: 0, parse: nth_time_resolved } }

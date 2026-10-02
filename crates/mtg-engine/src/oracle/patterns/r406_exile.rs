@@ -21,6 +21,9 @@ fn top_of_library(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
     for (whose, who) in [
         ("your library", PlayerRef::You),
         ("that player's library", b.it_player.clone()),
+        // "look at the top card of their library" (Dream-Thief's Bandana): the player the
+        // trigger is about.
+        ("their library", b.it_player.clone()),
         ("each opponent's library", PlayerRef::EachOpponent),
         ("each player's library", PlayerRef::EachPlayer),
     ] {
@@ -134,8 +137,19 @@ inventory::submit! { EffectPattern { name: "r406 play cards exiled with ~", prio
 /// "You may play that card for as long as it remains exiled." after exiling cards face
 /// down: a permission for those cards (CR 406.3a).
 fn may_play_while_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    // ", and mana of any type can be spent to cast it" (CR 609.4b).
+    let (l, any_type) = [
+        ", and mana of any type can be spent to cast it",
+        ", and mana of any type can be spent to cast that spell",
+        ", and mana of any type can be spent to cast them",
+        ", and mana of any type can be spent to cast those spells",
+    ]
+    .iter()
+    .find_map(|x| l.strip_suffix(x))
+    .map_or((l, false), |r| (r, true));
     if !matches!(
-        end(l),
+        l,
         "you may play that card for as long as it remains exiled"
             | "you may play it for as long as it remains exiled"
             | "for as long as it remains exiled, you may play it"
@@ -147,7 +161,7 @@ fn may_play_while_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         return false;
     }
     let old = std::mem::take(prev);
-    *prev = Effect::seq(vec![
+    let mut v = vec![
         old,
         Effect::GrantPlayPermission {
             who: PlayerRef::You,
@@ -156,7 +170,15 @@ fn may_play_while_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             duration: Duration::Permanent,
             free: false,
         },
-    ]);
+    ];
+    if any_type {
+        v.push(Effect::SpendAnyTypeMana {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            duration: Duration::Permanent,
+        });
+    }
+    *prev = Effect::seq(v);
     true
 }
 

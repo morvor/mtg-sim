@@ -84,13 +84,28 @@ impl Characteristics {
         self.abilities.iter().filter_map(|a| a.keyword())
     }
     pub fn has_keyword(&self, k: KeywordKind) -> bool {
-        self.keywords().any(|kw| kw.kind == k)
+        self.keyword(k).is_some()
     }
     pub fn keyword(&self, k: KeywordKind) -> Option<&Keyword> {
-        self.keywords().find(|kw| kw.kind == k)
+        let a = self
+            .abilities
+            .iter()
+            .find(|a| a.keyword().is_some_and(|kw| kw.kind == k))?;
+        // The keyword is consulted: it's exercised (see `structure`).
+        crate::structure::record(a, &self.name, "keyword");
+        a.keyword()
     }
     pub fn keyword_count(&self, k: KeywordKind) -> usize {
-        self.keywords().filter(|kw| kw.kind == k).count()
+        self.keywords_of(k).count()
+    }
+    /// The object's keyword abilities of kind `k`, for rules that consult them (each one
+    /// yielded counts as exercised, see `structure`).
+    pub fn keywords_of(&self, k: KeywordKind) -> impl Iterator<Item = &Keyword> + '_ {
+        self.abilities.iter().filter_map(move |a| {
+            let kw = a.keyword().filter(|kw| kw.kind == k)?;
+            crate::structure::record(a, &self.name, "keyword");
+            Some(kw)
+        })
     }
     /// Each of the object's own names (CR 201.2): a split card's combined name "A // B"
     /// is two names (CR 709.4a), and names interchangeable with its name are its names
@@ -277,6 +292,10 @@ pub struct CastInfo {
     /// main phase", addendum).
     #[serde(default)]
     pub main_phase: bool,
+    /// The generic cost increase that came with the permission it was cast with ("A spell
+    /// cast this way costs {2} more to cast", CR 601.2f).
+    #[serde(default)]
+    pub permission_cost_increase: u32,
 }
 
 /// Data from the event that caused a triggered ability to trigger, used by "that
@@ -340,6 +359,8 @@ pub struct Choices {
     pub card_name: Option<SmolStr>,
     pub number: Option<i32>,
     pub player: Option<PlayerId>,
+    /// The chosen basic land type ("choose a basic land type"), or any land type ("choose
+    /// a land type").
     pub basic_land_type: Option<Subtype>,
     pub card_type: Option<CardType>,
     /// Modal permanent choices (anchor words, CR 614.12c), etc.

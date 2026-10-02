@@ -141,6 +141,11 @@ impl Game {
                 .filter(|i| self.targets_possible(&modal.modes[*i].targets, ctx, id))
                 .filter(|i| crate::modal_history::may_choose(self, id, &modal.chooser, *i))
                 .collect();
+            // No mode can be chosen: nobody is asked; the spell can't be cast and a
+            // triggered ability is removed from the stack (CR 700.2a, 700.2b).
+            if available.is_empty() && min > 0 {
+                return false;
+            }
             let picks: Vec<usize> = if modal.chooser == ModeChooser::Random {
                 // A mode that can't be chosen (no legal targets) can't be chosen at random.
                 if available.is_empty() {
@@ -173,6 +178,11 @@ impl Game {
                             modes.len() as u32
                         }),
                         allow_repeat: modal.allow_repeat,
+                        available: available.clone(),
+                        pawprint_budget: match modal.chooser {
+                            ModeChooser::Pawprints(budget) => Some(budget),
+                            _ => None,
+                        },
                     },
                 );
                 let valid = |v: &Vec<usize>| {
@@ -269,9 +279,14 @@ impl Game {
     /// if some choice is made (e.g. a kicker cost is paid, CR 601.2c) are optional here.
     pub fn targets_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
         specs.iter().all(|s| {
-            s.min == 0
-                || s.condition.is_some()
-                || self.legal_target_candidates(s, ctx, stack_obj).len() as u32 >= s.min
+            s.min == 0 || s.condition.is_some() || {
+                let cands = self.legal_target_candidates(s, ctx, stack_obj);
+                cands.len() as u32 >= s.min
+                    && s.together.is_none_or(|grp| {
+                        crate::target_groups::find_group(self, grp, &cands, s.min as usize)
+                            .is_some()
+                    })
+            }
         })
     }
 
@@ -400,6 +415,7 @@ impl Game {
                     _ => false,
                 };
                 ok && !self.player_untargetable(p, ctx.controller, source_obj)
+                    && !crate::kw::target_forbidden(self, spec, e, source_obj)
             }
             Entity::Object(o) => {
                 if !self.is_live(o) {
@@ -435,6 +451,7 @@ impl Game {
                     TargetKind::Player(_) => false,
                 };
                 ok && !self.object_untargetable(o, ctx.controller, source_obj)
+                    && !crate::kw::target_forbidden(self, spec, e, source_obj)
             }
         }
     }
@@ -460,7 +477,7 @@ impl Game {
             // CR 702.11e: "as though it didn't have hexproof" covers hexproof from too.
             let ignore_hexproof =
                 crate::kw::hexproof::hexproof_ignored(self, Entity::Object(o), by);
-            for kw in c.keywords().filter(|k| k.kind == KeywordKind::Hexproof) {
+            for kw in c.keywords_of(KeywordKind::Hexproof) {
                 if self.are_opponents(by, ob.controller) && !ignore_hexproof {
                     match &kw.filter {
                         None => return true,
@@ -576,8 +593,7 @@ impl Game {
         // For abilities on the stack, the source of the ability is its source object.
         let src = self.ability_source_of(source);
         ob.chars
-            .keywords()
-            .filter(|k| k.kind == KeywordKind::Protection)
+            .keywords_of(KeywordKind::Protection)
             .any(|k| match &k.filter {
                 None => true,
                 Some(f) => self.matches(src, f, &src_ctx),
@@ -622,6 +638,11 @@ impl Game {
             if (cands.len() as u32) < spec.min {
                 return None;
             }
+            // Targets that must have a relationship with each other: a group of the
+            // required size must exist (CR 601.2c).
+            if let Some(grp) = spec.together {
+                crate::target_groups::find_group(self, grp, &cands, spec.min as usize)?;
+            }
             slot_cands[i] = cands.clone();
             slot_max[i] = max;
             let chooser = if spec.chosen_by_opponent {
@@ -657,7 +678,12 @@ impl Game {
                         .collect(),
                 }
             };
-            out[i] = picked;
+            out[i] = match spec.together {
+                Some(grp) => {
+                    crate::target_groups::fit(self, grp, picked, &cands, spec.min as usize)?
+                }
+                None => picked,
+            };
         }
         self.enforce_must_target(specs, &mut out, &slot_cands, &slot_max, ctx, stack_obj);
         ctx.targets = out.clone();
@@ -864,12 +890,21 @@ impl Game {
                     any_target = true;
                     if self.is_legal_target(spec, *t, &c2, id) {
                         legal.push(*t);
-                        any_legal = true;
                         if let Some(d) = cm.divided.get(i).and_then(|d| d.get(j)) {
                             legal_div.push(*d);
                         }
                     }
                 }
+                // Targets that must have a relationship with each other no longer have
+                // it: they're all illegal (CR 608.2b). Ones that left are compared using
+                // their last known information (see `target_groups`).
+                if let Some(grp) = spec.together {
+                    if !crate::target_groups::group_ok(self, grp, slot) {
+                        legal.clear();
+                        legal_div.clear();
+                    }
+                }
+                any_legal |= !legal.is_empty();
                 // CR 608.2b: damage divided onto an illegal target isn't dealt; keep the
                 // remaining divisions aligned with the remaining targets.
                 if let Some(d) = new_divided.get_mut(i) {
@@ -949,6 +984,15 @@ impl Game {
             }
         }
         self.exec_chosen(&body, &chosen, &mut ctx);
+        if let StackKind::Triggered { ability, .. } | StackKind::Activated { ability, .. } =
+            &si.kind
+        {
+            let name = si
+                .source_lki
+                .as_ref()
+                .map_or(&self.obj(src).chars.name, |c| &c.name);
+            crate::structure::record(ability, name, "resolved");
+        }
         // CR 603.2h: remember that a "do this only once each turn" action was taken.
         if trig.as_ref().is_some_and(|t| t.do_once_per_turn) && ctx.prev_happened {
             *self.objects[src.0 as usize]
@@ -1108,6 +1152,25 @@ impl Game {
                 crate::keyword_impls::resolve_mutate(self, id);
                 return;
             }
+            if let Some(dest) = crate::kw::permanent_resolved_destination(self, id) {
+                // A keyword puts the resolving permanent spell somewhere else instead
+                // (e.g. rebound on a creature spell, CR 702.88a; buyback on
+                // a permanent spell, which goes to its owner's hand, CR 702.27a).
+                let moved = self.move_object_ev(MoveEv {
+                    obj: id,
+                    to: dest.0,
+                    pos: dest.1,
+                    cause: MoveCause::Resolve,
+                    by: Some(controller),
+                    etb: EtbInfo::default(),
+                    source: None,
+                });
+                if let Some(new) = moved {
+                    crate::kw::after_spell_resolved(self, id, new);
+                }
+                self.emit(Event::SpellResolved { spell: id });
+                return;
+            }
             crate::kw::before_permanent_enters(self, id);
             crate::kw::permanent_spell_etb(self, id, &mut etb);
             let copy = o.kind == ObjKind::SpellCopy || o.kind == ObjKind::CardCopy;
@@ -1158,6 +1221,11 @@ impl Game {
             return;
         }
         self.exec_chosen(&body, &chosen, &mut ctx);
+        for a in &o.chars.abilities {
+            if matches!(a.kind, AbilityKind::Spell(_)) {
+                crate::structure::record(a, &o.chars.name, "resolved");
+            }
+        }
         // CR 608.2n: put into owner's graveyard (or wherever a replacement sends it).
         if self.is_live(id) && self.obj(id).zone == Zone::Stack {
             let (dest, declined) =

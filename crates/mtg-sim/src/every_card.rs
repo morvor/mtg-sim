@@ -786,6 +786,8 @@ fn run_card(picker: &Picker, index: usize, o: &Options, out: &Mutex<()>) -> Card
                 ..setup.config
             },
             decks: setup.decks,
+            specs: vec![],
+            external: Default::default(),
             agent_seed: seed.wrapping_mul(7),
             logging: true,
             check: o.check,

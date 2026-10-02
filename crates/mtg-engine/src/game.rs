@@ -193,6 +193,9 @@ pub struct Player {
     pub ring_level: u32,
     pub ring_bearer: Option<ObjectId>,
     pub dungeons_completed: u32,
+    /// Names of the dungeons this player has completed, in order (CR 309.7).
+    #[serde(default)]
+    pub completed_dungeons: Vec<SmolStr>,
     /// Venture marker: (dungeon object, room index).
     pub venture: Option<(ObjectId, usize)>,
     pub initiative_count: u32,
@@ -239,6 +242,7 @@ impl Player {
             ring_level: 0,
             ring_bearer: None,
             dungeons_completed: 0,
+            completed_dungeons: vec![],
             venture: None,
             initiative_count: 0,
             has_citys_blessing: false,
@@ -413,6 +417,9 @@ pub struct TurnHistory {
     pub players_attacked: BTreeSet<PlayerId>,
     pub attackers: Vec<ObjectId>,
     pub objects_dealt_damage: BTreeSet<ObjectId>,
+    /// Objects dealt noncombat damage this turn. Recorded by `kw/noncombat_damage.rs`.
+    #[serde(default)]
+    pub objects_dealt_noncombat_damage: BTreeSet<ObjectId>,
     /// (source, object) pairs: objects dealt damage this turn and by what.
     pub damage_by_source: BTreeSet<(ObjectId, ObjectId)>,
     /// Sources that dealt damage this turn (each object once, CR 400.7), with the player
@@ -676,7 +683,12 @@ pub struct Game {
     /// Multiplayer bookkeeping: ranges of influence, Grand Melee turn markers (CR 800–811).
     pub multiplayer: crate::multiplayer::MultiplayerState,
     pub planechase: crate::planechase::PlanarState,
-    /// Watches every event as it's processed (see [`EventObserver`]).
+    /// Records kept by hand-written card abilities (see `cards/`).
+    pub cards: crate::cards::CardState,
+    /// Every event, for observers outside the engine (off unless enabled).
+    pub event_feed: crate::event_feed::EventFeed,
+    /// Watches every event as it's processed, with the game as it is then (see
+    /// [`EventObserver`]; [`Game::event_feed`] keeps the events for later reading).
     pub observer: Option<EventObserver>,
 }
 
@@ -784,6 +796,8 @@ impl Game {
             modal_history: Default::default(),
             multiplayer: Default::default(),
             planechase: Default::default(),
+            cards: Default::default(),
+            event_feed: Default::default(),
             observer: None,
         };
         if let Some(teams) = g.config.teams.clone() {
