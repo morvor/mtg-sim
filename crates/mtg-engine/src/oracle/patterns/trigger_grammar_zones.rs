@@ -56,6 +56,12 @@ fn single(s: &str) -> Option<Filter> {
     (!plural && end(tail).is_empty()).then_some(f)
 }
 
+/// "enchanted creature": the permanent this Aura is attached to.
+fn enchanted(s: &str) -> Option<Filter> {
+    let (f, plural, tail) = parse_object_phrase(s.strip_prefix("enchanted ")?)?;
+    (!plural && end(tail).is_empty()).then(|| Filter::and(vec![Filter::AttachedToSource, f]))
+}
+
 /// The subjects of events that [`parse_subject`] reads besides its own (it falls back to
 /// this): the extensions listed in the module documentation.
 pub(crate) fn subject_ext(s: &str) -> Option<Subject> {
@@ -63,11 +69,9 @@ pub(crate) fn subject_ext(s: &str) -> Option<Subject> {
     // "enchanted Forest" (the Genjus): the permanent this Aura enchants.
     // ("Plains" reads like a plural noun.)
     if let Some(r) = s.strip_prefix("enchanted ") {
-        let (_, _, tail) = parse_object_phrase(r)?;
-        if !end(tail).is_empty() {
-            return None;
+        if parse_object_phrase(r).is_some_and(|(_, _, tail)| end(tail).is_empty()) {
+            return Some(subj(Filter::AttachedToSource, false, false));
         }
-        return Some(subj(Filter::AttachedToSource, false, false));
     }
     // "a 1/1 creature you control": with that power and toughness.
     if let Some(r) = s.strip_prefix("a ").or_else(|| s.strip_prefix("an ")) {
@@ -126,7 +130,8 @@ pub(crate) fn subject_ext(s: &str) -> Option<Subject> {
     for sep in [" or a ", " or an ", " or another "] {
         if let Some(i) = s.find(sep) {
             let (a, b) = (&s[..i], &s[i + " or ".len()..]);
-            let fa = single(a)?;
+            // "enchanted creature or another modified creature you control".
+            let fa = single(a).or_else(|| enchanted(a))?;
             let fb = single(b)?;
             return Some(subj(Filter::Or(vec![fa, fb]), false, false));
         }

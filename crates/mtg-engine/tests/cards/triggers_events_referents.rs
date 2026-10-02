@@ -163,3 +163,47 @@ fn another_creature_you_control_named_this_card_enters() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn enchanted_creature_or_another_modified_creature_you_control_dies() {
+    cr!("700.9", "603.10a", "303.4");
+    supported("One with the Kami");
+    ruling!(
+        "One with the Kami",
+        "A creature with a counter on it is considered modified no matter what kind of counter"
+    );
+    ruling!(
+        "One with the Kami",
+        "An Aura controlled by an opponent does not cause a creature you control to be modified"
+    );
+    let spirits = |t: &TestGame| {
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).chars.has_subtype("Spirit"))
+            .count()
+    };
+    let mut t = TestGame::new(2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let kami = t.battlefield(P0, "One with the Kami");
+    t.g.attach(kami, Entity::Object(bear));
+    // Unmodified, or enchanted only by an opponent's Aura: no.
+    let plain = t.battlefield(P0, "Craw Wurm");
+    t.g.destroy(plain, None);
+    t.resolve_all();
+    let theirs = t.battlefield(P0, "Craw Wurm");
+    let pacifism = t.battlefield(P1, "Pacifism");
+    t.g.attach(pacifism, Entity::Object(theirs));
+    t.g.destroy(theirs, None);
+    t.resolve_all();
+    assert_eq!(spirits(&t), 0);
+    // A -1/-1 counter an opponent put on it: a 5/3, five Spirits.
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    t.g.add_counters(Entity::Object(wurm), "-1/-1", 1, None);
+    t.g.destroy(wurm, None);
+    t.resolve_all();
+    assert_eq!(spirits(&t), 5);
+    // The enchanted creature (a 2/2): two more.
+    t.g.destroy(bear, None);
+    t.resolve_all();
+    assert_eq!(spirits(&t), 7);
+}
