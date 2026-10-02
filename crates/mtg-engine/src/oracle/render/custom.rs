@@ -182,7 +182,9 @@ impl Renderer<'_> {
         let adj = |s: &str| (true, s.to_string());
         let rel = |s: &str| (false, s.to_string());
         match name {
-            "saddled" | "suspected" | "monstrous" | "renowned" | "transformed" => adj(name),
+            "saddled" | "suspected" | "monstrous" | "renowned" | "transformed" | "damaged" => {
+                adj(name)
+            }
             "saddle:saddled it this turn" => rel("that saddled it this turn"),
             "crew:crewed it this turn" => rel("that crewed it this turn"),
             "convoke:convoked it" => rel("that convoked it"),

@@ -1207,9 +1207,15 @@ impl Game {
                     // applied once: its instruction happens once, for all the damage
                     // (once for each recipient if it's about the recipient).
                     let per_recipient = crate::prevention::followup_about_recipient(&e);
+                    // An instruction that doesn't count the damage happens for each
+                    // damage event (one counter per source, Nine Lives); shield counters
+                    // are one effect for all of it (CR 122.1c).
+                    let per_event = crate::prevention::followup_each_event(&e)
+                        && !crate::counter_rules::is_shield_prevention(&cand.key);
                     let recipient = |c: &Ctx| c.event.as_ref().map(|i| (i.object, i.player));
                     let this = recipient(&c);
                     match self.prevention_followups.as_mut() {
+                        Some(list) if per_event => list.push((key, c, e)),
                         Some(list) => match list.iter_mut().find(|(k, c0, _)| {
                             *k == key && (!per_recipient || recipient(c0) == this)
                         }) {
@@ -1311,7 +1317,11 @@ impl Game {
                     .into_iter()
                     .filter(|o| *o != m.obj)
                     .collect();
-                let chooser = m.by.unwrap_or(cand.controller);
+                // "You may have ~ enter as a copy": "you" is the player it enters under
+                // the control of (CR 109.5), who chooses before it enters (CR 614.12a),
+                // e.g. each player for their own card put onto the battlefield by Show
+                // and Tell.
+                let chooser = m.etb.controller.or(m.by).unwrap_or(cand.controller);
                 let min = if optional { 0 } else { 1 };
                 let chosen = self.ask_objects(
                     chooser,

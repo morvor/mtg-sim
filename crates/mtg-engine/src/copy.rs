@@ -24,6 +24,10 @@ pub fn copy_spell(
     if !ability_lki && (o.zone != Zone::Stack || !(g.is_live(spell) || spell_lki)) {
         return None;
     }
+    // "This spell can't be copied." (CR 113.6g, 707.10).
+    if crate::rule_statics::cant_be_copied::cant_be_copied(g, spell) {
+        return None;
+    }
     let orig = g.obj(spell).clone();
     let mut copy = orig.clone();
     copy.zone = Zone::Stack;
