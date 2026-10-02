@@ -69,7 +69,10 @@ fn qualified(f: Filter, tail: &str) -> Option<Filter> {
         ]),
         _ => {
             let name = t.strip_prefix("named ")?;
-            if name.contains(',') || name.contains(" and ") || name.contains(" or ") {
+            if [",", " and ", " or ", "and/or", " named "]
+                .iter()
+                .any(|w| name.contains(w))
+            {
                 return None;
             }
             Filter::Named(printed_name(name)?)

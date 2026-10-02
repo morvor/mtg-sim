@@ -124,15 +124,12 @@ fn cost_modifier(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Abilit
     let mut who = PlayerRel::Any;
     let mut scope;
     if let Some((group, kind)) = subject.split_once("'s ").filter(|(_, k)| {
-        k.ends_with(" ability") || k.ends_with(" abilities")
+        (k.ends_with(" ability") || k.ends_with(" abilities")) && !k.starts_with("activated ")
     }) {
         // "~'s equip abilities", "~'s equip ability".
         let kind = kind
             .strip_suffix(" abilities")
             .or_else(|| kind.strip_suffix(" ability"))?;
-        if kind == "activated" {
-            return None;
-        }
         scope = AbilityScope::new(
             sources(group)?,
             AbilityClass::Keyword(KeywordKind::from_name(kind)?),
