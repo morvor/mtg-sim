@@ -2045,12 +2045,20 @@ impl Game {
                 })
     }
 
+    /// Whether `uid` is a loyalty ability of `src`: one it has now, or one of any face of
+    /// its card — a permanent that transformed after activating a loyalty ability is the
+    /// same permanent (CR 712.18), and the limit is per permanent (CR 606.3).
     fn is_loyalty_uid(&self, src: ObjectId, uid: u64) -> bool {
-        self.obj(src)
-            .chars
-            .abilities
-            .iter()
-            .any(|a| a.uid == uid && matches!(&a.kind, AbilityKind::Activated(x) if x.is_loyalty))
+        let is = |a: &Ability| {
+            a.uid == uid && matches!(&a.kind, AbilityKind::Activated(x) if x.is_loyalty)
+        };
+        let o = self.obj(src);
+        o.chars.abilities.iter().any(|a| is(a))
+            || o.card.as_ref().is_some_and(|c| {
+                c.faces
+                    .iter()
+                    .any(|f| f.chars.abilities.iter().any(|a| is(a)))
+            })
     }
 
     pub(crate) fn activation_prohibited(&self, p: PlayerId, src: ObjectId, is_mana: bool) -> bool {

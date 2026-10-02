@@ -136,6 +136,14 @@ fn parse_counted(c: &str) -> Option<Condition> {
             n,
         ));
     }
+    if !inverted && r == "permanent types among cards in your graveyard" {
+        // CR 110.4a: artifact, battle, creature, enchantment, land, planeswalker.
+        return Some(Condition::Compare(
+            Value::DistinctAmong(Among::PermanentTypes, Box::new(Sel::All(in_gy()))),
+            Cmp::Ge,
+            n,
+        ));
+    }
     let phrase = if inverted {
         r.strip_suffix(" are in your graveyard")?
     } else {
@@ -172,6 +180,7 @@ mod tests {
             "~ is tapped",
             "you gained 3 or more life this turn",
             "there are four or more card types among cards in your graveyard",
+            "there are four or more permanent types among cards in your graveyard",
             "there are three or more creature cards in your graveyard",
             "twenty or more creature cards are in your graveyard",
             "you control no untapped lands",
