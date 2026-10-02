@@ -947,3 +947,74 @@ fn p_unattach_from(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "attach grammar: unattach a [attachment] from a [permanent]", priority: 110, parse: p_unattach_from } }
+
+/// "When you lose control of that Equipment, unattach it." (Ogre Geargrabber) after
+/// gaining control of an object: a delayed triggered ability (CR 603.7) that triggers the
+/// next time its controller loses control of that object.
+fn p_when_you_lose_control(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::zz_probe_ps::disabled() {
+        return None;
+    }
+    let r = end(l).strip_prefix("when you lose control of ")?;
+    let (obj, inner) = r.split_once(", ")?;
+    if !obj.starts_with("that ") || obj.contains(" this turn") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let parsed = (|| {
+        // "that Equipment": the object the text named (a target).
+        let noun = obj.strip_prefix("that ")?;
+        let (f, plural, tail) = parse_object_phrase(noun)?;
+        if plural || !end(tail).is_empty() {
+            return None;
+        }
+        let what = super::pronoun_groups::singular_it(b);
+        let Sel::Target(slot) = what else {
+            return None;
+        };
+        // The target is that kind of object.
+        let names = |t: &Filter| format!("{t:?}").contains(&format!("{f:?}"));
+        if !matches!(&b.targets.get(slot as usize)?.what, TargetKind::Object(t) if names(t)) {
+            return None;
+        }
+        let effect = crate::oracle::effects::parse_sentence(inner, b)?;
+        if b.targets.len() != saved.0 {
+            return None;
+        }
+        let trigger = TriggerCond::LoseControl(Filter::In(Box::new(what)));
+        // What the trigger and its effect refer to is captured as it's created.
+        let (mut stores, effect) = super::triggers_delayed::capture(&effect)?;
+        let (s2, trigger_json) = {
+            let wrapped = Effect::DelayedTrigger {
+                trigger,
+                body: Box::new(Body::effect(Effect::Noop)),
+                once: true,
+            };
+            super::triggers_delayed::capture(&wrapped)?
+        };
+        for s in s2 {
+            if !stores
+                .iter()
+                .any(|x| format!("{x:?}") == format!("{s:?}"))
+            {
+                stores.push(s);
+            }
+        }
+        let Effect::DelayedTrigger { trigger, .. } = trigger_json else {
+            return None;
+        };
+        stores.push(Effect::DelayedTrigger {
+            trigger,
+            body: Box::new(Body::effect(effect)),
+            once: true,
+        });
+        Some(Effect::seq(stores))
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "attach grammar: when you lose control of that [object], [effect] (delayed)", priority: 110, parse: p_when_you_lose_control } }

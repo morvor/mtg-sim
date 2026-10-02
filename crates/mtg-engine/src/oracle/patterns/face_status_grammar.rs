@@ -316,9 +316,8 @@ fn p_look_then(l: &str, b: &mut Builder) -> Option<Effect> {
                 return None;
             }
         }
-        // Something was taken.
-        matches!(&e, Effect::Dig { take, .. } if !matches!(take, Value::Const(0)))
-            .then_some(e)
+        // Something was done with the cards.
+        looked_at(&mut e).is_none().then_some(e)
     })();
     if parsed.is_none() {
         b.targets.truncate(saved.0);
@@ -875,3 +874,112 @@ fn p_face_up_or(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "face grammar: turn [object] face up or [instruction]", priority: 110, parse: p_face_up_or } }
+
+/// "manifest one of those cards, then put the other on the top or bottom of your library"
+/// (Write into Being), "cloak two of them, and put the rest on the bottom of your library
+/// in a random order" (Hide in Plain Sight) after looking at the top cards of your
+/// library: the cards are chosen among those looked at, then manifested or cloaked one at
+/// a time (CR 701.40, 701.58), and the rest go where the text says.
+fn f_manifest_some(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if super::zz_probe_ps::disabled() {
+        return false;
+    }
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (action, r) = if let Some(r) = l.strip_prefix("manifest ") {
+        (KeywordAction::Manifest, r)
+    } else if let Some(r) = l.strip_prefix("cloak ") {
+        (KeywordAction::Cloak, r)
+    } else {
+        return false;
+    };
+    let Some((k, r)) = parse_number(r) else {
+        return false;
+    };
+    let Some(k) = k.as_const().filter(|k| *k > 0) else {
+        return false;
+    };
+    let Some(r) = r
+        .trim_start()
+        .strip_prefix("of them")
+        .or_else(|| r.trim_start().strip_prefix("of those cards"))
+    else {
+        return false;
+    };
+    if !own_library(prev) {
+        return false;
+    }
+    let Some(Effect::Dig { n, .. }) = looked_at(prev) else {
+        return false;
+    };
+    let n = n.as_const();
+    let rest = [", then put the other ", ", and put the other ", " and put the other "]
+        .iter()
+        .find_map(|p| r.strip_prefix(p))
+        .map(|x| (true, x))
+        .or_else(|| {
+            [", then put the rest ", ", and put the rest ", " and put the rest "]
+                .iter()
+                .find_map(|p| r.strip_prefix(p))
+                .map(|x| (false, x))
+        });
+    let Some((single, x)) = rest else {
+        return false;
+    };
+    if single && n != Some(k + 1) {
+        return false;
+    }
+    let Some(n) = n else {
+        return false;
+    };
+    // The rest are still the top cards of the library: they're put in place as the rest
+    // of a look at those cards would be (not moved to another zone).
+    let rest_of = |rest_to: Destination| Effect::Dig {
+        who: PlayerRef::You,
+        n: Value::c(n - k),
+        reveal: false,
+        filter: Filter::Any,
+        take: Value::c(0),
+        take_up_to: true,
+        take_to: Destination::zone(ZoneKind::Hand),
+        rest_to,
+    };
+    let place_rest = if single && x == "on the top or bottom of your library" {
+        Effect::ChooseOne {
+            who: PlayerRef::You,
+            options: vec![
+                ("Top of library".into(), Effect::Noop),
+                ("Bottom of library".into(), rest_of(Destination::library_bottom())),
+            ],
+        }
+    } else {
+        match super::card_flow_dig::rest_destination(x, single) {
+            Some(d) if d.zone == ZoneKind::Library => rest_of(d),
+            _ => return false,
+        }
+    };
+    let looked = Filter::and(vec![
+        Filter::In(Box::new(Sel::Var(vars::REVEALED))),
+        Filter::InZone(ZoneKind::Library),
+    ]);
+    let dig = std::mem::take(prev);
+    *prev = Effect::Seq(vec![
+        dig,
+        Effect::KeywordAction {
+            action,
+            who: PlayerRef::You,
+            what: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: looked,
+                count: Value::c(k),
+                up_to: false,
+                store: None,
+            },
+            n: Value::c(1),
+        },
+        place_rest,
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "face grammar: manifest / cloak N of them, then put the rest ...", priority: 95, apply: f_manifest_some } }

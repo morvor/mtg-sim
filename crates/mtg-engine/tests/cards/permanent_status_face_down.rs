@@ -752,3 +752,60 @@ fn staff_room_turns_the_creature_face_up_or_puts_a_counter_on_it() {
     assert!(!t.g.obj(giant).face_down);
     assert_eq!(t.counters(giant, "+1/+1"), 0);
 }
+
+#[test]
+fn write_into_being_manifests_one_and_puts_the_other_on_top_or_bottom() {
+    cr!("701.40a");
+    let mut t = TestGame::new(2);
+    let cards = stack(&mut t, P0, &["Serra Angel", "Shock"]);
+    let spell = t.hand(P0, "Write into Being");
+    t.lands(P0, "Island", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(cards[0])]);
+    // The other on the bottom.
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(1),
+    );
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let angel = t.g.current(cards[0]);
+    assert!(t.on_battlefield(angel));
+    assert!(t.g.obj(angel).face_down);
+    assert_eq!(t.pt(angel), (2, 2));
+    assert_eq!(t.g.player(P0).library[0], cards[1]);
+}
+
+#[test]
+fn hide_in_plain_sight_cloaks_two_and_puts_the_rest_on_the_bottom() {
+    cr!("701.58a", "702.21a");
+    let mut t = TestGame::new(2);
+    let cards = stack(
+        &mut t,
+        P0,
+        &["Serra Angel", "Shock", "Island", "Hill Giant", "Swamp"],
+    );
+    let spell = t.hand(P0, "Hide in Plain Sight");
+    t.lands(P0, "Forest", 4);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(cards[0]), Entity::Object(cards[3])]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    for c in [cards[0], cards[3]] {
+        let now = t.g.current(c);
+        assert!(t.on_battlefield(now));
+        assert!(t.g.obj(now).face_down);
+        // Cloaked: a 2/2 with ward {2}.
+        assert!(t
+            .g
+            .obj(now)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Ward));
+    }
+    let lib = t.g.player(P0).library.clone();
+    let mut bottom = lib[..3].to_vec();
+    bottom.sort();
+    let mut expected = vec![cards[1], cards[2], cards[4]];
+    expected.sort();
+    assert_eq!(bottom, expected);
+}

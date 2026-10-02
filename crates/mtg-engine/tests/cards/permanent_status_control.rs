@@ -425,3 +425,27 @@ fn akiri_unattaches_an_equipment_and_the_creature_becomes_tapped_and_indestructi
         .obj_now(bears)
         .has_keyword(mtg_engine::keywords::KeywordKind::Indestructible));
 }
+
+#[test]
+fn ogre_geargrabber_unattaches_the_equipment_when_control_returns() {
+    cr!("603.7a", "514.3a", "701.3d");
+    ruling!(
+        "Ogre Geargrabber",
+        "If you still controlled the Equipment at that time, this causes the delayed triggered ability to trigger."
+    );
+    let mut t = TestGame::new(2);
+    let ogre = t.battlefield(P0, "Ogre Geargrabber");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let blade = t.battlefield(P1, "Bonesplitter");
+    assert!(t.g.attach(blade, Entity::Object(theirs)));
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(blade)]);
+    t.attack(&[(ogre, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(controller(&t, blade), P0);
+    assert_eq!(t.obj_now(blade).attached_to, Some(Entity::Object(ogre)));
+    // At cleanup control returns to P1, and the delayed ability unattaches it.
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(controller(&t, blade), P1);
+    assert_eq!(t.obj_now(blade).attached_to, None);
+}
