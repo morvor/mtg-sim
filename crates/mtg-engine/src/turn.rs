@@ -822,7 +822,9 @@ impl Game {
     /// passed for the permanents the active player controls (and the effect no longer
     /// applies to objects that left the battlefield, CR 400.7). An effect on a group not
     /// locked to objects ("lands you control don't untap during your next untap step")
-    /// lasts through its controller's next untap step.
+    /// lasts through its controller's next untap step, or through the next untap step of
+    /// the player whose permanents it names ("creatures target player controls don't
+    /// untap during that player's next untap step").
     fn expire_through_next_untap_step(&mut self, active: PlayerId) {
         let objects = &self.objects;
         let battlefield = &self.battlefield;
@@ -842,7 +844,9 @@ impl Game {
             !matches!(e.duration, Duration::ThroughNextUntapStep)
                 || match &e.objects {
                     Some(v) => !v.is_empty(),
-                    None => e.controller != active,
+                    None => {
+                        untap_restricted_player(&e.restriction).unwrap_or(e.controller) != active
+                    }
                 }
         });
         self.dirty = true;
@@ -1078,4 +1082,27 @@ impl Game {
     pub fn is_hidden_zone(zone: Zone) -> bool {
         !zone.is_public()
     }
+}
+
+/// The player a "doesn't untap" restriction on a group of permanents is about, if its
+/// filter names one ("creatures [that player] controls").
+fn untap_restricted_player(r: &Restriction) -> Option<PlayerId> {
+    let Restriction::DoesntUntap(f) = r else {
+        return None;
+    };
+    let parts = match f {
+        Filter::And(v) => v.as_slice(),
+        other => std::slice::from_ref(other),
+    };
+    parts.iter().find_map(|x| match x {
+        Filter::ControllerMatches(pf) => match &**pf {
+            PlayerFilter::Is(p) => Some(*p),
+            PlayerFilter::Or(v) => match v.as_slice() {
+                [PlayerFilter::Is(p)] => Some(*p),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    })
 }
