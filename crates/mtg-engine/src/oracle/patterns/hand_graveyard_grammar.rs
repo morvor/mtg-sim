@@ -2883,3 +2883,54 @@ fn c_you_control_listed(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "hand/graveyard grammar: you control a [A, B, or C]", priority: 960, parse: c_you_control_listed } }
+
+/// "If the top card of target player's graveyard is a creature card, put that card on top
+/// of that player's library." (CR 404.2: the top card is the one put there latest).
+fn p_if_top_card_of_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if the top card of ")?;
+    let (who, r) = r.split_once("'s graveyard is ")?;
+    let (kind, rest) = r.split_once(", ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let parsed = (|| {
+        let (who, extra) = player_ref(who, b)?;
+        if !extra.trim().is_empty() {
+            return None;
+        }
+        let kind = kind.strip_prefix("a ").or_else(|| kind.strip_prefix("an "))?;
+        let (f, _, tail) = parse_object_phrase(kind)?;
+        if !tail.trim().is_empty() || !has_card_head(&f) {
+            return None;
+        }
+        let top = Filter::and(vec![
+            Filter::Card,
+            Filter::InZone(ZoneKind::Graveyard),
+            super::value_grammar::owned_by(&who),
+            Filter::Custom(SmolStr::new(crate::kw::hand_graveyard_actions::TOP_OF_GRAVEYARD)),
+        ]);
+        b.it = Sel::Var(CHOSEN);
+        b.it_player = who;
+        let then = crate::oracle::effects::parse_sentence(rest, b)?;
+        Some(Effect::seq(vec![
+            Effect::Store {
+                var: CHOSEN,
+                sel: Sel::All(top.clone()),
+            },
+            Effect::If {
+                cond: Condition::Compare(
+                    Value::Count(Filter::and(vec![top, f])),
+                    Cmp::Ge,
+                    Value::Const(1),
+                ),
+                then: Box::new(then),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ]))
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "hand/graveyard grammar: if the top card of a graveyard is ...", priority: 960, parse: p_if_top_card_of_graveyard } }

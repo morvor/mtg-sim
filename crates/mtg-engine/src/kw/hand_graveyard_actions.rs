@@ -40,6 +40,9 @@ pub const BOTTOM_OF_GRAVEYARD: &str = "the bottom card of its graveyard";
 /// change ("exile ~ from your graveyard" after it died, CR 400.7).
 pub const SOURCE_OR_NEXT: &str = "the source or the object it became";
 
+/// `Filter::Custom`: the top card of its graveyard (the one put there latest, CR 404.2).
+pub const TOP_OF_GRAVEYARD: &str = "the top card of its graveyard";
+
 pub struct HandGraveyardActions;
 
 impl KeywordRules for HandGraveyardActions {
@@ -61,6 +64,13 @@ impl KeywordRules for HandGraveyardActions {
     fn custom_filter(&self, g: &Game, name: &str, id: crate::types::ObjectId, ctx: &Ctx) -> Option<bool> {
         if name == SOURCE_OR_NEXT {
             return Some(ctx.source.is_some_and(|s| s == id || g.obj(s).next == Some(id)));
+        }
+        if name == TOP_OF_GRAVEYARD {
+            let o = g.obj(id);
+            let crate::object::Zone::Graveyard(p) = o.zone else {
+                return Some(false);
+            };
+            return Some(g.player(p).graveyard.last() == Some(&id));
         }
         if name == BOTTOM_OF_GRAVEYARD {
             let o = g.obj(id);

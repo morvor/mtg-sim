@@ -2167,3 +2167,25 @@ fn veteran_ice_climber_may_target_no_player() {
     assert_eq!(t.graveyard_size(P1), 0);
     assert_eq!(t.graveyard_size(P0), 0);
 }
+
+#[test]
+fn guiding_spirit_moves_the_top_creature_card_of_a_graveyard() {
+    cr!("404.2");
+    assert_supported(&["Guiding Spirit"]);
+    let mut t = TestGame::new(2);
+    let gs = t.battlefield(P0, "Guiding Spirit");
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    t.activate(P0, gs, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Library(P1));
+    assert_eq!(*t.g.player(P1).library.last().unwrap(), t.g.current(bears));
+    // A creature card that isn't the top card isn't moved.
+    let mut t = TestGame::new(2);
+    let gs = t.battlefield(P0, "Guiding Spirit");
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P1, "Shock");
+    t.activate(P0, gs, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Graveyard(P1));
+    assert_eq!(t.graveyard_size(P1), 2);
+}
