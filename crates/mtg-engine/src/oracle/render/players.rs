@@ -766,7 +766,31 @@ impl Renderer<'_> {
                 format!("{q} {n}")
             }
             (c, other) => {
-                let v = self.value(other);
+                // "more lands than you": than the number of those the player controls.
+                let conj = |f: &Filter| -> Vec<Filter> {
+                    match f {
+                        Filter::And(v) => v.clone(),
+                        other => vec![other.clone()],
+                    }
+                };
+                let theirs = match other {
+                    Value::Count(g) => {
+                        let (fc, gc) = (conj(f), conj(g));
+                        let extra: Vec<&Filter> = gc
+                            .iter()
+                            .filter(|x| !fc.iter().any(|y| format!("{x:?}") == format!("{y:?}")))
+                            .collect();
+                        match extra.as_slice() {
+                            [Filter::ControlledBy(r)] if gc.len() == fc.len() + 1 => Some(*r),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
+                let v = match theirs {
+                    Some(r) => self.rel_object(r),
+                    None => self.value(other),
+                };
                 let n = self.noun(f, Num::Many);
                 match c {
                     Cmp::Gt => format!("more {n} than {v}"),

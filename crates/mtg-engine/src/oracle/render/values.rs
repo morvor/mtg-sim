@@ -750,6 +750,16 @@ impl Renderer<'_> {
         if let Some(s) = self.this_turn_compare(a, cmp, b) {
             return s;
         }
+        // "an opponent controls more lands than you".
+        if let (Value::CountPlayers(PlayerFilter::And(v)), Cmp::Ge, Value::Const(1)) = (a, cmp, b) {
+            if let [base @ (PlayerFilter::Opponent | PlayerFilter::Any), PlayerFilter::Controls(f, c, n)] =
+                v.as_slice()
+            {
+                let who = self.player_filter_object(base);
+                let what = self.count_phrase(f, *c, n);
+                return format!("{who} controls {what}");
+            }
+        }
         // "you have two or more opponents".
         if let (Value::CountPlayers(PlayerFilter::Opponent), Value::Const(n), Cmp::Ge) = (a, b, cmp)
         {
