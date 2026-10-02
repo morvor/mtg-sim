@@ -993,6 +993,10 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = super::hand_graveyard_grammar::count_phrase(r, b) {
         return Some(v);
     }
+    // "Mountains returned this way".
+    if let Some(v) = super::zone_move_grammar::returned_this_way(r, b) {
+        return Some(v);
+    }
     // "times ~ was kicked", "time it was kicked" (CR 702.33): the source's kicker count.
     for p in [
         "times ~ was kicked",

@@ -673,6 +673,38 @@ fn next_item_at(s: &str) -> Option<usize> {
     best
 }
 
+/// "nonland permanent or suspended card", "instant or sorcery card from your graveyard or
+/// exiled card with flashback you own": two complete descriptions, each with its own zone.
+fn described_alternatives(s: &str, b: &mut Builder, subject: &Subject) -> Option<Described> {
+    for (i, _) in s.match_indices(" or ") {
+        let (left, right) = (&s[..i], &s[i + " or ".len()..]);
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let l = described(left, b, subject).filter(|d| {
+            d.rest.trim().is_empty() && !d.random && d.filter.zone().is_some()
+        });
+        let r = l.as_ref().and_then(|_| {
+            described(right, b, subject)
+                .filter(|d| continues(&d.rest) && !d.random && d.filter.zone().is_some())
+        });
+        match (l, r) {
+            (Some(l), Some(r)) if l.filter.zone() != r.filter.zone() => {
+                return Some(Described {
+                    filter: Filter::Or(vec![l.filter, r.filter]),
+                    others: l.others || r.others,
+                    random: false,
+                    opponents_choice: l.opponents_choice || r.opponents_choice,
+                    rest: r.rest,
+                });
+            }
+            _ => {
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1, saved.2);
+            }
+        }
+    }
+    None
+}
+
 /// "artifact or non-Aura enchantment card", "artifact, enchantment, or legendary card",
 /// "Angel, Demon, or Dragon creature card": alternatives (each adjectives and a type or
 /// subtype) before the noun and qualifiers they share.
@@ -854,7 +886,9 @@ fn target_item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, Str
         Some(r) => (true, r),
         None => (false, r.strip_prefix("target ")?),
     };
-    let d = described(r, b, subject);
+    let d = described(r, b, subject)
+        .filter(|d| continues(&d.rest))
+        .or_else(|| described_alternatives(r, b, subject));
     dbg_zm!("ZM target described {r:?} -> {d:?}");
     let Described {
         filter,
@@ -1710,6 +1744,27 @@ fn except_for(s: &str) -> Option<Filter> {
     (plural && end(rest.trim()).is_empty()).then_some(f)
 }
 
+/// "[objects] returned this way" after a move of this grammar ("Return any number of
+/// Mountains you control to their owner's hand. ~ deals damage to target creature equal to
+/// twice the number of Mountains returned this way."): the moved objects of that kind,
+/// counted in their new zone (CR 400.7).
+pub fn returned_this_way(r: &str, b: &Builder) -> Option<(Value, String)> {
+    let i = r.find(" returned this way")?;
+    let (noun, rest) = (&r[..i], &r[i + " returned this way".len()..]);
+    if !word_end(rest) || !b.named.iter().any(|(n, _)| n == MOVED) {
+        return None;
+    }
+    let (f, _, tail) = parse_object_phrase(noun)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let f = match f {
+        Filter::Permanent | Filter::Card => Filter::In(Box::new(Sel::Var(vars::IT))),
+        f => Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::IT)))]),
+    };
+    Some((Value::Count(f), rest.to_string()))
+}
+
 fn note_moved(b: &mut Builder) {
     if !b.named.iter().any(|(n, _)| n == MOVED) {
         b.named.push((MOVED.to_string(), Sel::Var(vars::IT)));
@@ -1742,6 +1797,77 @@ pub fn self_move_zone(effect: &str) -> Option<FunctionZone> {
     }
     None
 }
+
+/// "Reveal the top card of your library. If it's a land card, put it onto the battlefield.
+/// Otherwise, put that card into your hand." (Coiling Oracle): the revealed card that
+/// isn't taken goes to the other zone instead of staying on top.
+fn f_otherwise_rest(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("otherwise, put ") else {
+        return false;
+    };
+    let Some(r) = r.strip_prefix("that card ").or_else(|| r.strip_prefix("it ")) else {
+        return false;
+    };
+    let zone = match r {
+        "into your hand" | "into its owner's hand" => ZoneKind::Hand,
+        "into your graveyard" | "into its owner's graveyard" => ZoneKind::Graveyard,
+        _ => return false,
+    };
+    let last = match prev {
+        Effect::Seq(v) => v.last_mut(),
+        e => Some(e),
+    };
+    let Some(Effect::Dig {
+        n: Value::Const(1),
+        take: Value::Const(1),
+        take_up_to: false,
+        rest_to,
+        ..
+    }) = last
+    else {
+        return false;
+    };
+    if rest_to.zone != ZoneKind::Library || rest_to.position != LibraryPosition::FromTop(0) {
+        return false;
+    }
+    *rest_to = Destination::zone(zone);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "zone-move grammar: otherwise, put that card into your hand (after a dig)", priority: 150, apply: f_otherwise_rest } }
+
+/// "Each of them enters with an additional -1/-1 counter on it." after a move onto the
+/// battlefield: the permanents enter with those counters (CR 122.6, 614.1c).
+fn f_enters_with(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = [
+        "each of them enters ",
+        "it enters ",
+        "they enter ",
+        "that creature enters ",
+        "those creatures enter ",
+    ]
+    .iter()
+    .find_map(|p| l.strip_prefix(p)) else {
+        return false;
+    };
+    let Some((c, rest)) = with_counters(r) else {
+        return false;
+    };
+    if !rest.trim().is_empty() {
+        return false;
+    }
+    let Some(Effect::Move { to, .. }) = last_move_mut(prev) else {
+        return false;
+    };
+    if to.zone != ZoneKind::Battlefield {
+        return false;
+    }
+    to.with_counters.extend(c);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "zone-move grammar: each of them enters with [counters]", priority: 970, apply: f_enters_with } }
 
 /// The last move of an effect (through sequences, "you may" and conditions).
 fn last_move_mut(e: &mut Effect) -> Option<&mut Effect> {
@@ -1983,8 +2109,21 @@ pub const MILLED_THIS_TURN: &str = "milled this turn";
 /// discards it, CR 702.29a), still the object it became.
 pub const DISCARDED_BY_YOU_THIS_TURN: &str = "discarded by you this turn";
 
-/// "that dealt damage this turn" (as a source), "that isn't a God" after an object noun.
+/// `Filter::Custom`: an object with an odd / even mana value (CR 202.3; 0 is even).
+pub const ODD_MANA_VALUE: &str = "odd mana value";
+pub const EVEN_MANA_VALUE: &str = "even mana value";
+
+/// "that dealt damage this turn" (as a source), "that isn't a God", "with an odd mana
+/// value" after an object noun.
 fn f_suffixes<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    for (p, name) in [
+        ("with an odd mana value", ODD_MANA_VALUE),
+        ("with an even mana value", EVEN_MANA_VALUE),
+    ] {
+        if let Some(r) = strip_word(t, p) {
+            return Some((Filter::Custom(SmolStr::new(name)), r));
+        }
+    }
     if let Some(r) = strip_word(t, "that dealt damage this turn") {
         return Some((Filter::Custom(SmolStr::new(DEALT_DAMAGE_THIS_TURN)), r));
     }

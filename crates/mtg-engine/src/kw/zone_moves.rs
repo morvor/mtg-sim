@@ -9,7 +9,7 @@ use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::events::{Event, MoveCause};
 use crate::oracle::patterns::zone_move_grammar::{
-    ACTIVATED_ABILITIES_OF_EXILED, DEALT_DAMAGE_THIS_TURN, DISCARDED_BY_YOU_THIS_TURN,
+    ACTIVATED_ABILITIES_OF_EXILED, DEALT_DAMAGE_THIS_TURN, DISCARDED_BY_YOU_THIS_TURN, EVEN_MANA_VALUE, ODD_MANA_VALUE,
     MILLED_THIS_TURN, RANDOM_COUNT, RANDOM_PICK,
     RANDOM_POOL,
 };
@@ -57,6 +57,8 @@ impl KeywordRules for ZoneMoves {
         match name {
             DEALT_DAMAGE_THIS_TURN => Some(g.history.damage_sources.iter().any(|(s, _)| *s == id)),
             MILLED_THIS_TURN => Some(g.history.milled.contains(&id)),
+            ODD_MANA_VALUE => Some(g.mana_value_of(id) % 2 == 1),
+            EVEN_MANA_VALUE => Some(g.mana_value_of(id) % 2 == 0),
             DISCARDED_BY_YOU_THIS_TURN => {
                 Some(g.history.discarded.contains(&(ctx.controller, id)))
             }
