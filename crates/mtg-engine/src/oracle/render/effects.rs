@@ -913,6 +913,10 @@ impl Renderer<'_> {
                 let t = self.sel(to, Case::Obj);
                 match kind {
                     Some(k) => format!("put {f} {k} counters on {t}"),
+                    // "If it had counters on it, put those counters on ~."
+                    None if matches!(from, Sel::TriggerLki | Sel::TriggerObject | Sel::This) => {
+                        format!("put {{alt:{f} counters|those counters}} on {t}")
+                    }
                     None => format!("put {f} counters on {t}"),
                 }
             }
@@ -1065,6 +1069,26 @@ impl Renderer<'_> {
                 who,
                 duration,
             } => {
+                // "Each player gains control of each creature they own": gaining control
+                // of what the player already controls changes nothing, so "that player
+                // doesn't control" goes unsaid.
+                let what = match what {
+                    Sel::All(Filter::And(v)) => {
+                        let rel = match who {
+                            PlayerRef::Iterated => Some(PlayerRel::Iterated),
+                            PlayerRef::You => Some(PlayerRel::You),
+                            _ => None,
+                        };
+                        let kept: Vec<Filter> = v
+                            .iter()
+                            .filter(|f| !matches!((f, rel), (Filter::Not(n), Some(r)) if matches!(n.as_ref(), Filter::ControlledBy(x) if *x == r)))
+                            .cloned()
+                            .collect();
+                        Sel::All(Filter::and(kept))
+                    }
+                    other => other.clone(),
+                };
+                let what = &what;
                 let w = self.sel(what, Case::Obj);
                 let d = self.duration(duration);
                 let vp = join_words(&[format!("gain control of {w}"), d]);

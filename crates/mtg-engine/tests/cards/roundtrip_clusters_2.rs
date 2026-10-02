@@ -93,3 +93,26 @@ fn the_one_ring_saga_mills_each_player_by_your_ring_bearers_power() {
     assert_eq!(t.library_size(P1), l1 - 3);
     assert_eq!(t.library_size(P0), l0 - 3);
 }
+
+#[test]
+fn during_turns_other_than_yours_includes_a_teammates_turn() {
+    cr!("102.3", "500.1");
+    // Mesa Lynx: "~ gets +0/+2 during turns other than yours." It applied only while an
+    // opponent was the active player, so not during a teammate's turn.
+    supported("Mesa Lynx");
+    let mut t = TestGame::with_config(
+        4,
+        GameConfig {
+            teams: Some(vec![0, 1, 0, 1]),
+            ..Default::default()
+        },
+    );
+    let lynx = t.battlefield(P0, "Mesa Lynx");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    assert_eq!(t.pt(lynx), (2, 1));
+    // P2 is P0's teammate.
+    t.set_step(P2, mtg_engine::turn::Step::PrecombatMain);
+    assert_eq!(t.pt(lynx), (2, 3));
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    assert_eq!(t.pt(lynx), (2, 3));
+}

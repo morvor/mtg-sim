@@ -458,6 +458,29 @@ impl Renderer<'_> {
                 }
             }
             Condition::Not(inner) => self.negated_condition(inner),
+            // "If you revealed a Dragon card or controlled a Dragon as you cast this
+            // spell" (`kw::revealed_or_controlled`).
+            Condition::Or(v)
+                if self.info.reveal_card.is_some()
+                    && matches!(v.as_slice(), [Condition::CostPaid(a), Condition::CostPaid(b)]
+                        if a == crate::kw::revealed_or_controlled::REVEAL
+                            && b == crate::kw::revealed_or_controlled::CONTROLLED) =>
+            {
+                let card = self.info.reveal_card.clone().unwrap_or(Filter::Any);
+                let quality = match &card {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::Card | Filter::InZone(_) | Filter::OwnedBy(_)))
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let c = self.noun_det(&card, Det::A);
+                let c = c.trim_end_matches(" in your hand").to_string();
+                let q = self.noun_det(&quality, Det::A);
+                format!("you revealed {c} or controlled {q} as you cast ~")
+            }
             // "If you cast it from your hand".
             Condition::And(v)
                 if v.len() == 2
@@ -790,6 +813,10 @@ impl Renderer<'_> {
                     };
                     if negated {
                         return format!("has no {} on it", plural(&c));
+                    }
+                    // "if it has counters on it": one or more.
+                    if k.is_none() {
+                        return "has {alt:a counter|counters} on it".into();
                     }
                     return format!("has {} on it", with_article(&c));
                 }

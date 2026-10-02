@@ -118,6 +118,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               says (CR 604.1).",
     },
     Equivalence {
+        pattern: r"\bif (it|thatit|~|~it) had\b",
+        replacement: "if $1 has",
+        why: "As \"if it was\" below: whether an object that left the battlefield had \
+              counters on it is judged by its last known information (CR 608.2h), which \
+              is what \"if it has\" asks of it.",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \

@@ -47,6 +47,10 @@ pub struct FaceInfo {
     /// For half of a meld pair: (the partner's noun, "a creature named Hanweir Garrison";
     /// the meld result's name), from the card's related cards.
     pub meld: Option<(String, String)>,
+    /// The card an optional "you may reveal a [quality] card from your hand" additional
+    /// cost reveals (Dragons of Tarkir), for "if you revealed a Dragon card or controlled
+    /// a Dragon as you cast this spell".
+    pub reveal_card: Option<crate::ability::Filter>,
 }
 
 impl FaceInfo {
@@ -57,8 +61,10 @@ impl FaceInfo {
             subtypes: face.chars.subtypes.iter().cloned().collect(),
             enchant: None,
             meld: None,
+            reveal_card: None,
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
+        info.reveal_card = reveal_card(&face.chars.abilities);
         info
     }
     fn has_subtype(&self, s: &str) -> bool {
@@ -366,6 +372,32 @@ fn meld_info(def: &CardDef) -> Option<(String, String)> {
 }
 
 /// The noun an Aura's enchant keyword names ("creature", "land", "player").
+/// The card an optional reveal additional cost of the spell reveals (see
+/// [`FaceInfo::reveal_card`]).
+fn reveal_card(abilities: &[Ability]) -> Option<crate::ability::Filter> {
+    use crate::ability::*;
+    abilities.iter().find_map(|a| {
+        let AbilityKind::Static(s) = &a.kind else {
+            return None;
+        };
+        let StaticEffect::CostModifier(CostModifier {
+            applies_to: CostTarget::ThisSpell,
+            change: CostChange::OptionalAdditionalCost { name, cost },
+            ..
+        }) = &s.effect
+        else {
+            return None;
+        };
+        if name.as_str() != crate::kw::revealed_or_controlled::REVEAL {
+            return None;
+        }
+        cost.parts.iter().find_map(|p| match p {
+            CostPart::RevealFromHand { filter, .. } => Some(filter.clone()),
+            _ => None,
+        })
+    })
+}
+
 pub fn enchant_noun(abilities: &[Ability], info: &FaceInfo) -> Option<String> {
     for a in abilities {
         if let AbilityKind::Keyword(k) = &a.kind {
@@ -443,6 +475,15 @@ pub(crate) fn merge_shared_as_though(lines: &mut Vec<String>) {
 }
 
 fn join_as_though(a: &str, b: &str) -> Option<String> {
+    // "~ can't block or be blocked by non-Spirit creatures."
+    if let (Some((sa, oa)), Some((sb, ob))) = (
+        a.trim_end_matches('.').split_once(" can't block "),
+        b.trim_end_matches('.').split_once(" can't be blocked by "),
+    ) {
+        if sa == sb && oa == ob {
+            return Some(format!("{sa} can't block or be blocked by {oa}."));
+        }
+    }
     // "~ can't attack or block alone." (two restrictions, one sentence).
     let (a0, b0) = (a.trim_end_matches('.'), b.trim_end_matches('.'));
     if let (Some(sa), Some(sb)) = (
