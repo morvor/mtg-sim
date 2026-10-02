@@ -3,16 +3,15 @@
 //! picked at random among those that match as the instruction is performed (CR 608.2c).
 
 use super::{KeywordRegistration, KeywordRules};
-use crate::types::Entity;
 use crate::eval::Ctx;
+use crate::events::{Event, MoveCause};
 use crate::game::Game;
 use crate::keywords::KeywordKind;
-use crate::events::{Event, MoveCause};
 use crate::oracle::patterns::zone_move_grammar::{
-    ACTIVATED_ABILITIES_OF_EXILED, DEALT_DAMAGE_THIS_TURN, DISCARDED_BY_YOU_THIS_TURN, EVEN_MANA_VALUE, ODD_MANA_VALUE,
-    MILLED_THIS_TURN, RANDOM_COUNT, RANDOM_PICK,
-    RANDOM_POOL,
+    ACTIVATED_ABILITIES_OF_EXILED, DEALT_DAMAGE_THIS_TURN, DISCARDED_BY_YOU_THIS_TURN,
+    EVEN_MANA_VALUE, MILLED_THIS_TURN, ODD_MANA_VALUE, RANDOM_COUNT, RANDOM_PICK, RANDOM_POOL,
 };
+use crate::types::Entity;
 use crate::types::ObjectId;
 
 /// `Effect::Custom`: picks [`RANDOM_COUNT`] of the objects in [`RANDOM_POOL`] at random
@@ -59,9 +58,7 @@ impl KeywordRules for ZoneMoves {
             MILLED_THIS_TURN => Some(g.history.milled.contains(&id)),
             ODD_MANA_VALUE => Some(g.mana_value_of(id) % 2 == 1),
             EVEN_MANA_VALUE => Some(g.mana_value_of(id) % 2 == 0),
-            DISCARDED_BY_YOU_THIS_TURN => {
-                Some(g.history.discarded.contains(&(ctx.controller, id)))
-            }
+            DISCARDED_BY_YOU_THIS_TURN => Some(g.history.discarded.contains(&(ctx.controller, id))),
             _ => None,
         }
     }
@@ -100,9 +97,11 @@ impl KeywordRules for ZoneMoves {
                 match &a.kind {
                     crate::ability::AbilityKind::Activated(_) => gained.push(a.clone()),
                     crate::ability::AbilityKind::Keyword(k) => gained.extend(
-                        crate::keyword_impls::derived_abilities(k).into_iter().filter(|d| {
-                            matches!(d.kind, crate::ability::AbilityKind::Activated(_))
-                        }),
+                        crate::keyword_impls::derived_abilities(k)
+                            .into_iter()
+                            .filter(|d| {
+                                matches!(d.kind, crate::ability::AbilityKind::Activated(_))
+                            }),
                     ),
                     _ => {}
                 }

@@ -36,7 +36,6 @@ use crate::oracle::phrases::*;
 use crate::types::CounterKind;
 use smol_str::SmolStr;
 
-
 /// The candidates a random choice is made among, how many are picked, and the pick.
 pub const RANDOM_POOL: Var = vars::USER + 7400;
 pub const RANDOM_PICK: Var = vars::USER + 7401;
@@ -238,9 +237,18 @@ fn their(b: &Builder, subject: &Subject) -> Option<PlayerRef> {
 /// "graveyard", "hand", "hand or graveyard", "hand and/or graveyard", "graveyards".
 fn zone_words(s: &str) -> Option<(Vec<ZoneKind>, &str)> {
     for (p, z) in [
-        ("hand or graveyard", vec![ZoneKind::Hand, ZoneKind::Graveyard]),
-        ("hand and/or graveyard", vec![ZoneKind::Hand, ZoneKind::Graveyard]),
-        ("graveyard or hand", vec![ZoneKind::Hand, ZoneKind::Graveyard]),
+        (
+            "hand or graveyard",
+            vec![ZoneKind::Hand, ZoneKind::Graveyard],
+        ),
+        (
+            "hand and/or graveyard",
+            vec![ZoneKind::Hand, ZoneKind::Graveyard],
+        ),
+        (
+            "graveyard or hand",
+            vec![ZoneKind::Hand, ZoneKind::Graveyard],
+        ),
         ("graveyards", vec![ZoneKind::Graveyard]),
         ("graveyard", vec![ZoneKind::Graveyard]),
         ("hands", vec![ZoneKind::Hand]),
@@ -257,7 +265,11 @@ fn zone_words(s: &str) -> Option<(Vec<ZoneKind>, &str)> {
 /// graveyard", "from all graveyards", "from their hand", "from your hand or graveyard",
 /// "from an opponent's graveyard", "from target opponent's graveyard", "from your
 /// graveyard or from exile". Returns the filter and whether the zone is another player's.
-fn from_zone<'a>(s: &'a str, b: &mut Builder, subject: &Subject) -> Option<(Filter, bool, &'a str)> {
+fn from_zone<'a>(
+    s: &'a str,
+    b: &mut Builder,
+    subject: &Subject,
+) -> Option<(Filter, bool, &'a str)> {
     use super::value_grammar::owned_by;
     let s = s.trim_start();
     let r = s.strip_prefix("from ").or_else(|| s.strip_prefix("in "))?;
@@ -336,8 +348,14 @@ fn history<'a>(s: &'a str, b: &Builder) -> Option<(Filter, &'a str)> {
     use crate::kw::hand_graveyard_actions::PUT_THERE_THIS_TURN;
     let t = s.trim_start();
     for (p, from) in [
-        ("that was put there from the battlefield this turn", "battlefield"),
-        ("that were put there from the battlefield this turn", "battlefield"),
+        (
+            "that was put there from the battlefield this turn",
+            "battlefield",
+        ),
+        (
+            "that were put there from the battlefield this turn",
+            "battlefield",
+        ),
         ("that were put there from anywhere this turn", ""),
         ("that was put there from anywhere this turn", ""),
         ("that were put there this turn", ""),
@@ -381,10 +399,19 @@ fn history<'a>(s: &'a str, b: &Builder) -> Option<(Filter, &'a str)> {
     }
     // "that were put into your graveyard from the battlefield this turn" (Fell Shepherd).
     for (p, from) in [
-        ("that were put into your graveyard from the battlefield this turn", "battlefield"),
-        ("that was put into your graveyard from the battlefield this turn", "battlefield"),
+        (
+            "that were put into your graveyard from the battlefield this turn",
+            "battlefield",
+        ),
+        (
+            "that was put into your graveyard from the battlefield this turn",
+            "battlefield",
+        ),
         ("that were put into your graveyard this turn", ""),
-        ("that were put into your graveyard from anywhere this turn", ""),
+        (
+            "that were put into your graveyard from anywhere this turn",
+            "",
+        ),
     ] {
         if let Some(r) = strip_word(t, p) {
             return Some((
@@ -488,7 +515,10 @@ fn is_target_phrase(s: &str) -> bool {
     };
     let head = s[..i].trim();
     if head.is_empty()
-        || matches!(head, "another" | "any number of" | "one, two, or three" | "one or two")
+        || matches!(
+            head,
+            "another" | "any number of" | "one, two, or three" | "one or two"
+        )
     {
         return true;
     }
@@ -538,8 +568,18 @@ fn continues(rest: &str) -> bool {
     let t = rest.trim_start();
     t.is_empty()
         || [
-            "to ", "onto ", "into ", "from ", "on top of", "on the bottom of", ",", "and ",
-            "and/or ", "under ", "tapped", "at random",
+            "to ",
+            "onto ",
+            "into ",
+            "from ",
+            "on top of",
+            "on the bottom of",
+            ",",
+            "and ",
+            "and/or ",
+            "under ",
+            "tapped",
+            "at random",
         ]
         .iter()
         .any(|p| t.starts_with(p))
@@ -550,7 +590,10 @@ fn continues(rest: &str) -> bool {
 fn zone_adjectives(s: &str) -> (Vec<Filter>, &str) {
     if let Some(r) = s.strip_prefix("face-up exiled ") {
         return (
-            vec![Filter::InZone(ZoneKind::Exile), Filter::not(Filter::FaceDown)],
+            vec![
+                Filter::InZone(ZoneKind::Exile),
+                Filter::not(Filter::FaceDown),
+            ],
             r,
         );
     }
@@ -608,15 +651,22 @@ fn described(s: &str, b: &mut Builder, subject: &Subject) -> Option<Described> {
         b.it_player = subject.who.clone();
     }
     // The reading that understands more of the phrase.
-    let parsed = match (super::value_grammar::objects(head, b), alternatives(head, b)) {
+    let parsed = match (
+        super::value_grammar::objects(head, b),
+        alternatives(head, b),
+    ) {
         (Some(a), Some(c)) => Some(if c.1.len() < a.1.len() { c } else { a }),
         (a, c) => a.or(c),
     };
     b.it_player = outer_player;
     let (filter, rest) = parsed?;
     // "outlaw creature cards": the shared parser leaves "cards" after a batch noun.
-    let (filter, rest) = match strip_word(rest.trim_start(), "cards").or_else(|| strip_word(rest.trim_start(), "card")) {
-        Some(r) if !names_cards(&filter) => (Filter::and(vec![filter, Filter::Card]), r.to_string()),
+    let (filter, rest) = match strip_word(rest.trim_start(), "cards")
+        .or_else(|| strip_word(rest.trim_start(), "card"))
+    {
+        Some(r) if !names_cards(&filter) => {
+            (Filter::and(vec![filter, Filter::Card]), r.to_string())
+        }
         _ => (filter, rest),
     };
     // "cards each with mana value X or less".
@@ -643,7 +693,9 @@ fn next_item_at(s: &str) -> Option<usize> {
         for (i, _) in s.match_indices(sep) {
             let after = &s[i + sep.len()..];
             let starts_item = (is_target_phrase(after)
-                && after.find("target ").is_some_and(|j| after[..j].split(' ').count() <= 6))
+                && after
+                    .find("target ")
+                    .is_some_and(|j| after[..j].split(' ').count() <= 6))
                 || ["up to ", "a ", "an ", "another ", "all ", "each ", "~ "]
                     .iter()
                     .any(|p| after.starts_with(p));
@@ -661,9 +713,8 @@ fn described_alternatives(s: &str, b: &mut Builder, subject: &Subject) -> Option
     for (i, _) in s.match_indices(" or ") {
         let (left, right) = (&s[..i], &s[i + " or ".len()..]);
         let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-        let l = described(left, b, subject).filter(|d| {
-            d.rest.trim().is_empty() && !d.random && d.filter.zone().is_some()
-        });
+        let l = described(left, b, subject)
+            .filter(|d| d.rest.trim().is_empty() && !d.random && d.filter.zone().is_some());
         let r = l.as_ref().and_then(|_| {
             described(right, b, subject)
                 .filter(|d| continues(&d.rest) && !d.random && d.filter.zone().is_some())
@@ -730,7 +781,8 @@ fn alternatives(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
             return None;
         }
         // The type or subtype that ends an alternative.
-        if let Some(h) = head_noun(w).filter(|h| matches!(h, Filter::Type(_) | Filter::Subtype(_))) {
+        if let Some(h) = head_noun(w).filter(|h| matches!(h, Filter::Type(_) | Filter::Subtype(_)))
+        {
             // A type followed by a noun that narrows it ends the list ("Dragon creature
             // card").
             let next = split_word(r).0.trim_end_matches(',');
@@ -822,9 +874,16 @@ fn finish_described(
         }
         // Qualifiers after "at random" or a zone ("a card at random exiled with ~").
         if !t.is_empty() && !continues(&t) {
-            if let Some((Filter::And(v), r)) = super::value_grammar::objects(&format!("card {t}"), b) {
+            if let Some((Filter::And(v), r)) =
+                super::value_grammar::objects(&format!("card {t}"), b)
+            {
                 if r.len() < t.len() && matches!(v.first(), Some(Filter::Card)) {
-                    filter = Filter::and(vec![filter].into_iter().chain(v.into_iter().skip(1)).collect());
+                    filter = Filter::and(
+                        vec![filter]
+                            .into_iter()
+                            .chain(v.into_iter().skip(1))
+                            .collect(),
+                    );
                     rest = r;
                     continue;
                 }
@@ -850,13 +909,14 @@ fn target_item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, Str
         if continues(&rest) {
             let mut rest = rest;
             let mut others = false;
-            if let Some(TargetKind::Object(f)) = b.targets.get(slot as usize).map(|t| t.what.clone()) {
+            if let Some(TargetKind::Object(f)) =
+                b.targets.get(slot as usize).map(|t| t.what.clone())
+            {
                 others = owned_by_other(&f);
                 // "target card with flashback you own from exile".
                 if f.zone().is_none() {
                     if let Some((z, other, r)) = from_zone(&rest, b, subject) {
-                        b.targets[slot as usize].what =
-                            TargetKind::Object(Filter::and(vec![f, z]));
+                        b.targets[slot as usize].what = TargetKind::Object(Filter::and(vec![f, z]));
                         others |= other;
                         rest = r.to_string();
                     }
@@ -884,7 +944,9 @@ fn target_item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, Str
         (Value::c(1), Value::c(3), r)
     } else if let Some(r) = t.strip_prefix("one or two ") {
         (Value::c(1), Value::c(2), r)
-    } else if let Some((n, r)) = parse_number(t).filter(|(_, r)| r.trim_start().starts_with("target ")) {
+    } else if let Some((n, r)) =
+        parse_number(t).filter(|(_, r)| r.trim_start().starts_with("target "))
+    {
         (n.clone(), n, r.trim_start())
     } else {
         (Value::c(1), Value::c(1), t)
@@ -1008,7 +1070,11 @@ fn item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, String)> {
                 if let Some((f, _, r)) = from_zone(&rest, b, subject) {
                     // An ability functions in one zone (CR 113.6m): "~ from your
                     // graveyard or from exile" would need two.
-                    if matches!(sel, Sel::This) && matches!(f.zone(), None) && matches!(f, Filter::Or(_) | Filter::And(_)) && format!("{f:?}").matches("InZone").count() > 1 {
+                    if matches!(sel, Sel::This)
+                        && matches!(f.zone(), None)
+                        && matches!(f, Filter::Or(_) | Filter::And(_))
+                        && format!("{f:?}").matches("InZone").count() > 1
+                    {
                         return None;
                     }
                     // The source may have moved since the ability triggered (an Aura
@@ -1019,10 +1085,7 @@ fn item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, String)> {
                         )),
                         sel => Filter::In(Box::new(sel)),
                     };
-                    return Some((
-                        fixed(Sel::All(Filter::and(vec![which, f]))),
-                        r.to_string(),
-                    ));
+                    return Some((fixed(Sel::All(Filter::and(vec![which, f]))), r.to_string()));
                 }
                 return Some((fixed(sel), rest));
             }
@@ -1129,12 +1192,14 @@ fn location_parts(f: &Filter) -> Vec<Filter> {
 fn items(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Vec<Item>, String)> {
     let (first, mut rest) = item(s, b, subject)?;
     let mut out = vec![first];
+    let mut and_or = false;
     loop {
         let t = rest.trim_start().to_string();
         let next = [", and/or ", ", and ", ", ", "and/or ", "and "]
             .iter()
-            .find_map(|sep| t.strip_prefix(sep));
-        let Some(n) = next else { break };
+            .find_map(|sep| t.strip_prefix(sep).map(|r| (sep.contains("and/or"), r)));
+        let Some((is_and_or, n)) = next else { break };
+        and_or |= is_and_or;
         let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
         match item(n, b, subject) {
             Some((i, r)) => {
@@ -1167,6 +1232,16 @@ fn items(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Vec<Item>, Stri
     if let Some((loc, other)) = shared {
         locate(&mut out, &loc, other, b);
     }
+    // "a creature card and/or a land card": either or both, so each is up to that many.
+    if and_or {
+        for i in out.iter_mut() {
+            if let Kind::Chosen { qty, .. } = &mut i.kind {
+                if let Qty::Exactly(n) = qty {
+                    *qty = Qty::UpTo(n.clone());
+                }
+            }
+        }
+    }
     Some((out, rest))
 }
 
@@ -1185,9 +1260,9 @@ fn locate(items: &mut [Item], loc: &Filter, other: bool, b: &mut Builder) {
 
 /// Whether every item that names cards says where they are.
 fn all_located(items: &[Item], b: &Builder) -> bool {
-    items.iter().all(|i| {
-        item_filter(i, b).is_none_or(|f| !names_cards(&f) || located(&f))
-    })
+    items
+        .iter()
+        .all(|i| item_filter(i, b).is_none_or(|f| !names_cards(&f) || located(&f)))
 }
 
 fn item_filter(i: &Item, b: &Builder) -> Option<Filter> {
@@ -1303,10 +1378,7 @@ fn dest_zone(s: &str) -> Option<(Destination, &str)> {
             return Some((Destination::battlefield(), r));
         }
     }
-    for p in [
-        "to the top of ",
-        "on top of ",
-    ] {
+    for p in ["to the top of ", "on top of "] {
         if let Some(r) = s.strip_prefix(p) {
             let (_, r) = owners(r)?;
             let r = strip_word(r, "library").or_else(|| strip_word(r, "libraries"))?;
@@ -1374,7 +1446,11 @@ fn with_counters(s: &str) -> Option<(Vec<(CounterKind, Value)>, &str)> {
             .strip_prefix("counters")
             .or_else(|| r2.strip_prefix("counter"))?;
         out.push((kind, n));
-        if let Some(x) = r2.strip_prefix(" and ").or_else(|| r2.strip_prefix(", and ")).or_else(|| r2.strip_prefix(", ")) {
+        if let Some(x) = r2
+            .strip_prefix(" and ")
+            .or_else(|| r2.strip_prefix(", and "))
+            .or_else(|| r2.strip_prefix(", "))
+        {
             r = x;
             continue;
         }
@@ -1465,9 +1541,16 @@ fn p_do_the_same_for(l: &str, b: &mut Builder) -> Option<Effect> {
         b.it_player = saved.2.clone();
     };
     // The kind words in the first instruction: between the quantity and "card(s)".
-    let (verb_q, after) = ["return a ", "return an ", "return all ", "put a ", "put an ", "put all "]
-        .iter()
-        .find_map(|p| first.strip_prefix(p).map(|r| (*p, r)))?;
+    let (verb_q, after) = [
+        "return a ",
+        "return an ",
+        "return all ",
+        "put a ",
+        "put an ",
+        "put all ",
+    ]
+    .iter()
+    .find_map(|p| first.strip_prefix(p).map(|r| (*p, r)))?;
     let noun_at = after.find(" cards ").or_else(|| after.find(" card "))?;
     let tail = &after[noun_at..];
     let mut out = vec![parse_move(first, b)?];
@@ -1514,7 +1597,9 @@ fn p_choose_card(l: &str, b: &mut Builder) -> Option<Effect> {
     let res = (|| {
         if is_target_phrase(&r) {
             let (it, rest) = target_item(&r, b, &subject)?;
-            let Kind::Target(slot) = it.kind else { return None };
+            let Kind::Target(slot) = it.kind else {
+                return None;
+            };
             if !end(rest.trim()).is_empty() {
                 return None;
             }
@@ -1539,28 +1624,40 @@ fn p_choose_card(l: &str, b: &mut Builder) -> Option<Effect> {
         {
             return None;
         }
-        // The chosen card is what the instruction was about (`vars::IT`).
-        let e = if d.random {
-            Effect::seq(vec![
-                random_pick(d.filter, n),
-                Effect::Store {
-                    var: vars::IT,
-                    sel: Sel::Var(RANDOM_PICK),
-                },
-            ])
+        // The chosen cards are what the instruction was about. They're added to
+        // [`CHOSEN_CARDS`], so that when several players each choose one ("Each opponent
+        // chooses a creature card in their graveyard. Put those cards onto the
+        // battlefield ...", CR 101.4) every player's choice is kept (see
+        // `simultaneous.rs`: a variable an instruction adds to is shared). Only one such
+        // choice per ability, so the variable holds nothing else.
+        if b.named.iter().any(|(n, _)| n == CHOSE) {
+            return None;
+        }
+        let pick = if d.random {
+            Some(random_pick(d.filter.clone(), n.clone()))
         } else {
-            Effect::Store {
-                var: vars::IT,
-                sel: Sel::Choose {
-                    chooser: PlayerRef::You,
-                    filter: d.filter,
-                    count: n,
-                    up_to: false,
-                    store: None,
-                },
-            }
+            None
         };
-        b.it = Sel::Var(vars::IT);
+        let chosen = match pick {
+            Some(_) => Sel::Var(RANDOM_PICK),
+            None => Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: d.filter,
+                count: n,
+                up_to: false,
+                store: None,
+            },
+        };
+        let store = Effect::Store {
+            var: CHOSEN_CARDS,
+            sel: Sel::Union(vec![Sel::Var(CHOSEN_CARDS), chosen]),
+        };
+        let e = match pick {
+            Some(p) => Effect::seq(vec![p, store]),
+            None => store,
+        };
+        b.named.push((CHOSE.to_string(), Sel::Var(CHOSEN_CARDS)));
+        b.it = Sel::Var(CHOSEN_CARDS);
         Some(e)
     })();
     if res.is_none() {
@@ -1572,14 +1669,22 @@ fn p_choose_card(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "zone-move grammar: choose a [card] exiled with ~", priority: 970, parse: p_choose_card } }
 
+/// The cards chosen with [`p_choose_card`] (every choosing player's).
+const CHOSEN_CARDS: Var = vars::USER + 7405;
+/// Marks, in [`Builder::named`], that [`p_choose_card`] chose cards earlier in the text.
+const CHOSE: &str = "\u{1}zone move: chose cards";
+
 /// "Choose a card exiled with ~. You may play that card this turn." (Muse Vessel): a
 /// permission to play the chosen card (CR 601.2a, 305.1).
 fn f_may_play_chosen(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    if end(l) != "you may play that card this turn" || !matches!(b.it, Sel::Var(vars::IT)) {
+    if end(l) != "you may play that card this turn" || !matches!(b.it, Sel::Var(CHOSEN_CARDS)) {
         return false;
     }
     let chose = match &*prev {
-        Effect::Store { var, sel: Sel::Choose { .. } } => *var == vars::IT,
+        Effect::Store {
+            var,
+            sel: Sel::Union(v),
+        } => *var == CHOSEN_CARDS && v.iter().any(|s| matches!(s, Sel::Choose { .. })),
         _ => false,
     };
     if !chose {
@@ -1590,7 +1695,7 @@ fn f_may_play_chosen(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         old,
         Effect::GrantPlayPermission {
             who: PlayerRef::You,
-            what: Sel::Var(vars::IT),
+            what: Sel::Var(CHOSEN_CARDS),
             duration: Duration::EndOfTurn,
             free: false,
         },
@@ -1676,7 +1781,10 @@ fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
             let sels: Vec<Sel> = sels
                 .iter()
                 .map(|s| match s {
-                    Sel::All(f) => Some(Sel::All(Filter::and(vec![f.clone(), Filter::not(ex.clone())]))),
+                    Sel::All(f) => Some(Sel::All(Filter::and(vec![
+                        f.clone(),
+                        Filter::not(ex.clone()),
+                    ]))),
                     _ => None,
                 })
                 .collect::<Option<_>>()?;
@@ -1754,7 +1862,12 @@ fn parse_move(l: &str, b: &mut Builder) -> Option<Effect> {
 /// "Each player returns all creature cards from their graveyard to the battlefield": all
 /// the players' cards move at the same time (CR 608.2e), each player's under their own
 /// control.
-fn each_players_all(subject: &Subject, sels: &[Sel], pre: &[Effect], to: &Destination) -> Option<Effect> {
+fn each_players_all(
+    subject: &Subject,
+    sels: &[Sel],
+    pre: &[Effect],
+    to: &Destination,
+) -> Option<Effect> {
     let each = subject.each.as_ref()?;
     if subject.may || !pre.is_empty() {
         return None;
@@ -1853,7 +1966,12 @@ fn p_each_player_exile_sacrifice_return(l: &str, _b: &mut Builder) -> Option<Eff
     }
     let (cf, _, t1) = parse_object_phrase(cards)?;
     let (pf, plural, t2) = parse_object_phrase(perms)?;
-    if !t1.trim().is_empty() || !t2.trim().is_empty() || !plural || !names_cards(&cf) || names_cards(&pf) {
+    if !t1.trim().is_empty()
+        || !t2.trim().is_empty()
+        || !plural
+        || !names_cards(&cf)
+        || names_cards(&pf)
+    {
         return None;
     }
     let exiled = Sel::Var(EXILED_BY_EACH);
@@ -1901,7 +2019,10 @@ pub fn self_move_zone(effect: &str) -> Option<FunctionZone> {
             if let Some(list) = after.strip_prefix(" and ") {
                 // The zone named once for the list ("~ and up to one other target creature
                 // card from your graveyard").
-                let stop = list.find(" to ").or_else(|| list.find(" onto ")).unwrap_or(list.len());
+                let stop = list
+                    .find(" to ")
+                    .or_else(|| list.find(" onto "))
+                    .unwrap_or(list.len());
                 if list[..stop].ends_with(" from your graveyard") {
                     return Some(FunctionZone::Graveyard);
                 }
@@ -1918,7 +2039,10 @@ fn f_otherwise_rest(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let Some(r) = end(l).strip_prefix("otherwise, put ") else {
         return false;
     };
-    let Some(r) = r.strip_prefix("that card ").or_else(|| r.strip_prefix("it ")) else {
+    let Some(r) = r
+        .strip_prefix("that card ")
+        .or_else(|| r.strip_prefix("it "))
+    else {
         return false;
     };
     let zone = match r {
@@ -1990,9 +2114,9 @@ fn last_move_mut(e: &mut Effect) -> Option<&mut Effect> {
     match e {
         Effect::Seq(v) => last_move_mut(v.last_mut()?),
         Effect::May { effect, .. } => last_move_mut(effect),
-        Effect::If { then, otherwise, .. } if matches!(**otherwise, Effect::Noop) => {
-            last_move_mut(then)
-        }
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => last_move_mut(then),
         _ => None,
     }
 }
@@ -2124,7 +2248,8 @@ inventory::submit! { super::FollowupPattern { name: "zone-move grammar: it's a [
 /// `Modification::Custom` name prefix (layer 6): "has all activated abilities of all
 /// [kind] cards exiled with ~" — followed by the card type or subtype word, or nothing
 /// for every card. Implemented in `kw/zone_moves.rs`.
-pub const ACTIVATED_ABILITIES_OF_EXILED: &str = "has all activated abilities of cards exiled with it:";
+pub const ACTIVATED_ABILITIES_OF_EXILED: &str =
+    "has all activated abilities of cards exiled with it:";
 
 /// "~ has all activated abilities of all creature cards exiled with it.", "Creatures you
 /// control have all activated abilities of all land cards exiled with ~.": the permanents
@@ -2281,7 +2406,9 @@ mod tests {
             toughness: None,
         };
         let r = compile(text, &ctx);
-        r.unsupported.is_empty().then(|| format!("{:#?}", r.abilities))
+        r.unsupported
+            .is_empty()
+            .then(|| format!("{:#?}", r.abilities))
     }
 
     #[test]

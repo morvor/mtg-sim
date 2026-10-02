@@ -2,11 +2,11 @@
 //! [from zone] to [zone] [modifiers]" with zone-qualified objects, history qualifiers,
 //! modifiers, multi-target lists, owner-side moves and bounces of your own permanents.
 
+use mtg_engine::ability::AbilityKind;
 use mtg_engine::card::card;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
-use mtg_engine::ability::AbilityKind;
-use mtg_engine::keywords::KeywordKind;
 use mtg_engine::*;
 
 fn assert_supported(name: &str) {
@@ -105,7 +105,10 @@ fn skyship_weatherlight_puts_a_random_card_exiled_with_it_into_its_owners_hand()
 #[test]
 fn myr_welder_has_the_activated_abilities_of_cards_it_exiled() {
     cr!("607.2a", "613.1f");
-    ruling!("Myr Welder", "Myr Welder has only the activated abilities of cards it exiles");
+    ruling!(
+        "Myr Welder",
+        "Myr Welder has only the activated abilities of cards it exiles"
+    );
     assert_supported("Myr Welder");
     let mut t = TestGame::new(2);
     let welder = t.battlefield(P0, "Myr Welder");
@@ -128,7 +131,8 @@ fn myr_welder_has_the_activated_abilities_of_cards_it_exiled() {
     // Use the gained "{1}, {T}: Tap target artifact, creature, or land."
     t.g.untap(welder);
     t.lands(P0, "Wastes", 1);
-    t.activate(P0, welder, 1, &[o(bears)]).expect("gained ability");
+    t.activate(P0, welder, 1, &[o(bears)])
+        .expect("gained ability");
     t.resolve_all();
     assert!(t.obj(bears).tapped);
 }
@@ -140,7 +144,10 @@ fn myr_welder_has_the_activated_abilities_of_cards_it_exiled() {
 #[test]
 fn no_rest_for_the_wicked_returns_only_creatures_that_died_this_turn() {
     cr!("400.7");
-    ruling!("No Rest for the Wicked", "It doesn’t matter who controlled the creature cards");
+    ruling!(
+        "No Rest for the Wicked",
+        "It doesn’t matter who controlled the creature cards"
+    );
     assert_supported("No Rest for the Wicked");
     let mut t = TestGame::new(2);
     let nrftw = t.battlefield(P0, "No Rest for the Wicked");
@@ -164,7 +171,10 @@ fn no_rest_for_the_wicked_returns_only_creatures_that_died_this_turn() {
 #[test]
 fn shadow_of_the_grave_returns_cards_you_discarded_this_turn() {
     cr!("701.9a");
-    ruling!("Shadow of the Grave", "returns to your hand all cards that you discarded for any reason");
+    ruling!(
+        "Shadow of the Grave",
+        "returns to your hand all cards that you discarded for any reason"
+    );
     assert_supported("Shadow of the Grave");
     let mut t = TestGame::new(2);
     let giant = t.hand(P0, "Hill Giant");
@@ -182,12 +192,16 @@ fn shadow_of_the_grave_returns_cards_you_discarded_this_turn() {
 #[test]
 fn restore_the_peace_returns_each_creature_that_dealt_damage_this_turn() {
     cr!("400.3");
-    ruling!("Restore the Peace", "Only creatures on the battlefield will be returned");
+    ruling!(
+        "Restore the Peace",
+        "Only creatures on the battlefield will be returned"
+    );
     assert_supported("Restore the Peace");
     let mut t = TestGame::new(2);
     let sorcerer = t.battlefield(P0, "Prodigal Sorcerer");
     t.battlefield(P1, "Grizzly Bears");
-    t.activate(P0, sorcerer, 0, &[Entity::Player(P1)]).expect("ping");
+    t.activate(P0, sorcerer, 0, &[Entity::Player(P1)])
+        .expect("ping");
     t.resolve_all();
     assert_eq!(t.life(P1), 19);
     t.lands(P0, "Plains", 1);
@@ -212,11 +226,11 @@ fn tato_farmer_puts_a_milled_land_onto_the_battlefield_tapped() {
     let mountain = t.g.current(milled[0]);
     // A land put into a graveyard without milling it isn't a legal target.
     let forest = t.graveyard(P1, "Forest");
-    assert!(t.activate(P0, farmer, 0, &[o(forest)]).is_err() || !t.on_battlefield(forest));
+    assert!(t.activate(P0, farmer, 0, &[o(forest)]).is_err());
+    assert!(!t.obj(farmer).tapped);
     t.clear_answers();
-    t.g.stack.clear();
-    t.g.untap(farmer);
-    t.activate(P0, farmer, 0, &[o(mountain)]).expect("activation");
+    t.activate(P0, farmer, 0, &[o(mountain)])
+        .expect("activation");
     t.resolve_all();
     let m = t.named_on_battlefield("Mountain");
     assert_eq!(m.len(), 1);
@@ -287,7 +301,10 @@ fn torrent_elemental_returns_from_exile_tapped() {
 #[test]
 fn talon_gates_of_madara_is_put_onto_the_battlefield_from_your_hand() {
     cr!("113.6m");
-    ruling!("Talon Gates of Madara", "If Talon Gates of Madara isn't still in your hand");
+    ruling!(
+        "Talon Gates of Madara",
+        "If Talon Gates of Madara isn't still in your hand"
+    );
     assert_supported("Talon Gates of Madara");
     let mut t = TestGame::new(2);
     let gates = t.hand(P0, "Talon Gates of Madara");
@@ -346,7 +363,10 @@ fn churning_eddy_returns_a_creature_and_a_land_to_their_owners_hands() {
 #[test]
 fn hurkyls_recall_returns_artifacts_the_player_owns_whoever_controls_them() {
     cr!("400.3");
-    ruling!("Hurkyl's Recall", "Retrieves all artifacts owned by the target player regardless of who controls them");
+    ruling!(
+        "Hurkyl's Recall",
+        "Retrieves all artifacts owned by the target player regardless of who controls them"
+    );
     assert_supported("Hurkyl's Recall");
     let mut t = TestGame::new(2);
     let thopter = t.battlefield(P1, "Ornithopter");
@@ -488,7 +508,10 @@ fn make_a_wish_returns_two_cards_at_random() {
 #[test]
 fn grim_captains_call_returns_one_card_of_each_type_in_turn() {
     cr!("608.2c");
-    ruling!("Grim Captain's Call", "you just continue to the next listed type");
+    ruling!(
+        "Grim Captain's Call",
+        "you just continue to the next listed type"
+    );
     assert_supported("Grim Captain's Call");
     let mut t = TestGame::new(2);
     let pirate = t.graveyard(P0, "Fathom Fleet Captain");
@@ -511,7 +534,10 @@ fn grim_captains_call_returns_one_card_of_each_type_in_turn() {
 #[test]
 fn estrid_returns_non_aura_enchantments_then_auras() {
     cr!("303.4f");
-    ruling!("Estrid, the Masked", "If an Aura card can't enchant anything, it remains in your graveyard");
+    ruling!(
+        "Estrid, the Masked",
+        "If an Aura card can't enchant anything, it remains in your graveyard"
+    );
     assert_compiles("Estrid, the Masked", "then do the same for Aura cards");
     let mut t = TestGame::new(2);
     let estrid = t.battlefield(P0, "Estrid, the Masked");
@@ -574,18 +600,39 @@ fn pulse_of_the_fields_returns_to_hand_if_an_opponent_has_more_life() {
 #[test]
 fn zone_move_texts_compile() {
     for (name, text) in [
-        ("Crop Sigil", "return up to one target creature card and up to one target land card"),
-        ("Reconstruct History", "up to one target planeswalker card from your graveyard"),
+        (
+            "Crop Sigil",
+            "return up to one target creature card and up to one target land card",
+        ),
+        (
+            "Reconstruct History",
+            "up to one target planeswalker card from your graveyard",
+        ),
         ("Relive the Past", "they are 5/5 elemental creatures"),
-        ("Gelatinous Cube", "put target creature card with mana value x exiled with"),
+        (
+            "Gelatinous Cube",
+            "put target creature card with mana value x exiled with",
+        ),
         ("Bane Alley Broker", "return a card exiled with"),
         ("Wall of Mourning", "put a card exiled with"),
         ("Ghost Vacuum", "each of them is a 1/1 spirit"),
-        ("Parallax Wave", "each player returns to the battlefield all cards they own exiled with it"),
-        ("Second Sunrise", "that were put there from the battlefield this turn"),
+        (
+            "Parallax Wave",
+            "each player returns to the battlefield all cards they own exiled with it",
+        ),
+        (
+            "Second Sunrise",
+            "that were put there from the battlefield this turn",
+        ),
         ("Thrilling Encore", "all creature cards in all graveyards"),
-        ("Soulquake", "all creature cards in graveyards to their owners' hands"),
-        ("Gorex, the Tombshell", "choose a card at random exiled with"),
+        (
+            "Soulquake",
+            "all creature cards in graveyards to their owners' hands",
+        ),
+        (
+            "Gorex, the Tombshell",
+            "choose a card at random exiled with",
+        ),
         ("Omenpath Journey", "choose a card at random exiled with"),
         ("Tasigur, the Golden Fang", "of an opponent's choice"),
     ] {
@@ -651,14 +698,18 @@ fn venser_s_diffusion_returns_a_suspended_card() {
     cr!("702.62b");
     assert_supported("Venser's Diffusion");
     let mut t = TestGame::new(2);
+    // An exiled card that isn't suspended (no suspend, or no time counter) isn't a legal
+    // target: with only those, the spell can't be cast.
+    let plain = t.exile(P1, "Lightning Bolt");
+    t.exile(P1, "Rift Bolt");
+    t.lands(P0, "Island", 3);
+    let spell = t.hand(P0, "Venser's Diffusion");
+    assert!(t.cast(P0, spell).target(plain).try_go().is_err());
+    t.clear_answers();
     let bolt = t.exile(P1, "Rift Bolt");
     t.g.objects[bolt.0 as usize]
         .counters
         .insert("time".into(), 1);
-    // An exiled card that isn't suspended can't be chosen.
-    t.exile(P1, "Lightning Bolt");
-    t.lands(P0, "Island", 3);
-    let spell = t.hand(P0, "Venser's Diffusion");
     t.cast(P0, spell).target(bolt).go();
     t.resolve_all();
     assert!(t.in_hand(P1, "Rift Bolt"));
@@ -747,7 +798,8 @@ fn muse_vessel_lets_you_play_a_card_exiled_with_it() {
     let vessel = t.battlefield(P0, "Muse Vessel");
     let bolt = t.hand(P1, "Lightning Bolt");
     t.lands(P0, "Wastes", 3);
-    t.activate(P0, vessel, 0, &[Entity::Player(P1)]).expect("exile");
+    t.activate(P0, vessel, 0, &[Entity::Player(P1)])
+        .expect("exile");
     t.resolve_all();
     assert!(t.in_exile("Lightning Bolt"));
     let exiled = t.g.current(bolt);
@@ -814,7 +866,10 @@ fn hedge_shredder_puts_the_land_cards_milled_onto_the_battlefield_tapped() {
 #[test]
 fn colossal_grave_reaver_puts_one_of_the_creature_cards_onto_the_battlefield() {
     cr!("603.2c");
-    assert_compiles("Colossal Grave-Reaver", "put one of them onto the battlefield");
+    assert_compiles(
+        "Colossal Grave-Reaver",
+        "put one of them onto the battlefield",
+    );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Colossal Grave-Reaver");
     t.library_top(P0, "Grizzly Bears");
@@ -831,4 +886,127 @@ fn colossal_grave_reaver_puts_one_of_the_creature_cards_onto_the_battlefield() {
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
     assert!(t.in_graveyard(P0, "Forest"));
+}
+
+#[test]
+fn dredge_the_mire_puts_every_opponents_chosen_card_onto_the_battlefield_at_once() {
+    cr!("101.4", "608.2e");
+    ruling!(
+        "Dredge the Mire",
+        "Then all the chosen cards are returned at the same time"
+    );
+    assert_supported("Dredge the Mire");
+    let mut t = TestGame::new(3);
+    t.graveyard(P1, "Hill Giant");
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    let elves = t.graveyard(P2, "Llanowar Elves");
+    t.answer_choose(P1, &[o(bears)]);
+    t.answer_choose(P2, &[o(elves)]);
+    t.lands(P0, "Swamp", 4);
+    let spell = t.hand(P0, "Dredge the Mire");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    // Both opponents' choices, not only the last one's, under your control.
+    for name in ["Grizzly Bears", "Llanowar Elves"] {
+        let p = t.named_on_battlefield(name);
+        assert_eq!(p.len(), 1, "{name}");
+        assert_eq!(t.obj(p[0]).controller, P0);
+    }
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+}
+
+#[test]
+fn michelangelo_puts_a_creature_card_and_or_a_land_card_onto_the_battlefield() {
+    cr!("608.2c");
+    assert_supported("Michelangelo, Improviser");
+    // "and/or": only the land, though a creature card could also be put.
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Michelangelo, Improviser");
+    t.hand(P0, "Grizzly Bears");
+    let forest = t.hand(P0, "Forest");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[]);
+    t.answer_choose(P0, &[o(forest)]);
+    t.g.deal_damage(m, Entity::Player(P1), 2, true);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Forest").len(), 1);
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    // Or both.
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Michelangelo, Improviser");
+    let bears = t.hand(P0, "Grizzly Bears");
+    let forest = t.hand(P0, "Forest");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[o(bears)]);
+    t.answer_choose(P0, &[o(forest)]);
+    t.g.deal_damage(m, Entity::Player(P1), 2, true);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Forest").len(), 1);
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
+
+#[test]
+fn tasigurs_chosen_opponent_picks_any_nonland_card_in_your_graveyard() {
+    cr!("608.2c");
+    ruling!("Tasigur, the Golden Fang", "The chosen opponent can choose any nonland card in your graveyard, not just one of the cards that was just put there");
+    ruling!("Tasigur, the Golden Fang", "You choose an opponent and that player chooses a nonland card only after you mill two cards");
+    assert_supported("Tasigur, the Golden Fang");
+    let mut t = TestGame::new(2);
+    let tasigur = t.battlefield(P0, "Tasigur, the Golden Fang");
+    // In the graveyard before the mill.
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.graveyard(P0, "Forest");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Llanowar Elves");
+    t.answer_choose(P1, &[o(giant)]);
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Island", 2);
+    t.activate(P0, tasigur, 0, &[]).expect("activation");
+    t.resolve_all();
+    // The milled cards were there when the opponent chose: the choice was theirs.
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(t.in_graveyard(P0, "Llanowar Elves"));
+    assert!(t.in_hand(P0, "Hill Giant"));
+    assert!(t.asked().iter().any(
+        |(p, d)| *p == P1 && matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. })
+    ));
+    // You chose only the opponent, not the card.
+    assert!(!t.asked().iter().any(|(p, d)| *p == P0
+        && matches!(d, mtg_engine::decision::Decision::ChooseEntities { candidates, .. }
+            if candidates.iter().any(|c| matches!(c, Entity::Object(_))))));
+}
+
+#[test]
+fn living_end_returns_only_the_cards_exiled_from_graveyards() {
+    cr!("608.2e", "110.2a");
+    ruling!("Living End", "\"All cards they exiled this way\" refers only to the cards exiled in the first part of the effect");
+    assert_supported("Living End");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Hill Giant");
+    t.graveyard(P1, "Llanowar Elves");
+    t.battlefield(P0, "Grizzly Bears");
+    // The sacrificed creatures are exiled instead of put into graveyards: not returned.
+    t.battlefield(P1, "Rest in Peace");
+    t.g.recompute();
+    let spell = t.hand(P0, "Living End");
+    // Cast without paying its mana cost (as suspend would, CR 702.62a).
+    mtg_engine::casting::grant_play_permission(
+        &mut t.g,
+        P0,
+        vec![spell],
+        mtg_engine::ability::Duration::EndOfTurn,
+        true,
+        None,
+    );
+    t.cast(P0, spell)
+        .method(mtg_engine::object::CastMethod::Free)
+        .go();
+    t.resolve_all();
+    let giant = t.named_on_battlefield("Hill Giant");
+    let elves = t.named_on_battlefield("Llanowar Elves");
+    assert_eq!((giant.len(), elves.len()), (1, 1));
+    assert_eq!(t.obj(giant[0]).controller, P0);
+    assert_eq!(t.obj(elves[0]).controller, P1);
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.in_exile("Grizzly Bears"));
 }
