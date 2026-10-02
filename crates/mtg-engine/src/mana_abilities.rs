@@ -1015,6 +1015,10 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             if !act.is_mana_ability {
                 continue;
             }
+            // CR 602.5e: "Activate only as an instant" — never in the middle of a payment.
+            if act.timing == ActivationTiming::AsInstant {
+                continue;
+            }
             if o.controller != p && !act.any_player {
                 continue;
             }
@@ -1038,7 +1042,8 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                         if o.tapped
                             || (o.is_creature()
                                 && o.summoning_sick
-                                && !o.has_keyword(KeywordKind::Haste))
+                                && !o.has_keyword(KeywordKind::Haste)
+                                && !crate::activation_costs::as_though_haste(g, p, o.id))
                         {
                             ok = false;
                         }
