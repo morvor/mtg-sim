@@ -119,6 +119,7 @@ pub mod start;
 pub mod stickers;
 pub mod structure;
 pub mod subgame;
+pub mod target_groups;
 pub mod target_rules;
 pub mod teams;
 pub mod testing;

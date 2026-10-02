@@ -25,6 +25,8 @@ pub const PILE_B: Var = vars::USER + 701;
 pub const CHOSEN: Var = vars::USER + 702;
 /// The pile that wasn't chosen.
 pub const OTHER: Var = vars::USER + 703;
+/// The face-down pile of a separation into a face-down pile and a face-up pile.
+pub const FACE_DOWN: Var = vars::USER + 704;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum PileAction {
@@ -32,6 +34,10 @@ pub enum PileAction {
     Separate { what: Sel, separator: PlayerRef },
     /// `chooser` chooses one of the two piles.
     Choose { chooser: PlayerRef },
+    /// `separator` separates the selected objects into a face-down pile ([`PILE_A`]) and
+    /// a face-up pile ([`PILE_B`]): the cards in the face-up pile are revealed
+    /// (CR 701.20a), the ones in the face-down pile aren't.
+    SeparateFaceDown { what: Sel, separator: PlayerRef },
 }
 
 /// The one player a pile instruction refers to. "An opponent" (several players) means the
@@ -83,7 +89,9 @@ fn set_pile(ctx: &mut Ctx, var: Var, objs: &[ObjectId]) {
 
 pub fn perform(g: &mut Game, action: &PileAction, ctx: &mut Ctx) {
     match action {
-        PileAction::Separate { what, separator } => {
+        PileAction::Separate { what, separator }
+        | PileAction::SeparateFaceDown { what, separator } => {
+            let face_down = matches!(action, PileAction::SeparateFaceDown { .. });
             let objs: Vec<ObjectId> = g
                 .resolve_objects(what, ctx)
                 .into_iter()
@@ -93,14 +101,12 @@ pub fn perform(g: &mut Game, action: &PileAction, ctx: &mut Ctx) {
             let n = objs.len() as u32;
             // The separator chooses the first pile; everything else is the second
             // (CR 700.3a); either may be empty (CR 700.3d).
-            let a = g.ask_objects(
-                p,
-                ctx.source,
-                "Separate into two piles: choose the objects in the first pile",
-                objs.clone(),
-                0,
-                n,
-            );
+            let prompt = if face_down {
+                "Separate into a face-down pile and a face-up pile: choose the cards in the face-down pile"
+            } else {
+                "Separate into two piles: choose the objects in the first pile"
+            };
+            let a = g.ask_objects(p, ctx.source, prompt, objs.clone(), 0, n);
             let b: Vec<ObjectId> = objs.iter().copied().filter(|o| !a.contains(o)).collect();
             // Piles list their objects in the order they're in (CR 700.3c).
             let a: Vec<ObjectId> = objs.iter().copied().filter(|o| a.contains(o)).collect();
@@ -113,18 +119,31 @@ pub fn perform(g: &mut Game, action: &PileAction, ctx: &mut Ctx) {
             });
             set_pile(ctx, PILE_A, &a);
             set_pile(ctx, PILE_B, &b);
+            if face_down {
+                set_pile(ctx, FACE_DOWN, &a);
+                crate::reveal::reveal_in(g, p, &b, Some(ctx));
+            }
         }
         PileAction::Choose { chooser } => {
             let a = pile(ctx, PILE_A);
             let b = pile(ctx, PILE_B);
             let p = one_player(g, chooser, ctx);
+            // A face-down pile's cards aren't shown.
+            let face_down = pile(ctx, FACE_DOWN);
+            let show = |g: &Game, p: &[ObjectId]| {
+                if !p.is_empty() && p == face_down.as_slice() {
+                    format!("face-down pile of {} card(s)", p.len())
+                } else {
+                    describe(g, p)
+                }
+            };
             let i = g.ask_option(
                 p,
                 ctx.source,
                 "Choose a pile",
                 vec![
-                    format!("Pile 1: {}", describe(g, &a)),
-                    format!("Pile 2: {}", describe(g, &b)),
+                    format!("Pile 1: {}", show(g, &a)),
+                    format!("Pile 2: {}", show(g, &b)),
                 ],
             );
             let (chosen, other) = if i == 1 { (b, a) } else { (a, b) };
