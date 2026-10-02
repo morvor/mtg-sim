@@ -49,8 +49,6 @@ macro_rules! dbg_zm {
 pub const RANDOM_POOL: Var = vars::USER + 7400;
 pub const RANDOM_PICK: Var = vars::USER + 7401;
 pub const RANDOM_COUNT: Var = vars::USER + 7402;
-/// The card a "choose a card exiled with ~" instruction chose.
-pub const CHOSEN: Var = vars::USER + 7403;
 
 fn word_end(rest: &str) -> bool {
     rest.is_empty() || rest.starts_with([' ', ',', '.', ';'])
@@ -1524,17 +1522,18 @@ fn p_choose_card(l: &str, b: &mut Builder) -> Option<Effect> {
         {
             return None;
         }
+        // The chosen card is what the instruction was about (`vars::IT`).
         let e = if d.random {
             Effect::seq(vec![
                 random_pick(d.filter, n),
                 Effect::Store {
-                    var: CHOSEN,
+                    var: vars::IT,
                     sel: Sel::Var(RANDOM_PICK),
                 },
             ])
         } else {
             Effect::Store {
-                var: CHOSEN,
+                var: vars::IT,
                 sel: Sel::Choose {
                     chooser: PlayerRef::You,
                     filter: d.filter,
@@ -1544,7 +1543,7 @@ fn p_choose_card(l: &str, b: &mut Builder) -> Option<Effect> {
                 },
             }
         };
-        b.it = Sel::Var(CHOSEN);
+        b.it = Sel::Var(vars::IT);
         Some(e)
     })();
     if res.is_none() {
@@ -1555,6 +1554,34 @@ fn p_choose_card(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "zone-move grammar: choose a [card] exiled with ~", priority: 970, parse: p_choose_card } }
+
+/// "Choose a card exiled with ~. You may play that card this turn." (Muse Vessel): a
+/// permission to play the chosen card (CR 601.2a, 305.1).
+fn f_may_play_chosen(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if end(l) != "you may play that card this turn" || !matches!(b.it, Sel::Var(vars::IT)) {
+        return false;
+    }
+    let chose = match &*prev {
+        Effect::Store { var, sel: Sel::Choose { .. } } => *var == vars::IT,
+        _ => false,
+    };
+    if !chose {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            duration: Duration::EndOfTurn,
+            free: false,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "zone-move grammar: choose a card ... you may play that card this turn", priority: 970, apply: f_may_play_chosen } }
 
 fn p_move(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
