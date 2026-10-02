@@ -10,13 +10,13 @@ use mtg_engine::ability::*;
 use mtg_engine::decision::Action;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::*;
-use mtg_engine::permissions::PERMISSION_COST_METHOD;
+use mtg_engine::casting::PERMISSION_COST;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
-const PAY_LIFE: CastMethod = CastMethod::Alternative(PERMISSION_COST_METHOD);
+const PAY_LIFE: CastMethod = CastMethod::Alternative(PERMISSION_COST);
 
 /// A sorcery: "You may play cards you own in exile this turn", the permission coming with
 /// `terms`.

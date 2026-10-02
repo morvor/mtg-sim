@@ -74,6 +74,9 @@ pub struct SpecialState {
     /// Cards a player may spend mana of any type to cast (CR 118.14): (player, card,
     /// duration, source, turn created).
     pub any_type_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,
+    /// Cards a player may spend mana as though it were mana of any color to cast (CR
+    /// 609.4b; colorless symbols still need colorless mana), as `any_type_mana`.
+    pub any_color_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,
     /// (source, player, turn): the player ignores the source's static effects until end
     /// of that turn (CR 116.2d).
     pub ignoring: Vec<(ObjectId, PlayerId, u32)>,
@@ -261,6 +264,44 @@ pub fn available(g: &Game, p: PlayerId) -> Vec<Action> {
         if g.can_pay_cost(p, &o.def.cost, o.ctx.source, &o.ctx) {
             out.push(Action::Special(SpecialAction::Offer { id: o.id }));
         }
+    }
+    out
+}
+
+/// The special actions effects allow `p` to take "any time you could activate a mana
+/// ability" (CR 605.3a, 116.2c) whose cost is only life and that add mana ("you may pay 1
+/// life. If you do, add {C}."), with `p` able to pay that life now: (offer id, context,
+/// life each use costs, the mana effect). `mana_abilities::mana_sources` plans with
+/// them, so they can be taken while a mana payment is being made.
+pub fn mana_offers(g: &Game, p: PlayerId) -> Vec<(u32, Ctx, u32, Effect)> {
+    let mut out = Vec::new();
+    for o in &g.special.offers {
+        if !o.def.mana_timing || !offer_active(g, o) {
+            continue;
+        }
+        let SpecialActionEffect::Effect(e @ Effect::AddMana { .. }) = &o.def.action else {
+            continue;
+        };
+        let cost = &o.def.cost;
+        if cost.mana.is_some() || !cost.parts.iter().all(|c| matches!(c, CostPart::PayLife(_))) {
+            continue;
+        }
+        if !g.player_filter_matches(&o.def.who, p, &o.ctx)
+            || !g.can_pay_cost(p, cost, o.ctx.source, &o.ctx)
+        {
+            continue;
+        }
+        let mut ctx = o.ctx.clone();
+        ctx.controller = p;
+        let life: i64 = cost
+            .parts
+            .iter()
+            .map(|c| match c {
+                CostPart::PayLife(v) => g.eval_value(v, &ctx).max(0),
+                _ => 0,
+            })
+            .sum();
+        out.push((o.id, ctx, life as u32, e.clone()));
     }
     out
 }

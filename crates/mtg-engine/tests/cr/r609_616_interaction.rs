@@ -267,6 +267,7 @@ fn back_face_entry_effects_apply_before_others() {
     def.faces.push(FaceDef {
         chars: back,
         unsupported: vec![],
+        manual: vec![],
         star_power: false,
         star_toughness: false,
     });

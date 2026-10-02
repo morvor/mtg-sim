@@ -309,11 +309,13 @@ fn opposition_agent_controls_opponents_while_they_search_their_libraries() {
     t.lands(P1, "Swamp", 2);
     let tutor = t.hand(P1, "Demonic Tutor");
     assert_eq!(decider(&t.g, P1), P1);
-    // P0 makes P1 find the Forest.
+    // P0 makes P1 find the Forest (which Opposition Agent's other ability exiles
+    // instead of putting into P1's hand).
     t.answer_choose(P0, &[Entity::Object(forest)]);
     t.cast(P1, tutor).go();
     t.resolve_all();
-    assert!(t.in_hand(P1, "Forest"));
+    assert_eq!(t.zone(t.g.current(forest)), Zone::Exile);
+    assert!(!t.in_hand(P1, "Forest"));
     assert!(!t.in_hand(P1, "Ancestral Recall"));
     let searches: Vec<PlayerId> = log
         .lock()

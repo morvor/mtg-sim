@@ -7,12 +7,11 @@
 //! * "Each opponent exiles the top card of their library. You may cast spells from among
 //!   those cards this turn." (Xander's Pact): permissions to cast those cards, not to play
 //!   them as lands (CR 305.9);
-//! * "You may play lands and cast spells from the top of your library. If you cast a spell
-//!   this way, pay life equal to its mana value rather than pay its mana cost." (Bolas's
-//!   Citadel): a static permission whose spells are cast for that alternative cost; "You
-//!   may cast noncreature spells from the top of your library. If you cast a spell this
-//!   way, you may cast it as though it had flash." (Elsha of the Infinite): one whose
-//!   spells may be cast any time their player could cast an instant (CR 702.8a);
+//! * "You may cast noncreature spells from the top of your library. If you cast a spell
+//!   this way, you may cast it as though it had flash." (Elsha of the Infinite): a static
+//!   permission whose spells may be cast any time their player could cast an instant
+//!   (CR 702.8a). (Bolas's Citadel's "... pay life equal to its mana value rather than
+//!   pay its mana cost" is in `r601_play_from_top_paying_life.rs`.)
 //! * "During each of your turns, you may play a land and cast a permanent spell of each
 //!   permanent type from your graveyard." (Muldrotha, the Gravetide): one once-each-turn
 //!   permission per permanent type (CR 110.4), each used up by the card played with it
@@ -148,13 +147,13 @@ fn may_cast_spells_from_among(l: &str, prev: &mut Effect, _b: &mut Builder) -> b
     true
 }
 
-/// "[A permission to play cards from a zone]. If you cast a spell this way, pay life equal
-/// to its mana value rather than pay its mana cost." (Bolas's Citadel), "... If you cast a
-/// spell this way, you may cast it as though it had flash." (Elsha of the Infinite).
-fn static_with_terms(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+/// "[A permission to play cards from a zone]. If you cast a spell this way, you may cast it
+/// as though it had flash." (Elsha of the Infinite). (The rider "If you cast a spell this
+/// way, pay life equal to its mana value rather than pay its mana cost." of such a
+/// permission is in `r601_play_from_top_paying_life.rs`.)
+fn static_with_flash(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let (first, second) = end(l).split_once(". ")?;
-    let flash = end(second) == "if you cast a spell this way, you may cast it as though it had flash";
-    if !flash && !is_pay_life_instead(second) {
+    if end(second) != "if you cast a spell this way, you may cast it as though it had flash" {
         return None;
     }
     let abilities = crate::oracle::statics::parse_static(first, ctx)?;
@@ -168,14 +167,10 @@ fn static_with_terms(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ab
     let StaticEffect::PlayPermission(p) = &mut s.effect else {
         return None;
     };
-    if !p.spells || p.cost.is_some() || p.flash || p.zone == ZoneKind::Hand {
+    if !p.spells || p.flash || p.zone == ZoneKind::Hand {
         return None;
     }
-    if flash {
-        p.flash = true;
-    } else {
-        p.cost = Some(life_equal_to_mana_value());
-    }
+    p.flash = true;
     Some(vec![AbilityDef::new(kind, text)])
 }
 
@@ -223,5 +218,5 @@ fn land_and_spell_of_each_permanent_type(
 inventory::submit! { FollowupPattern { name: "cast permission terms: if you cast a spell this way, pay life equal to its mana value rather than pay its mana cost", priority: 85, apply: pay_life_instead } }
 inventory::submit! { EffectPattern { name: "cast permission terms: each opponent exiles the top card of their library", priority: 90, parse: each_exiles_top } }
 inventory::submit! { FollowupPattern { name: "cast permission terms: you may cast spells from among those cards this turn", priority: 90, apply: may_cast_spells_from_among } }
-inventory::submit! { StaticPattern { name: "cast permission terms: play from a zone, paying life equal to its mana value or with flash", priority: 60, parse: static_with_terms } }
+inventory::submit! { StaticPattern { name: "cast permission terms: play from a zone, with flash", priority: 60, parse: static_with_flash } }
 inventory::submit! { StaticPattern { name: "cast permission terms: a land and a permanent spell of each permanent type from your graveyard", priority: 100, parse: land_and_spell_of_each_permanent_type } }

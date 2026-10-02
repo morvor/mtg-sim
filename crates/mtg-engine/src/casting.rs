@@ -97,6 +97,11 @@ pub fn grant_play_permission(
     }
 }
 
+/// The [`CastMethod::Alternative`] id of a spell cast for the cost a play permission
+/// requires ("If you cast a spell this way, pay life equal to its mana value rather than
+/// pay its mana cost."), not for an alternative cost of its own (see `permissions.rs`).
+pub const PERMISSION_COST: u64 = u64::MAX - 0x5045524d;
+
 /// The faces or halves a card could be cast with: either half of a split card
 /// (CR 709.3), the card or its Adventure (CR 715.3) or Omen (CR 720.3), either face of a
 /// modal double-faced card (CR 712.11b); a copy of such a card too (CR 709.3c). Faces
@@ -432,6 +437,7 @@ impl Game {
                 .rule_effects
                 .iter()
                 .any(|e| check(&e.restriction, e.source, e.controller))
+            || crate::kw::land_play_prohibited(self, p, card)
     }
 
     /// Characteristics of the face a card would be played with as a land.
@@ -1614,6 +1620,7 @@ impl Game {
             crate::designations::prepare_spell_cast(self, card, id);
             crate::designations::prepared_copy_left_exile(self, card);
         }
+        crate::next_spell::recheck_static_cast_grants(self, id);
         self.log(|g| format!("{p} casts {}", g.describe(id)));
         crate::structure::record_cast(self, id);
         self.emit(Event::SpellCast {
@@ -1738,6 +1745,8 @@ impl Game {
             crate::cost_rules::chosen_half(self, card, i, cur, s)
         });
         crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
+        // Changes applied after all others (e.g. a minimum total cost).
+        crate::kw::global_spell_cost(self, p, card, &mut cost);
         cost
     }
 
@@ -2596,6 +2605,7 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 crate::draw_rules::can_choose(self, e, &c)
+                    && crate::life_totals::cost_life_gain_possible(self, e, &c)
             }
             CostPart::PayManaCostOf(s) => {
                 crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
@@ -3018,6 +3028,12 @@ impl Game {
                 let mut c = ctx.clone();
                 c.controller = p;
                 self.exec(e, &mut c);
+                // CR 119.7: a cost that has a player who can't gain life gain life can't be
+                // paid — "have an opponent gain 3 life" with an opponent chosen as it's
+                // paid who can't.
+                if !crate::life_totals::cost_life_gain_possible(self, e, &c) {
+                    return bad("that player can't gain life");
+                }
             }
             CostPart::PayManaCostOf(s) => {
                 if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {

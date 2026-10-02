@@ -73,10 +73,6 @@ impl CastPermission {
     }
 }
 
-/// `CastMethod::Alternative` id of a spell cast for the alternative cost a permission
-/// requires ("pay life equal to its mana value rather than pay its mana cost").
-pub const PERMISSION_COST_METHOD: u64 = 0x601_0003_0118_009B;
-
 thread_local! {
     static OWN_ONLY: Cell<bool> = const { Cell::new(false) };
 }
@@ -335,7 +331,7 @@ fn with_permission(
             .map_or(0, |m| m.mana_value_with_x(0));
         o.alt_cost = Some(spell_relative_cost(c, mv));
         if face_way {
-            o.method = CastMethod::Alternative(PERMISSION_COST_METHOD);
+            o.method = CastMethod::Alternative(crate::casting::PERMISSION_COST);
         }
     }
     if perm.terms.flash {

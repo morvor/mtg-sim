@@ -141,6 +141,11 @@ impl Game {
                 .filter(|i| self.targets_possible(&modal.modes[*i].targets, ctx, id))
                 .filter(|i| crate::modal_history::may_choose(self, id, &modal.chooser, *i))
                 .collect();
+            // No mode can be chosen: nobody is asked; the spell can't be cast and a
+            // triggered ability is removed from the stack (CR 700.2a, 700.2b).
+            if available.is_empty() && min > 0 {
+                return false;
+            }
             let picks: Vec<usize> = if modal.chooser == ModeChooser::Random {
                 // A mode that can't be chosen (no legal targets) can't be chosen at random.
                 if available.is_empty() {
@@ -410,6 +415,7 @@ impl Game {
                     _ => false,
                 };
                 ok && !self.player_untargetable(p, ctx.controller, source_obj)
+                    && !crate::kw::target_forbidden(self, spec, e, source_obj)
             }
             Entity::Object(o) => {
                 if !self.is_live(o) {
@@ -445,6 +451,7 @@ impl Game {
                     TargetKind::Player(_) => false,
                 };
                 ok && !self.object_untargetable(o, ctx.controller, source_obj)
+                    && !crate::kw::target_forbidden(self, spec, e, source_obj)
             }
         }
     }
@@ -1147,7 +1154,8 @@ impl Game {
             }
             if let Some(dest) = crate::kw::permanent_resolved_destination(self, id) {
                 // A keyword puts the resolving permanent spell somewhere else instead
-                // (e.g. rebound on a creature spell, CR 702.88a).
+                // (e.g. rebound on a creature spell, CR 702.88a; buyback on
+                // a permanent spell, which goes to its owner's hand, CR 702.27a).
                 let moved = self.move_object_ev(MoveEv {
                     obj: id,
                     to: dest.0,

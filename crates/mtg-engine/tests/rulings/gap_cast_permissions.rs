@@ -13,13 +13,13 @@ use mtg_engine::decision::{Action, Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::*;
-use mtg_engine::permissions::PERMISSION_COST_METHOD;
+use mtg_engine::casting::PERMISSION_COST;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 const FORETELL: CastMethod = CastMethod::Keyword(KeywordKind::Foretell);
-const PAY_LIFE: CastMethod = CastMethod::Alternative(PERMISSION_COST_METHOD);
+const PAY_LIFE: CastMethod = CastMethod::Alternative(PERMISSION_COST);
 
 /// Whether `p` may play `card` as a land now.
 fn can_play_land(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
