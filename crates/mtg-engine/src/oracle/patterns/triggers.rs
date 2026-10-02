@@ -1339,8 +1339,9 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
     };
     // "dies or is put into exile" (Kaya's Ghostform): either zone change from the
     // battlefield (CR 603.1b, 603.6c).
+    // ("... from the battlefield" is the God-Eternals' own pattern.)
     for p in ["dies or is put into exile", "die or are put into exile"] {
-        if let Some(r) = starts(p) {
+        if let Some(r) = starts(p).filter(|r| !r.trim_start().starts_with("from")) {
             return zone_change(
                 TriggerCond::AnyOf(vec![
                     TriggerCond::Dies(f.clone()),
