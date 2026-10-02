@@ -735,3 +735,160 @@ fn the_exiled_found_cards_may_be_cast_this_turn() {
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn doomsday_keeps_five_cards_and_exiles_the_rest() {
+    cr!("701.23a", "701.23d", "401.4");
+    ruling!("Doomsday", "you must choose five cards from among them");
+    assert_supported("Doomsday");
+    let mut t = TestGame::new(2);
+    t.g.players[0].library.clear();
+    t.lands(P0, "Swamp", 3);
+    let a = t.library_top(P0, "Lightning Bolt");
+    let b = t.library_top(P0, "Grizzly Bears");
+    let c = t.library_top(P0, "Shock");
+    let d = t.graveyard(P0, "Savannah Lions");
+    let e = t.graveyard(P0, "Island");
+    let left = t.graveyard(P0, "Forest");
+    let spell = t.hand(P0, "Doomsday");
+    t.answer_choose(P0, &objs(&[a, b, c, d, e]));
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    // Every card of the library and graveyard was offered.
+    let offered = choice_candidates(&t, 0);
+    for o in [a, b, c, d, e, left] {
+        assert!(offered.contains(&Entity::Object(o)), "{o:?} not offered");
+    }
+    assert!(t.in_exile("Forest"));
+    let lib: Vec<String> = t
+        .g
+        .player(P0)
+        .library
+        .iter()
+        .map(|o| t.g.obj(*o).chars.name.to_string())
+        .collect();
+    assert_eq!(lib.len(), 5, "{lib:?}");
+    for n in ["Lightning Bolt", "Grizzly Bears", "Shock", "Savannah Lions", "Island"] {
+        assert!(lib.iter().any(|x| x == n), "{n} not in {lib:?}");
+    }
+    // The cards already in the library stayed the same objects (no zone change).
+    for o in [a, b, c] {
+        assert_eq!(t.zone(o), Zone::Library(P0));
+    }
+    assert!(t.asked().iter().any(|(_, d)| matches!(d, Decision::Order { .. })));
+    assert_eq!(shuffles(&t, P0), 0);
+    assert_eq!(t.life(P0), 10);
+    // Spells left the graveyard: the graveyard holds only Doomsday itself.
+    assert_eq!(t.g.player(P0).graveyard.len(), 1);
+}
+
+#[test]
+fn doomsday_with_fewer_than_five_cards_keeps_them_all_in_the_chosen_order() {
+    cr!("701.23d", "401.4");
+    ruling!("Doomsday", "all of those cards will wind up in your library");
+    let mut t = TestGame::new(2);
+    t.g.players[0].library.clear();
+    t.lands(P0, "Swamp", 3);
+    let a = t.library_top(P0, "Lightning Bolt");
+    let d = t.graveyard(P0, "Savannah Lions");
+    let spell = t.hand(P0, "Doomsday");
+    t.answer_choose(P0, &objs(&[a, d]));
+    // The second listed card (the Lions, now in the library) goes on top.
+    t.answer(P0, DecisionKind::Order, Answer::Indices(vec![1, 0]));
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let lib = &t.g.player(P0).library;
+    assert_eq!(lib.len(), 2);
+    assert_eq!(t.g.obj(lib[1]).chars.name, "Savannah Lions");
+    assert_eq!(lib[0], a);
+}
+
+#[test]
+fn x_is_the_number_of_players_with_at_least_two_more_lands() {
+    cr!("701.23a", "107.3c");
+    ruling!("Surveyor's Scope", "You count the number of players who control at least two more lands than you when the ability resolves.");
+    ruling!("Surveyor's Scope", "you'll still search and shuffle your library");
+    assert_supported("Surveyor's Scope");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Plains", 1);
+    t.lands(P1, "Plains", 3); // two more: counts
+    t.lands(P2, "Plains", 2); // one more: doesn't
+    let scope = t.battlefield(P0, "Surveyor's Scope");
+    let f1 = t.library_top(P0, "Forest");
+    let f2 = t.library_top(P0, "Forest");
+    t.answer_choose(P0, &objs(&[f1]));
+    t.activate(P0, scope, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(f2), Zone::Library(P0)); // shuffled, still in the library
+    let forests = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.g.obj(**o).chars.name == "Forest")
+        .count();
+    assert_eq!(forests, 1);
+    assert_eq!(shuffles(&t, P0), 1);
+
+    // Nobody has two more lands: nothing is found, but the library is still shuffled.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 1);
+    t.lands(P1, "Plains", 2);
+    let scope = t.battlefield(P0, "Surveyor's Scope");
+    t.library_top(P0, "Forest");
+    t.activate(P0, scope, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(!t.g.battlefield.iter().any(|o| t.g.obj(*o).chars.name == "Forest"));
+    assert_eq!(shuffles(&t, P0), 1);
+}
+
+#[test]
+fn a_search_if_you_ve_cast_spells_with_both_names_this_turn() {
+    cr!("701.23a", "201.2");
+    assert_supported("Sift Through Sands");
+    // Both named spells cast this turn: The Unspeakable can be found.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 6);
+    let target = t.library_top(P0, "The Unspeakable");
+    for _ in 0..8 {
+        t.library_top(P0, "Island");
+    }
+    let reach = t.hand(P0, "Reach Through Mists");
+    t.cast(P0, reach).go();
+    t.resolve_all();
+    let peer = t.hand(P0, "Peer Through Depths");
+    t.cast(P0, peer).go();
+    t.resolve_all();
+    // Peer Through Depths may have put The Unspeakable back on the bottom: it's still in
+    // the library either way.
+    let target = t.g.current(target);
+    assert_eq!(t.zone(target), Zone::Library(P0));
+    let sift = t.hand(P0, "Sift Through Sands");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &objs(&[target]));
+    t.cast(P0, sift).go();
+    t.resolve_all();
+    assert!(t
+        .g
+        .battlefield
+        .iter()
+        .any(|o| t.g.obj(*o).chars.name == "The Unspeakable"));
+
+    // Only one of them: no search.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 4);
+    let target = t.library_top(P0, "The Unspeakable");
+    let reach = t.hand(P0, "Reach Through Mists");
+    t.cast(P0, reach).go();
+    t.resolve_all();
+    let sift = t.hand(P0, "Sift Through Sands");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &objs(&[target]));
+    t.cast(P0, sift).go();
+    t.resolve_all();
+    assert!(!t
+        .g
+        .battlefield
+        .iter()
+        .any(|o| t.g.obj(*o).chars.name == "The Unspeakable"));
+    assert!(!searched(&t, P0));
+}

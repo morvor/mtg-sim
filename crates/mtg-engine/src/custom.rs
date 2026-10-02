@@ -594,6 +594,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) {
     if crate::commander_rules::custom_effect(g, name, ctx) {
         return;
     }
+    // Putting the cards a search found on top of a library in any order (CR 701.23).
+    if crate::search_rules::custom_effect(g, name, ctx) {
+        return;
+    }
     // Locking and unlocking doors of Rooms (CR 709.5f, 709.5g).
     if crate::rooms::custom_effect(g, name, ctx) {
         return;

@@ -921,6 +921,24 @@ pub(crate) fn player_clause(p: &str) -> Option<PlayerFilter> {
                 ));
             }
         }
+        // "controls at least two more lands than you".
+        if let Some(x) = r
+            .strip_prefix("at least ")
+            .and_then(|x| x.strip_suffix(" than you"))
+        {
+            let (n, x) = parse_number(x)?;
+            n.as_const()?;
+            let x = x.trim_start().strip_prefix("more ")?;
+            let (f, _, tail) = parse_object_phrase(x)?;
+            if !tail.trim().is_empty() {
+                return None;
+            }
+            return Some(PlayerFilter::Controls(
+                Box::new(f.clone()),
+                Cmp::Ge,
+                Box::new(Value::Sum(vec![Value::Count(f.you_control()), n])),
+            ));
+        }
         // "controls a creature with power 4 or greater".
         if let Some(x) = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")) {
             let (f, _, tail) = super::statics::object_phrase(x)?;

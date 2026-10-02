@@ -125,6 +125,10 @@ pub fn possible(g: &Game, spec: &SearchSpec, ctx: &Ctx) -> bool {
 /// exiled from their hand this way").
 pub const FROM_HAND: Var = vars::USER + 7023;
 
+/// The cards a search found, kept for instructions after others that change "it"
+/// ("Search ... for five cards and exile the rest. Put the chosen cards on top ...").
+pub const FOUND: Var = vars::USER + 7024;
+
 /// What one searcher found.
 struct Found {
     searcher: PlayerId,
@@ -504,4 +508,46 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<b
         ),
         _ => None,
     }
+}
+
+/// `Effect::Custom`: "Put the chosen cards on top of your library in any order."
+/// (Doomsday): the cards the search found ([`FOUND`]) go on top of their owners'
+/// libraries in the order each owner chooses (CR 401.4). Cards already in that library
+/// are rearranged, not moved (it isn't a zone change, CR 400.7).
+pub const FOUND_ON_TOP_ANY_ORDER: &str = "search: put the found cards on top in any order";
+
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+    if name != FOUND_ON_TOP_ANY_ORDER {
+        return false;
+    }
+    let objs: Vec<ObjectId> = g
+        .resolve_objects(&Sel::Var(FOUND), ctx)
+        .into_iter()
+        .filter(|o| g.is_live(*o))
+        .collect();
+    let (in_library, elsewhere): (Vec<ObjectId>, Vec<ObjectId>) = objs
+        .into_iter()
+        .partition(|o| g.obj(*o).zone == Zone::Library(g.obj(*o).owner));
+    let moved = g.move_to_destination(elsewhere, &Destination::library_top(), ctx);
+    let all: Vec<ObjectId> = in_library.into_iter().chain(moved).collect();
+    let mut owners: Vec<PlayerId> = all.iter().map(|o| g.obj(*o).owner).collect();
+    owners.dedup();
+    owners.sort_unstable_by_key(|p| p.idx());
+    owners.dedup();
+    for owner in owners {
+        let cards: Vec<ObjectId> = all
+            .iter()
+            .copied()
+            .filter(|o| g.obj(*o).owner == owner && g.player(owner).library.contains(o))
+            .collect();
+        let names = cards
+            .iter()
+            .map(|c| g.obj(*c).chars.name.to_string())
+            .collect();
+        let order = g.ask_order(owner, "Order the cards (first on top)", names);
+        let ordered: Vec<ObjectId> = order.into_iter().map(|i| cards[i]).collect();
+        crate::library::put_on_top(g, owner, &ordered);
+    }
+    ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
+    true
 }

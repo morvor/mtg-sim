@@ -53,6 +53,38 @@ inventory::submit! {
     ConditionPattern { name: "search grammar: you control a land named Wastes", priority: 100, parse: control_named }
 }
 
+inventory::submit! {
+    ConditionPattern { name: "search grammar: you've cast a spell named X and a spell named Y this turn", priority: 100, parse: cast_named_this_turn }
+}
+
+/// "you've cast a spell named Peer Through Depths and a spell named Reach Through Mists
+/// this turn" (Sift Through Sands): each named spell was cast by you this turn (copies
+/// weren't cast, CR 707.10).
+fn cast_named_this_turn(c: &str) -> Option<Condition> {
+    let r = c
+        .strip_prefix("you've cast a spell named ")?
+        .strip_suffix(" this turn")?;
+    let names: Vec<String> = r
+        .split(" and a spell named ")
+        .map(printed_name)
+        .collect::<Option<_>>()?;
+    let conds: Vec<Condition> = names
+        .into_iter()
+        .map(|n| {
+            Condition::Compare(
+                Value::SpellsCastThisTurn(PlayerRef::You, Filter::Named(n.into())),
+                Cmp::Ge,
+                Value::c(1),
+            )
+        })
+        .collect();
+    Some(if conds.len() == 1 {
+        conds.into_iter().next().expect("one")
+    } else {
+        Condition::And(conds)
+    })
+}
+
 /// "you control a land named Wastes" (CR 201.2).
 fn control_named(c: &str) -> Option<Condition> {
     let r = c
@@ -301,11 +333,26 @@ fn excludes_lands(f: &Filter) -> bool {
 /// hand", "put that card on top of your library" (the cards a search found, which "it"
 /// names; a conditional destination is a separate instruction).
 fn put_found(l: &str, b: &mut Builder) -> Option<Effect> {
-    if !matches!(b.it, Sel::Var(vars::IT)) {
+    let l = end(l);
+    let p = l.strip_prefix("put ")?;
+    // After "Search ... and exile the rest.", only "the chosen cards" follow.
+    let found = matches!(b.it, Sel::Var(crate::search_rules::FOUND));
+    if !matches!(b.it, Sel::Var(vars::IT)) && !found {
         return None;
     }
-    let l = end(l);
-    let r = pronoun(l.strip_prefix("put ")?)?.trim_start();
+    // "Put the chosen cards on top of your library in any order." (Doomsday: the cards
+    // the search found; their owner orders them, CR 401.4). Only right after a search that
+    // left the found cards where they were.
+    if let Some(r) = p.strip_prefix("the chosen cards ") {
+        if found && r == "on top of your library in any order" {
+            return Some(Effect::Custom(crate::search_rules::FOUND_ON_TOP_ANY_ORDER.into()));
+        }
+        return None;
+    }
+    if found {
+        return None;
+    }
+    let r = pronoun(p)?.trim_start();
     let you = Searcher {
         who: PlayerRef::You,
         their: PlayerRef::You,
@@ -689,6 +736,24 @@ fn qualifier(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
             Filter::Power(c, Box::new(n.clone())),
             Filter::Toughness(c, Box::new(n)),
         ]);
+        return Some((f, r.to_string()));
+    }
+    // "land cards that each have a basic land type" (Slimefoot's Survey): any card with
+    // one of the five basic land types, basic or not.
+    if let Some(r) = [
+        "that each have a basic land type",
+        "that have a basic land type",
+        "that has a basic land type",
+    ]
+    .iter()
+    .find_map(|p| s.strip_prefix(p))
+    {
+        let f = Filter::Or(
+            ["Plains", "Island", "Swamp", "Mountain", "Forest"]
+                .iter()
+                .map(|n| Filter::Subtype((*n).into()))
+                .collect(),
+        );
         return Some((f, r.to_string()));
     }
     if let Some(r) = s.strip_prefix("with a mana ability") {
@@ -1278,6 +1343,56 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
         dests: vec![],
         shuffle: SearchShuffle::No,
     };
+    // "Search your library and graveyard for five cards and exile the rest." (Doomsday):
+    // the found cards stay where they are; every other card in the searched zones is
+    // exiled.
+    if let Some(x) = [" and exile the rest", ", then exile the rest", ", exile the rest"]
+        .iter()
+        .find_map(|p| t.strip_prefix(p))
+    {
+        if !x.trim().is_empty()
+            || sr.third
+            || sr.optional
+            || spec.zones_optional
+            || !matches!(spec.whose, PlayerRef::You)
+            || x_value.is_some()
+            || that_player_shuffles
+        {
+            return None;
+        }
+        let rest: Vec<Sel> = spec
+            .zones
+            .iter()
+            .map(|z| {
+                Sel::All(Filter::and(vec![
+                    Filter::InZone(*z),
+                    Filter::OwnedBy(PlayerRel::You),
+                    Filter::Not(Box::new(Filter::In(Box::new(Sel::Var(
+                        crate::search_rules::FOUND,
+                    ))))),
+                ]))
+            })
+            .collect();
+        let exile = Effect::Exile {
+            what: if rest.len() == 1 {
+                rest.into_iter().next().expect("one zone")
+            } else {
+                Sel::Union(rest)
+            },
+            face_down: false,
+            link: false,
+        };
+        // "The chosen cards" are the found ones, after the exile changed "it".
+        b.it = Sel::Var(crate::search_rules::FOUND);
+        return Some(Effect::seq(vec![
+            Effect::SearchCards(Box::new(spec)),
+            Effect::Store {
+                var: crate::search_rules::FOUND,
+                sel: Sel::Var(vars::IT),
+            },
+            exile,
+        ]));
+    }
     let leftover = tail_inner(t, &mut spec, &sr, b)?.to_string();
     // "..., put that card into your hand, discard a card at random, then shuffle": an
     // instruction between putting the cards somewhere and shuffling.
@@ -1672,6 +1787,45 @@ mod tests {
         .is_none());
     }
 
+    #[test]
+    fn cards_that_each_have_a_basic_land_type() {
+        // Slimefoot's Survey: nonbasic lands with a basic land type are found too.
+        let e = compiled(
+            "Search your library for up to two land cards that each have a basic land type, put them onto the battlefield tapped, then shuffle.",
+        )
+        .expect("qualifier");
+        assert!(
+            e.contains("Or([Subtype(\"Plains\"), Subtype(\"Island\"), Subtype(\"Swamp\"), Subtype(\"Mountain\"), Subtype(\"Forest\")])"),
+            "{e}"
+        );
+        assert!(!e.contains("Basic"), "{e}");
+        let e = compiled(
+            "Search your library for a land card that has a basic land type, reveal it, put it into your hand, then shuffle.",
+        )
+        .expect("singular");
+        assert!(e.contains("Subtype(\"Forest\")"), "{e}");
+    }
+
+    #[test]
+    fn exile_the_rest_and_put_the_chosen_cards_on_top() {
+        let e = compiled(
+            "Search your library and graveyard for five cards and exile the rest. Put the chosen cards on top of your library in any order.",
+        )
+        .expect("doomsday");
+        assert!(e.contains("dests: [], shuffle: No"), "{e}");
+        assert!(e.contains("Store"), "{e}");
+        assert!(e.contains(crate::search_rules::FOUND_ON_TOP_ANY_ORDER), "{e}");
+        // Not after a search that chooses its zones, or another player's.
+        assert!(compiled(
+            "Search your library and/or graveyard for five cards and exile the rest."
+        )
+        .is_none());
+        assert!(compiled(
+            "Search target player's library and graveyard for five cards and exile the rest."
+        )
+        .is_none());
+    }
+
     fn show(name: &str) -> String {
         let d = CardDb::global().get(name).expect("card");
         format!("{:?} {:?}", d.unsupported_text(), d.faces[0].chars.abilities)
@@ -1682,5 +1836,18 @@ mod tests {
         let s = show("Liliana's Influence");
         assert!(s.contains("Liliana, Death Wielder"), "{s}");
         assert!(s.starts_with("[]"), "{s}");
+    }
+}
+#[cfg(test)]
+mod probe_tmp {
+    #[test]
+    fn probe_tmp() {
+        let Ok(p) = std::env::var("PROBE") else { return };
+        for t in std::fs::read_to_string(p).unwrap().lines() {
+            let tl = crate::types::TypeLine::parse("Sorcery");
+            let ctx = crate::oracle::CompileContext { card_name: "Testcard", full_name: "Testcard", type_line: &tl, layout: crate::card::Layout::Normal, face_index: 0, keywords: &[], power: None, toughness: None };
+            let c = crate::oracle::compile(t, &ctx);
+            eprintln!("== {t}\n  unsupported: {:?}\n  {:?}", c.unsupported, c.abilities);
+        }
     }
 }
