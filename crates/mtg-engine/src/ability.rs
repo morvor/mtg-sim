@@ -2607,6 +2607,11 @@ pub enum TriggerCond {
     CountersPut {
         filter: Filter,
         kind: Option<CounterKind>,
+        /// "Whenever a [kind] counter is put on …": triggers once for each counter put
+        /// (Fathom Mage's and Flourishing Defenses's rulings), rather than once for each
+        /// put action ("one or more [kind] counters are put on …").
+        #[serde(default)]
+        each: bool,
     },
     CountersRemoved {
         filter: Filter,
@@ -3554,6 +3559,9 @@ pub enum Effect {
 pub enum UntilEvent {
     /// "until [this object] leaves the battlefield".
     SourceLeavesBattlefield,
+    /// "until an opponent becomes the monarch" (an opponent of the effect's controller,
+    /// CR 725): it ends when one does, not merely because an opponent is the monarch.
+    OpponentBecomesMonarch,
 }
 
 impl Effect {

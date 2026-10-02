@@ -557,6 +557,15 @@ pub fn parse_value_phrase_core(s: &str, b: &mut Builder) -> Option<(Value, Strin
         let (v, rest) = parse_value_phrase(&format!("the number of {r}"), b)?;
         return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
     }
+    // Skemfar Shadowsage.
+    if let Some(rest) = s.strip_prefix(
+        "the greatest number of creatures you control that have a creature type in common",
+    ) {
+        return Some((
+            Value::Custom("greatest_creatures_you_control_sharing_a_type".into()),
+            rest.to_string(),
+        ));
+    }
     // CR 702.167c: "the total power of the exiled cards used to craft it".
     if let Some(v) = crate::oracle::patterns::craft::used_to_craft_value(s) {
         return Some(v);

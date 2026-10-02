@@ -443,6 +443,7 @@ fn counters_an_object_enters_with_are_counters_put_on_it() {
             TriggerCond::CountersPut {
                 filter: Filter::creature().you_control(),
                 kind: Some(counters::PLUS1.into()),
+                each: false,
             },
             Body::effect(gain(1)),
         ))

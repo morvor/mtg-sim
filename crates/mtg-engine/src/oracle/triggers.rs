@@ -636,6 +636,7 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             TriggerCond::CountersPut {
                 filter: Filter::Source,
                 kind: Some(crate::types::counters::PLUS1.into()),
+                each: r.starts_with("a "),
             },
             Sel::This,
             PlayerRef::You,

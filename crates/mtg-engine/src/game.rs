@@ -355,6 +355,10 @@ pub struct DelayedTrigger {
     pub created_turn: u32,
     /// For "at the beginning of the next end step": don't fire in the step it was created in.
     pub created_step: Option<crate::turn::Step>,
+    /// How many steps had begun this turn when it was created: an additional step of the
+    /// same kind that begins later (CR 500.8) is "the next" one.
+    #[serde(default)]
+    pub created_steps: usize,
     /// A delayed trigger that can trigger more than once lasts "for the rest of the game"
     /// rather than for the turn (e.g. epic, CR 702.50a).
     #[serde(default)]
@@ -1078,6 +1082,7 @@ impl Game {
             self.recompute();
         }
         self.actions_taken += 1;
+        self.note_forced_decision(&decision);
         // CR 800.4g, 800.4h: another player makes a choice a player who left would make.
         let player = crate::multiplayer::substitute_chooser(self, player, &decision);
         // CR 723.5: the decisions of a player controlled by another player are made by

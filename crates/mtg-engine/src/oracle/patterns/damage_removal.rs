@@ -743,11 +743,16 @@ fn p_pair(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "damage_removal: destroy/exile pair", priority: 50, parse: p_pair } }
 
-/// "exile target nonland permanent an opponent controls until ~ leaves the battlefield"
-/// (CR 610.3).
+/// "exile target nonland permanent an opponent controls until ~ leaves the battlefield",
+/// "... until an opponent becomes the monarch" (CR 610.3).
 fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("exile ")?;
-    let r = r.strip_suffix(" until ~ leaves the battlefield")?;
+    let (r, until) = if let Some(r) = r.strip_suffix(" until ~ leaves the battlefield") {
+        (r, UntilEvent::SourceLeavesBattlefield)
+    } else {
+        let r = r.strip_suffix(" until an opponent becomes the monarch")?;
+        (r, UntilEvent::OpponentBecomesMonarch)
+    };
     let (what, tail) = object_ref(r, b)?;
     if !end(&tail).is_empty() {
         return None;
@@ -764,10 +769,7 @@ fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
     if !on_battlefield {
         return None;
     }
-    Some(Effect::ExileUntil {
-        what,
-        until: UntilEvent::SourceLeavesBattlefield,
-    })
+    Some(Effect::ExileUntil { what, until })
 }
 
 inventory::submit! { EffectPattern { name: "damage_removal: exile until", priority: 50, parse: p_exile_until } }
@@ -1154,6 +1156,19 @@ fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
         if let Some(x) = r.strip_prefix("tapped") {
             d.tapped = true;
             r = x.trim_start();
+        } else if let Some(x) = r.strip_prefix("face down") {
+            // "return it to the battlefield face down" (Shorecrasher Elemental): a 2/2
+            // face-down creature that can be turned face up for its morph cost (CR 708.2).
+            d.face_down = true;
+            r = x.trim_start();
+        } else if let Some(x) = r
+            .strip_prefix("and attacking")
+            .or_else(|| r.strip_prefix("attacking"))
+        {
+            // "tapped and attacking" (The Neutrinos): attacking, never declared as an
+            // attacker (CR 506.3, 508.4).
+            d.attacking = true;
+            r = x.trim_start();
         } else if let Some(x) = r
             .strip_prefix("transformed")
             // CR 712.14a: "converted" also means with its back face up.
@@ -1192,7 +1207,8 @@ fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
 
 /// "[Exile X], then return it to the battlefield under its owner's control" and "Return
 /// that card to the battlefield under its owner's control at the beginning of the next
-/// end step" after an exile: the returned object is the card in exile — a new object
+/// end step" (or "At the beginning of the next end step, return that card ...") after an
+/// exile: the returned object is the card in exile — a new object
 /// (CR 400.7), not the original target. Also "You may exile ~. If you do, return it to
 /// the battlefield under its owner's control." (Estrid's Invocation).
 fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
@@ -1201,17 +1217,25 @@ fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         None => (l, false),
     };
     let what = match (last_effect(prev), if_you_do) {
-        (Effect::Exile { what, .. }, false) => what.clone(),
+        // "Exile up to one target creature ... If you do, return it ..." (Roll-Roll-Roll-
+        // Roll): only if something was exiled.
+        (Effect::Exile { what, .. }, _) => what.clone(),
         (Effect::May { effect, .. }, true) => match &**effect {
             Effect::Exile { what, .. } => what.clone(),
             _ => return false,
         },
         _ => return false,
     };
+    // "At the beginning of the next end step, return that card ..." (Long Road Home).
+    let (l, leading_step) = match l.strip_prefix("at the beginning of the next end step, ") {
+        Some(r) => (r, true),
+        None => (l, false),
+    };
     let Some(r) = l.strip_prefix("return ") else {
         return false;
     };
     let mut pronoun_it = false;
+    let mut plural = false;
     let mut rest = None;
     for p in [
         "it ",
@@ -1224,6 +1248,7 @@ fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     ] {
         if let Some(x) = r.strip_prefix(p) {
             pronoun_it = p == "it ";
+            plural = matches!(p, "them " | "those cards ");
             rest = Some(x);
             break;
         }
@@ -1232,13 +1257,17 @@ fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     // The pronoun must name what was just exiled.
-    let same =
-        format!("{:?}", b.it) == format!("{what:?}") || (pronoun_it && matches!(what, Sel::This));
+    // "Exile all creatures. ... return those cards ..." (Planar Guide): every card the
+    // exile moved.
+    let same = format!("{:?}", b.it) == format!("{what:?}")
+        || (pronoun_it && matches!(what, Sel::This))
+        || (plural && matches!(what, Sel::All(_)));
     if !same {
         return false;
     }
     let (dest_s, step) = match rest.strip_suffix(" at the beginning of the next end step") {
         Some(x) => (x, Some(TriggerStep::End)),
+        None if leading_step => (rest, Some(TriggerStep::End)),
         None => (rest, None),
     };
     let effects = match step {
@@ -1290,3 +1319,52 @@ fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "damage_removal: return exiled", priority: 40, apply: f_return_exiled } }
+
+/// "Exile up to one other target creature. At the beginning of the next end step, you may
+/// pay {3}{B}. If you don't, return that card to the battlefield under its owner's
+/// control." (Koya, Death from Above): the return is what the delayed ability does if the
+/// cost isn't paid (CR 603.7, 118.12), and "that card" is the card in exile, a new object
+/// (CR 400.7) remembered when the delayed ability is created.
+fn f_unpaid_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = l.strip_prefix("if you don't, return ") else {
+        return false;
+    };
+    let Some(dest_s) = ["that card ", "it "].iter().find_map(|p| r.strip_prefix(p)) else {
+        return false;
+    };
+    // "That card" is the target the first sentence exiled: the exile left it in the
+    // ability's "it" variable when the delayed ability was created.
+    if !matches!(b.it, Sel::Target(_)) {
+        return false;
+    }
+    let Effect::DelayedTrigger { body, .. } = &mut *prev else {
+        return false;
+    };
+    let Effect::PayOptional {
+        then, otherwise, ..
+    } = &mut body.effect
+    else {
+        return false;
+    };
+    if !matches!(**then, Effect::Noop) || !matches!(**otherwise, Effect::Noop) {
+        return false;
+    }
+    let Some(dest) = battlefield_destination(dest_s, Sel::Var(DELAYED)) else {
+        return false;
+    };
+    **otherwise = Effect::Move {
+        what: Sel::Var(DELAYED),
+        to: dest,
+    };
+    let delayed = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        Effect::Store {
+            var: DELAYED,
+            sel: Sel::Var(vars::IT),
+        },
+        delayed,
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "damage_removal: unless paid, return exiled", priority: 40, apply: f_unpaid_return_exiled } }
