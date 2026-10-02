@@ -273,3 +273,99 @@ fn summer_bloom_plays_up_to_three_additional_lands() {
     }
     assert!(t.play_land(P0, lands[4]).is_err());
 }
+
+/// Chooses as many cards with the name as it may (up to the maximum) when choosing among
+/// objects; the script answers the other decisions.
+struct ChooseNamed {
+    name: &'static str,
+    other: ScriptedAgent,
+}
+
+impl decision::Agent for ChooseNamed {
+    fn decide(&mut self, g: &game::Game, p: PlayerId, d: &decision::Decision) -> decision::Answer {
+        if let decision::Decision::ChooseEntities {
+            candidates, max, ..
+        } = d
+        {
+            // Logged as asked (nothing is queued for it).
+            let _ = self.other.decide(g, p, d);
+            let named: Vec<Entity> = candidates
+                .iter()
+                .copied()
+                .filter(|e| {
+                    e.object()
+                        .is_some_and(|o| g.obj(o).chars.name.as_str() == self.name)
+                })
+                .take(*max as usize)
+                .collect();
+            return decision::Answer::Entities(named);
+        }
+        self.other.decide(g, p, d)
+    }
+}
+
+#[test]
+fn collected_conjuring_casts_up_to_two_sorceries_and_puts_the_others_on_the_bottom() {
+    cr!("608.2g", "118.9");
+    ruling!(
+        "Collected Conjuring",
+        "You must cast any of the exiled cards you wish to cast while Collected Conjuring is resolving."
+    );
+    ruling!(
+        "Collected Conjuring",
+        "Each individual spell you cast this way must have mana value 3 or less."
+    );
+    assert_supported("Collected Conjuring");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Mountain", 2);
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let overrun = t.library_top(P0, "Overrun");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    let mountain = t.library_top(P0, "Mountain");
+    let spikes: Vec<ObjectId> = (0..3).map(|_| t.library_top(P0, "Lava Spike")).collect();
+    let conjuring = t.hand(P0, "Collected Conjuring");
+    // Choose as many Lava Spikes as allowed among the exiled cards (new objects).
+    t.g.agents.0.lock().unwrap()[P0.idx()] = Box::new(ChooseNamed {
+        name: "Lava Spike",
+        other: ScriptedAgent {
+            player: P0,
+            script: t.script.clone(),
+        },
+    });
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, conjuring).go();
+    t.resolve_all();
+    // Two of them, cast for free.
+    assert_eq!(t.life(P1), 14, "{}", t.dump_log());
+    // Chosen among the sorcery cards with mana value 3 or less: not Overrun (5).
+    let candidates = t
+        .asked()
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            decision::Decision::ChooseEntities { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .expect("a choice among the exiled cards");
+    assert_eq!(candidates.len(), 3);
+    for e in candidates {
+        let o = e.object().unwrap();
+        assert_eq!(t.g.obj(o).chars.name.as_str(), "Lava Spike");
+    }
+    // The others went to the bottom: none can be cast later.
+    for c in [overrun, bears, mountain] {
+        assert_eq!(t.zone(t.g.current(c)), Zone::Library(P0));
+    }
+    let zones: Vec<Zone> = spikes.iter().map(|c| t.zone(t.g.current(*c))).collect();
+    assert_eq!(
+        zones.iter().filter(|z| **z == Zone::Graveyard(P0)).count(),
+        2
+    );
+    assert_eq!(zones.iter().filter(|z| **z == Zone::Library(P0)).count(), 1);
+    assert!(!t.in_exile("Lava Spike"));
+    let top = t.g.library_top(P0).unwrap();
+    assert_eq!(t.g.obj(top).chars.name.as_str(), "Island");
+}

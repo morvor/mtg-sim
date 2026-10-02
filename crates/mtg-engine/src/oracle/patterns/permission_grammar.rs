@@ -108,6 +108,9 @@ pub struct Perm {
     /// The cards are named "the exiled card(s)" (in a static ability, the cards exiled
     /// with the source, CR 607.2a).
     pub exiled_named: bool,
+    /// "up to two sorcery spells": how many cards of the class (cast as the effect
+    /// resolves).
+    pub count: Option<u32>,
 }
 
 impl Perm {
@@ -807,7 +810,18 @@ pub fn parse(l: &str) -> Option<Perm> {
         p.from = Some(From::Linked { owned });
         rest = x;
     } else if p.spells && !p.lands {
+        // "up to two sorcery spells with mana value 3 or less from among them".
+        let r = match r.strip_prefix("up to ").and_then(parse_number) {
+            Some((n, x)) => {
+                p.count = Some(n.as_const()? as u32);
+                x.trim_start()
+            }
+            None => r,
+        };
         let (f, single, x) = class_phrase(r)?;
+        if single && p.count.is_some() {
+            return None;
+        }
         p.obj = Obj::Class {
             what: Filter::and(vec![Filter::Not(Box::new(Filter::Type(CardType::Land))), f]),
             single,
@@ -993,7 +1007,10 @@ fn mentions_x<T: serde::Serialize>(t: &T) -> bool {
 pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Option<Effect> {
     // A second zone is a static permission's; "any number of" is chosen as the effect
     // resolves.
-    if p.once_each_turn || p.also_from.is_some() || (p.any_number && p.duration.is_some()) {
+    if p.once_each_turn
+        || p.also_from.is_some()
+        || ((p.any_number || p.count.is_some()) && p.duration.is_some())
+    {
         return None;
     }
     let it = Sel::Var(vars::IT);
@@ -1045,7 +1062,7 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
         }
         Obj::Class { what, single } if p.from == Some(From::AmongReferent) => {
             let zone = zone?;
-            let limit = if *single { Some(1) } else { None };
+            let limit = if *single { Some(1) } else { p.count };
             referent_effect(p, who, it, zone, limit, Some(what.clone()), terms)
         }
         Obj::Class { what, single } => {
@@ -1151,7 +1168,11 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
         what: Sel::Choose {
             chooser: PlayerRef::You,
             filter: Filter::and(vec![zone, what]),
-            count: Value::c(if single { 1 } else { 99 }),
+            count: Value::c(if single {
+                1
+            } else {
+                p.count.unwrap_or(99) as i32
+            }),
             up_to: true,
             store: None,
         },
@@ -1345,7 +1366,7 @@ fn class_permission_from(
 
 /// The permission as static abilities (`text` is the ability's text).
 pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    if p.who != Who::You || p.duration.is_some() || p.look || p.any_number {
+    if p.who != Who::You || p.duration.is_some() || p.look || p.any_number || p.count.is_some() {
         return None;
     }
     // "You may cast ~ as though it had flash by tapping three untapped creatures you
@@ -1942,7 +1963,36 @@ fn next_spell_flash(l: &str, _b: &mut Builder) -> Option<Effect> {
     })
 }
 
+/// "Put the exiled cards not cast this way on the bottom of your library in a random
+/// order." (Collected Conjuring), after "You may cast up to two sorcery spells ... from
+/// among them": the cards chosen among that are still in exile (see [`followup`]).
+fn put_those_not_cast(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = [
+        "put the exiled cards not cast this way ",
+        "put the exiled cards that weren't cast this way ",
+        "put the cards not cast this way ",
+    ]
+    .iter()
+    .find_map(|p| l.strip_prefix(p))?;
+    if r != "on the bottom of your library in a random order" {
+        return None;
+    }
+    let (_, rest) = b
+        .named
+        .iter()
+        .rev()
+        .find(|(n, _)| n == super::r406_exile_until::THE_REST)?;
+    let mut to = Destination::zone(ZoneKind::Library);
+    to.position = LibraryPosition::BottomRandom;
+    Some(Effect::Move {
+        what: rest.clone(),
+        to,
+    })
+}
+
 inventory::submit! { EffectPattern { name: "permission grammar: the next spell you cast this turn can be cast as though it had flash", priority: 120, parse: next_spell_flash } }
+inventory::submit! { EffectPattern { name: "permission grammar: put the exiled cards not cast this way on the bottom", priority: 80, parse: put_those_not_cast } }
 inventory::submit! { FollowupPattern { name: "permission grammar: you may play the cards an earlier instruction moved", priority: 120, apply: followup } }
 inventory::submit! { EffectPattern { name: "permission grammar: a permission to play cards", priority: 450, parse: effect } }
 inventory::submit! { StaticPattern { name: "permission grammar: a static permission to play cards", priority: 120, parse: statics } }
