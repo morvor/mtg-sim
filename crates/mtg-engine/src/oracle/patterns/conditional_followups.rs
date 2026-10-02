@@ -365,8 +365,8 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let text = r.replace("that much life", "1 life");
     let first_new = b.targets.len();
     let saved_it = b.it.clone();
-    if let Some(sel) = subject {
-        b.it = sel;
+    if let Some(sel) = &subject {
+        b.it = sel.clone();
     }
     let parsed = crate::oracle::effects::parse_clause(&text, b);
     b.it = saved_it;
@@ -383,6 +383,19 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
                 b.targets.truncate(first_new);
                 return false;
             }
+        }
+    }
+    // "Otherwise, they put it into their graveyard and ~ deals 2 damage to them": an
+    // instruction that starts by putting the card the condition is about somewhere, joined
+    // with more, is about that card; with no card (an empty library) none of it happens.
+    if let (Some(sel @ Sel::Var(_)), Effect::Seq(v)) = (&subject, &e) {
+        if v.len() >= 2 && matches!(&v[0], Effect::Move { what, .. } if format!("{what:?}") == format!("{sel:?}"))
+        {
+            e = Effect::If {
+                cond: Condition::SelMatches(sel.clone(), Filter::Any),
+                then: Box::new(e),
+                otherwise: Box::new(Effect::Noop),
+            };
         }
     }
     if !earlier.is_empty() {

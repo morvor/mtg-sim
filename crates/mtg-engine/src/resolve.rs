@@ -81,8 +81,10 @@ impl Game {
                     self.exec(then, ctx);
                 } else {
                     // "If it's a permanent card, you may put it onto the battlefield. If
-                    // you do, ...": an optional instruction that wasn't offered wasn't done.
-                    if matches!(**then, Effect::May { .. }) && matches!(**otherwise, Effect::Noop) {
+                    // you do, ...", "Then if there are three or more collection counters
+                    // on it, sacrifice it. If you do, ...": an instruction whose condition
+                    // didn't hold wasn't done.
+                    if matches!(**otherwise, Effect::Noop) {
                         ctx.prev_happened = false;
                     }
                     self.exec(otherwise, ctx);
@@ -1490,6 +1492,7 @@ impl Game {
                 ctx.prev_happened = searched;
                 ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
             }
+            Effect::SearchCards(spec) => crate::search_rules::perform(self, spec, ctx),
             Effect::Shuffle { who } => {
                 for p in self.eval_players(who, ctx) {
                     self.shuffle_library(p);
@@ -2528,6 +2531,18 @@ impl Game {
         to: &Destination,
         ctx: &mut Ctx,
     ) -> Vec<ObjectId> {
+        let moves = self.destination_moves(objs, to, ctx);
+        self.move_objects(moves).into_iter().flatten().collect()
+    }
+
+    /// The moves that put `objs` into `to` (see [`Self::move_to_destination`]), for
+    /// moving them together with others at the same time.
+    pub fn destination_moves(
+        &mut self,
+        objs: Vec<ObjectId>,
+        to: &Destination,
+        ctx: &mut Ctx,
+    ) -> Vec<MoveEv> {
         let objs: Vec<ObjectId> = objs.into_iter().filter(|o| self.is_live(*o)).collect();
         if objs.is_empty() {
             return vec![];
@@ -2549,7 +2564,7 @@ impl Game {
                 source: ctx.source,
             });
         }
-        self.move_objects(moves).into_iter().flatten().collect()
+        moves
     }
 
     /// Creates `n` tokens for `p` (`spec`), "tapped and attacking" if `attacking`: as each
