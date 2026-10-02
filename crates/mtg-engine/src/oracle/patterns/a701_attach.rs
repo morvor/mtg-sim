@@ -1,4 +1,4 @@
-//! Unattaching (CR 701.3d): "Unattach all Equipment from target creature."
+//! Unattaching (CR 701.3d): "Unattach all Equipment from target creature.", "Unattach ~."
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -30,3 +30,15 @@ fn unattach_all(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "a701 unattach all", priority: 100, parse: unattach_all } }
+
+/// "unattach ~" (Elbrus, the Binding Blade: "unattach Elbrus, then transform it").
+fn unattach_this(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "unattach ~" {
+        return None;
+    }
+    // "..., then transform it": "it" is ~.
+    b.it = Sel::This;
+    Some(Effect::Unattach { what: Sel::This })
+}
+
+inventory::submit! { EffectPattern { name: "a701 unattach ~", priority: 100, parse: unattach_this } }
