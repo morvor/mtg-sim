@@ -284,8 +284,7 @@ impl Game {
                 let cands = self.legal_target_candidates(s, ctx, stack_obj);
                 cands.len() as u32 >= min
                     && s.together.is_none_or(|grp| {
-                        crate::target_groups::find_group(self, grp, &cands, s.min as usize)
-                            .is_some()
+                        crate::target_groups::find_group(self, grp, &cands, min as usize).is_some()
                     })
             }
         })
@@ -646,7 +645,7 @@ impl Game {
             // Targets that must have a relationship with each other: a group of the
             // required size must exist (CR 601.2c).
             if let Some(grp) = spec.together {
-                crate::target_groups::find_group(self, grp, &cands, spec.min as usize)?;
+                crate::target_groups::find_group(self, grp, &cands, min as usize)?;
             }
             slot_cands[i] = cands.clone();
             slot_max[i] = max;
@@ -684,9 +683,7 @@ impl Game {
                 }
             };
             out[i] = match spec.together {
-                Some(grp) => {
-                    crate::target_groups::fit(self, grp, picked, &cands, spec.min as usize)?
-                }
+                Some(grp) => crate::target_groups::fit(self, grp, picked, &cands, min as usize)?,
                 None => picked,
             };
         }

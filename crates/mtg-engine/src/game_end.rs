@@ -431,8 +431,6 @@ impl Game {
         true
     }
 
-    /// A fingerprint of the game state that doesn't depend on object ids (which change with
-    /// every zone change, CR 400.7), for recognizing repeated states.
     /// Notes a decision about to be asked: one with a single possible answer (choosing
     /// exactly as many targets or objects as there are candidates) is no optional action
     /// for [`Game::check_mandatory_loop`].
@@ -458,6 +456,8 @@ impl Game {
         }
     }
 
+    /// A fingerprint of the game state that doesn't depend on object ids (which change with
+    /// every zone change, CR 400.7), for recognizing repeated states.
     pub(crate) fn loop_fingerprint(&self) -> u64 {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         // Everything that could make a repetition end on its own must be part of the

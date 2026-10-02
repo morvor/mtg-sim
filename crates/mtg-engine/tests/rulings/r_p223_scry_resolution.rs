@@ -607,9 +607,24 @@ fn serum_sovereigns_oil_counter_is_removed_as_a_cost() {
 fn a_shard_token_is_a_colorless_enchantment_that_scries_then_draws() {
     cr!("111.10e", "701.22a");
     ruling!("Niko Aris", "Shard is a new predefined token, similar to Food and Treasure. A Shard token is a colorless enchantment with \"{2}, Sacrifice this enchantment: Scry 1, then draw a card.\" Shard is a new enchantment subtype.");
+    // Niko Aris (X = 1): "When Niko Aris enters, create X Shard tokens."
     let mut t = TestGame::new(2);
     let g = giants(&mut t, P0, 2);
-    let shard = create_token(&mut t, P0, "Shard");
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Wastes", 1);
+    let niko = t.hand(P0, "Niko Aris");
+    t.cast(P0, niko).x(1).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Niko Aris").len(), 1);
+    let shards: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.chars.has_subtype("Shard"))
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(shards.len(), 1, "X = 1 Shard token");
+    let shard = shards[0];
     let o = t.obj_now(shard);
     assert_eq!(o.chars.colors, ColorSet::NONE);
     assert!(o.chars.is(CardType::Enchantment));

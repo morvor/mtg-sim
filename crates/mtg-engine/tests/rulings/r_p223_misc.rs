@@ -53,3 +53,38 @@ fn three_faceless_devourers_loop_forever_and_the_game_is_a_draw() {
     t.g.run_until(2_000, |g| g.result.is_some());
     assert_eq!(t.g.result, Some(GameResult::Draw));
 }
+
+#[test]
+fn jund_gives_devour_to_creature_spells_that_are_black_red_or_green() {
+    cr!("702.82a", "105.2");
+    ruling!("Jund", "Casting a multicolor spell will cause the first ability to trigger as long as that spell is black, red, or green. It can be other colors as well.");
+    supported("Jund");
+    // "Whenever a player casts a creature spell that's black, red, or green, it gains
+    // devour 5."
+    let mut t = crate::r_s19_common::planechase_game(2);
+    crate::r_s19_common::start_planar_deck(&mut t, P0, &["Jund"]);
+    // A green-white creature spell (Watchwolf) triggers it, and devours for five
+    // counters per creature.
+    let food = t.battlefield(P0, "Llanowar Elves");
+    let wolf = in_hand_with_mana(&mut t, P0, "Watchwolf");
+    t.answer_choose(P0, &[Entity::Object(food)]);
+    t.cast(P0, wolf).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(food));
+    let wolf = t.named_on_battlefield("Watchwolf")[0];
+    assert_eq!(
+        t.counters(wolf, mtg_engine::types::counters::PLUS1),
+        5,
+        "devour 5 from Jund"
+    );
+    // A blue creature spell doesn't: nothing is devoured.
+    let food = t.battlefield(P1, "Llanowar Elves");
+    let drake = in_hand_with_mana(&mut t, P1, "Wind Drake");
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    t.answer_choose(P1, &[Entity::Object(food)]);
+    t.cast(P1, drake).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(food));
+    let drake = t.named_on_battlefield("Wind Drake")[0];
+    assert_eq!(t.counters(drake, mtg_engine::types::counters::PLUS1), 0);
+}

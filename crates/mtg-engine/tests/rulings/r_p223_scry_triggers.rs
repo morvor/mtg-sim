@@ -319,24 +319,49 @@ fn solved_static_and_activated_abilities_work_only_while_solved() {
     cr!("702.169b", "702.169d");
     ruling!("Case of the Shifting Visage", "“Solved — [static ability]” means “As long as this Case is solved, [static ability].”");
     ruling!("Case of the Shifting Visage", "The meaning of “solved” differs based on what type of ability follows it. “Solved — [activated ability]” means “[Activated ability]. Activate only if this Case is solved.”");
+    ruling!("Case of the Gateway Express", "\"Solved — [static ability]\" means \"As long as this Case is solved, [static ability].\"");
+    ruling!("Case of the Stashed Skeleton", "Activate only if this Case is solved.");
+    // Case of the Shifting Visage has only a solved triggered ability; as a copy of
+    // another Case it has that Case's solved static or activated ability.
     // Static: Case of the Gateway Express, "Solved — Creatures you control get +1/+0."
     supported("Case of the Gateway Express");
-    let mut t = TestGame::new(2);
-    let case = t.battlefield(P0, "Case of the Gateway Express");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    assert_eq!(t.pt(bears), (2, 2));
-    cases::solve(&mut t.g, case);
-    t.g.recompute();
-    assert_eq!(t.pt(bears), (3, 2));
+    for copy in [false, true] {
+        let mut t = TestGame::new(2);
+        let express = t.battlefield(P0, "Case of the Gateway Express");
+        let case = if copy {
+            let v = visage(&mut t);
+            become_copy(&mut t, v, express);
+            crate::r_s02_common::destroy(&mut t, express);
+            assert_eq!(t.obj_now(v).chars.name, "Case of the Gateway Express");
+            v
+        } else {
+            express
+        };
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        assert_eq!(t.pt(bears), (2, 2));
+        cases::solve(&mut t.g, case);
+        t.g.recompute();
+        assert_eq!(t.pt(bears), (3, 2));
+    }
     // Activated: Case of the Stashed Skeleton, "Solved — {1}{B}, Sacrifice this Case:
     // Search your library for a card, put it into your hand, then shuffle. Activate only
     // as a sorcery."
     supported("Case of the Stashed Skeleton");
-    let mut t = TestGame::new(2);
-    let case = t.battlefield(P0, "Case of the Stashed Skeleton");
-    t.lands(P0, "Swamp", 2);
-    assert!(!crate::r_s02_common::can_activate(&mut t, P0, case));
-    cases::solve(&mut t.g, case);
-    t.g.recompute();
-    assert!(crate::r_s02_common::can_activate(&mut t, P0, case));
+    for copy in [false, true] {
+        let mut t = TestGame::new(2);
+        let skeleton = t.battlefield(if copy { P1 } else { P0 }, "Case of the Stashed Skeleton");
+        let case = if copy {
+            let v = visage(&mut t);
+            become_copy(&mut t, v, skeleton);
+            assert_eq!(t.obj_now(v).chars.name, "Case of the Stashed Skeleton");
+            v
+        } else {
+            skeleton
+        };
+        t.lands(P0, "Swamp", 2);
+        assert!(!crate::r_s02_common::can_activate(&mut t, P0, case));
+        cases::solve(&mut t.g, case);
+        t.g.recompute();
+        assert!(crate::r_s02_common::can_activate(&mut t, P0, case));
+    }
 }
