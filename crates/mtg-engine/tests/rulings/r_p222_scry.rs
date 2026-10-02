@@ -477,3 +477,74 @@ fn arboreal_alliance_populates_when_you_attack_with_elves() {
     assert_eq!(copies.len(), 1);
     assert_eq!(t.obj(copies[0]).chars.name, t.obj(token).chars.name);
 }
+
+#[test]
+fn carrot_cake_triggers_on_entering_and_however_it_is_sacrificed() {
+    cr!("603.1b", "603.10a", "701.21a");
+    ruling!("Carrot Cake", "Carrot Cake's first ability will trigger whether you sacrifice it to pay the cost of its own last ability or due to another cost or effect. For example, if you sacrifice Carrot Cake in order to forage, you'll still create a Rabbit token and scry 1. It's delicious no matter how it's served!");
+    supported("Carrot Cake");
+    supported("Rusted Slasher");
+    let rabbits = |t: &TestGame| crate::r_s01_common::with_subtype(t, P0, "Rabbit").len();
+    // Entering: a Rabbit and scry 1.
+    let mut t = TestGame::new(2);
+    giants(&mut t, P0, 5);
+    t.set_step(P0, Step::PrecombatMain);
+    cast(&mut t, P0, "Carrot Cake", &[]);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert_eq!(rabbits(&t), 1);
+    assert_eq!(scry_sizes(&t, P0, from), vec![1]);
+    // Its own ability: gain 3 life, and another Rabbit and scry.
+    let cake = t.named_on_battlefield("Carrot Cake")[0];
+    t.lands(P0, "Wastes", 2);
+    let from = t.asked().len();
+    crate::r_s06_common::activate_containing(&mut t, P0, cake, "gain 3 life").unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    assert_eq!(rabbits(&t), 2);
+    assert_eq!(scry_sizes(&t, P0, from), vec![1]);
+    // Sacrificed for another permanent's cost (Rusted Slasher: "Sacrifice an artifact:
+    // Regenerate this creature.").
+    let mut t = TestGame::new(2);
+    giants(&mut t, P0, 5);
+    t.set_step(P0, Step::PrecombatMain);
+    let cake = t.battlefield(P0, "Carrot Cake");
+    let slasher = t.battlefield(P0, "Rusted Slasher");
+    t.answer_choose(P0, &[cake.into()]);
+    let from = t.asked().len();
+    crate::r_s06_common::activate_containing(&mut t, P0, slasher, "Regenerate").unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Carrot Cake"));
+    assert_eq!(rabbits(&t), 1);
+    assert_eq!(scry_sizes(&t, P0, from), vec![1]);
+    // Destroyed (not sacrificed): nothing.
+    let mut t = TestGame::new(2);
+    giants(&mut t, P0, 5);
+    let cake = t.battlefield(P0, "Carrot Cake");
+    destroy(&mut t, cake);
+    t.resolve_all();
+    assert_eq!(rabbits(&t), 0);
+}
+
+#[test]
+fn heaped_harvest_searches_on_entering_and_when_sacrificed() {
+    cr!("603.1b", "603.10a", "701.23a");
+    supported("Heaped Harvest");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Forest");
+    let forests = |t: &TestGame| t.named_on_battlefield("Forest").len();
+    cast(&mut t, P0, "Heaped Harvest", &[]);
+    let before = forests(&t);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(forests(&t), before + 1);
+    let harvest = t.named_on_battlefield("Heaped Harvest")[0];
+    t.lands(P0, "Wastes", 2);
+    t.answer_yes(P0, true);
+    crate::r_s06_common::activate_containing(&mut t, P0, harvest, "gain 3 life").unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    assert_eq!(forests(&t), before + 2);
+}
