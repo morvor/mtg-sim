@@ -23,7 +23,7 @@ pub fn excess_threshold(g: &Game, obj: ObjectId, deathtouch: bool) -> Option<u32
     let mut thresholds: Vec<u32> = Vec::new();
     if o.is_creature() {
         // Lethal damage takes into account damage already marked on the creature.
-        let rem = (o.toughness() - o.damage as i32).max(0) as u32;
+        let rem = (crate::kw::lethal_damage_basis(g, obj) - o.damage as i32).max(0) as u32;
         thresholds.push(if deathtouch { rem.min(1) } else { rem });
     }
     if o.is(CardType::Planeswalker) {

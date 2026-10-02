@@ -47,6 +47,7 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 | `card.rs` | `CardDef` from Scryfall, `CardDb`, `card("Name")` |
 | `testing.rs` | `TestGame` harness + `ScriptedAgent` |
 | `agents.rs` | `RandomAgent` |
+| `cards/` | **Hand-written card abilities** for genuine one-offs (`ManualAbility`, one file per card; policy in `cards/mod.rs`) |
 | `kwa/` | **Keyword action registry** (CR 701): one file per action; see also `keyword_actions*.rs` |
 | `decision.rs`, `events.rs`, `types.rs`, `keywords.rs` | `Agent` trait and `Decision`/`Answer`; game events; basic vocabulary (ids, colors, types); the `Keyword` enum |
 | Rule topics | `zones.rs` (CR 400–408), `target_rules.rs` (115), `special_actions.rs` (116), `cost_rules.rs`, `spell_costs.rs`, `cost_choices.rs`, `next_spell.rs` (118, 601.2), `life_totals.rs` (119), `excess_damage.rs` (120), `draw_rules.rs` (121), `counter_rules.rs` (122), `stickers.rs` (123), `names.rs` (201), `mana_value.rs` (202.3), `game_terms.rs` (700), `piles.rs` (700.3), `apnap.rs` (101.4), `as_though.rs` (609.4), `prevention.rs` (609.7, 615), `until.rs` (610.3), `skip.rs` (614.10), `copy.rs`, `copy_rules.rs` (707), `shortcuts.rs` (732), `modal_history.rs` |
@@ -80,6 +81,16 @@ note anything new you run into there.
 - **Oracle patterns**: add `src/oracle/patterns/<topic>.rs` registering `EffectPattern`,
   `TriggerPattern`, `StaticPattern`, `ConditionPattern`, or `AbilityPattern` via
   `inventory::submit!` (see `src/oracle/patterns/mod.rs`). Auto-included.
+- **Hand-written card abilities** (genuine one-offs only): add `src/cards/<card>.rs`
+  registering a `ManualAbility` (card, face, the exact normalized block from
+  `mtg-tools unsupported --card "Name" --raw`, a `build` fn returning AST abilities, and a
+  reason); rules the AST can't express go in a `KeywordRules` impl with `kinds() -> &[]`
+  using the registry-wide hooks (`custom_*`, `cast_prohibited`, `target_forbidden`, ...),
+  finding their sources by the custom ability, never by name. **Compile first**: any
+  construct two or more cards share must be compiled. Every manual card needs a test in
+  `tests/cards/m_<card>.rs`; `mtg-tools manual-check` (also run by `cargo test`) fails on
+  stale, now-compilable, duplicate or untested entries. See `src/cards/mod.rs`. The Oracle
+  round-trip renderer reports these abilities as "manual" (verified by their tests).
 - **Tests**: add files to `crates/mtg-engine/tests/{cr,keywords,actions,rulings,cards}/`.
   Every `.rs` file there is auto-included into that directory's test binary. Name files by
   rule: `tests/cr/r704_state_based_actions.rs`, `tests/keywords/k702_019_trample.rs`,
@@ -124,6 +135,7 @@ cargo test -p mtg-engine                       # all engine tests
 cargo test -p mtg-engine --test cr             # one test binary
 cargo run --release -p mtg-tools -- cr-coverage
 cargo run --release -p mtg-tools -- card-coverage
+cargo run --release -p mtg-tools -- manual-check   # hand-written abilities: current, compiled-first, tested
 cargo run --release -p mtg-tools -- rulings-coverage --card "Tarmogoyf"
 cargo run --release -p mtg-tools -- unsupported --limit 50 --filter "enters"
 rm -rf target/structlog && MTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace

@@ -135,6 +135,7 @@ fn kicker_robot() -> mtg_engine::card::CardDef {
     def.faces.push(mtg_engine::card::FaceDef {
         chars: back.faces[0].chars.clone(),
         unsupported: vec![],
+        manual: vec![],
         star_power: false,
         star_toughness: false,
     });

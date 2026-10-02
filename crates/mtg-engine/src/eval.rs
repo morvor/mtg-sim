@@ -1139,6 +1139,15 @@ impl Game {
                     .filter(|(q, s)| ps.contains(q) && self.matches_view(&Current, *s, f, ctx))
                     .count() as i64
             }
+            Value::SpellsCastThisTurnManaValue(r, f) => {
+                let ps = self.eval_players(r, ctx);
+                self.history
+                    .spells_cast
+                    .iter()
+                    .filter(|(q, s)| ps.contains(q) && self.matches_view(&Current, *s, f, ctx))
+                    .map(|(_, s)| self.mana_value_of(*s) as i64)
+                    .sum()
+            }
             Value::TimesResolvedThisTurn => ctx
                 .source
                 .map(|s| {

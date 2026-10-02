@@ -202,7 +202,17 @@ pub fn where_x_is_value(clause: &str, v: Value, b: &mut Builder, it: Sel) -> Opt
     // what a later "its" refers to, unless the clause names another.
     let value_it = std::mem::replace(&mut b.it, it.clone());
     let first_target = b.targets.len();
-    let e = crate::oracle::effects::parse_clause(clause, b)?;
+    // The clause's X has a value (e.g. "create an X/X token, where X is ...").
+    let marker = super::tokens_x_x::X_DEFINED;
+    let marked = !b.named.iter().any(|(n, _)| n == marker);
+    if marked {
+        b.named.push((marker.to_string(), Sel::None));
+    }
+    let e = crate::oracle::effects::parse_clause(clause, b);
+    if marked {
+        b.named.retain(|(n, _)| n != marker);
+    }
+    let e = e?;
     if format!("{:?}", b.it) == format!("{it:?}") {
         b.it = value_it;
     }
@@ -212,7 +222,15 @@ pub fn where_x_is_value(clause: &str, v: Value, b: &mut Builder, it: Sel) -> Opt
     for i in first_target..b.targets.len() {
         b.targets[i] = substitute_x_in(&b.targets[i], &x)?;
     }
-    substitute_x(&e, &x)
+    let e = substitute_x(&e, &x)?;
+    // "Create an X/X ... token, where X is .... It deals X damage to you.": the token's X
+    // is the X of the following instructions too.
+    if matches!(e, Effect::CreateTokenWithPT { .. }) {
+        b.named
+            .push((super::tokens_x_x::X_DEFINED.to_string(), Sel::None));
+        return Some(Effect::seq(vec![Effect::SetX { value: x }, e]));
+    }
+    Some(e)
 }
 
 inventory::submit! { EffectPattern { name: "r107 where x is", priority: 70, parse: where_x_is } }
