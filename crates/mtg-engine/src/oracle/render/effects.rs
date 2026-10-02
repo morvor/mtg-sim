@@ -3168,6 +3168,10 @@ impl Renderer<'_> {
             Value::EventAmount | Value::Prev => (format!("that many {noun_many}"), None),
             other => {
                 let v = self.value(other);
+                // A number already called X ("where X is ..." said elsewhere).
+                if v == "X" {
+                    return format!("create X {noun_many}{tail}");
+                }
                 if v.starts_with("the number of ") {
                     return format!("create X {noun_many}{tail}, where X is {v}");
                 }

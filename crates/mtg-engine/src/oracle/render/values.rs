@@ -106,7 +106,12 @@ impl Renderer<'_> {
             Value::StormCount => "the number of spells cast before it this turn".into(),
             Value::CardsDrawnThisTurn(p) => {
                 let p = self.player(p, Case::Subj);
-                format!("the number of cards {p} drew this turn")
+                // "the number of cards you've drawn this turn".
+                if p == "you" {
+                    "the number of cards you {alt:drew|drawn} this turn".to_string()
+                } else {
+                    format!("the number of cards {p} drew this turn")
+                }
             }
             Value::LifeGainedThisTurn(p) => {
                 let p = self.player(p, Case::Subj);

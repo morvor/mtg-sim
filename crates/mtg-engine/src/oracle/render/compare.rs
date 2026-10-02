@@ -623,6 +623,14 @@ fn singular(w: &str) -> String {
         "wasn't" | "weren't" => return "wasn't".into(),
         _ => {}
     }
+    // "Zombies", "Faeries", "Pixies": nouns ending in "ie".
+    if [
+        "zombies", "faeries", "pixies", "cookies", "rookies", "zombie's",
+    ]
+    .contains(&w)
+    {
+        return w.trim_end_matches('s').trim_end_matches('\'').to_string();
+    }
     if let Some(stem) = w.strip_suffix("ies") {
         return format!("{stem}y");
     }
