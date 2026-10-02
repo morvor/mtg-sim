@@ -178,3 +178,31 @@ fn mindlock_orb_looking_at_and_revealing_cards_still_works() {
     t.resolve_all();
     assert!(t.in_hand(P0, "Grizzly Bears"));
 }
+
+#[test]
+fn stranglehold_opponents_cant_choose_an_optional_search_so_they_dont_shuffle() {
+    cr!("701.23a", "609.3", "101.2");
+    ruling!(
+        "Stranglehold",
+        "your opponents can’t choose to search, so they won’t shuffle."
+    );
+    // P1's Stranglehold ("Your opponents can't search libraries."): P0's Trinket Mage
+    // doesn't offer P0 the search, finds nothing and doesn't shuffle.
+    let yes_no = |t: &TestGame, from: usize| {
+        t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
+            .count()
+    };
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Stranglehold");
+    let asked = t.asked().len();
+    assert_eq!(trinket_mage(&mut t), (false, false));
+    assert_eq!(yes_no(&t, asked), 0);
+    // P0's own Stranglehold doesn't stop P0: they're asked, search and shuffle.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Stranglehold");
+    let asked = t.asked().len();
+    assert_eq!(trinket_mage(&mut t), (true, true));
+    assert_eq!(yes_no(&t, asked), 1);
+}
