@@ -65,6 +65,8 @@ pub(crate) struct Np {
     without: Vec<String>,
     rel: Vec<String>,
     post: Vec<String>,
+    /// A quality already says where the object is ("exiled with it").
+    zone_said: bool,
 }
 
 /// CR 205.2a order in which card types are printed together ("artifact creature",
@@ -531,6 +533,18 @@ impl Renderer<'_> {
                 np.post.push(s);
             }
             Filter::Custom(name) => {
+                if let Some(q) = super::custom_filters::custom_rel(name) {
+                    use super::custom_filters::CustomQuality as Q;
+                    match q {
+                        Q::Rel(s) => np.rel.push(s),
+                        Q::RelInExile(s) => {
+                            np.rel.push(s);
+                            np.zone_said = true;
+                        }
+                        Q::Implied => {}
+                    }
+                    return;
+                }
                 let (adj, s) = self.custom_filter_quality(name);
                 if adj {
                     np.status.push(s);
@@ -806,6 +820,7 @@ impl Renderer<'_> {
             s.push_str(&join_list(&np.without, "or"));
         }
         match (np.zone, np.owner) {
+            (Some(ZoneKind::Exile), None) if np.zone_said => {}
             (Some(z), owner) if !matches!(z, ZoneKind::Battlefield | ZoneKind::Stack) => {
                 s.push(' ');
                 s.push_str(&self.zone_phrase(z, owner, num));
@@ -959,6 +974,14 @@ impl Renderer<'_> {
             ) {
                 return self.sel(sel, Case::Obj);
             }
+        }
+        // "the top card of target player's graveyard".
+        if let Some(s) = self.custom_whole_noun(f) {
+            return s;
+        }
+        // "target creature you control with the greatest power".
+        if let Some(s) = self.extreme_noun(f, &det) {
+            return s;
         }
         // A complex union inside a conjunction: "basic land card or Gate card in your
         // library" is "basic land card in your library or Gate card in your library".

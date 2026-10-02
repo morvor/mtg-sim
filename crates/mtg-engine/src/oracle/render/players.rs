@@ -392,6 +392,7 @@ impl Renderer<'_> {
                 let s = self.var_defs[i].1.clone();
                 self.sel(&s, case)
             }
+            Sel::Var(v) if self.plural_vars.contains(v) => them(case),
             Sel::Var(v) => match *v {
                 vars::SACRIFICED => {
                     let n = self.sacrificed.clone().unwrap_or_else(|| "creature".into());

@@ -327,6 +327,14 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Pronoun number: \"their\" and \"its\" (grammatical number is ignored, see \
               singularization).",
     },
+    Equivalence {
+        pattern: r"\bchoose ((?:up to \w+ )?target [^.;:]+?)\. (put|exile|destroy|tap|untap) (?:it|thatit)\b",
+        replacement: "$2 $1",
+        why: "\"Choose target creature card in your graveyard. Return it to the \
+              battlefield.\" is \"Return target creature card in your graveyard to the \
+              battlefield.\": a target is chosen as the spell or ability is put on the \
+              stack (CR 601.2c, 602.2b, 115.1), and \"it\" is that target.",
+    },
 ];
 
 /// The sentence-level rewrites `sentence_rewrites` applies to both sides (word order and

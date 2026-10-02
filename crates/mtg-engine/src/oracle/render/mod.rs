@@ -13,12 +13,14 @@
 pub mod compare;
 mod costs;
 mod custom;
+mod custom_filters;
 mod each_player;
 mod effects;
 mod extremes;
 mod keywords;
 mod nouns;
 mod outcomes;
+mod play_terms;
 mod players;
 mod statics;
 mod this_turn;
@@ -496,6 +498,12 @@ pub struct Renderer<'a> {
     pub(crate) sacrificed: Option<String>,
     /// The last group of objects named ("all creatures you control"), for "them".
     pub(crate) last_group: Option<String>,
+    /// Variables holding groups of objects (several), which later mentions call "them".
+    pub(crate) plural_vars: Vec<Var>,
+    /// The terms of the permissions to play cards being rendered.
+    pub(crate) play_terms: Option<PlayTerms>,
+    /// An earlier instruction of the sequence being rendered exiled objects.
+    pub(crate) after_exile: bool,
 }
 
 impl<'a> Renderer<'a> {
@@ -527,6 +535,9 @@ impl<'a> Renderer<'a> {
             x_for_each: None,
             trigger_names_opponent: false,
             keyword_ability: None,
+            plural_vars: Vec::new(),
+            play_terms: None,
+            after_exile: false,
         }
     }
 
@@ -599,10 +610,12 @@ impl<'a> Renderer<'a> {
         let saved_n = std::mem::replace(&mut self.self_named_in_clause, false);
         let saved_ts = std::mem::replace(&mut self.trigger_is_self, false);
         let saved_v = std::mem::take(&mut self.var_defs);
+        let saved_p = std::mem::take(&mut self.plural_vars);
         self.quote_depth += 1;
         let s = self.ability(a);
         self.quote_depth -= 1;
         self.var_defs = saved_v;
+        self.plural_vars = saved_p;
         self.targets = saved_t;
         self.introduced = saved_i;
         self.self_salient = saved_s;
@@ -616,6 +629,7 @@ impl<'a> Renderer<'a> {
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
         self.var_defs.clear();
+        self.plural_vars.clear();
         self.stored_values.clear();
         self.trigger_player = None;
         self.revealed_hand = false;

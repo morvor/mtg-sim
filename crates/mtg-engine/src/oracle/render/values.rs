@@ -425,6 +425,9 @@ impl Renderer<'_> {
                 format!("{s} exists")
             }
             Condition::SelMatches(s, f) => {
+                if let Some(c) = self.custom_condition_clause(s, f, false) {
+                    return c;
+                }
                 let subj = self.sel(s, Case::Subj);
                 let pred = self.is_predicate(f, false);
                 format!("{subj} {pred}")
@@ -500,6 +503,9 @@ impl Renderer<'_> {
             Condition::NotYourTurn => "it's your turn".into(),
             Condition::PrevHappened => "you don't".into(),
             Condition::SelMatches(s, f) => {
+                if let Some(c) = self.custom_condition_clause(s, f, true) {
+                    return c;
+                }
                 let subj = self.sel(s, Case::Subj);
                 let pred = self.is_predicate(f, true);
                 format!("{subj} {pred}")
@@ -523,6 +529,15 @@ impl Renderer<'_> {
 
     /// "you control an artifact", "you control no Islands", "there are ... in your graveyard".
     pub(crate) fn exists(&mut self, f: &Filter, negated: bool) -> String {
+        // "if you don't control a Ring-bearer" (your Ring-bearer is a creature you
+        // control, CR 701.54a).
+        if matches!(f, Filter::Custom(n) if n == crate::kwa::ring::RING_BEARER) {
+            return if negated {
+                "you don't control a Ring-bearer".into()
+            } else {
+                "you control a Ring-bearer".into()
+            };
+        }
         let (ctrl, rest) = split_controller(f);
         let zone = f.zone();
         match (ctrl, zone) {

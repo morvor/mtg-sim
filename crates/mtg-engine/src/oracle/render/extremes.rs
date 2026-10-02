@@ -75,12 +75,107 @@ impl Renderer<'_> {
         } else {
             ""
         };
-        let among = if r == o && !n.contains(['{', '|']) {
-            format!("{{opt:among {n}}}{field}")
-        } else {
-            format!("among {n}{field}")
+        // The objects compared are the ones the object is one of: cards may leave them
+        // out ("target nonland permanent with the lowest mana value").
+        if r == o && !n.contains(['{', '|', '}']) {
+            let words: &[&str] = match (greatest, x) {
+                (true, "mana value") => &["greatest", "highest"],
+                (false, "mana value") => &["least", "lowest"],
+                (true, _) => &["greatest"],
+                (false, _) => &["least"],
+            };
+            let mut forms = Vec::new();
+            for w in words {
+                forms.push(format!("with the {w} {x}"));
+                forms.push(format!("with the {w} {x} among {n}"));
+                if !field.is_empty() {
+                    forms.push(format!("with the {w} {x} among {n} on the battlefield"));
+                }
+            }
+            return Some(format!("{{alt:{}}}", forms.join("|")));
+        }
+        Some(format!("with the {word} {x} among {n}{field}"))
+    }
+
+    /// An object "with the greatest power" among the objects of its own kind: cards say
+    /// "target creature you control with the greatest power" or "a creature with the
+    /// greatest power among creatures you control" (the same objects compared, whether
+    /// or not they're named again).
+    pub(crate) fn extreme_noun(&mut self, f: &Filter, det: &super::nouns::Det) -> Option<String> {
+        let Filter::And(v) = f else {
+            return None;
         };
-        Some(format!("with the {word} {x} {among}"))
+        let (a, c, b) = v.iter().find_map(|x| match x {
+            Filter::ValueCmp(a, c, b) => Some((a, *c, b)),
+            _ => None,
+        })?;
+        let Value::Extreme(m, sel, greatest) = b.as_ref() else {
+            return None;
+        };
+        let x = tested_stat(a)?;
+        if tested_stat(m)? != x || !matches!((c, greatest), (Cmp::Ge, true) | (Cmp::Le, false)) {
+            return None;
+        }
+        let Sel::All(g) = sel.as_ref() else {
+            return None;
+        };
+        let rest: Vec<Filter> = v
+            .iter()
+            .filter(|s| !matches!(s, Filter::ValueCmp(..)))
+            .cloned()
+            .collect();
+        let (mut r, mut o) = (Vec::new(), Vec::new());
+        atoms(&Filter::And(rest.clone()), &mut r);
+        atoms(g, &mut o);
+        r.sort();
+        o.sort();
+        if r != o {
+            return None;
+        }
+        let bare: Vec<Filter> = rest
+            .iter()
+            .filter(|s| {
+                !matches!(
+                    s,
+                    Filter::ControlledBy(_) | Filter::InZone(ZoneKind::Battlefield)
+                )
+            })
+            .cloned()
+            .collect();
+        let plain = self.noun_det(&Filter::and(rest), det.clone());
+        let bare = self.noun_det(&Filter::and(bare), det.clone());
+        let n = self.noun(g, Num::Many);
+        let words: &[&str] = match (greatest, x) {
+            (true, "mana value") => &["greatest", "highest"],
+            (false, "mana value") => &["least", "lowest"],
+            (true, _) => &["greatest"],
+            (false, _) => &["least"],
+        };
+        let all_permanents = Self::counts_all_permanents(g, &n);
+        let mut forms = Vec::new();
+        for w in words {
+            forms.push(format!("{plain} with the {w} {x}"));
+            forms.push(format!("{bare} with the {w} {x} among {n}"));
+            if all_permanents {
+                forms.push(format!(
+                    "{bare} with the {w} {x} among {n} on the battlefield"
+                ));
+            }
+        }
+        if forms.iter().any(|f| f.contains(['{', '|', '}'])) {
+            let w = if words.len() > 1 {
+                format!("{{alt:{}}}", words.join("|"))
+            } else {
+                words[0].to_string()
+            };
+            let field = if all_permanents {
+                " {opt:on the battlefield}"
+            } else {
+                ""
+            };
+            return Some(format!("{bare} with the {w} {x} among {n}{field}"));
+        }
+        Some(format!("{{alt:{}}}", forms.join("|")))
     }
 
     /// [`Value::Extreme`]: "the greatest power among creatures you control".

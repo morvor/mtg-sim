@@ -144,9 +144,175 @@ impl Renderer<'_> {
         i: usize,
         known: &mut Vec<(Var, OutcomeVerb)>,
     ) -> Option<(usize, String)> {
-        self.reveal_part(v, i)
+        self.named_group_part(v, i)
+            .or_else(|| self.distribute_part(v, i))
+            .or_else(|| self.each_chooses_part(v, i))
+            .or_else(|| self.reveal_part(v, i))
             .or_else(|| self.each_player_part(v, i))
             .or_else(|| self.outcome_part(v, i, known))
+    }
+
+    /// "Untap target creature and each other creature that shares a color with it. Those
+    /// creatures get +2/+0": a group remembered as the next instruction names it; later
+    /// mentions are "them".
+    fn named_group_part(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
+        let Effect::Store {
+            var,
+            sel: sel @ Sel::Union(parts),
+        } = &v[i]
+        else {
+            return None;
+        };
+        let named = format!("{sel:?}");
+        if parts.len() < 2
+            || !v
+                .get(i + 1)
+                .is_some_and(|n| format!("{n:?}").contains(&named))
+        {
+            return None;
+        }
+        self.plural_vars.push(*var);
+        Some((1, String::new()))
+    }
+
+    /// "Put one of them into your hand, one on top of your library, and one on the bottom
+    /// of your library": each step picks one of the group not picked yet.
+    fn distribute_part(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
+        let (
+            Effect::Store {
+                var: done,
+                sel: Sel::None,
+            },
+            Some(Effect::Store {
+                var: group,
+                sel: Sel::Var(_),
+            }),
+        ) = (&v[i], v.get(i + 1))
+        else {
+            return None;
+        };
+        let mut j = i + 2;
+        let mut items = Vec::new();
+        while let (
+            Some(Effect::Store {
+                var: pick,
+                sel:
+                    Sel::Choose {
+                        chooser: PlayerRef::You,
+                        filter: Filter::And(f),
+                        count: Value::Const(1),
+                        up_to: false,
+                        ..
+                    },
+            }),
+            Some(Effect::Store {
+                var: d2,
+                sel: Sel::Union(u),
+            }),
+            Some(act),
+        ) = (v.get(j), v.get(j + 1), v.get(j + 2))
+        {
+            let from_group = matches!(f.as_slice(), [Filter::In(a), Filter::Not(b)]
+                if matches!(a.as_ref(), Sel::Var(x) if x == group)
+                    && matches!(b.as_ref(), Filter::In(c) if matches!(c.as_ref(), Sel::Var(x) if x == done)));
+            let adds = d2 == done
+                && matches!(u.as_slice(), [Sel::Var(a), Sel::Var(b)] if a == done && b == pick);
+            if !from_group || !adds {
+                break;
+            }
+            let one = if items.is_empty() {
+                "one of them"
+            } else {
+                "one {opt:of them}"
+            };
+            let text = match act {
+                Effect::Move {
+                    what: Sel::Var(x),
+                    to,
+                } if x == pick => {
+                    let m = self.move_effect(&Sel::Var(*pick), to);
+                    let (verb, rest) = m.split_once(" it ")?;
+                    if items.is_empty() {
+                        format!("{verb} {one} {rest}")
+                    } else {
+                        format!("{{opt:{verb}}} {one} {rest}")
+                    }
+                }
+                Effect::Exile {
+                    what: Sel::Var(x), ..
+                } if x == pick => format!("exile {one}"),
+                _ => return None,
+            };
+            items.push(text);
+            j += 3;
+        }
+        if items.len() < 2 {
+            return None;
+        }
+        Some((j - i, join_list(&items, "and")))
+    }
+
+    /// "Target opponent chooses a creature they control", "for each opponent, choose a
+    /// creature with the greatest power among creatures that player controls": the choices
+    /// are collected; later mentions are "it" or "them".
+    fn each_chooses_part(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
+        let (
+            Effect::Store {
+                var,
+                sel: Sel::Union(empty),
+            },
+            Some(Effect::ForEachPlayer { who, effect }),
+        ) = (&v[i], v.get(i + 1))
+        else {
+            return None;
+        };
+        if !empty.is_empty() {
+            return None;
+        }
+        let Effect::Store {
+            var: v2,
+            sel: Sel::Union(u),
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        let [Sel::Var(again), choice @ Sel::Choose { chooser, .. }] = u.as_slice() else {
+            return None;
+        };
+        if v2 != var || again != var {
+            return None;
+        }
+        let single = matches!(who, PlayerRef::You | PlayerRef::Target(_));
+        if !single {
+            self.plural_vars.push(*var);
+        }
+        let what = match choice {
+            Sel::Choose {
+                filter,
+                count,
+                up_to,
+                store,
+                ..
+            } => Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: filter.clone(),
+                count: count.clone(),
+                up_to: *up_to,
+                store: *store,
+            },
+            other => other.clone(),
+        };
+        let w = self.player(who, Case::Subj);
+        let s = self.sel(&what, Case::Obj);
+        let text = match chooser {
+            PlayerRef::Iterated => format!(
+                "{w} {}",
+                super::effects::third_person(&format!("choose {s}"))
+            ),
+            PlayerRef::You if !single => format!("for {w}, choose {s}"),
+            _ => return None,
+        };
+        Some((2, text))
     }
 
     /// "Reveal [cards] from your hand", "target player reveals three cards from their

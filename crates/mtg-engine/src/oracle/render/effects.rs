@@ -241,6 +241,10 @@ impl Renderer<'_> {
     /// An effect as text (sentences separated by ". ").
     pub(crate) fn effect(&mut self, e: &Effect) -> String {
         self.new_clause();
+        // "You may cast that card" (`play_terms.rs`).
+        if let Some(s) = self.cast_only_permission(e) {
+            return s;
+        }
         if let Some((who, vp, keep)) = self.actor_vp(e) {
             return self.with_subject(&who, &vp, keep);
         }
@@ -453,6 +457,23 @@ impl Renderer<'_> {
                 | Sel::AttachedToThis
                 | Sel::Linked
                 | Sel::CreatorLinked => String::new(),
+                // A group made of groups already named (or none yet): bookkeeping; later
+                // mentions are "them".
+                Sel::Union(parts)
+                    if parts.iter().all(|p| {
+                        matches!(
+                            p,
+                            Sel::Var(_) | Sel::Target(_) | Sel::This | Sel::TriggerObject
+                        )
+                    }) =>
+                {
+                    if let Effect::Store { var, .. } = e {
+                        if !parts.is_empty() {
+                            self.plural_vars.push(*var);
+                        }
+                    }
+                    String::new()
+                }
                 other => self.gap(format!("remembering {other:?}")),
             },
             Effect::StoreValue { var, value } => {
@@ -1322,7 +1343,7 @@ impl Renderer<'_> {
                     join_list(&parts, "and")
                 )
             }
-            Effect::WithPlayTerms { .. } => self.gap("permission to play with terms"),
+            Effect::WithPlayTerms { terms, effect } => self.with_play_terms(terms, effect),
             Effect::KeepAndSacrificeRest { up_to: true, .. } => {
                 self.gap("keep up to some permanents, sacrifice the rest")
             }
@@ -1370,7 +1391,16 @@ impl Renderer<'_> {
                     ""
                 };
                 let p = self.player(who, Case::Subj);
-                join_words(&[format!("{p} may play {w}{f}"), d])
+                let verb = self.permission_verb();
+                // A permission for an exiled card lasts as long as it's that object (CR
+                // 400.7): "for as long as it remains exiled".
+                let d = if matches!(duration, Duration::Permanent) && self.after_exile {
+                    "{alt:for as long as it remains exiled|for as long as they remain exiled}"
+                        .to_string()
+                } else {
+                    d
+                };
+                join_words(&[format!("{p} may {verb} {w}{f}"), d])
             }
             Effect::PreventDamage {
                 to,
@@ -1959,7 +1989,11 @@ impl Renderer<'_> {
                     }
                 }
             }
+            // Whether an earlier instruction exiled something (`after_exile`).
+            let saved_exile = self.after_exile;
+            self.after_exile |= v[..i].iter().any(exiles);
             let s = self.effect(&v[i]);
+            self.after_exile = saved_exile;
             if !s.is_empty() {
                 parts.push(s);
             }
@@ -3837,6 +3871,12 @@ pub(crate) fn lower_first(s: &str) -> String {
 }
 
 /// Third-person singular of a verb phrase in base form ("draw a card" → "draws a card").
+/// Whether an instruction exiles objects (a card exiled with a permission to play it).
+fn exiles(e: &Effect) -> bool {
+    let d = format!("{e:?}");
+    d.contains("Exile {") || d.contains("zone: Exile") || d.contains("ExileUntil")
+}
+
 /// Two wordings of the same instruction ("X tokens, where X is ..." / "a number of tokens
 /// equal to ..."), as alternatives when they can be written as such.
 pub(crate) fn either_form(a: String, b: String) -> String {

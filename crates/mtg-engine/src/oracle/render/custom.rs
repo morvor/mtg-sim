@@ -163,6 +163,10 @@ impl Renderer<'_> {
                 }
                 s
             }
+            n if n.starts_with("play permission terms:") => match self.permission_terms(n) {
+                Some(s) => s,
+                None => return self.gap(format!("Effect::Custom({n})")),
+            },
             other => return self.gap(format!("Effect::Custom({other})")),
         };
         s
