@@ -147,7 +147,7 @@ fn webweaver_changeling_checks_the_graveyard_on_trigger_and_resolution() {
 
 #[test]
 fn mothdust_changeling_can_tap_a_summoning_sick_creature_for_its_cost() {
-    cr!("302.6", "602.5a", "118.3");
+    cr!("302.6", "602.5a");
     ruling!(
         "Mothdust Changeling",
         "Since the activated ability doesn't have a tap symbol in its cost, you can tap a creature (including Mothdust Changeling itself) that hasn't been under your control since your most recent turn began to pay the cost."

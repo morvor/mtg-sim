@@ -295,7 +295,7 @@ fn pinion_feast_needs_a_flying_target() {
 
 #[test]
 fn the_great_aerie_bolsters_without_targeting_choosing_on_resolution() {
-    cr!("701.39a", "901.6", "115.1");
+    cr!("701.39a", "115.1");
     ruling!(
         "The Great Aerie",
         "Bolster itself doesn’t target any creature, though some spells and abilities that bolster may have other effects that target creatures."
