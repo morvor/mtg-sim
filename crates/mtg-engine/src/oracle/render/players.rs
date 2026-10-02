@@ -69,6 +69,13 @@ impl Renderer<'_> {
             return self.gap(format!("target slot {i} out of range"));
         };
         let other = !t.distinct_from.is_empty();
+        // "N damage divided as you choose among any number of targets" or "... among up to
+        // N targets": each target gets at least one (CR 601.2d), so "any number" (CR
+        // 107.1c) is at most N.
+        let divided_any = t.fixed_min() == Some(0)
+            && t.divide
+                .as_ref()
+                .is_some_and(|d| format!("{d:?}") == format!("{:?}", t.max));
         let count = match (t.fixed_min(), t.max.as_const()) {
             // "X target creatures": exactly that many (the minimum is the maximum).
             (None, _) if format!("{:?}", t.min) == format!("{:?}", t.max) => {
@@ -97,6 +104,13 @@ impl Renderer<'_> {
                 }
             }
             (_, Some(m)) => Some(m.to_string()),
+        };
+        // Cards say either.
+        let count = match count {
+            Some(c) if divided_any && c != "any number of" => {
+                Some(format!("{{alt:any number of|{c}}}"))
+            }
+            c => c,
         };
         let many = count.as_deref().is_some_and(|c| c != "up to one");
         let num = if many { Num::Many } else { Num::One };
@@ -471,7 +485,9 @@ impl Renderer<'_> {
                 up_to,
                 ..
             } => {
-                let det = if *up_to {
+                let det = if *up_to && unbounded_choice(filter, count) {
+                    Det::Count("any number of".into())
+                } else if *up_to {
                     let n = match count {
                         Value::Const(n) => number_word(*n),
                         other => self.value(other),
@@ -762,5 +778,33 @@ impl Renderer<'_> {
                 }
             }
         }
+    }
+}
+
+/// Whether "up to [count]" of the objects `filter` matches is never fewer than all of them
+/// (the count is at least the number of such objects there can be), so the choice is of
+/// "any number of" them (CR 107.1c).
+fn unbounded_choice(filter: &Filter, count: &Value) -> bool {
+    let conj = |f: &Filter| -> Vec<String> {
+        match f {
+            Filter::And(v) => v.iter().map(|x| format!("{x:?}")).collect(),
+            Filter::Any => vec![],
+            other => vec![format!("{other:?}")],
+        }
+    };
+    match count {
+        Value::Const(n) => *n >= 99,
+        // Every object the choice is from is one of those counted.
+        Value::Count(g) => {
+            let f = conj(filter);
+            conj(g).iter().all(|c| f.contains(c))
+        }
+        // "any number of cards from your hand"
+        Value::HandSize(PlayerRef::You) => {
+            let f = conj(filter);
+            f.contains(&format!("{:?}", Filter::InZone(ZoneKind::Hand)))
+                && f.contains(&format!("{:?}", Filter::OwnedBy(PlayerRel::You)))
+        }
+        _ => false,
     }
 }
