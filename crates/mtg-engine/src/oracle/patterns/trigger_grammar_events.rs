@@ -406,15 +406,20 @@ fn counters_events(r: &str) -> Option<Parsed> {
                     PlayerRef::You,
                 ));
             }
-            // "one or more loyalty counters are removed from ~"
+            // "one or more loyalty counters are removed from ~": counters removed at the
+            // same time (damage from several sources at once) are one event, and "that
+            // much" is how many (Chandra, Fire Artisan's rulings).
             if let Some(on) = rest.trim_start().strip_prefix("counters are removed from ") {
                 if on != "~" {
                     return None;
                 }
                 return Some((
-                    TriggerCond::CountersRemoved {
-                        filter: Filter::Source,
-                        kind: Some(kind),
+                    TriggerCond::Batched {
+                        trigger: Box::new(TriggerCond::CountersRemoved {
+                            filter: Filter::Source,
+                            kind: Some(kind),
+                        }),
+                        per: BatchPer::Batch,
                     },
                     Sel::This,
                     PlayerRef::You,
