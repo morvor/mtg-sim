@@ -1276,7 +1276,7 @@ impl Game {
                 c.event = Some(event_info_of(&original));
                 let more = self.eval_value(&count, &c).max(0) as u32;
                 let plus = TokenCreate {
-                    chars: crate::tokens::token_characteristics(&spec),
+                    chars: crate::tokens::token_characteristics_in(self, &spec, &c),
                     card: crate::tokens::predefined_card(&spec),
                     tapped: false,
                     attacking: None,

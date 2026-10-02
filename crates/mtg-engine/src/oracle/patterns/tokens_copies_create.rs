@@ -363,6 +363,7 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             toughness,
             abilities,
             scryfall_name: None,
+            pt_values: None,
         },
         attacking,
         tapped,

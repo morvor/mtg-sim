@@ -390,6 +390,7 @@ fn activating_an_ability_that_alters_costs_doesnt_affect_the_stack() {
             change: CostChange::IncreaseGeneric(Value::c(2)),
         }))],
         scryfall_name: None,
+        pt_values: None,
     };
     let taxer = t.custom(
         P1,

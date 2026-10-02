@@ -54,6 +54,11 @@ impl Game {
                 if self.eval_cond(cond, ctx) {
                     self.exec(then, ctx);
                 } else {
+                    // "If it's a permanent card, you may put it onto the battlefield. If
+                    // you do, ...": an optional instruction that wasn't offered wasn't done.
+                    if matches!(**then, Effect::May { .. }) && matches!(**otherwise, Effect::Noop) {
+                        ctx.prev_happened = false;
+                    }
                     self.exec(otherwise, ctx);
                 }
             }
@@ -155,6 +160,8 @@ impl Game {
                     self.exec(effect, ctx);
                 }
             }
+            Effect::RepeatProcess { body } => crate::repeat_process::run(self, body, ctx),
+            Effect::RepeatThisProcess => crate::repeat_process::request(ctx),
             Effect::ChooseOne { who, options } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let labels = options.iter().map(|(l, _)| l.clone()).collect();
@@ -752,7 +759,7 @@ impl Game {
                 let mut created = Vec::new();
                 for p in players {
                     let tc = TokenCreate {
-                        chars: crate::tokens::token_characteristics(spec),
+                        chars: crate::tokens::token_characteristics_in(self, spec, ctx),
                         card: crate::tokens::predefined_card(spec),
                         tapped: *tapped,
                         attacking: None,
@@ -781,7 +788,7 @@ impl Game {
                 let mut created = Vec::new();
                 for p in players {
                     let tc = TokenCreate {
-                        chars: crate::tokens::token_characteristics(spec),
+                        chars: crate::tokens::token_characteristics_in(self, spec, ctx),
                         card: crate::tokens::predefined_card(spec),
                         tapped: false,
                         attacking: None,

@@ -27,6 +27,7 @@ pub fn spirit() -> TokenSpec {
             "Flying",
         )],
         scryfall_name: None,
+        pt_values: None,
     }
 }
 

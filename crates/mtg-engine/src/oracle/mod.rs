@@ -71,10 +71,13 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
     for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {
-        // A pronoun left without an antecedent means the text wasn't understood.
+        // A pronoun left without an antecedent, or an instruction to repeat a process
+        // outside any process, means the text wasn't understood.
         let parsed = parse_ability(&block, ctx).filter(|v| {
-            !v.iter()
-                .any(|a| patterns::oracle_hardening_referents::has_no_referent(a))
+            !v.iter().any(|a| {
+                patterns::oracle_hardening_referents::has_no_referent(a)
+                    || crate::repeat_process::has_stray_repeat(a)
+            })
         });
         match parsed {
             Some(mut abilities) => out.abilities.append(&mut abilities),
