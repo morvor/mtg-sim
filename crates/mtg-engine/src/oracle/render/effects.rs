@@ -425,6 +425,27 @@ impl Renderer<'_> {
                 let inner = self.effect(effect);
                 format!("for each {s}, {inner}")
             }
+            // "Shuffle your graveyard into your library."
+            Effect::ForEachPlayer {
+                who: PlayerRef::You,
+                effect,
+            } if matches!(effect.as_ref(), Effect::ShuffleIntoLibrary {
+                    what: Sel::All(Filter::And(f)),
+                    library: PlayerRef::Iterated,
+                } if matches!(f.as_slice(), [Filter::InZone(_), Filter::OwnedBy(PlayerRel::Iterated)])) =>
+            {
+                let Effect::ShuffleIntoLibrary {
+                    what: Sel::All(Filter::And(f)),
+                    ..
+                } = effect.as_ref()
+                else {
+                    return self.gap("shuffle your zone");
+                };
+                let Some(Filter::InZone(z)) = f.first() else {
+                    return self.gap("shuffle your zone");
+                };
+                format!("shuffle your {} into your library", zone_word(*z))
+            }
             Effect::ForEachPlayer { who, effect } => {
                 let inner = self.effect(effect);
                 let w = self.player(who, Case::Subj);
@@ -694,6 +715,11 @@ impl Renderer<'_> {
             Effect::SetX { .. } => String::new(),
             Effect::Destroy { what, no_regen } => {
                 let w = self.sel(what, Case::Obj);
+                // "... for each permanent destroyed this way".
+                if let Sel::All(f) = what {
+                    let n = self.noun(f, Num::Many);
+                    self.it_done = Some(format!("{{alt:permanents|{n}}} destroyed this way"));
+                }
                 if *no_regen {
                     let pron = if is_plural_sel(what) { "They" } else { "It" };
                     format!("destroy {w}. {pron} can't be regenerated")

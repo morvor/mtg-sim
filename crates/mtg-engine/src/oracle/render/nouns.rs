@@ -999,6 +999,9 @@ impl Renderer<'_> {
             let w = if np.owner == Some(PlayerRel::You) {
                 np.owner = None;
                 format!("from your {z}")
+            } else if z == "exile" {
+                // "Whenever you cast a spell from exile", "spells cast from exile".
+                "{opt:cast} from exile".to_string()
             } else {
                 format!("cast from a {z}")
             };

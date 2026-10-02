@@ -26,6 +26,13 @@ impl Renderer<'_> {
                     format!("the number of {n}")
                 }
             }
+            Value::CountSel(s)
+                if matches!(s.as_ref(), Sel::Var(v) if *v == vars::IT)
+                    && self.it_done.is_some() =>
+            {
+                let d = self.it_done.clone().unwrap_or_default();
+                format!("the number of {d}")
+            }
             Value::CountSel(s) => {
                 let s = self.sel(s, Case::Obj);
                 format!("the number of {s}")

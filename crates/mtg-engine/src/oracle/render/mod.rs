@@ -658,6 +658,9 @@ pub struct Renderer<'a> {
     /// Variables stored by the ability's controller outside an instruction performed as
     /// another player: "you" in them stays the controller.
     pub(crate) outer_vars: Vec<Var>,
+    /// What the last instruction did to a group of objects ("permanents destroyed this
+    /// way"), for counting them.
+    pub(crate) it_done: Option<String>,
     /// How the trigger's player is called in the ability being rendered ("that spell's
     /// controller" for a targeting trigger).
     pub(crate) trigger_player: Option<&'static str>,
@@ -722,6 +725,7 @@ impl<'a> Renderer<'a> {
             last_group: None,
             var_defs: Vec::new(),
             outer_vars: Vec::new(),
+            it_done: None,
             trigger_player: None,
             revealed_hand: false,
             x_for_each: None,
@@ -826,6 +830,7 @@ impl<'a> Renderer<'a> {
         self.self_salient = false;
         self.var_defs.clear();
         self.outer_vars.clear();
+        self.it_done = None;
         self.plural_vars.clear();
         self.target_vars.clear();
         self.stored_values.clear();

@@ -142,6 +142,32 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               you\" is \"~ gets +1/+0 until end of turn and ~ deals 1 damage to you\".",
     },
     Equivalence {
+        pattern: r"\b(puts?|plus) an additional\b",
+        replacement: "$1 a",
+        why: "\"Put an additional +1/+1 counter on it\" puts one more counter: a counter \
+              (\"additional\" says that it's in addition to the counters it got from \
+              another instruction or event).",
+    },
+    Equivalence {
+        pattern: r"\b(draws?) (two|three|four|\d+) additional cards\b",
+        replacement: "$1 $2 cards",
+        why: "\"That player draws two additional cards\" in their draw step: two more \
+              cards (in addition to the draw for the turn, CR 504.1).",
+    },
+    Equivalence {
+        pattern: r"\b(exiles?|shuffles?) (?:all|each) (?:the )?cards (?:in|from) (your|their|its owner's|its controller's|that player's) (hand|graveyard|library)\b",
+        replacement: "$1 $2 $3",
+        why: "A hand, graveyard, or library is the cards in it (CR 400.1): exiling all the \
+              cards in your graveyard is exiling your graveyard.",
+    },
+    Equivalence {
+        pattern: r"\bif you (?:don't|do not) put (?:it|that card|the card|thatit) onto the battlefield,",
+        replacement: "if you don't,",
+        why: "\"You may put it onto the battlefield. If you don't put it onto the \
+              battlefield, ...\" repeats the optional instruction \"if you don't\" refers \
+              to.",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \
