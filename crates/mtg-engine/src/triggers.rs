@@ -171,10 +171,11 @@ impl Game {
 
     /// Marks the end of a group of simultaneous events (see [`Event::BatchBoundary`]).
     pub fn end_event_batch(&mut self) {
-        if self
-            .events
-            .last()
-            .is_some_and(|e| !matches!(e, Event::BatchBoundary))
+        if self.batch_hold == 0
+            && self
+                .events
+                .last()
+                .is_some_and(|e| !matches!(e, Event::BatchBoundary))
         {
             self.events.push(Event::BatchBoundary);
         }

@@ -1330,11 +1330,18 @@ impl Game {
                 let mut c = ctx.clone();
                 c.event = Some(event_info_of(&original));
                 let more = self.eval_value(&count, &c).max(0) as u32;
+                // Everything else the creating effect specifies (tapped, attacking) applies
+                // to the additional tokens too; they don't get the original tokens'
+                // characteristics or abilities.
+                let (tapped, attacking) = match &original {
+                    ReplEvent::CreateTokens { spec, .. } => (spec.tapped, spec.attacking),
+                    _ => (false, None),
+                };
                 let plus = TokenCreate {
                     chars: crate::tokens::token_characteristics_in(self, &spec, &c),
                     card: crate::tokens::predefined_card(&spec),
-                    tapped: false,
-                    attacking: None,
+                    tapped,
+                    attacking,
                     copy_of: None,
                     copy_exceptions: vec![],
                 };
