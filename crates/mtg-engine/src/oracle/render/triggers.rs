@@ -260,7 +260,19 @@ impl Renderer<'_> {
                     }
                     // "enters from your graveyard".
                     (Some(fz), Some(ZoneKind::Battlefield)) => {
-                        let fz_s = self.zone_from(*fz, filter);
+                        // "When ~ enters from a graveyard": it comes from its owner's
+                        // graveyard (CR 400.3), and whoever controls it as it enters
+                        // controls the ability; "from your graveyard" says the card is
+                        // yours (`Filter::OwnedBy`).
+                        let fz_s = if matches!(filter, Filter::Source)
+                            && matches!(
+                                fz,
+                                ZoneKind::Graveyard | ZoneKind::Hand | ZoneKind::Library
+                            ) {
+                            with_article(zone_word(*fz))
+                        } else {
+                            self.zone_from(*fz, filter)
+                        };
                         format!("enters from {fz_s}")
                     }
                     (Some(fz), Some(tz)) => {
@@ -663,27 +675,52 @@ impl Renderer<'_> {
                             }
                         }
                     }
+                    // "deals combat damage to a player or battle": the shared words said
+                    // once.
+                    if let [a, b] = vps.as_slice() {
+                        let wa: Vec<&str> = a.split(' ').collect();
+                        let wb: Vec<&str> = b.split(' ').collect();
+                        let k = wa.iter().zip(&wb).take_while(|(x, y)| x == y).count();
+                        if k >= 2 && k < wa.len() && k < wb.len() && !a.contains('{') {
+                            let merged = format!(
+                                "{} {} or {}",
+                                wa[..k].join(" "),
+                                wa[k..].join(" "),
+                                wb[k..].join(" ")
+                            );
+                            return Ev::new(
+                                evs[0].subj.clone(),
+                                format!("{{alt:{} or {b}|{merged}}}", a),
+                            );
+                        }
+                    }
                     Ev::new(evs[0].subj.clone(), join_list(&vps, "or"))
                 } else {
-                    // "Whenever A and whenever B" (each condition keeps its trigger word).
-                    let ts: Vec<String> = evs
+                    // "Whenever A and whenever B" (each condition keeps its trigger word):
+                    // separate clauses, so ~ named in one is "it" in the next ("When ~
+                    // enters and when you sacrifice it").
+                    self.self_salient = salient;
+                    let evs: Vec<Ev> = v
                         .iter()
-                        .enumerate()
-                        .map(|(i, e)| {
-                            let t = e.text();
-                            let begins = v
-                                .get(i)
-                                .is_some_and(|x| matches!(x, TriggerCond::BeginningOf { .. }));
-                            if i == 0 {
-                                t
-                            } else if begins {
-                                format!("at {t}")
-                            } else {
-                                format!("whenever {t}")
-                            }
-                        })
+                        .map(|x| self.trigger_event(x, det.clone()))
                         .collect();
-                    Ev::new("", join_list(&ts, "and"))
+                    // Or one trigger word for all: "Whenever you cast a blue spell or an
+                    // Island you control enters" (CR 603.2: either event triggers it).
+                    let n = evs.len();
+                    let mut s = String::new();
+                    for (i, e) in evs.iter().enumerate() {
+                        let t = e.text();
+                        let begins = v
+                            .get(i)
+                            .is_some_and(|x| matches!(x, TriggerCond::BeginningOf { .. }));
+                        if i > 0 {
+                            let word = if begins { "at" } else { "whenever" };
+                            let or = if i + 1 == n { "or" } else { "" };
+                            s.push_str(&format!(" {{alt:{or}|and {word}}} "));
+                        }
+                        s.push_str(&t);
+                    }
+                    Ev::new("", s)
                 }
             }
             // "Whenever you draw your second card each turn".
@@ -761,6 +798,20 @@ impl Renderer<'_> {
                 let p = p.strip_prefix("is ").map(|x| x.to_string()).unwrap_or(p);
                 Ev::new(e.subj, format!("{} while {p}", e.vp))
             }
+            // "Whenever you cast your first spell during each opponent's turn": the first
+            // spell each turn, on an opponent's turn.
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::NotYourTurn,
+            } if matches!(trigger.as_ref(), TriggerCond::NthSpellCast { n: 1, .. }) => {
+                let e = self.trigger_event(trigger, det);
+                let vp = e.vp.replacen(
+                    " spell each turn",
+                    " spell {alt:each turn during an opponent's turn|during each opponent's turn}",
+                    1,
+                );
+                Ev::new(e.subj, vp)
+            }
             // "Whenever you cast a spell during an opponent's turn".
             TriggerCond::Where {
                 trigger,
@@ -787,6 +838,21 @@ impl Renderer<'_> {
                 cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
             } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, .. } if name == "monstrous") => {
                 Ev::new(self.me(), "becomes monstrous")
+            }
+            // "Whenever you attack with three or more creatures": the event's amount is
+            // the number of attacking creatures.
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::EventAmount, Cmp::Ge, Value::Const(n)),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAttacks(_)) => {
+                let TriggerCond::PlayerAttacks(r) = trigger.as_ref() else {
+                    return Ev::new("", self.gap("attack with"));
+                };
+                let w = self.rel_subject(*r);
+                Ev::new(
+                    w,
+                    format!("attack with {} or more creatures", number_word(*n)),
+                )
             }
             // "Whenever ~ attacks while you control two or more artifacts".
             TriggerCond::Where { trigger, cond } => {

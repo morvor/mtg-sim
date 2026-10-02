@@ -626,10 +626,12 @@ impl Renderer<'_> {
             return self.me();
         }
         // "Red spells and white spells you cast cost {1} less".
-        let saved = (self.alt_and, self.plural_alts);
+        let saved = (self.alt_and, self.plural_alts, self.default_head);
         (self.alt_and, self.plural_alts) = (true, true);
+        // "noncreature spells": what's cast is a spell.
+        self.default_head = Some("spell");
         let n = self.noun(f, Num::Many);
-        (self.alt_and, self.plural_alts) = saved;
+        (self.alt_and, self.plural_alts, self.default_head) = saved;
         if n.contains("spell") {
             n
         } else if n == "permanents" || n == "cards" {
@@ -811,6 +813,15 @@ impl Renderer<'_> {
                 let w = self.rel_subject(r);
                 format!(" {w} activate")
             }
+        };
+        // "Spells your opponents cast that target ~": the caster before a relative
+        // clause.
+        let (target, who) = match target.find(" that ") {
+            Some(i) if !who.is_empty() && !target.contains('{') => (
+                format!("{}{who}{}", &target[..i], &target[i..]),
+                String::new(),
+            ),
+            _ => (target, who),
         };
         let act = if is_spell { "to cast" } else { "to activate" };
         let costs = if matches!(cm.applies_to, CostTarget::ThisSpell) {
@@ -1176,6 +1187,16 @@ impl Renderer<'_> {
                 let a = self.noun(attacker, Num::Many);
                 format!("{m} can't block {a}")
             }
+            // "Target creature can't block ~ this turn": a blocking restriction between
+            // two objects (CR 509.1b).
+            Restriction::CantBeBlockedBy {
+                attacker: Filter::Source,
+                blocker: Filter::In(b),
+            } if matches!(b.as_ref(), Sel::Target(_)) => {
+                let b = self.sel(b, Case::Subj);
+                let m = self.me();
+                format!("{b} can't block {m}")
+            }
             // "~ can't be blocked except by creatures with flying."
             Restriction::CantBeBlockedBy {
                 attacker,
@@ -1266,8 +1287,15 @@ impl Renderer<'_> {
                 format!("all creatures able to block {a} do so")
             }
             Restriction::MustBlockAttacker { blocker, attacker } => {
+                let named = self.self_salient;
                 let b = subj(self, blocker);
-                let a = self.noun_det(attacker, Det::A);
+                // "target creature blocks it": the object of "blocks" isn't its subject
+                // (that would be "itself"), so "it" is ~ when ~ was named before.
+                let a = if named && matches!(attacker, Filter::Source) {
+                    "~it".to_string()
+                } else {
+                    self.noun_det(attacker, Det::A)
+                };
                 format!("{b} blocks {a} each combat if able")
             }
             Restriction::AttackCost {
@@ -1727,8 +1755,14 @@ impl Renderer<'_> {
                         self.zone_any(*t),
                         self.zone_src(*f)
                     ),
+                    // A card is put into its owner's graveyard (CR 400.3); a zone change
+                    // with no origin is one from anywhere.
+                    (None, Some(ZoneKind::Graveyard)) => {
+                        "be put {alt:into a graveyard|into its owner's graveyard} {opt:from anywhere}"
+                            .to_string()
+                    }
                     (None, Some(t)) => {
-                        format!("be put into {} from anywhere", self.zone_any(*t))
+                        format!("be put into {} {{opt:from anywhere}}", self.zone_any(*t))
                     }
                     (Some(f), None) => format!("leave {}", self.zone_src(*f)),
                     (None, None) => "change zones".into(),
@@ -2005,7 +2039,86 @@ impl Renderer<'_> {
     }
 
     fn as_enters(&mut self, subj: &str, e: &Effect) -> String {
+        // "~ enters with your choice of a reach counter or a vigilance counter on it."
+        if let Effect::ChooseOne {
+            who: PlayerRef::You,
+            options,
+        } = e
+        {
+            let one = |x: &Effect| match x {
+                Effect::EnterWithCounters {
+                    kind,
+                    n: Value::Const(1),
+                } => Some(kind.to_string()),
+                _ => None,
+            };
+            let singles: Option<Vec<String>> = options.iter().map(|(_, x)| one(x)).collect();
+            if let Some(kinds) = singles.filter(|k| k.len() >= 2) {
+                let full: Vec<String> = kinds
+                    .iter()
+                    .map(|k| with_article(&counter_name(k)))
+                    .collect();
+                let short: Vec<String> = kinds.iter().map(|k| k.to_string()).collect();
+                let short = with_article(&format!("{} counter", join_list(&short, "or")));
+                return format!(
+                    "{subj} enters with your choice of {{alt:{}|{short}}} on it",
+                    join_list(&full, "or")
+                );
+            }
+            // "your choice of two different counters on it from among menace, deathtouch,
+            // and lifelink": every pair of different kinds.
+            let pairs: Option<Vec<(String, String)>> = options
+                .iter()
+                .map(|(_, x)| match x {
+                    Effect::Seq(v) if v.len() == 2 => {
+                        Some((one(&v[0])?, one(&v[1])?)).filter(|(a, b)| a != b)
+                    }
+                    _ => None,
+                })
+                .collect();
+            if let Some(pairs) = pairs {
+                let mut kinds: Vec<String> = Vec::new();
+                for (a, b) in &pairs {
+                    for k in [a, b] {
+                        if !kinds.contains(k) {
+                            kinds.push(k.clone());
+                        }
+                    }
+                }
+                let n = kinds.len();
+                let all_pairs = pairs.len() == n * (n - 1) / 2
+                    && kinds.iter().enumerate().all(|(i, a)| {
+                        kinds[i + 1..].iter().all(|b| {
+                            pairs
+                                .iter()
+                                .any(|(x, y)| (x == a && y == b) || (x == b && y == a))
+                        })
+                    });
+                if all_pairs && n >= 3 {
+                    return format!(
+                        "{subj} enters with your choice of two different counters on it from among {}",
+                        join_list(&kinds, "and")
+                    );
+                }
+            }
+        }
         match e {
+            // CR 702.138c: "~ escapes with [counters]" means "If this permanent escaped, it
+            // enters with [those counters]" (it escaped if its escape cost was paid).
+            Effect::If {
+                cond: Condition::CostPaid(name),
+                then,
+                otherwise,
+            } if name == "escape"
+                && matches!(otherwise.as_ref(), Effect::Noop)
+                && matches!(then.as_ref(), Effect::EnterWithCounters { .. }) =>
+            {
+                let Effect::EnterWithCounters { kind, n } = then.as_ref() else {
+                    return self.gap("escapes with");
+                };
+                let (c, w) = self.counted(n, &counter_name(kind));
+                format!("{subj} escapes with {c} on it{}", w.unwrap_or_default())
+            }
             // CR 307.5a: "If you cast it any time a sorcery couldn't have been cast, the
             // controller of the permanent it becomes sacrifices it at the beginning of the
             // next cleanup step."
@@ -2107,8 +2220,32 @@ impl Renderer<'_> {
                 let (c, w) = self.counted(n, &counter_name(kind));
                 format!("enters with {c} on it{}", w.unwrap_or_default())
             }
+            // "it enters with two +1/+1 counters on it and with haste": the keywords it
+            // has from the moment it enters.
+            Effect::OnEntry(inner)
+                if matches!(inner.as_ref(), Effect::Modify { what: Sel::This, mods, duration: Duration::Permanent }
+                    if !mods.is_empty() && mods.iter().all(|m| matches!(m, Modification::AddKeyword(_)))) =>
+            {
+                let Effect::Modify { mods, .. } = inner.as_ref() else {
+                    return self.gap("enters with keywords");
+                };
+                let k: Vec<String> = mods
+                    .iter()
+                    .filter_map(|m| match m {
+                        Modification::AddKeyword(k) => Some(self.keyword_lower(k)),
+                        _ => None,
+                    })
+                    .collect();
+                format!("enters with {}", join_list(&k, "and"))
+            }
             Effect::Seq(v) => {
-                let parts: Vec<String> = v.iter().map(|x| self.as_enters_vp(x)).collect();
+                let mut parts: Vec<String> = v.iter().map(|x| self.as_enters_vp(x)).collect();
+                // "enters with two +1/+1 counters on it and with haste": one verb.
+                for i in (1..parts.len()).rev() {
+                    if parts[i].starts_with("enters with ") && parts[i - 1].starts_with("enters ") {
+                        parts[i] = parts[i]["enters ".len()..].to_string();
+                    }
+                }
                 join_list(&parts, "and")
             }
             other => {
@@ -2232,7 +2369,12 @@ impl Renderer<'_> {
         if let Some(PlayerFilter::You) = to_players {
             to.push("you".into());
         }
-        // Damage to anything: no recipient phrase.
+        // Damage to anything: no recipient phrase, or "to a permanent or player" (what
+        // damage can be dealt to, CR 120.1 — a battle is a permanent).
+        let anything = matches!(
+            (to_objects, to_players),
+            (Some(Filter::Any), Some(PlayerFilter::Any))
+        );
         let (to_objects, to_players) = match (to_objects, to_players) {
             (Some(Filter::Any), Some(PlayerFilter::Any)) => (&None, &None),
             other => other,
@@ -2261,7 +2403,9 @@ impl Renderer<'_> {
                 Some(s)
             }
         };
-        let to_s = if to.is_empty() {
+        let to_s = if anything {
+            " {opt:to a permanent or player}".to_string()
+        } else if to.is_empty() {
             String::new()
         } else {
             // "to you and creatures you control" / "to you or a creature you control".
@@ -2298,6 +2442,18 @@ impl Renderer<'_> {
                     None => format!("if {kind} would be dealt{to_s}, {p}. {e}"),
                 }
             }
+            // "The next 1 damage that would be dealt to target creature this turn is dealt
+            // to ~ instead."
+            A::RedirectNext(sel, v) if src.is_none() => {
+                let t = self.sel(sel, Case::Obj);
+                let v = self.value(v);
+                format!("the next {v} {kind} that would be dealt{to_s} is dealt to {t} instead")
+            }
+            // "All damage that would be dealt to you is dealt to ~ instead."
+            A::Redirect(sel) if src.is_none() => {
+                let t = self.sel(sel, Case::Obj);
+                format!("all {kind} that would be dealt{to_s} is dealt to {t} instead")
+            }
             other => {
                 let s = src.unwrap_or_else(|| "a source".into());
                 let then = match other {
@@ -2305,7 +2461,12 @@ impl Renderer<'_> {
                     A::Multiply(3) => "it deals triple that damage instead".to_string(),
                     A::Add(v) => {
                         let v = self.value(v);
-                        format!("it deals that much damage plus {v} instead")
+                        let to_that = if anything {
+                            " {opt:to that permanent or player}"
+                        } else {
+                            ""
+                        };
+                        format!("it deals that much damage plus {v}{to_that} instead")
                     }
                     A::Subtract(v) => {
                         let v = self.value(v);

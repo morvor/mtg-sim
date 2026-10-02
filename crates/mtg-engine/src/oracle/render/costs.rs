@@ -101,7 +101,13 @@ impl Renderer<'_> {
                 zone,
                 count,
             } => {
-                let f = filter.clone().in_zone(*zone).and_owner_you();
+                // A card in your graveyard or hand is yours; a permanent you control may
+                // not be.
+                let f = if matches!(zone, ZoneKind::Battlefield | ZoneKind::Stack) {
+                    filter.clone()
+                } else {
+                    filter.clone().in_zone(*zone).and_owner_you()
+                };
                 let det = self.det_for(count);
                 let n = self.noun_det(&f, det);
                 format!("exile {n}")
@@ -130,7 +136,9 @@ impl Renderer<'_> {
                         Some(format!("for each {} removed this way", counter_name(kind)));
                 }
                 let (c, w) = self.counted(count, &counter_name(kind));
-                format!("remove {c} from ~{}", w.unwrap_or_default())
+                // "sacrifice ~ unless you remove a +1/+1 counter from it".
+                let me = self.me();
+                format!("remove {c} from {me}{}", w.unwrap_or_default())
             }
             CostPart::RemoveCountersFromAmong {
                 kind,
@@ -332,8 +340,14 @@ impl Renderer<'_> {
         // CR 702.142a: a boast ability can be activated only if the creature attacked this
         // turn and only once each turn; that's what "Boast —" says.
         let boast = self.keyword_ability == Some(crate::keywords::KeywordKind::Boast);
+        // CR 702.57b: a forecast ability may be activated only during its owner's upkeep
+        // and only once each turn; that's what "Forecast —" says.
+        let forecast = self.keyword_ability == Some(crate::keywords::KeywordKind::Forecast);
+        if forecast && matches!(a.timing, ActivationTiming::YourUpkeep) {
+            restr.retain(|r| r != "during your upkeep");
+        }
         match a.max_per_turn {
-            Some(1) if boast => {}
+            Some(1) if boast || forecast => {}
             None => {}
             Some(1) => restr.push("once each turn".into()),
             Some(2) => restr.push("twice each turn".into()),

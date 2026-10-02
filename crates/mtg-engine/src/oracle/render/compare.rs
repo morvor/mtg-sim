@@ -35,15 +35,15 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 201.5b), and objects share a name per CR 201.2a.",
     },
     Equivalence {
-        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(target player|target opponent) ([a-z]+s) ([^.;",{]*?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
-        replacement: "$1$2 $3 $4$5 that player $6",
+        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(target player|target opponent) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
+        replacement: "$1$2 $3$4$5 that player $6",
         why: "As below, for a targeted player: \"target player draws three cards and \
               loses 3 life\" is \"target player draws three cards and that player loses 3 \
               life\" (the same player, CR 115.1).",
     },
     Equivalence {
-        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|defending player|its controller|its owner|an opponent|a player|\{alt:[^}]*player[^}]*\}) ([a-z]+s) ([^.;",{]*?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
-        replacement: "$1$2 $3 $4$5 $2 $6",
+        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|defending player|its controller|its owner|an opponent|a player|\{alt:[^}]*player[^}]*\}) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
+        replacement: "$1$2 $3$4$5 $2 $6",
         why: "A clause without a subject after \"and\", \"then\", or a comma shares the \
               subject of the clause before it: \"each opponent sacrifices a creature and loses 3 life\" is \
               \"each opponent sacrifices a creature and each opponent loses 3 life\". \
@@ -86,17 +86,22 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "CR 700.4 (plural).",
     },
     Equivalence {
-        pattern: r"\b(to|into|on top of|on the bottom of|onto) (your|its owner's|their owners'|their owner's|its owners'|that player's|their) (hand|library|graveyard)",
+        pattern: r"\b(to|into|on top of|on the bottom of|onto) (your|its owner's|their owners'|their owner's|its owners'|that player's|their) (hands?|library|libraries|graveyards?)\b",
         replacement: "$1 owner's $3",
         why: "A card always goes to its owner's hand, library, or graveyard (CR 400.3); \
               \"your hand\" on a card you own is its owner's hand, and \"their hand\" or \"their \
               library\" for the cards a player moves from their own zones is too.",
     },
     Equivalence {
-        pattern: r"\bfrom (your|a|an|their|its owner's|that player's|target player's|target opponent's|an opponent's|each|all|any) ((?:opponent's |player's )?)(graveyards?|hands?|library|libraries)\b",
+        pattern: r"\bfrom (your|a|an|their|its owner's|that player's|target player's|target opponent's|an opponent's|defending player's|enchanted player's|each|all|any) ((?:opponent's |player's )?)(graveyards?|hands?|library|libraries)\b",
         replacement: "in $1 $2$3",
         why: "An object description says where the object is: \"a creature card from your \
               graveyard\" and \"a creature card in your graveyard\" describe the same cards.",
+    },
+    Equivalence {
+        pattern: r"\bfrom graveyards\b",
+        replacement: "in graveyards",
+        why: "See \"from your graveyard\".",
     },
     Equivalence {
         pattern: r"\bfrom exile\b",
@@ -146,6 +151,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "thatit",
         why: "Anaphora: \"that creature\" and \"it\" refer back to the object already named \
               (`thatit` matches \"it\", see [`token_eq`]).",
+    },
+    Equivalence {
+        pattern: r"\bthe exiled (card|creature|permanent|artifact)s?\b",
+        replacement: "thatit",
+        why: "Anaphora: \"Exile target creature. Return the exiled card ...\": \"the exiled \
+              card\" and \"it\" refer back to the object the exile instruction just moved \
+              (CR 400.7: that object is the card in exile).",
     },
     Equivalence {
         pattern: r"\b(those|the) (creatures|permanents|cards|spells|lands|artifacts|tokens|objects)\b",
@@ -266,12 +278,6 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "A triggered draw is in addition to the normal draw anyway (CR 504.1).",
     },
     Equivalence {
-        pattern: r"\bsupport (\d+|x|one|two|three|four|five|six)\b",
-        replacement: "put a +1/+1 counter on each of up to $1 other target creatures",
-        why: "CR 701.41a: \"Support N\" on a permanent means \"Put a +1/+1 counter on each \
-              of up to N other target creatures.\"",
-    },
-    Equivalence {
         pattern: r"(^|\. )([^.]+?) can't block (~|it)(\.|$)",
         replacement: "$1~ can't be blocked by $2$4",
         why: "\"Creatures with power less than ~'s power can't block it\" and \"~ can't be \
@@ -300,7 +306,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Contraction.",
     },
     Equivalence {
-        pattern: r"\bif (it|its|thatit|thatit's|that-object|~it|~it's|~|~'s|the sacrificed (?:creature|permanent|artifact)(?:'s)?)((?: power| toughness)?) was\b",
+        pattern: r"\bif (it|its|thatit|thatit's|that-object|~it|~it's|~|~'s|the sacrificed (?:creature|permanent|artifact)(?:'s)?|\{alt:the sacrificed [^}]*\})((?: power| toughness| mana value)?) was\b",
         replacement: "if $1$2 is",
         why: "A condition about an object checked after it left its zone (\"Destroy target \
               creature. If it was attacking, ...\", \"When ~ dies, if it was a Human\") is \
@@ -351,13 +357,16 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     },
     Equivalence {
         pattern: r"\b(he|she|him)\b",
-        replacement: "it",
+        replacement: "~it",
         why: "Oracle text of named characters refers to the permanent by a gendered \
-              pronoun where other cards say \"it\"; the referent is the same object.",
+              pronoun where other cards say \"it\"; the referent is the same object, the \
+              character the card names (itself), which is why such a card can say \"him\" \
+              right after naming another creature (\"~ becomes a copy of target creature. \
+              Prevent all damage that would be dealt to him\"): `~it`, the object itself.",
     },
     Equivalence {
         pattern: r"\bhis\b",
-        replacement: "its",
+        replacement: "~it's",
         why: "See \"he\".",
     },
     Equivalence {
@@ -1372,26 +1381,59 @@ fn shared_subject_match(oracle: &[String], starts: &[usize], units: &[Vec<String
             .map(|n| pos + n)
             .collect()
     };
-    let mut positions = std::collections::BTreeSet::from([0usize]);
-    for (i, u) in units.iter().enumerate() {
-        let mut next = std::collections::BTreeSet::new();
-        for &pos in &positions {
-            next.extend(ends(u, pos));
-            if i == 0 || starts.contains(&pos) {
-                continue;
+    // A unit may also leave out a trailing condition it shares with the next unit: "~
+    // gets +2/+2 and can't block as long as ..." states the condition once for both
+    // (a sentence's condition applies to all of it, see `SENTENCE_FORMS`).
+    let variants = |i: usize| -> Vec<(&[String], bool)> {
+        let u = &units[i];
+        let mut v: Vec<(&[String], bool)> = vec![(u.as_slice(), false)];
+        if let Some(next) = units.get(i + 1) {
+            let lcs = u
+                .iter()
+                .rev()
+                .zip(next.iter().rev())
+                .take_while(|(a, b)| a == b)
+                .count();
+            for k in (3..=lcs).rev() {
+                let suf = &u[u.len() - k..];
+                if suf[..3] == ["as", "long", "as"] && k < u.len() {
+                    v.push((&u[..u.len() - k], true));
+                    break;
+                }
             }
-            let prev = &units[i - 1];
-            let lcp = prev.iter().zip(u).take_while(|(a, b)| a == b).count();
-            for k in (1..=lcp.min(6)).rev() {
-                // The dropped words must be the whole subject of both units: a predicate
-                // starts right after them in each ("creatures you control have haste and
-                // attack ..." can't drop just "creatures" of "creatures attack ..."), or
-                // they end with a shared verb ("~ enters tapped and with ... counters").
-                let verb_shared = starts_predicate(&u[k - 1..]);
-                if !verb_shared && (!starts_predicate(&prev[k..]) || !starts_predicate(&u[k..])) {
+        }
+        v
+    };
+    let mut positions = std::collections::BTreeSet::from([0usize]);
+    for i in 0..units.len() {
+        let mut next = std::collections::BTreeSet::new();
+        for (u, dropped) in variants(i) {
+            // A dropped condition is said by the next unit, in the same Oracle line.
+            let ends = |t: &[String], pos: usize| -> Vec<usize> {
+                ends(t, pos)
+                    .into_iter()
+                    .filter(|e| !dropped || (*e < oracle.len() && !starts.contains(e)))
+                    .collect()
+            };
+            for &pos in &positions {
+                next.extend(ends(u, pos));
+                if i == 0 || starts.contains(&pos) {
                     continue;
                 }
-                next.extend(ends(&u[k..], pos));
+                let prev = &units[i - 1];
+                let lcp = prev.iter().zip(u).take_while(|(a, b)| a == b).count();
+                for k in (1..=lcp.min(6)).rev() {
+                    // The dropped words must be the whole subject of both units: a predicate
+                    // starts right after them in each ("creatures you control have haste and
+                    // attack ..." can't drop just "creatures" of "creatures attack ..."), or
+                    // they end with a shared verb ("~ enters tapped and with ... counters").
+                    let verb_shared = starts_predicate(&u[k - 1..]);
+                    if !verb_shared && (!starts_predicate(&prev[k..]) || !starts_predicate(&u[k..]))
+                    {
+                        continue;
+                    }
+                    next.extend(ends(&u[k..], pos));
+                }
             }
         }
         if next.is_empty() {

@@ -383,6 +383,16 @@ pub(crate) fn merge_shared_as_though(lines: &mut Vec<String>) {
 }
 
 fn join_as_though(a: &str, b: &str) -> Option<String> {
+    // "~ can't attack or block alone." (two restrictions, one sentence).
+    let (a0, b0) = (a.trim_end_matches('.'), b.trim_end_matches('.'));
+    if let (Some(sa), Some(sb)) = (
+        a0.strip_suffix(" can't attack alone"),
+        b0.strip_suffix(" can't block alone"),
+    ) {
+        if sa == sb {
+            return Some(format!("{sa} can't attack or block alone."));
+        }
+    }
     let (pa, ta) = a.split_once(" as though ")?;
     let (pb, tb) = b.split_once(" as though ")?;
     let (sa, va) = pa.split_once(' ')?;
@@ -530,6 +540,9 @@ pub struct Renderer<'a> {
     pub(crate) sacrificed: Option<String>,
     /// The last group of objects named ("all creatures you control"), for "them".
     pub(crate) last_group: Option<String>,
+    /// What the last search did with the cards it found ("exiled", "put"), for "the
+    /// cards exiled from their hand this way".
+    pub(crate) search_verb: Option<&'static str>,
 }
 
 impl<'a> Renderer<'a> {
@@ -558,6 +571,7 @@ impl<'a> Renderer<'a> {
             default_head: None,
             after_clash: false,
             sacrificed: None,
+            search_verb: None,
             last_group: None,
             var_defs: Vec::new(),
             trigger_player: None,
@@ -821,7 +835,15 @@ impl<'a> Renderer<'a> {
                         Value::Const(n) => self.count_word(*n),
                         other => self.value(other),
                     };
-                    format!("{no_s}. If {c}, choose {yes_s} instead")
+                    // The minimum stays: "you may choose both instead" (CR 700.2).
+                    if min.is_some()
+                        && !matches!(no.as_ref(), Value::Const(n) if *n != a)
+                        && !yes_s.contains(" or ")
+                    {
+                        format!("{no_s}. If {c}, you may choose {yes_s} instead")
+                    } else {
+                        format!("{no_s}. If {c}, choose {yes_s} instead")
+                    }
                 }
                 _ => {
                     let v = self.value(&m.max);

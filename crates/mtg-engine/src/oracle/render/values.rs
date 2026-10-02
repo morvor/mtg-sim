@@ -89,7 +89,7 @@ impl Renderer<'_> {
                 };
                 format!("the number of {n} in {p} graveyard")
             }
-            Value::EventAmount => "that much".into(),
+            Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
             Value::Var(vars::EXCESS) => "the excess damage".into(),
             Value::Var(_) if self.stored_x(v).is_some() => "X".into(),
@@ -196,7 +196,9 @@ impl Renderer<'_> {
                     Among::CreatureTypes => "creature types",
                     Among::BasicLandTypes => "basic land types",
                     Among::Colors => "colors",
-                    Among::ManaValues => "different mana values",
+                    // "five or more mana values among cards in your graveyard": distinct
+                    // values, said with or without "different".
+                    Among::ManaValues => "{opt:different} mana values",
                     Among::ManaCosts => "different mana costs",
                     Among::Powers => "different powers",
                     Among::Names => "different names",
@@ -242,7 +244,7 @@ impl Renderer<'_> {
             }
             Value::ManaValuesAmong(f) => {
                 let n = self.noun_det(f, Det::Plural);
-                format!("the number of different mana values among {n}")
+                format!("the number of {{opt:different}} mana values among {n}")
             }
             Value::DistinctNames(f) => {
                 let n = self.noun(f, Num::Many);
@@ -335,8 +337,9 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn amount(&mut self, v: &Value) -> (String, Option<String>) {
+        // "that much damage", "that many {E}": the same amount, worded for the noun.
         if matches!(v, Value::EventAmount) {
-            return ("that much".into(), None);
+            return ("{alt:that much|that many}".into(), None);
         }
         if matches!(v, Value::Prev) {
             return ("that many".into(), None);
@@ -368,6 +371,25 @@ impl Renderer<'_> {
             Value::EventAmount | Value::Prev | Value::Var(_) => {
                 (format!("that many {}", plural(noun)), None)
             }
+            Value::Custom(c) if c == "that many" => (format!("that many {}", plural(noun)), None),
+            // "draw that many cards plus one".
+            Value::Sum(v)
+                if matches!(
+                    v.as_slice(),
+                    [
+                        Value::EventAmount | Value::Prev | Value::Var(_),
+                        Value::Const(_)
+                    ]
+                ) && !matches!(v[0], Value::Var(n) if n == vars::EXCESS) =>
+            {
+                let Value::Const(k) = v[1] else {
+                    return (self.gap("that many plus"), None);
+                };
+                (
+                    format!("that many {} plus {}", plural(noun), number_word(k)),
+                    None,
+                )
+            }
             other => {
                 let s = self.value(other);
                 (
@@ -395,6 +417,33 @@ impl Renderer<'_> {
         match c {
             Condition::Always => self.gap("Condition::Always"),
             Condition::Never => self.gap("Condition::Never"),
+            // "if you have more cards in hand than each opponent": no opponent has at
+            // least as many.
+            Condition::Not(inner)
+                if matches!(inner.as_ref(), Condition::PlayerMatches(PlayerRef::EachOpponent,
+                    PlayerFilter::HandSize(Cmp::Ge, v) | PlayerFilter::Life(Cmp::Ge, v))
+                    if matches!(v.as_ref(), Value::HandSize(PlayerRef::You) | Value::LifeTotal(PlayerRef::You))) =>
+            {
+                let Condition::PlayerMatches(_, pf) = inner.as_ref() else {
+                    return self.gap("more than each opponent");
+                };
+                match pf {
+                    PlayerFilter::HandSize(_, v)
+                        if matches!(v.as_ref(), Value::HandSize(PlayerRef::You)) =>
+                    {
+                        "you have more cards in hand than each opponent".into()
+                    }
+                    PlayerFilter::Life(_, v)
+                        if matches!(v.as_ref(), Value::LifeTotal(PlayerRef::You)) =>
+                    {
+                        "you have more life than each opponent".into()
+                    }
+                    _ => {
+                        let inner = inner.as_ref().clone();
+                        self.negated_condition(&inner)
+                    }
+                }
+            }
             Condition::Not(inner) => self.negated_condition(inner),
             // "If you cast it from your hand".
             Condition::And(v)
@@ -432,6 +481,18 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Subj);
                 format!("{s} exists")
             }
+            // "If its mana value was 3 or less" (judged by last known information if
+            // it has left its zone, CR 608.2h).
+            Condition::SelMatches(s, Filter::ManaValue(c, v)) => {
+                let poss = self.sel(s, Case::Poss);
+                let v = self.value(v);
+                format!("{poss} mana value is {}", cmp_phrase(*c, &v))
+            }
+            // "if ~ entered this turn".
+            Condition::SelMatches(s, Filter::EnteredThisTurn) => {
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} entered this turn")
+            }
             Condition::SelMatches(s, f) => {
                 let subj = self.sel(s, Case::Subj);
                 let pred = self.is_predicate(f, false);
@@ -448,7 +509,12 @@ impl Renderer<'_> {
             Condition::WasCast => "you cast it".into(),
             Condition::PrevHappened => "you do".into(),
             Condition::PrevAffectedAny => "a card was affected this way".into(),
-            Condition::CastFrom(z) => format!("you cast it from your {}", zone_word(*z)),
+            // "If this spell was cast from a graveyard" (the zone it was cast from, CR
+            // 601.2a); cards casting their own card say "if you cast it from your ...".
+            Condition::CastFrom(z) => {
+                let z = zone_word(*z);
+                format!("{{alt:you cast it from your {z}|~ {{alt:was|is}} cast from a {z}}}")
+            }
             Condition::AllTriggerConditionsThisTurn(_) => {
                 self.gap("Condition::AllTriggerConditionsThisTurn")
             }
@@ -554,20 +620,29 @@ impl Renderer<'_> {
                 let subj = self.rel_subject(r);
                 let verb = if subj == "you" { "control" } else { "controls" };
                 if negated {
+                    // "you control no Humans" / "you don't control a Human".
                     let n = self.noun(&rest, Num::Many);
-                    format!("{subj} {verb} no {n}")
+                    let dont = if subj == "you" { "don't" } else { "doesn't" };
+                    format!("{subj} {{alt:{verb} no|{dont} control}} {n}")
                 } else {
                     let n = self.noun_det(&rest, Det::A);
                     format!("{subj} {verb} {n}")
                 }
             }
+            // "there is a Mountain on the battlefield": a permanent is on the battlefield
+            // (CR 110.1), so cards may say so or not.
             _ => {
+                let on_bf = if zone.is_none() || zone == Some(ZoneKind::Battlefield) {
+                    " {opt:on the battlefield}"
+                } else {
+                    ""
+                };
                 if negated {
                     let n = self.noun(f, Num::Many);
-                    format!("there are no {n}")
+                    format!("there are no {n}{on_bf}")
                 } else {
                     let n = self.noun_det(f, Det::A);
-                    format!("there is {n}")
+                    format!("there is {n}{on_bf}")
                 }
             }
         }
@@ -886,6 +961,11 @@ impl Renderer<'_> {
                 }
             }
             let n = self.count_phrase(f, cmp, b);
+            // Permanents are on the battlefield (CR 110.1): "there are five or more
+            // Islands on the battlefield".
+            if f.zone().is_none_or(|z| z == ZoneKind::Battlefield) {
+                return format!("there are {n} {{opt:on the battlefield}}");
+            }
             return format!("there are {n}");
         }
         if let Value::LifeTotal(p) = a {
@@ -963,7 +1043,7 @@ impl Renderer<'_> {
             Cmp::Lt => format!("is less than {b}"),
             Cmp::Le => format!("is {b} or less"),
             Cmp::Gt => format!("is greater than {b}"),
-            Cmp::Ge => format!("is {b} or greater"),
+            Cmp::Ge => format!("is {b} or {{alt:greater|more}}"),
         };
         format!("{a} {rel}")
     }

@@ -1796,13 +1796,19 @@ fn p_search(l: &str, _b: &mut Builder) -> Option<Effect> {
     // "search your library for any card" (Demonic Counsel) is "a card".
     let any = r.strip_prefix("any card").map(|x| format!("a card{x}"));
     let r = any.as_deref().unwrap_or(r);
-    let (count, r) = if let Some(r2) = r.strip_prefix("up to ") {
+    let (count, r, up_to) = if let Some(r2) = r.strip_prefix("up to ") {
         let (n, r3) = parse_number(r2)?;
-        (n, r3)
+        (n, r3, true)
     } else {
-        parse_number(r)?
+        let (n, r3) = parse_number(r)?;
+        (n, r3, false)
     };
     let (filter, _, rest) = parse_object_phrase(r)?;
+    // "up to three cards" may find fewer; `Effect::Search` finds a quantity of cards
+    // exactly (CR 701.23d), so that's the search grammar's.
+    if up_to && crate::search_rules::quantity_only(&filter) {
+        return None;
+    }
     let rest = rest.trim().trim_start_matches(',').trim();
     let (dest_s, shuffle) = if let Some(x) = rest
         .strip_suffix(", then shuffle")

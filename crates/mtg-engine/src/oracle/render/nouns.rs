@@ -35,6 +35,9 @@ impl Det {
 }
 
 /// The parts of a noun phrase, before a determiner is chosen.
+/// Where "cast from a [zone]" goes among a noun's relative phrases (see `np_text`).
+const CAST_FROM: &str = "\u{0}cast-from";
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Np {
     other: bool,
@@ -65,6 +68,11 @@ pub(crate) struct Np {
     without: Vec<String>,
     rel: Vec<String>,
     post: Vec<String>,
+    /// "exiled with ~": the cards linked to this object (CR 607.2a), which are in
+    /// exile, so "in exile" isn't said again.
+    exiled_with: bool,
+    /// "cast from a graveyard" (CR 601.2a: the zone the spell was cast from).
+    cast_from: Option<ZoneKind>,
 }
 
 /// CR 205.2a order in which card types are printed together ("artifact creature",
@@ -101,8 +109,15 @@ pub(crate) fn cmp_phrase(cmp: Cmp, v: &str) -> String {
         Cmp::Eq => format!("{{opt:equal to}} {v}"),
         Cmp::Ne => format!("other than {v}"),
         Cmp::Lt => format!("less than {v}"),
+        // "with mana value less than or equal to ~'s power".
+        Cmp::Le if v.parse::<i64>().is_err() && v != "X" => {
+            format!("{{alt:{v} or less|less than or equal to {v}}}")
+        }
         Cmp::Le => format!("{v} or less"),
         Cmp::Gt => format!("greater than {v}"),
+        Cmp::Ge if v.parse::<i64>().is_err() && v != "X" => {
+            format!("{{alt:{v} or greater|greater than or equal to {v}}}")
+        }
         Cmp::Ge => format!("{v} or greater"),
     }
 }
@@ -453,6 +468,12 @@ impl Renderer<'_> {
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
                 np.post.push("dealt damage this way".into())
             }
+            // "a card exiled with ~": the cards an ability of this object exiled
+            // (CR 607.2a).
+            Filter::In(s) if matches!(s.as_ref(), Sel::Linked) => {
+                np.exiled_with = true;
+                np.post.push("exiled with ~".into());
+            }
             Filter::In(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("among {s}"));
@@ -486,7 +507,7 @@ impl Renderer<'_> {
             Filter::ChosenType | Filter::LinkedChosenCreatureType => {
                 np.post.push("of {alt:the chosen type|that type}".into())
             }
-            Filter::ChosenName => np.with.push("the chosen name".into()),
+            Filter::ChosenName => np.with.push("{alt:the chosen name|that name}".into()),
             Filter::ChosenCardType => np.post.push("of the chosen card type".into()),
             Filter::Prepared => np.status.push("prepared".into()),
             Filter::Targets(f) => {
@@ -504,9 +525,10 @@ impl Renderer<'_> {
                 let s = self.targets_filter(tf);
                 np.rel.push(s);
             }
+            // Worded in `np_text`, where the owner is known.
             Filter::CastFrom(z) => {
-                let z = zone_word(*z);
-                np.rel.push(format!("cast from a {z}"));
+                np.cast_from = Some(*z);
+                np.rel.push(CAST_FROM.into());
             }
             Filter::CastWithCost(name) => np.status.push(name.to_string()),
             Filter::DealtDamageThisTurnBy(s) => {
@@ -833,7 +855,24 @@ impl Renderer<'_> {
             s.push_str(" without ");
             s.push_str(&join_list(&np.without, "or"));
         }
+        // "a spell from your graveyard": a card in your graveyard is yours (CR 400.3).
+        if let Some(z) = np.cast_from {
+            let z = zone_word(z);
+            let w = if np.owner == Some(PlayerRel::You) {
+                np.owner = None;
+                format!("from your {z}")
+            } else {
+                format!("cast from a {z}")
+            };
+            for r in np.rel.iter_mut().filter(|r| *r == CAST_FROM) {
+                *r = w.clone();
+            }
+        }
         match (np.zone, np.owner) {
+            (Some(ZoneKind::Exile), None) if np.exiled_with => {}
+            // "a nonlegendary creature on the battlefield": a permanent is on the
+            // battlefield anyway (CR 110.1), so cards may leave it out.
+            (Some(ZoneKind::Battlefield), None) => s.push_str(" {opt:on the battlefield}"),
             (Some(z), owner) if !matches!(z, ZoneKind::Battlefield | ZoneKind::Stack) => {
                 s.push(' ');
                 s.push_str(&self.zone_phrase(z, owner, num));
@@ -986,7 +1025,7 @@ impl Renderer<'_> {
         }
         // A complex union inside a conjunction: "basic land card or Gate card in your
         // library" is "basic land card in your library or Gate card in your library".
-        let f = &distribute_or(f);
+        let f = &flatten_or(&distribute_or(f));
         // A complex union: each alternative gets the determiner ("~ or another creature");
         // a count applies to all of them ("up to two basic land cards and/or Gate cards").
         if let Filter::Or(v) = f {
@@ -1145,6 +1184,24 @@ impl Renderer<'_> {
 
 /// `And([Or([a, b]), c])` → `Or([And([a, c]), And([b, c])])` when the union isn't a
 /// simple list of types or colors.
+/// "artifact, enchantment, or tapped creature": an alternative between alternatives is
+/// one list.
+fn flatten_or(f: &Filter) -> Filter {
+    match f {
+        Filter::Or(v) if v.iter().any(|x| matches!(x, Filter::Or(_))) => {
+            let mut out = Vec::new();
+            for x in v {
+                match flatten_or(x) {
+                    Filter::Or(w) => out.extend(w),
+                    y => out.push(y),
+                }
+            }
+            Filter::Or(out)
+        }
+        other => other.clone(),
+    }
+}
+
 fn distribute_or(f: &Filter) -> Filter {
     let Filter::And(v) = f else {
         return f.clone();

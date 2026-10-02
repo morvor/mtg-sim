@@ -161,6 +161,11 @@ impl Renderer<'_> {
                 // "target player or planeswalker", "target creature or player".
                 if o.starts_with("planeswalker") || o.starts_with("battle") {
                     format!("{p} or {o}")
+                } else if let Some((head, last)) =
+                    o.rsplit_once(" or ").filter(|_| !o.contains(['{', '|']))
+                {
+                    // "target artifact, creature, planeswalker, or opponent": one list.
+                    format!("{}, {last}, or {p}", head.trim_end_matches(','))
                 } else {
                     format!("{o} or {p}")
                 }
@@ -214,6 +219,13 @@ impl Renderer<'_> {
                 let before = s.clone();
                 for g in [" in a graveyard", " in graveyards"] {
                     s = s.replacen(g, " from a single graveyard", 1);
+                }
+                // "two target cards from an opponent's graveyard": one opponent's.
+                for g in [
+                    " in your opponents' graveyards",
+                    " in your opponents' graveyard",
+                ] {
+                    s = s.replacen(g, " in an opponent's graveyard", 1);
                 }
                 // "two target cards from an opponent's graveyard": one graveyard.
                 if s == before && !s.contains("graveyard") {
@@ -318,6 +330,16 @@ impl Renderer<'_> {
                     let c = self.controls_phrase(*r, Num::One);
                     extra.push(c);
                 }
+                // "target spell or ability that targets a creature", "... with a single
+                // target": qualities of the spell or ability itself.
+                Filter::Targets(t) => {
+                    let t = self.noun_det(t, Det::A);
+                    extra.push(format!("that targets {t}"));
+                }
+                Filter::StackTargets(tf) => {
+                    let s = self.targets_filter(tf);
+                    extra.push(s);
+                }
                 other => {
                     let s = self.noun(other, Num::One);
                     extra.push(s);
@@ -413,10 +435,19 @@ impl Renderer<'_> {
             }
             Sel::Var(v) => match *v {
                 vars::SACRIFICED => {
+                    // "Target player sacrifices a creature. ... that creature's toughness".
                     let n = self.sacrificed.clone().unwrap_or_else(|| "creature".into());
-                    decline(format!("the sacrificed {n}"), case)
+                    decline(format!("{{alt:the sacrificed {n}|that {n}}}"), case)
                 }
                 vars::CREATED => it(case),
+                // "a card for each card exiled from their hand this way".
+                crate::search_rules::FROM_HAND => {
+                    let v = self.search_verb.unwrap_or("put");
+                    decline(
+                        format!("each card {v} from {{alt:their|that player's}} hand this way"),
+                        case,
+                    )
+                }
                 _ => it(case),
             },
             Sel::TriggerObject
@@ -538,6 +569,20 @@ impl Renderer<'_> {
                         parts[1] = format!("{{opt:other}} {}", parts[1]);
                     }
                 }
+                // "up to one target creature card and up to one target noncreature
+                // permanent card from your graveyard": the zone said once, at the end.
+                if parts.len() > 1 {
+                    for z in [" in your graveyard", " in your hand", " in exile"] {
+                        if parts.iter().all(|p| p.ends_with(z)) {
+                            let n = parts.len();
+                            for p in parts.iter_mut().take(n - 1) {
+                                p.truncate(p.len() - z.len());
+                                p.push_str(&format!(" {{opt:{}}}", z.trim()));
+                            }
+                            break;
+                        }
+                    }
+                }
                 // "each opponent and each creature and planeswalker they control".
                 if parts.first().is_some_and(|p| p == "each opponent") {
                     for p in parts.iter_mut().skip(1) {
@@ -599,6 +644,18 @@ impl Renderer<'_> {
                     && matches!(sel.as_ref(), Sel::TriggerObject | Sel::TriggerLki) =>
             {
                 "{alt:that player|its controller}".into()
+            }
+            // "Creatures enchanted player controls": the "controller" of a player is that
+            // player.
+            PlayerRef::ControllerOf(sel)
+                if matches!(sel.as_ref(), Sel::AttachedTo)
+                    && self.attached_noun().ends_with(" player") =>
+            {
+                let n = self.attached_noun();
+                return match case {
+                    Case::Poss => format!("{n}'s"),
+                    _ => n,
+                };
             }
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
