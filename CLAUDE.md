@@ -63,6 +63,11 @@ Key invariants:
 - Decisions go through `game.ask(player, Decision)`; always validate answers and fall back
   to a sensible default on `Answer::Default` or invalid answers.
 
+Out of scope for now: `docs/DEFERRED.md` lists what the project has decided not to support
+yet (Contraptions, host/augment, sticker sheets, digital-only cards, cards not legal in
+any format). Don't implement those;
+note anything new you run into there.
+
 ## Extending — prefer adding files over editing shared code
 
 - **Keywords (CR 702)**: add `src/kw/<keyword>.rs` implementing `KeywordRules` and
