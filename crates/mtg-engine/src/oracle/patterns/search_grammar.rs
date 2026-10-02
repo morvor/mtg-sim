@@ -49,6 +49,28 @@ inventory::submit! {
     EffectPattern { name: "search grammar: that player shuffles / if you search your library this way, shuffle", priority: 95, parse: shuffle_after_search }
 }
 
+inventory::submit! {
+    ConditionPattern { name: "search grammar: you control a land named Wastes", priority: 100, parse: control_named }
+}
+
+/// "you control a land named Wastes" (CR 201.2).
+fn control_named(c: &str) -> Option<Condition> {
+    let r = c
+        .strip_prefix("you control a ")
+        .or_else(|| c.strip_prefix("you control an "))?;
+    let (kind, name) = r.split_once(" named ")?;
+    let (f, _, tail) = parse_object_phrase(kind)?;
+    let n = printed_name(name.trim())?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Condition::Exists(Filter::and(vec![
+        f,
+        Filter::Named(n.into()),
+        Filter::ControlledBy(PlayerRel::You),
+    ])))
+}
+
 /// "If X is 10 or more" (the spell's X, CR 107.3).
 fn x_is_at_least(c: &str) -> Option<Condition> {
     let r = c.strip_prefix("x is ")?;
@@ -222,6 +244,57 @@ fn search_conditional_inner(c: &str, x: &str, prev: &mut Effect, b: &mut Builder
 inventory::submit! {
     // Before the general "if [condition], [effect] instead" (priority 60).
     FollowupPattern { name: "search grammar: if [condition], search for an additional card / instead search", priority: 50, apply: search_conditional }
+}
+
+inventory::submit! {
+    FollowupPattern { name: "search grammar: you may play/cast the exiled found cards", priority: 90, apply: may_play_found }
+}
+
+/// "Until end of turn, you may play that card." / "You may cast them this turn." after a
+/// search that exiled the found cards (Thada Adel, Chandra, Heart of Fire): a permission
+/// for those objects (CR 400.7).
+fn may_play_found(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let cast_only = match end(l) {
+        "until end of turn, you may play that card"
+        | "until end of turn, you may play those cards"
+        | "you may play that card this turn"
+        | "you may play them this turn" => false,
+        "you may cast them this turn" | "you may cast that card this turn" => true,
+        _ => return false,
+    };
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        other => Some(other),
+    };
+    let Some(Effect::SearchCards(spec)) = last else {
+        return false;
+    };
+    let exiles = spec.dests.len() == 1 && spec.dests[0].to.zone == ZoneKind::Exile;
+    // A permission to cast is one to play only for cards that can't be lands.
+    if !exiles || (cast_only && !spec.parts.iter().all(|p| excludes_lands(&p.filter))) {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            duration: Duration::EndOfTurn,
+            free: false,
+        },
+    ]);
+    true
+}
+
+/// Whether no land card matches `f` ("red instant and/or sorcery cards").
+fn excludes_lands(f: &Filter) -> bool {
+    match f {
+        Filter::Type(t) => *t != CardType::Land,
+        Filter::And(v) => v.iter().any(excludes_lands),
+        Filter::Or(v) => !v.is_empty() && v.iter().all(excludes_lands),
+        _ => false,
+    }
 }
 
 /// "Put it onto the battlefield tapped if it's a land card", "put that card into your
@@ -1159,9 +1232,18 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
         .min()
         .unwrap_or(r.len());
     let (desc, mut t) = r.split_at(cut);
-    let (parts, distinct, leftover) = specs(desc, b)?;
+    let (mut parts, distinct, leftover) = specs(desc, b)?;
     if !leftover.trim().is_empty() {
         return None;
+    }
+    // "Search its owner's graveyard, hand, and library for any number of cards with that
+    // name": the name of the object "it" is (Deadly Cover-Up), not a chosen name.
+    if let PlayerRef::OwnerOf(sel) = &whose {
+        for p in &mut parts {
+            if !replace_chosen_name(&mut p.filter, sel) {
+                return None;
+            }
+        }
     }
     // "..., where X is [value], put them ...": X is that value (CR 107.3c).
     let mut x_value: Option<Value> = None;
@@ -1248,6 +1330,19 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
         Some(t) => Effect::seq(vec![e, t]),
         None => e,
     })
+}
+
+/// Replaces "with that name" (`Filter::ChosenName`) with the name of `sel`; false if the
+/// filter refers to a chosen name some other way.
+fn replace_chosen_name(f: &mut Filter, sel: &Sel) -> bool {
+    match f {
+        Filter::ChosenName => {
+            *f = Filter::SameNameAs(Box::new(sel.clone()));
+            true
+        }
+        Filter::And(v) | Filter::Or(v) => v.iter_mut().all(|x| replace_chosen_name(x, sel)),
+        other => !format!("{other:?}").contains("Chosen"),
+    }
 }
 
 /// Whether two player references are the same reference.

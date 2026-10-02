@@ -694,3 +694,44 @@ fn each_player_who_searched_their_library_this_way_shuffles() {
         assert_eq!(shuffles(&t, P0), 0);
     }
 }
+
+#[test]
+fn the_exiled_found_cards_may_be_cast_this_turn() {
+    cr!("701.23a", "400.7");
+    // Its first ability is another item's; the -9 ability compiles.
+    assert!(card("Chandra, Heart of Fire")
+        .unsupported_text()
+        .iter()
+        .all(|u| !u.contains("Search")));
+    let mut t = TestGame::new(2);
+    let chandra = t.battlefield(P0, "Chandra, Heart of Fire");
+    t.g.objects[chandra.0 as usize]
+        .counters
+        .insert("loyalty".into(), 9);
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let shock = t.graveyard(P0, "Shock");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bolt), Entity::Object(shock)]);
+    t.activate(P0, chandra, 1, &[]).unwrap();
+    t.resolve_all();
+    let offered = choice_candidates(&t, 0);
+    assert!(offered.contains(&Entity::Object(bolt)) && offered.contains(&Entity::Object(shock)));
+    assert!(!offered.contains(&Entity::Object(bears)));
+    assert_eq!(shuffles(&t, P0), 1);
+    // Both are exiled, and one can be cast with the red mana the ability added.
+    let exiled: Vec<ObjectId> = t
+        .g
+        .exile
+        .iter()
+        .copied()
+        .filter(|o| matches!(&*t.g.obj(*o).chars.name, "Lightning Bolt" | "Shock"))
+        .collect();
+    assert_eq!(exiled.len(), 2);
+    let bolt_now = *exiled
+        .iter()
+        .find(|o| t.g.obj(**o).chars.name == "Lightning Bolt")
+        .unwrap();
+    t.cast(P0, bolt_now).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}
