@@ -263,6 +263,11 @@ pub trait KeywordRules: Sync + Send {
     fn combat_damage_assigner(&self, g: &Game, creature: ObjectId) -> Option<PlayerId> {
         None
     }
+    /// Attack requirements this implementation's rules impose on the attacking players'
+    /// creatures (CR 508.1d). Called for every registered implementation.
+    fn attack_requirements(&self, g: &Game) -> Vec<crate::combat::AttackRequirement> {
+        vec![]
+    }
     /// A way the attacking creature `attacker` may assign its `power` combat damage other
     /// than the usual one (an exception to CR 510.1b–c), e.g. "divided as you choose among
     /// defending player and/or any number of creatures they control": the assignment, if
@@ -873,6 +878,14 @@ pub fn also_blocked(g: &Game, attacker: ObjectId) -> Vec<ObjectId> {
         }
     }
     out
+}
+
+/// See [`KeywordRules::attack_requirements`].
+pub fn attack_requirements(g: &Game) -> Vec<crate::combat::AttackRequirement> {
+    registry()
+        .iter()
+        .flat_map(|r| r.attack_requirements(g))
+        .collect()
 }
 
 /// See [`KeywordRules::assign_combat_damage`].

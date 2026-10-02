@@ -644,6 +644,9 @@ pub enum AttackRequirement {
     AttacksPlayerOtherThan(ObjectId, Vec<PlayerId>),
     /// "[creature] attacks [player] if able" (e.g. encore's tokens, CR 702.141a).
     AttacksPlayer(ObjectId, PlayerId),
+    /// "if one of [others] attacks, [creature] attacks if able": obeyed if it attacks or
+    /// none of the others do.
+    AttacksIfAnyAttacks(ObjectId, Vec<ObjectId>),
 }
 
 impl AttackRequirement {
@@ -651,7 +654,8 @@ impl AttackRequirement {
         match self {
             AttackRequirement::Attacks(c)
             | AttackRequirement::AttacksPlayerOtherThan(c, _)
-            | AttackRequirement::AttacksPlayer(c, _) => *c,
+            | AttackRequirement::AttacksPlayer(c, _)
+            | AttackRequirement::AttacksIfAnyAttacks(c, _) => *c,
         }
     }
     fn obeyed(&self, decl: &[(ObjectId, Entity)]) -> bool {
@@ -662,6 +666,9 @@ impl AttackRequirement {
                 .any(|(a, t)| a == c && matches!(t, Entity::Player(p) if !ps.contains(p))),
             AttackRequirement::AttacksPlayer(c, p) => {
                 decl.iter().any(|(a, t)| a == c && *t == Entity::Player(*p))
+            }
+            AttackRequirement::AttacksIfAnyAttacks(c, others) => {
+                decl.iter().any(|(a, _)| a == c) || !decl.iter().any(|(a, _)| others.contains(a))
             }
         }
     }
@@ -740,6 +747,8 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
             out.push(AttackRequirement::AttacksPlayerOtherThan(id, vec![goader]));
         }
     }
+    // Requirements that rules of keywords and hand-written abilities define.
+    out.extend(crate::kw::attack_requirements(g));
     out
 }
 
