@@ -238,9 +238,11 @@ The options are complete and exact: every listed option can be taken and nothing
 is accepted.
 
 * **Priority**: the engine's own legality checks produce the list, and each action is
-  then tried on a copy of the game (with the engine's default choices, then a few random
-  ones) so that only actions that can really be completed are listed (CR 733: an action
-  that can't be completed would otherwise be reversed). Mana abilities (CR 117.1d) and
+  then tried on a copy of the game (with the engine's default choices, then the cheapest
+  ones: X = 0, no optional costs, as few targets as allowed; then a few random ones) so
+  that only actions that can really be completed are listed (CR 733: an action that
+  can't be completed would otherwise be reversed). This search is a heuristic: an action
+  that can be completed only with an unusual combination of choices may be missed. Mana abilities (CR 117.1d) and
   conceding (CR 104.3a) are listed too. Pass is always option 0.
 * Choices made while taking an action (targets, modes, X, costs) are their own requests.
   If an agent's choices make the action impossible to complete (e.g. an X too large to

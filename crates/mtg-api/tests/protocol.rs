@@ -139,6 +139,9 @@ fn illegal_attacks_are_rejected_with_the_reason() {
             .unwrap()
             .index
     };
+    // The cyclops's option is marked as obeying a requirement, the bears' isn't.
+    assert_eq!(p.request.options[idx(berserker)].required, Some(true));
+    assert_eq!(p.request.options[idx(bears)].required, None);
     // Attacking with the bears alone leaves the cyclops home: illegal (CR 508.1d).
     let err = p
         .convert(&t.g, &JsonAnswer::indices(vec![idx(bears)]))
@@ -183,7 +186,6 @@ fn drive(s: &mut Session, seed: u64) -> (u32, u32) {
 
 #[test]
 fn a_session_drives_a_whole_game() {
-    cr!("117.1");
     let config = GameConfig {
         seed: 3,
         max_turns: 30,
@@ -296,7 +298,6 @@ impl<T: Transport> Agent for Shared<T> {
 
 #[test]
 fn child_processes_play_complete_games_through_json() {
-    cr!("117.1");
     let Some(py) = python() else {
         eprintln!("python3 not found: skipping the child process test");
         return;

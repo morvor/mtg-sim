@@ -176,3 +176,33 @@ fn a_controlled_players_view_is_shared_with_its_controller() {
     let p0 = json(&observe(&t.g, Some(P0)));
     assert!(p0.contains("Counterspell"), "{p0}");
 }
+
+#[test]
+fn events_dont_link_a_hidden_draw_to_where_the_card_went() {
+    cr!("402.3");
+    let (mut t, _, _) = secrets();
+    let before = t.g.event_feed.len();
+    let drawn = t.g.draw_cards(P1, 1)[0];
+    t.g.flush_events();
+    // The drawn card then becomes public (here: it's exiled face up).
+    let now =
+        t.g.move_object(
+            drawn,
+            mtg_engine::object::Zone::Exile,
+            mtg_engine::events::MoveCause::Exile,
+            Some(P1),
+        )
+        .unwrap();
+    t.g.flush_events();
+    let events = t.g.event_feed.since(before);
+    let for_p0 = describe_events(&t.g, Some(P0), &events);
+    let draw = for_p0.iter().find(|e| e.kind == "draw").unwrap();
+    // P0 didn't see which card was drawn: the draw event mustn't point at the exiled card
+    // it became.
+    assert!(!draw.objects.contains(&now.0), "{draw:?}");
+    assert!(!draw.text.contains("Ancestral Recall"), "{draw:?}");
+    // P1 saw it.
+    let for_p1 = describe_events(&t.g, Some(P1), &events);
+    let draw = for_p1.iter().find(|e| e.kind == "draw").unwrap();
+    assert!(draw.objects.contains(&now.0), "{draw:?}");
+}

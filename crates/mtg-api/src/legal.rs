@@ -10,7 +10,7 @@
 
 use mtg_engine::ability::AbilityKind;
 use mtg_engine::agents::RandomAgent;
-use mtg_engine::decision::{Action, Agent, PassiveAgent};
+use mtg_engine::decision::{Action, Agent, Answer, Decision, PassiveAgent};
 use mtg_engine::object::Zone;
 use mtg_engine::{Game, PlayerId};
 
@@ -33,14 +33,58 @@ pub fn sandbox(g: &Game, agent: impl Fn(PlayerId) -> Box<dyn Agent>) -> Game {
     copy
 }
 
+/// A chooser for trying an action: the cheapest choices where the engine's default may
+/// be too ambitious (X = 0, no optional costs, as few targets as allowed but at least
+/// one), the engine's default otherwise.
+struct CheapestAgent;
+
+impl Agent for CheapestAgent {
+    fn decide(&mut self, _g: &Game, _p: PlayerId, d: &Decision) -> Answer {
+        match d {
+            Decision::ChooseX { .. } => Answer::Number(0),
+            Decision::OptionalCost { repeatable, .. } => {
+                if *repeatable {
+                    Answer::Number(0)
+                } else {
+                    Answer::Bool(false)
+                }
+            }
+            Decision::ChooseTargets {
+                candidates,
+                min,
+                max,
+                ..
+            } => {
+                let n = (*min).max(1).min(*max) as usize;
+                if n > candidates.len() {
+                    return Answer::Default;
+                }
+                Answer::Entities(candidates[..n].to_vec())
+            }
+            _ => Answer::Default,
+        }
+    }
+}
+
 /// Whether `p` can take `action` now and complete it: tried on a copy of the game, first
-/// with the engine's default choices, then with a few random ones.
+/// with the engine's default choices, then with the cheapest ones, then with a few random
+/// ones.
 pub fn can_take(g: &Game, p: PlayerId, action: &Action) -> bool {
     match action {
         Action::Pass | Action::Concede => return true,
         _ => {}
     }
     let mut copy = sandbox(g, |_| Box::new(PassiveAgent));
+    if copy.perform_action(p, action.clone()).is_ok() {
+        return true;
+    }
+    let mut copy = sandbox(g, |q| {
+        if q == p {
+            Box::new(CheapestAgent)
+        } else {
+            Box::new(PassiveAgent)
+        }
+    });
     if copy.perform_action(p, action.clone()).is_ok() {
         return true;
     }

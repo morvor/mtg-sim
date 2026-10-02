@@ -82,8 +82,12 @@ fn zone_owner_text(z: Zone) -> String {
 pub fn describe_event(g: &Game, viewer: Viewer, e: &Event) -> Option<EventView> {
     let name = |id: ObjectId| object_name(g, viewer, id);
     let ent = |e: Entity| entity_name(g, viewer, e);
+    // An object's current id, only if the viewer could know the object in the event:
+    // following a card the viewer couldn't see then (a card drawn, or put into a hand or
+    // library) to where it is now would tell them which card it was.
     let obj_ids = |ids: &[ObjectId]| -> Vec<u32> {
         ids.iter()
+            .filter(|i| visible_id(g, viewer, **i).is_some())
             .filter_map(|i| visible_id(g, viewer, g.current(*i)))
             .collect()
     };

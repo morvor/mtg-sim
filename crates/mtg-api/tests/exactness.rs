@@ -163,6 +163,7 @@ fn main_phase_options_are_exact() {
     let mut t = TestGame::new(2);
     let lands = t.lands(P0, "Mountain", 1);
     let elves = t.battlefield(P0, "Llanowar Elves");
+    t.g.objects[elves.0 as usize].summoning_sick = true;
     let pyro = t.battlefield(P0, "Prodigal Pyromancer");
     let bolt = t.hand(P0, "Lightning Bolt");
     let bears = t.hand(P0, "Grizzly Bears");
@@ -175,7 +176,9 @@ fn main_phase_options_are_exact() {
         opts.iter()
             .any(|a| matches!(a, Action::Cast { card, .. } if *card == c))
     };
-    assert!(has_cast(bolt) && has_cast(bears));
+    assert!(has_cast(bolt));
+    // Grizzly Bears needs {G}: only the summoning-sick elves could make it.
+    assert!(!has_cast(bears));
     assert!(!has_cast(wurm), "Craw Wurm costs 6");
     assert!(opts.contains(&Action::PlayLand { card: forest }));
     // Mana abilities (CR 117.1d) and the pyromancer's ability (CR 117.1b).
@@ -186,7 +189,9 @@ fn main_phase_options_are_exact() {
         .iter()
         .any(|a| matches!(a, Action::Activate { source, .. } if *source == pyro)));
     // The elves are summoning sick: their mana ability needs {T} (CR 302.6).
-    let _ = elves;
+    assert!(!opts
+        .iter()
+        .any(|a| matches!(a, Action::Activate { source, .. } if *source == elves)));
     // After a land play, no more lands (CR 305.2).
     t.g.players[0].lands_played_this_turn = 1;
     let opts = check_now(&mut t, P0);
@@ -200,6 +205,7 @@ fn instant_speed_options_on_an_opponents_turn_are_exact() {
     t.lands(P0, "Mountain", 2);
     let bolt = t.hand(P0, "Lightning Bolt");
     let bears = t.hand(P0, "Grizzly Bears");
+    let hammer = t.hand(P0, "Volcanic Hammer");
     t.hand(P0, "Mountain");
     t.set_step(P1, Step::Upkeep);
     t.g.turn.priority = Some(P0);
@@ -210,7 +216,18 @@ fn instant_speed_options_on_an_opponents_turn_are_exact() {
     assert!(!opts
         .iter()
         .any(|a| matches!(a, Action::Cast { card, .. } if *card == bears)));
+    // A sorcery only in its controller's own main phase (CR 307.1).
+    assert!(!opts
+        .iter()
+        .any(|a| matches!(a, Action::Cast { card, .. } if *card == hammer)));
     assert!(!opts.iter().any(|a| matches!(a, Action::PlayLand { .. })));
+    // In P0's own main phase, with an empty stack, it can be cast.
+    t.set_step(P0, Step::PrecombatMain);
+    t.g.turn.priority = Some(P0);
+    let opts = check_now(&mut t, P0);
+    assert!(opts
+        .iter()
+        .any(|a| matches!(a, Action::Cast { card, .. } if *card == hammer)));
 }
 
 #[test]
@@ -219,9 +236,10 @@ fn alternative_casts_and_special_actions_are_exact() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 3);
     t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Forest", 1);
     let twice = t.graveyard(P0, "Think Twice");
     t.hand(P0, "Saw It Coming");
-    t.hand(P0, "Rift Bolt");
+    let rift = t.hand(P0, "Rift Bolt");
     t.hand(P0, "Bonecrusher Giant");
     t.hand(P0, "Lonely Sandbar");
     let den = t.battlefield(P0, "Den Protector");
@@ -237,6 +255,28 @@ fn alternative_casts_and_special_actions_are_exact() {
     assert!(opts
         .iter()
         .any(|a| matches!(a, Action::Special(SpecialAction::Foretell { .. }))));
+    assert!(opts
+        .iter()
+        .any(|a| *a == Action::Special(SpecialAction::Suspend { card: rift })));
+    // Turning the face-down Den Protector face up (megamorph {1}{G}) is a special action.
+    assert!(opts
+        .iter()
+        .any(|a| *a == Action::Special(SpecialAction::TurnFaceUp { obj: den })));
+}
+
+#[test]
+fn a_spell_castable_only_with_the_smallest_x_is_offered() {
+    // With one Mountain, Fireball ({X}{R}) can be cast only with X = 0 and one target:
+    // the engine's default choices don't complete it, but the player can choose X = 0
+    // (CR 107.3a).
+    cr!("117.1a", "107.3a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    let fireball = t.hand(P0, "Fireball");
+    let opts = check_now(&mut t, P0);
+    assert!(opts
+        .iter()
+        .any(|a| matches!(a, Action::Cast { card, .. } if *card == fireball)));
 }
 
 /// Wraps a random agent; on a sample of its priority decisions, checks the options.
