@@ -1049,11 +1049,15 @@ impl Game {
             }
             Effect::Attach { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
+                // "Attach ~ to a creature you control. If you do, ...": whether anything
+                // became attached.
+                let mut any = false;
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
                     for o in objs {
-                        self.attach(o, t);
+                        any |= self.attach(o, t);
                     }
                 }
+                ctx.prev_happened = any;
             }
             Effect::AttachAsCreature { what, to } => {
                 let objs = self.resolve_objects(what, ctx);

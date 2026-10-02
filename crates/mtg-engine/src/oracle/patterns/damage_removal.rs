@@ -300,6 +300,31 @@ fn players_of(prev: Option<&Sel>, b: &Builder) -> Option<PlayerRel> {
     }
 }
 
+/// "Any other target": other than the object dealing the damage too ("enchanted creature
+/// deals damage equal to its power to any other target", "~ deals 3 damage to any other
+/// target"). A targeted source is covered by `distinct_from`.
+pub(crate) fn other_than_damage_source(spec: &mut TargetSpec, src: &Sel) {
+    if !matches!(spec.what, TargetKind::AnyTarget) {
+        return;
+    }
+    let not_source = match src {
+        Sel::This => Filter::Other,
+        Sel::AttachedTo => Filter::Not(Box::new(Filter::AttachedToSource)),
+        _ => return,
+    };
+    spec.what = TargetKind::ObjectOrPlayer(
+        Filter::and(vec![
+            Filter::Or(vec![
+                Filter::creature(),
+                Filter::Type(crate::types::CardType::Planeswalker),
+                Filter::Type(crate::types::CardType::Battle),
+            ]),
+            not_source,
+        ]),
+        PlayerFilter::Any,
+    );
+}
+
 /// One recipient item. `prev` is the preceding item in an "and" list.
 fn recipient_item(
     s: &str,
@@ -317,6 +342,7 @@ fn recipient_item(
     if let Some(r) = word(s, "any other target") {
         let mut spec = TargetSpec::any_target();
         spec.distinct_from = (0..b.targets.len() as u8).collect();
+        other_than_damage_source(&mut spec, src);
         let slot = b.add_target(spec, "any other target");
         return Some((Sel::Target(slot), r.to_string()));
     }
