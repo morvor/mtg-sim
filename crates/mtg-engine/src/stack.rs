@@ -173,6 +173,11 @@ impl Game {
                             modes.len() as u32
                         }),
                         allow_repeat: modal.allow_repeat,
+                        available: available.clone(),
+                        pawprint_budget: match modal.chooser {
+                            ModeChooser::Pawprints(budget) => Some(budget),
+                            _ => None,
+                        },
                     },
                 );
                 let valid = |v: &Vec<usize>| {

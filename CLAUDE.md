@@ -13,6 +13,9 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 - `crates/mtg-data` — loaders: Scryfall cards/rulings/tags, CR parser. Defines the
   `cr!` and `ruling!` citation macros.
 - `crates/mtg-engine` — the engine.
+- `crates/mtg-api` — external decision interface: per-player observations, every legal
+  option for every decision, the JSON agent protocol (`docs/AGENT_PROTOCOL.md`),
+  `ExternalAgent` (child process) and `Session` (pull-style embedding).
 - `crates/mtg-sim` — CLI simulator (`cargo run --release -p mtg-sim -- --games 100`);
   `--random-decks` fuzzes the engine with random decks of fully supported cards.
 - `crates/mtg-tools` — coverage reports (`cr-coverage`, `card-coverage`,
