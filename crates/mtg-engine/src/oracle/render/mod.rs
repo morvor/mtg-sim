@@ -12,12 +12,23 @@
 
 pub mod compare;
 mod costs;
+mod counter_replacements;
 mod custom;
+mod custom_effects;
+mod custom_filters;
+mod custom_more;
+mod each_player;
 mod effects;
+mod extremes;
 mod keywords;
 mod nouns;
+mod once_each_turn;
+mod outcomes;
+mod play_terms;
 mod players;
 mod statics;
+mod this_turn;
+mod trigger_causes;
 mod triggers;
 mod values;
 
@@ -33,6 +44,9 @@ pub struct FaceInfo {
     pub subtypes: Vec<Subtype>,
     /// What an Aura on this face enchants ("creature", "land"), for "enchanted [thing]".
     pub enchant: Option<String>,
+    /// For half of a meld pair: (the partner's noun, "a creature named Hanweir Garrison";
+    /// the meld result's name), from the card's related cards.
+    pub meld: Option<(String, String)>,
 }
 
 impl FaceInfo {
@@ -42,6 +56,7 @@ impl FaceInfo {
             card_types: face.chars.card_types,
             subtypes: face.chars.subtypes.iter().cloned().collect(),
             enchant: None,
+            meld: None,
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
         info
@@ -313,7 +328,41 @@ pub fn render_ability(a: &Ability, info: &FaceInfo) -> Result<String, Vec<String
 
 /// Renders all faces of a card.
 pub fn render_card(def: &CardDef) -> Vec<RenderedFace> {
-    def.faces.iter().map(render_face).collect()
+    let meld = meld_info(def);
+    def.faces
+        .iter()
+        .map(|f| {
+            let mut info = FaceInfo::of(f);
+            info.meld = meld.clone();
+            render_abilities(&f.chars.abilities, &info)
+        })
+        .collect()
+}
+
+/// The meld partner and result of half of a meld pair (CR 701.42, 712.4).
+fn meld_info(def: &CardDef) -> Option<(String, String)> {
+    let db = crate::card::CardDb::global();
+    let result = def
+        .related
+        .iter()
+        .find(|(k, _)| k == "meld_result")
+        .map(|(_, n)| n.clone())?;
+    let partner = db
+        .get(&result)?
+        .related
+        .iter()
+        .find(|(k, n)| k == "meld_part" && !n.eq_ignore_ascii_case(&def.name))
+        .map(|(_, n)| n.clone())?;
+    let p = db.get(&partner)?;
+    let kind = p.faces.first().map(|f| f.chars.card_types)?;
+    let noun = if kind.contains(CardType::Creature) {
+        "creature"
+    } else if kind.contains(CardType::Land) {
+        "land"
+    } else {
+        "permanent"
+    };
+    Some((format!("a {noun} named {partner}"), result))
 }
 
 /// The noun an Aura's enchant keyword names ("creature", "land", "player").
@@ -340,6 +389,17 @@ fn gift_given(a: &Ability) -> Option<String> {
         AbilityKind::Triggered(t) => &t.body,
         _ => return None,
     };
+    // CR 702.174b: on a permanent, "When this permanent enters, if its gift cost was paid,
+    // [effect]."
+    if let AbilityKind::Triggered(t) = &a.kind {
+        if matches!(t.trigger, TriggerCond::EntersBattlefield(Filter::Source))
+            && matches!(&t.intervening_if, Some(Condition::CostPaid(c)) if c == "gift")
+        {
+            if let Effect::Custom(n) = &t.body.effect {
+                return n.strip_prefix("gift:give:").map(|s| s.to_string());
+            }
+        }
+    }
     if let Effect::If {
         cond: Condition::CostPaid(c),
         then,
@@ -481,6 +541,10 @@ pub struct Renderer<'a> {
     /// The last instruction rendered was performed by a player other than you ("If they
     /// do, ...").
     pub(crate) last_actor_other: bool,
+    /// Inside an instruction performed as another player (`Effect::AsPlayer`), whose
+    /// "you" is reworded for that player; text about the controller made there is marked
+    /// with [`KEEP_YOU`] so it isn't.
+    pub(crate) in_as_player: bool,
     /// The zone the ability being rendered functions from.
     pub(crate) zone: FunctionZone,
     /// The object itself was the last object mentioned (a trigger "When ~ attacks"), so
@@ -543,6 +607,17 @@ pub struct Renderer<'a> {
     /// What the last search did with the cards it found ("exiled", "put"), for "the
     /// cards exiled from their hand this way".
     pub(crate) search_verb: Option<&'static str>,
+    /// Variables holding groups of objects (several), which later mentions call "them".
+    pub(crate) plural_vars: Vec<Var>,
+    /// The terms of the permissions to play cards being rendered.
+    pub(crate) play_terms: Option<PlayTerms>,
+    /// An earlier instruction of the sequence being rendered exiled objects.
+    pub(crate) after_exile: bool,
+    /// The target an effect done "for each" target is about (a single target).
+    pub(crate) each_target: Option<u8>,
+    /// Targets remembered in variables, first mentioned through them: (variable, target
+    /// phrase, mentioned yet).
+    pub(crate) target_vars: Vec<(Var, String, bool)>,
 }
 
 impl<'a> Renderer<'a> {
@@ -556,6 +631,7 @@ impl<'a> Renderer<'a> {
             granted_keyword: false,
             self_before_target: false,
             last_actor_other: false,
+            in_as_player: false,
             zone: FunctionZone::Battlefield,
             self_salient: false,
             other_salient: false,
@@ -579,6 +655,11 @@ impl<'a> Renderer<'a> {
             x_for_each: None,
             trigger_names_opponent: false,
             keyword_ability: None,
+            plural_vars: Vec::new(),
+            play_terms: None,
+            after_exile: false,
+            each_target: None,
+            target_vars: Vec::new(),
         }
     }
 
@@ -651,10 +732,12 @@ impl<'a> Renderer<'a> {
         let saved_n = std::mem::replace(&mut self.self_named_in_clause, false);
         let saved_ts = std::mem::replace(&mut self.trigger_is_self, false);
         let saved_v = std::mem::take(&mut self.var_defs);
+        let saved_p = std::mem::take(&mut self.plural_vars);
         self.quote_depth += 1;
         let s = self.ability(a);
         self.quote_depth -= 1;
         self.var_defs = saved_v;
+        self.plural_vars = saved_p;
         self.targets = saved_t;
         self.introduced = saved_i;
         self.self_salient = saved_s;
@@ -668,6 +751,8 @@ impl<'a> Renderer<'a> {
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
         self.var_defs.clear();
+        self.plural_vars.clear();
+        self.target_vars.clear();
         self.stored_values.clear();
         self.trigger_player = None;
         self.revealed_hand = false;
@@ -1104,6 +1189,10 @@ pub fn zone_word(z: ZoneKind) -> &'static str {
 pub fn counter_name(k: &str) -> String {
     format!("{k} counter")
 }
+
+/// Marks a "you" that means the ability's controller inside an instruction performed as
+/// another player (removed when that instruction is put into words).
+pub(crate) const KEEP_YOU: char = '\u{1}';
 
 impl Renderer<'_> {
     /// Renders `f` with an event in scope (see [`Renderer::event_scope`]).

@@ -135,10 +135,10 @@ impl Agent for RandomAgent {
                 idx.shuffle(&mut self.rng);
                 Answer::Indices(idx.into_iter().take((*min).max(1) as usize).collect())
             }
-            Decision::ChooseX { max, .. } => Answer::Number(if *max > 0 {
-                self.rng.gen_range(0..=*max)
+            Decision::ChooseX { min, max, .. } => Answer::Number(if *max > *min {
+                self.rng.gen_range((*min).max(0)..=*max)
             } else {
-                0
+                (*min).max(0)
             }),
             _ => Answer::Default,
         }

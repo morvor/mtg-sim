@@ -976,6 +976,11 @@ fn scale(e: Effect, count: Value) -> Option<Effect> {
             who,
             effect: Box::new(scale(*effect, count)?),
         }),
+        // "each opponent loses 1 life": each of them loses that much.
+        Effect::ForEachPlayer { who, effect } => Some(Effect::ForEachPlayer {
+            who,
+            effect: Box::new(scale(*effect, count)?),
+        }),
         // "that player loses 1 life and you gain 1 life": each part.
         Effect::Seq(v) => Some(Effect::Seq(
             v.into_iter()

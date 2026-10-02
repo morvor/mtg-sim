@@ -300,7 +300,12 @@ impl Renderer<'_> {
                 },
                 other => {
                     let s = self.cost_part(other);
-                    parts.push(s);
+                    // "pay {1} for each card revealed this way".
+                    if matches!(other, CostPart::Repeated { .. }) && s.starts_with('{') {
+                        parts.push(format!("pay {s}"));
+                    } else {
+                        parts.push(s);
+                    }
                 }
             }
         }
@@ -414,6 +419,26 @@ impl Renderer<'_> {
             (true, false) => s.push_str(" This ability can't be copied."),
             (false, true) => s.push_str(" X can't be 0."),
             (false, false) => {}
+        }
+        // "Spend only black mana on X." (see `payment_rules`): after each mode of a modal
+        // ability, as the card says it.
+        for r in crate::payment_rules::ability_rules(a) {
+            let t = format!(" {}.", capitalize(&super::statics::cost_rule_text(&r)));
+            if a.body.modal.is_some() && s.contains("\n•") {
+                s = s
+                    .lines()
+                    .map(|l| {
+                        if l.trim_start().starts_with('•') {
+                            format!("{l}{t}")
+                        } else {
+                            l.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+            } else {
+                s.push_str(&t);
+            }
         }
         self.zone = saved;
         let _ = third_person;
