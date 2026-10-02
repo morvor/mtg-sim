@@ -371,3 +371,33 @@ fn asceticism_can_regenerate_any_creature() {
     destroy(&mut t, ogre);
     assert!(t.on_battlefield(ogre));
 }
+
+#[test]
+fn resistance_reunited_equipped_set_is_fixed_as_it_resolves() {
+    cr!("611.2c");
+    ruling!(
+        "Resistance Reunited",
+        "The set of creatures that gains indestructible is determined as Resistance Reunited resolves. After that point, an equipped creature that gained indestructible won't lose indestructible if it becomes unequipped."
+    );
+    supported("Resistance Reunited");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let theirs = t.battlefield(P1, "Gray Ogre");
+    let blade = t.battlefield(P0, "Bonesplitter");
+    t.g.attach(blade, obj(bears));
+    let their_blade = t.battlefield(P1, "Bonesplitter");
+    t.g.attach(their_blade, obj(theirs));
+    t.g.recompute();
+    cast_new(&mut t, P0, "Resistance Reunited", &[obj(giant)]);
+    t.resolve_all();
+    assert_eq!(t.pt(giant), (5, 5));
+    assert!(indestructible(&t, bears));
+    assert!(!indestructible(&t, giant), "not equipped");
+    assert!(!indestructible(&t, theirs), "not P0's");
+    // The Bonesplitter moves to the Giant.
+    t.g.attach(blade, obj(giant));
+    t.g.recompute();
+    assert!(indestructible(&t, bears), "keeps it unequipped");
+    assert!(!indestructible(&t, giant), "doesn't gain it equipped");
+}
