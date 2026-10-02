@@ -380,7 +380,7 @@ fn subject_verb<'a>(
     ] {
         if let Some(r) = l.strip_prefix(p) {
             let mut spec = TargetSpec::player(pf, p.trim_end());
-            spec.min = 0;
+            spec.min = Value::Const(0);
             let it = b.it.clone();
             let slot = b.add_target(spec, p.trim_end());
             b.it = it;
@@ -1372,7 +1372,7 @@ fn whole_zone<'a>(s: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
                 PlayerFilter::Any
             };
             let mut spec = TargetSpec::player(pf, p.trim_end());
-            spec.min = 0;
+            spec.min = Value::Const(0);
             spec.max = Value::Const(99);
             let it = b.it.clone();
             let slot = b.add_target(spec, p.trim_end());
@@ -2863,7 +2863,7 @@ fn p_up_to_one_target_player(l: &str, b: &mut Builder) -> Option<Effect> {
         (b.it, b.it_player) = (saved.1, saved.2);
         return None;
     }
-    b.targets[saved.0].min = 0;
+    b.targets[saved.0].min = Value::Const(0);
     Some(e)
 }
 
