@@ -380,6 +380,10 @@ impl Renderer<'_> {
         }
         let mut s = format!("{cost}: {body}");
         for oc in &a.own_cost_changes {
+            // Payment rules ("Spend only black mana on X") are written below.
+            if matches!(oc.change, CostChange::Rule(_)) && oc.condition.is_none() {
+                continue;
+            }
             let c = self.own_cost_change(oc);
             s = join_words(&[s, c]);
         }

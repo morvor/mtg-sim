@@ -1067,6 +1067,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(creates?) an? ([^.]+?) tokens? for each ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is the number of $3$4"),
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
             (r"\b(creates?) a number of ([^.]+?) tokens?((?: with [^.]+?)?) equal to ([^.]+?)(\.|$)", "$1 x $2 tokens$3, where x is $4$5"),
+            (r"\b(discards?|draws?|mills?) a number of cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"(^|[.:—•] |\n|, )for each ([^,.]+), (creates?) an? ([^.]+?) tokens?(\.|$)", "${1}$3 x $4 tokens, where x is the number of $2$5"),
         ]
         .into_iter()

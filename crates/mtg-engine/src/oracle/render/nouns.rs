@@ -721,6 +721,10 @@ impl Renderer<'_> {
                     zone_word(z)
                 ))
             }
+            // "target permanent not named ~".
+            Filter::SameNameAs(s) if matches!(s.as_ref(), Sel::This) => {
+                np.post.push(format!("not named {}", self.me()))
+            }
             Filter::Or(v) if is_outlaw(v) => np.nons.push("non-outlaw".into()),
             Filter::Or(v) => {
                 for x in v {
