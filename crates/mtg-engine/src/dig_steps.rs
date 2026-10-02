@@ -290,7 +290,12 @@ fn take(
         // "If an instant or sorcery card is revealed this way" (CR 701.20a).
         ctx.set_var(vars::REVEALED, entities(&chosen));
     }
-    ctx.set_var(vars::DUG_CHOSEN, entities(&chosen));
+    // "The revealed cards" stay the ones revealed while they're being distributed ("Put
+    // all land cards revealed this way onto the battlefield tapped and put all creature
+    // cards revealed this way into your hand").
+    if !matches!(from, Sel::Var(vars::DUG_CHOSEN)) {
+        ctx.set_var(vars::DUG_CHOSEN, entities(&chosen));
+    }
     let n = chosen.len();
     let placed = place(g, chosen, to, ctx);
     // Not part of "the rest" (`DigStep::Rest`), even if they stay in the library.

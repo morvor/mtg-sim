@@ -592,3 +592,292 @@ fn floodpits_drowner_shuffles_itself_and_the_stunned_creature() {
     assert_eq!(t.library_size(P0), mine + 1);
     assert_eq!(t.library_size(P1), theirs + 1);
 }
+
+#[test]
+fn zimone_s_experiment_puts_the_revealed_lands_and_creatures_where_they_go() {
+    cr!("701.20a", "701.20b");
+    assert_supported("Zimone's Experiment");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 4);
+    // Top first: Island, Grizzly Bears, Shock, Forest, Llanowar Elves.
+    let ids = stack(
+        &mut t,
+        P0,
+        &["Llanowar Elves", "Forest", "Shock", "Grizzly Bears", "Island"],
+    );
+    let spell = t.hand(P0, "Zimone's Experiment");
+    // Reveal the Island and the Grizzly Bears; the Forest and Llanowar Elves aren't
+    // revealed and go to the bottom with the Shock.
+    t.answer_choose(P0, &[Entity::Object(ids[4]), Entity::Object(ids[3])]);
+    t.cast(P0, spell).go();
+    t.resolve();
+    let island = t.named_on_battlefield("Island");
+    assert_eq!(island.len(), 1);
+    assert!(t.obj_now(island[0]).tapped);
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    // The cards not revealed stayed in the library (on the bottom), even the land and
+    // the creature among them.
+    assert!(!t.in_hand(P0, "Llanowar Elves"));
+    assert_eq!(t.named_on_battlefield("Forest").len(), 4);
+    let mut bottom: Vec<String> = t.g.player(P0).library[..3]
+        .iter()
+        .map(|c| name_of(&t, *c))
+        .collect();
+    bottom.sort();
+    assert_eq!(bottom, ["Forest", "Llanowar Elves", "Shock"]);
+}
+
+#[test]
+fn winding_way_takes_the_cards_of_the_chosen_kind() {
+    cr!("701.20a");
+    assert_supported("Winding Way");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    stack(&mut t, P0, &["Forest", "Grizzly Bears", "Island", "Llanowar Elves"]);
+    let spell = t.hand(P0, "Winding Way");
+    // "Choose creature or land": land.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert!(t.in_hand(P0, "Island") && t.in_hand(P0, "Forest"));
+    assert!(t.in_graveyard(P0, "Grizzly Bears") && t.in_graveyard(P0, "Llanowar Elves"));
+}
+
+#[test]
+fn inscribed_tablet_draws_only_without_a_land() {
+    cr!("608.2c");
+    ruling!(
+        "Inscribed Tablet",
+        "If you reveal one or more land cards with Inscribed Tablet’s first ability, you have to put one of them into your hand."
+    );
+    assert_supported("Inscribed Tablet");
+    for land in [true, false] {
+        let mut t = TestGame::new(2);
+        let tablet = t.battlefield(P0, "Inscribed Tablet");
+        t.lands(P0, "Plains", 1);
+        let top = if land { "Forest" } else { "Shock" };
+        stack(&mut t, P0, &["Grizzly Bears", top, "Lightning Bolt", "Duress", "Ornithopter"]);
+        let hand = t.hand_size(P0);
+        // No answer: a land must be taken all the same.
+        t.activate(P0, tablet, 0, &[]).unwrap();
+        t.resolve();
+        assert_eq!(t.in_hand(P0, "Forest"), land);
+        // A land, or a card drawn instead (a filler: the five revealed cards went to
+        // the bottom).
+        assert_eq!(t.hand_size(P0), hand + 1);
+        let in_hand_names: Vec<String> =
+            t.g.player(P0).hand.iter().map(|c| name_of(&t, *c)).collect();
+        assert_eq!(in_hand_names.contains(&"Filler".to_string()), !land);
+    }
+}
+
+#[test]
+fn town_greeter_gains_life_only_for_a_town() {
+    cr!("608.2c");
+    assert_supported("Town Greeter");
+    for town in [true, false] {
+        let mut t = TestGame::new(2);
+        let land = if town { "Capital City" } else { "Forest" };
+        stack(&mut t, P0, &["Shock", "Grizzly Bears", land, "Island"]);
+        t.enter(P0, "Town Greeter");
+        t.settle();
+        // The milled cards are new objects, top first: the land is the second.
+        let milled = ObjectId(t.g.objects.len() as u32 + 1);
+        t.answer_choose(P0, &[Entity::Object(milled)]);
+        t.resolve_all();
+        assert!(t.in_hand(P0, land), "{land}");
+        assert_eq!(t.life(P0), if town { 22 } else { 20 });
+    }
+}
+
+#[test]
+fn kaalia_zenith_seeker_one_card_of_each_type() {
+    cr!("608.2c");
+    ruling!(
+        "Kaalia, Zenith Seeker",
+        "If a card has more than one of these types, you choose which type it counts as."
+    );
+    assert_supported("Kaalia, Zenith Seeker");
+    let mut t = TestGame::new(2);
+    // Two Angels and a Dragon.
+    let ids = stack(
+        &mut t,
+        P0,
+        &["Serra Angel", "Shock", "Shivan Dragon", "Baneslayer Angel", "Forest", "Island"],
+    );
+    t.answer_choose(
+        P0,
+        &[
+            Entity::Object(ids[0]),
+            Entity::Object(ids[3]),
+            Entity::Object(ids[2]),
+        ],
+    );
+    t.enter(P0, "Kaalia, Zenith Seeker");
+    t.resolve_all();
+    // Only one Angel: the first one chosen.
+    assert!(t.in_hand(P0, "Serra Angel"));
+    assert!(!t.in_hand(P0, "Baneslayer Angel"));
+    assert!(t.in_hand(P0, "Shivan Dragon"));
+    assert_eq!(library_names(&t, P0)[0], "Filler");
+}
+
+#[test]
+fn tezzeret_s_gatebreaker_reveals_a_blue_or_artifact_card() {
+    cr!("701.20a");
+    assert_supported("Tezzeret's Gatebreaker");
+    let mut t = TestGame::new(2);
+    let ids = stack(
+        &mut t,
+        P0,
+        &["Ornithopter", "Shock", "Counterspell", "Grizzly Bears", "Forest"],
+    );
+    t.answer_choose(P0, &[Entity::Object(ids[2])]);
+    t.enter(P0, "Tezzeret's Gatebreaker");
+    t.resolve_all();
+    let mut offered = last_choice_candidates(&t);
+    offered.sort();
+    let mut expected = vec![Entity::Object(ids[0]), Entity::Object(ids[2])];
+    expected.sort();
+    assert_eq!(offered, expected);
+    assert!(t.in_hand(P0, "Counterspell"));
+}
+
+#[test]
+fn eye_of_yawgmoth_one_into_hand_and_the_rest_exiled() {
+    cr!("701.20a");
+    assert_supported("Eye of Yawgmoth");
+    let mut t = TestGame::new(2);
+    let eye = t.battlefield(P0, "Eye of Yawgmoth");
+    t.lands(P0, "Swamp", 3);
+    // A 2/2: two cards are revealed.
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let ids = stack(&mut t, P0, &["Forest", "Shock", "Island"]);
+    t.answer_choose(P0, &[Entity::Object(bear)]);
+    t.answer_choose(P0, &[Entity::Object(ids[1])]);
+    t.activate(P0, eye, 0, &[]).unwrap();
+    t.resolve();
+    assert!(t.in_hand(P0, "Shock"));
+    assert!(t.in_exile("Island"));
+    assert_eq!(library_names(&t, P0)[0], "Forest");
+}
+
+#[test]
+fn lurking_predators_creature_onto_the_battlefield_otherwise_maybe_the_bottom() {
+    cr!("701.20a");
+    ruling!(
+        "Lurking Predators",
+        "If it's not a creature card and you don't put it on the bottom of your library"
+    );
+    assert_supported("Lurking Predators");
+    for (top, bottom) in [("Grizzly Bears", false), ("Shock", true), ("Shock", false)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Lurking Predators");
+        let card = t.library_top(P0, top);
+        t.lands(P1, "Mountain", 1);
+        let bolt = t.hand(P1, "Lightning Bolt");
+        t.answer_yes(P0, bottom);
+        t.answer_targets(P1, &[Entity::Player(P0)]);
+        t.cast_with(P1, bolt, &[Entity::Player(P0)]).unwrap();
+        t.resolve();
+        if top == "Grizzly Bears" {
+            assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+        } else if bottom {
+            assert_eq!(t.g.player(P0).library[0], card);
+        } else {
+            assert_eq!(t.g.player(P0).library.last(), Some(&card));
+        }
+    }
+}
+
+#[test]
+fn epiphany_at_the_drownyard_the_opponent_may_choose_an_empty_pile() {
+    cr!("700.3a");
+    ruling!(
+        "Epiphany at the Drownyard",
+        "If X is 0, you’ll reveal one card and one pile will be empty"
+    );
+    assert_supported("Epiphany at the Drownyard");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    t.library_top(P0, "Shock");
+    let spell = t.hand(P0, "Epiphany at the Drownyard");
+    // P0 puts the Shock into the second pile; the opponent chooses the first (empty) one.
+    t.answer_choose(P0, &[]);
+    t.answer(P1, DecisionKind::Option, Answer::Index(0));
+    t.cast(P0, spell).x(0).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Shock"));
+}
+
+#[test]
+fn dimir_charm_puts_one_back_and_mills_the_rest() {
+    cr!("701.20e");
+    assert_supported("Dimir Charm");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Swamp", 1);
+    let ids = stack(&mut t, P1, &["Forest", "Shock", "Island"]);
+    let charm = t.hand(P0, "Dimir Charm");
+    t.answer_choose(P0, &[Entity::Object(ids[1])]);
+    t.cast(P0, charm).modes(&[2]).target(P1).go();
+    t.resolve();
+    assert_eq!(library_names(&t, P1)[0], "Shock");
+    assert!(t.in_graveyard(P1, "Forest") && t.in_graveyard(P1, "Island"));
+}
+
+#[test]
+fn dihada_makes_a_treasure_for_each_card_put_into_the_graveyard() {
+    cr!("608.2c");
+    assert_supported("Dihada, Binder of Wills");
+    let mut t = TestGame::new(2);
+    let dihada = t.battlefield(P0, "Dihada, Binder of Wills");
+    let ids = stack(
+        &mut t,
+        P0,
+        &["Forest", "Isamaru, Hound of Konda", "Shock", "Grizzly Bears"],
+    );
+    t.answer_choose(P0, &[Entity::Object(ids[1])]);
+    t.activate(P0, dihada, 1, &[]).unwrap();
+    t.resolve();
+    assert!(t.in_hand(P0, "Isamaru, Hound of Konda"));
+    assert_eq!(t.graveyard_size(P0), 3);
+    let treasures = t
+        .g
+        .permanents()
+        .filter(|o| o.chars.subtypes.iter().any(|s| s == "Treasure"))
+        .count();
+    assert_eq!(treasures, 3);
+}
+
+#[test]
+fn dream_pillager_may_cast_spells_from_among_the_exiled_cards() {
+    cr!("510.2");
+    ruling!("Dream Pillager", "Any cards you don't cast will remain exiled.");
+    assert_supported("Dream Pillager");
+    let mut t = TestGame::new(2);
+    let dragon = t.battlefield(P0, "Dream Pillager");
+    stack(&mut t, P0, &["Forest", "Shock", "Lightning Bolt", "Island", "Grizzly Bears"]);
+    t.attack(&[(dragon, Entity::Player(P1))], &[]);
+    // Four damage: four cards exiled, and spells among them may be cast this turn.
+    assert_eq!(t.g.exile.len(), 4);
+    t.advance_to(P0, Step::PostcombatMain);
+    t.lands(P0, "Mountain", 1);
+    let bolt = t
+        .g
+        .exile
+        .iter()
+        .copied()
+        .find(|c| name_of(&t, *c) == "Lightning Bolt")
+        .unwrap();
+    assert!(t.cast_with(P0, bolt, &[Entity::Player(P1)]).is_ok());
+    // A land among them can't be played this way.
+    let island = t
+        .g
+        .exile
+        .iter()
+        .copied()
+        .find(|c| name_of(&t, *c) == "Island")
+        .unwrap();
+    assert!(t.play_land(P0, island).is_err());
+}

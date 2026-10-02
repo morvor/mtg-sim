@@ -1116,7 +1116,13 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
         .or_else(|| r.split_once(" exiled this way"))
         .or_else(|| r.split_once(" milled this way"))
     {
-        // "Put all creature cards revealed this way into your hand".
+        // "Put all creature cards revealed this way into your hand": the cards dug, or
+        // the ones revealed from among them ("You may reveal up to two creature and/or
+        // land cards from among them, ... Put all land cards revealed this way onto the
+        // battlefield").
+        if b.named.iter().any(|(n, _)| n == CHOSEN_MARK) && r.contains(" revealed this way") {
+            from = Sel::Var(vars::DUG_CHOSEN);
+        }
         (counted(desc, may, b)?, after)
     } else {
         counted_of_them(r, may)?
