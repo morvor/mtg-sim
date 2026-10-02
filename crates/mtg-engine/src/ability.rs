@@ -1600,7 +1600,10 @@ pub enum Modification {
     /// Behavior implemented in code, applied in `layer`: see
     /// `KeywordRules::custom_modification` (e.g. a hand-written card's "has the creature
     /// types of the last creature card exiled with it").
-    Custom { name: SmolStr, layer: Layer },
+    Custom {
+        name: SmolStr,
+        layer: Layer,
+    },
 }
 
 impl Modification {

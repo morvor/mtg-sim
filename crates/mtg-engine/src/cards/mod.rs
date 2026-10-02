@@ -181,7 +181,11 @@ pub fn map_effect(
 }
 
 /// An instant or sorcery's spell ability (CR 113.3a).
-pub fn spell(targets: Vec<crate::ability::TargetSpec>, effect: crate::ability::Effect, text: &str) -> Ability {
+pub fn spell(
+    targets: Vec<crate::ability::TargetSpec>,
+    effect: crate::ability::Effect,
+    text: &str,
+) -> Ability {
     crate::ability::AbilityDef::new(
         AbilityKind::Spell(crate::ability::SpellAbility {
             body: crate::ability::Body::simple(targets, effect),
@@ -223,7 +227,10 @@ pub fn manual_check(tests_cards_dir: &std::path::Path) -> Vec<String> {
             continue;
         };
         if sc.name != m.card {
-            problems.push(format!("{}: use the full Oracle name {:?}", m.card, sc.name));
+            problems.push(format!(
+                "{}: use the full Oracle name {:?}",
+                m.card, sc.name
+            ));
         }
         let def = crate::card::CardDef::from_scryfall(sc);
         if !def

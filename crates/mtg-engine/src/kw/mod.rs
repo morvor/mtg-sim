@@ -1063,9 +1063,7 @@ pub fn skips_step(g: &Game, step: crate::turn::Step, active: PlayerId) -> bool {
 
 /// See [`KeywordRules::keeps_damage_in_cleanup`].
 pub fn keeps_damage_in_cleanup(g: &Game, id: ObjectId) -> bool {
-    registry()
-        .iter()
-        .any(|r| r.keeps_damage_in_cleanup(g, id))
+    registry().iter().any(|r| r.keeps_damage_in_cleanup(g, id))
 }
 
 /// See [`KeywordRules::survives_lethal_damage`].
