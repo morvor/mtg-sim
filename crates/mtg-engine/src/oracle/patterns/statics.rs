@@ -112,10 +112,23 @@ pub(crate) fn granted_abilities(
     hint: CardType,
     ctx: &CompileContext,
 ) -> Option<Vec<Ability>> {
+    granted_abilities_to(quote_lower, text, hint, ctx, false)
+}
+
+/// [`granted_abilities`]; `to_source`: the ability is granted to the card itself ("~ has
+/// deathtouch and \"Whenever [card name] deals combat damage ...\""), so its name and
+/// "this creature" both mean the object that has it.
+pub(crate) fn granted_abilities_to(
+    quote_lower: &str,
+    text: &str,
+    hint: CardType,
+    ctx: &CompileContext,
+    to_source: bool,
+) -> Option<Vec<Ability>> {
     let orig = quoted_segments(text)
         .into_iter()
         .find(|q| q.trim_end_matches(',').to_lowercase() == quote_lower)?;
-    if quote_names_card(orig, ctx) {
+    if !to_source && quote_names_card(orig, ctx) {
         return None;
     }
     let mut tl = TypeLine::default();
@@ -1303,7 +1316,8 @@ fn grant_list(
             .and_then(|x| x.parse::<usize>().ok())
         {
             let q = quotes.get(k)?;
-            for a in granted_abilities(q, text, subj.hint, ctx)? {
+            let to_source = matches!(subj.it, Some(Sel::This)) && matches!(subj.filter, Filter::Source);
+            for a in granted_abilities_to(q, text, subj.hint, ctx, to_source)? {
                 out.push(Out::Mod(Modification::AddAbility(a)));
             }
         } else {
