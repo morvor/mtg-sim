@@ -1277,6 +1277,9 @@ impl Renderer<'_> {
                 (self.self_salient, self.other_salient, self.trigger_is_self) = saved;
                 format!("{t}, {}", lower_first(&b))
             }
+            // Noting what the ability affected has no words of its own: the linked
+            // ability says "that player" (CR 607.1).
+            Effect::NoteLinked { .. } => String::new(),
             Effect::Reflexive { body } => {
                 let b = self.in_event_scope(|r| r.body(body));
                 format!("when you do, {}", lower_first(&b))

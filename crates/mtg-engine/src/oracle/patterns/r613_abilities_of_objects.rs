@@ -82,6 +82,9 @@ fn from_objects(s: &str, top_card: bool) -> Option<Sel> {
         "that card" if top_card => {
             return Some(Sel::TopOfLibrary(PlayerRef::You, Value::c(1)))
         }
+        // The card the linked ability chose most recently (Koh, the Face Stealer; see
+        // `r607_linked_targets`).
+        "the last chosen card" => return Some(Sel::LinkedNoted),
         _ => {}
     }
     let s = s

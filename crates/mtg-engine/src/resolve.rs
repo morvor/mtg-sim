@@ -1677,6 +1677,9 @@ impl Game {
                     performer,
                 });
             }
+            Effect::NoteLinked { what, replace } => {
+                crate::linked_notes::exec(self, what, *replace, ctx);
+            }
             Effect::Reflexive { body } => {
                 // CR 603.12: a reflexive triggered ability is checked immediately after it's
                 // created; it triggers now and waits to be put on the stack (with its own

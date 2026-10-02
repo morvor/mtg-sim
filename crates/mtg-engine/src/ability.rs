@@ -943,6 +943,10 @@ pub enum Sel {
     /// The top N cards of each of the players' libraries ("the top two cards of your
     /// library"), top first.
     TopOfLibrary(PlayerRef, Value),
+    /// The objects the linked abilities of the source noted ([`Effect::NoteLinked`],
+    /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
+    /// has since changed zones is a new object the note doesn't find (CR 400.7).
+    LinkedNoted,
 }
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
@@ -987,6 +991,11 @@ pub enum PlayerRef {
     ChosenOpponent,
     /// The monarch / initiative holder etc.
     Monarch,
+    /// The players the linked abilities of the source noted, or that such an ability
+    /// still on the stack targets ([`Effect::NoteLinked`], CR 607.1): "When ~ enters,
+    /// target player loses 6 life. When ~ leaves the battlefield, that player gains 6
+    /// life." (Laquatus's Champion).
+    LinkedNoted,
 }
 
 /// Player predicates, used in targets and filters.
@@ -3861,6 +3870,16 @@ pub enum Effect {
         body: Box<Body>,
         /// Fires once and is then removed.
         once: bool,
+    },
+    /// Notes the selected objects and players for the abilities linked to this one
+    /// (CR 607.1, 607.2e): what the ability affected or what a player chose, which a
+    /// linked ability refers to as "that player" or "the last chosen card"
+    /// ([`PlayerRef::LinkedNoted`], [`Sel::LinkedNoted`]). With `replace`, the new note
+    /// replaces earlier ones ("the last chosen card"); otherwise it adds to them
+    /// (CR 607.3). See `linked_notes.rs`.
+    NoteLinked {
+        what: Sel,
+        replace: bool,
     },
     /// A reflexive triggered ability ("When you do, ..."): created during resolution, it
     /// triggers immediately and is put on the stack the next time a player would receive
