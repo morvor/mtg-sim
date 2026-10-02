@@ -16,6 +16,9 @@ pub const OPPONENTS_BEING_ATTACKED: &str = "opponents being attacked";
 /// more creatures this turn (CR 508.6).
 pub const OPPONENTS_ATTACKED_THIS_TURN: &str = "opponents you attacked this turn";
 
+/// `Value::Custom` name: the number of players who have lost the game (CR 104.3).
+pub const PLAYERS_WHO_LOST: &str = "players who have lost the game";
+
 pub struct ValueCounts;
 
 impl KeywordRules for ValueCounts {
@@ -40,6 +43,7 @@ impl KeywordRules for ValueCounts {
                     })
                     .count() as i64,
             ),
+            PLAYERS_WHO_LOST => Some(g.players.iter().filter(|p| p.has_lost).count() as i64),
             _ => None,
         }
     }

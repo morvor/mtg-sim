@@ -63,3 +63,27 @@ fn each_player_counts(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "each player: amount depending on that player", priority: 65, parse: each_player_counts } }
+
+/// "defending player loses 1 life for each card in their graveyard", "it deals damage to
+/// defending player equal to the number of artifacts they control": "they" is the
+/// defending player the instruction names.
+fn defending_player_amount(l: &str, b: &mut Builder) -> Option<Effect> {
+    const P: &str = "defending player";
+    let i = l.find(P)?;
+    let after = &l[i + P.len()..];
+    if after.contains(P)
+        || matches!(b.it_player, PlayerRef::DefendingPlayer)
+        || !mentions_them_in_amount(after)
+        || l.contains("of their choice")
+    {
+        return None;
+    }
+    let saved = std::mem::replace(&mut b.it_player, PlayerRef::DefendingPlayer);
+    let e = parse_clause(l, b);
+    if e.is_none() {
+        b.it_player = saved;
+    }
+    e
+}
+
+inventory::submit! { EffectPattern { name: "defending player: amount depending on that player", priority: 65, parse: defending_player_amount } }

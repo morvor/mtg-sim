@@ -512,8 +512,66 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
         let n = rest.len();
         return Some((Filter::SameNameAs(Box::new(sel)), &t[t.len() - n..]));
     }
-    // "[player] controls".
+    if let Some(r) = t.strip_prefix("on the battlefield") {
+        if word_end(r) {
+            return Some((Filter::InZone(ZoneKind::Battlefield), r));
+        }
+    }
+    // "creatures it's blocking": the creatures the source blocks.
+    if let Some(r) = t.strip_prefix("it's blocking") {
+        if word_end(r) && matches!(b.it, Sel::This) {
+            return Some((Filter::BlockedBySource, r));
+        }
+        return None;
+    }
+    // "with power less than 0", "with toughness greater than 3".
+    for (p, cmp, power) in [
+        ("with power less than ", Cmp::Lt, true),
+        ("with power greater than ", Cmp::Gt, true),
+        ("with toughness less than ", Cmp::Lt, false),
+        ("with toughness greater than ", Cmp::Gt, false),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            let (n, rest) = parse_number(r)?;
+            n.as_const()?;
+            let f = if power {
+                Filter::Power(cmp, Box::new(n))
+            } else {
+                Filter::Toughness(cmp, Box::new(n))
+            };
+            return Some((f, rest));
+        }
+    }
+    // "lands you control named Wastes": a card name (CR 201.2).
+    if let Some(r) = t.strip_prefix("named ") {
+        let (name, rest) = match r.find([',', '.']) {
+            Some(i) => (&r[..i], &r[i..]),
+            None => (r, ""),
+        };
+        let title: Vec<String> = name
+            .split(' ')
+            .map(|w| {
+                let mut c = w.chars();
+                c.next()
+                    .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                    .unwrap_or_default()
+            })
+            .collect();
+        let title = title.join(" ");
+        if crate::card::CardDb::global().get(&title).is_some() {
+            return Some((Filter::Named(title.into()), rest));
+        }
+        return None;
+    }
+    // "[player] controls", "[player] owns".
     let (p, r) = player_word(t, b)?;
+    for (verb, owns) in [(" owns", true), (" own", true)] {
+        if let Some(r2) = r.strip_prefix(verb) {
+            if word_end(r2) && owns {
+                return Some((owned_by(&p), r2));
+            }
+        }
+    }
     let r = r
         .strip_prefix(" controls")
         .or_else(|| r.strip_prefix(" control"))?;
@@ -572,6 +630,21 @@ fn relative_list<'a>(r: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
 /// An object phrase with the qualifiers above, in any order. Returns the filter and the
 /// rest.
 pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
+    // "Aura and Equipment attached to it": either kind (a union of two nouns).
+    let owned;
+    let s = match s.split_once(' ') {
+        Some((w1, r)) => match r.split_once(' ') {
+            Some(("and", r2))
+                if head_noun(w1).is_some()
+                    && head_noun(r2.split(' ').next().unwrap_or("")).is_some() =>
+            {
+                owned = format!("{w1} or {r2}");
+                owned.as_str()
+            }
+            _ => s,
+        },
+        None => s,
+    };
     let (f, _, rest) = super::statics::object_phrase(s)?;
     let mut parts = vec![f];
     let mut rest = rest.to_string();
@@ -805,6 +878,8 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         "time it was kicked",
         "time he was kicked",
         "time she was kicked",
+        "times he was kicked",
+        "times she was kicked",
     ] {
         if let Some(rest) = r.strip_prefix(p) {
             if word_end(rest)
@@ -813,6 +888,15 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                 return Some((Value::TimesKicked, rest.to_string()));
             }
             return None;
+        }
+    }
+    // CR 104.3: "players who have lost the game".
+    for p in ["players who have lost the game", "player who has lost the game"] {
+        if let Some(rest) = r.strip_prefix(p) {
+            return Some((
+                Value::Custom(crate::kw::value_counts::PLAYERS_WHO_LOST.into()),
+                rest.to_string(),
+            ));
         }
     }
     // CR 700.8a: "creatures in your party".
@@ -1185,8 +1269,13 @@ pub fn whole_count(s: &str, it: Option<&Sel>) -> Option<Value> {
         power: None,
         toughness: None,
     };
-    let mut b = Builder::new(&ctx);
-    b.it = it.cloned().unwrap_or(Sel::This);
+    whole_count_in(s, &ctx, it.cloned().unwrap_or(Sel::This))
+}
+
+/// [`whole_count`] for a card being compiled (so "named ~" is its name).
+pub fn whole_count_in(s: &str, ctx: &crate::oracle::CompileContext, it: Sel) -> Option<Value> {
+    let mut b = Builder::new(ctx);
+    b.it = it;
     let (v, rest) = count(end(s), &mut b)?;
     (rest.trim().is_empty() && b.targets.is_empty()).then_some(v)
 }

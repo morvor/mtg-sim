@@ -196,7 +196,15 @@ fn p_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
     // "Each opponent ... for each creature they control"), and its targets come first.
     let (saved_targets, saved_it, saved_player) = (b.targets.len(), b.it.clone(), b.it_player.clone());
     if let Some(e) = parse_clause(clause, b) {
-        if let Some(count) = count_of(thing, b) {
+        // "Each creature your opponents control gets -1/-1 ... for each poison counter its
+        // controller has": "its" is each affected object in turn (CR 608.2h).
+        let it = b.it.clone();
+        if matches!(&e, Effect::Modify { what: Sel::All(_), .. }) {
+            b.it = Sel::Var(vars::AFFECTED);
+        }
+        let count = count_of(thing, b);
+        b.it = it;
+        if let Some(count) = count {
             if let Some(e) = multiply(e, count) {
                 return Some(e);
             }
