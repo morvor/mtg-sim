@@ -268,3 +268,43 @@ fn darkblade_agent_after_you_surveil() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn palladia_mors_has_hexproof_until_it_deals_damage() {
+    cr!("611.3a", "400.7");
+    ruling!(
+        "Palladia-Mors, the Ruiner",
+        "It has hexproof again until it deals damage"
+    );
+    assert_supported(&["Palladia-Mors, the Ruiner", "Ruric Thar, Magecrusher"]);
+    let mut t = TestGame::new(2);
+    let p = t.battlefield(P0, "Palladia-Mors, the Ruiner");
+    t.settle();
+    assert!(has(&t, p, KeywordKind::Hexproof));
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(p, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 14);
+    assert!(!has(&t, p, KeywordKind::Hexproof));
+    // A new object (it left and came back) has hexproof again.
+    let card = t.g.move_object(p, mtg_engine::object::Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+    let back = t.g.move_object(card.unwrap(), mtg_engine::object::Zone::Battlefield, mtg_engine::events::MoveCause::Effect, Some(P0));
+    t.settle();
+    assert!(has(&t, back.unwrap(), KeywordKind::Hexproof));
+}
+
+#[test]
+fn ruric_thar_hexproof_ends_only_with_combat_damage() {
+    cr!("611.3a", "510.2");
+    let mut t = TestGame::new(2);
+    let r = t.battlefield(P0, "Ruric Thar, Magecrusher");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.settle();
+    assert!(has(&t, r, KeywordKind::Hexproof));
+    // Noncombat damage (as in a fight): still hexproof.
+    t.g.deal_damage(r, Entity::Object(bears), 7, false);
+    t.settle();
+    assert!(has(&t, r, KeywordKind::Hexproof));
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(r, Entity::Player(P1))], &[]);
+    assert!(!has(&t, r, KeywordKind::Hexproof));
+}

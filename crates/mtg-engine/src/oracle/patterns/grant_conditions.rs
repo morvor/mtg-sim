@@ -20,6 +20,10 @@ pub const SACRIFICED_THIS_TURN: &str = "you_sacrificed_this_turn:";
 /// "you've surveilled this turn": a named action (`Event::Custom`) the controller
 /// performed this turn, evaluated by `kw/grant_conditions.rs`.
 pub const ACTION_THIS_TURN: &str = "you_did_this_turn:";
+/// The source has dealt damage / combat damage since it became the object it is
+/// (CR 400.7): evaluated by `kw/grant_conditions.rs`.
+pub const SOURCE_DEALT_DAMAGE: &str = "source_dealt_damage";
+pub const SOURCE_DEALT_COMBAT_DAMAGE: &str = "source_dealt_combat_damage";
 /// The effect's source card, followed through its zone changes, has been cast from
 /// exile: evaluated by `kw/grant_conditions.rs`.
 pub const SOURCE_CAST_FROM_EXILE: &str = "source_cast_from_exile";
@@ -141,6 +145,16 @@ fn object_history(c: &str) -> Option<Condition> {
     match c {
         // A permanent's abilities see how it was cast (CR 607.2i, 601.2i).
         "it was cast" | "~ was cast" => return Some(Condition::WasCast),
+        // "yet": since it became this object (CR 400.7). ("They" is a card that names
+        // itself in the plural, Ruric Thar.)
+        "it hasn't dealt damage yet" | "~ hasn't dealt damage yet" => {
+            return Some(not(Condition::Custom(SOURCE_DEALT_DAMAGE.into())))
+        }
+        "it hasn't dealt combat damage yet"
+        | "~ hasn't dealt combat damage yet"
+        | "they haven't dealt combat damage yet" => {
+            return Some(not(Condition::Custom(SOURCE_DEALT_COMBAT_DAMAGE.into())))
+        }
         _ => {}
     }
     // "two or more creatures are blocking it"

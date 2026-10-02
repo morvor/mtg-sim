@@ -10,6 +10,7 @@ use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::oracle::patterns::grant_conditions::{
     ACTION_THIS_TURN, COMMITTED_CRIME_THIS_TURN, SACRIFICED_THIS_TURN, SOURCE_CAST_FROM_EXILE,
+    SOURCE_DEALT_COMBAT_DAMAGE, SOURCE_DEALT_DAMAGE,
 };
 use crate::types::CardType;
 
@@ -18,6 +19,23 @@ pub struct GrantConditions;
 impl KeywordRules for GrantConditions {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
+    }
+
+    /// Records that the source dealt (combat) damage ("as long as it hasn't dealt damage
+    /// yet").
+    fn after_damage(
+        &self,
+        g: &mut Game,
+        source: crate::types::ObjectId,
+        _target: crate::types::Entity,
+        _amount: u32,
+        combat: bool,
+    ) {
+        let o = g.obj_mut(source);
+        o.dealt_damage.0 = true;
+        if combat {
+            o.dealt_damage.1 = true;
+        }
     }
 
     /// Records the named actions players perform ("surveil", "scry", CR 701.25, 701.22).
@@ -33,6 +51,17 @@ impl KeywordRules for GrantConditions {
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        if name == SOURCE_DEALT_DAMAGE || name == SOURCE_DEALT_COMBAT_DAMAGE {
+            let combat = name == SOURCE_DEALT_COMBAT_DAMAGE;
+            return Some(ctx.source.is_some_and(|s| {
+                let d = g.obj(s).dealt_damage;
+                if combat {
+                    d.1
+                } else {
+                    d.0
+                }
+            }));
+        }
         if name == SOURCE_CAST_FROM_EXILE {
             // The card now: a spell, or the permanent that spell became, cast from exile.
             let Some(src) = ctx.source else {
