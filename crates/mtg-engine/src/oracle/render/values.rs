@@ -1021,7 +1021,7 @@ impl Renderer<'_> {
                 format!("for as long as {c}")
             }
             Duration::Permanent => String::new(),
-            Duration::UntilHostLeaves => String::new(),
+            Duration::UntilHostLeaves | Duration::WhileFaceDown => String::new(),
             Duration::ThisTurn => "this turn".into(),
             Duration::ThroughNextUntapStep => "during its controller's next untap step".into(),
             Duration::ThroughYourNextUntapStep => "during your next untap step".into(),

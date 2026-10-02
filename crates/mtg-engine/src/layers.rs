@@ -343,7 +343,9 @@ impl Game {
                         ..Default::default()
                     }
                 } else {
-                    crate::facedown::face_down_characteristics(self, *id)
+                    let mut fd = crate::facedown::face_down_characteristics(self, *id);
+                    self.apply_face_down_listed(&mut fd, *id);
+                    fd
                 };
                 self.objects[id.0 as usize].chars = fd;
             }
@@ -541,6 +543,13 @@ impl Game {
                     remove.push(e.id);
                 }
             }
+            if let (Duration::WhileFaceDown, Affected::Objects(v)) = (&e.duration, &e.affected) {
+                if v.iter()
+                    .all(|o| !self.is_live(*o) || !self.obj(*o).face_down)
+                {
+                    remove.push(e.id);
+                }
+            }
         }
         let gone =
             |d: &Duration, s: Option<ObjectId>, c: PlayerId, g: &Game| g.effect_expired(d, s, c);
@@ -566,6 +575,27 @@ impl Game {
         self.rule_effects.retain(|e| !rm.contains(&e.id));
         self.player_effects.retain(|e| !pm.contains(&e.id));
         self.replacements.retain(|e| !rp.contains(&e.id));
+    }
+
+    /// The characteristics listed by the effects that turned the face-down permanent `id`
+    /// face down ("It becomes a 2/2 Cyberman artifact creature", CR 708.2a): they're its
+    /// face-down characteristics (layer 1b, CR 613.2b), and so its copiable values.
+    fn apply_face_down_listed(&self, c: &mut Characteristics, id: ObjectId) {
+        let mut listed: Vec<&ContinuousEffect> = self
+            .effects
+            .iter()
+            .filter(|e| {
+                matches!(e.duration, Duration::WhileFaceDown)
+                    && matches!(&e.affected, Affected::Objects(v) if v.contains(&id))
+            })
+            .collect();
+        listed.sort_by_key(|e| e.timestamp);
+        for e in listed {
+            let ctx = Ctx::new(e.source, e.controller);
+            for m in &e.mods {
+                apply_mod(c, m, self, &ctx, id);
+            }
+        }
     }
 
     pub(crate) fn effect_expired(
@@ -606,7 +636,12 @@ impl Game {
         let mut effs: Vec<LayerEff> = Vec::new();
         for (i, e) in self.effects.iter().enumerate() {
             let key = EffKey::Resolved(i);
-            if e.layer1.is_none() && has_layer_mod(&e.mods, layer) && !done.contains(&key) {
+            // Characteristics listed for a face-down permanent apply in layer 1b.
+            if e.layer1.is_none()
+                && !matches!(e.duration, Duration::WhileFaceDown)
+                && has_layer_mod(&e.mods, layer)
+                && !done.contains(&key)
+            {
                 effs.push(LayerEff {
                     key,
                     ts: crate::stickers::effect_timestamp(self, e),

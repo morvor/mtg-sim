@@ -24,6 +24,49 @@ fn p_turn_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "r708 turn face down", priority: 0, parse: p_turn_face_down } }
 
+/// "Turn target creature face down. It becomes a 2/2 Cyberman artifact creature." / "It's
+/// a 2/2 Cyberman artifact creature." / "They're 2/2 Horror creatures.": characteristics listed for the permanent turned face
+/// down (CR 708.2a) apply only while it's face down. Turned face up, it's whatever is
+/// printed on the card; one that couldn't be turned face down (CR 708.2b, 712.16) isn't
+/// changed at all.
+fn f_face_down_listed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Effect::TurnFaceDown { what } = &*prev else {
+        return false;
+    };
+    let what = what.clone();
+    let clause = if let Some(r) = l.strip_prefix("it's ") {
+        format!("it becomes {r}")
+    } else if let Some(r) = l.strip_prefix("they're ") {
+        format!("they become {r}")
+    } else if l.starts_with("it becomes ") || l.starts_with("they become ") {
+        l.to_string()
+    } else {
+        return false;
+    };
+    let Some(Effect::Modify {
+        what: w,
+        mods,
+        duration: Duration::Permanent,
+    }) = parse_clause(&clause, b)
+    else {
+        return false;
+    };
+    if format!("{w:?}") != format!("{what:?}") {
+        return false;
+    }
+    *prev = Effect::Seq(vec![
+        Effect::TurnFaceDown { what },
+        Effect::Modify {
+            what: w,
+            mods,
+            duration: Duration::WhileFaceDown,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "r708 face-down characteristics listed", priority: 0, apply: f_face_down_listed } }
+
 /// "Reveal target face-down permanent." (CR 708.12)
 fn p_reveal_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
     if end(l) != "reveal target face-down permanent" {

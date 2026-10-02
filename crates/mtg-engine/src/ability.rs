@@ -1650,6 +1650,10 @@ pub enum Duration {
     Permanent,
     /// Until the affected object leaves (used by Auras granting effects via resolution).
     UntilHostLeaves,
+    /// For as long as the affected objects are face down: characteristics an effect lists
+    /// for a permanent it turns face down ("Turn target creature face down. It becomes a
+    /// 2/2 Cyberman artifact creature.", CR 708.2a) stop applying once it's turned face up.
+    WhileFaceDown,
     /// "this turn" for rule-modifying effects — same as EndOfTurn.
     ThisTurn,
     /// "[doesn't untap] during its controller's next untap step": for each affected
