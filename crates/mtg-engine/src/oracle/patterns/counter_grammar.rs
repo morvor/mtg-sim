@@ -210,6 +210,16 @@ pub fn holder(s: &str, b: &mut Builder) -> Option<Sel> {
             return Some(Sel::This);
         }
     }
+    // "create Zabu, a legendary 2/2 green Cat creature token with "... put a +1/+1 counter
+    // on Zabu."": in the token's own ability, the token's name is the token.
+    if !s.contains(' ')
+        && !s.is_empty()
+        && crate::oracle::raw_text()
+            .to_lowercase()
+            .contains(&format!("create {s}, a "))
+    {
+        return Some(Sel::This);
+    }
     // "that Hero", "that Saga": the object the text is about, named by its type.
     if let Some(noun) = s.strip_prefix("that ") {
         if !noun.contains(' ')

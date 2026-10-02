@@ -121,3 +121,38 @@ fn dyadrine_draws_only_if_two_creatures_each_had_a_counter_removed() {
         }
     }
 }
+
+#[test]
+fn sab_sunen_draws_when_it_has_an_odd_number_of_counters() {
+    cr!("122.1", "608.2c");
+    let mut t = TestGame::new(2);
+    let s = t.battlefield(P0, "Sab-Sunen, Luxa Embodied");
+    // Two counters before: three after (odd), draw two.
+    add(&mut t, s, "charge", 2);
+    t.advance_to(P1, Step::Upkeep);
+    let hand = t.hand_size(P0);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1 + 2);
+    // Four after (even): no cards.
+    t.advance_to(P1, Step::Upkeep);
+    let hand = t.hand_size(P0);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn ka_zars_zabu_grows_on_landfall() {
+    cr!("111.4", "603.2");
+    assert_supported(&["Ka-Zar of the Savage Land"]);
+    let mut t = TestGame::new(2);
+    t.enter(P0, "Ka-Zar of the Savage Land");
+    t.resolve_all();
+    let zabu = t.named_on_battlefield("Zabu");
+    assert_eq!(zabu.len(), 1);
+    let forest = t.hand(P0, "Forest");
+    t.play_land(P0, forest).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(zabu[0], "+1/+1"), 1);
+}

@@ -52,6 +52,44 @@ pub(crate) fn then_if_counters_on_it(s: &str, prev: &mut Effect, b: &mut Builder
     else {
         return false;
     };
+    // "Then if it has an odd number of counters on it, ..." (Sab-Sunen): the total
+    // number, odd or even.
+    let parity = [("an odd number of ", 1), ("an even number of ", 0)]
+        .into_iter()
+        .find_map(|(p, r)| c.strip_prefix(p).map(|rest| (r, rest)));
+    if let Some((remainder, rest)) = parity {
+        let Some((None, tail)) = super::counters_resources_counters::kind_then_on(rest) else {
+            return false;
+        };
+        if !matches!(end(tail), "it" | "~") {
+            return false;
+        }
+        let total = Value::CountersOn(Box::new(Sel::This), None);
+        let half = Value::Mul(
+            Box::new(Value::c(2)),
+            Box::new(Value::Div(Box::new(total.clone()), 2, false)),
+        );
+        let cond = Condition::Compare(
+            Value::Diff(Box::new(total), Box::new(half)),
+            Cmp::Eq,
+            Value::c(remainder),
+        );
+        let saved_targets = b.targets.len();
+        let Some(then) = parse_clause(clause, b) else {
+            b.targets.truncate(saved_targets);
+            return false;
+        };
+        let old = std::mem::take(prev);
+        *prev = Effect::seq(vec![
+            old,
+            Effect::If {
+                cond,
+                then: Box::new(then),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ]);
+        return true;
+    }
     let Some((cmp, n, c)) = super::counters_resources_counters::amount_cmp(c) else {
         return false;
     };
