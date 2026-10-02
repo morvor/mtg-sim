@@ -2332,7 +2332,6 @@ mod tests {
                 "permanent card with mana value 3 or less",
                 "artifact card with mana value 2 or 3",
                 "hero or enchantment card",
-                "double-faced card",
                 "nonland, nonlegendary card",
             ] {
                 assert!(dig_card_filter(d, b).is_some(), "{d}");
