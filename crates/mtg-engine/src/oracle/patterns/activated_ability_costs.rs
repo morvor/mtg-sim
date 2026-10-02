@@ -39,6 +39,11 @@ pub(crate) fn sources(s: &str) -> Option<Filter> {
     if s == "~" {
         return Some(Filter::Source);
     }
+    // "that target a Merfolk you control".
+    let s = s
+        .strip_prefix("a ")
+        .or_else(|| s.strip_prefix("an "))
+        .unwrap_or(s);
     let (f, _, tail) = parse_object_phrase(s)?;
     if !end(tail).is_empty() {
         return None;
