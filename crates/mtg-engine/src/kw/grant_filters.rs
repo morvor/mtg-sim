@@ -49,6 +49,11 @@ impl KeywordRules for GrantFilters {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        // Bound to the granting object when the ability is acquired (`granted_by`); an
+        // unbound one matches nothing.
+        if name == crate::granted_by::GRANTER {
+            return Some(false);
+        }
         if name == DEALT_DAMAGE_THIS_TURN {
             return Some(g.history.damage_sources.iter().any(|(s, _)| *s == id));
         }

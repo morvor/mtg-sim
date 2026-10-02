@@ -1771,7 +1771,13 @@ pub fn acquired_ability(a: &Ability, from: Option<ObjectId>, target: ObjectId) -
             // A link id distinct from those of printed abilities and of abilities acquired
             // from other objects (CR 607.5).
             let link = 0x8000 | ((a.link as u32 * 131 + src.0 * 31) % 0x7fff) as u16;
-            AbilityDef::with_link(a.kind.clone(), a.text.clone(), link)
+            // "Sacrifice Blazing Torch": the object granting the ability (`granted_by`).
+            let kind = if crate::granted_by::refers_to_granter(a) {
+                crate::granted_by::bind_granter(a, src).kind.clone()
+            } else {
+                a.kind.clone()
+            };
+            AbilityDef::with_link(kind, a.text.clone(), link)
         })
         .clone()
 }

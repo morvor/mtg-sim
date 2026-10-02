@@ -142,8 +142,15 @@ pub(crate) fn granted_abilities_to(
     let orig = quoted_segments(text)
         .into_iter()
         .find(|q| q.trim_end_matches(',').to_lowercase() == quote_lower)?;
+    // An ability that names the card granting it ("Equipped creature has \"{T}, Sacrifice
+    // Blazing Torch: Blazing Torch deals 2 damage to any target.\""): only when every
+    // self-reference in it is the card's name (see `granted_by`).
+    let mut names_granter = false;
     if !to_source && quote_names_card(orig, ctx) {
-        return None;
+        if !quote_only_names_card(orig, ctx) {
+            return None;
+        }
+        names_granter = true;
     }
     let mut tl = TypeLine::default();
     tl.card_types.insert(hint);
@@ -168,7 +175,33 @@ pub(crate) fn granted_abilities_to(
     {
         return None;
     }
+    if names_granter {
+        return v.iter().map(crate::granted_by::refer_to_granter).collect();
+    }
     Some(v.into_iter().map(not_a_cda).collect())
+}
+
+/// Whether every self-reference of a quoted ability (normalized) is the card's name:
+/// without the name, its raw text has none ("this creature" would be the object that has
+/// the ability).
+fn quote_only_names_card(normalized: &str, ctx: &CompileContext) -> bool {
+    let raw = crate::oracle::raw_text();
+    let tl = TypeLine::default();
+    let anonymous = CompileContext {
+        card_name: "\u{1}",
+        full_name: "\u{1}",
+        type_line: &tl,
+        layout: crate::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let bare = |s: &str| s.trim().trim_end_matches(',').to_string();
+    quoted_segments(&raw).into_iter().any(|q| {
+        bare(&crate::oracle::normalize(q, ctx)) == bare(normalized)
+            && !crate::oracle::normalize(q, &anonymous).contains('~')
+    })
 }
 
 /// An ability an object acquires from an effect isn't characteristic-defining (CR 604.3a:
