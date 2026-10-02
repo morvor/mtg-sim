@@ -37,6 +37,10 @@ use crate::types::*;
 /// An object phrase, with "you don't own" / "you own" after it ("you control three or
 /// more permanents you don't own").
 fn noun(r: &str) -> Option<Filter> {
+    // A commander (CR 903.3) is any of a player's commanders on the battlefield.
+    if matches!(r, "commander" | "commanders") {
+        return Some(Filter::Commander);
+    }
     if let Some(x) = r.strip_suffix(" you don't own") {
         return Some(Filter::and(vec![
             color_or_phrase(x)?,
@@ -162,8 +166,10 @@ fn flip(c: Cmp) -> Cmp {
     }
 }
 
-/// What a player has or did, worded after the subject (`you`: base-form verbs).
-fn player_state(r: &str, you: bool) -> Option<PlayerFilter> {
+/// What a player has or did, worded after the subject (`you`: base-form verbs): "has more
+/// life than you", "controls no creatures", "has exactly three or exactly four cards in
+/// hand", "was dealt damage this turn", "is the monarch".
+pub(crate) fn player_state(r: &str, you: bool) -> Option<PlayerFilter> {
     let (has, controls, is) = if you {
         ("have ", "control ", "are ")
     } else {
@@ -190,6 +196,27 @@ fn player_state(r: &str, you: bool) -> Option<PlayerFilter> {
         if let Some((stat, cmp, other)) = comparison(x, false) {
             return compare_with(&stat, cmp, other);
         }
+        // "has at least four more cards in hand than you": yours plus four, or more.
+        if let Some((n, rest)) = x.strip_prefix("at least ").and_then(parse_number) {
+            if let Some((stat, Cmp::Gt, "you")) = comparison(rest.trim_start(), false) {
+                let v = Value::Sum(vec![stat.of(PlayerRef::You), n]);
+                return Some(stat.filter(Cmp::Ge, v));
+            }
+        }
+        // "has exactly three or exactly four cards in hand"
+        if let Some((a, b)) = x
+            .split_once(" or ")
+            .filter(|(a, b)| a.starts_with("exactly ") && b.starts_with("exactly "))
+        {
+            // The noun after the second number ("cards in hand") is the first one's too.
+            let words: Vec<&str> = b.split(' ').collect();
+            if words.len() > 2 {
+                let noun = words[2..].join(" ");
+                let first = player_state(&format!("{has}{a} {noun}"), you)?;
+                let second = player_state(&format!("{has}{b}"), you)?;
+                return Some(PlayerFilter::Or(vec![first, second]));
+            }
+        }
         let x = x.strip_prefix("a card in ").map(|h| format!("1 or more cards in {h}"));
         let x = x.as_deref().unwrap_or(&r[has.len()..]);
         let (cmp, n, tail) = amount_cmp(x)?;
@@ -209,6 +236,14 @@ fn player_state(r: &str, you: bool) -> Option<PlayerFilter> {
                 Box::new(color_or_phrase(y)?),
                 Cmp::Eq,
                 Box::new(Value::c(0)),
+            ));
+        }
+        // "controls a commander"
+        if let Some(y) = x.strip_prefix("a ").or_else(|| x.strip_prefix("an ")) {
+            return Some(PlayerFilter::Controls(
+                Box::new(noun(y)?),
+                Cmp::Ge,
+                Box::new(Value::c(1)),
             ));
         }
         let (cmp, n, rest) = amount_cmp(x)?;
@@ -597,6 +632,107 @@ pub(crate) fn required_source_zone(c: &Condition) -> Option<FunctionZone> {
     }
 }
 
+/// Whether a number is odd (or even): `v - 2 * floor(v / 2)` is 1 (or 0).
+pub(crate) fn parity(v: Value, odd: bool) -> Condition {
+    let half = Value::Div(Box::new(v.clone()), 2, false);
+    let rem = Value::Diff(
+        Box::new(v),
+        Box::new(Value::Mul(Box::new(Value::c(2)), Box::new(half))),
+    );
+    Condition::Compare(rem, Cmp::Eq, Value::c(odd as i32))
+}
+
+/// "~'s power is odd", "it has an even number of counters on it" (`it`: what "it" is).
+pub(crate) fn parity_condition(c: &str, it: &Sel) -> Option<Condition> {
+    let c = end(c);
+    for (p, sel) in [("~'s ", Sel::This), ("its ", it.clone())] {
+        if let Some(r) = c.strip_prefix(p) {
+            let (stat, odd) = r.split_once(" is ")?;
+            let odd = match odd {
+                "odd" => true,
+                "even" => false,
+                _ => return None,
+            };
+            let v = match stat {
+                "power" => Value::PowerOf(Box::new(sel)),
+                "toughness" => Value::ToughnessOf(Box::new(sel)),
+                "mana value" => Value::ManaValueOf(Box::new(sel)),
+                _ => return None,
+            };
+            return Some(parity(v, odd));
+        }
+    }
+    for (p, sel) in [("~ has an ", Sel::This), ("it has an ", it.clone())] {
+        if let Some(r) = c.strip_prefix(p) {
+            let (odd, tail) = r.split_once(" number of counters on ")?;
+            if !matches!(tail, "it" | "~" | "him" | "her") {
+                return None;
+            }
+            let odd = match odd {
+                "odd" => true,
+                "even" => false,
+                _ => return None,
+            };
+            return Some(parity(Value::CountersOn(Box::new(sel), None), odd));
+        }
+    }
+    None
+}
+
+/// "you control each creature on the battlefield with the greatest power", "you control
+/// the artifact with the greatest mana value or tied for the greatest mana value".
+fn greatest_condition(c: &str) -> Option<Condition> {
+    let on_bf = |f: Filter| Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]);
+    if let Some(r) = c
+        .strip_prefix("you control each ")
+        .and_then(|r| r.strip_suffix(" on the battlefield with the greatest power"))
+    {
+        let f = on_bf(color_or_phrase(r)?);
+        let greatest = Filter::Power(Cmp::Eq, Box::new(Value::GreatestPower(f.clone())));
+        // Some such object exists, and none of them is controlled by another player.
+        return Some(Condition::And(vec![
+            Condition::Exists(f.clone()),
+            Condition::Not(Box::new(Condition::Exists(Filter::and(vec![
+                f,
+                greatest,
+                Filter::not(Filter::ControlledBy(PlayerRel::You)),
+            ])))),
+        ]));
+    }
+    if let Some(r) = c.strip_prefix("you control the ").and_then(|r| {
+        r.strip_suffix(" with the greatest mana value or tied for the greatest mana value")
+    }) {
+        let f = on_bf(color_or_phrase(r)?);
+        let greatest = Filter::ManaValue(Cmp::Eq, Box::new(Value::GreatestManaValue(f.clone())));
+        return Some(Condition::Exists(Filter::and(vec![
+            f,
+            greatest,
+            Filter::ControlledBy(PlayerRel::You),
+        ])));
+    }
+    None
+}
+
+/// "you control no permanents other than ~ and have no cards in hand": two conditions
+/// with the same subject.
+fn same_subject_and(c: &str) -> Option<Condition> {
+    let r = c.strip_prefix("you ")?;
+    for (i, _) in r.match_indices(" and ") {
+        let (a, b) = (&r[..i], &r[i + " and ".len()..]);
+        if !["have ", "control ", "are "].iter().any(|v| b.starts_with(v)) {
+            continue;
+        }
+        let ca = crate::oracle_ext::parse_condition_ext(&format!("you {a}"))
+            .or_else(|| state_condition(&format!("you {a}")));
+        let cb = crate::oracle_ext::parse_condition_ext(&format!("you {b}"))
+            .or_else(|| state_condition(&format!("you {b}")));
+        if let (Some(ca), Some(cb)) = (ca, cb) {
+            return Some(Condition::And(vec![ca, cb]));
+        }
+    }
+    None
+}
+
 fn state_condition(c: &str) -> Option<Condition> {
     let c = end(c);
     player_condition(c)
@@ -604,6 +740,14 @@ fn state_condition(c: &str) -> Option<Condition> {
         .or_else(|| attacking_condition(c))
         .or_else(|| group_condition(c))
         .or_else(|| source_condition(c))
+        // Only "~'s ...": "its" has no referent here.
+        .or_else(|| {
+            c.starts_with("~")
+                .then(|| parity_condition(c, &Sel::This))
+                .flatten()
+        })
+        .or_else(|| greatest_condition(c))
+        .or_else(|| same_subject_and(c))
 }
 
 inventory::submit! { ConditionPattern { name: "state conditions: players, zones, attacks, groups, the source", priority: 400, parse: state_condition } }
@@ -647,3 +791,169 @@ fn most_player_does(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<
 }
 
 inventory::submit! { super::EffectPattern { name: "state conditions: the player with the most [stat] [does]", priority: 400, parse: most_player_does } }
+
+/// "[effect] instead if [condition]" after an effect: "If an opponent has more cards in
+/// hand than you, draw two cards. Draw three cards instead if an opponent has at least
+/// four more cards in hand than you." The new effect replaces the previous one when the
+/// condition holds as it would happen (CR 608.2c).
+fn instead_if(l: &str, prev: &mut Effect, b: &mut crate::oracle::effects::Builder) -> bool {
+    let Some((x, c)) = end(l).rsplit_once(" instead if ") else {
+        return false;
+    };
+    if matches!(prev, Effect::Noop) || x.contains(" if ") {
+        return false;
+    }
+    // Only conditions without referents (the grammar here has none).
+    let Some(cond) = state_condition(c) else {
+        return false;
+    };
+    let saved = (b.targets.len(), b.it.clone());
+    let Some(e) = crate::oracle::effects::parse_clause(x, b) else {
+        return false;
+    };
+    // A replacement with targets of its own would have them chosen whether or not it
+    // happens.
+    if b.targets.len() != saved.0 {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    }
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(old),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "state conditions: [effect] instead if [condition]", priority: 900, apply: instead_if } }
+
+/// "As long as ~ is in the command zone or on the battlefield, [static]" (eminence, an
+/// ability word, CR 207.2c): the ability states the zones it functions in (CR 113.6b).
+fn eminence_static(
+    l: &str,
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let rest = end(l).strip_prefix("as long as ~ is in the command zone or on the battlefield, ")?;
+    let cut = text.len() - rest.len() - usize::from(text.trim_end().ends_with('.'));
+    let body = text.get(cut..)?.trim().to_string();
+    let mut abilities = crate::oracle::statics::parse_static(&body, ctx)?;
+    let zones = Condition::Custom(smol_str::SmolStr::new(
+        crate::kw::eminence::IN_COMMAND_ZONE_OR_ON_BATTLEFIELD,
+    ));
+    for a in abilities.iter_mut() {
+        let AbilityKind::Static(s) = &a.kind else {
+            return None;
+        };
+        let mut s = s.clone();
+        s.condition = Some(match s.condition.take() {
+            Some(c) => Condition::And(vec![zones.clone(), c]),
+            None => zones.clone(),
+        });
+        s.zone = FunctionZone::Anywhere;
+        *a = AbilityDef::new(AbilityKind::Static(s), text);
+    }
+    Some(abilities)
+}
+
+inventory::submit! { super::StaticPattern { name: "state conditions: eminence static", priority: 400, parse: eminence_static } }
+
+/// Several conditional parts of one static ability, each its own static ability: "~ costs
+/// {1} less to cast if you control an artifact and {1} less to cast if you control an
+/// enchantment", "equipped creature has lifelink if you control a Cleric, deathtouch if
+/// you control a Rogue, haste if you control a Warrior, and flying if you control a
+/// Wizard".
+fn conditional_parts(
+    l: &str,
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let mut out = Vec::new();
+    {
+        // "[one object] has K if C, K2 if C2, and K3 if C3"
+        let (subj, list) = ["equipped creature has ", "enchanted creature has ", "~ has "]
+            .iter()
+            .find_map(|p| l.strip_prefix(p).map(|r| (&p[..p.len() - 1], r)))?;
+        let items: Vec<&str> = list
+            .split(", ")
+            .map(|i| i.strip_prefix("and ").unwrap_or(i))
+            .collect();
+        if items.len() < 2 {
+            return None;
+        }
+        for item in items {
+            let (k, c) = item.split_once(" if ")?;
+            let cond = state_condition(c).or_else(|| crate::oracle::statics::parse_condition(c, ctx))?;
+            let mut parsed = crate::oracle::statics::parse_static(&format!("{subj} {k}."), ctx)?;
+            for a in parsed.iter_mut() {
+                let AbilityKind::Static(s) = &a.kind else {
+                    return None;
+                };
+                let mut s = s.clone();
+                if s.condition.is_some() {
+                    return None;
+                }
+                s.condition = Some(cond.clone());
+                *a = AbilityDef::new(AbilityKind::Static(s), text);
+            }
+            out.extend(parsed);
+        }
+    }
+    for a in out.iter_mut() {
+        let a2 = AbilityDef::new(a.kind.clone(), text);
+        *a = a2;
+    }
+    Some(out)
+}
+
+inventory::submit! { super::StaticPattern { name: "state conditions: several conditional parts", priority: 400, parse: conditional_parts } }
+
+/// "~ costs {1} less to cast if you control an artifact and {1} less to cast if you
+/// control an enchantment": two cost reductions, each with its own condition (CR 601.2f).
+fn two_cost_changes(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim().trim_end_matches('.');
+    let r = t.strip_prefix("~ costs ")?;
+    let (a, b) = r.split_once(" and {")?;
+    if !a.contains(" less to cast if ") || !b.contains(" less to cast if ") {
+        return None;
+    }
+    let mut out = Vec::new();
+    for part in [format!("~ costs {a}."), format!("~ costs {{{b}.")] {
+        let parsed = crate::oracle::parse_ability(&part, ctx)?;
+        if parsed.is_empty() {
+            return None;
+        }
+        out.extend(parsed);
+    }
+    Some(out)
+}
+
+inventory::submit! { super::AbilityPattern { name: "state conditions: two conditional cost reductions", priority: 400, parse: two_cost_changes } }
+
+/// "Skip your upkeep step if you have no cards in hand" (hellbent): the static ability
+/// applies while the condition holds.
+fn skip_if(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let (body, c) = end(l).rsplit_once(" if ")?;
+    if !body.starts_with("skip your ") || body.contains(" if ") {
+        return None;
+    }
+    let cond = state_condition(c).or_else(|| crate::oracle::statics::parse_condition(c, ctx))?;
+    let mut abilities = crate::oracle::statics::parse_static(&format!("{body}."), ctx)?;
+    for a in abilities.iter_mut() {
+        let AbilityKind::Static(s) = &a.kind else {
+            return None;
+        };
+        let mut s = s.clone();
+        s.condition = Some(match s.condition.take() {
+            Some(inner) => Condition::And(vec![inner, cond.clone()]),
+            None => cond.clone(),
+        });
+        *a = AbilityDef::new(AbilityKind::Static(s), text);
+    }
+    (!abilities.is_empty()).then_some(abilities)
+}
+
+inventory::submit! { super::StaticPattern { name: "state conditions: skip [step] if [condition]", priority: 400, parse: skip_if } }

@@ -383,6 +383,10 @@ fn payer_phrase(r: &str) -> Option<PayerPhrase<'_>> {
         }
     }
     for p in [
+        // "~ deals 4 damage to any target unless that permanent's controller or that
+        // player pays {1}": the targeted player, or the targeted permanent's controller.
+        "that permanent's controller or that player ",
+        "that creature's controller or that player ",
         "its controller ",
         "that creature's controller ",
         "that spell's controller ",
@@ -514,6 +518,31 @@ fn unless_player_does(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "unless grammar: [effect] unless [player] [action]", priority: 850, parse: unless_player_does } }
 
+/// "If they do, ~ deals 2 damage to the permanent or player." after "~ deals 4 damage to
+/// any target unless that permanent's controller or that player pays {1}": what happens
+/// when the player pays; "the permanent or player" is the target.
+fn if_they_do_target(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if they do, ") else {
+        return false;
+    };
+    if !r.contains(" the permanent or player") {
+        return false;
+    }
+    let Effect::PayOptional { then, .. } = prev else {
+        return false;
+    };
+    if !matches!(**then, Effect::Noop) || !matches!(b.it, Sel::Target(_)) {
+        return false;
+    }
+    let Some(e) = parse_clause(&r.replace(" the permanent or player", " it"), b) else {
+        return false;
+    };
+    *then = Box::new(e);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "unless grammar: if they do, [effect on the permanent or player]", priority: 140, apply: if_they_do_target } }
+
 /// A condition after "unless" with "they" as its subject, worded with "that player" for
 /// the referent condition grammar: "they control two or more basic lands" → "that player
 /// controls two or more basic lands".
@@ -565,6 +594,19 @@ fn unless_state(l: &str, b: &mut Builder) -> Option<Effect> {
                     .map(|w| if w == "it" { "~" } else { w })
                     .collect();
                 crate::oracle::statics::parse_condition(&words.join(" "), b.ctx)
+            })
+            .or_else(|| {
+                // "unless they control a commander", "unless they have exactly three or
+                // exactly four cards in hand": what that player has or controls.
+                let pred = c.strip_prefix("that player ")?;
+                if is_no_player_referent(&b.it_player) {
+                    return None;
+                }
+                let f = crate::oracle::patterns::conditions_state::player_state(pred, false)
+                    .or_else(|| {
+                        crate::oracle::patterns::statics_conditions::player_predicate(pred)
+                    })?;
+                Some(Condition::PlayerMatches(b.it_player.clone(), f))
             })?;
         Some(Effect::If {
             cond: Condition::Not(Box::new(cond)),
@@ -601,6 +643,18 @@ fn static_unless(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Op
     if body.contains(" unless ") || body.contains(" as long as ") || body.contains(" if ") {
         return None;
     }
+    // A character's pronouns: "~ can't attack alone unless he has a +1/+1 counter on him".
+    let c = c
+        .split(' ')
+        .map(|w| match w {
+            "he" | "she" => "it",
+            "him" => "it",
+            "he's" | "she's" => "it's",
+            other => other,
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let c = c.as_str();
     // "enchanted creature doesn't untap during its controller's untap step unless that
     // player is the monarch": that player is its controller.
     let that_player = c.strip_prefix("that player ").filter(|_| body.contains(" its controller"));
@@ -609,10 +663,18 @@ fn static_unless(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Op
             PlayerRef::ControllerOf(Box::new(it.clone())),
             crate::oracle::patterns::statics_conditions::player_predicate(pred)?,
         ),
-        None => {
-            crate::oracle::patterns::statics_conditions::parse_static_condition(c, Some(&it), ctx)?
+        // "unless it has an even number of counters on it"
+        None => match crate::oracle::patterns::conditions_state::parity_condition(c, &it) {
+            Some(p) => p,
+            None => {
+                crate::oracle::patterns::statics_conditions::parse_static_condition(
+                    c,
+                    Some(&it),
+                    ctx,
+                )?
                 .0
-        }
+            }
+        },
     };
     // The original wording of the body (patterns may read names from it).
     let cut = text.to_lowercase().rfind(" unless ")?;
