@@ -436,6 +436,14 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
         "CR 107.3: the same number, as above.",
     ),
     (
+        "\"Choose target T. [Instruction] it ...\" -> \"[Instruction] target T ...\" (an instruction acting on it, not a condition)",
+        "CR 601.2c, 602.2b: the target is chosen as the spell or ability is put on the stack either way.",
+    ),
+    (
+        "\"up to X target T ..., where X is V\" -> \"up to V target T ...\"",
+        "CR 107.3: the same number of targets.",
+    ),
+    (
         "\"with mana value X or less ..., where X is V\" -> \"with mana value less than or equal to V ...\"",
         "CR 107.3: the same comparison, with the number X stands for named in place.",
     ),
@@ -872,6 +880,26 @@ fn sentence_rewrites(s: &str) -> String {
     }
     s = scaled_for_each(&s);
     s = compared_to_x(&s);
+    // "Choose target creature. Put a +1/+1 counter on it." / "Put a +1/+1 counter on
+    // target creature.": the target is chosen as the spell or ability is put on the stack
+    // either way (CR 601.2c, 602.2b); the instruction that first uses it names it.
+    static CHOOSE_TARGET: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = CHOOSE_TARGET.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )choose ((?:up to (?:one|1) )?target [^.,]+?)\. ((?:[a-z+/0-9{},-]+ ){1,8}?)(?:it|thatit|that creature|that permanent|that card|the chosen creature|the chosen card)\b").ok()
+    }) {
+        // Only an instruction that acts on it ("tap it", "put a +1/+1 counter on it"),
+        // not a condition about something else ("if you control a creature with a
+        // counter on it").
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                let lead = &c[3];
+                if lead.starts_with("if ") || lead.contains(" with ") || lead.starts_with("as ") {
+                    return c[0].to_string();
+                }
+                format!("{}{}{}", &c[1], lead, &c[2])
+            })
+            .to_string();
+    }
     // "Tap up to X target creatures, where X is V." / "up to V target creatures": the
     // number of targets X stands for, named in place (CR 107.3).
     static TARGETS_X: OnceLock<Option<Regex>> = OnceLock::new();

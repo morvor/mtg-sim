@@ -12,6 +12,64 @@ impl Renderer<'_> {
         self.chosen_source_prevention(v, i)
             .map(|s| (2, s))
             .or_else(|| self.does_the_same(v, i).map(|s| (2, s)))
+            .or_else(|| self.any_player_may(v, i).map(|s| (2, s)))
+    }
+
+    /// "Any player may pay 5 life. If a player does, counter ~.": each player in turn may
+    /// pay; the first payment does it (a flag remembers that it's done).
+    fn any_player_may(&mut self, v: &[Effect], i: usize) -> Option<String> {
+        let (
+            Effect::StoreValue {
+                var,
+                value: Value::Const(0),
+            },
+            Some(Effect::ForEachPlayer {
+                who: PlayerRef::EachPlayer,
+                effect,
+            }),
+        ) = (&v[i], v.get(i + 1))
+        else {
+            return None;
+        };
+        let Effect::PayOptional {
+            who: PlayerRef::Iterated,
+            cost,
+            then,
+            otherwise,
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        let Effect::If {
+            cond: Condition::Compare(Value::Var(flag), Cmp::Eq, Value::Const(0)),
+            then: inner,
+            otherwise: inner_else,
+        } = then.as_ref()
+        else {
+            return None;
+        };
+        if !matches!(otherwise.as_ref(), Effect::Noop)
+            || !matches!(inner_else.as_ref(), Effect::Noop)
+            || flag != var
+        {
+            return None;
+        }
+        let Effect::Seq(steps) = inner.as_ref() else {
+            return None;
+        };
+        let [Effect::StoreValue {
+            var: set,
+            value: Value::Const(1),
+        }, rest @ ..] = steps.as_slice()
+        else {
+            return None;
+        };
+        if set != var || rest.is_empty() {
+            return None;
+        }
+        let c = self.cost_as_payment(cost).replace(" your ", " their ");
+        let r = self.seq(rest);
+        Some(format!("any player may {c}. If a player does, {r}"))
     }
 
     /// "Create a Gold token. Each opponent attacking that player does the same.": each of
