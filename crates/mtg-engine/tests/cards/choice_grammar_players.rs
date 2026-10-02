@@ -314,3 +314,31 @@ fn priest_of_forgotten_gods_you_add_mana_and_draw() {
     assert_eq!(t.hand_size(P0), hand + 1);
     assert_eq!(t.g.player(P0).mana_pool.total(), 2, "{}", t.dump_log());
 }
+
+#[test]
+fn scheming_symmetry_each_of_them_searches() {
+    cr!("115.1a", "701.23a");
+    compiles("Scheming Symmetry");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Swamp", 1);
+    let bottom1 = t.library_top(P1, "Lightning Bolt");
+    t.library_top(P1, "Forest");
+    t.library_top(P1, "Forest");
+    let bottom2 = t.library_top(P2, "Grizzly Bears");
+    t.library_top(P2, "Island");
+    t.answer_choose(P1, &[Entity::Object(bottom1)]);
+    t.answer_choose(P2, &[Entity::Object(bottom2)]);
+    let spell = t.hand(P0, "Scheming Symmetry");
+    t.cast(P0, spell)
+        .targets(&[Entity::Player(P1), Entity::Player(P2)])
+        .go();
+    t.resolve_all();
+    let top = |t: &TestGame, p: PlayerId| {
+        let lib = &t.g.player(p).library;
+        t.g.obj(*lib.last().unwrap()).chars.name.to_string()
+    };
+    let top1 = top(&t, P1);
+    let top2 = top(&t, P2);
+    assert_eq!(top1, "Lightning Bolt", "{}", t.dump_log());
+    assert_eq!(top2, "Grizzly Bears");
+}

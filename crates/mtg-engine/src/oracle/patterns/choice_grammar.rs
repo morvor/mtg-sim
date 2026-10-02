@@ -607,3 +607,36 @@ fn those_players_each(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { super::FollowupPattern { name: "choice grammar: those players each [verb]", priority: 60, apply: those_players_each } }
+
+/// "Choose two target players. Each of them searches their library for a card, ...": the
+/// instruction for each of the players chosen, read as "each player ..." with the chosen
+/// players in place of all players.
+fn each_of_them_players(l: &str, b: &mut Builder) -> Option<Effect> {
+    let rest = end(l).strip_prefix("each of them ")?;
+    let who = b.named.iter().rev().find_map(|(p, sel)| match sel {
+        Sel::Players(r) if p == "they" => Some(r.clone()),
+        _ => None,
+    })?;
+    let e = crate::oracle::effects::parse_sentence(&format!("each player {rest}"), b)?;
+    let mut v = serde_json::to_value(&e).ok()?;
+    let with = serde_json::to_value(&who).ok()?;
+    fn walk(v: &mut serde_json::Value, with: &serde_json::Value, n: &mut usize) {
+        match v {
+            serde_json::Value::String(s) if s == "EachPlayer" => {
+                *v = with.clone();
+                *n += 1;
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, with, n)),
+            serde_json::Value::Object(m) => m.values_mut().for_each(|x| walk(x, with, n)),
+            _ => {}
+        }
+    }
+    let mut n = 0;
+    walk(&mut v, &with, &mut n);
+    if n != 1 {
+        return None;
+    }
+    serde_json::from_value(v).ok()
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: each of them (the chosen players)", priority: 88, parse: each_of_them_players } }
