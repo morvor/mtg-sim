@@ -126,7 +126,11 @@ fn zurgo_keeps_blocking_when_the_attackers_power_rises() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     let zurgo = t.battlefield(P0, "Zurgo Bellstriker");
     to_combat(&mut t, P1);
-    declare(&mut t, P1, &[(bears, Entity::Player(P0)), (elves, Entity::Player(P0))]);
+    declare(
+        &mut t,
+        P1,
+        &[(bears, Entity::Player(P0)), (elves, Entity::Player(P0))],
+    );
     // Zurgo can't block the 2-power Bears, but can block the 1-power Elves.
     assert!(!legal_blocks(&mut t, P0, &[(zurgo, bears)]));
     assert!(legal_blocks(&mut t, P0, &[(zurgo, elves)]));
@@ -271,7 +275,10 @@ fn altac_bloodseeker_bonuses_are_cumulative_but_first_strike_is_redundant() {
         .count();
     assert_eq!(hits, 1);
     assert!(!t.on_battlefield(blocker));
-    assert!(t.on_battlefield(altac), "first strike killed the blocker first");
+    assert!(
+        t.on_battlefield(altac),
+        "first strike killed the blocker first"
+    );
 }
 
 // ---------------------------------------------------------------------------------------

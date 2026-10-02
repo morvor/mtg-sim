@@ -32,7 +32,11 @@ fn ambuscade_shaman_triggers_for_each_creature_entering_with_it() {
     let mut t = TestGame::new(2);
     let ids = enter_together(
         &mut t,
-        &[(P0, "Ambuscade Shaman"), (P0, "Grizzly Bears"), (P0, "Savannah Lions")],
+        &[
+            (P0, "Ambuscade Shaman"),
+            (P0, "Grizzly Bears"),
+            (P0, "Savannah Lions"),
+        ],
     );
     assert_eq!(triggers_from(&t, ids[0]), 3);
     t.resolve_all();
@@ -231,7 +235,11 @@ fn platoon_dispenser_checks_for_two_other_creatures_on_trigger_and_resolution() 
 
 /// The creature `name` enters under P0's control with another creature; after the bonus
 /// resolves, a creature that begins to be controlled later doesn't get it.
-fn bonus_only_for_creatures_controlled_on_resolution(name: &str, others_only: bool, bonus: (i32, i32)) {
+fn bonus_only_for_creatures_controlled_on_resolution(
+    name: &str,
+    others_only: bool,
+    bonus: (i32, i32),
+) {
     supported(name);
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -242,7 +250,11 @@ fn bonus_only_for_creatures_controlled_on_resolution(name: &str, others_only: bo
     if others_only {
         assert_eq!(t.pt(c), base);
     } else {
-        assert_eq!(t.pt(c), (base.0 + bonus.0, base.1 + bonus.1), "{name} itself");
+        assert_eq!(
+            t.pt(c),
+            (base.0 + bonus.0, base.1 + bonus.1),
+            "{name} itself"
+        );
     }
     let later = t.battlefield(P0, "Savannah Lions");
     let stolen = t.battlefield(P1, "Hill Giant");
@@ -432,7 +444,10 @@ fn trench_stalker_counts_cards_drawn_before_it_entered() {
     assert!(has_kw(&t, s, KeywordKind::Deathtouch));
     assert!(has_kw(&t, s, KeywordKind::Lifelink));
     let other = t.battlefield(P1, "Trench Stalker");
-    assert!(!has_kw(&t, other, KeywordKind::Deathtouch), "P1 drew nothing");
+    assert!(
+        !has_kw(&t, other, KeywordKind::Deathtouch),
+        "P1 drew nothing"
+    );
 }
 
 #[test]
@@ -443,8 +458,8 @@ fn case_of_the_gorgons_kiss_looks_at_the_card_types_in_the_graveyard() {
         "looks at what type the cards are after they move to the graveyard to determine whether the ability should trigger"
     );
     supported("Case of the Gorgon's Kiss");
-    use mtg_engine::ability::{Modification, Value};
     use crate::r_s26_common::modify_until_eot;
+    use mtg_engine::ability::{Modification, Value};
     // Two creature cards and a creature card that was a noncreature permanent: solved.
     let mut t = TestGame::new(2);
     let case = t.battlefield(P0, "Case of the Gorgon's Kiss");
@@ -487,4 +502,39 @@ fn case_of_the_gorgons_kiss_looks_at_the_card_types_in_the_graveyard() {
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert!(!mtg_engine::cases::is_solved(&t.g, case));
+}
+
+#[test]
+fn nihilith_ignores_a_copy_of_a_spell_put_into_an_opponents_graveyard() {
+    cr!("108.2", "707.10a", "603.2");
+    ruling!(
+        "Nihilith",
+        "or a copy of a spell is put into an opponent's graveyard from the stack, Nihilith's ability will not trigger"
+    );
+    let mut t = TestGame::new(2);
+    let n = t.exile(P0, "Nihilith");
+    t.g.objects[n.0 as usize]
+        .counters
+        .insert(counters::TIME.into(), 7);
+    // P1 casts a Bolt and copies it with Twincast: two cards and one copy end up in P1's
+    // graveyard.
+    t.lands(P1, "Mountain", 1);
+    t.lands(P1, "Island", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.g.turn.priority = Some(P1);
+    let spell = t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    let twin = t.hand(P1, "Twincast");
+    t.cast(P1, twin).target(Entity::Object(spell)).go();
+    for _ in 0..4 {
+        t.answer_yes(P0, true);
+    }
+    t.resolve_all();
+    assert_eq!(t.life(P0), 14, "the Bolt and its copy resolved");
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    assert!(t.in_graveyard(P1, "Twincast"));
+    assert_eq!(
+        t.counters(n, counters::TIME),
+        5,
+        "one counter each for the Bolt and Twincast, none for the copy"
+    );
 }

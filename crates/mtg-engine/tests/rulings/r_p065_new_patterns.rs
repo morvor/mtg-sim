@@ -131,7 +131,10 @@ fn bloodstone_goblin_resolves_first_even_if_the_kicked_spell_is_countered() {
     let g = t.battlefield(P0, "Bloodstone Goblin");
     let burst = t.hand(P0, "Burst Lightning");
     t.lands(P0, "Mountain", 5);
-    t.cast(P0, burst).kicked(true).target(Entity::Player(P1)).go();
+    t.cast(P0, burst)
+        .kicked(true)
+        .target(Entity::Player(P1))
+        .go();
     t.settle();
     assert_eq!(triggers_from(&t, g), 1);
     assert_eq!(t.stack_len(), 2);
@@ -146,7 +149,11 @@ fn bloodstone_goblin_resolves_first_even_if_the_kicked_spell_is_countered() {
     let g = t.battlefield(P0, "Bloodstone Goblin");
     let burst = t.hand(P0, "Burst Lightning");
     t.lands(P0, "Mountain", 5);
-    let spell = t.cast(P0, burst).kicked(true).target(Entity::Player(P1)).go();
+    let spell = t
+        .cast(P0, burst)
+        .kicked(true)
+        .target(Entity::Player(P1))
+        .go();
     t.settle();
     assert!(t.g.counter(spell, None));
     t.resolve_all();
@@ -158,7 +165,10 @@ fn bloodstone_goblin_resolves_first_even_if_the_kicked_spell_is_countered() {
     let g = t.battlefield(P0, "Bloodstone Goblin");
     let burst = t.hand(P0, "Burst Lightning");
     t.lands(P0, "Mountain", 5);
-    t.cast(P0, burst).kicked(false).target(Entity::Player(P1)).go();
+    t.cast(P0, burst)
+        .kicked(false)
+        .target(Entity::Player(P1))
+        .go();
     t.settle();
     assert_eq!(triggers_from(&t, g), 0);
 }
@@ -194,7 +204,10 @@ fn howling_galefang_has_haste_with_any_adventurer_card_you_own_in_exile() {
     let h = t.battlefield_sick(P0, "Howling Galefang");
     let giant = t.hand(P0, "Bonecrusher Giant // Stomp");
     t.lands(P0, "Mountain", 2);
-    t.cast(P0, giant).method(ADVENTURE).target(Entity::Player(P1)).go();
+    t.cast(P0, giant)
+        .method(ADVENTURE)
+        .target(Entity::Player(P1))
+        .go();
     t.resolve_all();
     assert!(t.in_exile("Bonecrusher Giant"));
     assert!(has_kw(&t, h, KeywordKind::Haste));

@@ -49,7 +49,11 @@ fn check(e: &Enabler) {
     let c = t.battlefield_sick(P0, e.creature);
     (e.prepare)(&mut t, c);
     to_combat(&mut t, P0);
-    assert!(can_attack(&mut t, c), "{}: can attack with haste", e.creature);
+    assert!(
+        can_attack(&mut t, c),
+        "{}: can attack with haste",
+        e.creature
+    );
     let attacks = declare(&mut t, P0, &[(c, Entity::Player(P1))]);
     assert_eq!(attacks, vec![(c, Entity::Player(P1))], "{}", e.creature);
     (e.remove)(&mut t, &enablers);
@@ -57,7 +61,12 @@ fn check(e: &Enabler) {
     assert!(attacking(&t, c), "{}: still attacking", e.creature);
     let power = t.pt(c).0;
     t.advance_to(P0, Step::EndOfCombat);
-    assert_eq!(t.life(P1), 20 - power, "{}: dealt combat damage", e.creature);
+    assert_eq!(
+        t.life(P1),
+        20 - power,
+        "{}: dealt combat damage",
+        e.creature
+    );
 
     let mut t = TestGame::new(2);
     let enablers = (e.setup)(&mut t);
@@ -65,7 +74,11 @@ fn check(e: &Enabler) {
     (e.prepare)(&mut t, c);
     (e.remove)(&mut t, &enablers);
     to_combat(&mut t, P0);
-    assert!(!can_attack(&mut t, c), "{}: no haste, can't attack", e.creature);
+    assert!(
+        !can_attack(&mut t, c),
+        "{}: no haste, can't attack",
+        e.creature
+    );
 }
 
 #[test]
@@ -77,7 +90,12 @@ fn ghitu_lavarunner_losing_haste_after_attacking_keeps_attacking() {
     );
     check(&Enabler {
         creature: "Ghitu Lavarunner",
-        setup: |t| vec![t.graveyard(P0, "Lightning Bolt"), t.graveyard(P0, "Divination")],
+        setup: |t| {
+            vec![
+                t.graveyard(P0, "Lightning Bolt"),
+                t.graveyard(P0, "Divination"),
+            ]
+        },
         remove: exile_all,
         prepare: nothing,
     });
@@ -199,7 +217,10 @@ fn mobile_homesteads_land_doesnt_count_as_playing_a_land() {
     t.answer_yes(P0, true);
     declare(&mut t, P0, &[(v, Entity::Player(P1))]);
     t.resolve_all();
-    assert!(t.on_battlefield(forest), "the land was put onto the battlefield");
+    assert!(
+        t.on_battlefield(forest),
+        "the land was put onto the battlefield"
+    );
     assert!(t.obj_now(forest).tapped);
     // A land was put onto the battlefield, but only one land was played this turn: no
     // more land plays.

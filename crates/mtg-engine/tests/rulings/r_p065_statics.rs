@@ -176,7 +176,10 @@ fn anya_damage_stays_marked_but_deathtouch_is_checked_only_once() {
     t.g.players[1].life = 20;
     t.g.recompute();
     t.settle();
-    assert!(t.on_battlefield(anya), "deathtouch was checked only the first time");
+    assert!(
+        t.on_battlefield(anya),
+        "deathtouch was checked only the first time"
+    );
     assert_eq!(t.pt(anya), (4, 4));
 }
 
@@ -252,7 +255,11 @@ fn heron_of_hope_applies_once_per_lifelink_creature_dealing_combat_damage() {
     let a = t.battlefield(P0, "Vampire Nighthawk");
     let b = t.battlefield(P0, "Vampire Nighthawk");
     to_combat(&mut t, P0);
-    declare(&mut t, P0, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    declare(
+        &mut t,
+        P0,
+        &[(a, Entity::Player(P1)), (b, Entity::Player(P1))],
+    );
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P0), 26);
     // One lifelink creature dealing damage to two blockers: one event.
@@ -262,7 +269,9 @@ fn heron_of_hope_applies_once_per_lifelink_creature_dealing_combat_damage() {
     modify_until_eot(
         &mut t,
         g,
-        vec![Modification::AddKeyword(Keyword::new(KeywordKind::Lifelink))],
+        vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Lifelink,
+        ))],
     );
     let e1 = t.battlefield(P1, "Llanowar Elves");
     let e2 = t.battlefield(P1, "Llanowar Elves");
@@ -415,7 +424,9 @@ fn myojin_of_towering_might_distributes_at_least_one_counter_to_each_of_up_to_ei
         })
         .unwrap();
     assert_eq!(max, 8);
-    assert!(asked.iter().any(|(_, d)| matches!(d, Decision::Divide { .. })));
+    assert!(asked
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::Divide { .. })));
     t.resolve_all();
     assert_eq!(t.counters(a, counters::PLUS1), 5);
     assert_eq!(t.counters(b, counters::PLUS1), 3);
@@ -673,4 +684,40 @@ fn perennial_behemoth_doesnt_change_when_lands_can_be_played() {
     t.play_land(P0, a).unwrap();
     // Only one land per turn.
     assert!(!can_play_land(&mut t, P0, b));
+}
+
+#[test]
+fn anya_loses_indestructible_before_sbas_when_an_opponents_lifelink_source_damages_it() {
+    cr!("510.2", "704.3", "702.15b");
+    ruling!(
+        "Anya, Merciless Angel",
+        "if damage is dealt to Anya by a source with lifelink controlled by an opponent, Anya may lose indestructible and/or toughness before state-based actions are checked."
+    );
+    let mut t = TestGame::new(2);
+    t.g.players[1].life = 9;
+    let anya = t.battlefield(P0, "Anya, Merciless Angel");
+    assert_eq!(t.pt(anya), (7, 7));
+    assert!(has_kw(&t, anya, KeywordKind::Indestructible));
+    let giant = t.battlefield(P1, "Hill Giant");
+    modify_until_eot(
+        &mut t,
+        giant,
+        vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Lifelink,
+        ))],
+    );
+    // 5 damage with lifelink: P1 goes to 14, Anya becomes a 4/4 without indestructible
+    // before state-based actions see 5 damage on it.
+    damage(&mut t, giant, 5, anya);
+    t.settle();
+    assert_eq!(t.life(P1), 14);
+    assert!(!t.on_battlefield(anya));
+    // Without lifelink, the same damage leaves it on the battlefield.
+    let mut t = TestGame::new(2);
+    t.g.players[1].life = 9;
+    let anya = t.battlefield(P0, "Anya, Merciless Angel");
+    let giant = t.battlefield(P1, "Hill Giant");
+    damage(&mut t, giant, 5, anya);
+    t.settle();
+    assert!(t.on_battlefield(anya));
 }
