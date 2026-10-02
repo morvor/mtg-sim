@@ -15,7 +15,7 @@ use mtg_engine::*;
 
 #[test]
 fn cityscape_levelers_cast_trigger_doesnt_trigger_on_unearth_but_its_attack_trigger_does() {
-    cr!("702.84a", "603.2", "601.2i");
+    cr!("702.84a", "603.2", "601.2i", "113.6k");
     ruling!(
         "Cityscape Leveler",
         "Cityscape Leveler's triggered ability won't trigger when you activate its unearth ability from your graveyard. It will, however, trigger when you attack with Cityscape Leveler that turn."

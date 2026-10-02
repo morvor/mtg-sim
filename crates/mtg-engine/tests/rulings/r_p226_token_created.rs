@@ -1,4 +1,5 @@
-//! Rulings batch P226 — "Whenever you create a [Blood] token" (CR 111.1, 111.2): Voldaren
+//! Rulings batch P226 — "Whenever you create a [Blood] token" (CR 111.1, 111.2: tokens you
+//! create, which you own): Voldaren
 //! Bloodcaster (with its intervening "if" clause, CR 603.4) and Rosie Cotton of South Lane.
 
 use crate::r_s01_common::*;
