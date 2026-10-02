@@ -359,6 +359,28 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
             }
         }
     }
+    // "the creature's controller", "that land's controller", "the Wall's controller": the
+    // object the text is about.
+    if let Some(r) = s.strip_prefix("the ").or_else(|| s.strip_prefix("that ")) {
+        let (w, rest) = split_word(r);
+        if let Some(noun) = w.strip_suffix("'s") {
+            if parse_object_phrase(noun).is_some() {
+                if let Some(rest) = rest.strip_prefix("controller") {
+                    let it = super::pronoun_groups::singular_it(b);
+                    if super::oracle_hardening_referents::is_no_referent(&it)
+                        || matches!(it, Sel::This)
+                    {
+                        return None;
+                    }
+                    return Some((
+                        Sel::Players(PlayerRef::ControllerOf(Box::new(it))),
+                        rest.to_string(),
+                        true,
+                    ));
+                }
+            }
+        }
+    }
     // "enchanted artifact's controller", "target spell's controller".
     if let Some(i) = s.find("'s controller") {
         let head = &s[..i];
@@ -480,9 +502,17 @@ fn damage_amount(s: &str, source: &Sel, b: &mut Builder) -> Option<(Value, Strin
         return Some((Value::EventAmount, r.to_string()));
     }
     if let Some(r) = s.strip_prefix("damage equal to ") {
-        let saved = std::mem::replace(&mut b.it, source.clone());
-        let parsed = crate::oracle::statics::parse_value_phrase(r, b);
-        b.it = saved;
+        // "its power": the source's; "the creature's power", "that Wall's mana value": the
+        // object the text is about.
+        let (subject_its, r) = match referent_possessive(r) {
+            Some(x) => (false, x),
+            None => (r.starts_with("its ") || r.starts_with("their "), r.to_string()),
+        };
+        let saved = subject_its.then(|| std::mem::replace(&mut b.it, source.clone()));
+        let parsed = crate::oracle::statics::parse_value_phrase(&r, b);
+        if let Some(it) = saved {
+            b.it = it;
+        }
         let (v, rest) = parsed?;
         let rest = rest.trim_start().strip_prefix("to ")?;
         return Some((v, rest.to_string()));
@@ -490,6 +520,16 @@ fn damage_amount(s: &str, source: &Sel, b: &mut Builder) -> Option<(Value, Strin
     let (n, r) = number_expr(s)?;
     let r = strip(r, "damage to ")?;
     Some((n, r.to_string()))
+}
+
+/// "the creature's power ...", "that wall's mana value ..." → "its power ...": a
+/// possessive naming the object the text is about by its noun.
+fn referent_possessive(s: &str) -> Option<String> {
+    let r = s.strip_prefix("the ").or_else(|| s.strip_prefix("that "))?;
+    let (w, rest) = split_word(r);
+    let noun = w.strip_suffix("'s")?;
+    parse_object_phrase(noun)?;
+    Some(format!("its {rest}"))
 }
 
 /// "3", "x plus 2", "five times x".

@@ -526,3 +526,82 @@ fn sacrifice_described(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "basic effects: sacrifice [described object]", priority: 46, parse: sacrifice_described } }
+
+/// "sacrifice each other creature you control", "sacrifice all Dragons you control",
+/// "sacrifice half the non-Demon permanents you control, rounded up", "enchanted
+/// permanent's controller sacrifices it", "target artifact creature's controller
+/// sacrifices it" (CR 701.21a: a player sacrifices only their own permanents).
+fn sacrifice_group(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if let Some(subject) = l.strip_suffix("'s controller sacrifices it") {
+        let (what, tail) = crate::oracle::effects::object_ref(subject, b)?;
+        if !tail.trim().is_empty() || matches!(what, Sel::All(_) | Sel::Players(_)) {
+            return None;
+        }
+        // "That player may search ...": the controller.
+        b.it_player = PlayerRef::ControllerOf(Box::new(what.clone()));
+        return Some(Effect::SacrificeObjects { what });
+    }
+    let r = l.strip_prefix("sacrifice ")?;
+    if let Some(x) = r.strip_prefix("half the ") {
+        let x = x.strip_suffix(", rounded up")?;
+        let (f, plural, tail) = parse_object_phrase(x)?;
+        if !plural || !end(tail).is_empty() {
+            return None;
+        }
+        let f = own(Verb::Sacrifice, f);
+        return Some(Effect::Sacrifice {
+            who: PlayerRef::You,
+            filter: f.clone(),
+            count: Value::Div(Box::new(Value::Count(f)), 2, true),
+        });
+    }
+    let x = r.strip_prefix("each ").or_else(|| r.strip_prefix("all "))?;
+    let (f, _, tail) = parse_object_phrase(x)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(Effect::SacrificeObjects {
+        what: Sel::All(own(Verb::Sacrifice, f)),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: sacrifice a group", priority: 60, parse: sacrifice_group } }
+
+/// "you untap all lands you control" (Sword of Feast and Famine), "you tap ...": the
+/// controller performs the instruction.
+fn you_untap(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you ")?;
+    if !(r.starts_with("untap ") || r.starts_with("tap ")) {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(r, b)
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: you untap/tap ...", priority: 60, parse: you_untap } }
+
+/// "If that player does, they lose 2 life." after an instruction a player might not be
+/// able to follow ("target opponent sacrifices a green or white creature of their choice"):
+/// whether they did (CR 118.12, 608.2c).
+fn if_that_player_does(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = ["if that player does, ", "if the player does, ", "if they do, "]
+        .iter()
+        .find_map(|p| l.strip_prefix(p))?;
+    if super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+        return None;
+    }
+    // "they" is that player.
+    let r = match r.strip_prefix("they ") {
+        Some(x) => format!("that player {x}"),
+        None => r.to_string(),
+    };
+    let e = crate::oracle::effects::parse_clause(&r, b)?;
+    Some(Effect::If {
+        cond: Condition::PrevHappened,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: if that player does", priority: 60, parse: if_that_player_does } }

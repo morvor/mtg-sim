@@ -375,6 +375,13 @@ fn quantified(s: &str) -> Option<(Filter, &str)> {
 /// object the previous instruction acted on).
 fn this_way_condition(c: &str) -> Option<(Filter, Verb, &str, bool)> {
     let c = c.strip_suffix(" this way")?;
+    // "that creature dies this way", "a white creature dies this way": it's put into a
+    // graveyard from the battlefield (CR 700.4).
+    if let Some(np) = c.strip_suffix(" dies").or_else(|| c.strip_suffix(" die")) {
+        let as_put = format!("{np} is put into a graveyard this way");
+        let (f, verb_, _, that) = this_way_condition(&as_put)?;
+        return Some((f, verb_, "put into a graveyard", that));
+    }
     // "you exiled a land card", "that player discards an artifact card".
     for p in ["you ", "that player ", "the player "] {
         if let Some(r) = c.strip_prefix(p) {
