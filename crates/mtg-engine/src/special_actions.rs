@@ -198,7 +198,10 @@ fn morph_or_disguise_payable(g: &Game, p: PlayerId, id: ObjectId) -> bool {
 /// 701.58c–d), by `kw/morph_face_up.rs`.
 pub fn turn_face_up_cost(g: &Game, id: ObjectId) -> Option<Cost> {
     let o = g.obj(id);
-    if !o.face_down || o.zone != Zone::Battlefield {
+    if !o.face_down
+        || o.zone != Zone::Battlefield
+        || crate::rule_statics::face_up::cant_be_turned_face_up(g, id)
+    {
         return None;
     }
     let card = o.card.as_ref()?;

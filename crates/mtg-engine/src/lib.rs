@@ -115,6 +115,7 @@ pub mod resolve;
 pub mod restart;
 pub mod reveal;
 pub mod rooms;
+pub mod rule_statics;
 pub mod saga;
 pub mod sba;
 pub mod scry_rules;

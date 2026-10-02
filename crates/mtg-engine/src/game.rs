@@ -178,6 +178,10 @@ pub struct Player {
     pub mulligans: u32,
     /// Speed (CR 702.179).
     pub speed: Option<u32>,
+    /// The number of turns this player has taken this game, including the current one
+    /// (with shared team turns, each player on the active team takes the turn, CR 805.4).
+    #[serde(default)]
+    pub turns_taken: u32,
     pub speed_increased_this_turn: bool,
     /// Commander(s) owned by this player (the card objects' current ids are tracked by
     /// `is_commander` on objects).
@@ -234,6 +238,7 @@ impl Player {
             team: id.0,
             mulligans: 0,
             speed: None,
+            turns_taken: 0,
             speed_increased_this_turn: false,
             commander_names: vec![],
             commander_damage: BTreeMap::new(),
@@ -1137,6 +1142,7 @@ impl Game {
         crate::stickers::follow(self, old, id, zone);
         crate::rooms::entering(self, old, id, zone);
         crate::merge::incarnation(self, old, id);
+        crate::rule_statics::counters_remain::follow(self, old, id, zone);
         id
     }
 

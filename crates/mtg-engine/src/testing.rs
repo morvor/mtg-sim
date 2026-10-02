@@ -182,6 +182,8 @@ impl TestGame {
         g.turn.number = 1;
         g.turn.starting_player = P0;
         g.turn.active = P0;
+        // It's P0's first turn.
+        g.players[0].turns_taken = 1;
         let mut t = TestGame { g, script };
         t.set_step(P0, Step::PrecombatMain);
         t
