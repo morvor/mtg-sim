@@ -910,7 +910,7 @@ fn remove_and_that_much(l: &str, b: &mut Builder) -> Option<Effect> {
     None
 }
 
-inventory::submit! { EffectPattern { name: "counter grammar: remove counters and [that much]", priority: 60, parse: remove_and_that_much } }
+inventory::submit! { EffectPattern { name: "counter grammar: remove counters and [that much]", priority: 90, parse: remove_and_that_much } }
 
 /// "three or more", "two or fewer", "exactly one", "one or more", "a", "an", "no": how
 /// many counters an object has, as a comparison.
