@@ -1095,3 +1095,69 @@ fn atraxa_one_card_for_each_card_type() {
     assert_eq!(t.hand_size(P0), 3);
     assert_eq!(t.library_size(P0), library - 3);
 }
+
+#[test]
+fn diluvian_primordial_casts_one_card_from_each_opponents_graveyard() {
+    cr!("601.2c", "608.2g", "614.1a", "405.2");
+    ruling!(
+        "Diluvian Primordial",
+        "You cast the cards one at a time, choosing modes, targets and so on. The last card you cast will be the first one to resolve."
+    );
+    ruling!(
+        "Diluvian Primordial",
+        "If an instant or sorcery card you cast this way is countered, it will still be exiled."
+    );
+    ruling!(
+        "Diluvian Primordial",
+        "or if you choose not to cast one, it will remain in its owner's graveyard."
+    );
+    supported("Diluvian Primordial");
+    // Two opponents with an instant or sorcery card each: one target for each; both are
+    // cast, the second one cast resolves first, and both end up in exile.
+    let mut t = TestGame::new(3);
+    let div = t.graveyard(P1, "Divination");
+    let shock = t.graveyard(P2, "Shock");
+    t.answer_targets(P0, &[Entity::Object(div)]);
+    t.answer_targets(P0, &[Entity::Object(shock)]);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    // Shock's target: P1.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Diluvian Primordial");
+    t.settle();
+    let hand = t.hand_size(P0);
+    t.resolve();
+    // The two spells are on the stack, Shock (cast second) on top.
+    assert_eq!(t.stack_len(), 2);
+    let top = *t.g.stack.last().unwrap();
+    assert_eq!(t.obj(top).name(), "Shock");
+    t.resolve();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.hand_size(P0), hand);
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert!(t.in_exile("Divination"));
+    assert!(t.in_exile("Shock"));
+    assert!(!t.in_graveyard(P1, "Divination"));
+    assert!(!t.in_graveyard(P2, "Shock"));
+
+    // One is countered: it's exiled all the same. The other isn't cast: it stays in its
+    // owner's graveyard.
+    let mut t = TestGame::new(3);
+    let div = t.graveyard(P1, "Divination");
+    let shock = t.graveyard(P2, "Shock");
+    t.answer_targets(P0, &[Entity::Object(div)]);
+    t.answer_targets(P0, &[Entity::Object(shock)]);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, false);
+    t.enter(P0, "Diluvian Primordial");
+    t.settle();
+    t.resolve();
+    assert_eq!(t.stack_len(), 1);
+    let spell = *t.g.stack.last().unwrap();
+    assert!(t.g.counter(spell, None));
+    t.g.flush_events();
+    assert!(t.in_exile("Divination"));
+    assert!(!t.in_graveyard(P1, "Divination"));
+    assert!(t.in_graveyard(P2, "Shock"));
+}
