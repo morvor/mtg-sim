@@ -303,3 +303,36 @@ fn warden_of_the_groves_x_is_counted_on_resolution_or_from_last_known_informatio
     assert_eq!(t.pt(spirits[0]), (2, 2));
     assert_eq!(t.counters(bears, counters::PLUS1), 0);
 }
+
+#[test]
+fn endless_swarm_doesnt_see_a_land_that_entered_before_it_was_in_the_graveyard() {
+    cr!("603.2", "113.6");
+    ruling!(
+        "Hormagaunt Horde",
+        "The Endless Swarm ability triggers only if Hormagaunt Horde is in your graveyard at the moment the land enters the battlefield."
+    );
+    // The land enters, then (before triggered abilities are checked) Hormagaunt Horde is
+    // put into the graveyard from the hand: it wasn't there when the land entered.
+    let mut t = TestGame::new(2);
+    let horde = t.hand(P0, "Hormagaunt Horde");
+    let plains = t.hand(P0, "Plains");
+    t.g.move_object(plains, Zone::Battlefield, mtg_engine::events::MoveCause::Effect, None);
+    t.g.end_event_batch();
+    t.g.move_object(horde, Zone::Graveyard(P0), mtg_engine::events::MoveCause::Effect, None);
+    t.g.end_event_batch();
+    t.g.flush_events();
+    t.settle();
+    assert!(t.in_graveyard(P0, "Hormagaunt Horde"));
+    assert_eq!(on_stack(&t, "you may pay"), 0);
+    // Control: in the graveyard first, then the land enters.
+    let mut t = TestGame::new(2);
+    let horde = t.hand(P0, "Hormagaunt Horde");
+    let plains = t.hand(P0, "Plains");
+    t.g.move_object(horde, Zone::Graveyard(P0), mtg_engine::events::MoveCause::Effect, None);
+    t.g.end_event_batch();
+    t.g.move_object(plains, Zone::Battlefield, mtg_engine::events::MoveCause::Effect, None);
+    t.g.end_event_batch();
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(on_stack(&t, "you may pay"), 1);
+}

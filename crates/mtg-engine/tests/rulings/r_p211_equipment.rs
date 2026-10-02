@@ -435,7 +435,7 @@ fn bladehold_war_whip_reduces_only_generic_mana_in_equip_costs() {
 
 #[test]
 fn becoming_unattached_destroys_or_sacrifices_the_permanent() {
-    cr!("701.3c", "603.2", "603.10a", "704.5n");
+    cr!("301.5c", "603.2", "603.10a", "704.5n");
     ruling!(
         "Captain's Hook",
         "Captain's Hook becomes unattached from the creature it's equipping if you equip it to a new creature, if Captain's Hook leaves the battlefield, if the equipped creature ceases to be a creature, or if Captain's Hook ceases to be an Equipment. (It also becomes unattached if the equipped creature leaves the battlefield, but the triggered ability won't do anything in that case.)"
