@@ -549,7 +549,33 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             effect: Box::new(e),
         });
     }
-    if let Some((cond, rest)) = parse_leading_if(l, b) {
+    // "If you control a Fish, Octopus, or Otter, draw a card.": when the text after the
+    // first comma isn't an instruction, the condition may go on (read by the patterns).
+    let before_if = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let leading_if = parse_leading_if(l, b).and_then(|(cond, rest)| {
+        if !rest.contains(", ") {
+            return Some((cond, rest));
+        }
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let subject_is_source;
+        let rest2 = match rest.strip_prefix("it ") {
+            Some(r) if l.starts_with("if ~ ") => {
+                subject_is_source = format!("~ {r}");
+                subject_is_source.as_str()
+            }
+            _ => rest,
+        };
+        let ok = parse_clause(rest2, b).is_some();
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        if !ok {
+            // Read again by the patterns: nothing the condition added stays.
+            b.targets.truncate(before_if.0);
+            (b.it, b.it_player) = (before_if.1.clone(), before_if.2.clone());
+        }
+        ok.then_some((cond, rest))
+    });
+    if let Some((cond, rest)) = leading_if {
         // "If ~ was kicked, it deals 2 damage ...": the subject "it" is the condition's.
         let subject_is_source;
         let rest = match rest.strip_prefix("it ") {
@@ -668,7 +694,12 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         ("enchanted planeswalker", Sel::AttachedTo),
     ];
     for (p, sel) in pairs {
-        if let Some(rest) = s.strip_prefix(p) {
+        // A whole phrase: "equipped creatures you control" is a group, not "equipped
+        // creature".
+        if let Some(rest) = s
+            .strip_prefix(p)
+            .filter(|r| p == "~" || !r.starts_with(|c: char| c.is_alphanumeric()))
+        {
             // "Gain control of enchanted permanent. Untap that permanent.": the object
             // just named is what a later pronoun refers to (unless something more
             // specific already is).
@@ -679,6 +710,19 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 b.it = Sel::AttachedTo;
             }
             return Some((sel, rest.to_string()));
+        }
+    }
+    // "enchanted Forest" (the Genjus: "Enchant Forest"): the permanent it's attached to.
+    if let Some(r) = s.strip_prefix("enchanted ") {
+        let w = r.split(' ').next().unwrap_or("");
+        let rest = &r[w.len()..];
+        if super::phrases::subtype_word(w).is_some() && !w.ends_with(',') {
+            if matches!(b.it, Sel::This)
+                || super::patterns::oracle_hardening_referents::is_no_referent(&b.it)
+            {
+                b.it = Sel::AttachedTo;
+            }
+            return Some((Sel::AttachedTo, rest.to_string()));
         }
     }
     // The longest phrase that names the object ("the creature an opponent controls"
@@ -851,6 +895,21 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             PlayerRef::ControllerOf(Box::new(b.it.clone())),
             r.to_string(),
         ));
+    }
+    // "~'s controller sacrifices it": the source's controller (or owner); "it" is ~.
+    for (p, owner) in [("~'s controller", false), ("~'s owner", true)] {
+        if let Some(r) = s.strip_prefix(p) {
+            if super::patterns::oracle_hardening_referents::is_no_referent(&b.it) {
+                b.it = Sel::This;
+            }
+            let this = Box::new(Sel::This);
+            let who = if owner {
+                PlayerRef::OwnerOf(this)
+            } else {
+                PlayerRef::ControllerOf(this)
+            };
+            return Some((who, r.to_string()));
+        }
     }
     if let Some(r) = s
         .strip_prefix("its owner")

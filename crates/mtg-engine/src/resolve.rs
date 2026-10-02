@@ -922,20 +922,28 @@ impl Game {
                 to,
             } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                // What they enter attached to; `None` if it's undefined (CR 303.4i).
-                let attach = self.resolve_sel(to, ctx).first().copied();
+                // What they enter attached to: each of the objects "it" is (a melded
+                // permanent returned as two cards, Not Dead After All's ruling); `None` if
+                // it's undefined (CR 303.4i).
+                let mut attach: Vec<Option<Entity>> =
+                    self.resolve_sel(to, ctx).into_iter().map(Some).collect();
+                if attach.is_empty() {
+                    attach.push(None);
+                }
                 let players = self.eval_players(controller, ctx);
                 let mut created = Vec::new();
                 for p in players {
-                    let tc = TokenCreate {
-                        chars: crate::tokens::token_characteristics_in(self, spec, ctx),
-                        card: crate::tokens::predefined_card(spec),
-                        tapped: false,
-                        attacking: None,
-                        copy_of: None,
-                        copy_exceptions: vec![],
-                    };
-                    created.extend(self.create_tokens_attached(p, tc, n, ctx.source, attach));
+                    for a in &attach {
+                        let tc = TokenCreate {
+                            chars: crate::tokens::token_characteristics_in(self, spec, ctx),
+                            card: crate::tokens::predefined_card(spec),
+                            tapped: false,
+                            attacking: None,
+                            copy_of: None,
+                            copy_exceptions: vec![],
+                        };
+                        created.extend(self.create_tokens_attached(p, tc, n, ctx.source, *a));
+                    }
                 }
                 self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
@@ -1004,11 +1012,20 @@ impl Game {
                 new_targets,
             } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
+                let mut copies = vec![];
                 for o in self.resolve_objects(what, ctx) {
                     for _ in 0..n {
-                        crate::copy::copy_spell(self, o, ctx.controller, *new_targets);
+                        copies.extend(crate::copy::copy_spell(
+                            self,
+                            o,
+                            ctx.controller,
+                            *new_targets,
+                        ));
                     }
                 }
+                // CR 405.3: the copies are put on the stack at once, in the order
+                // their controller chooses.
+                crate::copy::order_copies(self, ctx.controller, &copies);
             }
             Effect::OfferSpecialAction {
                 def,
@@ -1146,11 +1163,14 @@ impl Game {
                 }
             }
             Effect::TurnFaceDown { what } => {
-                let mut any = false;
+                let mut turned = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
-                    any |= crate::facedown::turn_face_down(self, o);
+                    if crate::facedown::turn_face_down(self, o) {
+                        turned.push(Entity::Object(o));
+                    }
                 }
-                ctx.prev_happened = any;
+                ctx.prev_happened = !turned.is_empty();
+                ctx.set_var(vars::TURNED_FACE_DOWN, turned);
             }
             Effect::RemoveFromCombat { what } => {
                 for o in self.resolve_objects(what, ctx) {
@@ -1317,15 +1337,19 @@ impl Game {
                 ctx.set_var(vars::IT, discarded);
             }
             Effect::DiscardHand { who } => {
-                let mut n = 0;
+                let mut discarded = Vec::new();
                 for p in self.eval_players(who, ctx) {
                     for c in self.player(p).hand.clone() {
-                        if self.discard(p, c, ctx.source).is_some() {
-                            n += 1;
+                        if let Some(n) = self.discard(p, c, ctx.source) {
+                            discarded.push(Entity::Object(n));
                         }
                     }
                 }
-                ctx.prev_value = n;
+                // "for each card discarded this way". A hand of no cards is discarded too
+                // ("you may discard your hand. If you do, ..."): it still happened.
+                ctx.prev_value = discarded.len() as i64;
+                ctx.set_var(crate::discard_rules::DISCARDED, discarded.clone());
+                ctx.set_var(vars::IT, discarded);
             }
             Effect::Mill { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
@@ -2372,6 +2396,16 @@ impl Game {
         // "Target creature blocks this creature this combat if able": both creatures are
         // the objects named as the effect began.
         // Likewise "target creature can't block this creature this turn".
+        if let Restriction::MustBlockAttacker { attacker, .. } = &mut r {
+            // The creature to be blocked is only named, not affected: the requirement
+            // still refers to it if it has become an illegal target (CR 608.2b; Feral
+            // Contest: "the second targeted creature is still affected by the blocking
+            // restriction").
+            if filter_references_specific(attacker) {
+                let c2 = self.with_original_targets(ctx);
+                *attacker = Filter::Objects(self.named_objects(attacker, &c2));
+            }
+        }
         if let Restriction::MustBlockAttacker { blocker, attacker }
         | Restriction::CantBeBlockedBy { attacker, blocker } = &mut r
         {
@@ -2452,6 +2486,27 @@ impl Game {
         } else {
             None
         }
+    }
+
+    /// `ctx` with each target slot left empty by illegal targets (CR 608.2b) refilled with
+    /// the targets chosen for it, for wording that only names an illegal target.
+    fn with_original_targets(&self, ctx: &Ctx) -> Ctx {
+        let mut c = ctx.clone();
+        let chosen = ctx
+            .stack_obj
+            .and_then(|s| self.obj(s).stack.as_deref())
+            .map(|si| si.chosen.clone())
+            .unwrap_or_default();
+        if let [cm] = chosen.as_slice() {
+            for (k, slot) in cm.targets.iter().enumerate() {
+                if c.targets.len() == k {
+                    c.targets.push(slot.clone());
+                } else if let Some(t) = c.targets.get_mut(k).filter(|t| t.is_empty()) {
+                    *t = slot.clone();
+                }
+            }
+        }
+        c
     }
 
     /// The objects a filter naming specific objects matches as an effect begins.

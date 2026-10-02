@@ -232,6 +232,11 @@ fn amount_phrase<'a>(s: &'a str, where_x: &Option<Value>) -> Option<(Value, &'a 
 // Damage
 // ---------------------------------------------------------------------------
 
+/// The controller of the permanent the source is attached to.
+fn attached_controller() -> PlayerRef {
+    PlayerRef::ControllerOf(Box::new(Sel::AttachedTo))
+}
+
 /// Player recipients that aren't targets.
 fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
     let it = || Box::new(b.it.clone());
@@ -262,6 +267,12 @@ fn player_recipient<'a>(s: &'a str, b: &Builder) -> Option<(Sel, &'a str)> {
         ),
         ("that spell's controller", PlayerRef::ControllerOf(it())),
         ("its owner", PlayerRef::OwnerOf(it())),
+        // "~ deals 2 damage to enchanted artifact's controller" (Gremlin Infestation).
+        ("enchanted creature's controller", attached_controller()),
+        ("enchanted artifact's controller", attached_controller()),
+        ("enchanted permanent's controller", attached_controller()),
+        ("enchanted land's controller", attached_controller()),
+        ("equipped creature's controller", attached_controller()),
     ];
     for (p, r) in pairs {
         if let Some(rest) = word(s, p) {

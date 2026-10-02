@@ -208,7 +208,8 @@ pub fn commanders_problem(commanders: &[&CardDef]) -> Option<String> {
 /// rules, CR 113.6n). A Background is a commander only through a "choose a Background"
 /// partner (CR 702.124k, see [`commanders_problem`]).
 pub fn can_be_commander(card: &CardDef, brawl: bool) -> bool {
-    let c = &card.front().chars;
+    let outside = characteristics_outside_the_game(card);
+    let c = &outside;
     let says_so = c.abilities.iter().any(|a| {
         matches!(&a.kind, AbilityKind::Static(s)
             if matches!(&s.effect, StaticEffect::Custom(n) if n == CAN_BE_YOUR_COMMANDER))
@@ -221,6 +222,34 @@ pub fn can_be_commander(card: &CardDef, brawl: bool) -> bool {
             || c.has_subtype("Vehicle")
             || (c.has_subtype("Spacecraft") && has_pt_box(c))
             || (brawl && c.is(CardType::Planeswalker)))
+}
+
+/// A card's characteristics outside the game, as its deck is built: its front face's,
+/// with its own static abilities that function there applied — an ability that states
+/// the zones it doesn't function in works everywhere else, even outside the game (CR
+/// 113.6c: "As long as Grist isn't on the battlefield, it's a 1/1 Insect creature in
+/// addition to its other types"), as does one that says it functions anywhere. They're
+/// computed with the layer system (CR 613) on a hypothetical object in the command zone
+/// of an otherwise empty game. (Characteristic-defining abilities also function there,
+/// CR 113.6a, but define only colors, subtypes, power and toughness.)
+pub fn characteristics_outside_the_game(card: &CardDef) -> Characteristics {
+    let front = &card.front().chars;
+    let functions_outside = front.abilities.iter().any(|a| {
+        matches!(&a.kind, AbilityKind::Static(s)
+            if matches!(s.zone, FunctionZone::Anywhere | FunctionZone::AnywhereExcept(_)))
+    });
+    if !functions_outside {
+        return front.clone();
+    }
+    let mut g = Game::new(crate::game::GameConfig::default(), vec![vec![]], vec![]);
+    let id = g.create_card_object(
+        std::sync::Arc::new(card.clone()),
+        crate::types::PlayerId(0),
+        Zone::Command,
+    );
+    g.command.push(id);
+    g.recompute();
+    g.obj(id).chars.clone()
 }
 
 /// Whether a card has a power/toughness box. A station card's box belongs to a station

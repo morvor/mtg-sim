@@ -551,7 +551,15 @@ impl Renderer<'_> {
             Filter::Source => np.other = true,
             // "each other permanent with the same name as that permanent": other than
             // the target just named.
-            Filter::In(s) if matches!(s.as_ref(), Sel::Target(_)) => np.other = true,
+            // "it gets +1/+1 for each other creature you control": other than "it".
+            Filter::In(s)
+                if matches!(
+                    s.as_ref(),
+                    Sel::Target(_) | Sel::TriggerObject | Sel::AttachedTo
+                ) =>
+            {
+                np.other = true
+            }
             Filter::Other => np.is_self = true,
             Filter::HasKeyword(k) => np.without.push(self.keyword_kind_word(*k)),
             Filter::HasAbilities => np.with.push("no abilities".into()),

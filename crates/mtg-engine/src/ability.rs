@@ -862,6 +862,9 @@ pub mod vars {
     /// Permanents the most recent tap instruction tapped ("the number of creatures tapped
     /// this way"): not those that were already tapped.
     pub const TAPPED: Var = USER + 3066;
+    /// Permanents the most recent "turn ... face down" instruction turned face down: not
+    /// those that already were face down or couldn't be (CR 708.2b, 712.16).
+    pub const TURNED_FACE_DOWN: Var = USER + 7088;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
@@ -1733,6 +1736,10 @@ pub enum Duration {
     Permanent,
     /// Until the affected object leaves (used by Auras granting effects via resolution).
     UntilHostLeaves,
+    /// For as long as the affected objects are face down: characteristics an effect lists
+    /// for a permanent it turns face down ("Turn target creature face down. It becomes a
+    /// 2/2 Cyberman artifact creature.", CR 708.2a) stop applying once it's turned face up.
+    WhileFaceDown,
     /// "for as long as it has a [kind] counter on it": for each affected object, until it
     /// has no counters of that kind (CR 611.2b: it doesn't apply again if it gets one
     /// later, and does nothing to an object that has none as the effect begins).
@@ -2412,6 +2419,13 @@ pub enum Restriction {
     /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
     /// it would exist on the battlefield.
     CantEnter(Filter),
+    /// "[cards] in [zones] can't enter the battlefield" (Kunoros, Hound of Athreos;
+    /// Grafdigger's Cage): checked against the card as it exists in that zone, before it
+    /// would move (so a noncreature card entering as a copy of a creature isn't stopped).
+    CantEnterFrom {
+        what: Filter,
+        zones: Vec<ZoneKind>,
+    },
     /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
     /// "damage can't be prevented".
     DamageCantBePrevented,
@@ -2676,6 +2690,9 @@ pub enum StaticEffect {
     /// "Cast this spell only [condition]" — e.g. "only during combat before blockers are
     /// declared" (CR 506.8). Checked from the card itself while it's being cast.
     CastOnlyIf(Condition),
+    /// "~ can be attached only to a [filter]" (Gate Smasher, Konda's Banner): an Equipment
+    /// that can't legally be attached to other objects (CR 301.5, 701.3b, 704.5n).
+    AttachOnlyTo(Filter),
     /// An optional cost to attack with the source, paid "as it attacks" (CR 508.1g), e.g.
     /// "You may exert this creature as it attacks. When you do, [then]."
     OptionalAttackCost {
