@@ -824,11 +824,22 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
     // "with corruption counters on them", "with +1/+1 counters on them" (a plural
     // subject: each one with one or more counters of that kind).
     if !negate {
+        // "with no counters on them" (Damning Verdict, Hazardous Conditions).
+        if let Some(tail) = rest.strip_prefix("no counters on them") {
+            return Some((Filter::not(Filter::HasCounter(None)), tail));
+        }
         let (kind, r2) = split_word(rest);
         if let Some(tail) = r2.strip_prefix("counters on them") {
             if kind.starts_with('+')
                 || kind.starts_with('-')
-                || (!kind.is_empty() && kind.chars().all(|c| c.is_alphabetic()))
+                || (!kind.is_empty()
+                    && kind.chars().all(|c| c.is_alphabetic())
+                    // "with no counters on them" (Damning Verdict), "with two counters
+                    // on them": not a counter kind.
+                    && !matches!(
+                        kind,
+                        "no" | "any" | "some" | "two" | "three" | "four" | "five" | "more"
+                    ))
             {
                 return Some((Filter::HasCounter(Some(kind.into())), tail));
             }
