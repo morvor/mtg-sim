@@ -626,7 +626,7 @@ pub struct TargetSpec {
 /// A relationship the targets of one instance of the word "target" must have with each
 /// other, both as they're chosen (CR 601.2c) and as the spell or ability resolves
 /// (CR 608.2b).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TargetGroup {
     /// All have the same owner: cards "from a single graveyard", or "two target cards
     /// from an opponent's graveyard" (one opponent's graveyard).
@@ -643,6 +643,21 @@ pub enum TargetGroup {
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
+    /// No two of them have the same name ("with different names", CR 201.2).
+    DifferentNames,
+    /// Their total of a value is at most the value ("with total mana value 6 or less",
+    /// "with total mana value X or less").
+    TotalAtMost(TotalStat, Box<Value>),
+}
+
+/// What [`TargetGroup::TotalAtMost`] adds up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TotalStat {
+    ManaValue,
+    Power,
+    Toughness,
+    /// Power plus toughness.
+    PowerAndToughness,
 }
 
 impl TargetSpec {
@@ -736,6 +751,10 @@ pub mod vars {
     /// The excess damage dealt by the most recent damage effect ("the excess damage dealt
     /// this way", CR 120.10), as a number.
     pub const EXCESS: Var = 7;
+    /// The object a [`Filter::ValueCmp`] is testing, or that a [`Value::Extreme`] is
+    /// measuring, while its values are evaluated ("with toughness greater than its power",
+    /// "the greatest power among creatures you control"; see `relational.rs`).
+    pub const TESTED: Var = 6;
 }
 
 /// Selects players and/or objects.
@@ -1194,6 +1213,16 @@ pub enum Filter {
     /// An ability on the stack whose source (as it last existed, CR 113.7a) matches the
     /// filter: "activated or triggered ability ... from an artifact source".
     AbilityFrom(Box<Filter>),
+    /// A value of the object compared with another value: the object is in
+    /// [`vars::TESTED`] while both are evaluated ("with toughness greater than its power",
+    /// "with total power and toughness 5 or less", "with the greatest mana value among
+    /// creatures you control"; see `relational.rs`).
+    ValueCmp(Box<Value>, Cmp, Box<Value>),
+    /// A requirement on the objects chosen together for one selection ("up to four cards
+    /// with different names", "any number of creature cards with total mana value 6 or
+    /// less"). Every object matches it on its own; whatever chooses the objects (target
+    /// slots, searches, choices) checks the group (see `relational.rs`, `target_groups.rs`).
+    Together(TargetGroup),
     /// Custom predicates implemented in code, by name.
     Custom(SmolStr),
 }
@@ -1364,6 +1393,10 @@ pub enum Value {
     /// The first value if the condition holds, otherwise the second ("choose one. If you
     /// control a commander as you cast this spell, you may choose both instead").
     If(Box<Condition>, Box<Value>, Box<Value>),
+    /// The greatest (`true`) or least value among the selected objects, each measured with
+    /// the object in [`vars::TESTED`] ("the greatest power among creatures you control",
+    /// "the lowest mana value among nonland permanents"); 0 if there are none.
+    Extreme(Box<Value>, Box<Sel>, bool),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
 }
@@ -1563,6 +1596,11 @@ pub enum Duration {
     /// "[doesn't untap] during its controller's next untap step": for each affected
     /// object, until its controller's next untap step has passed (CR 502.3).
     ThroughNextUntapStep,
+    /// "[doesn't untap] during your next untap step": until the next untap step of the
+    /// effect's controller has passed; it applies only during that player's untap steps,
+    /// so an affected permanent another player gains control of untaps as usual during
+    /// that player's untap step (CR 502.3).
+    ThroughYourNextUntapStep,
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),
@@ -1916,6 +1954,19 @@ pub enum ReplacementEvent {
     PutCountersBy {
         by: PlayerRel,
         kind: Option<CounterKind>,
+    },
+    /// Counters (of `kind`) would be put on an object matching `on_objects` or a player
+    /// matching `on_players`, by a player matching `by` if given (CR 122.6, 122.6a: "If you
+    /// would put one or more counters on a permanent you control"), and, if `effect_only`,
+    /// by an effect (CR 609.1: "If an effect would put one or more counters on a permanent
+    /// you control" doesn't apply to counters put as a cost, as the result of damage, or by
+    /// a turn-based action; see [`crate::events::CounterOrigin`]).
+    PutCountersMatching {
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        by: Option<PlayerRel>,
+        effect_only: bool,
     },
     /// One or more tokens would be created under a player's control.
     CreateTokens(PlayerFilter),
@@ -2701,6 +2752,37 @@ pub enum TriggerCond {
         /// put action ("one or more [kind] counters are put on …").
         #[serde(default)]
         each: bool,
+    },
+    /// "Whenever [who] put(s) one or more [kind] counters on [objects or players]" (once
+    /// for each put action on each permanent or player) / "Whenever [who] put(s) a [kind]
+    /// counter on …" (`each`: once for each counter) (CR 122.6, 122.6a): counters put by a
+    /// player matching `who`, however they were put (by an effect, as a cost, as the result
+    /// of damage, or by a turn-based action, [`crate::events::CounterOrigin`]). Event
+    /// object = the permanent (none for a player), player = the player who put them,
+    /// amount = how many.
+    CountersPutBy {
+        who: PlayerRel,
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        each: bool,
+    },
+    /// "Whenever a spell or ability [by] controls destroys [filter]" (CR 701.8): a
+    /// permanent destroyed by the effect of a spell or ability (not by a state-based
+    /// action, CR 704.5g–h, and not sacrificed or exiled). Looks back in time
+    /// (CR 603.10a). Event object = the permanent as it last existed on the battlefield,
+    /// player = the controller of the spell or ability.
+    DestroyedBy {
+        filter: Filter,
+        by: PlayerRel,
+    },
+    /// "When/Whenever [filter spell] is countered by a spell or ability [by] controls"
+    /// (CR 701.6). Looks back in time (CR 603.10e). Event object = the spell as it last
+    /// existed on the stack, player = the controller of the spell or ability that
+    /// countered it.
+    CounteredBy {
+        filter: Filter,
+        by: PlayerRel,
     },
     CountersRemoved {
         filter: Filter,

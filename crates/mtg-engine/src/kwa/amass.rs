@@ -73,7 +73,12 @@ pub fn amass(g: &mut Game, p: PlayerId, subtype: &Subtype, n: u32, ctx: &mut Ctx
             .or(Some(cands[0])),
     };
     if let Some(army) = army {
-        g.add_counters(Entity::Object(army), counters::PLUS1, n, ctx.source);
+        g.put_counters(
+            Entity::Object(army),
+            counters::PLUS1,
+            n,
+            crate::event_causes::CounterPut::by_player(p, ctx),
+        );
         g.recompute();
         if on_battlefield(g, army) && !g.obj(army).chars.has_subtype(subtype) {
             c.set_var(kvars::AMASSED, vec![Entity::Object(army)]);

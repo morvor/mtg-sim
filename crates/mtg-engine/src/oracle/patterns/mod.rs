@@ -69,6 +69,28 @@ pub struct AbilityPattern {
 }
 inventory::collect!(AbilityPattern);
 
+/// Parses a qualifier after an object phrase's head noun that the core phrase parser
+/// doesn't understand ("with lesser mana value", "that shares a color with it", "with the
+/// greatest power among creatures you control"). Receives the text after the noun and
+/// its earlier qualifiers (lowercase, leading spaces trimmed) and the filter the phrase
+/// has described so far; returns the qualifier's filter and the rest. Tried, in order of
+/// ascending priority, after the core suffixes.
+pub struct FilterSuffixPattern {
+    pub name: &'static str,
+    pub priority: i32,
+    pub parse: for<'a> fn(&'a str, &Filter) -> Option<(Filter, &'a str)>,
+}
+inventory::collect!(FilterSuffixPattern);
+
+pub fn filter_suffix_patterns() -> &'static [&'static FilterSuffixPattern] {
+    static P: OnceLock<Vec<&'static FilterSuffixPattern>> = OnceLock::new();
+    P.get_or_init(|| {
+        sorted(inventory::iter::<FilterSuffixPattern>.into_iter(), |p| {
+            (p.priority, p.name)
+        })
+    })
+}
+
 /// How many modes a modal header lets a player choose, and who chooses them (CR 700.2).
 pub struct ModalHeader {
     pub min: Value,

@@ -178,6 +178,25 @@ impl Game {
                 _ => None,
             })
             .collect();
+        // Attachments leaving the battlefield while still attached to something (an object
+        // leaving at the same time counts): their last known information.
+        let still_attached: Vec<ObjectId> = finals
+            .iter()
+            .filter_map(|(_, e)| match e {
+                ReplEvent::Move(m) if m.to != Zone::Battlefield => Some(m.obj),
+                _ => None,
+            })
+            .filter(|o| {
+                let o = self.obj(*o);
+                o.zone == Zone::Battlefield
+                    && o.attached_to.is_some_and(|a| match a {
+                        Entity::Player(_) => true,
+                        Entity::Object(x) => {
+                            self.is_live(x) && self.obj(x).zone == Zone::Battlefield
+                        }
+                    })
+            })
+            .collect();
         for (i, e) in finals {
             match e {
                 ReplEvent::Move(m) => {
@@ -190,6 +209,11 @@ impl Game {
             }
         }
         self.entering = prev_entering;
+        for o in still_attached {
+            if let Some(lb) = self.objects[o.0 as usize].left_battlefield.as_mut() {
+                lb.attached = true;
+            }
+        }
         crate::zones::face_down_exiled(
             self,
             face_down_exiles
@@ -412,6 +436,7 @@ impl Game {
                 blocked: self.combat.as_ref().is_some_and(|c| c.is_blocked(old_id)),
                 enchanted: has(self, "Aura"),
                 equipped: has(self, "Equipment"),
+                attached: false,
             };
             self.objects[old_id.0 as usize].left_battlefield = Some(Box::new(status));
             crate::combat::remove_from_combat(self, old_id);
@@ -613,7 +638,15 @@ impl Game {
                 if lore > 0 {
                     counters_to_add.push((counters::LORE.into(), lore));
                 }
-                for (k, n) in counters_to_add {
+                // CR 122.6a: its controller puts them on it, unless the effect has another
+                // player put them (tribute's chosen opponent).
+                let ctl = self.obj(new_id).controller;
+                let counters_to_add: Vec<(CounterKind, u32, PlayerId)> = counters_to_add
+                    .into_iter()
+                    .map(|(k, n)| (k, n, ctl))
+                    .chain(m.etb.counters_by.iter().cloned())
+                    .collect();
+                for (k, n, putter) in counters_to_add {
                     // Counters placed as it enters are part of the ETB event; replacement
                     // effects on counters still apply (CR 614.16).
                     for e in self.replace(ReplEvent::AddCounters {
@@ -621,11 +654,15 @@ impl Game {
                         kind: k.clone(),
                         n,
                         source: None,
+                        by: Some(putter),
+                        origin: crate::events::CounterOrigin::Effect,
                     }) {
                         if let ReplEvent::AddCounters {
                             target: Entity::Object(t),
                             kind,
                             n,
+                            by,
+                            origin,
                             ..
                         } = e
                         {
@@ -642,6 +679,9 @@ impl Game {
                                         target: Entity::Object(t),
                                         kind,
                                         n,
+                                        by,
+                                        origin,
+                                        as_put: None,
                                     });
                                 }
                             }
@@ -801,8 +841,13 @@ impl Game {
             ReplEvent::GainLife { player, amount } => self.perform_gain_life(player, amount),
             ReplEvent::LoseLife { player, amount, .. } => self.perform_lose_life(player, amount),
             ReplEvent::AddCounters {
-                target, kind, n, ..
-            } => self.perform_add_counters(target, kind, n),
+                target,
+                kind,
+                n,
+                by,
+                origin,
+                ..
+            } => self.perform_add_counters(target, kind, n, by, origin),
             ReplEvent::CreateTokens {
                 controller,
                 spec,
@@ -811,7 +856,7 @@ impl Game {
             } => {
                 self.perform_create_tokens(controller, &spec, count);
             }
-            ReplEvent::Destroy { obj, .. } => {
+            ReplEvent::Destroy { obj, source, by } => {
                 let owner = self.obj(obj).owner;
                 // The move to the graveyard is itself subject to replacement effects
                 // ("if it would die, exile it instead"), as in `destroy_all`.
@@ -823,11 +868,15 @@ impl Game {
                         cause: MoveCause::Destroy,
                         by: None,
                         etb: EtbInfo::default(),
-                        source: None,
+                        source,
                     })
                     .is_some()
                 {
-                    self.emit(Event::Destroyed { obj });
+                    self.emit(Event::Destroyed {
+                        obj,
+                        cause: source,
+                        by,
+                    });
                 }
             }
             ReplEvent::LoseGame { player } => self.player_loses(player),
@@ -1066,6 +1115,9 @@ impl Game {
         }) || self.rule_effects.iter().any(|e| match &e.restriction {
             Restriction::DoesntUntap(f) => {
                 e.objects.as_ref().is_none_or(|v| v.contains(&obj))
+                    // "During your next untap step": only in its controller's untap step.
+                    && (!matches!(e.duration, Duration::ThroughYourNextUntapStep)
+                        || self.obj(obj).controller == e.controller)
                     && self.matches(obj, f, &Ctx::new(e.source, e.controller))
             }
             _ => false,
@@ -1076,8 +1128,16 @@ impl Game {
     // Destroy / sacrifice / exile
     // ------------------------------------------------------------------
 
-    /// Destroys a permanent (CR 701.8). Returns true if it left the battlefield.
+    /// Destroys a permanent (CR 701.8) by the spell or ability `source` (its controller's).
+    /// Returns true if it left the battlefield.
     pub fn destroy(&mut self, obj: ObjectId, source: Option<ObjectId>) -> bool {
+        let cause = crate::event_causes::Cause::of_source(self, source);
+        self.destroy_by(obj, cause)
+    }
+
+    /// Destroys a permanent (CR 701.8); `cause` is the spell or ability doing it (none for
+    /// a state-based action). Returns true if it left the battlefield.
+    pub fn destroy_by(&mut self, obj: ObjectId, cause: crate::event_causes::Cause) -> bool {
         if self.dirty {
             self.recompute();
         }
@@ -1088,7 +1148,11 @@ impl Game {
         if self.obj(obj).has_keyword(KeywordKind::Indestructible) {
             return false;
         }
-        let evs = self.replace(ReplEvent::Destroy { obj, source });
+        let evs = self.replace(ReplEvent::Destroy {
+            obj,
+            source: cause.obj,
+            by: cause.by,
+        });
         for e in evs {
             self.execute_repl_event(e);
         }
@@ -1097,17 +1161,32 @@ impl Game {
         !self.is_live(obj)
     }
 
-    /// Destroys several permanents simultaneously ("destroy all creatures").
+    /// Destroys several permanents simultaneously ("destroy all creatures") by the spell or
+    /// ability `source` (its controller's).
     pub fn destroy_all(
         &mut self,
         objs: Vec<ObjectId>,
         source: Option<ObjectId>,
         no_regen: bool,
     ) -> Vec<ObjectId> {
+        let cause = crate::event_causes::Cause::of_source(self, source);
+        self.destroy_all_by(objs, cause, no_regen)
+    }
+
+    /// Destroys several permanents simultaneously; `cause` is the spell or ability doing it
+    /// (CR 701.8b).
+    pub fn destroy_all_by(
+        &mut self,
+        objs: Vec<ObjectId>,
+        cause: crate::event_causes::Cause,
+        no_regen: bool,
+    ) -> Vec<ObjectId> {
         if self.dirty {
             self.recompute();
         }
+        let (source, by) = (cause.obj, cause.by);
         let mut moves = Vec::new();
+        let mut causes: Vec<(Option<ObjectId>, Option<PlayerId>)> = Vec::new();
         for obj in objs {
             if !self.is_live(obj) || self.obj(obj).zone != Zone::Battlefield {
                 continue;
@@ -1121,16 +1200,17 @@ impl Game {
                 let mut skip = self.repl_context.last().cloned().unwrap_or_default();
                 skip.extend(self.regeneration_keys());
                 self.repl_context.push(skip);
-                let r = self.replace(ReplEvent::Destroy { obj, source });
+                let r = self.replace(ReplEvent::Destroy { obj, source, by });
                 self.repl_context.pop();
                 r
             } else {
-                self.replace(ReplEvent::Destroy { obj, source })
+                self.replace(ReplEvent::Destroy { obj, source, by })
             };
             for e in evs {
                 match e {
-                    ReplEvent::Destroy { obj, .. } => {
+                    ReplEvent::Destroy { obj, source, by } => {
                         let owner = self.obj(obj).owner;
+                        causes.push((source, by));
                         moves.push(MoveEv {
                             obj,
                             to: Zone::Graveyard(owner),
@@ -1147,9 +1227,13 @@ impl Game {
         }
         let ids: Vec<ObjectId> = moves.iter().map(|m| m.obj).collect();
         let res = self.move_objects(moves);
-        for (old, new) in ids.iter().zip(res.iter()) {
+        for ((old, new), (cause, by)) in ids.iter().zip(res.iter()).zip(causes) {
             if new.is_some() {
-                self.emit(Event::Destroyed { obj: *old });
+                self.emit(Event::Destroyed {
+                    obj: *old,
+                    cause,
+                    by,
+                });
             }
         }
         res.into_iter().flatten().collect()
@@ -1225,13 +1309,37 @@ impl Game {
     // Counters (CR 122)
     // ------------------------------------------------------------------
 
-    /// Puts counters on an object or player. Returns the number actually placed.
+    /// Puts counters on an object or player by the effect of the spell or ability `source`
+    /// (its controller puts them, CR 122.6a). Returns the number actually placed.
     pub fn add_counters(
         &mut self,
         target: Entity,
         kind: &str,
         n: u32,
         source: Option<ObjectId>,
+    ) -> u32 {
+        let mut how = crate::event_causes::CounterPut::by_source(self, source);
+        // Not put by a spell or ability: a permanent's controller puts them, as for the
+        // counters it enters with (CR 122.6a).
+        if how.by.is_none() {
+            if let Entity::Object(o) = target {
+                if self.obj(o).zone == Zone::Battlefield {
+                    how.by = Some(self.obj(o).controller);
+                }
+            }
+        }
+        self.put_counters(target, kind, n, how)
+    }
+
+    /// Puts counters on an object or player: `how` says who puts them and whether by an
+    /// effect, as a cost, as the result of damage, or by a game rule (CR 122.6). Returns
+    /// the number actually placed.
+    pub fn put_counters(
+        &mut self,
+        target: Entity,
+        kind: &str,
+        n: u32,
+        how: crate::event_causes::CounterPut,
     ) -> u32 {
         if n == 0 {
             return 0;
@@ -1249,7 +1357,9 @@ impl Game {
             target,
             kind: kind.into(),
             n,
-            source,
+            source: how.source,
+            by: how.by,
+            origin: how.origin,
         }) {
             if let ReplEvent::AddCounters { n, .. } = &e {
                 placed += *n;
@@ -1260,15 +1370,24 @@ impl Game {
         placed
     }
 
-    fn perform_add_counters(&mut self, target: Entity, kind: CounterKind, n: u32) {
+    fn perform_add_counters(
+        &mut self,
+        target: Entity,
+        kind: CounterKind,
+        n: u32,
+        by: Option<PlayerId>,
+        origin: crate::events::CounterOrigin,
+    ) {
         if n == 0 {
             return;
         }
+        let mut as_put = None;
         match target {
             Entity::Object(o) => {
                 if !self.is_live(o) {
                     return;
                 }
+                as_put = crate::event_causes::AsPut::of(self, o);
                 // CR 613.7c: every counter of this kind gets the new counter's timestamp.
                 let ts = self.new_timestamp();
                 let ob = &mut self.objects[o.0 as usize];
@@ -1284,7 +1403,14 @@ impl Game {
         }
         self.history.counters_put += n;
         self.dirty = true;
-        self.emit(Event::CountersAdded { target, kind, n });
+        self.emit(Event::CountersAdded {
+            target,
+            kind,
+            n,
+            by,
+            origin,
+            as_put,
+        });
     }
 
     /// Removes up to `n` counters of a kind. Returns the number removed.
@@ -1569,6 +1695,8 @@ impl Game {
             }
         }
         crate::excess_damage::record_excess(self, &excess_before, &dealt, combat);
+        // CR 702.164c: toxic's poison counters, one event for each player and controller.
+        crate::keyword_impls::toxic_counters(self, &dealt, combat);
         for (_, p, n) in lifelink_gains {
             self.gain_life(p, n);
         }
@@ -1666,11 +1794,15 @@ impl Game {
     /// Counters that are the result of damage (infect and wither, CR 120.3b, 120.3d),
     /// as modified by replacement effects that interact with them (CR 120.4c).
     fn put_damage_counters(&mut self, target: Entity, kind: &str, n: u32, source: ObjectId) {
+        // The source's controller puts them, and not by an effect (CR 702.80a, 702.90b–c).
+        let how = crate::event_causes::CounterPut::damage(self, source);
         for e in self.replace(ReplEvent::AddCounters {
             target,
             kind: kind.into(),
             n,
             source: Some(source),
+            by: how.by,
+            origin: how.origin,
         }) {
             self.execute_repl_event(e);
         }

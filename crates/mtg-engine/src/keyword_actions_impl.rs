@@ -50,7 +50,7 @@ pub fn proliferate(g: &mut Game, p: PlayerId, ctx: &Ctx) {
                 .collect(),
         };
         for k in kinds {
-            g.add_counters(e, &k, 1, ctx.source);
+            g.put_counters(e, &k, 1, crate::event_causes::CounterPut::by_player(p, ctx));
         }
     }
     g.emit(crate::events::Event::Custom {

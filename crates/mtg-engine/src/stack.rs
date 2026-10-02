@@ -283,8 +283,9 @@ impl Game {
             min == 0 || s.condition.is_some() || {
                 let cands = self.legal_target_candidates(s, ctx, stack_obj);
                 cands.len() as u32 >= min
-                    && s.together.is_none_or(|grp| {
-                        crate::target_groups::find_group(self, grp, &cands, min as usize).is_some()
+                    && s.together.as_ref().is_none_or(|grp| {
+                        crate::target_groups::find_group(self, grp, &cands, min as usize, ctx)
+                            .is_some()
                     })
             }
         })
@@ -644,8 +645,8 @@ impl Game {
             }
             // Targets that must have a relationship with each other: a group of the
             // required size must exist (CR 601.2c).
-            if let Some(grp) = spec.together {
-                crate::target_groups::find_group(self, grp, &cands, min as usize)?;
+            if let Some(grp) = &spec.together {
+                crate::target_groups::find_group(self, grp, &cands, min as usize, ctx)?;
             }
             slot_cands[i] = cands.clone();
             slot_max[i] = max;
@@ -682,8 +683,10 @@ impl Game {
                         .collect(),
                 }
             };
-            out[i] = match spec.together {
-                Some(grp) => crate::target_groups::fit(self, grp, picked, &cands, min as usize)?,
+            out[i] = match &spec.together {
+                Some(grp) => {
+                    crate::target_groups::fit(self, grp, picked, &cands, min as usize, ctx)?
+                }
                 None => picked,
             };
         }
@@ -846,6 +849,10 @@ impl Game {
         ctx.source = source;
         ctx.controller = o.controller;
         ctx.stack_obj = Some(id);
+        // A resolving spell or ability performs its own effects (CR 609.1), whatever
+        // context created it.
+        ctx.paying_cost = false;
+        ctx.cause = None;
         ctx.x = si.x.unwrap_or(ctx.x);
         ctx.event = si.event.clone().or(ctx.event);
         // An ability's "if it was kicked", "if you cast it from your hand" etc. refer to how
@@ -900,8 +907,8 @@ impl Game {
                 // Targets that must have a relationship with each other no longer have
                 // it: they're all illegal (CR 608.2b). Ones that left are compared using
                 // their last known information (see `target_groups`).
-                if let Some(grp) = spec.together {
-                    if !crate::target_groups::group_ok(self, grp, slot) {
+                if let Some(grp) = &spec.together {
+                    if !crate::target_groups::group_ok(self, grp, slot, &c2) {
                         legal.clear();
                         legal_div.clear();
                     }
@@ -939,7 +946,23 @@ impl Game {
         if let StackKind::Triggered { ability, .. } = &si.kind {
             if let AbilityKind::Triggered(t) = &ability.kind {
                 if let Some(c) = &t.intervening_if {
-                    if !self.eval_cond(c, &ctx) {
+                    // The source as it last existed: an Aura whose enchanted permanent
+                    // left the battlefield first wasn't enchanting anything. (A trigger on
+                    // that permanent leaving looks back in time, CR 603.10a.)
+                    let detach = !matches!(
+                        t.trigger,
+                        TriggerCond::LeavesBattlefield(_) | TriggerCond::Dies(_)
+                    ) && crate::attach::attached_to_nothing(self, src);
+                    let saved = if detach {
+                        self.objects[src.0 as usize].attached_to.take()
+                    } else {
+                        None
+                    };
+                    let holds = self.eval_cond(c, &ctx);
+                    if detach {
+                        self.objects[src.0 as usize].attached_to = saved;
+                    }
+                    if !holds {
                         self.remove_from_stack(id);
                         self.state_triggers_active.remove(&(src, uid));
                         return;
@@ -1281,17 +1304,30 @@ impl Game {
         });
     }
 
-    /// Counters a spell or ability (CR 701.6). Returns false if it can't be countered.
+    /// Counters a spell or ability (CR 701.6) by the spell or ability `by` (its
+    /// controller's). Returns false if it can't be countered.
     pub fn counter(&mut self, id: ObjectId, by: Option<ObjectId>) -> bool {
+        let cause = crate::event_causes::Cause::of_source(self, by);
+        self.counter_by(id, cause)
+    }
+
+    /// Counters a spell or ability (CR 701.6); `cause` is the spell or ability countering
+    /// it, which the countered event records ("a creature spell you cast this turn was
+    /// countered by a spell or ability an opponent controlled"). Returns false if it can't
+    /// be countered.
+    pub fn counter_by(&mut self, id: ObjectId, cause: crate::event_causes::Cause) -> bool {
         if !self.is_live(id) || self.obj(id).zone != Zone::Stack {
             return false;
         }
         if self.cant_be_countered(id) {
             return false;
         }
-        let _ = by;
         self.counter_or_fizzle(id, MoveCause::Counter);
-        self.emit(Event::Countered { what: id });
+        self.emit(Event::Countered {
+            what: id,
+            cause: cause.obj,
+            by: cause.by,
+        });
         true
     }
 

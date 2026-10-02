@@ -986,7 +986,10 @@ pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
             rest = tail;
             continue;
         }
-        if let Some(r) = t.strip_prefix("from anywhere other than your hand") {
+        if let Some(r) = t
+            .strip_prefix("from anywhere other than your hand")
+            .or_else(|| t.strip_prefix("from anywhere other than their hand"))
+        {
             parts.push(Filter::not(Filter::CastFrom(ZoneKind::Hand)));
             rest = r;
             continue;
