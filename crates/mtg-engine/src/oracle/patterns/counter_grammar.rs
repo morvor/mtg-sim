@@ -699,3 +699,82 @@ pub fn counters_on(rest: &str, negate: bool) -> Option<(Filter, &str)> {
     };
     Some((if negate { Filter::not(f) } else { f }, tail))
 }
+
+/// "... for as long as it has a [kind] counter on it": the duration of an effect on an
+/// object (CR 611.2b). Returns the duration and the text before it.
+pub fn counter_duration(t: &str) -> Option<(Duration, &str)> {
+    let (head, tail) = t.rsplit_once(" for as long as ")?;
+    let r = tail
+        .strip_prefix("it has ")
+        .or_else(|| tail.strip_prefix("they have "))?;
+    let r = r
+        .strip_prefix("a ")
+        .or_else(|| r.strip_prefix("an "))
+        .unwrap_or(r);
+    let (kind, r) = counter_noun(r)?;
+    if !matches!(end(r), "on it" | "on them") {
+        return None;
+    }
+    Some((Duration::WhileAffectedHasCounter(kind?), head))
+}
+
+/// The counter kind of "[it/that creature/...] has a [kind] counter on it".
+fn has_counter_on_it(c: &str) -> Option<CounterKind> {
+    let (_, r) = c.split_once(" has ")?;
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let (kind, r) = counter_noun(r)?;
+    (end(r) == "on it").then_some(kind?)
+}
+
+/// Rewrites every "until end of turn" duration of continuous effects in `e` to `d`.
+fn with_duration(e: &mut Effect, d: &Duration) -> usize {
+    match e {
+        Effect::Seq(v) => v.iter_mut().map(|x| with_duration(x, d)).sum(),
+        Effect::Modify { duration, .. } if matches!(duration, Duration::EndOfTurn) => {
+            *duration = d.clone();
+            1
+        }
+        _ => 0,
+    }
+}
+
+/// "That land is an Island in addition to its other types for as long as it has a flood
+/// counter on it.", "For as long as that creature has a shadow counter on it, it's a
+/// Wraith in addition to its other types.", "that creature has base power and toughness
+/// 3/1 and has flying for as long as it has a feather counter on it": a continuous
+/// effect on an object for as long as it has a counter of that kind (CR 611.2b).
+fn while_it_has_counter(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (clause, kind) = if let Some(r) = l.strip_prefix("for as long as ") {
+        let (c, clause) = r.split_once(", ")?;
+        (clause.to_string(), has_counter_on_it(c)?)
+    } else {
+        let (clause, c) = l.rsplit_once(" for as long as ")?;
+        if !c.starts_with("it has ") {
+            return None;
+        }
+        (clause.to_string(), has_counter_on_it(c)?)
+    };
+    // The state the object is in ("is", "'s", "has") as an effect that begins now.
+    let clause = if let Some(r) = clause.strip_prefix("it's ") {
+        format!("it becomes {r}")
+    } else {
+        let (subject, rest) = clause
+            .split_once(" is ")
+            .map(|(s, r)| (s.to_string(), format!("becomes {r}")))
+            .unwrap_or_else(|| (String::new(), clause.clone()));
+        if subject.is_empty() {
+            clause.clone()
+        } else {
+            format!("{subject} {rest}")
+        }
+    };
+    let clause = clause.replace(" and has ", " and gains ");
+    let mut e = crate::oracle::effects::parse_clause(&format!("{clause} until end of turn"), b)?;
+    if with_duration(&mut e, &Duration::WhileAffectedHasCounter(kind)) == 0 {
+        return None;
+    }
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "counter grammar: [effect] for as long as it has a [kind] counter on it", priority: 50, parse: while_it_has_counter } }

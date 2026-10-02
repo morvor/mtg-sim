@@ -151,6 +151,11 @@ pub(crate) fn amount_cmp(s: &str) -> Option<(Cmp, Value, &str)> {
     if let Some(r) = strip(s, "one or more") {
         return Some((Cmp::Ge, Value::c(1), r));
     }
+    // "exactly three tide counters" (Homarid).
+    if let Some(r) = strip(s, "exactly") {
+        let (n, r) = parse_number(r)?;
+        return (!matches!(n, Value::X)).then_some((Cmp::Eq, n, r));
+    }
     let (n, r) = parse_number(s)?;
     if matches!(n, Value::X) {
         return None;
@@ -189,12 +194,13 @@ fn counter_condition(c: &str) -> Option<Condition> {
         .or_else(|| c.strip_prefix("~ had "))?;
     // "~ has counters on it"
     if let Some(r2) = strip(r, "counters on") {
-        return matches!(end(r2), "it" | "~")
+        return matches!(end(r2), "it" | "~" | "him" | "her")
             .then(|| Condition::Compare(counters(Sel::This, None), Cmp::Ge, Value::c(1)));
     }
     let (cmp, n, r) = amount_cmp(r)?;
     let (kind, r) = kind_then_on(r)?;
-    if !matches!(end(r), "it" | "~") {
+    // A named character's personal pronoun ("~ has a shield counter on him").
+    if !matches!(end(r), "it" | "~" | "him" | "her") {
         return None;
     }
     Some(Condition::Compare(counters(Sel::This, kind), cmp, n))

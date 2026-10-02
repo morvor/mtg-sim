@@ -806,6 +806,10 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
             return (d, r);
         }
     }
+    // "for as long as it has a flood counter on it" (CR 611.2b).
+    if let Some((d, r)) = super::patterns::counter_grammar::counter_duration(t) {
+        return (d, r);
+    }
     (Duration::Permanent, t)
 }
 

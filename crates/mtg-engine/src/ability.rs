@@ -1547,6 +1547,10 @@ pub enum Duration {
     Permanent,
     /// Until the affected object leaves (used by Auras granting effects via resolution).
     UntilHostLeaves,
+    /// "for as long as it has a [kind] counter on it": for each affected object, until it
+    /// has no counters of that kind (CR 611.2b: it doesn't apply again if it gets one
+    /// later, and does nothing to an object that has none as the effect begins).
+    WhileAffectedHasCounter(CounterKind),
     /// "this turn" for rule-modifying effects — same as EndOfTurn.
     ThisTurn,
     /// "[doesn't untap] during its controller's next untap step": for each affected
