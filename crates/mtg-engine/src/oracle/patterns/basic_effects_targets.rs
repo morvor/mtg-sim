@@ -437,6 +437,14 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
             true,
         ));
     }
+    // "any target of an opponent's choice" (CR 601.2c: an opponent chooses it).
+    if let Some(r) = s.strip_prefix("any target of an opponent's choice") {
+        let mut spec = TargetSpec::any_target();
+        spec.chosen_by_opponent = true;
+        spec.text = "any target of an opponent's choice".to_string();
+        let slot = b.add_target(spec, "any target of an opponent's choice");
+        return Some((Sel::Target(slot), r.to_string(), true));
+    }
     // "any target that isn't a Dinosaur", "any target that was dealt damage this turn"
     if let Some(r) = s.strip_prefix("any target that ") {
         let any = Filter::Or(vec![
@@ -704,6 +712,45 @@ fn each_deals_to_its_controller(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "basic effects: each [object] deals damage to its controller", priority: 150, parse: each_deals_to_its_controller } }
+
+/// "Up to two target creatures you control each deal damage equal to their power to
+/// another target creature." (Band Together, Allies at Last): each of the first targets
+/// deals damage equal to its power (CR 120.3).
+fn targets_each_deal_their_power(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (subject, recipient) = l.split_once(" each deal damage equal to their power to ")?;
+    let (spec, tail) = parse_target(subject)?;
+    if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let slot = b.add_target(spec, subject);
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+        b.it_player = saved.2.clone();
+    };
+    let Some((to, rest, _)) = damage_recipient(recipient, b) else {
+        restore(b);
+        return None;
+    };
+    if !end(&rest).is_empty() || !matches!(to, Sel::Target(_)) {
+        restore(b);
+        return None;
+    }
+    const EACH: Var = vars::USER + 3331;
+    Some(Effect::ForEach {
+        sel: Sel::Target(slot),
+        var: EACH,
+        effect: Box::new(Effect::DealDamage {
+            source: Sel::Var(EACH),
+            amount: Value::PowerOf(Box::new(Sel::Var(EACH))),
+            to,
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: target creatures each deal damage equal to their power", priority: 150, parse: targets_each_deal_their_power } }
 
 #[cfg(test)]
 mod tests {

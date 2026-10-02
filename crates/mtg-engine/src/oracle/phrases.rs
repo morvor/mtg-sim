@@ -1175,6 +1175,10 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
             r,
         ));
     }
+    // "with power 4, 5, or 6"
+    if let Some(x) = super::patterns::basic_effects_filters::stat_in_list(t) {
+        return Some(x);
+    }
     let (stat, rest) = if let Some(r) = t.strip_prefix("with power ") {
         ("power", r)
     } else if let Some(r) = t.strip_prefix("with toughness ") {
@@ -1388,13 +1392,19 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
             (TargetKind::Object(f), r)
         }
     };
+    // "any target of an opponent's choice" (CR 115.1, 601.2c): an opponent chooses it.
+    let (chosen_by_opponent, rest) = match rest.trim_start().strip_prefix("of an opponent's choice")
+    {
+        Some(r) => (true, r),
+        None => (false, rest),
+    };
     let spec = TargetSpec {
         what,
         min,
         max,
         distinct_from: vec![],
         divide: None,
-        chosen_by_opponent: false,
+        chosen_by_opponent,
         text: String::new(),
         condition: None,
         together,

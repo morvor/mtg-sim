@@ -148,3 +148,48 @@ mod tests {
         assert_eq!(end(rest), "");
     }
 }
+
+/// "with power 4, 5, or 6" (Sarkhan's Unsealing), "with mana value 1, 2, or 3": any of the
+/// listed numbers.
+pub(crate) fn stat_in_list(s: &str) -> Option<(Filter, &str)> {
+    let t = s.trim_start();
+    let (stat, mut r) = if let Some(r) = t.strip_prefix("with power ") {
+        ("power", r)
+    } else if let Some(r) = t.strip_prefix("with toughness ") {
+        ("toughness", r)
+    } else if let Some(r) = t.strip_prefix("with mana value ") {
+        ("mv", r)
+    } else {
+        return None;
+    };
+    // A number (digits, then a comma, a space or the end).
+    let num = |x: &str| -> Option<(i32, usize)> {
+        let d = x.chars().take_while(|c| c.is_ascii_digit()).count();
+        Some((x[..d].parse().ok()?, d))
+    };
+    let mut ns = Vec::new();
+    loop {
+        let (n, d) = num(r)?;
+        ns.push(n);
+        let rest = &r[d..];
+        if let Some(x) = rest.strip_prefix(", or ").or_else(|| rest.strip_prefix(" or ")) {
+            let (n, d) = num(x)?;
+            ns.push(n);
+            r = &x[d..];
+            break;
+        }
+        r = rest.strip_prefix(", ")?;
+    }
+    if ns.len() < 3 {
+        return None;
+    }
+    let one = |n: i32| {
+        let v = Box::new(Value::Const(n));
+        match stat {
+            "power" => Filter::Power(Cmp::Eq, v),
+            "toughness" => Filter::Toughness(Cmp::Eq, v),
+            _ => Filter::ManaValue(Cmp::Eq, v),
+        }
+    };
+    Some((Filter::Or(ns.into_iter().map(one).collect()), r))
+}

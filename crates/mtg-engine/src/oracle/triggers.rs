@@ -25,7 +25,7 @@ fn parse_triggered_at(
     ctx: &CompileContext,
 ) -> Option<Ability> {
     let lower = cond_s.to_lowercase();
-    let (trigger, it, it_player) = parse_trigger_condition(&lower)?;
+    let (trigger, it, mut it_player) = parse_trigger_condition(&lower)?;
     let mut eff = eff_s.trim();
     // "This ability triggers only once each turn." is a rule about the ability, not part
     // of its effect.
@@ -113,6 +113,16 @@ fn parse_triggered_at(
             };
             if let Some(cond) = parsed {
                 intervening = Some(cond);
+                // "Whenever ~ attacks, if defending player controls no Walls, it deals 2
+                // damage to each creature without flying that player controls."
+                if c.starts_with("defending player ")
+                    && (matches!(it_player, PlayerRef::You)
+                        || super::patterns::oracle_hardening_referents::is_no_player_referent(
+                            &it_player,
+                        ))
+                {
+                    it_player = PlayerRef::DefendingPlayer;
+                }
                 eff = &eff[3 + c.len() + 2..];
                 // "..., if ~ is an enchantment, it becomes a 3/3 Knight creature": the
                 // subject "it" is the condition's.

@@ -153,6 +153,51 @@ pub fn source_of_slot(slot: u8) -> String {
     format!("{SOURCE_OF_SLOT}{slot}")
 }
 
+/// `Condition::CostPaid` name prefix (then a JSON `Filter`): "you controlled a modified
+/// creature as you cast ~". Recorded in the spell's `CastInfo::paid` as it becomes cast
+/// (CR 601.2i) if its caster controlled such a permanent then; a copy wasn't cast
+/// (CR 707.10), so it has no such record.
+pub const CONTROLLED_AS_CAST: &str = "basic_effects:controlled as cast:";
+
+/// The `Condition` "you controlled a [filter] as you cast ~".
+pub fn controlled_as_cast(f: &crate::ability::Filter) -> crate::ability::Condition {
+    crate::ability::Condition::CostPaid(
+        format!(
+            "{CONTROLLED_AS_CAST}{}",
+            serde_json::to_string(f).unwrap_or_default()
+        )
+        .into(),
+    )
+}
+
+/// The filters of the "controlled as you cast" conditions in a spell's abilities.
+fn controlled_as_cast_filters(chars: &crate::object::Characteristics) -> Vec<String> {
+    let Ok(json) = serde_json::to_string(&chars.abilities) else {
+        return vec![];
+    };
+    let Ok(prefix) = serde_json::to_string(CONTROLLED_AS_CAST) else {
+        return vec![];
+    };
+    // The prefix as it appears inside a JSON string (without its closing quote).
+    let prefix = &prefix[..prefix.len() - 1];
+    let mut out = Vec::new();
+    let mut rest = json.as_str();
+    while let Some(i) = rest.find(prefix) {
+        let after = &rest[i + 1..];
+        // The whole JSON string literal.
+        let mut de = serde_json::Deserializer::from_str(&rest[i..]).into_iter::<String>();
+        if let Some(Ok(name)) = de.next() {
+            if let Some(f) = name.strip_prefix(CONTROLLED_AS_CAST) {
+                if !out.iter().any(|x: &String| x == f) {
+                    out.push(f.to_string());
+                }
+            }
+        }
+        rest = after;
+    }
+    out
+}
+
 pub struct BasicEffects;
 
 impl KeywordRules for BasicEffects {
@@ -188,6 +233,34 @@ impl KeywordRules for BasicEffects {
             !same
         });
         true
+    }
+
+    fn on_event(&self, g: &mut Game, ev: &Event) {
+        let Event::SpellCast { spell, player, .. } = ev else {
+            return;
+        };
+        let (spell, p) = (*spell, *player);
+        if !g.is_live(spell) {
+            return;
+        }
+        let filters = controlled_as_cast_filters(&g.obj(spell).chars);
+        let ctx = Ctx::new(Some(spell), p);
+        for json in filters {
+            let Ok(f) = serde_json::from_str::<crate::ability::Filter>(&json) else {
+                continue;
+            };
+            let controls = g
+                .battlefield
+                .iter()
+                .any(|id| g.obj(*id).controller == p && g.matches(*id, &f, &ctx));
+            if controls {
+                if let Some(si) = g.objects[spell.0 as usize].stack.as_mut() {
+                    si.cast
+                        .paid
+                        .push(format!("{CONTROLLED_AS_CAST}{json}").into());
+                }
+            }
+        }
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {

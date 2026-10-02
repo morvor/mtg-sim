@@ -492,3 +492,185 @@ fn return_cards_put_into_graveyard(s: &str, prev: &mut Effect, _b: &mut Builder)
 }
 
 inventory::submit! { super::FollowupPattern { name: "basic effects: return each card put into a graveyard this way", priority: 80, apply: return_cards_put_into_graveyard } }
+
+/// "Whenever enchanted creature deals damage to a creature, destroy the other creature"
+/// (Venomous Fangs): in a trigger about two creatures, "the other creature" is the one the
+/// trigger's "it" refers to (the damaged creature, the blocking or blocked creature).
+fn the_other_creature(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !b.in_trigger || !matches!(b.it, Sel::TriggerObject) || !l.contains("the other creature") {
+        return None;
+    }
+    if l.matches("the other creature").count() != 1 || l.contains("that creature") {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&l.replace("the other creature", "that creature"), b)
+}
+
+inventory::submit! { EffectPattern { name: "the other creature (trigger referent)", priority: 150, parse: the_other_creature } }
+
+/// "Up to three target creatures can't block this turn. Destroy any of them that are
+/// Walls." (Blow Your House Down): the objects the previous instruction named that match.
+fn destroy_any_of_them_that_are(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("destroy any of them that are ")?;
+    if matches!(b.it, Sel::None) {
+        return None;
+    }
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some(Effect::Destroy {
+        what: Sel::All(Filter::and(vec![Filter::In(Box::new(b.it.clone())), f])),
+        no_regen: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "destroy any of them that are [objects]", priority: 150, parse: destroy_any_of_them_that_are } }
+
+/// The number counted by "count the number of [objects]".
+const COUNTED: Var = vars::USER + 3340;
+
+/// "At the beginning of your upkeep, count the number of permanents you control. Your life
+/// total becomes that number." (Touch of the Eternal): the number is counted once, as the
+/// instruction is carried out; "that number" in the next sentence is it.
+fn count_the_number_of(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("count the number of ")?;
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    let f = match f.zone() {
+        Some(_) => f,
+        None => Filter::and(vec![Filter::Permanent, f]),
+    };
+    Some(Effect::StoreValue {
+        var: COUNTED,
+        value: Value::Count(f),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "count the number of [objects]", priority: 150, parse: count_the_number_of } }
+
+/// "... that number ..." after "count the number of [objects]".
+fn that_number(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        other => Some(other),
+    };
+    if !matches!(last, Some(Effect::StoreValue { var, .. }) if *var == COUNTED) {
+        return false;
+    }
+    let l = end(l);
+    if l.matches("that number").count() != 1
+        || l.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x")
+    {
+        return false;
+    }
+    let text = l.replace("that number", "x");
+    let first_new = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_sentence(&text, b) else {
+        b.targets.truncate(first_new);
+        return false;
+    };
+    if b.targets.len() != first_new {
+        b.targets.truncate(first_new);
+        return false;
+    }
+    let Some(e) = super::r107_numbers::substitute_x(&e, &Value::Var(COUNTED)) else {
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = match old {
+        Effect::Seq(mut v) => {
+            v.push(e);
+            Effect::Seq(v)
+        }
+        o => Effect::Seq(vec![o, e]),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "basic effects: ... that number (counted)", priority: 80, apply: that_number } }
+
+/// "~ deals 1 damage to that player or a planeswalker that player controls" (Curse of the
+/// Pierced Heart): you choose, as the ability resolves, the player or one of their
+/// planeswalkers (not a target).
+fn damage_player_or_their_planeswalker(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let head = l.strip_suffix(" or a planeswalker that player controls")?;
+    if !head.ends_with(" to that player") {
+        return None;
+    }
+    let saved = b.targets.len();
+    let e = crate::oracle::effects::parse_clause(head, b)?;
+    if b.targets.len() != saved {
+        b.targets.truncate(saved);
+        return None;
+    }
+    let Effect::DealDamage { source, amount, to } = &e else {
+        return None;
+    };
+    let Sel::Players(p) = to else {
+        return None;
+    };
+    let pw = Effect::DealDamage {
+        source: source.clone(),
+        amount: amount.clone(),
+        to: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                Filter::Type(crate::types::CardType::Planeswalker),
+                Filter::ControlledByPlayer(Box::new(p.clone())),
+            ]),
+            count: Value::Const(1),
+            up_to: false,
+            store: None,
+        },
+    };
+    Some(Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: vec![
+            (head.to_string(), e),
+            ("a planeswalker that player controls".to_string(), pw),
+        ],
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: damage to that player or a planeswalker that player controls", priority: 120, parse: damage_player_or_their_planeswalker } }
+
+/// "Regenerate target creature." on a card named Regenerate: normalizing the card's name to
+/// "~" also caught the verb, so a sentence that reads "~ [object]" is the verb.
+fn verb_named_like_the_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("~ ")?;
+    let name = b.ctx.card_name.to_lowercase();
+    if name.contains(' ') || !name.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    if !(r.starts_with("target ") || r.starts_with("up to ") || r.starts_with("all ")) {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&format!("{name} {r}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: verb named like the card", priority: 150, parse: verb_named_like_the_card } }
+
+/// "If you controlled a modified creature as you cast ~, ..." (Flame Discharge), "... if you
+/// controlled a Faerie as you cast ~" (Faerie Fencing): recorded as the spell becomes cast
+/// (see `kw/basic_effects.rs`).
+fn controlled_as_you_cast(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let r = c
+        .strip_suffix(" as you cast ~")
+        .or_else(|| c.strip_suffix(" as you cast this spell"))?;
+    let r = r
+        .strip_prefix("you controlled a ")
+        .or_else(|| r.strip_prefix("you controlled an "))?;
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if plural || !end(tail).is_empty() || matches!(f, Filter::Any) {
+        return None;
+    }
+    Some(crate::kw::basic_effects::controlled_as_cast(&f))
+}
+
+inventory::submit! { super::ConditionPattern { name: "basic effects: you controlled a [permanent] as you cast ~", priority: 100, parse: controlled_as_you_cast } }

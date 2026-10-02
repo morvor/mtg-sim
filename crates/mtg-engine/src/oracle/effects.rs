@@ -112,6 +112,11 @@ impl<'c> Builder<'c> {
         // "Destroy target creature an opponent controls. That player loses 3 life.": the
         // opponent mentioned is that object's controller.
         let opponents = matches!(&spec.what, TargetKind::Object(f) if controlled_by_opponent(f));
+        // "Exile target card from an opponent's graveyard. If it was a creature card, that
+        // player loses 1 life.": the opponent is the card's owner.
+        let owned_by_opponent = matches!(&spec.what, TargetKind::Object(Filter::And(v))
+            if v.iter().any(|f| matches!(f, Filter::OwnedBy(PlayerRel::Opponent)))
+                && v.iter().any(|f| matches!(f, Filter::InZone(z) if *z != ZoneKind::Battlefield)));
         self.targets.push(spec);
         let slot = (self.targets.len() - 1) as u8;
         if !is_player {
@@ -124,6 +129,8 @@ impl<'c> Builder<'c> {
         }
         if opponents {
             self.it_player = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
+        } else if owned_by_opponent {
+            self.it_player = PlayerRef::OwnerOf(Box::new(Sel::Target(slot)));
         }
         slot
     }
