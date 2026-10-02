@@ -818,3 +818,34 @@ fn inspire_awe_scries_as_it_resolves_and_prevents_other_combat_damage() {
     // theirs.
     assert_eq!(t.life(P1), 15);
 }
+
+#[test]
+fn champions_from_beyond_doesnt_care_what_happens_to_the_attackers() {
+    cr!("603.2", "506.4", "611.2c");
+    ruling!("Champions from Beyond", "The second and third abilities of Champions from Beyond don't care what happens to those creatures after you attack with them.");
+    supported("Champions from Beyond");
+    // "Light Party — Whenever you attack with four or more creatures, scry 2, then draw a
+    // card. Full Party — Whenever you attack with eight or more creatures, those
+    // creatures get +4/+4 until end of turn."
+    let mut t = TestGame::new(2);
+    giants(&mut t, P0, 4);
+    t.battlefield(P0, "Champions from Beyond");
+    let bears: Vec<ObjectId> = (0..8).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+    let other = t.battlefield(P0, "Grizzly Bears");
+    let decl: Vec<(ObjectId, Entity)> = bears.iter().map(|b| (*b, Entity::Player(P1))).collect();
+    attack_with(&mut t, &decl);
+    assert_eq!(t.stack_len(), 2);
+    // In response: one attacker dies, another is removed from combat.
+    destroy(&mut t, bears[0]);
+    mtg_engine::combat::remove_from_combat(&mut t.g, bears[1]);
+    let hand = t.hand_size(P0);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert_eq!(scry_sizes(&t, P0, from), vec![2]);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    for b in &bears[1..] {
+        assert_eq!(t.pt(*b), (6, 6));
+    }
+    // A creature that didn't attack doesn't get the bonus.
+    assert_eq!(t.pt(other), (2, 2));
+}
