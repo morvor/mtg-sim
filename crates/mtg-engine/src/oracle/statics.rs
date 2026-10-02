@@ -376,17 +376,25 @@ fn attached_restriction(r: &str, text: &str) -> Option<Vec<Ability>> {
 
 /// "spells your opponents cast cost {1} more to cast", "creature spells you cast cost {1} less to cast".
 fn parse_cost_modifier(l: &str, text: &str) -> Option<Ability> {
-    let (spells, rest) = l.split_once(" cost ")?;
+    // "Each creature spell you cast with toughness greater than its power costs {1} less
+    // to cast." (Doran, Besieged by Time): each such spell.
+    let (spells, rest) = l.split_once(" cost ").or_else(|| {
+        l.strip_prefix("each ")
+            .and_then(|x| x.split_once(" costs "))
+    })?;
     // "creature spells you cast with power 4 or greater" (Goreclaw): the qualifier
-    // follows the caster; read it as "creature spells with power 4 or greater".
+    // follows the caster; read it as "creature spells with power 4 or greater". So is
+    // "spells you cast that share a card type with the exiled card" (Semblance Anvil).
     let qualified = [
-        (" you cast with ", PlayerRel::You),
-        (" your opponents cast with ", PlayerRel::Opponent),
+        (" you cast with ", " with ", PlayerRel::You),
+        (" your opponents cast with ", " with ", PlayerRel::Opponent),
+        (" you cast that ", " that ", PlayerRel::You),
+        (" your opponents cast that ", " that ", PlayerRel::Opponent),
     ]
     .into_iter()
-    .find_map(|(sep, who)| {
+    .find_map(|(sep, join, who)| {
         let (a, b) = spells.split_once(sep)?;
-        Some((who, format!("{a} with {b}")))
+        Some((who, format!("{a}{join}{b}")))
     });
     let qualified_spells;
     let (who, spells) = if let Some((who, s)) = qualified {
