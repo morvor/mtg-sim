@@ -387,6 +387,10 @@ impl Renderer<'_> {
                 }
             }
             StaticEffect::Dice(d) => self.dice_static(d),
+            StaticEffect::AttachOnlyTo(f) => {
+                let n = self.noun_det(f, super::nouns::Det::A);
+                format!("~ can be attached only to {n}")
+            }
             // "You can't cast ~ during your first, second, or third turns of the game."
             StaticEffect::CastOnlyIf(Condition::Not(inner))
                 if crate::rule_statics::turns_taken::early_turns_n(inner).is_some() =>
