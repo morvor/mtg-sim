@@ -671,6 +671,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 Filter::Custom(crate::attach::ENCHANTED_BY_YOUR_AURA.into()),
                 r,
             )
+        } else if let Some((f, r)) = super::patterns::filter_suffix_patterns()
+            .iter()
+            .find_map(|p| (p.parse)(t))
+        {
+            // Qualifiers registered by pattern files (`FilterSuffixPattern`).
+            (f, r)
         } else {
             break;
         };
