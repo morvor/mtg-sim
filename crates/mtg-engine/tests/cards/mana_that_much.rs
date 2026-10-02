@@ -33,11 +33,12 @@ fn that_much_mana_compiles() {
         "Mark of Sakiko",
     ]);
     // "That much" after another instruction ("discard any number of cards. If you do,
-    // draw that many cards and add that much {R}") isn't the event's amount.
-    assert!(!card("Neheb, Dreadhorde Champion")
-        .unsupported_text()
-        .is_empty());
-    assert!(!card("Mana Seism").unsupported_text().is_empty());
+    // draw that many cards and add that much {R}") isn't the event's amount: it's the
+    // number of cards discarded (tests/cards/hand_graveyard_grammar.rs).
+    let neheb = format!("{:?}", card("Neheb, Dreadhorde Champion").faces[0].chars.abilities);
+    assert!(!neheb.contains("EventAmount"), "{neheb}");
+    let seism = format!("{:?}", card("Mana Seism").faces[0].chars.abilities);
+    assert!(!seism.contains("EventAmount"), "{seism}");
 }
 
 #[test]

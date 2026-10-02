@@ -2149,7 +2149,25 @@ impl Game {
             }
             _ => None,
         };
-        if let Some(x) = cycled_x.or_else(|| etb_cast.as_ref().and_then(|ci| ci.x)) {
+        // CR 107.3i: "When you cast this spell, ... X ..." uses the spell's X.
+        let cast_self_x = match &t.ability.kind {
+            AbilityKind::Triggered(tr)
+                if matches!(
+                    tr.trigger,
+                    TriggerCond::CastSpell {
+                        filter: Filter::Source,
+                        ..
+                    }
+                ) =>
+            {
+                self.obj(t.source).stack.as_deref().and_then(|si| si.x)
+            }
+            _ => None,
+        };
+        if let Some(x) = cycled_x
+            .or_else(|| etb_cast.as_ref().and_then(|ci| ci.x))
+            .or(cast_self_x)
+        {
             ctx.x = x;
         }
         let id = crate::stack::create_stack_ability(
@@ -2177,7 +2195,7 @@ impl Game {
                 si.x = Some(saved.x);
             }
             self.saved_ctx.insert(id, saved);
-        } else if let Some(x) = cycled_x {
+        } else if let Some(x) = cycled_x.or(cast_self_x) {
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
                 si.x = Some(x);
             }

@@ -989,6 +989,10 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = super::cost_parts::paid_this_way_prefix(r) {
         return Some(v);
     }
+    // "cards revealed this way", "creature cards exiled this way".
+    if let Some(v) = super::hand_graveyard_grammar::count_phrase(r, b) {
+        return Some(v);
+    }
     // "times ~ was kicked", "time it was kicked" (CR 702.33): the source's kicker count.
     for p in [
         "times ~ was kicked",
