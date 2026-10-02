@@ -985,10 +985,17 @@ impl Renderer<'_> {
                     } else {
                         " unless they're mana abilities"
                     };
-                    return format!(
-                        "{} activated abilities can't be activated{m}",
-                        nouns::possessive(&s)
-                    );
+                    let poss = nouns::possessive(&s);
+                    // "Enchanted creature can't attack or block, and its activated
+                    // abilities can't be activated." (one line, one subject)
+                    let poss = if matches!(sources, Filter::AttachedToSource | Filter::Source)
+                        && !poss.contains('{')
+                    {
+                        format!("{{alt:{poss}|its}}")
+                    } else {
+                        poss
+                    };
+                    return format!("{poss} activated abilities can't be activated{m}");
                 }
                 let w = self.player_filter_subject(who);
                 let s = if matches!(sources, Filter::Any) {

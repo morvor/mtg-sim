@@ -390,7 +390,7 @@ impl Renderer<'_> {
                 np.post.push("of the chosen color".into())
             }
             Filter::ChosenType | Filter::LinkedChosenCreatureType => {
-                np.post.push("of the chosen type".into())
+                np.post.push("of {alt:the chosen type|that type}".into())
             }
             Filter::ChosenName => np.with.push("the chosen name".into()),
             Filter::ChosenCardType => np.post.push("of the chosen card type".into()),
