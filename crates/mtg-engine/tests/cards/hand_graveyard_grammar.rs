@@ -436,3 +436,388 @@ fn steal_the_show_target_player_discards_any_number_then_draws_that_many() {
     assert!(t.in_hand(P1, "Shock"));
     assert_eq!(t.hand_size(P1), 2);
 }
+
+// ---------------------------------------------------------------------------
+// Revealing cards from a hand
+// ---------------------------------------------------------------------------
+
+#[test]
+fn reveal_family_compiles() {
+    assert_supported(&[
+        "Sacellum Godspeaker",
+        "Nightshade Assassin",
+        "Priest of the Wakening Sun",
+        "Magus of the Scroll",
+        "Hired Torturer",
+        "Assembly Hall",
+        "Domri Rade",
+        "Herald's Horn",
+        "Scent of Nightshade",
+        "Infernal Tutor",
+    ]);
+    assert_compiles(&[(
+        "Urza Assembles the Titans",
+        "If a planeswalker card is revealed this way, put it into your hand",
+    )]);
+}
+
+#[test]
+fn sacellum_godspeaker_adds_mana_per_card_revealed() {
+    cr!("701.20a");
+    let mut t = TestGame::new(2);
+    let sg = t.battlefield(P0, "Sacellum Godspeaker");
+    let a = t.hand(P0, "Craw Wurm");
+    let b = t.hand(P0, "Shivan Dragon");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.answer_choose(P0, &objs(&[a, b]));
+    t.activate(P0, sg, 0, &[]).unwrap();
+    t.resolve_all();
+    let offered = last_choice_of(&t, P0);
+    assert!(!offered.contains(&Entity::Object(bears)));
+    assert_eq!(t.g.player(P0).mana_pool.total(), 2);
+    // The revealed cards stay in hand.
+    assert_eq!(t.hand_size(P0), 3);
+}
+
+#[test]
+fn scent_of_nightshade_counts_revealed_black_cards() {
+    cr!("701.20a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    let a = t.hand(P0, "Grizzly Bears");
+    let b = t.hand(P0, "Doom Blade");
+    let c = t.hand(P0, "Duress");
+    let target = t.battlefield(P1, "Hill Giant");
+    let s = t.hand(P0, "Scent of Nightshade");
+    t.answer_choose(P0, &objs(&[b, c]));
+    t.cast(P0, s).target(target).go();
+    t.resolve();
+    let offered = last_choice_of(&t, P0);
+    assert!(!offered.contains(&Entity::Object(a)));
+    assert_eq!(t.pt(target), (1, 1));
+}
+
+#[test]
+fn priest_of_the_wakening_sun_needs_a_dinosaur_to_gain_life() {
+    cr!("603.5", "701.20a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Priest of the Wakening Sun");
+    t.hand(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Priest of the Wakening Sun");
+    let d = t.hand(P0, "Carnage Tyrant");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &objs(&[d]));
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+    assert!(t.in_hand(P0, "Carnage Tyrant"));
+}
+
+#[test]
+fn domri_rade_reveals_a_creature_from_the_top() {
+    cr!("701.20a");
+    let mut t = TestGame::new(2);
+    let domri = t.battlefield(P0, "Domri Rade");
+    t.library_top(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.activate(P0, domri, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    // A noncreature card stays on top.
+    let mut t = TestGame::new(2);
+    let domri = t.battlefield(P0, "Domri Rade");
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    t.answer_yes(P0, true);
+    t.activate(P0, domri, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), Zone::Library(P0));
+    assert_eq!(*t.g.player(P0).library.last().unwrap(), t.g.current(bolt));
+}
+
+#[test]
+fn hired_torturer_reveals_a_random_card() {
+    cr!("701.20a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    let ht = t.battlefield(P0, "Hired Torturer");
+    t.hand(P1, "Grizzly Bears");
+    t.activate(P0, ht, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.hand_size(P1), 1);
+    assert!(t.dump_log().to_lowercase().contains("reveal"));
+}
+
+// ---------------------------------------------------------------------------
+// Moving cards between hands, libraries and graveyards
+// ---------------------------------------------------------------------------
+
+#[test]
+fn put_family_compiles() {
+    assert_supported(&[
+        "Draugr Thought-Thief",
+        "Eye Spy",
+        "Wu Spy",
+        "Jace, the Living Guildpact",
+        "Agonizing Memories",
+        "Landscaper Colos",
+        "Rishadan Pawnshop",
+        "Dramatic Accusation",
+        "Nulltread Gargantuan",
+        "Repopulate",
+        "Kellan, Daring Traveler // Journey On",
+        "Skirk Drill Sergeant",
+    ]);
+    assert_compiles(&[(
+        "Jace, the Mind Sculptor",
+        "You may put that card on the bottom of that player's library",
+    )]);
+}
+
+#[test]
+fn draugr_thought_thief_may_mill_the_looked_at_card() {
+    cr!("401.4");
+    let mut t = TestGame::new(2);
+    let top = t.library_top(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, true);
+    t.enter(P0, "Draugr Thought-Thief");
+    t.resolve_all();
+    assert_eq!(t.zone(top), Zone::Graveyard(P1));
+}
+
+#[test]
+fn wu_spy_puts_one_of_the_two_into_the_graveyard() {
+    cr!("401.4");
+    let mut t = TestGame::new(2);
+    let a = t.library_top(P1, "Grizzly Bears");
+    let b = t.library_top(P1, "Shock");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &objs(&[a]));
+    t.enter(P0, "Wu Spy");
+    t.resolve_all();
+    assert_eq!(t.zone(a), Zone::Graveyard(P1));
+    assert_eq!(t.zone(b), Zone::Library(P1));
+    assert_eq!(*t.g.player(P1).library.last().unwrap(), t.g.current(b));
+}
+
+#[test]
+fn landscaper_colos_puts_an_opponents_card_on_the_bottom() {
+    cr!("401.4");
+    let mut t = TestGame::new(2);
+    let g = t.graveyard(P1, "Grizzly Bears");
+    t.answer_targets(P0, &objs(&[g]));
+    t.enter(P0, "Landscaper Colos");
+    t.resolve_all();
+    assert_eq!(t.zone(g), Zone::Library(P1));
+    assert_eq!(t.g.player(P1).library[0], t.g.current(g));
+}
+
+#[test]
+fn rishadan_pawnshop_shuffles_into_owners_library() {
+    cr!("701.24a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    let pawn = t.battlefield(P0, "Rishadan Pawnshop");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.activate(P0, pawn, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Library(P0));
+    assert_eq!(t.library_size(P0), 31);
+}
+
+#[test]
+fn repopulate_shuffles_creature_cards_back() {
+    cr!("701.24a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P1, "Hill Giant");
+    t.graveyard(P1, "Shock");
+    let r = t.hand(P0, "Repopulate");
+    t.cast(P0, r).target(P1).go();
+    t.resolve();
+    assert_eq!(t.graveyard_size(P1), 1);
+    assert_eq!(t.library_size(P1), 32);
+}
+
+#[test]
+fn kellan_otherwise_may_mill_the_revealed_card() {
+    cr!("701.20a");
+    // A creature with mana value 3 or less goes to hand.
+    let mut t = TestGame::new(2);
+    let k = t.battlefield(P0, "Kellan, Daring Traveler // Journey On");
+    t.library_top(P0, "Grizzly Bears");
+    t.attack(&[(k, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    // Otherwise it may go to the graveyard.
+    let mut t = TestGame::new(2);
+    let k = t.battlefield(P0, "Kellan, Daring Traveler // Journey On");
+    t.library_top(P0, "Shivan Dragon");
+    t.answer_yes(P0, true);
+    t.attack(&[(k, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Shivan Dragon"));
+    // ... or stay on top.
+    let mut t = TestGame::new(2);
+    let k = t.battlefield(P0, "Kellan, Daring Traveler // Journey On");
+    let sd = t.library_top(P0, "Shivan Dragon");
+    t.answer_yes(P0, false);
+    t.attack(&[(k, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(*t.g.player(P0).library.last().unwrap(), t.g.current(sd));
+}
+
+// ---------------------------------------------------------------------------
+// "A or B" instructions
+// ---------------------------------------------------------------------------
+
+#[test]
+fn either_or_family_compiles() {
+    assert_supported(&[
+        "K'un-Lun Warrior",
+        "Crypt Lurker",
+        "Highway Robbery",
+        "Reckless Detective",
+        "Contract Hero",
+    ]);
+    assert_compiles(&[(
+        "Chandra, Spark Hunter",
+        "You may sacrifice an artifact or discard a card",
+    )]);
+}
+
+#[test]
+fn kun_lun_warrior_sacrifices_or_discards_then_draws() {
+    cr!("608.2c");
+    // Discarding.
+    let mut t = TestGame::new(2);
+    let c = t.hand(P0, "Shock");
+    t.answer_yes(P0, true);
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(1),
+    );
+    t.answer_choose(P0, &objs(&[c]));
+    t.enter(P0, "K'un-Lun Warrior");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Shock"));
+    assert_eq!(t.hand_size(P0), 1);
+    // Sacrificing an artifact.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ornithopter");
+    t.answer_yes(P0, true);
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(0),
+    );
+    t.enter(P0, "K'un-Lun Warrior");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Ornithopter"));
+    assert_eq!(t.hand_size(P0), 1);
+    // Declining: nothing happens.
+    let mut t = TestGame::new(2);
+    t.hand(P0, "Shock");
+    t.answer_yes(P0, false);
+    t.enter(P0, "K'un-Lun Warrior");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 1);
+    assert!(t.in_hand(P0, "Shock"));
+}
+
+// ---------------------------------------------------------------------------
+// Statics for cards in graveyards and hands
+// ---------------------------------------------------------------------------
+
+#[test]
+fn zone_static_family_compiles() {
+    assert_supported(&[
+        "Lier, Disciple of the Drowned",
+        "Yixlid Jailer",
+        "Solemn Doomguide",
+        "Iroh, Grand Lotus",
+        "Return the Past",
+    ]);
+    assert_compiles(&[(
+        "Norman Osborn // Green Goblin",
+        "Each nonland card in your graveyard has mayhem",
+    )]);
+}
+
+#[test]
+fn lier_grants_flashback_to_instants_and_sorceries_in_your_graveyard() {
+    cr!("613.1f", "702.34a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lier, Disciple of the Drowned");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    t.cast(P0, bolt)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Flashback,
+        ))
+        .target(P1)
+        .go();
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.zone(bolt), Zone::Exile);
+    // An opponent's graveyard isn't affected.
+    let theirs = t.graveyard(P1, "Lightning Bolt");
+    t.lands(P1, "Mountain", 1);
+    let r = t
+        .cast(P1, theirs)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Flashback,
+        ))
+        .target(P0)
+        .try_go();
+    assert!(r.is_err());
+}
+
+#[test]
+fn iroh_flashback_only_during_your_turn() {
+    cr!("613.1f", "702.34a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Iroh, Grand Lotus");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    let r = t
+        .cast(P0, bolt)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Flashback,
+        ))
+        .target(P1)
+        .try_go();
+    assert!(r.is_err());
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.cast(P0, bolt)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Flashback,
+        ))
+        .target(P1)
+        .go();
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn yixlid_jailer_removes_abilities_of_graveyard_cards() {
+    cr!("613.1f");
+    let mut t = TestGame::new(2);
+    let g = t.graveyard(P1, "Lightning Bolt");
+    t.g.recompute();
+    assert!(!t.obj_now(g).chars.abilities.is_empty());
+    t.battlefield(P0, "Yixlid Jailer");
+    t.g.recompute();
+    assert!(t.obj_now(g).chars.abilities.is_empty());
+}
