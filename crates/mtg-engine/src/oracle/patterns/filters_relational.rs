@@ -1346,3 +1346,18 @@ pub fn other_than_referent(f: Filter) -> Filter {
     }
     other_than_it(f, &referent())
 }
+
+/// "that each have mana value X", "that each have mana value X or less" (after a plural
+/// description: Uncage the Menagerie, Ecological Appreciation): each object's own value.
+fn that_each_have<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("that each have ")?;
+    let (stat, r) = stat_word(r)?;
+    let r = r.trim_start();
+    if let Some((cmp, v, rest)) = bound(r) {
+        return Some((stat_filter(stat, cmp, v), rest));
+    }
+    let (n, rest) = parse_number(r)?;
+    Some((stat_filter(stat, Cmp::Eq, n), rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "relational: that each have [stat] N", priority: 100, parse: that_each_have } }

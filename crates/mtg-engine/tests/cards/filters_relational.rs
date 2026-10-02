@@ -507,3 +507,22 @@ fn ancient_ooze_counts_the_total_mana_value_of_other_creatures() {
     assert_eq!(t.pt(ooze), (6, 6));
 }
 
+
+#[test]
+fn uncage_the_menagerie_finds_creatures_with_mana_value_x_and_different_names() {
+    cr!("201.2", "107.3a");
+    let mut t = TestGame::new(2);
+    let a = t.library_top(P0, "Grizzly Bears"); // 2
+    let b = t.library_top(P0, "Grizzly Bears"); // 2
+    let ogre = t.library_top(P0, "Gray Ogre"); // 3
+    let elf = t.library_top(P0, "Elvish Mystic"); // 1
+    t.lands(P0, "Forest", 4);
+    let c = t.hand(P0, "Uncage the Menagerie");
+    t.answer_choose(P0, &[a.into(), b.into()]);
+    t.cast(P0, c).x(2).go();
+    t.resolve();
+    // Only cards with mana value 2 qualify, and two Grizzly Bears share a name.
+    assert_eq!(t.hand_size(P0), 1);
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    let _ = (ogre, elf);
+}
