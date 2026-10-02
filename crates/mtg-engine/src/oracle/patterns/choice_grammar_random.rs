@@ -101,41 +101,24 @@ fn exile_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "choice grammar: exile cards at random", priority: 80, parse: exile_at_random } }
 
-/// "choose a card at random in your graveyard", "choose a creature card at random from
-/// target opponent's graveyard", "choose a creature at random", "choose a creature at
-/// random that attacked this turn": the objects are chosen at random as the effect
-/// happens; "it" / "that card" / "that creature" refer to them.
+/// "choose a creature at random", "choose a creature at random that attacked this turn":
+/// the permanents are chosen at random as the effect happens; "it" / "that creature"
+/// refer to them.
 fn choose_objects_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("choose ")?;
     let k = r.find(" at random")?;
     let without = format!("{}{}", &r[..k], &r[k + " at random".len()..]);
-    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let sel = match cards(&without, b, Some(&PlayerRef::You)) {
-        Some((c, rest)) if end(&rest).is_empty() && !c.any_owner && c.zone.is_some() => {
-            let Qty::Exactly(n) = c.qty else {
-                return None;
-            };
-            Sel::AtRandom {
-                filter: c.filter,
-                count: n,
-                store: Some(RANDOM_OBJECTS),
-            }
-        }
-        _ => {
-            b.targets.truncate(saved.0);
-            (b.it, b.it_player) = (saved.1, saved.2);
-            // Permanents: "a creature", "a creature that attacked this turn".
-            let (n, r2) = parse_number(&without)?;
-            let (f, _, tail) = parse_object_phrase(r2)?;
-            if !end(tail).is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
-                return None;
-            }
-            Sel::AtRandom {
-                filter: Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
-                count: n,
-                store: Some(RANDOM_OBJECTS),
-            }
-        }
+    // Permanents: "a creature", "a creature that attacked this turn". (Cards in a zone
+    // chosen at random are the zone-move grammar's, `zone_move_grammar::p_choose_card`.)
+    let (n, r2) = parse_number(&without)?;
+    let (f, _, tail) = parse_object_phrase(r2)?;
+    if !end(tail).is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+        return None;
+    }
+    let sel = Sel::AtRandom {
+        filter: Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+        count: n,
+        store: Some(RANDOM_OBJECTS),
     };
     b.it = Sel::Var(RANDOM_OBJECTS);
     for p in ["that card", "that creature", "the chosen card", "the chosen creature"] {

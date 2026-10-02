@@ -150,7 +150,8 @@ fn chosen_kind(
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let probe = format!("a {}", s.trim_start());
     if let Some((cs, rest)) = cards(&probe, b, Some(&subject)) {
-        if cs.zone.is_some() && matches!(cs.qty, Qty::Exactly(_)) {
+        // Cards you choose are the zone-move grammar's (`zone_move_grammar::p_choose_card`).
+        if cs.zone.is_some() && matches!(cs.qty, Qty::Exactly(_)) && !matches!(c.chooser, PlayerRef::You) {
             let word = head_word(&s[..s.len() - rest.trim_start().len().min(s.len())]);
             let filter = if c.each.is_some() {
                 cs.filter

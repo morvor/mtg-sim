@@ -191,7 +191,7 @@ fn choose_from_hand(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     true
 }
 
-inventory::submit! { FollowupPattern { name: "choice grammar: you choose cards from a revealed hand", priority: 85, apply: choose_from_hand } }
+inventory::submit! { FollowupPattern { name: "choice grammar: you choose cards from a revealed hand", priority: 95, apply: choose_from_hand } }
 
 /// "look at target player's hand and choose up to two cards from it".
 fn look_and_choose(l: &str, b: &mut Builder) -> Option<Effect> {
