@@ -594,6 +594,8 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::ControlledBy(PlayerRel::Iterated), r)
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
+        } else if let Some(r) = t.strip_prefix("an opponent owns") {
+            (Filter::OwnedBy(PlayerRel::Opponent), r)
         } else if let Some(r) = t
             .strip_prefix("in your graveyard")
             .or_else(|| t.strip_prefix("from your graveyard"))
@@ -1083,6 +1085,19 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
         let consumed: usize = words[..n].iter().map(|w| w.len()).sum::<usize>() + (n - 1);
         let tail = &rest[consumed.min(rest.len())..];
         let f = Filter::HasKeyword(k);
+        // "with flash or haste": either keyword. (A landwalk keyword names one kind of
+        // landwalk, which `HasKeyword` doesn't.)
+        if !negate && k != KeywordKind::Landwalk {
+            if let Some((g, t)) = tail
+                .strip_prefix(" or ")
+                .and_then(|t| parse_with_suffix(&format!("with {t}")).map(|(g, r)| (g, r.len())))
+                .filter(
+                    |(g, _)| matches!(g, Filter::HasKeyword(k2) if *k2 != KeywordKind::Landwalk),
+                )
+            {
+                return Some((Filter::Or(vec![f, g]), &tail[tail.len() - t..]));
+            }
+        }
         return Some((if negate { Filter::not(f) } else { f }, tail));
     }
     None

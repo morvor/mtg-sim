@@ -399,6 +399,11 @@ fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
     match e {
         Effect::FlipCoins(f) => Some(f),
         Effect::Seq(v) => v.iter_mut().rev().find_map(last_flip),
+        // "If they don't, you flip a coin. If you win the flip, ...": the results are
+        // part of the conditional flip.
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => last_flip(then),
         _ => None,
     }
 }

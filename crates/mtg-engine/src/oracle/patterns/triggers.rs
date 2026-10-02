@@ -209,13 +209,15 @@ fn parse_conjunction(r: &str) -> Option<Parsed> {
         format!("whenever {first}")
     };
     let a = crate::oracle::triggers::parse_trigger_condition(&first_full)?;
-    // "When ~ enters and whenever it attacks": "it" is the object of the first condition.
+    // "When ~ enters and whenever it attacks", "When ~ enters and when you sacrifice it"
+    // (Carrot Cake): "it" is the object of the first condition.
     let rest_self;
     let rest = match rest.strip_prefix("whenever it ") {
         Some(r) if first.starts_with("~ ") => {
             rest_self = format!("whenever ~ {r}");
             rest_self.as_str()
         }
+        _ if first.starts_with("~ ") && rest == "when you sacrifice it" => "when you sacrifice ~",
         _ => rest,
     };
     let b = crate::oracle::triggers::parse_trigger_condition(rest)?;
@@ -237,7 +239,7 @@ fn parse_conjunction(r: &str) -> Option<Parsed> {
 }
 
 fn is_batch(c: &TriggerCond) -> bool {
-    matches!(c, TriggerCond::Batched { .. })
+    super::trigger_grammar_events::is_batched(c)
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +293,8 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
         ("each ", Whose::Rel(PlayerRel::Any)),
         // "the chosen player's upkeep" (Black Vise; CR 607.2d)
         ("the chosen player's ", Whose::Rel(PlayerRel::Chosen)),
+        // (Before "the ": "the monarch's end step".)
+        ("the monarch's ", Whose::Player(PlayerRef::Monarch)),
         ("the ", Whose::Rel(PlayerRel::Any)),
         (
             "enchanted player's ",
@@ -300,7 +304,6 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
             "enchanted opponent's ",
             Whose::Player(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo))),
         ),
-        ("the monarch's ", Whose::Player(PlayerRef::Monarch)),
     ] {
         if let Some(r) = s.strip_prefix(p) {
             return Some((w, r));
@@ -1090,6 +1093,12 @@ pub(crate) struct Subject {
 }
 
 pub(crate) fn parse_subject(s: &str) -> Option<Subject> {
+    // More subjects ("enchanted Forest", "~ and/or one or more other Vampires you
+    // control", "[object] or a [object]"): see `trigger_grammar_zones`.
+    parse_subject_core(s).or_else(|| super::trigger_grammar_zones::subject_ext(s))
+}
+
+fn parse_subject_core(s: &str) -> Option<Subject> {
     let s = s.trim();
     let mk = |filter, self_only, one_or_more| {
         Some(Subject {
@@ -1315,7 +1324,19 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             } else if let Some(x) = r.strip_prefix(" from exile") {
                 from = Some(ZoneKind::Exile);
                 r = x;
+            } else if let Some(x) = r.strip_prefix(" from your hand") {
+                from = Some(ZoneKind::Hand);
+                r = x;
             }
+            // "Whenever a nonland permanent an opponent owns enters the battlefield under
+            // your control, they lose life ...": "they" is the owner the subject names.
+            let who = if p.contains("under your control")
+                && super::trigger_grammar_filters::names_other_owner(&f)
+            {
+                PlayerRef::OwnerOf(Box::new(Sel::TriggerObject))
+            } else {
+                ctl_of(Sel::TriggerObject)
+            };
             let cond = match from {
                 None => TriggerCond::EntersBattlefield(f),
                 Some(z) => TriggerCond::ZoneChange {
@@ -1325,16 +1346,9 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
                 },
             };
             if subj.one_or_more {
-                return Some((batch(cond, false, ctl_of(Sel::TriggerObject)), r));
+                return Some((batch(cond, false, who), r));
             }
-            return Some((
-                (
-                    cond,
-                    this_or(Sel::TriggerObject),
-                    ctl_of(Sel::TriggerObject),
-                ),
-                r,
-            ));
+            return Some(((cond, this_or(Sel::TriggerObject), who), r));
         }
     }
     // --- leaves the battlefield / dies / put into a graveyard ---------------------------

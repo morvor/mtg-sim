@@ -924,20 +924,28 @@ impl Game {
                 to,
             } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
-                // What they enter attached to; `None` if it's undefined (CR 303.4i).
-                let attach = self.resolve_sel(to, ctx).first().copied();
+                // What they enter attached to: each of the objects "it" is (a melded
+                // permanent returned as two cards, Not Dead After All's ruling); `None` if
+                // it's undefined (CR 303.4i).
+                let mut attach: Vec<Option<Entity>> =
+                    self.resolve_sel(to, ctx).into_iter().map(Some).collect();
+                if attach.is_empty() {
+                    attach.push(None);
+                }
                 let players = self.eval_players(controller, ctx);
                 let mut created = Vec::new();
                 for p in players {
-                    let tc = TokenCreate {
-                        chars: crate::tokens::token_characteristics_in(self, spec, ctx),
-                        card: crate::tokens::predefined_card(spec),
-                        tapped: false,
-                        attacking: None,
-                        copy_of: None,
-                        copy_exceptions: vec![],
-                    };
-                    created.extend(self.create_tokens_attached(p, tc, n, ctx.source, attach));
+                    for a in &attach {
+                        let tc = TokenCreate {
+                            chars: crate::tokens::token_characteristics_in(self, spec, ctx),
+                            card: crate::tokens::predefined_card(spec),
+                            tapped: false,
+                            attacking: None,
+                            copy_of: None,
+                            copy_exceptions: vec![],
+                        };
+                        created.extend(self.create_tokens_attached(p, tc, n, ctx.source, *a));
+                    }
                 }
                 self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
@@ -1006,11 +1014,20 @@ impl Game {
                 new_targets,
             } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
+                let mut copies = vec![];
                 for o in self.resolve_objects(what, ctx) {
                     for _ in 0..n {
-                        crate::copy::copy_spell(self, o, ctx.controller, *new_targets);
+                        copies.extend(crate::copy::copy_spell(
+                            self,
+                            o,
+                            ctx.controller,
+                            *new_targets,
+                        ));
                     }
                 }
+                // CR 405.3: the copies are put on the stack at once, in the order
+                // their controller chooses.
+                crate::copy::order_copies(self, ctx.controller, &copies);
             }
             Effect::OfferSpecialAction {
                 def,
