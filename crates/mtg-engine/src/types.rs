@@ -594,6 +594,19 @@ pub fn is_basic_land_type(s: &str) -> bool {
     matches!(s, "Plains" | "Island" | "Swamp" | "Mountain" | "Forest")
 }
 
+/// A land type (CR 205.3i), basic or not.
+pub fn is_land_type(s: &str) -> bool {
+    is_basic_land_type(s) || subtype_lists().land.contains(s)
+}
+
+/// Every land type (CR 205.3i), in alphabetical order: the choices for "choose a land
+/// type".
+pub fn land_types() -> Vec<String> {
+    let mut v: Vec<String> = subtype_lists().land.iter().cloned().collect();
+    v.sort();
+    v
+}
+
 /// Classifies a subtype by the card type it's correlated with.
 pub fn subtype_kind(s: &str) -> Option<SubtypeKind> {
     let l = subtype_lists();
