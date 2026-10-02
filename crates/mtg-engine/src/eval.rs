@@ -906,13 +906,21 @@ impl Game {
                         .unwrap_or_default()
                 })
                 .unwrap_or_default(),
+            // CR 607.2a, 400.7: a linked object that has since changed zones is a new
+            // object the link no longer finds ("If it returns to exile later in the turn,
+            // you can't play it again").
             Sel::Linked => ctx
                 .source
                 .map(|s| {
                     self.obj(s)
                         .linked
                         .get(&ctx.link)
-                        .map(|v| v.iter().map(|o| Entity::Object(self.current(*o))).collect())
+                        .map(|v| {
+                            v.iter()
+                                .filter(|o| self.obj(**o).next.is_none())
+                                .map(|o| Entity::Object(*o))
+                                .collect()
+                        })
                         .unwrap_or_default()
                 })
                 .unwrap_or_default(),
@@ -1163,6 +1171,12 @@ impl Game {
             Value::DistinctNames(f) => {
                 let objs = self.objects_matching(f, ctx);
                 crate::names::distinct_name_count(objs.iter().map(|o| &self.obj(*o).chars)) as i64
+            }
+            Value::ManaValuesAmong(f) => {
+                let objs = self.objects_matching(f, ctx);
+                let mvs: std::collections::BTreeSet<u32> =
+                    objs.iter().map(|o| self.mana_value_of(*o)).collect();
+                mvs.len() as i64
             }
             Value::GreatestManaValue(f) => self
                 .objects_matching(f, ctx)

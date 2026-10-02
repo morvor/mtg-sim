@@ -98,7 +98,8 @@ fn mana_from_spells_and_from_non_mana_abilities() {
     // stack): the source is the ability's source, Chandra.
     t.g.players[0].mana_pool.mana.clear();
     let chandra = t.battlefield(P0, "Chandra, Torch of Defiance");
-    let ab = t.activate(P0, chandra, 0, &[]).unwrap();
+    // Its second ability: "+1: Add {R}{R}."
+    let ab = t.activate(P0, chandra, 1, &[]).unwrap();
     assert!(ab.is_some(), "loyalty abilities use the stack");
     assert_eq!(pool_total(&t, P0), 0);
     t.resolve();

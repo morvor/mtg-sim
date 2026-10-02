@@ -258,6 +258,10 @@ impl Game {
         // CR 103.7, 901.5: the starting plane.
         crate::planechase::set_starting_plane(self);
         self.events.clear();
+        // An opening-hand action may have made another player the starting player.
+        if self.turn.starting_player != starting {
+            return self.turn.starting_player;
+        }
         starting
     }
 
