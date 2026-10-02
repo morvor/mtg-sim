@@ -2189,3 +2189,40 @@ fn guiding_spirit_moves_the_top_creature_card_of_a_graveyard() {
     assert_eq!(t.zone(bears), Zone::Graveyard(P1));
     assert_eq!(t.graveyard_size(P1), 2);
 }
+
+#[test]
+fn bison_whistle_a_bison_put_onto_the_battlefield_isnt_also_put_into_hand() {
+    cr!("400.7");
+    assert_supported(&["Bison Whistle"]);
+    // A Bison creature card: onto the battlefield; the hand option no longer applies.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 1);
+    let w = t.battlefield(P0, "Bison Whistle");
+    let bison = t.library_top(P0, "Appa, the Vigilant");
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.activate(P0, w, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(bison), Zone::Battlefield);
+    assert_eq!(t.named_on_battlefield("Appa, the Vigilant").len(), 1);
+    // A non-Bison creature card: into the hand (not the graveyard).
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 1);
+    let w = t.battlefield(P0, "Bison Whistle");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.activate(P0, w, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Hand(P0));
+    // A land: may go to the graveyard.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 1);
+    let w = t.battlefield(P0, "Bison Whistle");
+    let land = t.library_top(P0, "Island");
+    t.answer_yes(P0, true);
+    t.activate(P0, w, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(land), Zone::Graveyard(P0));
+}

@@ -1232,13 +1232,22 @@ fn p_reveal_and_put(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     use crate::kw::reveal_from_hand::{REVEALED, REVEAL_CHOSEN};
+    // A card an earlier instruction already put onto the battlefield is a new object, no
+    // longer the card looked at (CR 400.7): it isn't revealed or moved.
+    let still_a_card = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(sel)),
+        Filter::not(Filter::InZone(ZoneKind::Battlefield)),
+    ]));
     Some(Effect::seq(vec![
         Effect::Store {
             var: REVEALED,
-            sel: sel.clone(),
+            sel: still_a_card.clone(),
         },
         Effect::Custom(SmolStr::new(REVEAL_CHOSEN)),
-        Effect::Move { what: sel, to },
+        Effect::Move {
+            what: still_a_card,
+            to,
+        },
     ]))
 }
 
