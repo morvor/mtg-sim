@@ -407,3 +407,88 @@ fn one_or_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "basic effects: [effect] or [effect]", priority: 120, parse: one_or_the_other } }
+
+/// "clash with defending player" (Marvo, Deep Operative): with that player, not an
+/// opponent of your choice (CR 701.30a).
+fn clash_with_defending_player(l: &str, _b: &mut Builder) -> Option<Effect> {
+    (end(l) == "clash with defending player").then(|| {
+        Effect::Custom(crate::kw::basic_effects::CLASH_WITH_DEFENDING_PLAYER.into())
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: clash with defending player", priority: 80, parse: clash_with_defending_player } }
+
+/// "investigate once for each nontoken attacking creature": that many times (CR 701.16a).
+fn investigate_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("investigate once for each ")?;
+    let (n, tail) = crate::oracle::statics::parse_value_phrase(&format!("the number of {r}"), b)?;
+    if !end(&tail).is_empty() {
+        return None;
+    }
+    Some(Effect::KeywordAction {
+        action: KeywordAction::Investigate,
+        who: PlayerRef::You,
+        what: Sel::None,
+        n,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "basic effects: investigate once for each", priority: 80, parse: investigate_for_each } }
+
+/// "Those creatures can't be regenerated." after destroying a group (Mageta the Lion).
+fn those_cant_be_regenerated(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if !matches!(
+        end(s),
+        "those creatures can't be regenerated" | "those permanents can't be regenerated"
+    ) {
+        return false;
+    }
+    let last = match prev {
+        Effect::Seq(v) => v.last_mut(),
+        e => Some(e),
+    };
+    match last {
+        Some(Effect::Destroy {
+            what: Sel::All(_),
+            no_regen,
+        }) => {
+            *no_regen = true;
+            true
+        }
+        _ => false,
+    }
+}
+
+inventory::submit! { super::FollowupPattern { name: "basic effects: those creatures can't be regenerated", priority: 80, apply: those_cant_be_regenerated } }
+
+/// "Return each card put into a graveyard this way to the battlefield under your control."
+/// after a destroy effect (Sorin, Lord of Innistrad): the destroyed permanents' cards that
+/// went to graveyards.
+fn return_cards_put_into_graveyard(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(dest) = end(s)
+        .strip_prefix("return each card put into a graveyard this way ")
+        .or_else(|| end(s).strip_prefix("return the cards put into graveyards this way "))
+    else {
+        return false;
+    };
+    let last_is_destroy = match &*prev {
+        Effect::Seq(v) => matches!(v.last(), Some(Effect::Destroy { .. })),
+        e => matches!(e, Effect::Destroy { .. }),
+    };
+    if !last_is_destroy {
+        return false;
+    }
+    let cards = Sel::All(Filter::and(vec![
+        Filter::Card,
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::In(Box::new(Sel::Var(vars::IT))),
+    ]));
+    let Some(to) = super::damage_removal::battlefield_destination(dest, cards.clone()) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, Effect::Move { what: cards, to }]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "basic effects: return each card put into a graveyard this way", priority: 80, apply: return_cards_put_into_graveyard } }

@@ -214,3 +214,104 @@ fn word_of_blasting_damages_the_walls_controller() {
     // Wall of Stone's mana value is 3.
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn mageta_destroys_all_other_creatures_without_regeneration() {
+    cr!("701.19c");
+    assert_supported("Mageta the Lion");
+    let mut t = TestGame::new(2);
+    let mageta = t.battlefield(P0, "Mageta the Lion");
+    let other = t.battlefield(P1, "Drudge Skeletons");
+    t.lands(P0, "Plains", 4);
+    t.lands(P1, "Swamp", 1);
+    t.hand(P0, "Island");
+    t.hand(P0, "Island");
+    t.activate(P0, mageta, 0, &[]).unwrap();
+    // Regenerating the Skeletons doesn't save them.
+    t.activate(P1, other, 0, &[]).unwrap();
+    t.resolve();
+    t.resolve();
+    assert!(t.on_battlefield(mageta));
+    assert!(!t.on_battlefield(other));
+}
+
+#[test]
+fn moonlight_hunt_wolves_and_werewolves_deal_damage_to_that_creature() {
+    cr!("120.3");
+    assert_supported("Moonlight Hunt");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Timber Wolves");
+    t.battlefield(P0, "Grizzly Bears");
+    let target = t.battlefield(P1, "Craw Wurm");
+    t.lands(P0, "Forest", 2);
+    let mh = t.hand(P0, "Moonlight Hunt");
+    t.cast(P0, mh).target(target).go();
+    t.resolve();
+    // Only the Wolf's 1 damage.
+    assert_eq!(t.obj_now(target).damage, 1);
+}
+
+#[test]
+fn compel_brutality_a_planeswalker_deals_damage_equal_to_its_loyalty() {
+    cr!("306.5b");
+    assert_supported("Compel Brutality");
+    let mut t = TestGame::new(2);
+    let pw = t.battlefield(P0, "Sorin, Lord of Innistrad");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.lands(P0, "Forest", 2);
+    let cb = t.hand(P0, "Compel Brutality");
+    t.cast(P0, cb).modes(&[1]).target(pw).target(wurm).go();
+    t.resolve();
+    assert_eq!(t.obj_now(wurm).damage, 3);
+}
+
+#[test]
+fn sorin_returns_the_destroyed_creatures_under_your_control() {
+    cr!("606.3");
+    assert_supported("Sorin, Lord of Innistrad");
+    let mut t = TestGame::new(2);
+    let sorin = t.battlefield(P0, "Sorin, Lord of Innistrad");
+    t.g.objects[sorin.0 as usize]
+        .counters
+        .insert("loyalty".into(), 6);
+    let theirs = t.battlefield(P1, "Craw Wurm");
+    t.activate(P0, sorin, 2, &[Entity::Object(theirs)]).unwrap();
+    t.resolve();
+    let wurms = t.named_on_battlefield("Craw Wurm");
+    assert_eq!(wurms.len(), 1);
+    assert_eq!(t.obj_now(wurms[0]).controller, P0);
+}
+
+#[test]
+fn sophina_investigates_for_each_nontoken_attacker() {
+    cr!("701.16a");
+    assert_supported("Sophina, Spearsage Deserter");
+    let mut t = TestGame::new(2);
+    let sophina = t.battlefield(P0, "Sophina, Spearsage Deserter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.attack(
+        &[(sophina, Entity::Player(P1)), (bears, Entity::Player(P1))],
+        &[],
+    );
+    assert_eq!(t.named_on_battlefield("Clue Token").len(), 2);
+}
+
+#[test]
+fn intellectual_offering_untaps_your_and_that_players_nonland_permanents() {
+    cr!("701.26b");
+    assert_supported("Intellectual Offering");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let land = t.battlefield(P1, "Forest");
+    for o in [mine, theirs, land] {
+        t.g.tap(o);
+    }
+    t.lands(P0, "Island", 5);
+    let io = t.hand(P0, "Intellectual Offering");
+    t.cast(P0, io).modes(&[1]).go();
+    t.resolve();
+    assert!(!t.obj_now(mine).tapped && !t.obj_now(theirs).tapped);
+    assert!(t.obj_now(land).tapped);
+}

@@ -181,6 +181,28 @@ fn one_target(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         let slot = b.add_target(spec, &text);
         return Some((Sel::Target(slot), rest.to_string()));
     }
+    // "all nonland permanents that player controls" (the player an earlier part named).
+    if let Some(r) = s.strip_prefix("all ").or_else(|| s.strip_prefix("each ")) {
+        if let Some(i) = r.find(" that player controls") {
+            if !super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+                if let Some((f, _, tail)) = parse_object_phrase(&r[..i]) {
+                    if end(tail).is_empty() {
+                        let f = Filter::and(vec![
+                            f,
+                            Filter::ControlledByPlayer(Box::new(b.it_player.clone())),
+                        ]);
+                        return Some((Sel::All(f), r[i + " that player controls".len()..].to_string()));
+                    }
+                }
+            }
+        }
+    }
+    // "target instant or sorcery spell that targets you".
+    if let Some((spec, rest)) = super::basic_effects_counter::stack_target(s) {
+        let text = spec.text.clone();
+        let slot = b.add_target(spec, &text);
+        return Some((Sel::Target(slot), rest.to_string()));
+    }
     let (sel, rest) = object_ref(s, b)?;
     Some((sel, rest))
 }
@@ -511,6 +533,10 @@ fn damage_amount(s: &str, source: &Sel, b: &mut Builder) -> Option<(Value, Strin
             return None;
         }
         return Some((Value::EventAmount, r.to_string()));
+    }
+    // "damage equal to its loyalty" (a planeswalker source).
+    if let Some(r) = s.strip_prefix("damage equal to its loyalty to ") {
+        return Some((Value::LoyaltyOf(Box::new(source.clone())), r.to_string()));
     }
     if let Some(r) = s.strip_prefix("damage equal to ") {
         // "its power": the source's; "the creature's power", "that Wall's mana value": the

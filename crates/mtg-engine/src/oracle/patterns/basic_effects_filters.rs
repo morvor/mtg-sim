@@ -94,6 +94,33 @@ fn except_for<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     Some((Filter::not(f), ""))
 }
 
+/// "that's a Wolf or a Werewolf", "that's an artifact": the object is one of them.
+fn thats_a<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let mut r = t.strip_prefix("that's ")?;
+    let mut alts = Vec::new();
+    loop {
+        let x = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+        let (w, rest) = split_word(x);
+        let (f, plural, tail) = parse_object_phrase(w)?;
+        if plural || !tail.trim().is_empty() {
+            return None;
+        }
+        alts.push(f);
+        r = rest;
+        match r.strip_prefix("or ") {
+            Some(x) => r = x,
+            None => break,
+        }
+    }
+    let f = if alts.len() == 1 {
+        alts.pop()?
+    } else {
+        Filter::Or(alts)
+    };
+    Some((f, r))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "basic effects: that's a X or a Y", priority: 90, parse: thats_a } }
 inventory::submit! { FilterSuffixPattern { name: "basic effects: this turn (dealt damage, blocked, entered)", priority: 90, parse: this_turn } }
 inventory::submit! { FilterSuffixPattern { name: "basic effects: except for", priority: 90, parse: except_for } }
 

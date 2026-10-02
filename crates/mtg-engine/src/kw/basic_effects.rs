@@ -142,6 +142,10 @@ pub fn remove_keyword(r: &RemoveKeyword) -> crate::ability::Modification {
     }
 }
 
+/// `Effect::Custom`: "clash with defending player" (CR 701.30): you and the defending
+/// player clash; whether you won is recorded ("if you win, ...").
+pub const CLASH_WITH_DEFENDING_PLAYER: &str = "basic_effects:clash with defending player";
+
 const SOURCE_OF_SLOT: &str = "basic_effects:source of the ability in target slot ";
 
 /// `Filter::Custom` name: the source of the ability chosen in target slot `slot`.
@@ -187,6 +191,16 @@ impl KeywordRules for BasicEffects {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name == CLASH_WITH_DEFENDING_PLAYER {
+            let me = ctx.controller;
+            let mut players = vec![me];
+            players.extend(g.defending_player_for(ctx).filter(|d| *d != me));
+            let won = crate::kwa::fateseal_clash::clash_players(g, &players, ctx.source)
+                .into_iter()
+                .any(|(q, _, won)| q == me && won);
+            ctx.prev_happened = won;
+            return true;
+        }
         let Some(json) = name.strip_prefix(LOOK_AT_TOP) else {
             return false;
         };
