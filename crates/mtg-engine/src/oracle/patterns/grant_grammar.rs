@@ -324,6 +324,16 @@ fn its_a_with_quotes(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     else {
         return false;
     };
+    // An Aura put onto the battlefield is attached as it enters (CR 303.4f), which
+    // "enters as" modifications don't do.
+    if mods.iter().any(|m| match m {
+        Modification::SetTypes { subtypes, .. } | Modification::AddSubtypes(subtypes) => {
+            subtypes.iter().any(|s| s == "Aura")
+        }
+        _ => false,
+    }) {
+        return false;
+    }
     let Some(Effect::Move { to, .. }) = last_move(prev) else {
         return false;
     };

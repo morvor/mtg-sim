@@ -153,3 +153,4 @@ fn vraska_the_silencer_returns_the_card_as_a_treasure() {
         .count();
     assert_eq!(mana, 1);
 }
+
