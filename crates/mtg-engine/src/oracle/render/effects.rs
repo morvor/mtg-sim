@@ -1220,6 +1220,8 @@ impl Renderer<'_> {
                     if let Some(x) = r.strip_suffix(" each combat if able") {
                         return format!("{x} this combat if able");
                     }
+                    // "It can't be blocked this combat."
+                    return format!("{r} {{alt:until end of combat|this combat}}");
                 }
                 join_words(&[r, d])
             }
@@ -4649,15 +4651,20 @@ impl Renderer<'_> {
         // A copy's "except it's a 4/4 black Zombie" keeps the copied types (the rulings
         // on eternalize and similar copies), with or without "in addition to its other
         // types".
-        format!(
-            "it {}",
-            vp.replace(" and is ", " and it is ")
-                .replace(" and has ", " and it has ")
-                .replace(
-                    " in addition to its other types",
-                    " {opt:in addition to its other types}"
-                )
-        )
+        let vp = vp
+            .replace(" and is ", " and it is ")
+            .replace(" and has ", " and it has ")
+            .replace(
+                " in addition to its other types",
+                " {opt:in addition to its other types}",
+            );
+        // "except it's 1/1": its base power and toughness.
+        if let Some(pt) = vp.strip_prefix("has base power and toughness ") {
+            if !pt.contains(' ') {
+                return format!("it {{alt:has base power and toughness {pt}|is {pt}}}");
+            }
+        }
+        format!("it {vp}")
     }
 
     /// A choice ("a color", "a creature type", "an opponent").

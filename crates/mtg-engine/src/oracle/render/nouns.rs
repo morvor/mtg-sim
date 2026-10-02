@@ -1267,6 +1267,33 @@ impl Renderer<'_> {
         // A complex union: each alternative gets the determiner ("~ or another creature");
         // a count applies to all of them ("up to two basic land cards and/or Gate cards").
         if let Filter::Or(v) = f {
+            // "a card named Festering Newt or Bubbling Cauldron".
+            let named = |x: &Filter| -> Option<String> {
+                match x {
+                    Filter::Named(n) => Some(n.to_string()),
+                    Filter::And(p) => {
+                        let names: Vec<String> = p
+                            .iter()
+                            .filter_map(|q| match q {
+                                Filter::Named(n) => Some(n.to_string()),
+                                _ => None,
+                            })
+                            .collect();
+                        let others_plain = p.iter().all(|q| {
+                            matches!(q, Filter::Named(_) | Filter::Card | Filter::InZone(_))
+                        });
+                        (names.len() == 1 && others_plain).then(|| names[0].clone())
+                    }
+                    _ => None,
+                }
+            };
+            let names: Option<Vec<String>> = v.iter().map(named).collect();
+            if let Some(names) = names.filter(|n| n.len() > 1) {
+                let first = self.noun_det(&v[0], det.clone());
+                if let Some(head) = first.strip_suffix(names[0].as_str()) {
+                    return format!("{head}{}", join_list(&names, "or"));
+                }
+            }
             // "creatures with flying or reach": alternatives that differ only in a keyword.
             if let Some((shared, kws)) = keyword_alternatives(v) {
                 let n = self.noun_det(&shared, det.clone());

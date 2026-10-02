@@ -28,6 +28,13 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"(^|\n)it (has|have) ([^.\n]*) as long as ~ is on the battlefield\b",
+        replacement: "$1~ $2 $3",
+        why: "\"As long as ~ is on the battlefield, it has ...\" is \"~ has ...\": the \
+              abilities of a permanent function only while it is on the battlefield \
+              (CR 113.6).",
+    },
+    Equivalence {
         pattern: r"\bwith the same name as ~(?:it\b)?",
         replacement: "named ~",
         why: "An object \"named ~\" is one with the same name as this object: a name used \

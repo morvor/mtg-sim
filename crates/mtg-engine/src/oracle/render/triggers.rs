@@ -371,6 +371,12 @@ impl Renderer<'_> {
                         let fz_s = self.zone_from(*fz, filter);
                         format!("is put into {tz_s} from {fz_s}")
                     }
+                    // "Whenever ~ is put into a graveyard from anywhere": its owner's (CR
+                    // 400.3).
+                    (None, Some(ZoneKind::Graveyard)) if matches!(filter, Filter::Source) => {
+                        let tz_s = self.zone_into(ZoneKind::Graveyard, filter);
+                        format!("is put into {{alt:{tz_s}|a graveyard}} from anywhere")
+                    }
                     (None, Some(tz)) => {
                         let tz_s = self.zone_into(*tz, filter);
                         format!("is put into {tz_s} from anywhere")
