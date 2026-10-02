@@ -6,6 +6,10 @@
 //! makes it take that card if it has the quality (the one revealed card is taken if it
 //! qualifies, CR 608.2c), and the third says where the card goes if it doesn't. Without an
 //! "Otherwise" sentence, a card that doesn't qualify stays on top of the library.
+//!
+//! Also "Look at the top card of your library. If it's a creature card, you may reveal it
+//! and put it into your hand." (Domri Rade, Dryad Greenseeker): a looked-at card that may
+//! be taken if it qualifies; otherwise it stays on top.
 
 use super::card_flow_search::card_filter;
 use crate::ability::*;
@@ -18,6 +22,9 @@ inventory::submit! {
 }
 inventory::submit! {
     FollowupPattern { name: "card_flow: otherwise, put it ...", priority: 90, apply: otherwise_put_it }
+}
+inventory::submit! {
+    FollowupPattern { name: "card_flow: if it's a [card], you may reveal it and put it into your hand", priority: 90, apply: may_reveal_if_its_a }
 }
 
 /// The revealed top card of your library, nothing decided yet.
@@ -113,4 +120,43 @@ fn otherwise_put_it(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         }
         _ => false,
     }
+}
+
+/// "if it's a creature card, you may reveal it and put it into your hand", after "look at
+/// the top card of your library".
+fn may_reveal_if_its_a(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l
+        .strip_prefix("if it's a ")
+        .or_else(|| l.strip_prefix("if it's an "))
+    else {
+        return false;
+    };
+    let Some(desc) = r.strip_suffix(", you may reveal it and put it into your hand") else {
+        return false;
+    };
+    let Some(filter) = card_filter(desc, b) else {
+        return false;
+    };
+    let Effect::Dig {
+        who: PlayerRef::You,
+        n: Value::Const(1),
+        reveal: false,
+        filter: f,
+        take: take @ Value::Const(0),
+        take_up_to,
+        take_to,
+        rest_to,
+    } = prev
+    else {
+        return false;
+    };
+    if !in_place(rest_to) {
+        return false;
+    }
+    *f = filter;
+    *take = Value::c(1);
+    *take_up_to = true;
+    *take_to = Destination::zone(ZoneKind::Hand);
+    true
 }

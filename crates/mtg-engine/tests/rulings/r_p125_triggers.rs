@@ -318,3 +318,39 @@ fn blinding_angel_skips_are_cumulative() {
     t.advance_to(P1, Step::PostcombatMain);
     assert_eq!(combat_skips(&t), 1);
 }
+
+#[test]
+fn domri_rade_plus_one_puts_back_an_unwanted_card_unrevealed() {
+    cr!("401.4", "701.20a");
+    ruling!(
+        "Domri Rade",
+        "When resolving Domri's first ability, if the card you look at isn't a creature card, or if it's a creature card you don't want to put into your hand, you simply put it back on top of your library. You don't reveal it or say why you're putting it back."
+    );
+    supported("Domri Rade");
+    let revealed = |t: &TestGame| {
+        t.g.turn_events.iter().any(|e| {
+            matches!(e, mtg_engine::events::Event::Custom { name, .. }
+                if name.as_str() == mtg_engine::reveal::REVEALED)
+        })
+    };
+    // (top card, take it?) -> whether it ends up in P0's hand.
+    for (top, take) in [("Forest", true), ("Grizzly Bears", false), ("Grizzly Bears", true)] {
+        let mut t = TestGame::new(2);
+        let domri = t.battlefield(P0, "Domri Rade");
+        loyalty(&mut t, domri, 3);
+        let card = t.library_top(P0, top);
+        if take {
+            t.answer_choose(P0, &[obj(card)]);
+        } else {
+            t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![]));
+        }
+        t.activate(P0, domri, 0, &[]).expect("+1");
+        t.resolve_all();
+        let to_hand = take && top == "Grizzly Bears";
+        assert_eq!(t.in_hand(P0, top), to_hand, "{top} {take}");
+        if !to_hand {
+            assert_eq!(t.g.player(P0).library.last().copied(), Some(t.g.current(card)), "back on top");
+            assert!(!revealed(&t));
+        }
+    }
+}
