@@ -48,6 +48,11 @@ pub struct Ctx {
     /// to how the permanent enters made by [`Effect::EnterTapped`] and
     /// [`Effect::EnterWithCounters`] (CR 614.1c, 614.12).
     pub entering: Option<EntryMods>,
+    /// For a reflexive triggered ability (CR 603.12): the printed ability that created it,
+    /// which is what "this ability" in its text refers to ("When you do, ~ becomes a copy
+    /// of ..., except it has this ability", CR 707.9a).
+    #[serde(default)]
+    pub reflexive_parent: Option<Box<crate::ability::Ability>>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -274,6 +279,10 @@ impl Game {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
             }
             PlayerFilter::MaxSpeed => self.player(p).speed.unwrap_or(0) >= 4,
+            // Twice the life total against the starting life total: no rounding.
+            PlayerFilter::LessThanHalfStartingLife => {
+                2 * self.player(p).life < crate::life_totals::starting_life(self, p)
+            }
             PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
@@ -1017,7 +1026,8 @@ impl Game {
             Value::LifeTotal(r) => self
                 .eval_player(r, ctx)
                 .map_or(0, |p| self.player(p).life as i64),
-            Value::StartingLife => self.config.starting_life as i64,
+            // "Your starting life total": the variant's (CR 119.1a-e).
+            Value::StartingLife => crate::life_totals::starting_life(self, ctx.controller) as i64,
             // CR 800.4i: for a player who left the game, as last known.
             Value::HandSize(r) => self.eval_player(r, ctx).map_or(0, |p| {
                 crate::multiplayer::zone_size(self, p, ZoneKind::Hand) as i64
@@ -1120,6 +1130,15 @@ impl Game {
                     .iter()
                     .filter(|(q, s)| ps.contains(q) && self.matches_view(&Current, *s, f, ctx))
                     .count() as i64
+            }
+            Value::SpellsCastThisTurnManaValue(r, f) => {
+                let ps = self.eval_players(r, ctx);
+                self.history
+                    .spells_cast
+                    .iter()
+                    .filter(|(q, s)| ps.contains(q) && self.matches_view(&Current, *s, f, ctx))
+                    .map(|(_, s)| self.mana_value_of(*s) as i64)
+                    .sum()
             }
             Value::TimesResolvedThisTurn => ctx
                 .source

@@ -135,6 +135,7 @@ fn abilities_on_both_faces_of_a_transforming_card_are_linked() {
     def.faces.push(FaceDef {
         chars: back.faces[0].chars.clone(),
         unsupported: vec![],
+        manual: vec![],
         star_power: false,
         star_toughness: false,
     });
@@ -215,6 +216,7 @@ fn a_token_can_have_an_ability_linked_to_its_creator() {
             }),
         )],
         scryfall_name: None,
+        pt_values: None,
     };
     let def = CB::new("Jailer")
         .artifact()

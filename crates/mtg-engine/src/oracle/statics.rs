@@ -760,6 +760,11 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             let milled = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::IT)))]);
             return Some((Value::Count(milled), rest.to_string()));
         }
+        // "the number of creatures tapped this way" (Angel's Trumpet).
+        if let Some(rest) = rest.trim_start().strip_prefix("tapped this way") {
+            let tapped = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::TAPPED)))]);
+            return Some((Value::Count(tapped), rest.to_string()));
+        }
         return Some((Value::Count(f), rest.to_string()));
     }
     if let Some(r) = s.strip_prefix("the sacrificed ") {
@@ -797,6 +802,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(r) = s.strip_prefix("the total power of ") {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::PowerOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
+    if let Some(v) = super::patterns::spells_cast_this_turn::total_mana_value_of_spells_you_cast(s)
+    {
+        return Some(v);
     }
     if let Some(r) = s.strip_prefix("the total toughness of ") {
         let (f, _, rest) = parse_object_phrase(r)?;

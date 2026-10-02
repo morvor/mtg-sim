@@ -709,6 +709,9 @@ pub mod vars {
     /// Permanents sacrificed to pay the cost of the resolving spell or ability, or by an
     /// earlier instruction of it ("the sacrificed creature", last known information).
     pub const SACRIFICED: Var = 9;
+    /// Permanents the most recent tap instruction tapped ("the number of creatures tapped
+    /// this way"): not those that were already tapped.
+    pub const TAPPED: Var = USER + 3066;
     /// First user-defined variable.
     pub const USER: Var = 10;
     /// The object a static ability's continuous effect is being applied to, while its
@@ -859,6 +862,9 @@ pub enum PlayerFilter {
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
+    /// A player whose life total is less than half their own starting life total (CR
+    /// 119.1; "that player has less than half their starting life total").
+    LessThanHalfStartingLife,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
@@ -1262,6 +1268,9 @@ pub enum Value {
     /// stack, whether or not they're still there ("you've cast four or more instant and
     /// sorcery spells this turn"). Copies of spells weren't cast.
     SpellsCastThisTurn(PlayerRef, Filter),
+    /// Total mana value of the spells the player has cast this turn that match the filter
+    /// (each as it last existed on the stack); copies weren't cast (CR 707.10).
+    SpellsCastThisTurnManaValue(PlayerRef, Filter),
     /// Number of times this ability has resolved this turn.
     TimesResolvedThisTurn,
     /// Number of distinct card types among cards in graveyards etc.
@@ -1597,6 +1606,13 @@ pub enum Modification {
     ModifyPT(Value, Value),
     /// 7d: switch.
     SwitchPT,
+    /// Behavior implemented in code, applied in `layer`: see
+    /// `KeywordRules::custom_modification` (e.g. a hand-written card's "has the creature
+    /// types of the last creature card exiled with it").
+    Custom {
+        name: SmolStr,
+        layer: Layer,
+    },
 }
 
 impl Modification {
@@ -1640,6 +1656,7 @@ impl Modification {
             SetPT(..) => Layer::L7bSet,
             ModifyPT(..) => Layer::L7cModify,
             SwitchPT => Layer::L7dSwitch,
+            Custom { layer, .. } => *layer,
         }
     }
 }
@@ -1689,6 +1706,11 @@ pub struct TokenSpec {
     pub abilities: Vec<Ability>,
     /// Name of a Scryfall token card to copy characteristics from, when available.
     pub scryfall_name: Option<SmolStr>,
+    /// Power and toughness given by values ("an X/X ... token, where X is ..."): each is
+    /// determined once, as the token is created, and becomes part of the token's
+    /// copiable values in place of `power`/`toughness` (CR 111.3, 107.3, 608.2h).
+    #[serde(default)]
+    pub pt_values: Option<Box<(Value, Value)>>,
 }
 
 /// What mana an effect adds (CR 106).
@@ -2766,6 +2788,18 @@ pub enum Effect {
         times: Value,
         effect: Box<Effect>,
     },
+    /// "[instructions]. If [condition], repeat this process." / "You may repeat this
+    /// process any number of times.": the process (`body`) is performed, and performed
+    /// again, with new choices, after each pass in which it performed
+    /// [`Effect::RepeatThisProcess`] — so whether to repeat is decided anew after every
+    /// pass, from that pass's results, and repeating includes the instruction to repeat
+    /// (CR 608.2c). See [`crate::repeat_process`].
+    RepeatProcess {
+        body: Box<Effect>,
+    },
+    /// "repeat this process", inside the body of [`Effect::RepeatProcess`]: once the
+    /// current pass ends, the process is performed again.
+    RepeatThisProcess,
     /// Choose one of several effects at resolution ("choose one —" when not modal on cast,
     /// or "choose one at random").
     ChooseOne {
