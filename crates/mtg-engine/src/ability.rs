@@ -2530,6 +2530,11 @@ pub enum TriggerCond {
     CountersPut {
         filter: Filter,
         kind: Option<CounterKind>,
+        /// "Whenever a [kind] counter is put on …": triggers once for each counter put
+        /// (Fathom Mage's and Flourishing Defenses's rulings), rather than once for each
+        /// put action ("one or more [kind] counters are put on …").
+        #[serde(default)]
+        each: bool,
     },
     CountersRemoved {
         filter: Filter,

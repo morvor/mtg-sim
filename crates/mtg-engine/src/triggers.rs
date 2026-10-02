@@ -1218,7 +1218,7 @@ impl Game {
                 }
             }
             (
-                TriggerCond::CountersPut { filter, kind },
+                TriggerCond::CountersPut { filter, kind, each },
                 Event::CountersAdded {
                     target: Entity::Object(o),
                     kind: k,
@@ -1226,11 +1226,15 @@ impl Game {
                 },
             ) => {
                 if kind.as_ref().is_none_or(|x| x == k) && self.matches(*o, filter, &ctx) {
-                    one(EventInfo {
-                        object: Some(*o),
-                        amount: *n as i32,
-                        ..Default::default()
-                    })
+                    // "Whenever a [kind] counter is put on …" triggers for each counter.
+                    let (times, amount) = if *each { (*n, 1) } else { (1, *n as i32) };
+                    (0..times)
+                        .map(|_| EventInfo {
+                            object: Some(*o),
+                            amount,
+                            ..Default::default()
+                        })
+                        .collect()
                 } else {
                     none()
                 }
