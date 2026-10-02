@@ -3151,7 +3151,10 @@ impl Renderer<'_> {
                     if mods.iter().any(|m| {
                         matches!(m, Modification::AddSubtypes(v) if !v.is_empty())
                             || matches!(m, Modification::SetTypes { subtypes, .. } if !subtypes.is_empty())
-                    }) => {}
+                    }) =>
+                {
+                    becomes.replaces_creature_types = true
+                }
                 Modification::RemoveAllCreatureTypes => {
                     parts.push("loses all creature types".into())
                 }
@@ -3751,6 +3754,8 @@ struct Becomes {
     subtypes: Vec<String>,
     add_types: Vec<CardType>,
     additive: bool,
+    /// New creature types replace the old ones (CR 205.1a).
+    replaces_creature_types: bool,
     land_type: bool,
     name: Option<String>,
 }
@@ -3848,7 +3853,10 @@ impl Becomes {
         // Adding a supertype ("is snow", "is legendary") never removes anything.
         let only_supertypes =
             self.add_types.is_empty() && self.subtypes.is_empty() && !self.supertypes.is_empty();
-        if self.additive && !self.land_type && !only_supertypes {
+        // "becomes a Human Warrior": only its creature types change (CR 205.1a); it
+        // keeps its card types without adding any, so nothing is "in addition".
+        let only_creature_types = self.replaces_creature_types && self.add_types.is_empty();
+        if self.additive && !self.land_type && !only_supertypes && !only_creature_types {
             // An effect that adds types keeps the old ones: cards say "It's still a land"
             // when they know what the object was, else "in addition to its other types".
             let known: Vec<CardType> = r

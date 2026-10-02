@@ -152,3 +152,57 @@ fn enters_from_your_graveyard_is_only_your_own_graveyard() {
         assert_eq!(t.stack_len(), usize::from(triggers), "owner {owner:?}");
     }
 }
+
+fn tokens(t: &TestGame, p: PlayerId) -> usize {
+    t.g.objects
+        .iter()
+        .filter(|o| o.zone == mtg_engine::object::Zone::Battlefield && o.controller == p)
+        .filter(|o| o.is_token())
+        .count()
+}
+
+#[test]
+fn if_it_was_after_a_bounce_is_judged_by_last_known_information() {
+    cr!("608.2h", "400.7");
+    // The round trip treats "If it was tapped" and "If it is tapped" alike because the
+    // engine judges a condition about an object that left the battlefield by its last
+    // known information. Brackish Blunder: "Return target creature to its owner's hand.
+    // If it was tapped, create a Map token."; Desculpting Blast: "... If it was attacking,
+    // create a 1/1 colorless Drone ..."
+    supported("Brackish Blunder");
+    supported("Desculpting Blast");
+    for tapped in [true, false] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        if tapped {
+            t.g.tap(bears);
+        }
+        t.lands(P0, "Island", 2);
+        let s = t.hand(P0, "Brackish Blunder");
+        t.cast(P0, s).target(bears).go();
+        t.resolve_all();
+        assert!(t.in_hand(P1, "Grizzly Bears"));
+        assert_eq!(
+            tokens(&t, P0),
+            usize::from(tapped),
+            "tapped {tapped}"
+        );
+    }
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 2);
+    let s = t.hand(P0, "Desculpting Blast");
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, mtg_engine::turn::Step::DeclareBlockers);
+    t.resolve_all();
+    t.cast(P0, s).target(bears).go();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(tokens(&t, P0), 1);
+}
