@@ -68,6 +68,25 @@ fn names_on_battlefield(t: &TestGame, p: PlayerId) -> Vec<String> {
     v
 }
 
+/// Whether `p` could activate the `index`th activated ability of `source` now.
+fn can_activate_nth(t: &mut TestGame, p: PlayerId, source: ObjectId, index: usize) -> bool {
+    t.g.turn.priority = Some(p);
+    t.g.recompute();
+    let source = t.g.current(source);
+    let uid = t
+        .obj(source)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+        .nth(index)
+        .map(|a| a.uid)
+        .unwrap();
+    t.g.legal_actions(p).iter().any(|a| {
+        matches!(a, mtg_engine::decision::Action::Activate { source: s, ability } if *s == source && *ability == uid)
+    })
+}
+
 fn sorted(v: &[&str]) -> Vec<String> {
     let mut v: Vec<String> = v.iter().map(|s| s.to_string()).collect();
     v.sort();
@@ -527,4 +546,383 @@ fn trickster_gods_heist_chapter_two_targets_share_a_card_type() {
     move_to(&mut t, ring, Zone::Hand(P2));
     t.resolve_all();
     assert_eq!(t.obj_now(seat).controller, P1);
+}
+
+// ---------------------------------------------------------------------------
+// Targets from a single graveyard; up to N targets
+// ---------------------------------------------------------------------------
+
+#[test]
+fn pestilent_cauldron_needs_four_cards_in_a_single_graveyard() {
+    cr!("115.1", "602.2b", "601.2c");
+    ruling!(
+        "Pestilent Cauldron // Restorative Burst",
+        "You must be able to target four cards in a single graveyard in order to activate Pestilent Cauldron’s last ability."
+    );
+    supported("Pestilent Cauldron // Restorative Burst");
+    let mut t = TestGame::new(2);
+    let cauldron = t.battlefield(P0, "Pestilent Cauldron // Restorative Burst");
+    t.lands(P0, "Swamp", 4);
+    for _ in 0..2 {
+        t.graveyard(P0, "Grizzly Bears");
+        t.graveyard(P1, "Grizzly Bears");
+    }
+    // Four cards in graveyards, but no four in one graveyard.
+    assert!(!can_activate_nth(&mut t, P0, cauldron, 2));
+    t.graveyard(P1, "Shock");
+    t.graveyard(P1, "Forest");
+    assert!(can_activate_nth(&mut t, P0, cauldron, 2));
+    // Answering one of P0's cards among them: the four are fitted to P1's graveyard.
+    let p1_cards: Vec<Entity> = t
+        .g
+        .player(P1)
+        .graveyard
+        .iter()
+        .map(|o| Entity::Object(*o))
+        .collect();
+    let mut answer = p1_cards.clone();
+    answer[0] = Entity::Object(t.g.player(P0).graveyard[0]);
+    t.answer_targets(P0, &answer);
+    let hand = t.hand_size(P0);
+    let ab = t.activate(P0, cauldron, 2, &[]).unwrap().unwrap();
+    let mut chosen: Vec<Entity> = t
+        .obj(ab)
+        .stack
+        .as_ref()
+        .unwrap()
+        .chosen
+        .iter()
+        .flat_map(|cm| cm.targets.iter().flatten().copied())
+        .collect();
+    chosen.sort();
+    let mut expect = p1_cards;
+    expect.sort();
+    assert_eq!(chosen, expect);
+    t.resolve();
+    assert_eq!(t.graveyard_size(P1), 0);
+    assert_eq!(t.graveyard_size(P0), 2);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn restorative_burst_with_no_targets_or_only_illegal_ones() {
+    cr!("608.2b", "115.1");
+    ruling!(
+        "Pestilent Cauldron // Restorative Burst",
+        "You may cast Restorative Burst with no targets. If you do, each player will gain 4 life and you’ll exile Restorative Burst. However, if you choose one or two target cards, and each of those cards is an illegal target as Restorative Burst tries to resolve (usually because something else moved them in response), Restorative Burst won’t resolve and none of its effects will happen. No one will gain life, and Restorative Burst won’t be exiled."
+    );
+    // No targets: everyone gains 4 life and the card is exiled.
+    let mut t = TestGame::new(2);
+    let burst = t.hand(P0, "Pestilent Cauldron // Restorative Burst");
+    add_mana(&mut t, P0, ManaType::G, 5);
+    t.cast(P0, burst).method(CastMethod::Half(1)).targets(&[]).go();
+    t.resolve();
+    assert_eq!((t.life(P0), t.life(P1)), (24, 24));
+    // The card is exiled, not put into the graveyard.
+    assert_eq!(t.g.exile.len(), 1);
+    assert_eq!(t.graveyard_size(P0), 0);
+
+    // One target, which leaves the graveyard: the spell doesn't resolve.
+    let mut t = TestGame::new(2);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let burst = t.hand(P0, "Pestilent Cauldron // Restorative Burst");
+    add_mana(&mut t, P0, ManaType::G, 5);
+    t.cast(P0, burst)
+        .method(CastMethod::Half(1))
+        .targets(&[Entity::Object(bears)])
+        .go();
+    move_to(&mut t, bears, Zone::Exile);
+    t.resolve();
+    assert_eq!((t.life(P0), t.life(P1)), (20, 20));
+    assert_eq!(t.graveyard_size(P0), 1);
+    assert!(t.g.exile.iter().all(|o| t.obj(*o).name() == "Grizzly Bears"));
+}
+
+#[test]
+fn unbury_returns_the_other_card_by_last_known_creature_types() {
+    cr!("608.2b", "608.2h");
+    ruling!(
+        "Unbury",
+        "If you choose the second mode and one of the two cards leaves your graveyard, you'll still return the other card to your hand as long as it has a creature type that the other card had as it left your graveyard."
+    );
+    supported("Unbury");
+    // Llanowar Elves (Elf Druid) and Elvish Visionary (Elf Shaman) share Elf; the Elves
+    // leave the graveyard; the Visionary still returns.
+    let mut t = TestGame::new(2);
+    let elves = t.graveyard(P0, "Llanowar Elves");
+    let visionary = t.graveyard(P0, "Elvish Visionary");
+    let spell = t.hand(P0, "Unbury");
+    add_mana(&mut t, P0, ManaType::B, 2);
+    t.cast(P0, spell)
+        .modes(&[1])
+        .targets(&[Entity::Object(elves), Entity::Object(visionary)])
+        .go();
+    move_to(&mut t, elves, Zone::Exile);
+    t.resolve();
+    assert!(t.in_hand(P0, "Elvish Visionary"));
+    assert!(t.in_exile("Llanowar Elves"));
+}
+
+// ---------------------------------------------------------------------------
+// Targets chosen for each opponent
+// ---------------------------------------------------------------------------
+
+#[test]
+fn in_the_darkness_bind_them_chapter_four() {
+    cr!("608.2b", "701.54a", "115.1");
+    ruling!(
+        "In the Darkness Bind Them",
+        "When In the Darkness Bind Them's final chapter ability triggers, you can choose to target no creatures just so that the Ring tempts you. However, if you do choose at least one target, and all of those targets are illegal at the time the ability tries to resolve, the ability won't resolve and none of its effects will happen. The Ring won't tempt you."
+    );
+    ruling!(
+        "In the Darkness Bind Them",
+        "If a creature targeted by In the Darkness Bind Them's final chapter ability changes controllers before the ability resolves, that creature is no longer a legal target."
+    );
+    ruling!(
+        "In the Darkness Bind Them",
+        "Some spells and abilities that cause the Ring to tempt you may require targets. If each target chosen is an illegal target as that spell or ability tries to resolve, it won't resolve. The Ring won't tempt you."
+    );
+    use crate::r_s19_common::add_lore;
+    supported("In the Darkness Bind Them");
+    let chapter_four = |t: &mut TestGame| {
+        let saga = t.battlefield(P0, "In the Darkness Bind Them");
+        t.g.objects[saga.0 as usize]
+            .counters
+            .insert("lore".into(), 3);
+        add_lore(t, saga, 1);
+        assert_eq!(t.stack_len(), 1);
+    };
+    // No target: the Ring still tempts P0.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[]);
+    chapter_four(&mut t);
+    let level = t.g.players[0].ring_level;
+    t.resolve();
+    assert_eq!(t.g.players[0].ring_level, level + 1);
+
+    // P1's Hill Giant targeted; P0 gains control of it in response: it's no longer a
+    // creature P1 controls, so the only target is illegal and nothing happens.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    chapter_four(&mut t);
+    let level = t.g.players[0].ring_level;
+    gain_control(&mut t, P0, giant);
+    t.g.objects[giant.0 as usize].tapped = true;
+    t.resolve();
+    assert_eq!(t.g.players[0].ring_level, level);
+    // "Untap those creatures" didn't happen either.
+    assert!(t.obj_now(giant).tapped);
+}
+
+#[test]
+fn hideous_taskmaster_cast_trigger_resolves_first() {
+    cr!("603.3", "405.5", "608.2b");
+    ruling!(
+        "Hideous Taskmaster",
+        "Hideous Taskmaster's second ability will resolve before Hideous Taskmaster does. If Hideous Taskmaster is countered or otherwise leaves the stack in response to that triggered ability, the triggered ability will still resolve as normal."
+    );
+    supported("Hideous Taskmaster");
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P2, "Hill Giant");
+    t.g.objects[giant.0 as usize].tapped = true;
+    let spell = t.hand(P0, "Hideous Taskmaster");
+    add_mana(&mut t, P0, ManaType::R, 7);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let id = t.cast(P0, spell).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    // The spell is countered in response; the trigger still resolves.
+    assert!(t.g.counter(id, None));
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Hideous Taskmaster"));
+    assert_eq!(t.obj_now(bears).controller, P0);
+    assert_eq!(t.obj_now(giant).controller, P0);
+    assert!(!t.obj_now(giant).tapped);
+}
+
+#[test]
+fn exiled_until_it_leaves_if_it_left_before_the_ability_resolved() {
+    cr!("610.3b", "610.3c");
+    ruling!(
+        "Bronzebeak Foragers",
+        "If Bronzebeak Foragers leaves the battlefield before its first ability resolves, none of the target permanents will be exiled."
+    );
+    ruling!(
+        "Battle at the Helvault",
+        "If Battle at the Helvault leaves the battlefield before its first or second chapter ability resolves, the target permanents won't be exiled."
+    );
+    ruling!(
+        "Vault 13: Dweller's Journey",
+        "If Vault 13 leaves the battlefield before its first chapter ability resolves, the target permanents won't be exiled at all."
+    );
+    supported("Battle at the Helvault");
+    // Bronzebeak Foragers: one target per opponent; the Foragers leave first.
+    let mut t = TestGame::new(3);
+    let b1 = t.battlefield(P1, "Grizzly Bears");
+    let b2 = t.battlefield(P2, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(b1)]);
+    t.answer_targets(P0, &[Entity::Object(b2)]);
+    let foragers = crate::r_s05_common::enter(&mut t, P0, "Bronzebeak Foragers");
+    assert_eq!(t.stack_len(), 1);
+    t.g.destroy(foragers, None);
+    t.settle();
+    t.resolve_all();
+    assert!(t.on_battlefield(b1) && t.on_battlefield(b2));
+    // And when it stays, they're exiled.
+    let mut t = TestGame::new(3);
+    let b1 = t.battlefield(P1, "Grizzly Bears");
+    let b2 = t.battlefield(P2, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(b1)]);
+    t.answer_targets(P0, &[Entity::Object(b2)]);
+    crate::r_s05_common::enter(&mut t, P0, "Bronzebeak Foragers");
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears") && t.in_exile("Hill Giant"));
+
+    // Battle at the Helvault and Vault 13: a target for each player (P0's included).
+    for saga in ["Battle at the Helvault", "Vault 13: Dweller's Journey"] {
+        let mut t = TestGame::new(2);
+        let mine = t.battlefield(P0, "Grizzly Bears");
+        let theirs = t.battlefield(P1, "Hill Giant");
+        t.answer_targets(P0, &[Entity::Object(mine)]);
+        t.answer_targets(P0, &[Entity::Object(theirs)]);
+        let s = crate::r_s05_common::enter(&mut t, P0, saga);
+        assert_eq!(t.stack_len(), 1, "{saga}");
+        t.g.destroy(s, None);
+        t.settle();
+        t.resolve_all();
+        assert!(t.on_battlefield(mine) && t.on_battlefield(theirs), "{saga}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Each mode must target a different player
+// ---------------------------------------------------------------------------
+
+#[test]
+fn shadrix_silverquill_zero_or_two_modes_each_a_different_player() {
+    cr!("700.2", "700.2d", "603.3c");
+    ruling!(
+        "Shadrix Silverquill",
+        "You may choose exactly zero modes or two modes. You can't choose only one mode. If you choose two modes, you choose which two and the target players as you put the triggered ability on the stack."
+    );
+    ruling!(
+        "Shadrix Silverquill",
+        "You can target a player with the third mode even if they control no creatures."
+    );
+    supported("Shadrix Silverquill");
+    let combat = |t: &mut TestGame| {
+        t.battlefield(P0, "Shadrix Silverquill");
+        t.advance_to(P0, Step::BeginningOfCombat);
+        t.settle();
+        // The modes were asked for.
+        assert!(t.asked().iter().any(|(_, d)| matches!(
+            d,
+            mtg_engine::decision::Decision::ChooseModes { .. }
+        )));
+    };
+    // Zero modes: the ability does nothing (it isn't put on the stack with modes).
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![]));
+    let hand = t.hand_size(P1);
+    combat(&mut t);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), hand);
+    assert!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Inkling").is_empty());
+
+    // One mode isn't allowed: it isn't a mode set of the right size.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+    combat(&mut t);
+    let chosen = t
+        .g
+        .stack
+        .last()
+        .map_or(0, |s| t.obj(*s).stack.as_ref().unwrap().chosen.len());
+    assert_ne!(chosen, 1);
+    t.resolve_all();
+
+    // Two modes, chosen with their target players as the ability is put on the stack: P0
+    // creates an Inkling, and P1 (who controls no creatures) is the third mode's target.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0, 2]));
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    combat(&mut t);
+    let top = *t.g.stack.last().unwrap();
+    let players: Vec<Entity> = t
+        .obj(top)
+        .stack
+        .as_ref()
+        .unwrap()
+        .chosen
+        .iter()
+        .flat_map(|cm| cm.targets.iter().flatten().copied())
+        .collect();
+    assert_eq!(players, vec![Entity::Player(P0), Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(
+        crate::r_s05_common::tokens_with_subtype(&t, P0, "Inkling").len(),
+        1
+    );
+}
+
+#[test]
+fn phoenix_returns_targets_with_total_mana_value_6_counting_x_as_0() {
+    cr!("202.3e", "115.1", "601.2c");
+    ruling!(
+        "Joshua, Phoenix's Dominant // Phoenix, Warden of Fire",
+        "If a card in your graveyard has {X} in its mana cost, X is 0 for the purpose of determining its mana value."
+    );
+    use crate::r_s19_common::add_lore;
+    supported("Joshua, Phoenix's Dominant // Phoenix, Warden of Fire");
+    // Phoenix, Warden of Fire's chapter III: "Return any number of target creature cards
+    // with total mana value 6 or less from your graveyard to the battlefield."
+    let mut t = TestGame::new(2);
+    let walker = t.graveyard(P0, "Hangarback Walker");
+    let giant = t.graveyard(P0, "Hill Giant");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let elves = t.graveyard(P0, "Llanowar Elves");
+    let phoenix = t.battlefield(P0, "Joshua, Phoenix's Dominant // Phoenix, Warden of Fire");
+    assert!(mtg_engine::dfc::transform(&mut t.g, phoenix));
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(phoenix).face, FaceState::Back);
+    t.g.objects[phoenix.0 as usize]
+        .counters
+        .insert("lore".into(), 2);
+    t.recompute();
+    // Hangarback Walker ({X}{X}: 0), Hill Giant (4) and Grizzly Bears (2) total 6; the
+    // Llanowar Elves (1 more) don't fit.
+    let from = t.asked().len();
+    t.answer_targets(
+        P0,
+        &[walker, giant, bears, elves].map(Entity::Object),
+    );
+    add_lore(&mut t, phoenix, 1);
+    let top = *t.g.stack.last().unwrap();
+    let mut chosen: Vec<Entity> = t
+        .obj(top)
+        .stack
+        .as_ref()
+        .unwrap()
+        .chosen
+        .iter()
+        .flat_map(|cm| cm.targets.iter().flatten().copied())
+        .collect();
+    chosen.sort();
+    let mut expect = [walker, giant, bears].map(Entity::Object).to_vec();
+    expect.sort();
+    assert_eq!(chosen, expect, "{:?}", asked_since(&t, from));
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert!(t.in_graveyard(P0, "Llanowar Elves"));
 }
