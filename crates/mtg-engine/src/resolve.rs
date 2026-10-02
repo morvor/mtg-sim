@@ -1383,6 +1383,7 @@ impl Game {
                 ctx.prev_happened = searched;
                 ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
             }
+            Effect::SearchCards(spec) => crate::search_rules::perform(self, spec, ctx),
             Effect::Shuffle { who } => {
                 for p in self.eval_players(who, ctx) {
                     self.shuffle_library(p);
@@ -2293,6 +2294,18 @@ impl Game {
         to: &Destination,
         ctx: &mut Ctx,
     ) -> Vec<ObjectId> {
+        let moves = self.destination_moves(objs, to, ctx);
+        self.move_objects(moves).into_iter().flatten().collect()
+    }
+
+    /// The moves that put `objs` into `to` (see [`Self::move_to_destination`]), for
+    /// moving them together with others at the same time.
+    pub fn destination_moves(
+        &mut self,
+        objs: Vec<ObjectId>,
+        to: &Destination,
+        ctx: &mut Ctx,
+    ) -> Vec<MoveEv> {
         let controller = to
             .controller
             .as_ref()
@@ -2361,7 +2374,7 @@ impl Game {
                 }
             })
             .collect();
-        self.move_objects(moves).into_iter().flatten().collect()
+        moves
     }
 
     /// Creates `n` tokens for `p` (`spec`), "tapped and attacking" if `attacking`: as each
