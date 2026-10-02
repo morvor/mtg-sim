@@ -1324,3 +1324,62 @@ fn p_draw_then_of_them(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "hand/graveyard grammar: draw, then [verb] N of them", priority: 960, parse: p_draw_then_of_them } }
+
+/// "Reveal the top card of your library. If it's a creature card, put it into your hand.
+/// Otherwise, you may put it into your graveyard.": the revealed card goes where the
+/// condition says if it qualifies; otherwise its owner may move it (or leave it on top).
+fn f_otherwise_may_put_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("otherwise, you may put it ") else {
+        return false;
+    };
+    let Effect::Dig {
+        who: PlayerRef::You,
+        n: Value::Const(1),
+        reveal,
+        take: Value::Const(1),
+        take_up_to: false,
+        filter,
+        take_to,
+        rest_to,
+    } = &*prev
+    else {
+        return false;
+    };
+    if rest_to.zone != ZoneKind::Library || !matches!(rest_to.position, LibraryPosition::FromTop(0)) {
+        return false;
+    }
+    let Some((to, tail)) = destination(r, b, &PlayerRef::You) else {
+        return false;
+    };
+    if !end(tail).is_empty() || to.zone == take_to.zone {
+        return false;
+    }
+    let look = Effect::Dig {
+        who: PlayerRef::You,
+        n: Value::Const(1),
+        reveal: *reveal,
+        filter: Filter::Any,
+        take: Value::Const(0),
+        take_up_to: true,
+        take_to: take_to.clone(),
+        rest_to: rest_to.clone(),
+    };
+    let it = Sel::Var(vars::IT);
+    *prev = Effect::seq(vec![
+        look,
+        Effect::If {
+            cond: Condition::SelMatches(it.clone(), filter.clone()),
+            then: Box::new(Effect::Move {
+                what: it.clone(),
+                to: take_to.clone(),
+            }),
+            otherwise: Box::new(Effect::May {
+                who: PlayerRef::You,
+                effect: Box::new(Effect::Move { what: it, to }),
+            }),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: otherwise, you may put it ...", priority: 89, apply: f_otherwise_may_put_it } }
