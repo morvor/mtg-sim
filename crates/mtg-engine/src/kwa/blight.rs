@@ -51,7 +51,13 @@ pub fn blight(g: &mut Game, p: PlayerId, n: u32, ctx: &mut Ctx) -> Option<Object
             .or(Some(cands[0])),
     };
     if let Some(c) = chosen {
-        g.add_counters(Entity::Object(c), counters::MINUS1, n, ctx.source);
+        // Blighting as a cost puts them as a cost (CR 118, 701.68a).
+        g.put_counters(
+            Entity::Object(c),
+            counters::MINUS1,
+            n,
+            crate::event_causes::CounterPut::of(ctx),
+        );
     }
     ctx.set_var(
         kvars::BLIGHTED,

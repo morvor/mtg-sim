@@ -40,6 +40,26 @@ pub enum MoveCause {
     Other,
 }
 
+/// How counters come to be put on a permanent or player (CR 122.6). Only counters put by
+/// an effect are put "by an effect" (CR 609.1): "If an effect would put one or more
+/// counters on a permanent ..." doesn't apply to the others.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CounterOrigin {
+    /// The effect of a spell or ability (CR 609.1), including the counters a permanent
+    /// enters with (CR 122.6, 614.1c).
+    #[default]
+    Effect,
+    /// Paying a cost (CR 118, 602.2b): "those counters are put on as a cost, not as an
+    /// effect".
+    Cost,
+    /// The result of damage dealt by a source with wither or infect, or of combat damage
+    /// dealt by a creature with toxic (CR 120.3b, 120.3d, 702.80a, 702.90b–c, 702.164c).
+    Damage,
+    /// A turn-based action (a Saga's lore counter, CR 703.4f, 714.3c) or a special action
+    /// (exiling a card with suspend, CR 116.2f, 702.62a).
+    Rule,
+}
+
 /// Triggered abilities of permanents captured just before an event, so that
 /// leaves-the-battlefield abilities "look back in time" (CR 603.10).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -92,6 +112,11 @@ pub enum Event {
     },
     Countered {
         what: ObjectId,
+        /// The spell or ability that countered it (only a spell or ability whose text
+        /// says "counter" counters, CR 701.6a), if known.
+        cause: Option<ObjectId>,
+        /// The controller of that spell or ability.
+        by: Option<PlayerId>,
     },
     Damage {
         source: ObjectId,
@@ -145,6 +170,14 @@ pub enum Event {
         target: Entity,
         kind: CounterKind,
         n: u32,
+        /// The player who put them (CR 122.6, 122.6a): the controller of the spell or
+        /// ability putting them, the player paying the cost, the controller of the source
+        /// of the damage (wither, infect, toxic), or, for counters a permanent enters with,
+        /// the player the effect names (tribute's opponent) or else its controller.
+        by: Option<PlayerId>,
+        /// Whether they were put by an effect, as a cost, as the result of damage, or by
+        /// a game rule.
+        origin: CounterOrigin,
     },
     CountersRemoved {
         target: Entity,
@@ -253,6 +286,13 @@ pub enum Event {
     },
     Destroyed {
         obj: ObjectId,
+        /// The spell or ability whose effect destroyed it (CR 701.8b: an effect that uses
+        /// the word "destroy"). A replacement effect's modified event is caused by the
+        /// spell or ability whose event it replaced (umbra armor, CR 702.89a). `None` for
+        /// a state-based action (CR 704.5g–h).
+        cause: Option<ObjectId>,
+        /// The controller of that spell or ability.
+        by: Option<PlayerId>,
     },
     Attached {
         obj: ObjectId,

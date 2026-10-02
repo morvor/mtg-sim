@@ -846,6 +846,10 @@ impl Game {
         ctx.source = source;
         ctx.controller = o.controller;
         ctx.stack_obj = Some(id);
+        // A resolving spell or ability performs its own effects (CR 609.1), whatever
+        // context created it.
+        ctx.paying_cost = false;
+        ctx.cause = None;
         ctx.x = si.x.unwrap_or(ctx.x);
         ctx.event = si.event.clone().or(ctx.event);
         // An ability's "if it was kicked", "if you cast it from your hand" etc. refer to how
@@ -1274,17 +1278,30 @@ impl Game {
         });
     }
 
-    /// Counters a spell or ability (CR 701.6). Returns false if it can't be countered.
+    /// Counters a spell or ability (CR 701.6) by the spell or ability `by` (its
+    /// controller's). Returns false if it can't be countered.
     pub fn counter(&mut self, id: ObjectId, by: Option<ObjectId>) -> bool {
+        let cause = crate::event_causes::Cause::of_source(self, by);
+        self.counter_by(id, cause)
+    }
+
+    /// Counters a spell or ability (CR 701.6); `cause` is the spell or ability countering
+    /// it, which the countered event records ("a creature spell you cast this turn was
+    /// countered by a spell or ability an opponent controlled"). Returns false if it can't
+    /// be countered.
+    pub fn counter_by(&mut self, id: ObjectId, cause: crate::event_causes::Cause) -> bool {
         if !self.is_live(id) || self.obj(id).zone != Zone::Stack {
             return false;
         }
         if self.cant_be_countered(id) {
             return false;
         }
-        let _ = by;
         self.counter_or_fizzle(id, MoveCause::Counter);
-        self.emit(Event::Countered { what: id });
+        self.emit(Event::Countered {
+            what: id,
+            cause: cause.obj,
+            by: cause.by,
+        });
         true
     }
 

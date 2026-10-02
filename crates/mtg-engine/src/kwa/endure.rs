@@ -46,7 +46,12 @@ pub fn endure(g: &mut Game, obj: ObjectId, n: u32, ctx: &mut Ctx) {
             ],
         ) == 0;
     if use_counters {
-        g.add_counters(Entity::Object(obj), counters::PLUS1, n, ctx.source);
+        g.put_counters(
+            Entity::Object(obj),
+            counters::PLUS1,
+            n,
+            crate::event_causes::CounterPut::of(ctx),
+        );
     } else {
         let mut c = ctx.clone();
         c.controller = p;

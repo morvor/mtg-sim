@@ -333,6 +333,7 @@ fn has_event_amount(t: &TriggerCond) -> bool {
         | TriggerCond::GainsLife { .. }
         | TriggerCond::LosesLife { .. }
         | TriggerCond::CountersPut { .. }
+        | TriggerCond::CountersPutBy { .. }
         | TriggerCond::CountersRemoved { .. }
         | TriggerCond::Mills(_)
         | TriggerCond::PlayerAttacks(_)
