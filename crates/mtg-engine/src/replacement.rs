@@ -810,6 +810,9 @@ impl Game {
     /// Whether a "can't enter the battlefield" effect stops this move (CR 614.17d),
     /// checking the object as it would exist on the battlefield.
     pub(crate) fn cant_enter(&mut self, m: &MoveEv) -> bool {
+        if self.cant_enter_from_its_zone(m.obj) {
+            return true;
+        }
         let any = self.statics.restrictions.iter().any(|(_, _, r)| {
             matches!(
                 r,

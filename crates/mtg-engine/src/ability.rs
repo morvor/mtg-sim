@@ -2295,6 +2295,13 @@ pub enum Restriction {
     /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
     /// it would exist on the battlefield.
     CantEnter(Filter),
+    /// "[cards] in [zones] can't enter the battlefield" (Kunoros, Hound of Athreos;
+    /// Grafdigger's Cage): checked against the card as it exists in that zone, before it
+    /// would move (so a noncreature card entering as a copy of a creature isn't stopped).
+    CantEnterFrom {
+        what: Filter,
+        zones: Vec<ZoneKind>,
+    },
     /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
     /// "damage can't be prevented".
     DamageCantBePrevented,
