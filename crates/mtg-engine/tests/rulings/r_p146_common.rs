@@ -51,3 +51,48 @@ pub fn discard(t: &mut TestGame, p: PlayerId, card: ObjectId) {
     t.g.flush_events();
     t.settle();
 }
+
+/// Destroys the permanents simultaneously (as "destroy all creatures" would), then the
+/// game settles (dies triggers are put on the stack).
+pub fn destroy_together(t: &mut TestGame, ids: &[ObjectId]) {
+    let ids: Vec<ObjectId> = ids.iter().map(|i| t.g.current(*i)).collect();
+    t.g.destroy_all(ids, None, false);
+    t.g.flush_events();
+    t.settle();
+}
+
+/// Counters the spell `spell` (as an opponent's counterspell would), then settles.
+pub fn counter(t: &mut TestGame, spell: ObjectId) {
+    use mtg_engine::ability::{Effect, Sel};
+    run_from(
+        t,
+        P1,
+        None,
+        Effect::CounterSpell {
+            what: Sel::Target(0),
+        },
+        &[Entity::Object(spell)],
+    );
+    assert!(!t.g.stack.contains(&spell), "the spell wasn't countered");
+}
+
+/// The triggered abilities on the stack now.
+pub fn stacked_triggers(t: &TestGame) -> usize {
+    t.g.stack
+        .iter()
+        .filter(|id| {
+            t.g.obj(**id).stack.as_ref().is_some_and(|si| {
+                matches!(si.kind, mtg_engine::object::StackKind::Triggered { .. })
+            })
+        })
+        .count()
+}
+
+/// Puts real cards onto the battlefield under `p`'s control at the same time, then the
+/// game settles (enters triggers are put on the stack).
+pub fn enter_together(t: &mut TestGame, p: PlayerId, names: &[&str]) -> Vec<ObjectId> {
+    let ids = crate::r_p116_common::enter_together(t, p, names);
+    t.g.flush_events();
+    t.settle();
+    ids
+}
