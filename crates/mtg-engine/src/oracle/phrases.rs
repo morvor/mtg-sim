@@ -30,6 +30,7 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         "fourteen" | "14" => 14,
         "fifteen" | "15" => 15,
         "twenty" | "20" => 20,
+        "fifty" | "50" => 50,
         "x" => return Some((Value::X, rest)),
         other => {
             if let Ok(n) = other.parse::<i32>() {
@@ -351,6 +352,16 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             let nw = split_word(r).0.trim_end_matches(',');
             if matches!(heads.last(), Some(Filter::Type(_)))
                 && matches!(head_noun(nw), Some(Filter::Type(_)))
+            {
+                s = r;
+                continue;
+            }
+            // "Aura and Equipment spells", "Equipment and Vehicle spells": subtypes joined
+            // by "and" before a plural noun that narrows them name objects with either.
+            let after = split_word(split_word(r).1).0;
+            if matches!(heads.last(), Some(Filter::Subtype(_) | Filter::Type(_)))
+                && matches!(head_noun(nw), Some(Filter::Subtype(_)))
+                && matches!(after, "spells" | "cards" | "permanents")
             {
                 s = r;
                 continue;

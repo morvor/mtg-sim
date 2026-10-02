@@ -150,6 +150,18 @@ pub(crate) fn card_filter(s: &str, b: &Builder) -> Option<Filter> {
             return Some(Filter::and(vec![Filter::Card, Filter::Named(name.into())]));
         }
     }
+    // "a card named Prince of Thralls": a name printed in the text.
+    if let Some(n) = s.strip_prefix("card named ") {
+        let name = super::cost_parts::printed_name(&n.to_lowercase())?;
+        // One name, not a list ("a card named Alpine Watchdog and/or a card named ...").
+        if [",", " and ", " or ", "and/or", " named "]
+            .iter()
+            .any(|w| name.contains(w))
+        {
+            return None;
+        }
+        return Some(Filter::and(vec![Filter::Card, Filter::Named(name)]));
+    }
     let (f, _, rest) = parse_object_phrase(s)?;
     if !rest.trim().is_empty() {
         return None;

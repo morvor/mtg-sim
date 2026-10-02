@@ -116,24 +116,23 @@ pub fn face_down_foretold(g: &Game, owner: Option<PlayerId>) -> Vec<ObjectId> {
         .collect()
 }
 
-/// Marks the cards as foretold, giving them `cost` as a foretell cost (CR 702.143d). Their
-/// owner may look at them as long as they remain in exile.
+/// Marks the cards as foretold (CR 702.143d), giving them a foretell cost equal to the
+/// mana cost of the face they're cast as reduced by {`reduce_by`}, if given. Their owner
+/// may look at them as long as they remain in exile.
 fn become_foretold(g: &mut Game, cards: &[ObjectId], reduce_by: Option<u32>) {
     for c in cards.iter().copied() {
         if !g.is_live(c) || g.obj(c).zone != Zone::Exile {
             continue;
         }
-        let cost = reduce_by.map(|n| {
-            let mut m = g
-                .obj(c)
-                .card
-                .as_ref()
-                .and_then(|d| d.characteristics(FaceState::Front).mana_cost)
-                .unwrap_or_default();
-            m.reduce_generic(n);
-            Cost::mana(m)
-        });
-        crate::special_actions::mark_with_cost(g, c, KeywordKind::Foretell, cost);
+        match reduce_by {
+            Some(n) => crate::special_actions::mark_with_reduced_mana_cost(
+                g,
+                c,
+                KeywordKind::Foretell,
+                n,
+            ),
+            None => crate::special_actions::mark(g, c, KeywordKind::Foretell),
+        }
         let owner = g.obj(c).owner;
         crate::zones::allow_look(g, owner, c);
     }
@@ -218,21 +217,33 @@ impl KeywordRules for Foretell {
             return vec![];
         }
         // Any foretell cost it has: its printed one, and one the effect that made it
-        // foretold gave it (CR 702.143d).
-        let costs: Vec<Cost> = foretell_cost(g, card)
-            .into_iter()
-            .chain(mark.cost.clone())
-            .collect();
-        costs
-            .into_iter()
-            .map(|cost| {
-                let mut opt = CastOption::normal(FaceState::Front);
+        // foretold gave it (CR 702.143d). It's cast as any face or half it could be cast
+        // as (a modal double-faced card as either face, CR 712.11b), turned face up: a
+        // foretell cost "equal to its mana cost reduced by {2}" is that of the face cast
+        // (Ethereal Valkyrie ruling). A land face can't be cast (CR 305.9).
+        let mut out = Vec::new();
+        for face in crate::casting::castable_faces(g, card) {
+            let reduced = mark.mana_cost_reduced_by.map(|n| {
+                let mut m = g
+                    .face_characteristics(card, face)
+                    .mana_cost
+                    .unwrap_or_default();
+                m.reduce_generic(n);
+                Cost::mana(m)
+            });
+            let costs = foretell_cost(g, card)
+                .into_iter()
+                .chain(mark.cost.clone())
+                .chain(reduced);
+            for cost in costs {
+                let mut opt = CastOption::normal(face);
                 opt.method = CastMethod::Keyword(KeywordKind::Foretell);
                 opt.alt_cost = Some(cost);
                 opt.tag = Some("foretell");
-                opt
-            })
-            .collect()
+                out.push(opt);
+            }
+        }
+        out
     }
 
     fn custom_trigger(

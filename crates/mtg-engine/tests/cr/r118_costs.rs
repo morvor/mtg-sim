@@ -271,6 +271,7 @@ fn an_unpayable_cost_stays_unpayable_but_alternative_costs_can_be_paid() {
         free: true,
         source: None,
         turn: 1,
+        terms: Default::default(),
     });
     t.cast(P0, vision).method(CastMethod::Free).go();
     assert_eq!(t.permanents().filter(|o| o.tapped).count(), 1);
