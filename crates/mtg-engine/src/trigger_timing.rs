@@ -63,10 +63,12 @@ impl Clone for TriggerTiming {
 /// (CR 608.2c) rather than performing an action itself: the instructions inside it are
 /// separate actions, each checked for triggers when it's done.
 pub fn is_sequencing(e: &Effect) -> bool {
+    if let Effect::Seq(v) = e {
+        return !creates_tokens_together(v);
+    }
     matches!(
         e,
         Effect::Noop
-            | Effect::Seq(_)
             | Effect::If { .. }
             | Effect::May { .. }
             | Effect::PayOptional { .. }
@@ -83,6 +85,22 @@ pub fn is_sequencing(e: &Effect) -> bool {
             | Effect::SetX { .. }
             | Effect::SelfReplace { .. }
     )
+}
+
+/// Whether a sequence is "create a [token] and a [token]": one instruction that the
+/// compiler splits into one creation per kind. The tokens enter at the same time, as one
+/// event (CR 603.2c, 608.2c): one batch, checked for triggers once they've all entered.
+pub fn creates_tokens_together(v: &[Effect]) -> bool {
+    v.len() > 1
+        && v.iter().all(|e| {
+            matches!(
+                e,
+                Effect::CreateToken { .. }
+                    | Effect::CreateTokenWithPT { .. }
+                    | Effect::CreateTokenCopy { .. }
+                    | Effect::CreateTokenAttached { .. }
+            )
+        })
 }
 
 impl Game {

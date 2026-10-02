@@ -49,7 +49,9 @@ impl Game {
                 // creation sentences ("Create A. Then create B.") the same shape, but no
                 // card prints creation sentences with nothing else between or around them,
                 // and a sequence with any other instruction keeps one batch per element.
-                let together = v.len() > 1 && v.iter().all(is_token_creation);
+                // Being one event, it's also checked for triggers as a whole (`exec` runs
+                // it atomically, see `trigger_timing`).
+                let together = crate::trigger_timing::creates_tokens_together(v);
                 if together {
                     self.end_event_batch();
                     self.batch_hold += 1;
@@ -2883,15 +2885,4 @@ pub(crate) fn performed_by(mut body: Body, p: PlayerId) -> Body {
         }
     }
     body
-}
-
-/// Whether `e` only creates tokens (of one kind).
-fn is_token_creation(e: &Effect) -> bool {
-    matches!(
-        e,
-        Effect::CreateToken { .. }
-            | Effect::CreateTokenWithPT { .. }
-            | Effect::CreateTokenCopy { .. }
-            | Effect::CreateTokenAttached { .. }
-    )
 }
