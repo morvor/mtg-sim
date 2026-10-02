@@ -102,6 +102,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               text already named; the renderer always uses the pronoun.",
     },
     Equivalence {
+        pattern: r"\bthat (creature or planeswalker|creature or vehicle|artifact or creature|spell or ability)\b",
+        replacement: "it",
+        why: "Anaphora, as below: \"that creature or planeswalker\" refers back to the \
+              target already named.",
+    },
+    Equivalence {
         pattern: r"\b(that|the) (creature|permanent|card|spell|land|artifact|enchantment|planeswalker|token|aura|equipment|vehicle|battle|ability|object|source)\b",
         replacement: "it",
         why: "Anaphora: \"that creature\" and \"it\" refer back to the object already named.",

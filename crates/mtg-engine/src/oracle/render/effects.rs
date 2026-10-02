@@ -1898,6 +1898,13 @@ impl Renderer<'_> {
             };
             return format!("shuffle {w} into {p}");
         }
+        // A permanent put onto the battlefield is under the control of the player who put
+        // it there (CR 110.2a); "return" puts it under its owner's control instead.
+        let d = if verb == "put" {
+            d.replacen(" under your control", " {opt:under your control}", 1)
+        } else {
+            d
+        };
         // Several cards put on top of or under a library go in the order their owner
         // chooses (CR 401.4): cards say "in any order" or leave it out.
         if plural

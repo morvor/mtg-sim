@@ -277,12 +277,20 @@ impl Renderer<'_> {
                 let d = self.rel_object(*defender);
                 Ev::new(a, format!("attack {d}"))
             }
+            // Only creatures attack and block (CR 506.1): a filter with no type is a
+            // creature.
             TriggerCond::BlocksCreature { blocker, attacker } => {
+                let saved = self.default_head;
+                self.default_head = Some("creature");
                 let a = self.noun_det(attacker, Det::A);
+                self.default_head = saved;
                 Ev::new(obj(self, blocker), format!("blocks {a}"))
             }
             TriggerCond::BlockedByCreature { attacker, blocker } => {
+                let saved = self.default_head;
+                self.default_head = Some("creature");
                 let b = self.noun_det(blocker, Det::A);
+                self.default_head = saved;
                 Ev::new(obj(self, attacker), format!("becomes blocked by {b}"))
             }
             TriggerCond::BlockedByN { attacker, n } => {
