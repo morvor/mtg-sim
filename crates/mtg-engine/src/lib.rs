@@ -97,6 +97,7 @@ pub mod planechase;
 pub mod player_control;
 pub mod prevention;
 pub mod radiation;
+pub mod repeat_process;
 pub mod replacement;
 pub mod resolve;
 pub mod restart;

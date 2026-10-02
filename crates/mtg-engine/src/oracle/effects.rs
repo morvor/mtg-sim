@@ -318,6 +318,16 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         super::patterns::oracle_hardening_referents::note_player_mention(&s, b);
         effects.push(e);
         b.sentences += 1;
+        // "If you do, repeat this process.": the instructions so far are the process.
+        if effects
+            .last()
+            .is_some_and(crate::repeat_process::has_open_repeat)
+        {
+            let body = Effect::seq(std::mem::take(&mut effects));
+            effects.push(Effect::RepeatProcess {
+                body: Box::new(body),
+            });
+        }
     }
     let e = super::patterns::oracle_hardening_referents::finish_introduced(
         Effect::seq(effects),
@@ -1378,6 +1388,7 @@ pub fn parse_token_description(s: &str) -> Option<TokenSpec> {
         toughness: Some(toughness),
         abilities,
         scryfall_name: None,
+        pt_values: None,
     })
 }
 

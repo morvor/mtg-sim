@@ -38,13 +38,13 @@ pub fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 
 /// CR 107.1b: a calculation that determines the result of an effect uses 0 instead of a
 /// negative number.
-fn nonnegative(v: Value) -> Value {
+pub(crate) fn nonnegative(v: Value) -> Value {
     Value::Max(Box::new(v), Box::new(Value::c(0)))
 }
 
 /// Replaces `Value::X` (and optionally `Value::Y` written as the variable `y`) in an
 /// effect.
-fn substitute_x(e: &Effect, x: &Value) -> Option<Effect> {
+pub(crate) fn substitute_x(e: &Effect, x: &Value) -> Option<Effect> {
     substitute_x_in(e, x)
 }
 
