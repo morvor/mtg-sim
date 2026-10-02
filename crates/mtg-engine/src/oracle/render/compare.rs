@@ -671,7 +671,20 @@ fn sentence_rewrites(s: &str) -> String {
         s = re.replace_all(&s, *rep).to_string();
     }
     for _ in 0..3 {
-        let n = lead.replace_all(&s, "$1$3 $2.").to_string();
+        // The clause goes to the end of the sentence, before a "where X is" that defines
+        // a number in it.
+        let n = lead
+            .replace_all(&s, |c: &regex::Captures| {
+                let (start, clause, body) = (&c[1], &c[2], &c[3]);
+                let duration = clause == "until end of turn" || clause == "this turn";
+                match body.split_once(", where x is ") {
+                    Some((head, x)) if duration && !body.contains('"') => {
+                        format!("{start}{head} {clause}, where x is {x}.")
+                    }
+                    _ => format!("{start}{body} {clause}."),
+                }
+            })
+            .to_string();
         if n == s {
             break;
         }
