@@ -303,6 +303,7 @@ Airdrop Condor
 Airship Crash
 Airship Engine Room
 Aisling Leprechaun
+Ajani Fells the Godsire
 Ajani's Anguish
 Ajani's Comrade
 Ajani's Influence
@@ -1726,6 +1727,7 @@ Blisterstick Shaman
 Blitz Automaton
 Blitz of the Thunder-Raptor
 Blitzball Shot
+Blizzard
 Blizzard Elemental
 Bloated Contaminator
 Bloated Processor
@@ -1741,6 +1743,7 @@ Blood Burglar
 Blood Celebrant
 Blood Crypt
 Blood Cultist
+Blood Curdle
 Blood Divination
 Blood Feud
 Blood Fountain
@@ -2645,6 +2648,7 @@ Cayth, Famed Mechanist
 Cazur, Ruthless Stalker
 Cease // Desist
 Cease-Fire
+Ceaseless Searblades
 Celebrity Fencer
 Celestial Ancient
 Celestial Archon
@@ -2872,6 +2876,7 @@ Chocobo Racetrack
 Choke
 Choked Estuary
 Choking Fumes
+Choking Miasma
 Choking Restraints
 Choking Tethers
 Chomping Changeling
@@ -5054,6 +5059,7 @@ Elixir of Vitality
 Ellivere of the Wild Court
 Eloise, Nephalia Sleuth
 Elrond, Lord of Rivendell
+Elrond, Moon-Reader
 Elspeth's Nightmare
 Elspeth's Smite
 Elspeth, Knight-Errant
@@ -5664,7 +5670,6 @@ Farmstead Gleaner
 Farseek
 Farsight Mask
 Fascination
-Fast // Furious
 Fatal Attraction
 Fatal Blow
 Fatal Fumes
@@ -5689,6 +5694,7 @@ Fatestitcher
 Fathom Fleet Captain
 Fathom Fleet Cutthroat
 Fathom Fleet Firebrand
+Fathom Mage
 Fathom Seer
 Fatigue
 Fault Line
@@ -5722,6 +5728,7 @@ Fearless Pup
 Fearless Skald
 Fearsome Awakening
 Fearsome Goblin Pair
+Feast of Blood
 Feast of Sanity
 Feast of Succession
 Feast of the Unicorn
@@ -5893,6 +5900,7 @@ Final Strike
 Final Vengeance
 Final-Sting Faerie
 Finch Formation
+Find // Finality
 Find the Path
 Finishing Blow
 Finishing Move
@@ -6121,6 +6129,7 @@ Flora Colossus
 Floral Evoker
 Floral Spuzzem
 Floriferous Vinewall
+Flourishing Defenses
 Flourishing Fox
 Flourishing Strike
 Flow of Ideas
@@ -6717,6 +6726,7 @@ Ghostly Prison
 Ghostly Sentinel
 Ghostly Touch
 Ghostly Wings
+Ghostway
 Ghoul's Feast
 Ghoulcaller Gisa
 Ghoulcaller's Accomplice
@@ -7116,6 +7126,7 @@ Gold Myr
 Gold Pan
 Gold-Forged Sentinel
 Gold-Forged Thopteryx
+Golden Argosy
 Golden Bear
 Golden Egg
 Golden Hind
@@ -7379,6 +7390,7 @@ Grim Reaper's Scythe
 Grim Roustabout
 Grim Strider
 Grim Tutor
+Grim Wanderer
 Grimclaw Bats
 Grimgrin, Corpse-Born
 Grindclock
@@ -7685,6 +7697,7 @@ Harvesttide Sentry
 Hashaton, Scarab's Fist
 Hashep Oasis
 Haste Magic
+Hatchet Bully
 Hatching Plans
 Hate Weaver
 Hateflayer
@@ -8185,6 +8198,7 @@ Humble Naturalist
 Humble the Brute
 Humbler of Mortals
 Humbling Elder
+Humiliate
 Humongulus
 Hundred-Talon Kami
 Hundred-Talon Strike
@@ -9642,6 +9656,7 @@ Lesser Masticore
 Lessons from Life
 Let's Play a Game
 Lethal Protection
+Lethal Sting
 Lethal Vapors
 Letter of Acceptance
 Levitating Statue
@@ -9745,6 +9760,7 @@ Liliana's Devotee
 Liliana's Elite
 Liliana's Mastery
 Liliana's Reaver
+Liliana's Scrounger
 Liliana's Shade
 Liliana's Specter
 Liliana's Spoils
@@ -9855,6 +9871,7 @@ Lonesome Unicorn // Rider in Need
 Long Goodbye
 Long Lake Nuisance
 Long River's Pull
+Long Road Home
 Long-Bodied Grey Dog
 Long-Finned Skywhale
 Long-Forgotten Gohei
@@ -11170,6 +11187,7 @@ Mystical Dispute
 Mystical Teachings
 Mystical Tether
 Mystical Tutor
+Mystifying Maze
 Mythic Proportions
 Nacatl Hunt-Pride
 Nacatl Outlander
@@ -11897,6 +11915,7 @@ Ostracize
 Otepec Huntmaster
 Otherworld Atlas
 Otherworldly Gaze
+Otherworldly Journey
 Otrimi, the Ever-Playful
 Otter-Penguin
 Ouroboroid
@@ -11992,6 +12011,7 @@ Painted Bluffs
 Painter's Studio // Defaced Gallery
 Palace Familiar
 Palace Guard
+Palace Jailer
 Palace Sentinels
 Paladin of Atonement
 Paladin of Predation
@@ -12292,7 +12312,6 @@ Pia and Kiran Nalaar
 Pia, Aether Ascetic
 Pia, Determined Rebuilder
 Pianna, Nomad Captain
-Pick Your Poison
 Pierce Strider
 Pierce the Sky
 Piercing Light
@@ -12388,6 +12407,7 @@ Planar Bridge
 Planar Cleansing
 Planar Despair
 Planar Disruption
+Planar Guide
 Planar Incision
 Planar Outburst
 Planar Portal
@@ -12849,6 +12869,7 @@ Quarry Beetle
 Quasiduplicate
 Queen Allenal of Ruadach
 Queen Brahne
+Queen Marchesa
 Queen Mother Ramonda
 Queen of Ice // Rage of Winter
 Queen's Agent
@@ -13278,7 +13299,6 @@ Recuperate
 Red Dragon
 Red Elemental Blast
 Red Ghost, Intangible Genius
-Red Herring
 Red Hulk
 Red Room Recruit
 Red Scarab
@@ -14196,6 +14216,7 @@ Sarkhan's Dragonfire
 Sarkhan's Rage
 Sarkhan's Resolve
 Sarkhan's Triumph
+Sarkhan's Whelp
 Sarkhan, Fireblood
 Sarpadian Simulacrum
 Sarulf's Packmate
@@ -14294,6 +14315,7 @@ Scarlet Spider, Ben Reilly
 Scarlet Spider, Kaine
 Scarlet Witch, Wanda Maximoff
 Scarred Vinebreeder
+Scarscale Ritual
 Scarwood Goblins
 Scarwood Treefolk
 Scathe Zombies
@@ -14711,6 +14733,7 @@ Seton's Desire
 Seton's Scout
 Seton, Krosan Protector
 Settle Beyond Reality
+Settle the Score
 Settlement Blacksmith
 Seven-Tail Mentor
 Sever Soul
@@ -16714,6 +16737,7 @@ Sword Dancer
 Sword of Body and Mind
 Sword of Fire and Ice
 Sword of Sinew and Steel
+Sword of Truth and Justice
 Sword of Vengeance
 Sword of War and Peace
 Sword of Wealth and Power
@@ -17551,6 +17575,7 @@ Tishana's Wayfinder
 Tishana, Voice of Thunder
 Titan Forge
 Titan of Eternal Fire
+Titan of Industry
 Titan's Grave
 Titan's Revenge
 Titan's Strength
@@ -17956,6 +17981,7 @@ Tuskeri Firewalker
 Tuskguard Captain
 Tuya Bearclaw
 Tweeze
+Twice Upon a Time // Unlikely Meeting
 Twiddle
 Twigwalker
 Twilight Drover

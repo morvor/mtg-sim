@@ -301,6 +301,31 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     },
 ];
 
+/// The sentence-level rewrites `sentence_rewrites` applies to both sides (word order and
+/// the forms of a number), listed with the [`EQUIVALENCES`] in the report.
+pub const SENTENCE_FORMS: &[(&str, &str)] = &[
+    (
+        "\"Until end of turn, X.\" / \"As long as C, X.\" / \"At the beginning of the next end step, X.\" -> \"X until end of turn.\" ...",
+        "A leading duration, condition or delayed time applies to the whole sentence wherever it's written.",
+    ),
+    (
+        "\"If C, Y. Otherwise, X.\" -> \"X. If C, Y instead.\"",
+        "Both state the same choice between two instructions.",
+    ),
+    (
+        "\"X if C.\" -> \"If C, X.\" (not \"if able\", \"only if\", \"unless\")",
+        "A trailing condition is the same condition.",
+    ),
+    (
+        "\"You may pay P. If you don't, X.\" -> \"X unless you pay P.\"",
+        "The same optional payment (CR 118.12).",
+    ),
+    (
+        "\"N damage equal to V\", \"N life for each F\", \"+1/+1 for each F\", \"a card for each F\", ... -> \"X ..., where X is V\"",
+        "CR 107.3: X is defined by the text; both describe the same number.",
+    ),
+];
+
 /// Words dropped from both sides before comparing.
 pub const IGNORED_WORDS: &[(&str, &str)] = &[
     (
