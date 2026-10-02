@@ -337,7 +337,7 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &crate::eval::Ctx) -> bool {
     for (i, t) in targets.into_iter().enumerate() {
         let n = div.get(i).copied().unwrap_or(0);
         if n > 0 {
-            g.add_counters(t, kind, n, ctx.source);
+            g.put_counters(t, kind, n, crate::event_causes::CounterPut::of(ctx));
         }
     }
     true

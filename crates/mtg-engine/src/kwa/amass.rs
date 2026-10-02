@@ -77,7 +77,7 @@ pub fn amass(g: &mut Game, p: PlayerId, subtype: &Subtype, n: u32, ctx: &mut Ctx
             Entity::Object(army),
             counters::PLUS1,
             n,
-            crate::event_causes::CounterPut::of(ctx),
+            crate::event_causes::CounterPut::by_player(p, ctx),
         );
         g.recompute();
         if on_battlefield(g, army) && !g.obj(army).chars.has_subtype(subtype) {

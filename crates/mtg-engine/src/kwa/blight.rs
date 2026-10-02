@@ -56,7 +56,7 @@ pub fn blight(g: &mut Game, p: PlayerId, n: u32, ctx: &mut Ctx) -> Option<Object
             Entity::Object(c),
             counters::MINUS1,
             n,
-            crate::event_causes::CounterPut::of(ctx),
+            crate::event_causes::CounterPut::by_player(p, ctx),
         );
     }
     ctx.set_var(

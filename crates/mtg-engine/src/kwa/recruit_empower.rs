@@ -168,7 +168,7 @@ pub fn empower_jace(g: &mut Game, p: PlayerId, n: u32, ctx: &Ctx) -> Option<Obje
         Entity::Object(jace),
         counters::LOYALTY,
         n,
-        crate::event_causes::CounterPut::of(ctx),
+        crate::event_causes::CounterPut::by_player(p, ctx),
     );
     Some(jace)
 }

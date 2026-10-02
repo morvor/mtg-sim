@@ -147,7 +147,7 @@ pub fn earthbend(g: &mut Game, p: PlayerId, land: ObjectId, n: u32, ctx: &mut Ct
         Entity::Object(land),
         counters::PLUS1,
         n,
-        crate::event_causes::CounterPut::of(ctx),
+        crate::event_causes::CounterPut::by_player(p, ctx),
     );
     // "When that land dies or is put into exile, return it to the battlefield tapped
     // under your control."

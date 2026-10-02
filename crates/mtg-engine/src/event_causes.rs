@@ -93,6 +93,15 @@ impl CounterPut {
         }
     }
 
+    /// Counters that the player `p` puts while performing the effects of `ctx` (a keyword
+    /// action that player performs: "proliferate", "amass", "blight N", ...).
+    pub fn by_player(p: PlayerId, ctx: &Ctx) -> CounterPut {
+        CounterPut {
+            by: Some(p),
+            ..CounterPut::of(ctx)
+        }
+    }
+
     /// Counters put by the effect of the spell or ability `source` (or an ability of
     /// `source`): its controller puts them (CR 122.6a).
     pub fn by_source(g: &Game, source: Option<ObjectId>) -> CounterPut {

@@ -50,7 +50,8 @@ pub fn endure(g: &mut Game, obj: ObjectId, n: u32, ctx: &mut Ctx) {
             Entity::Object(obj),
             counters::PLUS1,
             n,
-            crate::event_causes::CounterPut::of(ctx),
+            // CR 701.63a: that permanent's controller puts them.
+            crate::event_causes::CounterPut::by_player(p, ctx),
         );
     } else {
         let mut c = ctx.clone();
