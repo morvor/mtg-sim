@@ -128,7 +128,14 @@ pub(crate) fn card_filter(s: &str, b: &Builder) -> Option<Filter> {
             if a_card {
                 let fa = card_filter(a, b)?;
                 let fc = card_filter(c, b)?;
-                return Some(Filter::Or(vec![fa, fc]));
+                // "basic land cards and/or Town cards with different names": a requirement
+                // on the cards found together is about all of them (`relational.rs`).
+                let (fa, mut groups) = crate::relational::split_groups(fa);
+                let (fc, gc) = crate::relational::split_groups(fc);
+                groups.extend(gc);
+                let mut parts = vec![Filter::Or(vec![fa, fc])];
+                parts.extend(groups.into_iter().map(Filter::Together));
+                return Some(Filter::and(parts));
             }
         }
     }
