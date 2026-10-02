@@ -7,7 +7,7 @@ use crate::r506_common::*;
 use mtg_engine::ability::*;
 use mtg_engine::card::card;
 use mtg_engine::combat::attack_options;
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Action, Decision};
 use mtg_engine::eval::Ctx;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
@@ -155,6 +155,17 @@ fn saddlebrute_controllers_own_new_creatures_may_attack() {
     assert!(targets_of(&t, theirs).is_none());
 }
 
+fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
+    let saved = t.g.turn.priority;
+    t.g.turn.priority = Some(p);
+    let ok =
+        t.g.legal_actions(p)
+            .iter()
+            .any(|a| matches!(a, Action::Cast { card: c, .. } if *c == card));
+    t.g.turn.priority = saved;
+    ok
+}
+
 /// Casts Master Warcraft for `p` (with four Mountains).
 fn cast_master_warcraft(t: &mut TestGame, p: PlayerId) -> Result<ObjectId, ()> {
     t.lands(p, "Mountain", 4);
@@ -285,11 +296,20 @@ fn master_warcraft_cast_only_before_the_first_combats_attackers() {
         "this spell can only be cast before the beginning of the Declare Attackers Step of the first combat phase"
     );
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Grizzly Bears");
-    t.set_step(P0, Step::BeginningOfCombat);
-    go_to(&mut t, Step::PostcombatMain);
-    // Before a second combat phase this turn: still too late.
-    assert!(cast_master_warcraft(&mut t, P1).is_err());
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P1, "Mountain", 4);
+    let mw = t.hand(P1, "Master Warcraft");
+    go_to(&mut t, Step::BeginningOfCombat);
+    // Castable before the first combat's attackers are declared (P1 holds it).
+    assert!(castable(&mut t, P1, mw));
+    declare(&mut t, &[(bears, Entity::Player(P1))]);
+    go_to(&mut t, Step::DeclareAttackers);
+    t.g.add_extra_combat(true);
+    go_to(&mut t, Step::EndOfCombat);
+    go_to(&mut t, Step::BeginningOfCombat);
+    assert_eq!(t.g.turn.combat_phases, 2);
+    // Before the second combat phase's attackers are declared: still too late.
+    assert!(!castable(&mut t, P1, mw));
 }
 
 #[test]
@@ -339,4 +359,70 @@ fn each_card_put_onto_the_battlefield_attacking_gets_its_own_target() {
     let targets = [attack_target(&t, na), attack_target(&t, nb)];
     assert!(targets.contains(&Some(Entity::Object(jace))));
     assert!(targets.contains(&Some(Entity::Player(P1))));
+}
+
+#[test]
+fn chaos_lord_can_attack_as_though_it_had_haste_unless_it_entered_this_turn() {
+    cr!("302.6", "508.1a", "609.4");
+    let mut t = TestGame::new(2);
+    let lord = t.battlefield_sick(P0, "Chaos Lord");
+    to_combat(&mut t, P0);
+    // Under a new controller's control since this turn began (it changes control each
+    // upkeep), but it was on the battlefield before: it may attack.
+    t.g.objects[lord.0 as usize].entered_turn = t.g.turn.number.saturating_sub(1);
+    t.g.objects[lord.0 as usize].summoning_sick = true;
+    t.g.recompute();
+    assert!(!t.obj_now(lord).has_keyword(KeywordKind::Haste));
+    assert!(t.g.can_attack(lord), "it can attack as though it had haste");
+    // It entered the battlefield this turn: it can't.
+    t.g.objects[lord.0 as usize].entered_turn = t.g.turn.number;
+    t.g.recompute();
+    assert!(!t.g.can_attack(lord), "it entered this turn");
+}
+
+#[test]
+fn master_warcraft_active_player_may_decline_attack_costs_chosen_for_them() {
+    cr!("508.1h");
+    supported("Propaganda");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Propaganda");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let plains = t.lands(P0, "Plains", 2);
+    to_combat(&mut t, P0);
+    cast_master_warcraft(&mut t, P1).expect("cast");
+    // P1 has the bears attack, which costs P0 {2}; P0 declines, so P1 chooses again.
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(false));
+    t.answer(P1, DecisionKind::Attackers, Answer::Attackers(vec![]));
+    go_to(&mut t, Step::DeclareAttackers);
+    assert!(attacking(&t).is_empty());
+    assert_eq!(
+        count_asked(&t, P1, |d| matches!(d, Decision::DeclareAttackers { .. })),
+        2
+    );
+    assert!(plains.iter().all(|l| !t.obj_now(*l).tapped), "nothing was paid");
+}
+
+#[test]
+fn master_warcraft_active_player_pays_attack_costs_they_accept() {
+    cr!("508.1h", "508.1j");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Propaganda");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let plains = t.lands(P0, "Plains", 2);
+    to_combat(&mut t, P0);
+    cast_master_warcraft(&mut t, P1).expect("cast");
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
+    go_to(&mut t, Step::DeclareAttackers);
+    assert_eq!(attacking(&t), vec![(bears, Some(Entity::Player(P1)))]);
+    assert!(plains.iter().all(|l| t.obj_now(*l).tapped), "P0 paid {{2}}");
 }
