@@ -1109,13 +1109,15 @@ impl Game {
                     })
                     .count() as i64
             }),
-            Value::SpellsCastThisTurn(r, f) => self.eval_player(r, ctx).map_or(0, |p| {
+            // Summed over the players ("spells your opponents cast this turn").
+            Value::SpellsCastThisTurn(r, f) => {
+                let ps = self.eval_players(r, ctx);
                 self.history
                     .spells_cast
                     .iter()
-                    .filter(|(q, s)| *q == p && self.matches_view(&Current, *s, f, ctx))
+                    .filter(|(q, s)| ps.contains(q) && self.matches_view(&Current, *s, f, ctx))
                     .count() as i64
-            }),
+            }
             Value::TimesResolvedThisTurn => ctx
                 .source
                 .map(|s| {
