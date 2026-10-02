@@ -109,7 +109,8 @@ fn noncombat(c: TriggerCond) -> Option<TriggerCond> {
 }
 
 /// "one or more +1/+1 counters are put on [object]", "a +1/+1 counter is put on [object]".
-/// Each such event is one put action on one object.
+/// Each such event is one put action on one object; the singular form triggers once for
+/// each counter put.
 fn parse_counters_put(r: &str) -> Option<Parsed> {
     let (x, plural) = if let Some(x) = r.strip_prefix("one or more ") {
         (x, true)
@@ -156,6 +157,7 @@ fn parse_counters_put(r: &str) -> Option<Parsed> {
         TriggerCond::CountersPut {
             filter: subj.filter,
             kind: Some(kind),
+            each: !plural,
         },
         it,
         PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
@@ -737,12 +739,14 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
         if x != "or more creatures" {
             return None;
         }
+        // "those creatures" are the creatures the player attacked with, whatever has
+        // happened to them since.
         return Some((
             TriggerCond::Where {
                 trigger: Box::new(base),
                 cond: Condition::Compare(Value::EventAmount, Cmp::Ge, Value::c(n)),
             },
-            Sel::None,
+            Sel::TriggerObjects,
             tp(),
         ));
     }
@@ -1371,6 +1375,8 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
     for p in [
         "is put into exile from the battlefield",
         "are put into exile from the battlefield",
+        "is exiled from the battlefield",
+        "are exiled from the battlefield",
     ] {
         if let Some(r) = starts(p) {
             return zone_change(
