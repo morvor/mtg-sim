@@ -43,12 +43,14 @@ fn vampire_hexmage_removes_every_counter_of_every_kind() {
     add(&mut t, giant, "+1/+1", 2);
     add(&mut t, giant, "flying", 1);
     // The planeswalker loses all its loyalty and is put into the graveyard.
-    t.activate(P0, hexmage, 0, &[Entity::Object(walker)]).unwrap();
+    t.activate(P0, hexmage, 0, &[Entity::Object(walker)])
+        .unwrap();
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Ajani Goldmane"));
     // Another one: counters of two kinds, all removed.
     let hexmage2 = t.battlefield(P0, "Vampire Hexmage");
-    t.activate(P0, hexmage2, 0, &[Entity::Object(giant)]).unwrap();
+    t.activate(P0, hexmage2, 0, &[Entity::Object(giant)])
+        .unwrap();
     t.resolve_all();
     assert_eq!(t.counters(giant, "+1/+1"), 0);
     assert_eq!(t.counters(giant, "flying"), 0);
@@ -89,13 +91,21 @@ fn price_of_betrayal_removes_counters_from_an_opponent() {
     );
     assert_supported(&["Price of Betrayal"]);
     let mut t = TestGame::new(2);
-    t.g.add_counters(Entity::Player(P1), "poison", 4, None);
+    t.g.add_counters(Entity::Player(P1), "poison", 2, None);
+    t.g.add_counters(Entity::Player(P1), "experience", 2, None);
     t.lands(P0, "Swamp", 1);
     let p = t.hand(P0, "Price of Betrayal");
+    // Three of the four: the first kind listed twice (all of it), then the other kind.
     t.answer(P0, DecisionKind::Number, Answer::Number(3));
+    for _ in 0..3 {
+        t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    }
     t.cast(P0, p).target(Entity::Player(P1)).go();
     t.resolve_all();
-    assert_eq!(t.g.player(P1).counter("poison"), 1);
+    let poison = t.g.player(P1).counter("poison");
+    let experience = t.g.player(P1).counter("experience");
+    assert_eq!(poison + experience, 1, "three removed");
+    assert!(poison < 2 && experience < 2, "both kinds were removed from");
 }
 
 #[test]
@@ -112,7 +122,8 @@ fn thrull_parasite_removes_one_counter_of_the_chosen_kind() {
     add(&mut t, giant, "+1/+1", 2);
     add(&mut t, giant, "charge", 2);
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
-    t.activate(P0, parasite, 0, &[Entity::Object(giant)]).unwrap();
+    t.activate(P0, parasite, 0, &[Entity::Object(giant)])
+        .unwrap();
     t.resolve_all();
     assert_eq!(t.counters(giant, "+1/+1"), 2);
     assert_eq!(t.counters(giant, "charge"), 1);
@@ -187,11 +198,27 @@ fn coalition_relic_adds_a_mana_of_any_color_for_each_counter_removed() {
     let relic = t.battlefield(P0, "Coalition Relic");
     add(&mut t, relic, "charge", 2);
     t.advance_to(P1, Step::Upkeep);
+    // A different color for each counter.
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
     t.advance_to(P0, Step::PrecombatMain);
     t.resolve_all();
     assert_eq!(t.counters(relic, "charge"), 0);
-    assert_eq!(t.g.player(P0).mana_pool.mana.len(), 2);
-    let _ = ManaType::W;
+    let pool = &t.g.player(P0).mana_pool;
+    assert_eq!(pool.mana.len(), 2);
+    let colors = [
+        ManaType::W,
+        ManaType::U,
+        ManaType::B,
+        ManaType::R,
+        ManaType::G,
+    ];
+    assert_eq!(
+        colors.iter().filter(|c| pool.count(**c) == 1).count(),
+        2,
+        "two different colors: {:?}",
+        pool.mana
+    );
 }
 
 #[test]
@@ -235,7 +262,8 @@ fn hex_parasite_gets_the_bonus_only_for_counters_removed() {
     // X = 5, choosing the most: only four counters there.
     t.answer(P0, DecisionKind::X, Answer::Number(5));
     t.answer(P0, DecisionKind::Number, Answer::Number(4));
-    t.activate(P0, parasite, 0, &[Entity::Object(walker)]).unwrap();
+    t.activate(P0, parasite, 0, &[Entity::Object(walker)])
+        .unwrap();
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Ajani Goldmane"));
     assert_eq!(t.pt(parasite), (1 + 4, 1));
