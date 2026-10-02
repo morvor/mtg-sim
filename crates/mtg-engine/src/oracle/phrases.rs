@@ -1287,6 +1287,28 @@ fn target_group_suffix<'a>(
             rest,
         ));
     }
+    let Some((rest, grp)) = group_phrase(t) else {
+        return Some((f, r));
+    };
+    *together = Some(grp);
+    // The object phrase's own suffixes may follow ("... from your graveyard"): parsed
+    // after a stand-in noun, which is then dropped.
+    let probe = format!("cards{rest}");
+    let (more, _, tail) = parse_object_phrase(&probe)?;
+    let rest = &rest[rest.len() - tail.len()..];
+    let mut parts = vec![f];
+    match more {
+        Filter::Card => {}
+        Filter::And(v) => parts.extend(v.into_iter().filter(|x| !matches!(x, Filter::Card))),
+        other => parts.push(other),
+    }
+    Some((Filter::and(parts), rest))
+}
+
+/// A relationship several objects must have, at the start of `t` ("that share a creature
+/// type", "with different names", "with total mana value 6 or less"; see
+/// `target_groups.rs`), and what follows it.
+pub fn group_phrase(t: &str) -> Option<(&str, TargetGroup)> {
     let groups = [
         ("that share a creature type", TargetGroup::ShareCreatureType),
         (
@@ -1307,28 +1329,25 @@ fn target_group_suffix<'a>(
             "with different mana values",
             TargetGroup::DifferentManaValues,
         ),
+        ("with different powers", TargetGroup::DifferentPowers),
         ("with equal toughness", TargetGroup::EqualToughness),
     ];
-    let found = groups
+    groups
         .iter()
         .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, g.clone())))
-        .or_else(|| total_at_most(t));
-    let Some((rest, grp)) = found else {
-        return Some((f, r));
-    };
-    *together = Some(grp);
-    // The object phrase's own suffixes may follow ("... from your graveyard"): parsed
-    // after a stand-in noun, which is then dropped.
-    let probe = format!("cards{rest}");
-    let (more, _, tail) = parse_object_phrase(&probe)?;
-    let rest = &rest[rest.len() - tail.len()..];
-    let mut parts = vec![f];
-    match more {
-        Filter::Card => {}
-        Filter::And(v) => parts.extend(v.into_iter().filter(|x| !matches!(x, Filter::Card))),
-        other => parts.push(other),
-    }
-    Some((Filter::and(parts), rest))
+        .or_else(|| total_at_most(t))
+}
+
+/// The first relationship phrase (see [`group_phrase`]) in `l`, after a space: its start,
+/// its end and the relationship.
+pub fn find_group_phrase(l: &str) -> Option<(usize, usize, TargetGroup)> {
+    l.match_indices(' ').find_map(|(i, _)| {
+        let rest = &l[i + 1..];
+        let (after, grp) = group_phrase(rest)?;
+        // A whole phrase: not "with different names" inside a longer word.
+        (after.is_empty() || after.starts_with([' ', ',', '.']))
+            .then(|| (i, l.len() - after.len(), grp))
+    })
 }
 
 /// "with total mana value 6 or less", "with total power 10 or less", "with total mana

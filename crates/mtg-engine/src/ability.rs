@@ -649,6 +649,9 @@ pub enum TargetGroup {
     ShareCreatureType,
     /// There's a card type all of them have.
     ShareCardType,
+    /// There's one of these card types all of them have ("another target permanent that
+    /// shares one of those types with it", the types the first target was described by).
+    ShareCardTypeAmong(Vec<CardType>),
     /// There's a permanent type (artifact, battle, creature, enchantment, land,
     /// planeswalker) all of them have.
     SharePermanentType,
@@ -660,6 +663,8 @@ pub enum TargetGroup {
     DifferentNames,
     /// No two of them have the same mana value ("with different mana values").
     DifferentManaValues,
+    /// No two of them have the same power ("with different powers").
+    DifferentPowers,
     /// All have the same toughness ("with equal toughness").
     EqualToughness,
     /// Each stands for a different card type it has ("for each card type, ... a card of

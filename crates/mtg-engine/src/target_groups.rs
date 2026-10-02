@@ -107,6 +107,7 @@ pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) ->
         TargetGroup::DifferentManaValues => {
             pairwise(&objs, |a, b| g.mana_value_of(a.id) != g.mana_value_of(b.id))
         }
+        TargetGroup::DifferentPowers => pairwise(&objs, |a, b| a.power() != b.power()),
         TargetGroup::EqualToughness => objs.iter().all(|o| o.toughness() == objs[0].toughness()),
         TargetGroup::OnePerCardType => one_per_card_type(&objs),
         TargetGroup::TotalManaValueAtMost(v) | TargetGroup::TotalPowerAtMost(v) => {
@@ -146,6 +147,9 @@ pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) ->
                     .iter()
                     .any(|t| objs.iter().all(|o| o.chars.is(t)))
         }
+        TargetGroup::ShareCardTypeAmong(types) => {
+            objs.len() < 2 || types.iter().any(|t| objs.iter().all(|o| o.chars.is(*t)))
+        }
         TargetGroup::SharePermanentType => {
             objs.len() < 2
                 || objs[0]
@@ -177,10 +181,12 @@ pub fn holds_on_resolution(
         | TargetGroup::ShareCreatureType
         | TargetGroup::ShareNoCreatureType
         | TargetGroup::ShareCardType
+        | TargetGroup::ShareCardTypeAmong(_)
         | TargetGroup::SharePermanentType => group_ok(g, group, all, ctx),
         TargetGroup::DifferentControllers
         | TargetGroup::DifferentNames
         | TargetGroup::DifferentManaValues
+        | TargetGroup::DifferentPowers
         | TargetGroup::EqualToughness
         | TargetGroup::OnePerCardType
         | TargetGroup::TotalManaValueAtMost(_)
