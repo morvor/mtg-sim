@@ -1124,22 +1124,6 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
         ("greater than the number of ", Cmp::Gt),
     ] {
         if let Some(r) = rest.strip_prefix(p) {
-            // "with power less than or equal to the number of Warriors you control" (Goma
-            // Fada Vanguard): counted as the target is chosen and as the ability resolves.
-            if let Some((objs, _, tail)) = parse_object_phrase(r) {
-                if r[..r.len() - tail.len()]
-                    .trim_end()
-                    .ends_with(" you control")
-                {
-                    let v = Box::new(Value::Count(objs));
-                    let f = match stat {
-                        "power" => Filter::Power(cmp, v),
-                        "toughness" => Filter::Toughness(cmp, v),
-                        _ => Filter::ManaValue(cmp, v),
-                    };
-                    return Some((f, tail));
-                }
-            }
             let (kind, r) = split_word(r);
             let r = r
                 .strip_prefix("counters on ~")

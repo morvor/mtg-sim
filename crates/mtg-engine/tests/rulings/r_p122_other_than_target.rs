@@ -41,6 +41,9 @@ fn phalanx_tactics_each_other_creature_excludes_the_target() {
     t.resolve_all();
     assert_eq!(t.pt(bears), (4, 3));
     assert_eq!(t.pt(lions), (3, 2));
+    // The affected set was fixed as the effect began.
+    let goblin = t.enter(P0, "Raging Goblin");
+    assert_eq!(t.pt(goblin), (1, 1));
 }
 
 #[test]

@@ -1034,30 +1034,41 @@ pub(crate) fn other_than_sole_target(mut body: Body) -> Body {
     {
         return body;
     }
-    // `Filter::Other` inside a filter conjunction ({"And": [..., "Other", ...]}).
-    fn fix(v: serde_json::Value, in_and: bool) -> serde_json::Value {
+    // A filter conjunction with `Filter::Other` ({"And": [..., "Other", ...]}) also excludes
+    // the target. Abilities the spell grants or gives to tokens keep their own "other"
+    // (other than their source).
+    fn fix(v: serde_json::Value, in_and: bool, changed: &mut bool) -> serde_json::Value {
         use serde_json::Value as J;
         match v {
-            J::String(s) if in_and && s == "Other" => {
-                serde_json::json!({"Not": {"In": {"Target": 0}}})
-            }
+            J::Object(m) if m.contains_key("uid") && m.contains_key("kind") => J::Object(m),
             J::Object(m) => J::Object(
                 m.into_iter()
                     .map(|(k, v)| {
                         let and = k == "And";
-                        (k, fix(v, and))
+                        (k, fix(v, and, changed))
                     })
                     .collect(),
             ),
-            J::Array(a) => J::Array(a.into_iter().map(|x| fix(x, in_and)).collect()),
+            // Kept alongside "other than this spell", which matters for a spell filter.
+            J::Array(a) if in_and && a.iter().any(|x| x == "Other") => {
+                *changed = true;
+                let mut a: Vec<_> = a.into_iter().map(|x| fix(x, false, changed)).collect();
+                a.push(serde_json::json!({"Not": {"In": {"Target": 0}}}));
+                J::Array(a)
+            }
+            J::Array(a) => J::Array(a.into_iter().map(|x| fix(x, false, changed)).collect()),
             other => other,
         }
     }
     let Ok(json) = serde_json::to_value(&body.effect) else {
         return body;
     };
-    if let Ok(e) = serde_json::from_value(fix(json, false)) {
-        body.effect = e;
+    let mut changed = false;
+    let json = fix(json, false, &mut changed);
+    if changed {
+        if let Ok(e) = serde_json::from_value(json) {
+            body.effect = e;
+        }
     }
     body
 }
