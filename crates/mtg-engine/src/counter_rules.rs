@@ -17,6 +17,12 @@ const SHIELD_DESTROY_UID: u64 = u64::MAX - 1;
 const SHIELD_DAMAGE_UID: u64 = u64::MAX - 2;
 const FINALITY_UID: u64 = u64::MAX - 3;
 
+/// Whether a replacement key is the prevention effect shield counters create (CR 122.1c),
+/// a single effect for all the damage that would be dealt to the permanent at once.
+pub fn is_shield_prevention(key: &ReplKey) -> bool {
+    matches!(key, ReplKey::Static(_, u) if *u == SHIELD_DAMAGE_UID)
+}
+
 /// Hone counters (CR 122.1j).
 pub const HONE: &str = "hone";
 
