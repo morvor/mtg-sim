@@ -336,7 +336,7 @@ fn your_zones_condition(c: &str) -> Option<Condition> {
         }
         return Some(Condition::Compare(Value::LifeTotal(PlayerRef::You), cmp, n));
     }
-    if c == "there are no cards in your library" {
+    if c == "there are no cards in your library" || c == "your library has no cards in it" {
         return Some(Condition::Compare(
             Value::LibrarySize(PlayerRef::You),
             Cmp::Eq,

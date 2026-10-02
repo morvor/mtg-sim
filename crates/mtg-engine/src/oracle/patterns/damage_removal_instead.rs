@@ -116,7 +116,13 @@ fn token_amount(x: &str, prev: &Effect) -> Option<Effect> {
 
 /// Whether an effect refers to the objects the previous instruction produced (`vars::IT`).
 fn mentions_it(e: &Effect) -> bool {
-    serde_json::to_string(e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::IT)))
+    // Also the cards an earlier instruction dug ("put any number of creature cards from
+    // among them onto the battlefield instead", `dig_grammar`).
+    serde_json::to_string(e).is_ok_and(|s| {
+        [vars::IT, vars::DUG, vars::DUG_CHOSEN, vars::DUG_FOUND]
+            .iter()
+            .any(|v| s.contains(&format!("{{\"Var\":{v}}}")))
+    })
 }
 
 /// The target slots an effect refers to (`Sel::Target(i)`, also inside other selectors

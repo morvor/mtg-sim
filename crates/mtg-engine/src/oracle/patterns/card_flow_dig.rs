@@ -83,6 +83,8 @@ fn look_at_top(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         _ => return None,
     };
+    // "If it's a Forest card, remove that creature from combat." (Lost in the Woods).
+    super::dig_grammar::keep_that_creature(b);
     b.it = Sel::Var(vars::IT);
     Some(Effect::Dig {
         who,

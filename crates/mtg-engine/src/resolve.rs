@@ -267,6 +267,14 @@ impl Game {
                 // "Exile a creature card from your graveyard. If you do, ...": whether
                 // anything was exiled (as for moving it, CR 608.2c).
                 ctx.prev_happened = !res.is_empty();
+                // "Exile the top N cards of your library. ... from among them"
+                // (`dig_steps.rs`).
+                if matches!(what, Sel::TopOfLibrary(..)) {
+                    crate::dig_steps::set_dug(
+                        ctx,
+                        res.iter().map(|o| Entity::Object(*o)).collect(),
+                    );
+                }
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
             Effect::Sacrifice { who, filter, count } => {
@@ -1394,6 +1402,8 @@ impl Game {
                     all.extend(self.mill(p, k));
                 }
                 ctx.prev_value = all.len() as i64;
+                // "From among them", "the milled cards" (`dig_steps.rs`).
+                crate::dig_steps::set_dug(ctx, all.iter().map(|o| Entity::Object(*o)).collect());
                 ctx.set_var(vars::IT, all.into_iter().map(Entity::Object).collect());
             }
             Effect::GainLife { who, n } => {
@@ -1624,6 +1634,7 @@ impl Game {
                     ctx,
                 );
             }
+            Effect::DigStep(step) => crate::dig_steps::resolve(self, step, ctx),
             // CR 701.20a: the cards are revealed while the rest of the effect needs them.
             Effect::RevealHand { who } => {
                 let mut revealed = Vec::new();
@@ -1661,16 +1672,19 @@ impl Game {
                     // exile a nonland card.": the cards found, and the others, of all of
                     // them. With no player (an illegal target player isn't affected, CR
                     // 608.2b; no opponent left), nothing happens.
-                    let (mut found, mut rest) = (Vec::new(), Vec::new());
+                    let (mut found, mut rest, mut dug) = (Vec::new(), Vec::new(), Vec::new());
                     for p in players {
                         ctx.set_var(vars::IT, vec![]);
                         ctx.set_var(vars::REVEALED, vec![]);
                         crate::library::reveal_until(self, p, filter, found_to, rest_to, ctx);
                         found.extend(ctx.vars.get(&vars::IT).cloned().unwrap_or_default());
                         rest.extend(ctx.vars.get(&vars::REVEALED).cloned().unwrap_or_default());
+                        dug.extend(ctx.vars.get(&vars::DUG).cloned().unwrap_or_default());
                     }
+                    ctx.set_var(vars::DUG_FOUND, found.clone());
                     ctx.set_var(vars::IT, found);
                     ctx.set_var(vars::REVEALED, rest);
+                    crate::dig_steps::set_dug(ctx, dug);
                 }
             }
             Effect::ExtraTurn { who } => {

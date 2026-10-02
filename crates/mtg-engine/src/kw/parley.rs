@@ -36,6 +36,8 @@ fn reveal_tops(g: &mut Game, ctx: &mut Ctx) {
         crate::reveal::reveal_in(g, p, &[top], Some(ctx));
         revealed.push(Entity::Object(top));
     }
+    // "You may put the revealed cards into their owners' graveyards." (`dig_grammar`).
+    crate::dig_steps::set_dug(ctx, revealed.clone());
     ctx.set_var(REVEALED, revealed);
 }
 
