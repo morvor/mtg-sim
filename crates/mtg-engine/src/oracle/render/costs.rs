@@ -30,11 +30,21 @@ impl Renderer<'_> {
                 parts.push("{Q}".into());
             }
         }
+        // "Remove three quest counters from ~ and sacrifice it": a later cost names the
+        // object again as "it".
+        let mut named_self = false;
         for p in &c.parts {
             match p {
                 CostPart::Tap | CostPart::Untap | CostPart::Loyalty(_) => {}
                 other => {
-                    let s = self.cost_part(other);
+                    let mut s = self.cost_part(other);
+                    if named_self {
+                        s = s.replace(" ~ ", " ~it ");
+                        if let Some(x) = s.strip_suffix(" ~") {
+                            s = format!("{x} ~it");
+                        }
+                    }
+                    named_self |= s.contains('~');
                     parts.push(capitalize(&s));
                 }
             }
@@ -132,8 +142,20 @@ impl Renderer<'_> {
                     None => "counter".into(),
                 };
                 let (c, w) = self.counted(count, &noun);
+                let w = w.unwrap_or_default();
+                // "Remove two counters from ~" (counters of any kinds).
+                if matches!(filter, Filter::Source) {
+                    let m = self.me();
+                    return format!("remove {c} from {m}{w}");
+                }
+                // "Remove a counter from a creature you control": one counter comes from
+                // one of them.
+                if matches!(count, Value::Const(1)) {
+                    let f = self.noun_det(filter, nouns::Det::A);
+                    return format!("remove {c} from {f}{w}");
+                }
                 let f = self.noun(filter, Num::Many);
-                format!("remove {c} from among {f}{}", w.unwrap_or_default())
+                format!("remove {c} from among {f}{w}")
             }
             CostPart::AddCounters { kind, count } => {
                 let (c, w) = self.counted(count, &counter_name(kind));
@@ -247,13 +269,44 @@ impl Renderer<'_> {
             match p {
                 CostPart::Tap => parts.push("tap ~".into()),
                 CostPart::Untap => parts.push("untap ~".into()),
+                // "have ~ deal 4 damage to [the player who pays]".
+                CostPart::Effect(e) => match &**e {
+                    Effect::DealDamage {
+                        source: Sel::This,
+                        amount,
+                        to: Sel::Players(PlayerRef::You),
+                    } => {
+                        let s = match amount {
+                            Value::Const(n) => format!("have ~ deal {n} damage to you"),
+                            v => {
+                                let v = self.value(v);
+                                format!("have ~ deal damage to you equal to {v}")
+                            }
+                        };
+                        parts.push(s);
+                    }
+                    _ => {
+                        let s = self.cost_part(p);
+                        parts.push(s);
+                    }
+                },
                 other => {
                     let s = self.cost_part(other);
-                    parts.push(s);
+                    // "pay {1} for each card revealed this way".
+                    if matches!(other, CostPart::Repeated { .. }) && s.starts_with('{') {
+                        parts.push(format!("pay {s}"));
+                    } else {
+                        parts.push(s);
+                    }
                 }
             }
         }
         // "pay {2} and 2 life".
+        if parts.len() > 1 && parts.iter().all(|x| x.starts_with("pay ")) {
+            for x in parts.iter_mut().skip(1) {
+                *x = x["pay ".len()..].to_string();
+            }
+        }
         join_list(&parts, "and")
     }
 
@@ -323,6 +376,10 @@ impl Renderer<'_> {
             None => {}
         }
         let mut s = format!("{cost}: {body}");
+        for oc in &a.own_cost_changes {
+            let c = self.own_cost_change(oc);
+            s = join_words(&[s, c]);
+        }
         if !restr.is_empty() {
             let r: Vec<String> = restr
                 .iter()
@@ -348,6 +405,26 @@ impl Renderer<'_> {
             (true, false) => s.push_str(" This ability can't be copied."),
             (false, true) => s.push_str(" X can't be 0."),
             (false, false) => {}
+        }
+        // "Spend only black mana on X." (see `payment_rules`): after each mode of a modal
+        // ability, as the card says it.
+        for r in crate::payment_rules::ability_rules(a) {
+            let t = format!(" {}.", capitalize(&super::statics::cost_rule_text(&r)));
+            if a.body.modal.is_some() && s.contains("\n•") {
+                s = s
+                    .lines()
+                    .map(|l| {
+                        if l.trim_start().starts_with('•') {
+                            format!("{l}{t}")
+                        } else {
+                            l.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+            } else {
+                s.push_str(&t);
+            }
         }
         self.zone = saved;
         let _ = third_person;

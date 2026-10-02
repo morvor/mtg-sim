@@ -35,6 +35,7 @@ fn spend_for(g: &Game, spell: ObjectId) -> SpendContext {
         check_only: false,
         class_level: false,
         cost_of: Some(crate::rule_statics::payment::CostOf::Spell),
+        ..Default::default()
     }
 }
 

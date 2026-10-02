@@ -99,6 +99,12 @@ impl Renderer<'_> {
                 let e = self.static_effect(&s.effect);
                 format!("during your turn, {}", lower_first(&e))
             }
+            // "Once during each of your turns, you may cast a Zombie creature spell from
+            // your graveyard" (`once_each_turn.rs`).
+            Some(Condition::And(v)) if self.once_each_turn_permission(v, &s.effect).is_some() => {
+                self.once_each_turn_permission(v, &s.effect)
+                    .unwrap_or_default()
+            }
             Some(Condition::NotYourTurn) => {
                 let e = self.static_effect(&s.effect);
                 format!("during turns other than yours, {}", lower_first(&e))
@@ -617,6 +623,13 @@ impl Renderer<'_> {
                     s
                 }
             }
+            PlayerModification::PayLifeForMana { color, life } => {
+                let sym = mana_symbol(crate::mana::ManaType::from_color(*color));
+                format!(
+                    "for each {sym} in a cost, {subj} may pay {} life rather than pay that mana",
+                    number_word(*life as i32)
+                )
+            }
             PlayerModification::Custom(name) => self.custom_player_mod(name, &subj, &poss),
         }
     }
@@ -626,14 +639,20 @@ impl Renderer<'_> {
             return self.me();
         }
         // "Red spells and white spells you cast cost {1} less".
-        let saved = self.alt_and;
-        self.alt_and = true;
+        let saved = (self.alt_and, self.plural_alts);
+        (self.alt_and, self.plural_alts) = (true, true);
         let n = self.noun(f, Num::Many);
-        self.alt_and = saved;
+        (self.alt_and, self.plural_alts) = saved;
         if n.contains("spell") {
             n
         } else if n == "permanents" || n == "cards" {
             "spells".into()
+        } else if let Some(r) = n
+            .strip_prefix("permanents ")
+            .filter(|_| !format!("{f:?}").contains("Permanent"))
+        {
+            // "spells from anywhere other than your hand" (no type named).
+            format!("spells {r}")
         } else {
             format!("{} spells", n.trim_end_matches('s'))
         }
@@ -831,6 +850,7 @@ impl Renderer<'_> {
                 let t = target.clone();
                 format!("you can spend mana of any type to cast {t}")
             }
+            CostChange::Rule(r) => cost_rule_text(r),
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
             CostChange::ReduceColored(c, v) => {
                 let sym = mana_symbol(crate::mana::ManaType::from_color(*c));
@@ -925,6 +945,43 @@ impl Renderer<'_> {
                 )
             }
         }
+    }
+
+    /// "This ability costs {1} less to activate for each legendary creature you control",
+    /// "... during your turn", "... if you control an artifact" (an activated ability's own
+    /// cost change, CR 601.2f).
+    pub(crate) fn own_cost_change(&mut self, oc: &OwnCostChange) -> String {
+        let (dir, amt, tail) = match &oc.change {
+            CostChange::IncreaseGeneric(v) => {
+                let (a, t) = self.cost_amount(v);
+                ("more", a, t)
+            }
+            CostChange::ReduceGeneric(v) => {
+                let (a, t) = self.cost_amount(v);
+                ("less", a, t)
+            }
+            CostChange::IncreaseMana(m) => ("more", m.to_string(), String::new()),
+            CostChange::ReduceMana { mana, .. } => ("less", mana.to_string(), String::new()),
+            CostChange::ReduceColored(c, v) => {
+                let sym = mana_symbol(crate::mana::ManaType::from_color(*c));
+                match v {
+                    Value::Const(n) if *n > 0 => ("less", sym.repeat(*n as usize), String::new()),
+                    other => {
+                        let v = self.value(other);
+                        ("less", sym.to_string(), format!(" for each {v}"))
+                    }
+                }
+            }
+            other => {
+                return self.gap(format!("own cost change {other:?}"));
+            }
+        };
+        let cond = match &oc.condition {
+            None => String::new(),
+            Some(Condition::YourTurn) => " during your turn".into(),
+            Some(c) => format!(" if {}", self.condition(c)),
+        };
+        format!("This ability costs {amt} {dir} to activate{tail}{cond}.")
     }
 
     /// An alternative cost offered for the spells `t` describes (CR 118.9): "You may cast
@@ -1225,7 +1282,7 @@ impl Renderer<'_> {
             Restriction::MustBlockAttacker { blocker, attacker } => {
                 let b = subj(self, blocker);
                 let a = self.noun_det(attacker, Det::A);
-                format!("{b} blocks {a} this combat if able")
+                format!("{b} blocks {a} each combat if able")
             }
             Restriction::AttackCost {
                 attackers,
@@ -1725,10 +1782,40 @@ impl Renderer<'_> {
             ) => self.damage_replacement(source, to_players, to_objects, false, true, action),
             // --- Players.
             (E::Draw(p), action) => {
-                let w = self.player_filter_subject(p);
-                let w = if w == "players" { "a player".into() } else { w };
+                // "If you would draw a card except the first one you draw in each of your
+                // draw steps".
+                let (p, except) = match p {
+                    PlayerFilter::And(v)
+                        if v.iter().any(|x| matches!(x, PlayerFilter::Not(f) if matches!(f.as_ref(), PlayerFilter::FirstDrawInDrawStep))) =>
+                    {
+                        let rest: Vec<PlayerFilter> = v
+                            .iter()
+                            .filter(|x| !matches!(x, PlayerFilter::Not(f) if matches!(f.as_ref(), PlayerFilter::FirstDrawInDrawStep)))
+                            .cloned()
+                            .collect();
+                        let rest = match rest.as_slice() {
+                            [one] => one.clone(),
+                            _ => PlayerFilter::And(rest),
+                        };
+                        (rest, true)
+                    }
+                    other => (other.clone(), false),
+                };
+                let w = self.player_filter_subject(&p);
+                let w = match w.as_str() {
+                    "players" => "a player".into(),
+                    "your opponents" if except => "an opponent".into(),
+                    _ => w,
+                };
                 let then = self.replacement_then(action, "");
-                format!("if {w} would draw a card, {then}")
+                let except = if !except {
+                    String::new()
+                } else if w == "you" {
+                    " except the first one you draw in each of your draw steps".into()
+                } else {
+                    " except the first one they draw in each of their draw steps".into()
+                };
+                format!("if {w} would draw a card{except}, {then}")
             }
             (E::DrawCards { who, min }, action) => {
                 let w = self.player_filter_subject(who);
@@ -1945,6 +2032,25 @@ impl Renderer<'_> {
                 let then = self.replacement_then(action, "");
                 format!("if {w} would search a library, {then}")
             }
+            // "If an effect would put one or more counters on a permanent you control, it
+            // puts twice that many of those counters on that permanent instead."
+            (
+                E::PutCountersMatching {
+                    on_objects,
+                    on_players,
+                    kind,
+                    by,
+                    effect_only,
+                },
+                action @ (A::Multiply(_) | A::Add(_)),
+            ) => self.counters_matching_replacement(
+                on_objects.as_ref(),
+                on_players.as_ref(),
+                kind.as_ref(),
+                *by,
+                *effect_only,
+                action,
+            ),
             (event, action) => self.gap(format!(
                 "replacement {:?} / {:?}",
                 std::mem::discriminant(event),
@@ -1991,6 +2097,19 @@ impl Renderer<'_> {
                 let t = self.as_enters_vp(otherwise);
                 let c = self.condition(cond);
                 format!("{subj} {t} unless {c}")
+            }
+            Effect::If {
+                cond,
+                then,
+                otherwise,
+            } if matches!(otherwise.as_ref(), Effect::Noop)
+                && !matches!(cond, Condition::Not(_))
+                && !mentions_entry_modification(then) =>
+            {
+                // "If it's neither day nor night, it becomes day as ~ enters."
+                let c = self.condition(cond);
+                let s = self.effect(then);
+                format!("if {c}, {s} as {subj} enters")
             }
             Effect::If {
                 cond,
@@ -2346,4 +2465,37 @@ impl Renderer<'_> {
         let _ = join_words;
         let _ = third_person;
     }
+}
+
+/// The sentence of a rule a spell or ability states about its own cost (see
+/// `payment_rules.rs`).
+pub(crate) fn cost_rule_text(r: &CostRule) -> String {
+    match r {
+        CostRule::XAtLeast(1) => "X can't be 0".into(),
+        CostRule::XAtLeast(n) => format!("X can't be less than {n}"),
+        CostRule::XOnlyColors { colors, distinct } => {
+            let words: Vec<&str> = Color::ALL
+                .iter()
+                .filter(|c| colors.contains(**c))
+                .map(|c| c.word())
+                .collect();
+            let mut s = if *colors == ColorSet::ALL {
+                "spend only colored mana on X".to_string()
+            } else {
+                format!("spend only {} mana on X", words.join(" and/or "))
+            };
+            if *distinct {
+                s.push_str(". No more than one mana of each color may be spent this way");
+            }
+            s
+        }
+        CostRule::NoMana => "you can't spend mana to cast ~".into(),
+    }
+}
+
+/// Whether `e` modifies how the object enters anywhere ("enters tapped", "enters with ...
+/// counters"), or is a choice of how it enters.
+fn mentions_entry_modification(e: &Effect) -> bool {
+    let d = format!("{e:?}");
+    d.contains("Enter") || d.contains("Choose") || d.contains("Custom")
 }

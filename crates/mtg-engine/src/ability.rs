@@ -2759,6 +2759,28 @@ pub enum CostChange {
     /// "You can spend mana of any type to cast creature spells." (CR 609.4b, 118.14): the
     /// cost doesn't change, but each of its mana symbols can be paid with mana of any type.
     SpendAnyType,
+    /// A rule the text of a spell or activated ability makes about announcing or paying
+    /// its own cost ("X can't be 0.", "Spend only black mana on X.", "You can't spend mana
+    /// to cast this spell."): the cost doesn't change (see `payment_rules.rs`).
+    Rule(CostRule),
+}
+
+/// A rule about announcing or paying the cost of the spell or activated ability whose text
+/// states it (see `payment_rules.rs`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CostRule {
+    /// "X can't be 0." (CR 107.3a): the least value that may be announced for X.
+    XAtLeast(u32),
+    /// "Spend only black mana on X.", "Spend only black and/or red mana on X.", "Spend
+    /// only colored mana on X.": only mana of these colors may pay the part of the cost
+    /// that X represents (CR 107.3a, 601.2h). It's still generic mana (cost reductions
+    /// may reduce it, and life can't pay it). `distinct`: "No more than one mana of each
+    /// color may be spent this way."
+    XOnlyColors { colors: ColorSet, distinct: bool },
+    /// "You can't spend mana to cast this spell." (Hogaak, Arisen Necropolis): no mana may
+    /// pay its total cost, so only other ways of paying it can (CR 601.2h): convoke, delve,
+    /// and life where an effect lets a mana symbol be paid with life (CR 118.3).
+    NoMana,
 }
 
 /// Static abilities (CR 604) and what they do.
@@ -2917,6 +2939,14 @@ pub enum PlayerModification {
     /// abilities of Jace planeswalkers you control on any player's turn any time you could
     /// cast an instant."). Collected with the static permissions (`collect_statics`).
     ActivationPermission(ActivationPermission),
+    /// "For each {B} in a cost, you may pay 2 life rather than pay that mana." (K'rrik,
+    /// Son of Yawgmoth): each mana symbol of that color in a cost the player pays may be
+    /// paid with `life` life instead (CR 118.3b, 119.4). It changes only how costs are paid,
+    /// not the costs (see `payment_rules.rs`).
+    PayLifeForMana {
+        color: Color,
+        life: u32,
+    },
     /// "Spells you cast have ..." etc. are handled elsewhere.
     /// Skip draw step etc. handled via replacements.
     /// "You can't be attacked", etc.
@@ -3898,11 +3928,15 @@ pub enum Effect {
     },
     /// "Add [mana]. When that mana is spent to cast [a spell], [effect]." (CR 106.6): the
     /// inner `AddMana` adds mana carrying a delayed triggered ability that triggers when
-    /// that mana is spent (one per mana produced, CR 106.6a).
+    /// that mana is spent (one per mana produced, CR 106.6a). `abilities`: "... to cast a
+    /// spell or activate an ability" (Sunken Palace): it also triggers when the mana is
+    /// spent to activate an ability, which is then "that ability".
     AddManaWithSpentTrigger {
         add: Box<Effect>,
         spell_filter: Filter,
         body: Box<Body>,
+        #[serde(default)]
+        abilities: bool,
     },
     /// "[Add mana]. Until end of turn, you don't lose this mana as steps and phases end."
     /// (CR 500.4): the mana the inner effect adds stays in its pool until the turn's cleanup

@@ -151,7 +151,14 @@ impl KeywordRules for MorphFaceUp {
         let mut chosen_x = None;
         if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
             let max = g.max_mana_available(p) as i64;
-            let x = match g.ask(p, Decision::ChooseX { source: obj, max }) {
+            let x = match g.ask(
+                p,
+                Decision::ChooseX {
+                    source: obj,
+                    min: 0,
+                    max,
+                },
+            ) {
                 Answer::Number(n) if (0..=max).contains(&n) => n,
                 _ => 0,
             };
