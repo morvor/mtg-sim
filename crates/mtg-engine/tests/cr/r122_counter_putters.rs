@@ -48,7 +48,7 @@ fn puts_on(t: &TestGame, on: ObjectId, kind: &str) -> Vec<(Option<PlayerId>, Cou
 
 #[test]
 fn counters_put_as_a_cost_arent_put_by_an_effect() {
-    cr!("118.3", "122.6", "602.2b", "609.1");
+    cr!("122.6", "602.2b", "609.1");
     supported("Devoted Druid");
     supported("Vizier of Remedies");
     // Devoted Druid: "Put a -1/-1 counter on this creature: Untap this creature." Doubling
@@ -146,7 +146,7 @@ fn the_controller_of_a_wither_source_puts_the_counters() {
 
 #[test]
 fn whenever_an_opponent_puts_counters_names_the_putter() {
-    cr!("122.6", "122.6a");
+    cr!("122.6");
     // "Whenever an opponent puts one or more counters on a creature, you gain that much
     // life."
     let watcher = oracle_card(

@@ -129,7 +129,7 @@ fn a_regenerated_permanent_isnt_destroyed() {
 
 #[test]
 fn a_countered_spell_records_what_countered_it() {
-    cr!("701.6a", "608.2b");
+    cr!("701.6a");
     // "Whenever a spell or ability you control counters a spell, you gain 3 life."
     let watcher = oracle_card(
         "Counter Keeper",

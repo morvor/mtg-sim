@@ -273,7 +273,7 @@ fn selesnya_loft_gardens_doubles_effects_not_costs_or_damage() {
 
 #[test]
 fn all_will_be_one_triggers_for_effects_entering_counters_and_damage() {
-    cr!("120.3b", "120.3d", "122.6", "702.90b", "702.90c", "702.164c");
+    cr!("120.3b", "120.3d", "122.6", "702.80a", "702.90b");
     ruling!(
         "All Will Be One",
         "All Will Be One's ability will trigger any time you put one or more counters on a permanent or player. This might be due to a spell or ability resolving, a permanent you control entering the battlefield with counters, or combat damage from a source with toxic, infect, or wither."
@@ -829,7 +829,7 @@ fn fairgrounds_trumpeter_counts_permanents_you_controlled_as_the_counter_was_pla
 
 #[test]
 fn fairgrounds_trumpeter_doesnt_see_counters_put_during_the_end_step() {
-    cr!("603.4", "513.1a");
+    cr!("603.4");
     ruling!(
         "Fairgrounds Trumpeter",
         "If a +1/+1 counter hasn't been placed yet at the moment an end step begins, Fairgrounds Trumpeter's ability doesn't trigger at all. If another ability triggers during the end step and puts a +1/+1 counter on a permanent you control, you won't put an additional +1/+1 counter on Fairgrounds Trumpeter."
@@ -855,7 +855,7 @@ fn fairgrounds_trumpeter_doesnt_see_counters_put_during_the_end_step() {
 
 #[test]
 fn lord_jyscal_guado_and_lasting_tarfire_check_as_the_end_step_begins() {
-    cr!("603.4", "513.1a");
+    cr!("603.4");
     ruling!(
         "Lord Jyscal Guado",
         "Lord Jyscal Guado's last ability checks at the moment it would trigger to see if you put a counter on a creature this turn. If you didn't, the ability won't trigger at all. Once your end step begins, it's too late to put a counter on a creature in order to cause this ability to trigger."
@@ -946,7 +946,7 @@ fn putting_counters_on_several_creatures_at_once_triggers_for_each() {
 
 #[test]
 fn wakka_checks_as_the_end_step_begins_whoever_put_the_counter() {
-    cr!("603.4", "513.1a");
+    cr!("603.4");
     ruling!(
         "Wakka, Devoted Guardian",
         "Wakka's last ability checks at the moment it would trigger to see if a counter was put on Wakka this turn. If none were, the ability won't trigger at all. Once your end step begins, it's too late to put a counter on Wakka in order to cause this ability to trigger."
