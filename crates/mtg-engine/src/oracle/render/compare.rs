@@ -28,6 +28,13 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"\bcycles? or discards? (a|another|one or more|two or more) ",
+        replacement: "discard $1 ",
+        why: "Cycling a card discards it (CR 702.29a); an ability that triggers when a player \
+              \"cycles or discards\" a card triggers once when a card is cycled (CR 702.29d), \
+              as one that triggers on discarding does.",
+    },
+    Equivalence {
         pattern: r"\bif (?:it|that spell) is countered this way, exile it instead of putting it into its owner's graveyard",
         replacement: "if it would be put into a graveyard from the stack, exile it instead",
         why: "A spell countered by the instruction goes to its owner's graveyard from the \
@@ -234,13 +241,6 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "{1} $1 to $2 for each $3",
         why: "A cost reduced or increased by {X}, where X is a number of objects, changes by \
               {1} for each of them.",
-    },
-    Equivalence {
-        pattern: r"\bcycles? or discards? (a|another|one or more|two or more) ",
-        replacement: "discard $1 ",
-        why: "Cycling a card discards it (CR 702.29a); an ability that triggers when a player \
-              \"cycles or discards\" a card triggers once when a card is cycled (CR 702.29d), \
-              as one that triggers on discarding does.",
     },
     Equivalence {
         pattern: r"\bthe number of (white|blue|black|red|green) mana symbols in the mana costs of permanents you control\b",

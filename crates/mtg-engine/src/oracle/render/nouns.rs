@@ -214,7 +214,8 @@ impl Renderer<'_> {
                             _ => String::new(),
                         })
                         .collect();
-                    np.colors.push(join_list(&cs, "or"));
+                    // "white or blue creature" / "white and/or blue creature".
+                    np.colors.push(join_list(&cs, "{alt:or|and/or}"));
                 } else if v.iter().all(Self::is_type_like) {
                     // A kind all the alternatives share is said once: "Merfolk and Druid
                     // cards", "instant or sorcery card".
@@ -757,7 +758,7 @@ impl Renderer<'_> {
                 let p = self.target_player_mention(i);
                 possessive(&p)
             }
-            PlayerRel::TriggerPlayer | PlayerRel::Iterated => "that player's".into(),
+            PlayerRel::TriggerPlayer | PlayerRel::Iterated => "{alt:that player's|their}".into(),
             PlayerRel::Defending => "defending player's".into(),
             PlayerRel::Active => "the active player's".into(),
             PlayerRel::Teammate => "a teammate's".into(),

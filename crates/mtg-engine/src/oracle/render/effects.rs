@@ -1898,6 +1898,14 @@ impl Renderer<'_> {
             };
             return format!("shuffle {w} into {p}");
         }
+        // Several cards put on top of or under a library go in the order their owner
+        // chooses (CR 401.4): cards say "in any order" or leave it out.
+        if plural
+            && to.zone == ZoneKind::Library
+            && matches!(to.position, LibraryPosition::Top | LibraryPosition::Bottom)
+        {
+            return format!("{verb} {w} {d} {{opt:in any order}}");
+        }
         format!("{verb} {w} {d}")
     }
 
@@ -2003,6 +2011,8 @@ impl Renderer<'_> {
         };
         let det = match count {
             Value::Const(1) => Det::A,
+            // An unbounded count: "any number of Dragon creature cards".
+            Value::Const(n) if *n >= 99 => Det::Count("any number of".into()),
             Value::Const(n) => Det::UpTo(number_word(*n)),
             other => {
                 let v = self.value(other);
@@ -2604,6 +2614,22 @@ impl Renderer<'_> {
                         .any(|c| *k == format!("protection from {c}"))
                 });
                 keywords.push("protection from each color".into());
+            }
+            // "protection from green and from blue" (CR 702.16a: one quality each).
+            let prot: Vec<String> = keywords
+                .iter()
+                .filter_map(|k| k.strip_prefix("protection from ").map(str::to_string))
+                .collect();
+            if prot.len() >= 2 {
+                if let Some(first) = keywords
+                    .iter()
+                    .position(|k| k.starts_with("protection from "))
+                {
+                    keywords.retain(|k| !k.starts_with("protection from "));
+                    let froms: Vec<String> = prot.iter().map(|q| format!("from {q}")).collect();
+                    let merged = format!("protection {}", join_list(&froms, "and"));
+                    keywords.insert(first.min(keywords.len()), merged);
+                }
             }
             let mut grants = keywords.clone();
             grants.extend(abilities.iter().cloned());
