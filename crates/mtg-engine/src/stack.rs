@@ -141,6 +141,11 @@ impl Game {
                 .filter(|i| self.targets_possible(&modal.modes[*i].targets, ctx, id))
                 .filter(|i| crate::modal_history::may_choose(self, id, &modal.chooser, *i))
                 .collect();
+            // No mode can be chosen: nobody is asked; the spell can't be cast and a
+            // triggered ability is removed from the stack (CR 700.2a, 700.2b).
+            if available.is_empty() && min > 0 {
+                return false;
+            }
             let picks: Vec<usize> = if modal.chooser == ModeChooser::Random {
                 // A mode that can't be chosen (no legal targets) can't be chosen at random.
                 if available.is_empty() {
