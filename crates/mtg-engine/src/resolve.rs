@@ -1061,11 +1061,15 @@ impl Game {
             }
             Effect::Attach { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
+                // "Attach ~ to a creature you control. If you do, ...": whether anything
+                // became attached.
+                let mut any = false;
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
                     for o in objs {
-                        self.attach(o, t);
+                        any |= self.attach(o, t);
                     }
                 }
+                ctx.prev_happened = any;
             }
             Effect::AttachAsCreature { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
@@ -2010,11 +2014,19 @@ impl Game {
                 let min = if *up_to { 0 } else { n.min(cands.len() as u32) };
                 // CR 406.4: face-down exiled cards the player can't look at are chosen by
                 // pile.
+                let all: Vec<Entity> = cands.iter().map(|o| Entity::Object(*o)).collect();
                 let picked: Vec<Entity> =
                     crate::zones::choose_objects(self, p, ctx.source, "Choose", cands, min, n)
                         .into_iter()
                         .map(Entity::Object)
                         .collect();
+                // Objects chosen together must meet the group requirements ("any number
+                // of cards with different names"; see `relational.rs`).
+                let picked = if crate::relational::groups_of(filter).is_empty() {
+                    picked
+                } else {
+                    crate::relational::fit_selection(self, filter, picked, &all, min as usize, ctx)
+                };
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }

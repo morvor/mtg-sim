@@ -17,6 +17,8 @@ use crate::types::CardType;
 fn graveyard_owner(s: &str, b: &Builder) -> Option<PlayerRel> {
     match s {
         "your graveyard" => Some(PlayerRel::You),
+        // Any player's (Spectral Arcanist).
+        "a graveyard" => Some(PlayerRel::Any),
         "that player's graveyard" => match &b.it_player {
             PlayerRef::Target(n) => Some(PlayerRel::Target(*n)),
             PlayerRef::TriggerPlayer => Some(PlayerRel::TriggerPlayer),
@@ -33,6 +35,13 @@ fn cast_from_graveyard_free(l: &str, b: &mut Builder) -> Option<Effect> {
         .strip_suffix(" without paying its mana cost")?;
     let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
     let (desc, zone) = r.rsplit_once(" from ")?;
+    // "... from your graveyard with mana value less than or equal to that spell's mana
+    // value" (Counterpoint): the qualifier after the zone.
+    let (desc, zone) = match zone.split_once(" with ") {
+        Some((z, q)) => (format!("{desc} with {q}"), z),
+        None => (desc.to_string(), zone),
+    };
+    let desc = desc.as_str();
     let owner = graveyard_owner(zone, b)?;
     // "[quality] spell [with ...]": the card it's cast from has that quality.
     let (before, after) = desc.split_once("spell")?;

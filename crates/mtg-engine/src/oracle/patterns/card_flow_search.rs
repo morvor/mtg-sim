@@ -128,7 +128,14 @@ pub(crate) fn card_filter(s: &str, b: &Builder) -> Option<Filter> {
             if a_card {
                 let fa = card_filter(a, b)?;
                 let fc = card_filter(c, b)?;
-                return Some(Filter::Or(vec![fa, fc]));
+                // "basic land cards and/or Town cards with different names": a requirement
+                // on the cards found together is about all of them (`relational.rs`).
+                let (fa, mut groups) = crate::relational::split_groups(fa);
+                let (fc, gc) = crate::relational::split_groups(fc);
+                groups.extend(gc);
+                let mut parts = vec![Filter::Or(vec![fa, fc])];
+                parts.extend(groups.into_iter().map(Filter::Together));
+                return Some(Filter::and(parts));
             }
         }
     }
@@ -142,6 +149,18 @@ pub(crate) fn card_filter(s: &str, b: &Builder) -> Option<Filter> {
             };
             return Some(Filter::and(vec![Filter::Card, Filter::Named(name.into())]));
         }
+    }
+    // "a card named Prince of Thralls": a name printed in the text.
+    if let Some(n) = s.strip_prefix("card named ") {
+        let name = super::cost_parts::printed_name(&n.to_lowercase())?;
+        // One name, not a list ("a card named Alpine Watchdog and/or a card named ...").
+        if [",", " and ", " or ", "and/or", " named "]
+            .iter()
+            .any(|w| name.contains(w))
+        {
+            return None;
+        }
+        return Some(Filter::and(vec![Filter::Card, Filter::Named(name)]));
     }
     let (f, _, rest) = parse_object_phrase(s)?;
     if !rest.trim().is_empty() {

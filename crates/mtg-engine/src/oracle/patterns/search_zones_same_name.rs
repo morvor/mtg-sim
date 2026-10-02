@@ -16,7 +16,7 @@
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
-use crate::kw::search_same_name::{parse_search, search_effect};
+use crate::kw::search_same_name::{parse_search, search_any_effect, search_effect};
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::end;
 
@@ -25,9 +25,24 @@ const FOUND: Var = vars::USER + 2311;
 
 fn search_same_name(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("search ")?;
-    let r = r.strip_prefix("its controller's ")?;
-    let r =
-        r.strip_prefix("graveyard, hand, and library for all cards with the same name as that ")?;
+    // "its owner's graveyard, ...": a target card in a graveyard, whose owner is the
+    // player whose zones are searched (a card outside the battlefield and the stack is
+    // controlled by no one, and is looked at through its owner, CR 108.4a).
+    let in_graveyard = b.targets.last().is_some_and(|t| {
+        matches!(&t.what, TargetKind::Object(f) if f.zone() == Some(ZoneKind::Graveyard))
+    });
+    let r = r.strip_prefix("its controller's ").or_else(|| {
+        in_graveyard
+            .then(|| r.strip_prefix("its owner's "))
+            .flatten()
+    })?;
+    let r = r.strip_prefix("graveyard, hand, and library for ")?;
+    // "any number of cards": the searcher may leave some in the graveyard too.
+    let (any, r) = if let Some(x) = r.strip_prefix("all cards with the same name as that ") {
+        (false, x)
+    } else {
+        (true, r.strip_prefix("any number of cards with the same name as that ")?)
+    };
     let noun = r.strip_suffix(" and exile them")?;
     if noun.contains(' ') || noun.is_empty() {
         return None;
@@ -40,7 +55,11 @@ fn search_same_name(l: &str, b: &mut Builder) -> Option<Effect> {
     // The cards are in the zones of the target's controller (as it last existed).
     b.it_player = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
     Some(Effect::seq(vec![
-        search_effect(slot, FOUND),
+        if any {
+            search_any_effect(slot, FOUND)
+        } else {
+            search_effect(slot, FOUND)
+        },
         Effect::Exile {
             what: Sel::Var(FOUND),
             face_down: false,
