@@ -294,6 +294,18 @@ fn chromium_becoming_unblockable_after_blocks_stays_blocked() {
         t.g.combat.as_ref().unwrap().blockers_of(chromium),
         vec![angel]
     );
+    // Activated before blockers are declared, "it can't be blocked this turn" applies.
+    let mut t = TestGame::new(2);
+    let chromium = t.battlefield(P0, "Chromium, the Mutable");
+    let angel = t.battlefield(P1, "Serra Angel");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    chromium_shift(&mut t, chromium);
+    to_blockers(
+        &mut t,
+        &[(chromium, Entity::Player(P1))],
+        &[(angel, chromium)],
+    );
+    assert!(!t.g.combat.as_ref().unwrap().is_blocked(chromium));
 }
 
 // ---------------------------------------------------------------------------------------

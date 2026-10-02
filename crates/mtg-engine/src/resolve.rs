@@ -35,7 +35,10 @@ impl Game {
             Effect::Seq(v) => {
                 // "Create a [token] and a [token]" is one instruction that the compiler
                 // splits into one creation per kind: the tokens enter at the same time, as
-                // one batch of events (CR 603.2c, 608.2c).
+                // one batch of events (CR 603.2c, 608.2c). The compiler gives separate
+                // creation sentences ("Create A. Then create B.") the same shape, but no
+                // card prints creation sentences with nothing else between or around them,
+                // and a sequence with any other instruction keeps one batch per element.
                 let together = v.len() > 1 && v.iter().all(is_token_creation);
                 if together {
                     self.end_event_batch();
