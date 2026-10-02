@@ -865,6 +865,11 @@ pub enum PlayerFilter {
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,
+    /// A player the card they would draw now would be the first one they draw in this
+    /// draw step: it's one of their draw steps and they haven't drawn a card in it yet
+    /// (CR 504.1, 121.2) — "except the first one they draw in each of their draw steps"
+    /// is `Not` this. See `draw_rules::next_draw_is_first_in_draw_step`.
+    FirstDrawInDrawStep,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
@@ -3110,6 +3115,15 @@ pub enum Effect {
         controller: PlayerRef,
         tapped: bool,
         attacking: bool,
+    },
+    /// "Create a 0/0 green Ooze creature token ... The token enters with X +1/+1 counters
+    /// on it" (Printlifter Ooze): the tokens `effect` creates enter with these counters
+    /// (CR 122.6) — abilities that trigger on them entering see them with the counters.
+    /// Each number is determined just before the tokens are created ("other creatures"
+    /// than them are the creatures already there).
+    TokensEnterWithCounters {
+        counters: Vec<(CounterKind, Value)>,
+        effect: Box<Effect>,
     },
     /// "Create a Monster Role token attached to it": tokens that enter the battlefield
     /// attached to an object or player (CR 111.10j, 303.4f–i, 301.5e). An Aura token that

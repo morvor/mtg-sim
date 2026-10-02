@@ -593,14 +593,26 @@ fn f_created_pronoun(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     }
     let l = end(l);
-    let rewritten = if let Some(r) = l.strip_prefix("attach ~ to ") {
+    // "You may attach ~ to it." (Cori-Steel Cutter): the choice is made as the ability
+    // resolves, after the token entered.
+    let (l, optional) = match l.strip_prefix("you may attach ~ to ") {
+        Some(r) => (r, true),
+        None => (l, false),
+    };
+    let rewritten = if let Some(r) = l.strip_prefix("attach ~ to ").or(optional.then_some(l)) {
         if !matches!(r, "it" | "that token" | "the token") {
             return false;
         }
-        let e = Effect::Attach {
+        let mut e = Effect::Attach {
             what: Sel::This,
             to: Sel::Var(vars::CREATED),
         };
+        if optional {
+            e = Effect::May {
+                who: PlayerRef::You,
+                effect: Box::new(e),
+            };
+        }
         b.it = Sel::Var(vars::CREATED);
         return append_after_create(prev, e);
     } else if let Some(r) = ["it ", "that token ", "the token "]

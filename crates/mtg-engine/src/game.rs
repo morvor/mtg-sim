@@ -470,6 +470,11 @@ pub struct TurnHistory {
     /// `permissions.rs`, `kw/once_each_turn_cast.rs`).
     #[serde(default)]
     pub once_permissions_used: Vec<(ObjectId, SmolStr)>,
+    /// Cards players drew during their own draw steps: (player, draw step, card), the step
+    /// being its index in `TurnState::step_log`, in the order drawn ("except the first one
+    /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
+    #[serde(default)]
+    pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -707,6 +712,8 @@ pub struct Game {
     /// Watches every event as it's processed, with the game as it is then (see
     /// [`EventObserver`]; [`Game::event_feed`] keeps the events for later reading).
     pub observer: Option<EventObserver>,
+    /// When queued events are checked for triggers (CR 603.2, 608.2c).
+    pub timing: crate::trigger_timing::TriggerTiming,
 }
 
 impl Game {
@@ -817,6 +824,7 @@ impl Game {
             cards: Default::default(),
             event_feed: Default::default(),
             observer: None,
+            timing: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

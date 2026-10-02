@@ -136,3 +136,24 @@ pub fn predefined_card(spec: &TokenSpec) -> Option<std::sync::Arc<crate::card::C
         && spec.subtypes[0].as_str() == "Incubator";
     incubator.then(crate::tokens_predefined::incubator_card)
 }
+
+/// Performs `effect`, whose tokens enter with `counters` (CR 122.6; see
+/// [`Effect::TokensEnterWithCounters`]). The numbers are determined first, while the
+/// tokens don't exist yet: "the tokens just created" are none.
+pub fn enter_with_counters(
+    g: &mut Game,
+    counters: &[(CounterKind, Value)],
+    effect: &Effect,
+    ctx: &mut crate::eval::Ctx,
+) {
+    let mut before = ctx.clone();
+    before.vars.remove(&vars::CREATED);
+    let with: Vec<(CounterKind, u32)> = counters
+        .iter()
+        .map(|(k, v)| (k.clone(), g.eval_value(v, &before).max(0) as u32))
+        .filter(|(_, n)| *n > 0)
+        .collect();
+    let prev = std::mem::replace(&mut g.token_counters, with);
+    g.exec(effect, ctx);
+    g.token_counters = prev;
+}
