@@ -623,6 +623,16 @@ fn unless_state(l: &str, b: &mut Builder) -> Option<Effect> {
     if eff.contains(" unless ") || eff.ends_with(',') || eff.is_empty() {
         return None;
     }
+    // "Each opponent loses 1 life unless they control an Island": "they" is each of
+    // them, not a player the text referred to before.
+    if (c.starts_with("they ") || c.starts_with("that player "))
+        && has_player_subject(eff)
+        && !["you ", "that player ", "that opponent "]
+            .iter()
+            .any(|s| eff.starts_with(s))
+    {
+        return None;
+    }
     let c = they_as_that_player(c);
     let saved = (
         b.targets.clone(),
@@ -690,6 +700,11 @@ fn static_unless(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Op
         return None;
     };
     if body.contains(" unless ") || body.contains(" as long as ") || body.contains(" if ") {
+        return None;
+    }
+    // "Enchanted creature gets +2/+2 and can't be blocked unless ...": the condition is
+    // about the last part only.
+    if body.replace("attack or block", "").contains(" and ") {
         return None;
     }
     // A character's pronouns: "~ can't attack alone unless he has a +1/+1 counter on him".

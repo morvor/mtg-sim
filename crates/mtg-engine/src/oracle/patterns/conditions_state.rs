@@ -525,6 +525,24 @@ fn group_condition(c: &str) -> Option<Condition> {
             Filter::InZone(ZoneKind::Battlefield),
         ])));
     }
+    // "you control two or more nonland, nontoken permanents with the same name as one
+    // another": more of them than there are different names among them (a face-down
+    // permanent has no name, CR 708.2).
+    if let Some(r) = c
+        .strip_prefix("you control two or more ")
+        .and_then(|r| r.strip_suffix(" with the same name as one another"))
+    {
+        let f = Filter::and(vec![
+            color_or_phrase(r)?.you_control(),
+            Filter::InZone(ZoneKind::Battlefield),
+            Filter::not(Filter::FaceDown),
+        ]);
+        return Some(Condition::Compare(
+            Value::Count(f.clone()),
+            Cmp::Gt,
+            Value::DistinctNames(f),
+        ));
+    }
     // "your team controls another Warrior" (CR 102.4: you and/or your teammates).
     if let Some(r) = c.strip_prefix("your team controls ") {
         let (other, r) = match r.strip_prefix("another ") {
@@ -814,6 +832,23 @@ fn instead_if(l: &str, prev: &mut Effect, b: &mut crate::oracle::effects::Builde
     // A replacement with targets of its own would have them chosen whether or not it
     // happens.
     if b.targets.len() != saved.0 {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    }
+    // It replaces the whole previous instruction, of the same kind ("draw two cards ...
+    // draw three cards instead"), not one part of several.
+    let core = match &*prev {
+        Effect::If {
+            then,
+            otherwise,
+            ..
+        } if matches!(**otherwise, Effect::Noop) => &**then,
+        other => other,
+    };
+    if matches!(core, Effect::Seq(_))
+        || std::mem::discriminant(core) != std::mem::discriminant(&e)
+    {
         b.targets.truncate(saved.0);
         b.it = saved.1;
         return false;

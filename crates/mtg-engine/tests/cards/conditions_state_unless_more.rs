@@ -523,6 +523,27 @@ fn aerial_surveyor_searches_when_the_defender_has_more_lands() {
 }
 
 #[test]
+fn chrome_replicator_needs_two_permanents_sharing_a_name() {
+    cr!("603.4", "201.2");
+    assert_supported(&["Chrome Replicator"]);
+    // Two differently named nonland, nontoken permanents: no token.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Gray Ogre");
+    t.lands(P0, "Forest", 2);
+    t.enter(P0, "Chrome Replicator");
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Construct Token").is_empty());
+    // Two Bears share a name (lands don't count): a Construct.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Grizzly Bears");
+    t.enter(P0, "Chrome Replicator");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Construct Token").len(), 1);
+}
+
+#[test]
 fn beza_compares_with_each_opponent_separately() {
     cr!("608.2h");
     ruling!(
