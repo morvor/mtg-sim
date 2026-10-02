@@ -160,6 +160,26 @@ pub fn with_condition(a: &Ability, cond: crate::ability::Condition, text: &str) 
     crate::ability::AbilityDef::new(kind, text)
 }
 
+/// `a` with `f` applied to the effect of its body (a spell, activated or triggered
+/// ability) and the oracle text `text`.
+pub fn map_effect(
+    a: &Ability,
+    text: &str,
+    f: impl FnOnce(crate::ability::Effect) -> crate::ability::Effect,
+) -> Ability {
+    let mut kind = a.kind.clone();
+    let body = match &mut kind {
+        AbilityKind::Spell(s) => Some(&mut s.body),
+        AbilityKind::Activated(x) => Some(&mut x.body),
+        AbilityKind::Triggered(t) => Some(&mut t.body),
+        _ => None,
+    };
+    if let Some(b) = body {
+        b.effect = f(std::mem::take(&mut b.effect));
+    }
+    crate::ability::AbilityDef::new(kind, text)
+}
+
 /// An instant or sorcery's spell ability (CR 113.3a).
 pub fn spell(targets: Vec<crate::ability::TargetSpec>, effect: crate::ability::Effect, text: &str) -> Ability {
     crate::ability::AbilityDef::new(
