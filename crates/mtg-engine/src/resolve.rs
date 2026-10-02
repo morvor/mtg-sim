@@ -344,20 +344,38 @@ impl Game {
                 }
             }
             Effect::DealDamage { source, amount, to } => {
-                let src = self.damage_source(source, ctx);
-                let n = self.eval_value(amount, ctx).max(0) as u32;
+                // "Each creature you control deals damage equal to its power to ...": every
+                // one of those objects deals its own damage, all at the same time (CR
+                // 120.2); the amount is evaluated for each of them (`vars::AFFECTED`).
+                let srcs: Vec<ObjectId> = match source {
+                    Sel::All(_) | Sel::Union(_) => self.resolve_objects(source, ctx),
+                    _ => self.damage_source(source, ctx).into_iter().collect(),
+                };
                 let recipients = self.resolve_sel(to, ctx);
-                if let Some(src) = src {
-                    let evs = recipients.into_iter().map(|r| (src, r, n)).collect();
+                if !srcs.is_empty() {
+                    let mut evs = Vec::new();
+                    for &src in &srcs {
+                        let saved = ctx.vars.insert(vars::AFFECTED, vec![Entity::Object(src)]);
+                        let n = self.eval_value(amount, ctx).max(0) as u32;
+                        match saved {
+                            Some(v) => {
+                                ctx.vars.insert(vars::AFFECTED, v);
+                            }
+                            None => {
+                                ctx.vars.remove(&vars::AFFECTED);
+                            }
+                        }
+                        evs.extend(recipients.iter().map(|r| (src, *r, n)));
+                    }
                     let before = self.events.len();
                     self.deal_damage_batch(evs, false);
-                    self.record_damaged(src, before, ctx);
+                    self.record_damaged(&srcs, before, ctx);
                     // "The damage dealt this way": the total actually dealt to all the
                     // recipients, as modified by replacement and prevention (CR 120.4b).
                     ctx.prev_value = self.events[before.min(self.events.len())..]
                         .iter()
                         .map(|e| match e {
-                            Event::Damage { source, amount, .. } if *source == src => {
+                            Event::Damage { source, amount, .. } if srcs.contains(source) => {
                                 *amount as i64
                             }
                             _ => 0,
@@ -409,7 +427,7 @@ impl Game {
                         .collect();
                     let before = self.events.len();
                     self.deal_damage_batch(evs, false);
-                    self.record_damaged(src, before, ctx);
+                    self.record_damaged(&[src], before, ctx);
                 }
             }
             Effect::Fight { a, b } => {
@@ -2040,7 +2058,7 @@ impl Game {
     /// Records the objects that were actually dealt damage by `src` since event index
     /// `before` (after replacement and prevention) as "dealt damage this way"
     /// ([`vars::DAMAGED`]) and as the previous effect's affected objects.
-    fn record_damaged(&mut self, src: ObjectId, before: usize, ctx: &mut Ctx) {
+    fn record_damaged(&mut self, srcs: &[ObjectId], before: usize, ctx: &mut Ctx) {
         let mut damaged: Vec<Entity> = Vec::new();
         for ev in &self.events[before.min(self.events.len())..] {
             if let Event::Damage {
@@ -2050,7 +2068,7 @@ impl Game {
                 ..
             } = ev
             {
-                if *source == src && *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
+                if srcs.contains(source) && *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
                     damaged.push(Entity::Object(*o));
                 }
             }
