@@ -98,7 +98,10 @@ impl Renderer<'_> {
                 format!("{} unless {c}", e.trim_end_matches('.'))
             }
             Some(c) => {
-                // "As long as ~ is enchanted, it has ...".
+                // "As long as ~ is enchanted, it has ..." / "~ has ... as long as it's
+                // enchanted": the condition comes first or last, so the object itself is
+                // named by "~" or "it" in either place.
+                self.self_salient = true;
                 let c = self.condition(c);
                 let e = self.static_effect(&s.effect);
                 format!("as long as {c}, {}", lower_first(&e))
@@ -1040,12 +1043,14 @@ impl Renderer<'_> {
                 }
             }
             (E::TurnedFaceUp, A::AsEnters(e)) => {
+                let m = self.me();
                 let e = self.effect(e);
-                format!("as ~ is turned face up, {e}")
+                format!("as {m} is turned face up, {e}")
             }
             (E::Transforms, A::AsEnters(e)) => {
+                let m = self.me();
                 let e = self.effect(e);
-                format!("as ~ transforms, {e}")
+                format!("as {m} transforms, {e}")
             }
             // --- Zone changes.
             (E::Dies(f), action) => {

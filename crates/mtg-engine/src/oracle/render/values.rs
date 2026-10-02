@@ -161,7 +161,7 @@ impl Renderer<'_> {
                 let n = self.noun(f, Num::Many);
                 format!("the number of colors among {n}")
             }
-            Value::ClassLevel => "~'s level".into(),
+            Value::ClassLevel => format!("{}'s level", self.me()),
             Value::XOf(s) => {
                 let s = self.sel(s, Case::Poss);
                 format!("the value of X for {s}")
@@ -182,8 +182,10 @@ impl Renderer<'_> {
                 let n = self.noun(f, Num::Many);
                 format!("the number of differently named {n}")
             }
-            Value::ColorsSpent => "the number of colors of mana spent to cast ~".into(),
-            Value::ManaSpent => "the amount of mana spent to cast ~".into(),
+            Value::ColorsSpent => {
+                format!("the number of colors of mana spent to cast {}", self.me())
+            }
+            Value::ManaSpent => format!("the amount of mana spent to cast {}", self.me()),
             Value::Chosen => "the chosen number".into(),
             Value::TimesKicked => format!("the number of times {} was kicked", self.me()),
             Value::Speed(p) => {
@@ -855,9 +857,9 @@ impl Renderer<'_> {
             Duration::UntilYourNextTurn => "until your next turn".into(),
             Duration::UntilEndOfYourNextTurn => "until the end of your next turn".into(),
             Duration::WhileSourceOnBattlefield => {
-                "for as long as ~ remains on the battlefield".into()
+                format!("for as long as {} remains on the battlefield", self.me())
             }
-            Duration::WhileYouControlSource => "for as long as you control ~".into(),
+            Duration::WhileYouControlSource => format!("for as long as you control {}", self.me()),
             Duration::WhileCondition(c) => {
                 let c = self.condition(c);
                 format!("for as long as {c}")
