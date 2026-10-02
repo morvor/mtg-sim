@@ -578,6 +578,31 @@ impl Renderer<'_> {
                     }
                 }
             }
+            Effect::RemoveCountersUpTo { what, kind, max } => {
+                let noun = match kind {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let t = self.sel(what, Case::Obj);
+                match max {
+                    None => format!("remove any number of {} from {t}", plural(&noun)),
+                    Some(v) => {
+                        let (c, w) = self.counted(v, &noun);
+                        format!("remove up to {c} from {t}{}", w.unwrap_or_default())
+                    }
+                }
+            }
+            // "Choose a counter on target permanent. Put an additional counter of that kind
+            // on that permanent."
+            Effect::ChooseCounterKind { from, then } => {
+                let f = self.sel(from, Case::Obj);
+                let inner = self.effect(then);
+                let k = crate::ability::CHOSEN_COUNTER_KIND;
+                let inner = inner
+                    .replace(&format!("{k} counters"), "counters of that kind")
+                    .replace(&format!("{k} counter"), "counter of that kind");
+                format!("choose a counter on {f}. {inner}")
+            }
             Effect::MoveCounters { from, to, kind, n } => {
                 let noun = match kind {
                     Some(k) => counter_name(k),

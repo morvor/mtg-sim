@@ -1011,7 +1011,9 @@ inventory::submit! { TriggerPattern { name: "counter grammar: when there are N c
 
 /// "Put a charge counter on ~ or remove one from it.", "Put a plague counter on ~ or
 /// remove a plague counter from it.", "Put a lore counter on target Saga you control or
-/// remove one from it.": the controller chooses which as the ability resolves.
+/// remove one from it.": the controller chooses which as the ability resolves (Jinxed
+/// Choker's ruling), and can choose to remove one only if there's one there (Plague
+/// Boiler's ruling).
 fn put_or_remove(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let r = l.strip_prefix("put ")?;
@@ -1052,8 +1054,8 @@ fn put_or_remove(l: &str, b: &mut Builder) -> Option<Effect> {
         then: Box::new(Effect::ChooseOne {
             who: PlayerRef::You,
             options: vec![
-                (format!("put a {kind} counter"), put.clone()),
-                (format!("remove a {rkind} counter"), remove),
+                (format!("Put a {kind} counter"), put.clone()),
+                (format!("Remove a {rkind} counter"), remove),
             ],
         }),
         otherwise: Box::new(put.clone()),
