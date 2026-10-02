@@ -370,11 +370,16 @@ pub fn parse_keyword_cost(s: &str) -> Option<Cost> {
         if let Some((n, sym)) = super::phrases::parse_number(&r.to_lowercase())
             .and_then(|(n, rest)| Some((n.as_const()?, rest.trim().to_string())))
         {
-            if n > 1 && sym.starts_with('{') && sym.ends_with('}') && sym.matches('{').count() == 1
+            // Mana symbols only ("pay eight {E}" is energy).
+            if n > 1
+                && sym.starts_with('{')
+                && sym.ends_with('}')
+                && sym.matches('{').count() == 1
+                && sym != "{e}"
             {
-                return Some(Cost::mana(ManaCost::parse(
-                    &sym.to_uppercase().repeat(n as usize),
-                )?));
+                if let Some(m) = ManaCost::parse(&sym.to_uppercase().repeat(n as usize)) {
+                    return Some(Cost::mana(m));
+                }
             }
         }
     }

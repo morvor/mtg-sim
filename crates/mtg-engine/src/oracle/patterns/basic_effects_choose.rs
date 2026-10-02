@@ -71,8 +71,31 @@ impl Verb {
 /// The objects a player can choose for the verb: their own for sacrificing (CR 701.21a).
 fn own(verb: Verb, f: Filter) -> Filter {
     match verb {
-        Verb::Sacrifice => Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]),
+        Verb::Sacrifice if !controls_you(&f) => {
+            Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)])
+        }
         _ => f,
+    }
+}
+
+fn controls_you(f: &Filter) -> bool {
+    match f {
+        Filter::ControlledBy(PlayerRel::You) => true,
+        Filter::And(v) => v.iter().any(controls_you),
+        _ => false,
+    }
+}
+
+/// `f` without its "you control" part.
+fn without_you_control(f: Filter) -> Filter {
+    match f {
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|x| !matches!(x, Filter::ControlledBy(PlayerRel::You)))
+                .collect(),
+        ),
+        Filter::ControlledBy(PlayerRel::You) => Filter::Any,
+        f => f,
     }
 }
 
@@ -82,7 +105,8 @@ fn own(verb: Verb, f: Filter) -> Filter {
 /// sentences.
 fn verb_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let (verb, r) = [Verb::Tap, Verb::Untap, Verb::Sacrifice, Verb::Exile]
+    // (Untapping chosen lands is `mana_untap.rs`.)
+    let (verb, r) = [Verb::Tap, Verb::Sacrifice, Verb::Exile]
         .into_iter()
         .find_map(|v| l.strip_prefix(v.word()).and_then(|r| r.strip_prefix(' ')).map(|r| (v, r)))?;
     // "any number of", "one or more", "up to N", or exactly N ("exile a land you
@@ -97,8 +121,11 @@ fn verb_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
         n.as_const()?;
         (Some(n), true, r)
     } else if verb == Verb::Exile {
+        // "exile a land you control" (several of them are other patterns').
         let (n, r) = parse_number(r)?;
-        n.as_const()?;
+        if n.as_const() != Some(1) {
+            return None;
+        }
         (Some(n), false, r)
     } else {
         return None;
@@ -131,6 +158,11 @@ fn verb_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         _ => return None,
     };
+    // Permanents only ("exile a land you control"); cards in other zones are other
+    // patterns' (which link them to the source, CR 607).
+    if f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+        return None;
+    }
     let f = own(verb, f);
     let count = count.unwrap_or_else(|| Value::Count(f.clone()));
     let choose = Effect::Store {
@@ -170,7 +202,7 @@ fn verb_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
     ]))
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: [verb] any number of [objects]", priority: 45, parse: verb_chosen } }
+inventory::submit! { EffectPattern { name: "basic effects: [verb] any number of [objects]", priority: 150, parse: verb_chosen } }
 
 /// "you may tap two untapped creatures you control", "any opponent may tap an untapped
 /// creature they control", "you may exile a Human you control and an artifact you
@@ -185,9 +217,8 @@ fn may_pay_action(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         return None;
     };
-    if !["tap ", "sacrifice ", "exile "]
-        .iter()
-        .any(|v| r.starts_with(v))
+    // (A sacrifice under "you may" records whether it happened itself.)
+    if !["tap ", "exile "].iter().any(|v| r.starts_with(v))
         || r.contains("target")
         || r.contains("any number of")
         || r.contains("one or more")
@@ -516,16 +547,21 @@ fn sacrifice_described(l: &str, _b: &mut Builder) -> Option<Effect> {
     }
     let (cost, _) = crate::oracle::costs::parse_cost(l)?;
     match cost.parts.as_slice() {
-        [CostPart::Sacrifice { filter, count }] if cost.mana.is_none() => Some(Effect::Sacrifice {
-            who: PlayerRef::You,
-            filter: filter.clone(),
-            count: count.clone(),
-        }),
+        // A number of them ("all" is `SacrificeObjects`, elsewhere).
+        [CostPart::Sacrifice { filter, count }]
+            if cost.mana.is_none() && matches!(count, Value::Const(_)) =>
+        {
+            Some(Effect::Sacrifice {
+                who: PlayerRef::You,
+                filter: filter.clone(),
+                count: count.clone(),
+            })
+        }
         _ => None,
     }
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: sacrifice [described object]", priority: 46, parse: sacrifice_described } }
+inventory::submit! { EffectPattern { name: "basic effects: sacrifice [described object]", priority: 150, parse: sacrifice_described } }
 
 /// "sacrifice each other creature you control", "sacrifice all Dragons you control",
 /// "sacrifice half the non-Demon permanents you control, rounded up", "enchanted
@@ -552,7 +588,7 @@ fn sacrifice_group(l: &str, b: &mut Builder) -> Option<Effect> {
         let f = own(Verb::Sacrifice, f);
         return Some(Effect::Sacrifice {
             who: PlayerRef::You,
-            filter: f.clone(),
+            filter: without_you_control(f.clone()),
             count: Value::Div(Box::new(Value::Count(f)), 2, true),
         });
     }
@@ -562,11 +598,11 @@ fn sacrifice_group(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     Some(Effect::SacrificeObjects {
-        what: Sel::All(own(Verb::Sacrifice, f)),
+        what: Sel::All(Filter::and(vec![Filter::Permanent, own(Verb::Sacrifice, f)])),
     })
 }
 
-inventory::submit! { EffectPattern { name: "basic effects: sacrifice a group", priority: 60, parse: sacrifice_group } }
+inventory::submit! { EffectPattern { name: "basic effects: sacrifice a group", priority: 150, parse: sacrifice_group } }
 
 /// "you untap all lands you control" (Sword of Feast and Famine), "you sacrifice a land"
 /// (Redcap Melee): the controller performs the instruction.
