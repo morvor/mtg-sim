@@ -158,3 +158,43 @@ fn magus_of_the_abyss_that_player_chooses_the_target() {
     assert!(t.on_battlefield(a));
     assert!(!t.on_battlefield(b));
 }
+
+#[test]
+fn harsh_mercy_destroys_creatures_not_of_a_type_any_player_chose() {
+    cr!("101.4", "608.2d");
+    compiles("Harsh Mercy");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let goblin = t.battlefield(P1, "Raging Goblin");
+    t.answer(P0, DecisionKind::Option, Answer::Index(creature_type("Bear")));
+    t.answer(P1, DecisionKind::Option, Answer::Index(creature_type("Elf")));
+    let spell = t.hand(P0, "Harsh Mercy");
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert!(t.on_battlefield(bears));
+    assert!(t.on_battlefield(elves));
+    assert!(!t.on_battlefield(goblin));
+}
+
+#[test]
+fn patriarchs_bidding_returns_creatures_of_every_chosen_type() {
+    cr!("101.4");
+    compiles("Patriarch's Bidding");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 5);
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Raging Goblin");
+    t.graveyard(P1, "Llanowar Elves");
+    t.graveyard(P1, "Gray Ogre");
+    t.answer(P0, DecisionKind::Option, Answer::Index(creature_type("Bear")));
+    t.answer(P1, DecisionKind::Option, Answer::Index(creature_type("Elf")));
+    let spell = t.hand(P0, "Patriarch's Bidding");
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.named_on_battlefield("Llanowar Elves").len(), 1);
+    assert!(t.in_graveyard(P0, "Raging Goblin"));
+    assert!(t.in_graveyard(P1, "Gray Ogre"));
+}

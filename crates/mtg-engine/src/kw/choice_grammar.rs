@@ -119,6 +119,25 @@ pub fn choose_player_effect(
     ))
 }
 
+/// `Effect::Custom` prefix: each player, in APNAP order (CR 101.4), chooses a creature
+/// type; the types are kept for the rest of the resolution in numeric variables (JSON of
+/// the base `Var`: the count at `var`, each type's index among the creature types at
+/// `var + 1 + i`).
+pub const EACH_CHOOSES_CREATURE_TYPE: &str = "choice_grammar:each player chooses a creature type:";
+/// `Filter::Custom` prefix: an object of one of the creature types chosen by
+/// [`EACH_CHOOSES_CREATURE_TYPE`] (JSON of the base `Var`).
+pub const OF_A_TYPE_CHOSEN: &str = "choice_grammar:of a type chosen this way:";
+
+/// The creature types chosen by [`EACH_CHOOSES_CREATURE_TYPE`] with base variable `var`.
+fn chosen_types(ctx: &Ctx, var: crate::ability::Var) -> Vec<String> {
+    let list = &crate::types::subtype_lists().creature;
+    let n = ctx.nums.get(&var).copied().unwrap_or(0);
+    (0..n)
+        .filter_map(|i| ctx.nums.get(&(var + 1 + i as crate::ability::Var)))
+        .filter_map(|ix| list.get(*ix as usize).cloned())
+        .collect()
+}
+
 pub struct ChoiceGrammar;
 
 impl KeywordRules for ChoiceGrammar {
@@ -143,6 +162,20 @@ impl KeywordRules for ChoiceGrammar {
             ctx.prev_happened = !pick.is_empty();
             ctx.chosen_player = pick.first().and_then(|e| e.player());
             ctx.set_var(var, pick);
+            return true;
+        }
+        if let Some(json) = name.strip_prefix(EACH_CHOOSES_CREATURE_TYPE) {
+            let Ok(var) = serde_json::from_str::<crate::ability::Var>(json) else {
+                return true;
+            };
+            let list: Vec<String> = crate::types::subtype_lists().creature.clone();
+            let mut n = 0i64;
+            for p in g.apnap() {
+                let i = g.ask_option(p, ctx.source, "Choose a creature type", list.clone());
+                ctx.nums.insert(var + 1 + n as crate::ability::Var, i as i64);
+                n += 1;
+            }
+            ctx.nums.insert(var, n);
             return true;
         }
         if let Some(json) = name.strip_prefix(CHOOSE_PLAYER) {
@@ -198,6 +231,15 @@ impl KeywordRules for ChoiceGrammar {
                 matches!(e, Event::Damage { source, target: Entity::Player(p), amount, combat: true }
                     if *source == id && *p == you && *amount > 0)
             }));
+        }
+        if let Some(json) = name.strip_prefix(OF_A_TYPE_CHOSEN) {
+            let var: crate::ability::Var = serde_json::from_str(json).ok()?;
+            let o = g.obj(id);
+            let types = chosen_types(ctx, var);
+            return Some(
+                o.chars.all_creature_types
+                    || types.iter().any(|t| o.chars.subtypes.iter().any(|s| s == t)),
+            );
         }
         if let Some(json) = name.strip_prefix(ONE_OF_EACH) {
             let spec: OneOfEach = serde_json::from_str(json).ok()?;

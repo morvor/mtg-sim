@@ -232,3 +232,36 @@ fn choose_kind(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: choose a kind of type", priority: 90, parse: choose_kind } }
+
+/// The creature types each player chose ("Each player chooses a creature type.").
+const EACH_PLAYERS_TYPE: Var = vars::USER + 4435;
+
+/// "Each player chooses a creature type." (Harsh Mercy, Patriarch's Bidding): each player
+/// in APNAP order (CR 101.4); "of a type chosen this way" refers to any of them.
+fn each_player_chooses_creature_type(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if end(l) != "each player chooses a creature type" {
+        return None;
+    }
+    let json = serde_json::to_string(&EACH_PLAYERS_TYPE).ok()?;
+    Some(Effect::Custom(
+        format!("{}{json}", crate::kw::choice_grammar::EACH_CHOOSES_CREATURE_TYPE).into(),
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: each player chooses a creature type", priority: 85, parse: each_player_chooses_creature_type } }
+
+/// "of a type chosen this way", "that aren't of a type chosen this way".
+fn of_a_type_chosen<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let (neg, r) = if let Some(r) = t.strip_prefix("that aren't of a type chosen this way") {
+        (true, r)
+    } else if let Some(r) = t.strip_prefix("that isn't of a type chosen this way") {
+        (true, r)
+    } else {
+        (false, t.strip_prefix("of a type chosen this way")?)
+    };
+    let json = serde_json::to_string(&EACH_PLAYERS_TYPE).ok()?;
+    let f = Filter::Custom(format!("{}{json}", crate::kw::choice_grammar::OF_A_TYPE_CHOSEN).into());
+    Some((if neg { Filter::not(f) } else { f }, r))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "choice grammar: of a type chosen this way", priority: 10, parse: of_a_type_chosen } }
