@@ -1763,7 +1763,7 @@ pub fn any_first_strike(g: &Game) -> bool {
 /// already marked, or at most 1 if the source has deathtouch.
 pub fn lethal_damage(g: &Game, source: ObjectId, creature: ObjectId) -> u32 {
     let o = g.obj(creature);
-    let lethal = (o.toughness() - o.damage as i32).max(0) as u32;
+    let lethal = (crate::kw::lethal_damage_basis(g, creature) - o.damage as i32).max(0) as u32;
     if g.obj(source).has_keyword(KeywordKind::Deathtouch) {
         // Any nonzero amount is lethal (and none is needed if it already has lethal
         // damage marked, CR 702.19b).

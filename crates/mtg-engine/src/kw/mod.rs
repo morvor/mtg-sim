@@ -284,6 +284,22 @@ pub trait KeywordRules: Sync + Send {
         vec![]
     }
     fn day_night_changed(&self, g: &mut Game) {}
+    /// The number damage marked on `creature` is checked against to determine whether
+    /// it's lethal damage (CR 704.5g, 702.19b, 120.4a), if not its toughness: e.g.
+    /// "lethal damage ... is determined by their power rather than their toughness".
+    fn lethal_damage_basis(&self, g: &Game, creature: ObjectId) -> Option<i32> {
+        None
+    }
+    /// Whether `creature`, which has lethal damage marked on it, isn't destroyed by the
+    /// state-based action for lethal damage (an exception to CR 704.5g).
+    fn survives_lethal_damage(&self, g: &Game, creature: ObjectId) -> bool {
+        false
+    }
+    /// Whether damage marked on the permanent `id` isn't removed in the cleanup step (an
+    /// exception to CR 514.2).
+    fn keeps_damage_in_cleanup(&self, g: &Game, id: ObjectId) -> bool {
+        false
+    }
     /// A player drew `card` (the `nth` card they drew this turn), as it's drawn: e.g.
     /// "you may reveal this card as you draw it" (CR 121.9, 702.94a).
     fn after_draw(&self, g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {}
@@ -839,6 +855,29 @@ pub fn damage_prevention(g: &Game, source: ObjectId, target: Entity) -> Vec<Keyw
         .iter()
         .flat_map(|r| r.damage_prevention(g, source, target))
         .collect()
+}
+
+/// The number damage marked on `creature` is checked against for lethal damage: its
+/// toughness unless a rule changes it (see [`KeywordRules::lethal_damage_basis`]).
+pub fn lethal_damage_basis(g: &Game, creature: ObjectId) -> i32 {
+    registry()
+        .iter()
+        .find_map(|r| r.lethal_damage_basis(g, creature))
+        .unwrap_or_else(|| g.obj(creature).toughness())
+}
+
+/// See [`KeywordRules::keeps_damage_in_cleanup`].
+pub fn keeps_damage_in_cleanup(g: &Game, id: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.keeps_damage_in_cleanup(g, id))
+}
+
+/// See [`KeywordRules::survives_lethal_damage`].
+pub fn survives_lethal_damage(g: &Game, creature: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.survives_lethal_damage(g, creature))
 }
 
 pub fn day_night_changed(g: &mut Game) {
