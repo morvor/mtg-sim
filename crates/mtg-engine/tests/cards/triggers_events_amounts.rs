@@ -1,7 +1,7 @@
 //! Trigger events with amounts and counters: "deals N or more damage to ...", "is dealt N
 //! or more damage by a single source" (one damage event, CR 120.3), counters put on one or
 //! more objects (CR 122.6, once per batch, CR 603.2c), counters removed, the Nth counter
-//! (CR 122.7), and a Saga's final chapter ability resolving (CR 714.2c).
+//! (CR 122.7), and a Saga's final chapter ability resolving (CR 714.2e).
 
 use mtg_engine::testing::*;
 use mtg_engine::*;
@@ -134,15 +134,23 @@ fn you_put_counters_on_one_or_more_other_heroes() {
     };
     let mut t = TestGame::new(2);
     let sue = t.battlefield(P0, "Invisible Woman, Sue Storm");
-    // On Sue herself (not another Hero): no.
-    t.g.add_counters(Entity::Object(sue), "+1/+1", 1, None);
+    let hero = t.battlefield(P0, "Amateur Hero");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    // On Sue herself (not another Hero), or on a creature that isn't a Hero: no.
+    t.g.add_counters(Entity::Object(sue), "+1/+1", 1, Some(sue));
+    t.resolve_all();
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 1, Some(sue));
     t.resolve_all();
     assert_eq!(walls(&t), 0);
-    let hero = t.battlefield(P0, "Invisible Woman, Sue Storm");
-    t.answer_yes(P0, true);
-    t.g.add_counters(Entity::Object(hero), "+1/+1", 1, Some(sue));
+    // An opponent puts them: no.
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(hero), "+1/+1", 1, Some(theirs));
     t.resolve_all();
-    assert!(walls(&t) >= 1);
+    assert_eq!(walls(&t), 0);
+    t.answer_yes(P0, true);
+    t.g.add_counters(Entity::Object(hero), "+1/+1", 2, Some(sue));
+    t.resolve_all();
+    assert_eq!(walls(&t), 1);
 }
 
 #[test]
@@ -203,7 +211,7 @@ fn the_twelfth_hour_counter() {
 
 #[test]
 fn the_final_chapter_ability_of_a_saga_resolves() {
-    cr!("714.2c", "608.2p");
+    cr!("714.2d", "714.2e", "608.2p");
     supported("Narci, Fable Singer");
     ruling!(
         "Narci, Fable Singer",
@@ -296,7 +304,7 @@ fn you_put_counters_draw_that_many_only_once_each_turn() {
 
 #[test]
 fn gain_life_put_that_many_counters_only_once_each_turn() {
-    cr!("603.2h", "119.9");
+    cr!("603.2h");
     supported("Nykthos Paragon");
     ruling!(
         "Nykthos Paragon",

@@ -60,7 +60,7 @@ fn land_enters_during_your_turn() {
 
 #[test]
 fn becomes_tapped_during_your_turn_once_each_turn() {
-    cr!("603.2", "603.2e");
+    cr!("603.2");
     supported("Interface Ace");
     let mut t = TestGame::new(2);
     let ace = t.battlefield(P0, "Interface Ace");
@@ -70,6 +70,13 @@ fn becomes_tapped_during_your_turn_once_each_turn() {
     t.g.tap(ace);
     t.resolve_all();
     assert!(t.obj_now(ace).tapped, "triggers only once each turn");
+    // During an opponent's turn: no.
+    let mut t = TestGame::new(2);
+    let ace = t.battlefield(P0, "Interface Ace");
+    t.set_step(P1, Step::PrecombatMain);
+    t.g.tap(ace);
+    t.resolve_all();
+    assert!(t.obj_now(ace).tapped, "not during your turn");
 }
 
 #[test]
@@ -149,6 +156,23 @@ fn opponent_loses_life_for_the_first_time_during_each_of_their_turns() {
     t.resolve_all();
     assert_eq!(t.counters(valgavoth, "+1/+1"), 1);
     assert_eq!(t.hand_size(P0), hand + 1);
+    // It enters during that opponent's turn after they lost life: their first loss this
+    // turn is already past, so a later one doesn't trigger it.
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    t.g.lose_life(P1, 1);
+    t.resolve_all();
+    let valgavoth = t.battlefield(P0, "Valgavoth, Harrower of Souls");
+    t.g.lose_life(P1, 1);
+    t.resolve_all();
+    assert_eq!(t.counters(valgavoth, "+1/+1"), 0);
+    // (Without the earlier loss, the same loss triggers it.)
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    let valgavoth = t.battlefield(P0, "Valgavoth, Harrower of Souls");
+    t.g.lose_life(P1, 1);
+    t.resolve_all();
+    assert_eq!(t.counters(valgavoth, "+1/+1"), 1);
 }
 
 #[test]
@@ -214,7 +238,7 @@ fn dies_while_this_card_is_in_your_graveyard() {
 
 #[test]
 fn becomes_tapped_while_it_has_a_counter() {
-    cr!("603.2", "122.1");
+    cr!("603.2");
     supported("Encumbered Reejerey");
     let mut t = TestGame::new(2);
     let reejerey = t.battlefield(P0, "Encumbered Reejerey");
@@ -222,11 +246,15 @@ fn becomes_tapped_while_it_has_a_counter() {
     t.g.tap(reejerey);
     t.resolve_all();
     assert_eq!(t.counters(reejerey, "-1/-1"), 0);
+    // The qualifier is part of the event, checked as it becomes tapped: with no counter
+    // then, nothing triggers, even if it has one before the ability would resolve.
     t.g.untap(reejerey);
     t.g.tap(reejerey);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    t.g.add_counters(Entity::Object(reejerey), "-1/-1", 1, None);
     t.resolve_all();
-    assert_eq!(t.counters(reejerey, "-1/-1"), 0);
-    assert!(t.on_battlefield(reejerey));
+    assert_eq!(t.counters(reejerey, "-1/-1"), 1);
 }
 
 #[test]
@@ -239,10 +267,14 @@ fn another_creature_enters_while_this_has_a_counter() {
     t.enter(P0, "Grizzly Bears");
     t.resolve_all();
     assert_eq!(t.counters(battler, "-1/-1"), 0);
-    // No counter left: the qualifier doesn't hold.
+    // No counter as the next one enters: nothing triggers (the qualifier is checked as
+    // the event happens), even if it has a counter again before anything would resolve.
     t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    t.g.add_counters(Entity::Object(battler), "-1/-1", 1, None);
     t.resolve_all();
-    assert_eq!(t.counters(battler, "-1/-1"), 0);
+    assert_eq!(t.counters(battler, "-1/-1"), 1);
 }
 
 #[test]

@@ -131,12 +131,19 @@ fn one_or_more_players_sacrifice_one_or_more_creatures() {
     supported("Evin, Waterdeep Opportunist");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Evin, Waterdeep Opportunist");
+    // A noncreature permanent: no.
+    let ring = t.battlefield(P1, "Sol Ring");
+    t.g.sacrifice(ring, P1);
+    t.resolve_all();
+    assert_eq!(count_subtype(&t, "Treasure"), 0);
+    // Any player's creature.
     let theirs = t.battlefield(P1, "Grizzly Bears");
     t.g.sacrifice(theirs, P1);
     t.resolve_all();
     assert_eq!(count_subtype(&t, "Treasure"), 1);
-    let ring = t.battlefield(P1, "Sol Ring");
-    t.g.sacrifice(ring, P1);
+    // Only once each turn.
+    let other = t.battlefield(P1, "Grizzly Bears");
+    t.g.sacrifice(other, P1);
     t.resolve_all();
     assert_eq!(count_subtype(&t, "Treasure"), 1);
 }
@@ -239,6 +246,24 @@ fn one_or_more_nonland_cards_are_milled() {
     t.resolve_all();
     let total: u32 = [a, b, c].iter().map(|x| t.counters(*x, "+1/+1")).sum();
     assert_eq!(total, 2, "up to two targets");
+    // Three targets is more than X (two nonland cards, not three cards): an illegal
+    // choice, so the default (no targets) is used instead.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Wise Mothman");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let c = t.battlefield(P0, "Grizzly Bears");
+    t.library_top(P1, "Grizzly Bears");
+    t.library_top(P1, "Sol Ring");
+    t.library_top(P1, "Island");
+    t.answer_targets(
+        P0,
+        &[Entity::Object(a), Entity::Object(b), Entity::Object(c)],
+    );
+    t.g.mill(P1, 3);
+    t.resolve_all();
+    let total: u32 = [a, b, c].iter().map(|x| t.counters(*x, "+1/+1")).sum();
+    assert_eq!(total, 0, "X is 2");
 }
 
 #[test]
@@ -303,6 +328,17 @@ fn an_opponent_mills_a_nonland_card_from_your_graveyard() {
     t.g.mill(P1, 1);
     t.resolve_all();
     assert!(t.in_hand(P0, "Infesting Radroach"));
+    // Milled at the same time as the opponent's nonland card (Ghoulcaller's Bell: "Each
+    // player mills a card."): it's in your graveyard as the event happens.
+    supported("Ghoulcaller's Bell");
+    let mut t = TestGame::new(2);
+    let bell = t.battlefield(P0, "Ghoulcaller's Bell");
+    t.library_top(P0, "Infesting Radroach");
+    t.library_top(P1, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.activate(P0, bell, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Infesting Radroach"));
     // Your own mill: no.
     let mut t = TestGame::new(2);
     t.graveyard(P0, "Infesting Radroach");
@@ -357,23 +393,32 @@ fn whenever_you_get_one_or_more_energy() {
     supported("Territorial Gorger");
     supported("Aether Revolt");
     ruling!("Territorial Gorger", "only gets +2/+2 once, not +2/+2 per");
+    supported("Glimmer of Genius");
+    // Glimmer of Genius: "Scry 2, then draw two cards. You get {E}{E}."
+    let glimmer = |t: &mut TestGame, p: PlayerId| {
+        t.lands(p, "Island", 4);
+        let g = t.hand(p, "Glimmer of Genius");
+        t.cast(p, g).go();
+        t.resolve_all();
+    };
     let mut t = TestGame::new(2);
     let gorger = t.battlefield(P0, "Territorial Gorger");
-    // Aether Hub: "When this land enters, you get {E}." — then pay energy for mana.
+    glimmer(&mut t, P0);
+    assert_eq!(t.pt(gorger), (4, 4), "two {{E}} at once: +2/+2 once");
+    // Aether Hub: "When this land enters, you get {E}." Another time: another trigger.
     t.enter(P0, "Aether Hub");
     t.resolve_all();
-    assert_eq!(t.pt(gorger), (4, 4));
+    assert_eq!(t.pt(gorger), (6, 6));
     // Aether Revolt: "~ deals that much damage to any target".
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Aether Revolt");
     t.answer_targets(P0, &[Entity::Player(P1)]);
-    t.enter(P0, "Aether Hub");
-    t.resolve_all();
-    assert_eq!(t.life(P1), 19);
+    glimmer(&mut t, P0);
+    assert_eq!(t.life(P1), 18, "two {{E}}: 2 damage");
     // An opponent's energy: no.
-    t.enter(P1, "Aether Hub");
-    t.resolve_all();
-    assert_eq!(t.life(P1), 19);
+    t.set_step(P1, Step::PrecombatMain);
+    glimmer(&mut t, P1);
+    assert_eq!(t.life(P1), 18);
 }
 
 #[test]
@@ -394,6 +439,20 @@ fn whenever_you_clash_and_win() {
     // Lash Out left the hand; a card was drawn.
     assert_eq!(t.hand_size(P0), hand);
     assert_eq!(t.life(P1), 17, "won the clash");
+    // A lost clash: no draw.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sylvan Echoes");
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    t.library_top(P0, "Island");
+    t.library_top(P1, "Craw Wurm");
+    let lash = t.hand(P0, "Lash Out");
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.cast(P0, lash).target(bear).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20, "lost the clash");
+    assert_eq!(t.hand_size(P0), hand - 1);
 }
 
 #[test]
@@ -466,7 +525,7 @@ fn an_opponent_gains_control_of_a_permanent_from_you() {
 
 #[test]
 fn a_player_puts_a_nontoken_creature_onto_the_battlefield() {
-    cr!("110.2a", "608.3a");
+    cr!("110.2a");
     supported("Overburden");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Overburden");

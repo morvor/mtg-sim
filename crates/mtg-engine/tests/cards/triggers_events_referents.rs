@@ -62,12 +62,33 @@ fn whenever_you_scry_if_this_is_tapped_untap_it() {
     );
     let mut t = TestGame::new(2);
     let legolas = t.battlefield(P0, "Legolas, Counter of Kills");
-    t.lands(P0, "Island", 1);
+    t.lands(P0, "Island", 3);
     t.g.tap(legolas);
+    let scry = |t: &mut TestGame, untap: bool| {
+        let opt = t.hand(P0, "Opt");
+        t.answer_yes(P0, untap);
+        t.cast(P0, opt).go();
+        t.resolve_all();
+    };
+    // Declined: it triggers again the next time.
+    scry(&mut t, false);
+    assert!(t.obj_now(legolas).tapped);
+    scry(&mut t, true);
+    assert!(!t.obj_now(legolas).tapped);
+    // Done this turn.
+    t.g.tap(legolas);
+    scry(&mut t, true);
+    assert!(t.obj_now(legolas).tapped);
+    // Untapped: the intervening "if" fails.
+    let mut t = TestGame::new(2);
+    let legolas = t.battlefield(P0, "Legolas, Counter of Kills");
+    t.lands(P0, "Island", 1);
     let opt = t.hand(P0, "Opt");
-    t.answer_yes(P0, true);
     t.cast(P0, opt).go();
-    t.resolve_all();
+    t.settle();
+    t.resolve();
+    t.settle();
+    assert_eq!(t.stack_len(), 0, "no trigger while it's untapped");
     assert!(!t.obj_now(legolas).tapped);
 }
 
@@ -100,7 +121,7 @@ fn a_permanent_an_opponent_owns_enters_under_your_control() {
 
 #[test]
 fn a_legendary_card_called_by_its_title_and_name() {
-    cr!("201.5", "603.6a");
+    cr!("201.5c", "603.6a");
     supported("General Kudro of Drannith");
     let mut t = TestGame::new(2);
     let target = t.graveyard(P1, "Grizzly Bears");

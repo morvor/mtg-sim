@@ -93,8 +93,9 @@ fn about_source(it: &Sel) -> bool {
 /// "[event] [qualifier]".
 fn qualified(r: &str) -> Option<Parsed> {
     let r = end(r);
-    let active = |p: PlayerRef| Condition::PlayerMatches(p, PlayerFilter::Active);
-    // Turn qualifiers.
+    // Turn qualifiers. ("For the first time during each of your turns": the first
+    // matching event among those during your turn, so the turn condition is part of what
+    // "first" counts — inside a "one or more" batch too, see `first_time`.)
     let forms: [(&str, fn(TriggerCond) -> TriggerCond); 9] = [
         // "whenever one or more lands enter under an opponent's control without being
         // played" (CR 305.1).
@@ -121,16 +122,16 @@ fn qualified(r: &str) -> Option<Parsed> {
         }),
         (" for the first time each turn", first_time),
         (" for the first time during each of your turns", |c| {
-            where_events(first_time(c), Condition::YourTurn)
+            first_time(where_events(c, Condition::YourTurn))
         }),
         (" for the first time during each of their turns", |c| {
-            where_events(
-                first_time(c),
+            first_time(where_events(
+                c,
                 Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::Active),
-            )
+            ))
         }),
         (" for the first time during each opponent's turn", |c| {
-            where_events(first_time(c), Condition::NotYourTurn)
+            first_time(where_events(c, Condition::NotYourTurn))
         }),
     ];
     for (suffix, wrap) in forms {
@@ -156,7 +157,6 @@ fn qualified(r: &str) -> Option<Parsed> {
         ) {
             return None;
         }
-        let _ = active;
         return Some((wrap(c), it, p));
     }
     // "[event] while [condition]".
@@ -518,7 +518,7 @@ inventory::submit! { TriggerPattern { name: "counters put on / removed (batches,
 // Sagas (CR 714)
 // ---------------------------------------------------------------------------
 
-/// "the final chapter ability of a Saga you control resolves" (CR 608.2p, 714.2c):
+/// "the final chapter ability of a Saga you control resolves" (CR 608.2p, 714.2e):
 /// "that Saga" is the Saga.
 fn final_chapter_resolves(r: &str) -> Option<Parsed> {
     let x = end(r)
@@ -666,5 +666,17 @@ mod tests {
             panic!("{c:?}");
         };
         assert!(matches!(*trigger, TriggerCond::FirstTimeEachTurn(_)));
+        // The batch is still checked as a whole for "first" (`check_batch_triggers` reads a
+        // `FirstTimeEachTurn` directly inside the batch), with the turn condition inside.
+        let (c, _, _) = p(
+            "whenever you discard one or more cards for the first time during each of your turns",
+        );
+        let TriggerCond::Batched { trigger, .. } = c else {
+            panic!("{c:?}");
+        };
+        let TriggerCond::FirstTimeEachTurn(inner) = *trigger else {
+            panic!("{trigger:?}");
+        };
+        assert!(matches!(*inner, TriggerCond::Where { .. }), "{inner:?}");
     }
 }

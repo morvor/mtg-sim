@@ -77,7 +77,7 @@ fn a_permanent_is_put_into_an_opponents_graveyard() {
 
 #[test]
 fn a_nontoken_permanent_is_put_into_a_players_graveyard() {
-    cr!("700.4", "111.7");
+    cr!("700.4");
     supported("Liability");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Liability");
@@ -473,4 +473,13 @@ fn one_or_more_creature_cards_into_your_graveyard_during_your_turn() {
     t.g.discard(P0, card, None);
     t.resolve_all();
     assert_eq!(insects(&t), 1, "only once each turn");
+    // "From anywhere" is never a leaves-the-battlefield ability: it doesn't look back in
+    // time, so destroyed together with the creature it doesn't see the creature card
+    // arrive.
+    let mut t = TestGame::new(2);
+    let infestation = t.battlefield(P0, "Crawling Infestation");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    t.g.destroy_all(vec![infestation, bear], None, false);
+    t.resolve_all();
+    assert_eq!(insects(&t), 0);
 }
