@@ -179,6 +179,17 @@ fn parse_modal(
     let (head, rest) = t.split_once('\n')?;
     let hl = head.to_lowercase();
     let hl = hl.trim().trim_end_matches(['—', ':', '.', ' ']);
+    // "Each mode must target a different player" (see `mode_players.rs`).
+    let (hl, different_players) =
+        match hl.strip_suffix(". each mode must target a different player") {
+            Some(h) => (h, true),
+            None => (hl, false),
+        };
+    // "You may choose two": that many modes, or none (see `Modal::optional`).
+    let (hl, optional) = match hl.strip_prefix("you may ") {
+        Some(h) if matches!(h, "choose one" | "choose two" | "choose three") => (h, true),
+        _ => (hl, false),
+    };
     let fixed = match hl {
         "choose one" => Some((1, 1)),
         "choose two" => Some((2, 2)),
@@ -236,6 +247,8 @@ fn parse_modal(
         modes,
         per_mode_cost: false,
         chooser: header.chooser,
+        different_players,
+        optional,
     })
 }
 
@@ -959,7 +972,7 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
             if !end(&tail).is_empty() {
                 return None;
             }
-            spec.min = 1;
+            spec.min = Value::c(1);
             spec.max = n.clone();
             spec.divide = Some(n);
             let slot = b.add_target(spec, "targets (divided)");

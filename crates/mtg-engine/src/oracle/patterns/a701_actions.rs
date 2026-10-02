@@ -567,7 +567,7 @@ fn support(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     }
     let spec = TargetSpec {
         what: TargetKind::Object(what),
-        min: 0,
+        min: Value::c(0),
         max: n,
         distinct_from: vec![],
         divide: None,
@@ -579,6 +579,8 @@ fn support(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         },
         condition: None,
         together: None,
+        related_to: None,
+        per_player: None,
     };
     let body = Body {
         targets: vec![spec],

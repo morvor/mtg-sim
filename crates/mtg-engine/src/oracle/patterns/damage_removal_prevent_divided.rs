@@ -34,7 +34,7 @@ fn prevent_divided(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(tail).is_empty() {
         return None;
     }
-    spec.min = 1;
+    spec.min = Value::c(1);
     if any_number {
         spec.max = n.clone();
     }

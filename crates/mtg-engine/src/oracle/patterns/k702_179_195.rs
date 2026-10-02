@@ -157,6 +157,8 @@ fn tiered(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         modes,
         per_mode_cost: true,
         chooser: ModeChooser::Controller,
+        different_players: false,
+        optional: false,
     };
     let mut out =
         crate::oracle::keywords::compile_keyword(Keyword::new(KeywordKind::Tiered), "Tiered");
@@ -220,6 +222,8 @@ fn tiered_chosen_pt(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         modes,
         per_mode_cost: true,
         chooser: ModeChooser::Controller,
+        different_players: false,
+        optional: false,
     };
     Some(vec![AbilityDef::new(
         AbilityKind::Spell(SpellAbility {

@@ -128,6 +128,14 @@ pub struct Modal {
     pub per_mode_cost: bool,
     /// Modes chosen by an opponent (CR 700.2e) or at random.
     pub chooser: ModeChooser,
+    /// "Each mode must target a different player": no player is the target of two of
+    /// the chosen modes (see `mode_players.rs`).
+    #[serde(default)]
+    pub different_players: bool,
+    /// "You may choose two": the controller chooses that many modes or none (a triggered
+    /// ability with no mode chosen is removed from the stack, CR 700.2b).
+    #[serde(default)]
+    pub optional: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -587,7 +595,11 @@ pub enum LibraryPosition {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TargetSpec {
     pub what: TargetKind,
-    pub min: u32,
+    /// The fewest targets that must be chosen. Like `max`, it's evaluated as targets are
+    /// chosen, after X and the number of times the spell is kicked are announced
+    /// (CR 601.2b, 601.2c): "X target creatures" has exactly X targets (`min` and `max`
+    /// both X), never more than `max`.
+    pub min: Value,
     pub max: Value,
     /// Each target in this slot must be different from targets in these other slots
     /// ("another target creature").
@@ -607,12 +619,25 @@ pub struct TargetSpec {
     /// share a creature type"); see `target_groups.rs`.
     #[serde(default)]
     pub together: Option<TargetGroup>,
+    /// A relationship the targets of this instance of the word "target" must have with
+    /// those of an earlier one, slot `.0` ("move a counter from target creature onto
+    /// another target creature with the same controller"); see `target_groups.rs`.
+    #[serde(default)]
+    pub related_to: Option<(u8, TargetGroup)>,
+    /// "For each opponent, ... up to one target creature that player controls": this
+    /// instance of the word "target" is chosen once for each player in the game this
+    /// filter matches, `min` to `max` targets for each, where the object filter's
+    /// `PlayerRel::Iterated` is that player. A player with no legal choice gets no
+    /// target; on resolution each target must still match for the player it was chosen
+    /// for. See `per_player_targets.rs`.
+    #[serde(default)]
+    pub per_player: Option<PlayerFilter>,
 }
 
 /// A relationship the targets of one instance of the word "target" must have with each
 /// other, both as they're chosen (CR 601.2c) and as the spell or ability resolves
 /// (CR 608.2b).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TargetGroup {
     /// All have the same owner: cards "from a single graveyard", or "two target cards
     /// from an opponent's graveyard" (one opponent's graveyard).
@@ -629,13 +654,25 @@ pub enum TargetGroup {
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
+    /// No two of them are controlled by the same player ("with different controllers").
+    DifferentControllers,
+    /// No two of them have the same name ("with different names", CR 201.2).
+    DifferentNames,
+    /// No two of them have the same mana value ("with different mana values").
+    DifferentManaValues,
+    /// All have the same toughness ("with equal toughness").
+    EqualToughness,
+    /// Their total mana value is at most this ("with total mana value 6 or less").
+    TotalManaValueAtMost(Value),
+    /// Their total power is at most this ("with total power 10 or less").
+    TotalPowerAtMost(Value),
 }
 
 impl TargetSpec {
     pub fn one(what: TargetKind, text: impl Into<String>) -> TargetSpec {
         TargetSpec {
             what,
-            min: 1,
+            min: Value::Const(1),
             max: Value::Const(1),
             distinct_from: vec![],
             divide: None,
@@ -643,11 +680,13 @@ impl TargetSpec {
             text: text.into(),
             condition: None,
             together: None,
+            related_to: None,
+            per_player: None,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
         TargetSpec {
-            min: 0,
+            min: Value::Const(0),
             max: Value::Const(n),
             ..TargetSpec::one(what, text)
         }
@@ -660,6 +699,13 @@ impl TargetSpec {
     }
     pub fn any_target() -> TargetSpec {
         TargetSpec::one(TargetKind::AnyTarget, "any target")
+    }
+    /// `min` when it's a fixed number (most target phrases: "target", "up to two").
+    pub fn fixed_min(&self) -> Option<i32> {
+        match self.min {
+            Value::Const(n) => Some(n),
+            _ => None,
+        }
     }
 }
 

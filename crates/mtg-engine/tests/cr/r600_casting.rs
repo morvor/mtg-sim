@@ -176,6 +176,8 @@ fn modes_are_announced_while_casting() {
                 ],
                 per_mode_cost: false,
                 chooser: ModeChooser::Controller,
+                different_players: false,
+                optional: false,
             }),
         })
         .build();
@@ -292,7 +294,7 @@ fn tap_two() -> CardDef {
         .cost("{0}")
         .spell(Body::simple(
             vec![TargetSpec {
-                min: 2,
+                min: Value::c(2),
                 max: Value::c(2),
                 ..TargetSpec::object(Filter::creature(), "two target creatures")
             }],
@@ -381,6 +383,8 @@ fn a_mode_without_targets_can_be_chosen_when_another_needs_unavailable_targets()
                 ],
                 per_mode_cost: false,
                 chooser: ModeChooser::Controller,
+                different_players: false,
+                optional: false,
             }),
         })
         .build();

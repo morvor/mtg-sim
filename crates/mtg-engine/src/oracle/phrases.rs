@@ -503,6 +503,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // Internal form of "that player controls" inside a trigger whose player is
             // the triggering player (see `triggers_effects::that_player_controls`).
             (Filter::ControlledBy(PlayerRel::TriggerPlayer), r)
+        } else if let Some(r) = t.strip_prefix("the iterated player controls") {
+            // Internal form of "that player controls" after "for each opponent," (see
+            // `patterns::per_player_targets`).
+            (Filter::ControlledBy(PlayerRel::Iterated), r)
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
         } else if let Some(r) = t
@@ -521,6 +525,19 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             .or_else(|| t.strip_prefix("from a graveyard"))
         {
             (Filter::InZone(ZoneKind::Graveyard), r)
+        } else if let Some(r) = t
+            .strip_prefix("from the iterated player's graveyard")
+            .or_else(|| t.strip_prefix("in the iterated player's graveyard"))
+        {
+            // Internal form of "from that player's graveyard" after "for each opponent,"
+            // (see `patterns::per_player_targets`).
+            (
+                Filter::and(vec![
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedBy(PlayerRel::Iterated),
+                ]),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("from the triggering player's graveyard") {
             // Internal form of "from that player's graveyard" inside a trigger whose
             // player is the triggering player (`triggers_effects::that_player_controls`).
@@ -1098,30 +1115,29 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
 /// Parses a target phrase. Returns (spec, rest).
 pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     let mut s = s.trim_start();
-    let mut min = 1u32;
+    let mut min = Value::Const(1);
     let mut max = Value::Const(1);
     let mut another = false;
     let mut together = None;
     if let Some(r) = strip(s, "up to ") {
         let (n, r2) = parse_number(r)?;
-        min = 0;
+        min = Value::Const(0);
         max = n;
         s = r2;
     } else if let Some(r) = strip(s, "one or two ") {
-        min = 1;
+        min = Value::Const(1);
         max = Value::Const(2);
         s = r;
     } else if let Some((n, r)) = parse_number(s) {
         if strip(r, "target").is_some() || strip(r, "other target").is_some() {
-            if let Value::Const(k) = n {
-                min = k as u32;
-            }
+            // "X target creatures" means exactly X of them (CR 601.2c).
+            min = n.clone();
             max = n;
             s = r;
         }
     }
     if let Some(r) = strip(s, "any number of ") {
-        min = 0;
+        min = Value::Const(0);
         max = Value::Const(99);
         s = r;
     }
@@ -1230,6 +1246,8 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         text: String::new(),
         condition: None,
         together,
+        related_to: None,
+        per_player: None,
     };
     Some((spec, rest))
 }
@@ -1271,11 +1289,22 @@ fn target_group_suffix<'a>(
             "that share a permanent type",
             TargetGroup::SharePermanentType,
         ),
+        (
+            "with different controllers",
+            TargetGroup::DifferentControllers,
+        ),
+        ("with different names", TargetGroup::DifferentNames),
+        (
+            "with different mana values",
+            TargetGroup::DifferentManaValues,
+        ),
+        ("with equal toughness", TargetGroup::EqualToughness),
     ];
-    let Some((rest, grp)) = groups
+    let found = groups
         .iter()
-        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, *g)))
-    else {
+        .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, g.clone())))
+        .or_else(|| total_at_most(t));
+    let Some((rest, grp)) = found else {
         return Some((f, r));
     };
     *together = Some(grp);
@@ -1291,6 +1320,24 @@ fn target_group_suffix<'a>(
         other => parts.push(other),
     }
     Some((Filter::and(parts), rest))
+}
+
+/// "with total mana value 6 or less", "with total power 10 or less", "with total mana
+/// value X or less": a bound on the targets' total.
+fn total_at_most(t: &str) -> Option<(&str, TargetGroup)> {
+    let (r, mana_value) = if let Some(r) = t.strip_prefix("with total mana value ") {
+        (r, true)
+    } else {
+        (t.strip_prefix("with total power ")?, false)
+    };
+    let (n, r) = parse_number(r)?;
+    let r = r.trim_start().strip_prefix("or less")?;
+    let grp = if mana_value {
+        TargetGroup::TotalManaValueAtMost(n)
+    } else {
+        TargetGroup::TotalPowerAtMost(n)
+    };
+    Some((r, grp))
 }
 
 fn filter_mentions_spell(f: &Filter) -> bool {
@@ -1398,7 +1445,7 @@ mod tests {
         assert!(matches!(t.what, TargetKind::Object(_)));
         assert_eq!(end(rest), "");
         let (t, _) = parse_target("up to two target creatures").unwrap();
-        assert_eq!(t.min, 0);
+        assert_eq!(t.fixed_min(), Some(0));
         let (t, _) = parse_any_target("any target").unwrap();
         assert!(matches!(t.what, TargetKind::AnyTarget));
         let (t, _) = parse_target("target spell").unwrap();

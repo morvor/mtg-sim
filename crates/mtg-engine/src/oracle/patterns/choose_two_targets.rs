@@ -19,7 +19,7 @@ fn choose_two_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     for text in [first, second.as_str()] {
         let (spec, tail) = parse_target(text)?;
         if !end(tail).is_empty()
-            || spec.min != 1
+            || spec.fixed_min() != Some(1)
             || !matches!(spec.max, Value::Const(1))
             || !matches!(spec.what, TargetKind::Object(_))
         {

@@ -354,7 +354,7 @@ fn support_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let spec = TargetSpec {
         what: TargetKind::Object(what),
-        min: 0,
+        min: Value::c(0),
         max: n,
         distinct_from: vec![],
         divide: None,
@@ -362,6 +362,8 @@ fn support_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
         text: String::new(),
         condition: None,
         together: None,
+        related_to: None,
+        per_player: None,
     };
     let slot = b.add_target(spec, text);
     Some(Effect::AddCounters {

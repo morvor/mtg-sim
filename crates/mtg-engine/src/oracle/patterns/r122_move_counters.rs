@@ -32,7 +32,7 @@ fn object(s: &str, b: &mut Builder) -> Option<Sel> {
     };
     let (mut spec, tail) = parse_target(&text)?;
     if !end(tail).is_empty()
-        || spec.min != 1
+        || spec.fixed_min() != Some(1)
         || !matches!(spec.max, Value::Const(1))
         || !matches!(spec.what, TargetKind::Object(_))
     {
