@@ -156,6 +156,10 @@ pub trait KeywordRules: Sync + Send {
         x: u32,
     ) {
     }
+    /// Changes to the total cost of `card` cast by `p` applied after every other cost
+    /// increase and reduction (CR 601.2f), e.g. a minimum total cost. Called for every
+    /// registered implementation.
+    fn global_spell_cost(&self, g: &Game, p: PlayerId, card: ObjectId, cost: &mut Cost) {}
     /// Where a resolved instant/sorcery goes, if the keyword changes it.
     fn resolved_destination(
         &self,
@@ -632,6 +636,13 @@ pub fn cost_reductions(
         for r in impls_for(kw.kind) {
             r.cost_reduction(g, p, card, kw, cost, x);
         }
+    }
+}
+
+/// See [`KeywordRules::global_spell_cost`].
+pub fn global_spell_cost(g: &Game, p: PlayerId, card: ObjectId, cost: &mut Cost) {
+    for r in registry() {
+        r.global_spell_cost(g, p, card, cost);
     }
 }
 

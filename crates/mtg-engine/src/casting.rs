@@ -1741,6 +1741,8 @@ impl Game {
             }
         }
         crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
+        // Changes applied after all others (e.g. a minimum total cost).
+        crate::kw::global_spell_cost(self, p, card, &mut cost);
         cost
     }
 

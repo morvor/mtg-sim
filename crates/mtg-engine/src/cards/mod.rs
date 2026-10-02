@@ -165,6 +165,16 @@ pub fn manual_check(tests_cards_dir: &std::path::Path) -> Vec<String> {
             ));
             continue;
         }
+        let face = &def.faces[m.face];
+        if face.chars.abilities.iter().any(|a| {
+            matches!(&a.kind, AbilityKind::Unsupported(t) if t == m.text)
+        }) || !face.unsupported.is_empty()
+        {
+            problems.push(format!(
+                "{} (face {}): the card still has unsupported text {:?}",
+                m.card, m.face, face.unsupported
+            ));
+        }
         let plain = crate::oracle::without_manual(|| crate::card::CardDef::from_scryfall(sc));
         if !plain.faces[m.face].unsupported.iter().any(|t| t == m.text) {
             problems.push(format!(
