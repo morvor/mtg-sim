@@ -448,7 +448,7 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             if let Some((g, _, r)) = parse_object_phrase(&probe) {
                 let consumed = t.len().saturating_sub(r.len());
                 if consumed > 0 && r.len() <= t.len() {
-                    parts.push(g);
+                    parts.push(crate::oracle::phrases::without_probe_card(g));
                     rest = &t[consumed..];
                     continue;
                 }
@@ -1446,6 +1446,24 @@ pub(crate) fn type_predicate_mods(r: &str, subj: &Subject) -> Option<Vec<Modific
 fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
     let r = r.trim();
     let m = |v: Vec<Modification>| Some(v.into_iter().map(Out::Mod).collect::<Vec<Out>>());
+    // "... with base power and toughness 1/1 named Legitimate Businessperson" (Witness
+    // Protection): the rest of the predicate, and the object's name becomes that name
+    // (CR 201.2), in the card's own capitalization.
+    if let Some((x, name)) = r.rsplit_once(" named ") {
+        let name = name.trim();
+        if !name.is_empty() && !name.contains(['"', '~', ',']) && name.split(' ').count() <= 4 {
+            let raw = crate::oracle::raw_text();
+            let original = (raw.len() == raw.to_lowercase().len())
+                .then(|| {
+                    let i = raw.to_lowercase().find(&format!(" named {name}"))? + 7;
+                    raw.get(i..i + name.len()).map(str::to_string)
+                })
+                .flatten()?;
+            let mut out = type_predicate(x, subj)?;
+            out.push(Out::Mod(Modification::SetName(original.into())));
+            return Some(out);
+        }
+    }
     // "is also a Cleric, Rogue, Warrior, and Wizard"
     if let Some(x) = r.strip_prefix("also ") {
         let tw = type_words(x)?;

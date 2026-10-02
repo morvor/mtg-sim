@@ -172,6 +172,7 @@ dependencies = [
  "mtg-data",
  "rand",
  "rand_chacha",
+ "regex",
  "serde",
  "serde_json",
  "smallvec",

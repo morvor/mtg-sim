@@ -41,8 +41,13 @@ fn targeted_thing(s: &str) -> Option<(Option<Filter>, Option<PlayerFilter>)> {
 /// Splits a qualifier describing a stack object's targets off a target phrase: "with a
 /// single target", "that targets only [...]", "that targets [...]" (CR 115.9).
 fn split_targets_qualifier(s: &str) -> (&str, Option<TargetsFilter>) {
-    if let Some((head, _)) = s.split_once(" with a single target") {
-        return (head, Some(TargetsFilter::Count(1)));
+    // Only at the end: "... with a single target unless its controller pays {2}" is
+    // more than a target phrase.
+    if let Some((head, tail)) = s.split_once(" with a single target") {
+        if end(tail).trim().is_empty() {
+            return (head, Some(TargetsFilter::Count(1)));
+        }
+        return (s, None);
     }
     if let Some((head, what)) = s.split_once(" that targets only ") {
         if let Some((objects, players)) = targeted_thing(what) {

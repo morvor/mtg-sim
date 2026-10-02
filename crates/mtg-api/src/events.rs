@@ -223,7 +223,7 @@ pub fn describe_event(g: &Game, viewer: Viewer, e: &Event) -> Option<EventView> 
             x.objects = obj_ids(&[*spell]);
             x
         }
-        Event::Countered { what } => ev("counter", format!("{} was countered", name(*what))),
+        Event::Countered { what, .. } => ev("counter", format!("{} was countered", name(*what))),
         Event::Damage {
             source,
             target,
@@ -306,7 +306,9 @@ pub fn describe_event(g: &Game, viewer: Viewer, e: &Event) -> Option<EventView> 
             x.objects = obj_ids(cards);
             x
         }
-        Event::CountersAdded { target, kind, n } => ev(
+        Event::CountersAdded {
+            target, kind, n, ..
+        } => ev(
             "counters",
             format!("{n} {kind} counter(s) put on {}", ent(*target)),
         ),
@@ -432,7 +434,7 @@ pub fn describe_event(g: &Game, viewer: Viewer, e: &Event) -> Option<EventView> 
             "sacrifice",
             format!("{} sacrificed {}", player_name(*player), name(*obj)),
         ),
-        Event::Destroyed { obj } => ev("destroy", format!("{} was destroyed", name(*obj))),
+        Event::Destroyed { obj, .. } => ev("destroy", format!("{} was destroyed", name(*obj))),
         Event::Attached { obj, to } => ev(
             "attach",
             format!("{} became attached to {}", name(*obj), ent(*to)),
