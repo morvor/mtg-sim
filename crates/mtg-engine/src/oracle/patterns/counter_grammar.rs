@@ -332,6 +332,9 @@ fn remove_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     let (q, r) = quantity(r, b)?;
     let (kind, r) = counter_noun(&r)?;
     let r = r.strip_prefix("from ")?;
+    // "Remove a +1/+1 counter from each of two creatures you control. If you do, ...":
+    // done only if there are two such creatures (each then has one removed).
+    let mut needs: Option<(Filter, i32)> = None;
     let what = match holder(r, b)? {
         // "Remove a counter from a creature you control": one with such a counter.
         Sel::Choose {
@@ -341,14 +344,19 @@ fn remove_counters(l: &str, b: &mut Builder) -> Option<Effect> {
             up_to,
             store,
         } => {
-            // "Remove a +1/+1 counter from each of two creatures you control. If you do,
-            // ...": whether it was done depends on both; not read.
+            let filter = Filter::and(vec![filter, Filter::HasCounter(kind.clone())]);
             if !up_to && !matches!(count, Value::Const(1)) {
-                return None;
+                let Value::Const(n) = count else {
+                    return None;
+                };
+                if !matches!(q, Qty::Exact(_)) {
+                    return None;
+                }
+                needs = Some((filter.clone(), n));
             }
             Sel::Choose {
                 chooser,
-                filter: Filter::and(vec![filter, Filter::HasCounter(kind.clone())]),
+                filter,
                 count,
                 up_to,
                 store,
@@ -356,7 +364,20 @@ fn remove_counters(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         other => other,
     };
-    Some(match q {
+    let e = remove_effect(q, what, kind);
+    Some(match needs {
+        Some((f, n)) => Effect::If {
+            cond: Condition::Compare(Value::Count(f), Cmp::Ge, Value::c(n)),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+        None => e,
+    })
+}
+
+/// The removal of `q` counters of `kind` (any kind: None) from `what`.
+fn remove_effect(q: Qty, what: Sel, kind: Option<CounterKind>) -> Effect {
+    match q {
         Qty::Exact(n) => Effect::RemoveCounters { what, kind, n },
         Qty::All => Effect::RemoveCounters {
             what,
@@ -373,7 +394,7 @@ fn remove_counters(l: &str, b: &mut Builder) -> Option<Effect> {
             kind,
             max: None,
         },
-    })
+    }
 }
 
 inventory::submit! { EffectPattern { name: "counter grammar: remove [quantity] counters from [holder]", priority: 400, parse: remove_counters } }
@@ -482,8 +503,41 @@ fn add(what: &Sel, q: &Qty, kind: CounterKind) -> Option<Effect> {
 
 /// A value phrase with nothing after it.
 fn amount_value(a: &str, b: &mut Builder) -> Option<Value> {
+    // "the amount of life you gained this turn or the amount of life you lost this turn,
+    // whichever is greater".
+    if let Some(r) = end(a).strip_suffix(", whichever is greater") {
+        let (x, y) = r.split_once(" or ")?;
+        return Some(Value::Max(
+            Box::new(amount_value(x, b)?),
+            Box::new(amount_value(y, b)?),
+        ));
+    }
+    if end(a) == "the amount of life you lost this turn" {
+        return Some(Value::LifeLostThisTurn(PlayerRef::You));
+    }
     let (v, rest) = super::value_grammar::parse_value(a, b)?;
     end(&rest).is_empty().then_some(v)
+}
+
+/// "put that many [counters] on ..." / "put that number of [counters] on ..." after "if
+/// it had counters on it" / "if that artifact had counters on it": how many counters the
+/// object had as it last existed (CR 603.10, 608.2h).
+fn counters_it_had(b: &Builder) -> Option<Value> {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let lki = if b.in_trigger && (raw.contains(", if it had one or more counters on it,") || raw.contains(", if it had counters on it,")) {
+        Sel::TriggerLki
+    } else if raw.contains("if that artifact had counters on it")
+        || raw.contains("if that creature had counters on it")
+        || raw.contains("if that permanent had counters on it")
+    {
+        match &b.it {
+            Sel::Target(_) => b.it.clone(),
+            _ => return None,
+        }
+    } else {
+        return None;
+    };
+    Some(Value::CountersOn(Box::new(lki), None))
 }
 
 /// "put [items] on [holder] [equal to V]": one put instruction.
@@ -493,6 +547,23 @@ fn put_one(l: &str, b: &mut Builder) -> Option<Effect> {
     let (choice, r) = match r.strip_prefix("your choice of ") {
         Some(r) => (true, r),
         None => (false, r),
+    };
+    // "put that many +1/+1 counters or charge counters on ..." after "if that artifact had
+    // counters on it": as many as it had.
+    let had = match r
+        .strip_prefix("that many ")
+        .or_else(|| r.strip_prefix("that number of "))
+    {
+        Some(rest) => Some((counters_it_had(b)?, rest)),
+        None => None,
+    };
+    let x_items;
+    let r = match &had {
+        Some((_, rest)) => {
+            x_items = format!("x {rest}");
+            x_items.as_str()
+        }
+        None => r,
     };
     // "put a number of +1/+1 counters equal to ~'s power on ...", "put a number of
     // +1/+1 counters on ~ equal to ...".
@@ -548,7 +619,10 @@ fn put_one(l: &str, b: &mut Builder) -> Option<Effect> {
             value = Some(amount_value(a, b)?);
         }
     }
-    let amount = value;
+    let amount = match had {
+        Some((v, _)) => Some(v),
+        None => value,
+    };
     let mut effects = Vec::new();
     for (q, kind) in options {
         let mut e = add(&what, &q, kind.clone())?;
