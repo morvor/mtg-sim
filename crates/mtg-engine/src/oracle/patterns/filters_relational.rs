@@ -758,8 +758,18 @@ fn target_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
             },
         },
     };
+    // "target creature card and all other cards with the same name as that card from
+    // your graveyard": the zone is the target's too.
+    let consumed = &after[..after.len() - rest.len()];
+    let head = match ["from your graveyard", "from a graveyard", "in your graveyard"]
+        .iter()
+        .find(|z| consumed.contains(*z))
+    {
+        Some(z) => format!("{head} {z}"),
+        None => head.to_string(),
+    };
     let rewritten = if tail.is_empty() {
-        head.to_string()
+        head
     } else {
         format!("{head} {tail}")
     };
@@ -773,7 +783,19 @@ fn target_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
             if let TargetKind::Object(tf) = &b.targets[slot as usize].what {
                 if let Some(zone) = tf.zone().filter(|z| *z != ZoneKind::Battlefield) {
                     if group_filter.zone().is_none() {
-                        group_filter = Filter::and(vec![group_filter.clone(), Filter::InZone(zone)]);
+                        // And whose zone it is ("from your graveyard").
+                        let parts = match tf {
+                            Filter::And(v) => v.as_slice(),
+                            other => std::slice::from_ref(other),
+                        };
+                        let mut v = vec![group_filter.clone(), Filter::InZone(zone)];
+                        v.extend(
+                            parts
+                                .iter()
+                                .filter(|p| matches!(p, Filter::OwnedBy(_)))
+                                .cloned(),
+                        );
+                        group_filter = Filter::and(v);
                     }
                 }
             }
@@ -1181,6 +1203,12 @@ fn objects_for_value(t: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let t = t.trim_start();
     let t2 = t.strip_prefix("all ").unwrap_or(t);
     if let Some((f, plural, rest)) = parse_object_phrase(t2) {
+        // "cards milled this way", "cards revealed this way": a description the phrase
+        // parser doesn't finish (the core value parser reads some of these).
+        let next = rest.split_whitespace().next().unwrap_or("");
+        if next.ends_with("ed") && next != "and" {
+            return None;
+        }
         if plural {
             let f = resolve_referent(f, b)?;
             // "... and [another description]"
@@ -1273,4 +1301,16 @@ pub fn value_of_objects(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         Value::Extreme(Box::new(tested(stat)), Box::new(sel), greatest),
         rest,
     ))
+}
+
+/// After a clause was parsed: "they" in "among creatures they control" is the player each
+/// instruction is performed for, and a qualifier's "it" the effect parser didn't resolve
+/// where it was used means what "it" meant as the clause began (`it`). If that has no
+/// antecedent the placeholder stays, and the ability isn't understood.
+pub fn resolve_clause(e: Effect, it: &Sel) -> Effect {
+    let e = resolve_they(e);
+    if !mentions_referent(&e) {
+        return e;
+    }
+    substitute(&e, it).unwrap_or(e)
 }

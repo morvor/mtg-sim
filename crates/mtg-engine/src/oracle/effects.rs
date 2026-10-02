@@ -904,6 +904,14 @@ fn signed_value(s: &str) -> Option<Value> {
 
 /// The main pattern list. Each returns Some if it fully understands the clause.
 pub fn parse_simple(l: &str, b: &mut Builder) -> Option<Effect> {
+    // "it" in an object qualifier ("search for a creature card with lesser mana value")
+    // means what "it" meant as the clause began (see `patterns::filters_relational`).
+    let it = super::patterns::pronoun_groups::singular_it(b);
+    let e = parse_simple_clause(l, b)?;
+    Some(super::patterns::filters_relational::resolve_clause(e, &it))
+}
+
+fn parse_simple_clause(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     type P = fn(&str, &mut Builder) -> Option<Effect>;
     const PATTERNS: &[P] = &[

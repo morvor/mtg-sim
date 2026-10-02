@@ -126,6 +126,11 @@ fn exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let desc = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
     let filter = card_filter(desc, b)?;
+    // A quality relative to the trigger's spell ("with lesser mana value", Jodah, the
+    // Unifier) is `r406_exile_until.rs`'s, with its own follow-up instructions.
+    if super::filters_relational::mentions_referent(&filter) {
+        return None;
+    }
     b.it = Sel::Var(vars::IT);
     Some(effect(who, filter))
 }

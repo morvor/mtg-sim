@@ -506,3 +506,4 @@ fn ancient_ooze_counts_the_total_mana_value_of_other_creatures() {
     t.g.recompute();
     assert_eq!(t.pt(ooze), (6, 6));
 }
+
