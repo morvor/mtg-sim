@@ -161,6 +161,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               of them gets +1/+1\" is \"they get +1/+1\" (CR 611.2c: each affected object).",
     },
     Equivalence {
+        pattern: r"(^|[.:—•] |\n)it ([^.]*?) as long as (enchanted creature|enchanted permanent|equipped creature|enchanted land|enchanted artifact) is ",
+        replacement: "${1}$3 $2 as long as $3 is ",
+        why: "\"Enchanted permanent gets -1/-1 as long as it's a creature\" and \"As long as \
+              enchanted permanent is a creature, it gets -1/-1\": the noun and the pronoun \
+              name the same object, one way or the other.",
+    },
+    Equivalence {
         pattern: r"\bat the beginning of the next upkeep\b",
         replacement: "at the beginning of the next turn's upkeep",
         why: "Each turn has one upkeep (CR 500.1), and an effect can't be created during \

@@ -48,6 +48,13 @@ fn filter_has(f: &Filter, p: &dyn Fn(&Filter) -> bool) -> bool {
 
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
+        if let Some(t) = self
+            .class_level_abilities(s)
+            .or_else(|| self.level_symbol(s))
+            .or_else(|| self.station_symbol(s))
+        {
+            return t;
+        }
         // "Solved — [ability]" (CR 719.3b), compiled as the ability granted while solved.
         if s.condition.as_ref().is_some_and(super::is_solved) {
             if let StaticEffect::Continuous {
@@ -869,6 +876,23 @@ impl Renderer<'_> {
                     s.push_str(". This effect reduces only the amount of colored mana you pay");
                 }
                 s
+            }
+            // "This spell costs {R} more to cast for each target beyond the first": paid
+            // with the spell's total cost like an additional cost (CR 601.2f).
+            CostChange::AdditionalCost(Cost { mana: None, parts })
+                if matches!(cm.applies_to, CostTarget::ThisSpell)
+                    && matches!(parts.as_slice(), [CostPart::Repeated { cost, times: Value::Custom(t) }]
+                        if t == "spell_targets_beyond_first" && cost.parts.is_empty() && cost.mana.is_some()) =>
+            {
+                let [CostPart::Repeated { cost, .. }] = parts.as_slice() else {
+                    return self.gap("cost per target");
+                };
+                let mana = cost
+                    .mana
+                    .as_ref()
+                    .map(|m| m.to_string())
+                    .unwrap_or_default();
+                format!("~ costs {mana} more to cast for each target beyond the first")
             }
             CostChange::AdditionalCost(c) => {
                 let c = self.cost_as_payment(c);

@@ -247,3 +247,166 @@ pub(crate) fn or_form(options: &[String]) -> Option<String> {
             .join(" "),
     )
 }
+
+impl Renderer<'_> {
+    /// "{3}{W}: Level 2": a Class's level ability (CR 716.2a: activate only as a sorcery
+    /// and only if the Class's level is one less).
+    pub(crate) fn class_level_up(&mut self, a: &ActivatedAbility) -> Option<String> {
+        let Effect::SetClassLevel { level } = &a.body.effect else {
+            return None;
+        };
+        let one_less = matches!(&a.condition,
+            Some(Condition::Compare(Value::ClassLevel, Cmp::Eq, Value::Const(n))) if *n + 1 == *level as i32);
+        if !matches!(a.timing, ActivationTiming::Sorcery)
+            || !one_less
+            || a.max_per_turn.is_some()
+            || !a.body.targets.is_empty()
+        {
+            return None;
+        }
+        let cost = self.cost(&a.cost);
+        Some(format!("{cost}: Level {level}"))
+    }
+
+    /// A Class's level section: the abilities it has while its level is that level or
+    /// greater (CR 716.2a), written after its level ability.
+    pub(crate) fn class_level_abilities(&mut self, s: &StaticAbility) -> Option<String> {
+        if !matches!(
+            &s.condition,
+            Some(Condition::Compare(
+                Value::ClassLevel,
+                Cmp::Ge,
+                Value::Const(_)
+            ))
+        ) {
+            return None;
+        }
+        let StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods,
+        } = &s.effect
+        else {
+            return None;
+        };
+        let abilities: Vec<&Ability> = mods
+            .iter()
+            .map(|m| match m {
+                Modification::AddAbility(a) => Some(a),
+                _ => None,
+            })
+            .collect::<Option<_>>()?;
+        if abilities.is_empty() {
+            return None;
+        }
+        let texts: Vec<String> = abilities.iter().map(|a| self.nested_ability(a)).collect();
+        Some(texts.join("\n"))
+    }
+}
+
+impl Renderer<'_> {
+    /// A leveler's level symbol: "LEVEL 2-3 / 3/3 / Flying" (CR 711.2a: as long as it has
+    /// at least 2 and no more than 3 level counters, it has base power and toughness 3/3
+    /// and has flying; CR 711.2b: "LEVEL 4+").
+    pub(crate) fn level_symbol(&mut self, s: &StaticAbility) -> Option<String> {
+        let level = |c: &Condition| match c {
+            Condition::Compare(Value::CountersOn(sel, Some(k)), cmp, Value::Const(n))
+                if k == "level" && matches!(sel.as_ref(), Sel::This) =>
+            {
+                Some((*cmp, *n))
+            }
+            _ => None,
+        };
+        let range = match s.condition.as_ref()? {
+            Condition::And(v) => match v.as_slice() {
+                [a, b] => match (level(a)?, level(b)?) {
+                    ((Cmp::Ge, lo), (Cmp::Le, hi)) => format!("{lo}-{hi}"),
+                    _ => return None,
+                },
+                [a] => match level(a)? {
+                    (Cmp::Ge, lo) => format!("{lo}+"),
+                    _ => return None,
+                },
+                _ => return None,
+            },
+            c => match level(c)? {
+                (Cmp::Ge, lo) => format!("{lo}+"),
+                _ => return None,
+            },
+        };
+        let StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods,
+        } = &s.effect
+        else {
+            return None;
+        };
+        let mut lines = vec![format!("LEVEL {range}")];
+        let mut pt = None;
+        let mut abilities = Vec::new();
+        for m in mods {
+            match m {
+                Modification::SetPT(Some(Value::Const(p)), Some(Value::Const(t)))
+                    if pt.is_none() =>
+                {
+                    pt = Some(format!("{p}/{t}"))
+                }
+                Modification::AddAbility(a) => abilities.push(a.clone()),
+                _ => return None,
+            }
+        }
+        lines.push(pt?);
+        for a in &abilities {
+            lines.push(self.nested_ability(a));
+        }
+        Some(lines.join("\n"))
+    }
+}
+
+impl Renderer<'_> {
+    /// A station symbol: "8+ | Flying, trample" (CR 721.2a: as long as it has 8 or more
+    /// charge counters, it has those abilities; CR 721.2b: with a power/toughness box, it's
+    /// also a creature with that base power and toughness, which the box shows).
+    pub(crate) fn station_symbol(&mut self, s: &StaticAbility) -> Option<String> {
+        if !self
+            .info
+            .subtypes
+            .iter()
+            .any(|t| t == "Spacecraft" || t == "Planet")
+        {
+            return None;
+        }
+        let Some(Condition::Compare(Value::CountersOn(sel, Some(k)), Cmp::Ge, Value::Const(n))) =
+            &s.condition
+        else {
+            return None;
+        };
+        if k != "charge" || !matches!(sel.as_ref(), Sel::This) {
+            return None;
+        }
+        let StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods,
+        } = &s.effect
+        else {
+            return None;
+        };
+        let mut creature = false;
+        let mut pt = false;
+        let mut abilities = Vec::new();
+        for m in mods {
+            match m {
+                Modification::AddTypes(t) if t.as_slice() == [CardType::Creature] => {
+                    creature = true
+                }
+                Modification::SetPT(Some(Value::Const(_)), Some(Value::Const(_))) => pt = true,
+                Modification::AddAbility(a) => abilities.push(a.clone()),
+                _ => return None,
+            }
+        }
+        if creature != pt || abilities.is_empty() {
+            return None;
+        }
+        let texts: Vec<String> = abilities.iter().map(|a| self.nested_ability(a)).collect();
+        Some(format!("{n}+ | {}", texts.join("\n")))
+    }
+}

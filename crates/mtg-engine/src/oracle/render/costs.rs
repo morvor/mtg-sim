@@ -312,6 +312,9 @@ impl Renderer<'_> {
 
     /// An activated ability: "{cost}: {effect} {restrictions}".
     pub(crate) fn activated(&mut self, a: &ActivatedAbility) -> String {
+        if let Some(t) = self.class_level_up(a) {
+            return t;
+        }
         let saved = self.zone;
         self.zone = a.zone;
         let cost = self.cost(&a.cost);
