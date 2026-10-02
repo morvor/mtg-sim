@@ -190,3 +190,40 @@ fn convoke_pays_the_total_cost_after_increases_and_keeps_the_mana_value() {
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Thalia, Guardian of Thraben"));
 }
+
+#[test]
+fn ingenious_mastery_cast_for_its_alternative_cost_has_the_mana_value_of_its_mana_cost() {
+    cr!("118.9c", "202.3", "107.3b", "601.2f");
+    ruling!(
+        "Ingenious Mastery",
+        "The mana value of a spell on the stack is determined by its mana cost, not any alternative costs you used to pay for it."
+    );
+    supported("Ingenious Mastery");
+    supported("Thalia, Guardian of Thraben");
+    // Ingenious Mastery ({X}{2}{U}): "You may pay {2}{U} rather than pay this spell's mana
+    // cost. If the {2}{U} cost was paid, you draw three cards, then an opponent creates two
+    // Treasure tokens and they scry 2. If that cost wasn't paid, you draw X cards." With
+    // P1's Thalia the alternative cost totals {3}{U}, but the spell's mana value comes
+    // from {X}{2}{U} with X = 0 (no X was chosen for the alternative cost): 3.
+    let mut t = TestGame::new(2);
+    kaervek(&mut t);
+    t.battlefield(P1, "Thalia, Guardian of Thraben");
+    t.lands(P0, "Island", 6);
+    let mastery = t.hand(P0, "Ingenious Mastery");
+    let alt = alternative(&mut t, mastery);
+    aim_kaervek_at_p0(&mut t);
+    let hand = t.hand_size(P0);
+    let spell = t.cast(P0, mastery).method(alt).go();
+    assert_eq!(tapped_lands(&t, P0), 4);
+    assert_eq!(
+        t.obj(spell).chars.mana_cost.as_ref().unwrap().to_string(),
+        "{X}{2}{U}"
+    );
+    assert_eq!(mana_value(&t, spell), 3);
+    t.resolve();
+    assert_eq!(t.life(P0), 17);
+    t.resolve_all();
+    // The {2}{U} cost was paid: three cards, and two Treasures for P1.
+    assert_eq!(t.hand_size(P0), hand - 1 + 3);
+    assert_eq!(with_subtype(&t, P1, "Treasure").len(), 2);
+}
