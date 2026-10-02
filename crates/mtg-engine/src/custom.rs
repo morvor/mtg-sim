@@ -203,6 +203,24 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
             .filter(|(p, _)| g.are_opponents(ctx.controller, **p))
             .map(|(_, n)| *n as i64)
             .sum(),
+        // "the number of creatures that were exiled under your opponents' control this
+        // turn" (Vren, the Relentless): creatures an opponent controlled that left the
+        // battlefield for exile (their last known information, CR 608.2h).
+        "creatures_exiled_from_opponents_this_turn" => g
+            .history
+            .permanents_left
+            .iter()
+            .filter(|o| {
+                let old = g.obj(**o);
+                old.chars.is(crate::types::CardType::Creature)
+                    && g.are_opponents(ctx.controller, old.controller)
+                    && old
+                        .next
+                        .is_some_and(|n| g.obj(n).zone == crate::object::Zone::Exile)
+            })
+            .count() as i64,
+        // "the number of spells cast this turn" (by all players).
+        "spells_cast_this_turn" => g.history.spells_cast.len() as i64,
         // Number of spells the controller has cast this turn.
         "spells_you_cast_this_turn" => g
             .history

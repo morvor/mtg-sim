@@ -14,6 +14,21 @@ inventory::submit! {
 inventory::submit! {
     FollowupPattern { name: "card_flow: you may play those cards this turn", priority: 90, apply: may_play_them }
 }
+inventory::submit! {
+    FollowupPattern { name: "card_flow: if it's a nonland card, you may cast that card this turn", priority: 90, apply: may_cast_if_nonland }
+}
+inventory::submit! {
+    FollowupPattern { name: "card_flow: you may cast that card (now)", priority: 90, apply: may_cast_it_now }
+}
+inventory::submit! {
+    EffectPattern { name: "card_flow: shuffle your library, then exile the top N cards", priority: 90, parse: shuffle_then_exile_top }
+}
+inventory::submit! {
+    FollowupPattern { name: "card_flow: until end of turn, you may play lands and cast spells from among cards exiled this way without paying their mana costs", priority: 90, apply: may_play_them_free }
+}
+inventory::submit! {
+    EffectPattern { name: "card_flow: you may play that card until end of turn (the card just moved)", priority: 90, parse: may_play_that_card }
+}
 
 /// "the top card of", "the top N cards of" + a library.
 fn top_cards_of<'a>(s: &'a str) -> Option<(Value, &'a str)> {
@@ -49,6 +64,16 @@ fn exile_top(l: &str, b: &mut Builder) -> Option<Effect> {
             b.it_player = PlayerRef::Target(slot);
             PlayerRef::Target(slot)
         }
+        // "exile the top card of that player's library" / "of their library": the player
+        // the text is about (e.g. the player a creature dealt combat damage to).
+        "that player's library" | "their library"
+            if matches!(
+                b.it_player,
+                PlayerRef::Target(_) | PlayerRef::TriggerPlayer | PlayerRef::DefendingPlayer
+            ) =>
+        {
+            b.it_player.clone()
+        }
         _ => return None,
     };
     b.it = Sel::Var(vars::IT);
@@ -78,8 +103,8 @@ fn exiles_your_top_cards(e: &Effect) -> bool {
 }
 
 /// "you may play that card this turn", "until end of turn, you may play those cards",
-/// "until the end of your next turn, you may play that card" after exiling the top cards
-/// of your library.
+/// "until the end of your next turn, you may play that card", "you may play it until your
+/// next end step" after exiling the top cards of your library.
 fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let (duration, r) = if let Some(r) = l.strip_prefix("until the end of your next turn, ") {
         (Some(Duration::UntilEndOfYourNextTurn), r)
@@ -107,6 +132,13 @@ fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         (Some(d), "") => d,
         (None, "this turn") => Duration::EndOfTurn,
         (None, "until the end of your next turn") => Duration::UntilEndOfYourNextTurn,
+        // Haste Magic: until your next end step begins (CR 500.4).
+        (None, "until your next end step") => Duration::UntilYourNextStep(TriggerStep::End),
+        // Valakut Exploration, Rassilon: the permission is for those objects, so it ends
+        // when they leave exile (CR 400.7).
+        (None, "for as long as it remains exiled" | "for as long as they remain exiled") => {
+            Duration::Permanent
+        }
         _ => return false,
     };
     if !exiles_your_top_cards(prev) {
@@ -120,6 +152,123 @@ fn may_play_them(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             what: Sel::Var(vars::IT),
             duration,
             free: false,
+        },
+    ]);
+    true
+}
+
+/// "If it's a nonland card, you may cast that card this turn." after exiling the top card
+/// of your library (Vance's Blasting Cannons): a permission to cast it, with the normal
+/// timing rules and costs; a land card gets none (CR 305.9).
+fn may_cast_if_nonland(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let duration = match l {
+        "if it's a nonland card, you may cast that card this turn"
+        | "if it's a nonland card, you may cast it this turn" => Duration::EndOfTurn,
+        _ => return false,
+    };
+    if !exiles_your_top_cards(prev) {
+        return false;
+    }
+    let card = Sel::Var(vars::IT);
+    let grant = Effect::If {
+        cond: Condition::SelMatches(
+            card.clone(),
+            Filter::Not(Box::new(Filter::Type(crate::types::CardType::Land))),
+        ),
+        then: Box::new(Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: card,
+            duration,
+            free: false,
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    *prev = Effect::seq(vec![std::mem::take(prev), grant]);
+    true
+}
+
+/// "You may cast that card." after exiling the top card of your library (Chandra, Torch of
+/// Defiance): it may be cast as the effect resolves, paying its costs (CR 608.2g, 601.2b);
+/// "If you don't, ..." then refers to whether it was cast.
+fn may_cast_it_now(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if !matches!(l, "you may cast that card" | "you may cast it") || !exiles_your_top_cards(prev) {
+        return false;
+    }
+    *prev = Effect::seq(vec![
+        std::mem::take(prev),
+        Effect::CastCard {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            free: false,
+            optional: true,
+        },
+    ]);
+    true
+}
+
+/// "You may play that card until end of turn." as an instruction of its own, "that card"
+/// being the card the previous instruction moved ("If you don't, you may play that card
+/// until end of turn.", Spark of Creativity): a permission for that object (CR 400.7).
+fn may_play_that_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let duration = match end(l) {
+        "you may play that card until end of turn" | "you may play that card this turn" => {
+            Duration::EndOfTurn
+        }
+        _ => return None,
+    };
+    if !matches!(&b.it, Sel::Var(v) if *v == vars::IT) {
+        return None;
+    }
+    Some(Effect::GrantPlayPermission {
+        who: PlayerRef::You,
+        what: Sel::Var(vars::IT),
+        duration,
+        free: false,
+    })
+}
+
+/// "Shuffle your library, then exile the top X cards" (Magus of the Mind): of that
+/// library.
+fn shuffle_then_exile_top(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("shuffle your library, then exile ")?;
+    let r = r.strip_prefix("the top ")?;
+    let (n, rest) = parse_number(r)?;
+    if !matches!(n, Value::X) {
+        n.as_const()?;
+    }
+    if !matches!(rest.trim(), "cards" | "card") {
+        return None;
+    }
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::seq(vec![
+        Effect::Shuffle {
+            who: PlayerRef::You,
+        },
+        Effect::Exile {
+            what: Sel::TopOfLibrary(PlayerRef::You, n),
+            face_down: false,
+            link: false,
+        },
+    ]))
+}
+
+/// "Until end of turn, you may play lands and cast spells from among cards exiled this way
+/// without paying their mana costs." after exiling the top cards of your library: lands
+/// are played with the normal rules (a land play, CR 305.2), spells cast without paying
+/// their mana costs (CR 118.9).
+fn may_play_them_free(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if l != "until end of turn, you may play lands and cast spells from among cards exiled this way without paying their mana costs"
+        || !exiles_your_top_cards(prev)
+    {
+        return false;
+    }
+    *prev = Effect::seq(vec![
+        std::mem::take(prev),
+        Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: Sel::Var(vars::IT),
+            duration: Duration::EndOfTurn,
+            free: true,
         },
     ]);
     true

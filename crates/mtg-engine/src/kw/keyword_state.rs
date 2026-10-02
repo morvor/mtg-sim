@@ -18,4 +18,9 @@ pub struct KeywordState {
     /// How many times each power-up ability (the permanent, the ability's uid) has been
     /// activated (CR 702.193a: "Activate this ability only once").
     pub power_up_activations: BTreeMap<(ObjectId, u64), u32>,
+    /// The terms that come with a player's permission to play a card, by the player, the
+    /// card and the permission's source ("A spell cast this way costs {2} more to cast",
+    /// see `kw/play_permission_terms.rs`).
+    pub permission_terms:
+        BTreeMap<(PlayerId, ObjectId, Option<ObjectId>), super::play_permission_terms::Terms>,
 }

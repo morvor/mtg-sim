@@ -578,6 +578,7 @@ fn support(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
             "up to N other target creatures".into()
         },
         condition: None,
+        together: None,
     };
     let body = Body {
         targets: vec![spec],
