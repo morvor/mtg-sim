@@ -157,7 +157,7 @@ pub fn protected_by(who: &crate::ability::PlayerRef) -> String {
     )
 }
 
-const SAME_NAME_AS_ANOTHER: &str = "basic_effects:same name as another:";
+pub const SAME_NAME_AS_ANOTHER: &str = "basic_effects:same name as another:";
 
 /// The filter "with the same name as another [objects]" (CR 201.2). `sel` is "another
 /// [objects]" read as an object phrase (other than the source). When the object
@@ -190,6 +190,13 @@ pub fn same_name_as_another(sel: &crate::ability::Sel) -> Option<crate::ability:
         )
         .into(),
     ))
+}
+
+/// The "another [objects]" a [`same_name_as_another`] filter compares with, as written.
+pub fn same_name_as_another_sel(name: &str) -> Option<crate::ability::Sel> {
+    let json = name.strip_prefix(SAME_NAME_AS_ANOTHER)?;
+    let (_, sel): (crate::ability::Sel, crate::ability::Sel) = serde_json::from_str(json).ok()?;
+    Some(sel)
 }
 
 const SOURCE_OF_SLOT: &str = "basic_effects:source of the ability in target slot ";
