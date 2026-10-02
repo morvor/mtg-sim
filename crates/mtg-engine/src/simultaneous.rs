@@ -268,7 +268,7 @@ fn makes_choice(e: &Effect) -> bool {
 
 fn has_choice(sel: &Sel) -> bool {
     match sel {
-        Sel::Choose { .. } => true,
+        Sel::Choose { .. } | Sel::AtRandom { .. } => true,
         Sel::Union(v) => v.iter().any(has_choice),
         _ => false,
     }

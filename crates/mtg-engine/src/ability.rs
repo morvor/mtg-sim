@@ -719,6 +719,11 @@ pub struct TargetSpec {
     /// for. See `per_player_targets.rs`.
     #[serde(default)]
     pub per_player: Option<PlayerFilter>,
+    /// "target ... chosen at random": nobody chooses; the targets are chosen at random
+    /// among the legal ones as the spell or ability is put on the stack (see
+    /// `patterns::choice_grammar_random`).
+    #[serde(default)]
+    pub random: bool,
 }
 
 /// A relationship the targets of one instance of the word "target" must have with each
@@ -787,6 +792,7 @@ impl TargetSpec {
             together: None,
             related_to: None,
             per_player: None,
+            random: false,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
@@ -919,6 +925,15 @@ pub enum Sel {
     All(Filter),
     /// Players.
     Players(PlayerRef),
+    /// Objects chosen at random during resolution ("a card at random from your
+    /// graveyard", "a creature an opponent controls chosen at random"): nobody chooses;
+    /// each object matching the filter is equally likely (CR 701.9b's random discard
+    /// works the same way). Stored in `store` like [`Sel::Choose`].
+    AtRandom {
+        filter: Filter,
+        count: Value,
+        store: Option<Var>,
+    },
     /// Objects chosen during resolution (not targeted): a player chooses.
     Choose {
         chooser: PlayerRef,

@@ -276,3 +276,24 @@ pub fn valid_card_name(name: &str, filter: Option<&str>) -> bool {
         None => matches(f),
     })
 }
+
+/// Objects matching `filter` chosen at random ([`crate::ability::Sel::AtRandom`]): `count`
+/// different ones (all of them if there are fewer), each equally likely; nobody chooses.
+pub fn pick_at_random(
+    g: &mut Game,
+    filter: &crate::ability::Filter,
+    count: &crate::ability::Value,
+    ctx: &Ctx,
+) -> Vec<ObjectId> {
+    use rand::seq::SliceRandom;
+    let n = g.eval_value(count, ctx).max(0) as usize;
+    // CR 614.13a: objects entering the battlefield right now can't be chosen.
+    let mut cands: Vec<ObjectId> = g
+        .objects_matching(filter, ctx)
+        .into_iter()
+        .filter(|o| !g.entering.contains(o))
+        .collect();
+    cands.shuffle(&mut g.rng);
+    cands.truncate(n);
+    cands
+}

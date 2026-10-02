@@ -64,11 +64,93 @@ fn max_matching(g: &Game, kinds: &[crate::ability::Filter], pool: &[ObjectId], c
         .count()
 }
 
+/// `Effect::Custom` prefix: choose a player at random among some players and store them
+/// in a variable (JSON of `(Var, PlayerRef)`).
+pub const RANDOM_PLAYER: &str = "choice_grammar:random player:";
+/// `Effect::Custom` prefix: choose one of several numbers at random and store it as a
+/// number variable, and as the previous instruction's value (JSON of `(Var, Vec<i32>)`).
+pub const RANDOM_NUMBER: &str = "choice_grammar:random number:";
+
+/// "choose an opponent at random": the effect storing the player chosen in `var`.
+pub fn random_player_effect(
+    var: crate::ability::Var,
+    from: crate::ability::PlayerRef,
+) -> Option<crate::ability::Effect> {
+    let json = serde_json::to_string(&(var, from)).ok()?;
+    Some(crate::ability::Effect::Custom(
+        format!("{RANDOM_PLAYER}{json}").into(),
+    ))
+}
+
+/// "choose 1, 2, or 3 at random": the effect storing the number chosen in `var`.
+pub fn random_number_effect(var: crate::ability::Var, nums: &[i32]) -> Option<crate::ability::Effect> {
+    let json = serde_json::to_string(&(var, nums)).ok()?;
+    Some(crate::ability::Effect::Custom(
+        format!("{RANDOM_NUMBER}{json}").into(),
+    ))
+}
+
+/// `Effect::Custom` prefix: the opponent who makes a choice "an opponent" makes (CR
+/// 801.5a, see `Game::deciding_opponent`), stored in a variable (JSON of the `Var`).
+pub const DECIDING_OPPONENT: &str = "choice_grammar:deciding opponent:";
+
+/// "An opponent chooses ...": the effect storing that opponent in `var`.
+pub fn deciding_opponent_effect(var: crate::ability::Var) -> Option<crate::ability::Effect> {
+    let json = serde_json::to_string(&var).ok()?;
+    Some(crate::ability::Effect::Custom(
+        format!("{DECIDING_OPPONENT}{json}").into(),
+    ))
+}
+
 pub struct ChoiceGrammar;
 
 impl KeywordRules for ChoiceGrammar {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        use rand::seq::SliceRandom;
+        if let Some(json) = name.strip_prefix(RANDOM_PLAYER) {
+            let Ok((var, from)) =
+                serde_json::from_str::<(crate::ability::Var, crate::ability::PlayerRef)>(json)
+            else {
+                return true;
+            };
+            let players = g.eval_players(&from, ctx);
+            let pick: Vec<Entity> = players
+                .choose(&mut g.rng)
+                .map(|p| Entity::Player(*p))
+                .into_iter()
+                .collect();
+            ctx.prev_happened = !pick.is_empty();
+            ctx.chosen_player = pick.first().and_then(|e| e.player());
+            ctx.set_var(var, pick);
+            return true;
+        }
+        if let Some(json) = name.strip_prefix(DECIDING_OPPONENT) {
+            let Ok(var) = serde_json::from_str::<crate::ability::Var>(json) else {
+                return true;
+            };
+            let Some(obj) = ctx.stack_obj.or(ctx.source) else {
+                return true;
+            };
+            let p = g.deciding_opponent(ctx.controller, obj, ctx);
+            ctx.set_var(var, vec![Entity::Player(p)]);
+            return true;
+        }
+        if let Some(json) = name.strip_prefix(RANDOM_NUMBER) {
+            let Ok((var, nums)) = serde_json::from_str::<(crate::ability::Var, Vec<i32>)>(json)
+            else {
+                return true;
+            };
+            if let Some(n) = nums.choose(&mut g.rng).copied() {
+                ctx.nums.insert(var, n as i64);
+                ctx.prev_value = n as i64;
+            }
+            return true;
+        }
+        false
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {

@@ -2088,6 +2088,20 @@ impl Game {
                 }
                 picked
             }
+            Sel::AtRandom {
+                filter,
+                count,
+                store,
+            } => {
+                let picked: Vec<Entity> = crate::choices::pick_at_random(self, filter, count, ctx)
+                    .into_iter()
+                    .map(Entity::Object)
+                    .collect();
+                if let Some(v) = store {
+                    ctx.vars.insert(*v, picked.clone());
+                }
+                picked
+            }
             Sel::Union(v) => {
                 let mut out = Vec::new();
                 for s in v {

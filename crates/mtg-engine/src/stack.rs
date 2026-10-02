@@ -878,6 +878,13 @@ impl Game {
             slot_max[i] = max;
             let picked = if max == 0 {
                 vec![]
+            } else if spec.random {
+                // "target ... chosen at random": nobody chooses.
+                use rand::seq::SliceRandom;
+                let mut v = cands.clone();
+                v.shuffle(&mut self.rng);
+                v.truncate(max as usize);
+                v
             } else {
                 match self.ask(
                     chooser,

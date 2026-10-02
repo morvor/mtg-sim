@@ -482,6 +482,11 @@ impl Renderer<'_> {
                 }
                 decline(s, case)
             }
+            Sel::AtRandom { filter, count, .. } => {
+                let det = self.det_for(count);
+                let s = self.noun_det(filter, det);
+                decline(format!("{s} chosen at random"), case)
+            }
             Sel::Linked => decline("each card exiled with ~".into(), case),
             Sel::CreatorLinked => decline("the exiled card".into(), case),
             Sel::ExiledWithCardsNamed(n) => {

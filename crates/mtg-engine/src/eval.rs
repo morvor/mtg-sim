@@ -1005,7 +1005,7 @@ impl Game {
                 .into_iter()
                 .map(Entity::Player)
                 .collect(),
-            Sel::Choose { store, .. } => store
+            Sel::Choose { store, .. } | Sel::AtRandom { store, .. } => store
                 .and_then(|v| ctx.vars.get(&v).cloned())
                 .unwrap_or_default(),
             Sel::ExiledWithCardsNamed(name) => self

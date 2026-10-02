@@ -256,3 +256,104 @@ fn serial_instructions(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: A, B, and C (a series of instructions)", priority: 990, parse: serial_instructions } }
+
+/// "~ attacks that player this combat if able" after choosing a player ("choose an
+/// opponent at random"): a requirement that the creature attack that player (CR 508.1d),
+/// locked onto the player chosen.
+fn attacks_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (subject, rest) = l.split_once(" attacks that player ")?;
+    let duration = match rest {
+        "this combat if able" => Duration::EndOfCombat,
+        "this turn if able" => Duration::EndOfTurn,
+        _ => return None,
+    };
+    let attackers = match subject {
+        "~" => Filter::Source,
+        "it" if matches!(b.it, Sel::This) => Filter::Source,
+        _ => return None,
+    };
+    let (who, _) = crate::oracle::effects::player_ref("that player", b)?;
+    if !matches!(who, PlayerRef::Var(_) | PlayerRef::Target(_)) {
+        return None;
+    }
+    Some(Effect::AddRestriction {
+        restriction: Restriction::MustAttackPlayer {
+            attackers,
+            defender: PlayerFilter::Ref(Box::new(who)),
+        },
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: ~ attacks that player if able", priority: 85, parse: attacks_that_player } }
+
+/// The internal form of "[objects] that player controls" / "[objects] they control" for a
+/// player the text named earlier (see [`that_player_controls`]), followed by the JSON of
+/// the player reference in hex digits.
+const CONTROLLED_BY_REF: &str = "controlled by player@";
+
+/// "creatures that player controls can't block this turn", "other creatures they control
+/// can't block this turn" after the text named a player ("target opponent chooses a
+/// creature they control"): objects that player controls. The phrase is rewritten to an
+/// internal form the object phrase parser reads as that player (see
+/// [`controlled_by_ref`]). Only where "that player" has an antecedent other than the
+/// trigger's player (handled by `triggers_effects::that_player_controls`).
+fn that_player_controls(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !(l.contains(" that player controls") || l.contains(" they control"))
+        || l.contains(CONTROLLED_BY_REF)
+    {
+        return None;
+    }
+    let who = b.it_player.clone();
+    if super::oracle_hardening_referents::is_no_player_referent(&who)
+        || matches!(who, PlayerRef::TriggerPlayer | PlayerRef::You)
+    {
+        return None;
+    }
+    let json = serde_json::to_string(&who).ok()?;
+    let hex: String = json.bytes().map(|x| format!("{x:02x}")).collect();
+    let form = format!(" {CONTROLLED_BY_REF}{hex}");
+    let t = l
+        .replace(" that player controls", &form)
+        .replace(" they control", &form);
+    crate::oracle::effects::parse_sentence(&t, b)
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: [objects] that player controls", priority: 992, parse: that_player_controls } }
+
+/// Reads the internal form written by [`that_player_controls`].
+fn controlled_by_ref<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix(CONTROLLED_BY_REF)?;
+    // Hex digits of the JSON (sentences are lowercased).
+    let k = r
+        .find(|c: char| !c.is_ascii_hexdigit())
+        .unwrap_or(r.len());
+    let bytes: Option<Vec<u8>> = (0..k / 2)
+        .map(|i| u8::from_str_radix(&r[2 * i..2 * i + 2], 16).ok())
+        .collect();
+    let json = String::from_utf8(bytes?).ok()?;
+    let who: PlayerRef = serde_json::from_str(&json).ok()?;
+    Some((Filter::ControlledByPlayer(Box::new(who)), &r[k..]))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "choice grammar: controlled by a referenced player", priority: 10, parse: controlled_by_ref } }
+
+/// "You gain control of those creatures.", "you put that card on the bottom of your
+/// library": an instruction with "you" as its subject is the imperative instruction
+/// (the controller of the spell or ability performs it).
+fn you_imperative(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you ")?;
+    let verb = r.split(' ').next()?;
+    if !matches!(
+        verb,
+        "gain" | "put" | "return" | "exile" | "destroy" | "tap" | "untap" | "create" | "sacrifice"
+    ) || r.starts_with("gain ") && !r.starts_with("gain control of ")
+    {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(r, b)
+}
+
+inventory::submit! { EffectPattern { name: "choice grammar: you [verb] (imperative)", priority: 996, parse: you_imperative } }
