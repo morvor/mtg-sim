@@ -131,12 +131,9 @@ fn a_spells_pronoun_without_an_antecedent_is_unsupported() {
         "{1}: ~ gets +1/+1 until end of turn. It gains flying until end of turn."
     )
     .is_ok());
-    // Real cards: each creature's own controller, and the player an earlier ability
-    // targeted, aren't tracked (they used to compile as the spell's controller / you).
-    assert_unsupported(
-        "Rakdos Charm",
-        "Each creature deals 1 damage to its controller",
-    );
+    // Real cards: the player an earlier ability targeted isn't tracked (it used to compile
+    // as you). (Each creature's own controller, Rakdos Charm, is: see
+    // `basic_effects_damage.rs`.)
     assert_unsupported("Laquatus's Champion", "that player gains 6 life");
 }
 

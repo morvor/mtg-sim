@@ -270,11 +270,15 @@ fn parse_cost_part_core(p: &str) -> Option<CostPart> {
         let (f, _, tail) = parse_object_phrase(r2)?;
         // Nothing may follow the zone ("... from your graveyard and pay its mana cost" is
         // a different cost).
-        let zone = match end(tail) {
-            "from your graveyard" | "from a graveyard" => ZoneKind::Graveyard,
-            "from your hand" => ZoneKind::Hand,
-            "" if f.zone() == Some(ZoneKind::Graveyard) => ZoneKind::Graveyard,
-            "" if f.zone() == Some(ZoneKind::Hand) => ZoneKind::Hand,
+        let (zone, f) = match end(tail) {
+            "from your graveyard" => (ZoneKind::Graveyard, f),
+            "from a graveyard" => (ZoneKind::Graveyard, from_any_graveyard(f)),
+            "from a single graveyard" => (ZoneKind::Graveyard, from_a_single_graveyard(f)),
+            "from your hand" => (ZoneKind::Hand, f),
+            "" if f.zone() == Some(ZoneKind::Graveyard) => {
+                (ZoneKind::Graveyard, from_any_graveyard(f))
+            }
+            "" if f.zone() == Some(ZoneKind::Hand) => (ZoneKind::Hand, f),
             _ => return None,
         };
         return Some(CostPart::Exile {
@@ -358,6 +362,31 @@ fn parse_cost_part_core(p: &str) -> Option<CostPart> {
         return Some(CostPart::Forage);
     }
     None
+}
+
+/// Cards a cost exiles "from a graveyard": any player's, unless the phrase said whose
+/// ("from your graveyard", "from an opponent's graveyard"). A cost's cards are otherwise
+/// its payer's (see `Game::exile_cost_cards`).
+pub fn from_any_graveyard(f: Filter) -> Filter {
+    let owned = match &f {
+        Filter::And(v) => v.iter().any(|x| matches!(x, Filter::OwnedBy(_))),
+        Filter::OwnedBy(_) => true,
+        _ => false,
+    };
+    if owned {
+        f
+    } else {
+        Filter::and(vec![f, Filter::OwnedBy(PlayerRel::Any)])
+    }
+}
+
+/// Cards a cost exiles "from a single graveyard": any player's, all with the same owner
+/// (chosen together, `target_groups.rs`; Night Soil ruling).
+pub fn from_a_single_graveyard(f: Filter) -> Filter {
+    Filter::and(vec![
+        from_any_graveyard(f),
+        Filter::Together(TargetGroup::SameOwner),
+    ])
 }
 
 /// "+1/+1 counter", "loyalty counter", "charge counters".

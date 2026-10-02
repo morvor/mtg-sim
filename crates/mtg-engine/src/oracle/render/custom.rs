@@ -226,6 +226,11 @@ impl Renderer<'_> {
                 let k = &n["has landwalk:".len()..];
                 (false, format!("with {k}"))
             }
+            // "if you paid life this way" (see `kw/offered_costs.rs`).
+            n if n.starts_with(crate::kw::offered_costs::PAID_OFFERED_COST) => {
+                let cost = &n[crate::kw::offered_costs::PAID_OFFERED_COST.len()..];
+                (false, format!("for which you chose to {cost}"))
+            }
             other => {
                 let g = self.gap(format!("Filter::Custom({other})"));
                 (false, g)
@@ -270,6 +275,11 @@ impl Renderer<'_> {
             n if n.starts_with("mana_spent_of:") => {
                 let l = &n["mana_spent_of:".len()..];
                 format!("the amount of {{{l}}} spent to cast {}", self.me())
+            }
+            // "that many": the amount paid for "you may pay any amount of mana" (see
+            // `kw/offered_costs.rs`).
+            n if n.starts_with(crate::kw::offered_costs::PAID_OFFERED_AMOUNT) => {
+                "the amount of mana you paid this way".into()
             }
             "opponents_counters:poison" => {
                 "the number of poison counters your opponents have".into()
