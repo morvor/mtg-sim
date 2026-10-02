@@ -347,8 +347,18 @@ impl Game {
                     (None, Some(fc)) => &fc.abilities,
                     (None, None) => &o.chars.abilities,
                 };
+                let entering_ctx = Ctx::new(Some(m.obj), self.entering_controller(m));
                 for a in abilities {
                     if let AbilityKind::Static(s) = &a.kind {
+                        // A conditional one ("If you attacked this turn, you may have ~
+                        // enter as a copy ...") applies only if its condition is true as
+                        // the permanent enters.
+                        if s.condition
+                            .as_ref()
+                            .is_some_and(|c| !self.eval_cond(c, &entering_ctx))
+                        {
+                            continue;
+                        }
                         // CR 614.12: only effects that affect just that permanent apply
                         // from the permanent itself ("Permanents enter tapped" doesn't
                         // affect the permanent that has it).

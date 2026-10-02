@@ -165,6 +165,18 @@ pub trait KeywordRules: Sync + Send {
     ) -> Option<(Zone, LibraryPosition)> {
         None
     }
+    /// Where a resolving permanent spell is put instead of onto the battlefield, if the
+    /// keyword changes it: e.g. a creature spell with rebound cast from its owner's hand
+    /// is exiled (CR 702.88a; Jeskai Baller). [`KeywordRules::after_spell_resolved`] is
+    /// then called as for an instant or sorcery.
+    fn permanent_resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
     /// Whether [`KeywordRules::resolved_destination`] is a replacement effect of the
     /// spell being put into its owner's graveyard ("instead of putting it into your
     /// graveyard as it resolves, ...", CR 614.1a): if other replacement effects would
@@ -713,6 +725,16 @@ pub fn resolved_destinations(
         out.extend(resolved_destination_by(g, spell));
     }
     out
+}
+
+/// See [`KeywordRules::permanent_resolved_destination`].
+pub fn permanent_resolved_destination(
+    g: &Game,
+    spell: ObjectId,
+) -> Option<(Zone, LibraryPosition)> {
+    distinct_kinds(&g.obj(spell).chars).iter().find_map(|kw| {
+        impls_for(kw.kind).find_map(|r| r.permanent_resolved_destination(g, spell, kw))
+    })
 }
 
 pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
