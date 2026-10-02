@@ -3066,6 +3066,17 @@ impl Renderer<'_> {
     fn if_effect(&mut self, cond: &Condition, then: &Effect, otherwise: &Effect) -> String {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
+        // "Exile that card from your graveyard": only if it's still there (CR 400.7).
+        if else_empty {
+            if let Condition::SelMatches(sel, Filter::InZone(z)) = cond {
+                if matches!(then, Effect::Exile { what, .. } if same_sel(what, sel)) {
+                    let t = self.effect(then);
+                    if let Some(rest) = t.strip_prefix("exile it") {
+                        return format!("exile it from your {}{rest}", zone_word(*z));
+                    }
+                }
+            }
+        }
         // "After this main phase, there is an additional combat phase ...": only during
         // a main phase is there a main phase to come after.
         if else_empty
@@ -3096,7 +3107,12 @@ impl Renderer<'_> {
             }
             Condition::PrevHappened => {
                 // "Counter target spell unless its controller pays {2}. If they do, ..."
-                let who = if self.last_actor_other { "they" } else { "you" };
+                // "If they don't" / "If that player doesn't".
+                let who = if self.last_actor_other {
+                    "{alt:they|that player}"
+                } else {
+                    "you"
+                };
                 let mut s = String::new();
                 if !then_empty {
                     let t = self.effect(then);

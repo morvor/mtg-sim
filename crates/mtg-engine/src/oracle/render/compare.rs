@@ -192,6 +192,18 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               flash\" is \"... as though they had flash this turn\".",
     },
     Equivalence {
+        pattern: r"\b(return|put) (?:in)?to (your|owner's|its owner's|their owners') hands? (each|all|target) ([^.;]+?)(\.|;|$)",
+        replacement: "$1 $3 $4 to $2 hand$5",
+        why: "Word order: \"return to your hand all creature cards in your graveyard that \
+              ...\" (the long object last) is \"return all creature cards ... to your hand\".",
+    },
+    Equivalence {
+        pattern: r"\bif you have ([^.,;]+? in your (?:graveyard|library|hand))\b",
+        replacement: "if there are $1",
+        why: "\"If you have four or more creature cards in your graveyard\" asks whether \
+              there are that many there.",
+    },
+    Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
         why: "\"Activate no more than twice each turn\" and \"Activate only twice each \
