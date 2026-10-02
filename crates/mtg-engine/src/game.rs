@@ -186,6 +186,9 @@ pub struct Player {
     pub ring_level: u32,
     pub ring_bearer: Option<ObjectId>,
     pub dungeons_completed: u32,
+    /// Names of the dungeons this player has completed, in order (CR 309.7).
+    #[serde(default)]
+    pub completed_dungeons: Vec<SmolStr>,
     /// Venture marker: (dungeon object, room index).
     pub venture: Option<(ObjectId, usize)>,
     pub initiative_count: u32,
@@ -232,6 +235,7 @@ impl Player {
             ring_level: 0,
             ring_bearer: None,
             dungeons_completed: 0,
+            completed_dungeons: vec![],
             venture: None,
             initiative_count: 0,
             has_citys_blessing: false,
