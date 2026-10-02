@@ -1731,6 +1731,9 @@ pub enum Modification {
         from: Filter,
     },
     RemoveKeyword(KeywordKind),
+    /// Loses one particular keyword ability: the instances of that kind with the same
+    /// parameter text (Animate Dead: "it loses \"enchant creature card in a graveyard\"").
+    LoseKeyword(Keyword),
     RemoveAllAbilities,
     /// "can't have or gain [ability]".
     CantHaveKeyword(KeywordKind),
@@ -1787,6 +1790,7 @@ impl Modification {
             | AddKeywordX(..)
             | AddKeywordsOf { .. }
             | RemoveKeyword(_)
+            | LoseKeyword(_)
             | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,

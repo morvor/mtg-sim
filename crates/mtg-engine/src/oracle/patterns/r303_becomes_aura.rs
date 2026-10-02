@@ -30,6 +30,12 @@ fn becomes_aura(l: &str, b: &mut Builder) -> Option<Effect> {
     if tl.card_types != CardTypeSet::single(CardType::Enchantment) || !tl.subtypes.is_empty() {
         return None;
     }
+    // Quoted: "it becomes an Aura with \"enchant creature put onto the battlefield with
+    // ~.\"" (Necromancy).
+    let enchant = match enchant.strip_prefix('"').and_then(|e| e.strip_suffix('"')) {
+        Some(e) => e.trim_end_matches('.'),
+        None => enchant,
+    };
     if !enchant.starts_with("enchant ") {
         return None;
     }

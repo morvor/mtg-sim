@@ -186,13 +186,16 @@ impl Game {
                 ReplEvent::Move(m) if m.to != Zone::Battlefield => Some(m.obj),
                 _ => None,
             })
-            .filter(|o| {
-                let o = self.obj(*o);
+            .filter(|id| {
+                let o = self.obj(*id);
                 o.zone == Zone::Battlefield
                     && o.attached_to.is_some_and(|a| match a {
                         Entity::Player(_) => true,
+                        // A permanent, or a card in the zone the Aura's enchant ability
+                        // names (Spellweaver Volute).
                         Entity::Object(x) => {
-                            self.is_live(x) && self.obj(x).zone == Zone::Battlefield
+                            self.is_live(x)
+                                && crate::attach::can_be_attached_where_it_is(self, *id, x)
                         }
                     })
             })

@@ -117,6 +117,13 @@ impl Renderer<'_> {
             return "fortified land".into();
         }
         match &self.info.enchant {
+            // "Enchant creature card in a graveyard": "enchanted creature" (and "enchanted
+            // creature card" for the card itself, see `move_effect`).
+            Some(n) if n.contains(" card") => {
+                let head = n.split(" card").next().unwrap_or(n);
+                let head = head.rsplit(' ').next().unwrap_or(head);
+                format!("enchanted {head}")
+            }
             // "Enchant artifact or creature" Auras say "enchanted permanent"; "Enchant
             // nonland permanent" ones "enchanted permanent"; "Enchant opponent" ones
             // "enchanted player".

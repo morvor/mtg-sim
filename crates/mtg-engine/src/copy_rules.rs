@@ -370,9 +370,21 @@ pub fn copy_cards(
     let mut out = Vec::new();
     match named {
         None => {
+            // "Copy the enchanted instant card" (Spellweaver Volute): the card the Aura
+            // enchanted as it last existed on the battlefield (CR 608.2h), even if that
+            // card has since left its zone — and nothing if the Aura was attached to
+            // nothing then.
+            let enchanted = matches!(what, Sel::AttachedTo);
+            if enchanted
+                && ctx
+                    .source
+                    .is_some_and(|s| crate::attach::attached_to_nothing(g, s))
+            {
+                return out;
+            }
             // CR 707.12: created in the zone the object is in.
             for o in g.resolve_objects(what, ctx) {
-                if !g.is_live(o) {
+                if !g.is_live(o) && !enchanted {
                     continue;
                 }
                 let ob = g.obj(o).clone();

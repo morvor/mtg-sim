@@ -484,7 +484,10 @@ impl Renderer<'_> {
             Effect::Exile {
                 what, face_down, ..
             } => {
-                let w = self.sel(what, Case::Obj);
+                let w = match self.enchanted_card(false) {
+                    Some(c) if matches!(what, Sel::AttachedTo) => c,
+                    _ => self.sel(what, Case::Obj),
+                };
                 if *face_down {
                     format!("exile {w} face down")
                 } else {
@@ -903,6 +906,22 @@ impl Renderer<'_> {
             }
             Effect::Attach { what, to } | Effect::AttachAsCreature { what, to } => {
                 let w = self.sel(what, Case::Obj);
+                // "attach ~ to another instant card in a graveyard": other than the card it
+                // enchants.
+                if let Sel::Choose {
+                    filter: Filter::And(v),
+                    ..
+                } = to
+                {
+                    if let [Filter::Type(t), Filter::Card, Filter::InZone(ZoneKind::Graveyard), Filter::Not(n)] =
+                        v.as_slice()
+                    {
+                        if matches!(&**n, Filter::In(s) if matches!(**s, Sel::AttachedTo)) {
+                            let t = t.word().to_lowercase();
+                            return format!("attach {w} to another {t} card in a graveyard");
+                        }
+                    }
+                }
                 let t = self.sel(to, Case::Obj);
                 format!("attach {w} to {t}")
             }
@@ -1487,6 +1506,12 @@ impl Renderer<'_> {
                 }
             }
             Effect::CopyCard { what, named } => match named {
+                // "copy the enchanted instant card" (an Aura enchanting a card in a
+                // graveyard).
+                None if matches!(what, Sel::AttachedTo) && self.enchanted_card(true).is_some() => {
+                    let w = self.enchanted_card(true).unwrap_or_default();
+                    format!("copy {w}")
+                }
                 None => {
                     let w = self.sel(what, Case::Obj);
                     format!("copy {w}")
@@ -2041,9 +2066,32 @@ impl Renderer<'_> {
         }
     }
 
+    /// "the enchanted instant card" / "the enchanted card", for an Aura that enchants a card
+    /// in a graveyard ("Enchant instant card in a graveyard").
+    fn enchanted_card(&mut self, with_type: bool) -> Option<String> {
+        let e = self.info.enchant.clone()?;
+        let head = e.split(" card").next().filter(|_| e.contains(" card"))?;
+        Some(if with_type {
+            format!("the enchanted {head} card")
+        } else {
+            "the enchanted card".into()
+        })
+    }
+
     /// Moving objects between zones.
     fn move_effect(&mut self, what: &Sel, to: &Destination) -> String {
         let mut w = self.sel(what, Case::Obj);
+        // An Aura enchanting a card in a graveyard: "return enchanted creature card to the
+        // battlefield" (Animate Dead).
+        if matches!(what, Sel::AttachedTo)
+            && self
+                .info
+                .enchant
+                .as_deref()
+                .is_some_and(|e| e.contains(" card"))
+        {
+            w.push_str(" card");
+        }
         // An ability that functions in a hidden or public zone moves the card from there
         // ("Return ~ from your graveyard to your hand", CR 113.6m).
         if matches!(what, Sel::This) {
@@ -2694,6 +2742,14 @@ impl Renderer<'_> {
                 }
                 Modification::RemoveKeyword(k) => {
                     parts.push(format!("loses {}", self.keyword_kind_word(*k)))
+                }
+                Modification::LoseKeyword(k) => {
+                    let t = k
+                        .text
+                        .as_deref()
+                        .map(|t| t.to_lowercase())
+                        .unwrap_or_else(|| self.keyword_kind_word(k.kind));
+                    parts.push(format!("loses \"{t}\""))
                 }
                 Modification::RemoveAllAbilities => parts.push("loses all abilities".into()),
                 Modification::CantHaveKeyword(k) => {
