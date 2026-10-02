@@ -1,0 +1,263 @@
+//! Pump and type-change phrasing (`src/oracle/patterns/grant_grammar.rs`,
+//! `pump_combat_tricks.rs`, `control_exile_battlefield.rs`): a leading duration over
+//! several clauses with their own subjects, "gets an additional +N/+N" (CR 613.4c), "has
+//! base toughness N" (CR 613.4b), "becomes a Treasure artifact with \"...\" and loses
+//! all other card types and abilities" and a card returned as "a Treasure artifact with
+//! \"...\"" or "a Skeleton ... and has no abilities" (CR 205.1a, 613.1d, 613.1f).
+
+use mtg_engine::ability::AbilityKind;
+use mtg_engine::keywords::KeywordKind;
+use mtg_engine::testing::*;
+use mtg_engine::types::CardType;
+use mtg_engine::*;
+
+fn assert_supported(names: &[&str]) {
+    for n in names {
+        let u = card(n).unsupported_text().join(" | ");
+        assert!(u.is_empty(), "{n} has unsupported text: {u}");
+    }
+}
+
+#[test]
+fn arm_the_cathars_three_targets_three_bonuses() {
+    cr!("611.2a", "115.3");
+    assert_supported(&["Arm the Cathars"]);
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let c = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 3);
+    let s = t.hand(P0, "Arm the Cathars");
+    t.cast(P0, s)
+        .target(a)
+        .target(b)
+        .target(c)
+        .go();
+    t.resolve();
+    assert_eq!(t.pt(a), (5, 5));
+    assert_eq!(t.pt(b), (4, 4));
+    assert_eq!(t.pt(c), (3, 3));
+    assert!(t.obj_now(c).has_keyword(KeywordKind::Vigilance));
+}
+
+#[test]
+fn legion_leadership_doubles_power_and_grants_first_strike() {
+    cr!("611.2a", "701.10d");
+    assert_supported(&["Legion Leadership // Legion Stronghold"]);
+    let mut t = TestGame::new(2);
+    let g = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 3);
+    let s = t.hand(P0, "Legion Leadership // Legion Stronghold");
+    t.cast(P0, s).target(g).go();
+    t.resolve();
+    assert_eq!(t.pt(g), (6, 3));
+    assert!(t.obj_now(g).has_keyword(KeywordKind::FirstStrike));
+}
+
+#[test]
+fn chariot_of_the_sun_sets_only_base_toughness() {
+    cr!("613.4b");
+    assert_supported(&["Chariot of the Sun", "Take to the Streets"]);
+    let mut t = TestGame::new(2);
+    let ch = t.battlefield(P0, "Chariot of the Sun");
+    let g = t.battlefield(P0, "Hill Giant");
+    t.g.add_counters(Entity::Object(g), "+1/+1", 1, None);
+    t.lands(P0, "Plains", 2);
+    t.activate(P0, ch, 0, &[Entity::Object(g)]).unwrap();
+    t.resolve();
+    // Base 3/1, plus the counter.
+    assert_eq!(t.pt(g), (4, 2));
+    assert!(t.obj_now(g).has_keyword(KeywordKind::Flying));
+}
+
+#[test]
+fn take_to_the_streets_citizens_get_an_additional_bonus() {
+    cr!("613.4c");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let citizen = t.custom(P0, citizen_def(), mtg_engine::object::Zone::Battlefield);
+    t.lands(P0, "Forest", 5);
+    let s = t.hand(P0, "Take to the Streets");
+    t.cast(P0, s).go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (4, 4));
+    assert_eq!(t.pt(citizen), (4, 4));
+    assert!(t.obj_now(citizen).has_keyword(KeywordKind::Vigilance));
+    assert!(!t.obj_now(bears).has_keyword(KeywordKind::Vigilance));
+}
+
+fn citizen_def() -> CardDef {
+    let mut c = mtg_engine::object::Characteristics::default();
+    c.name = "Citizen".into();
+    c.card_types.insert(CardType::Creature);
+    c.subtypes.push("Citizen".into());
+    c.power = Some(1);
+    c.toughness = Some(1);
+    CardDef::custom(c)
+}
+
+#[test]
+fn xu_ifit_returned_creature_is_a_skeleton_without_abilities() {
+    cr!("614.1c", "613.1f");
+    ruling!(
+        "Xu-Ifit, Osteoharmonist",
+        "it will lose that ability before it can trigger"
+    );
+    assert_supported(&["Xu-Ifit, Osteoharmonist"]);
+    let mut t = TestGame::new(2);
+    let xu = t.battlefield(P0, "Xu-Ifit, Osteoharmonist");
+    let gy = t.graveyard(P0, "Mulldrifter");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    let hand = t.hand_size(P0);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.activate(P0, xu, 0, &[Entity::Object(gy)]).unwrap();
+    t.resolve_all();
+    let m = t.named_on_battlefield("Mulldrifter")[0];
+    let o = t.obj_now(m);
+    assert!(o.chars.has_subtype("Skeleton") && o.chars.has_subtype("Elemental"));
+    assert!(!o.has_keyword(KeywordKind::Flying));
+    assert_eq!(t.hand_size(P0), hand, "its enters trigger never existed");
+}
+
+#[test]
+fn vraska_the_silencer_returns_the_card_as_a_treasure() {
+    cr!("614.1c", "205.1a", "111.10a");
+    ruling!(
+        "Vraska, the Silencer",
+        "It will retain its supertypes as well as its abilities"
+    );
+    assert_supported(&["Vraska, the Silencer"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vraska, the Silencer");
+    t.lands(P0, "Swamp", 1);
+    let theirs = t.battlefield(P1, "Mulldrifter");
+    t.answer(P0, DecisionKind::YesNo, mtg_engine::decision::Answer::Bool(true));
+    t.g.destroy_all(vec![theirs], None, false);
+    t.settle();
+    t.resolve_all();
+    let tr = t.named_on_battlefield("Mulldrifter")[0];
+    let o = t.obj_now(tr);
+    assert_eq!(o.controller, P0);
+    assert!(o.tapped);
+    assert!(o.chars.card_types.contains(CardType::Artifact));
+    assert!(!o.chars.card_types.contains(CardType::Creature));
+    assert!(o.chars.has_subtype("Treasure") && !o.chars.has_subtype("Elemental"));
+    // It keeps its other abilities and gains the Treasure's.
+    assert!(o.has_keyword(KeywordKind::Flying));
+    let mana = o
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(&a.kind, AbilityKind::Activated(x) if x.is_mana_ability))
+        .count();
+    assert_eq!(mana, 1);
+}
+
+
+#[test]
+fn shallow_grave_returned_creature_gains_haste_and_is_exiled_at_end_step() {
+    cr!("400.7", "603.7");
+    assert_supported(&["Shallow Grave", "Zirilan of the Claw"]);
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Lightning Bolt");
+    t.graveyard(P0, "Hill Giant");
+    t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 2);
+    let s = t.hand(P0, "Shallow Grave");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.cast(P0, s).go();
+    t.resolve();
+    // The top creature card: the Bears (put into the graveyard last).
+    let bears = t.named_on_battlefield("Grizzly Bears")[0];
+    assert!(t.named_on_battlefield("Hill Giant").is_empty());
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Haste));
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.in_exile("Grizzly Bears"));
+}
+
+#[test]
+fn zirilan_found_dragon_gains_haste_and_is_exiled() {
+    cr!("400.7", "603.7");
+    let mut t = TestGame::new(2);
+    let z = t.battlefield(P0, "Zirilan of the Claw");
+    t.library_top(P0, "Shivan Dragon");
+    t.lands(P0, "Mountain", 3);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.activate(P0, z, 0, &[]).unwrap();
+    t.resolve();
+    let d = t.named_on_battlefield("Shivan Dragon")[0];
+    assert!(t.obj_now(d).has_keyword(KeywordKind::Haste));
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(t.in_exile("Shivan Dragon"));
+}
+
+#[test]
+fn bill_the_pony_target_assigns_damage_by_toughness_this_turn() {
+    cr!("510.1a", "611.2a");
+    assert_supported(&["Bill the Pony"]);
+    let mut t = TestGame::new(2);
+    let bill = t.enter(P0, "Bill the Pony");
+    t.resolve_all();
+    // Horned Turtle: 1/4.
+    let turtle = t.battlefield(P0, "Horned Turtle");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.activate(P0, bill, 0, &[Entity::Object(turtle)]).unwrap();
+    t.resolve();
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.attack(&[(turtle, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn kingpin_creatures_with_more_toughness_assign_damage_by_toughness() {
+    cr!("510.1a");
+    assert_supported(&["The Kingpin of Crime"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Kingpin of Crime");
+    let turtle = t.battlefield(P0, "Horned Turtle");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.attack(
+        &[(turtle, Entity::Player(P1)), (giant, Entity::Player(P1))],
+        &[],
+    );
+    // 4 (the Turtle's toughness) + 3 (the Giant's power).
+    assert_eq!(t.life(P1), 13);
+    assert_eq!(t.life(P0), 18);
+}
+
+/// The Kingpin's effect doesn't modify characteristics, so it's a rules change whose set of
+/// creatures isn't locked in as it begins (CR 611.2c): a creature whose toughness becomes
+/// greater than its power later in the turn assigns damage by toughness too.
+#[test]
+fn kingpin_effect_applies_to_creatures_that_qualify_later() {
+    cr!("611.2c", "510.1a");
+    assert_supported(&["The Kingpin of Crime", "Dive Down"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Kingpin of Crime");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Island", 1);
+    t.answer_yes(P0, true);
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(giant, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, mtg_engine::turn::Step::DeclareBlockers);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    // Hill Giant 3/3 -> 3/6 after the Kingpin's ability resolved.
+    let dd = t.hand(P0, "Dive Down");
+    t.cast(P0, dd).target(giant).go();
+    // (Extort triggers too.)
+    t.resolve_all();
+    assert_eq!(t.pt(giant), (3, 6));
+    t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
+    assert_eq!(t.life(P1), 14);
+}

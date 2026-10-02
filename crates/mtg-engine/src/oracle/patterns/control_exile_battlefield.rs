@@ -159,6 +159,12 @@ fn f_enters_as(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         }];
         return true;
     }
+    // "It's a Skeleton in addition to its other types and has no abilities." (Xu-Ifit):
+    // it loses all its abilities as well (layer 6, CR 613.1f).
+    let (r, no_abilities) = match r.strip_suffix(" and has no abilities") {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
     let (x, with_colors) = if let Some(x) = r
         .strip_suffix(" in addition to its other colors and types")
         .or_else(|| r.strip_suffix(" in addition to their other colors and types"))
@@ -203,6 +209,9 @@ fn f_enters_as(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         mods.push(Modification::AddColors(colors));
     }
     mods.push(Modification::AddSubtypes(subtypes));
+    if no_abilities {
+        mods.push(Modification::RemoveAllAbilities);
+    }
     let Some(Effect::Move { to, .. }) = last_effect_mut(prev) else {
         return false;
     };
