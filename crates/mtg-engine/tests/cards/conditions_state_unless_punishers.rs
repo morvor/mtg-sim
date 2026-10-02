@@ -179,7 +179,7 @@ fn erosion_pays_mana_or_life() {
         t.set_step(P0, Step::End);
         (t, land)
     };
-    // Can't pay {1} (its only land would have to tap for it, and that's fine): pays 1 life.
+    // Declines {1} and pays 1 life instead: the land stays.
     let (mut t, land) = setup();
     t.answer_yes(P1, false);
     t.answer_yes(P1, true);
@@ -401,6 +401,86 @@ fn unnatural_hunger_another_creature_isnt_the_enchanted_one() {
     assert!(t.on_battlefield(ogre));
     // Damage equal to the enchanted creature's power (2) to its controller.
     assert_eq!(t.life(P1), 18);
+    // Another creature: P1 sacrifices it and takes no damage.
+    let mut t = TestGame::new(2);
+    let aura = t.battlefield(P0, "Unnatural Hunger");
+    let ogre = t.battlefield(P1, "Gray Ogre");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.attach(aura, Entity::Object(ogre));
+    t.set_step(P0, Step::End);
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(ogre));
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn curse_artifact_only_its_controller_can_sacrifice_that_artifact() {
+    cr!("118.12a", "118.3", "701.21a");
+    assert_supported(&["Curse Artifact"]);
+    let setup = || {
+        let mut t = TestGame::new(2);
+        let curse = t.battlefield(P0, "Curse Artifact");
+        let ring = t.battlefield(P1, "Sol Ring");
+        t.g.attach(curse, Entity::Object(ring));
+        t.set_step(P0, Step::End);
+        (t, ring)
+    };
+    // P1 sacrifices the enchanted artifact: no damage.
+    let (mut t, ring) = setup();
+    t.answer_yes(P1, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert!(!t.on_battlefield(ring));
+    assert_eq!(t.life(P1), 20);
+    // P0 gains control of it with the ability on the stack: P1 can't sacrifice a
+    // permanent it doesn't control, so it isn't offered and P1 takes 2 damage.
+    let (mut t, ring) = setup();
+    t.advance_to(P1, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    let o = &mut t.g.objects[ring.0 as usize];
+    o.base_controller = P0;
+    o.controller = P0;
+    t.g.recompute();
+    t.answer_yes(P1, true);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert!(yes_no_askers(&t, from).is_empty());
+    assert!(t.on_battlefield(ring));
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn drake_familiar_may_return_an_opponents_enchantment() {
+    cr!("118.12a", "118.3");
+    ruling!(
+        "Drake Familiar",
+        "The ability lets you return any enchantment on the battlefield, including an opponent’s enchantment."
+    );
+    assert_supported(&["Drake Familiar"]);
+    // P1's Glorious Anthem, which has shroud (the action isn't targeted): returned to
+    // P1's hand, and the Drake stays.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Sterling Grove");
+    let anthem = t.battlefield(P1, "Glorious Anthem");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(anthem)]);
+    let d = t.enter(P0, "Drake Familiar");
+    t.resolve_all();
+    assert!(t.on_battlefield(d));
+    assert!(t.in_hand(P1, "Glorious Anthem"));
+    // No enchantment on the battlefield (one in hand doesn't count): sacrificed.
+    let mut t = TestGame::new(2);
+    t.hand(P0, "Glorious Anthem");
+    t.answer_yes(P0, true);
+    let d = t.enter(P0, "Drake Familiar");
+    t.resolve_all();
+    assert!(!t.on_battlefield(d));
+    assert!(t.in_hand(P0, "Glorious Anthem"));
 }
 
 // --- Payments with amounts -------------------------------------------------------------
@@ -419,6 +499,18 @@ fn essence_vortex_pays_life_equal_to_toughness_or_no_regeneration() {
     t.resolve_all();
     assert!(t.on_battlefield(wall));
     assert_eq!(t.life(P1), 12);
+    // With less life than its toughness, P1 can't pay (CR 119.4): destroyed.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Swamp", 1);
+    let wall = t.battlefield(P1, "Wall of Stone");
+    t.g.player_mut(P1).life = 7;
+    let vortex = t.hand(P0, "Essence Vortex");
+    t.answer_yes(P1, true);
+    t.cast(P0, vortex).target(wall).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(wall));
+    assert_eq!(t.life(P1), 7);
     // Not paid: destroyed, and it can't be regenerated.
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 2);
@@ -443,15 +535,34 @@ fn repulsive_mutation_zero_mana_may_still_be_declined() {
         "That player can choose not to pay 0 mana; if they do, the spell will be countered."
     );
     assert_supported(&["Repulsive Mutation"]);
+    // P0's only creature is gone when Repulsive Mutation resolves: the amount is 0. P1 is
+    // still asked, and declining counters the Bolt; paying 0 lets it resolve.
+    for pays in [false, true] {
+        let mut t = TestGame::new(2);
+        t.lands(P1, "Mountain", 1);
+        t.lands(P0, "Island", 1);
+        t.lands(P0, "Forest", 1);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let bolt = t.hand(P1, "Lightning Bolt");
+        let mutation = t.hand(P0, "Repulsive Mutation");
+        let bolt = t.cast(P1, bolt).target(Entity::Player(P0)).go();
+        t.cast(P0, mutation).x(0).target(bears).target(bolt).go();
+        t.g.destroy(bears, None);
+        t.answer_yes(P1, pays);
+        let from = t.asked().len();
+        t.resolve_all();
+        assert_eq!(yes_no_askers(&t, from), vec![P1], "P1 chooses whether to pay 0");
+        assert_eq!(t.life(P0), if pays { 17 } else { 20 }, "paid: {pays}");
+    }
+    // The Bears still there: {2}, which P1 (no mana left) can't pay.
     let mut t = TestGame::new(2);
     t.lands(P1, "Mountain", 1);
-    t.lands(P0, "Island", 2);
+    t.lands(P0, "Island", 1);
     t.lands(P0, "Forest", 1);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let bolt = t.hand(P1, "Lightning Bolt");
     let mutation = t.hand(P0, "Repulsive Mutation");
     let bolt = t.cast(P1, bolt).target(Entity::Player(P0)).go();
-    // X = 0: no counters; the greatest power is the Bears' 2. P1 has no mana left.
     t.answer_yes(P1, true);
     t.cast(P0, mutation).x(0).target(bears).target(bolt).go();
     t.resolve_all();
@@ -473,6 +584,17 @@ fn mundungu_needs_both_mana_and_life() {
     // P1 paid {1} and 1 life: the Bolt resolved.
     assert_eq!(t.life(P1), 19);
     assert_eq!(t.life(P0), 17);
+    // No mana left after the Bolt: the whole cost can't be paid (CR 118.3), countered.
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Mundungu");
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let bolt = t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.answer_yes(P1, true);
+    t.activate(P0, m, 0, &[Entity::Object(bolt)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20, "no life paid");
+    assert_eq!(t.life(P0), 20, "countered");
 }
 
 // --- Any player may pay ------------------------------------------------------------------

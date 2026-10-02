@@ -327,6 +327,12 @@ fn parse_cost_part_core(p: &str) -> Option<CostPart> {
     }
     if let Some(r) = strip(p, "return") {
         let (n, r2) = parse_number(r)?;
+        // A returned permanent is one its payer controls only when the text says so:
+        // "unless you return an enchantment to its owner's hand" may return anyone's
+        // (Drake Familiar), which this cost part can't express.
+        if !r2.contains(" you control") {
+            return None;
+        }
         let (f, _, tail) = parse_object_phrase(r2)?;
         if end(tail) == "to its owner's hand" || end(tail) == "to their owner's hand" {
             return Some(CostPart::ReturnToHand {

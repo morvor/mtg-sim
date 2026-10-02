@@ -259,6 +259,31 @@ fn action_payment(a: &str, b: &mut Builder) -> Option<Vec<Payment>> {
         }
         return None;
     }
+    // "return an enchantment to its owner's hand": any one on the battlefield, not only
+    // one the player controls (it isn't targeted).
+    if let Some(r) = a.strip_prefix("return ").filter(|r| !r.contains(" you control")) {
+        if let Some(what) = r
+            .strip_suffix(" to its owner's hand")
+            .or_else(|| r.strip_suffix(" to their owner's hand"))
+        {
+            let (n, rest) = parse_number(what)?;
+            let (f, _, t) = parse_object_phrase(rest.trim_start())?;
+            if !end(t).is_empty() || matches!(n, Value::X) {
+                return None;
+            }
+            let e = Effect::Move {
+                what: Sel::Choose {
+                    chooser: PlayerRef::You,
+                    filter: Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+                    count: n,
+                    up_to: false,
+                    store: None,
+                },
+                to: Destination::zone(ZoneKind::Hand),
+            };
+            return single(Cost::default().with(CostPart::Effect(Box::new(e))));
+        }
+    }
     if let Some((cost, loyalty)) = crate::oracle::costs::parse_cost(&a) {
         let ok = !loyalty
             && cost.mana.is_none()

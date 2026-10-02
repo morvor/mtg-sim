@@ -153,10 +153,6 @@ fn fall_from_favor_untaps_only_for_the_monarch() {
 #[test]
 fn brainwash_attack_costs_three() {
     cr!("508.1d", "508.1h");
-    ruling!(
-        "Brainwash",
-        "If there are multiple combat phases during the turn, the attack cost must be paid each time if you want to attack with the creature."
-    );
     assert_supported(&["Brainwash", "Oppressive Rays", "Qal Sisma Behemoth"]);
     let mut t = TestGame::new(2);
     let aura = t.battlefield(P1, "Brainwash");
@@ -167,6 +163,43 @@ fn brainwash_attack_costs_three() {
     // Another creature attacks for free.
     let ogre = t.battlefield(P0, "Gray Ogre");
     assert!(mtg_engine::combat::required_attack_cost(&t.g, ogre, Entity::Player(P1)).is_none());
+}
+
+#[test]
+fn brainwash_cost_is_paid_again_in_each_combat() {
+    cr!("508.1h", "500.8");
+    ruling!(
+        "Brainwash",
+        "If there are multiple combat phases during the turn, the attack cost must be paid each time if you want to attack with the creature."
+    );
+    for lands in [6, 3] {
+        let mut t = TestGame::new(2);
+        let aura = t.battlefield(P1, "Brainwash");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.g.attach(aura, Entity::Object(bears));
+        let plains = t.lands(P0, "Plains", lands);
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.g.add_extra_combat(false);
+        t.attack(&[(bears, Entity::Player(P1))], &[]);
+        assert_eq!(t.life(P1), 18, "{lands} lands: paid {{3}} for the first attack");
+        // Untapped for the additional combat: it attacks again only if {3} is paid again.
+        t.g.objects[bears.0 as usize].tapped = false;
+        t.answer(
+            P0,
+            DecisionKind::Attackers,
+            Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+        );
+        t.advance_to_step(Step::BeginningOfCombat);
+        t.advance_to_step(Step::EndOfCombat);
+        let tapped = plains.iter().filter(|l| t.obj_now(**l).tapped).count();
+        if lands == 6 {
+            assert_eq!(t.life(P1), 16, "paid {{3}} again");
+            assert_eq!(tapped, 6);
+        } else {
+            assert_eq!(t.life(P1), 18, "no mana for the second attack: it didn't attack");
+            assert_eq!(tapped, 3);
+        }
+    }
 }
 
 #[test]
@@ -235,6 +268,20 @@ fn sphere_of_safety_counts_its_controllers_enchantments() {
     t3.battlefield(P1, "Sphere of Safety");
     let bears = t3.battlefield(P0, "Grizzly Bears");
     assert!(mtg_engine::combat::required_attack_cost(&t3.g, bears, Entity::Player(P2)).is_none());
+    // Juggernaut "attacks each combat if able": with Sphere of Safety, P0 may leave it home
+    // even with the mana to pay (CR 508.1d); without it, not attacking is illegal.
+    for sphere in [true, false] {
+        let mut t = TestGame::new(2);
+        if sphere {
+            t.battlefield(P1, "Sphere of Safety");
+        }
+        t.battlefield(P0, "Juggernaut");
+        t.lands(P0, "Plains", 2);
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
+        t.advance_to_step(Step::EndOfCombat);
+        assert_eq!(t.life(P1), if sphere { 20 } else { 15 }, "Sphere: {sphere}");
+    }
 }
 
 #[test]
@@ -319,19 +366,23 @@ fn wild_dogs_go_to_the_player_with_the_most_life() {
         "If no one player has more life than all other players at that time (i.e., if two or more players are tied for the most life), the ability won’t trigger at all."
     );
     assert_supported(&["Wild Dogs", "Sokenzan Renegade", "Wild Mammoth", "Thoughtbound Primoc"]);
-    // Tied: nothing happens.
-    let mut t = TestGame::new(2);
+    // P1 and P2 tied for the most life: it doesn't trigger at all.
+    let mut t = TestGame::new(3);
     let dogs = t.battlefield(P0, "Wild Dogs");
-    t.set_step(P1, Step::End);
+    t.g.player_mut(P1).life = 25;
+    t.g.player_mut(P2).life = 25;
+    t.set_step(P2, Step::End);
     t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 0, "no trigger");
     t.resolve_all();
     assert_eq!(t.obj_now(dogs).controller, P0);
-    // P1 has the most life: P1 gains control.
-    t.g.player_mut(P1).life = 21;
-    t.set_step(P1, Step::End);
+    // P2 has the most life: P2 gains control.
+    t.g.player_mut(P2).life = 26;
+    t.set_step(P2, Step::End);
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
-    assert_eq!(t.obj_now(dogs).controller, P1);
+    assert_eq!(t.obj_now(dogs).controller, P2);
 }
 
 #[test]
@@ -350,6 +401,32 @@ fn sokenzan_renegade_goes_to_the_player_with_the_most_cards() {
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert_eq!(t.obj_now(r).controller, P2);
+    // Tied when it would trigger: nothing.
+    let mut t = TestGame::new(3);
+    let r = t.battlefield(P0, "Sokenzan Renegade");
+    for p in [P1, P2] {
+        t.hand(p, "Grizzly Bears");
+        t.hand(p, "Grizzly Bears");
+    }
+    t.set_step(P2, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 0, "no trigger");
+    t.resolve_all();
+    assert_eq!(t.obj_now(r).controller, P0);
+    // Tied by the time it resolves: it does nothing.
+    let mut t = TestGame::new(3);
+    let r = t.battlefield(P0, "Sokenzan Renegade");
+    t.hand(P2, "Grizzly Bears");
+    t.hand(P2, "Grizzly Bears");
+    t.hand(P1, "Grizzly Bears");
+    t.set_step(P2, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.hand(P1, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.obj_now(r).controller, P0);
 }
 
 #[test]
@@ -371,7 +448,7 @@ fn cryptolith_fragment_transforms_when_each_player_has_ten_or_less() {
 
 #[test]
 fn kazuul_triggers_only_when_you_are_the_defending_player() {
-    cr!("603.4", "508.5");
+    cr!("603.4", "508.5", "508.5a");
     ruling!(
         "Kazuul, Tyrant of the Cliffs",
         "In a multiplayer game, the ability checks whether you're the defending player for each individual attacking creature."
@@ -422,6 +499,16 @@ fn battle_of_wits_and_triskaidekaphile_count_cards() {
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert!(!t.has_lost(P1));
+    // 200 cards in the library: P0 wins.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Battle of Wits");
+    while t.g.player(P0).library.len() < 200 {
+        t.library_top(P0, "Island");
+    }
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.has_lost(P1));
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Triskaidekaphile");
     for _ in 0..13 {
@@ -520,6 +607,22 @@ fn bull_rush_bruiser_needs_another_warrior_on_your_team() {
     t.battlefield(P0, "Bull-Rush Bruiser");
     t.attack(&[(b, Entity::Player(P1))], &[]);
     assert!(t.obj_now(b).has_keyword(KeywordKind::FirstStrike));
+    // The other Warrior is gone by the time the ability resolves: no first strike.
+    let mut t = TestGame::new(2);
+    let b = t.battlefield(P0, "Bull-Rush Bruiser");
+    let other = t.battlefield(P0, "Bull-Rush Bruiser");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(b, Entity::Player(P1))]),
+    );
+    t.advance_to_step(Step::DeclareAttackers);
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "triggered: another Warrior when it attacked");
+    t.g.destroy(other, None);
+    t.resolve_all();
+    assert!(!t.obj_now(b).has_keyword(KeywordKind::FirstStrike));
 }
 
 // --- The source's zone -------------------------------------------------------------------------
@@ -548,7 +651,7 @@ fn oloro_gains_life_from_the_command_zone() {
 
 #[test]
 fn nether_spirit_returns_only_as_the_only_creature_card() {
-    cr!("603.4", "113.6b");
+    cr!("603.4");
     ruling!(
         "Nether Spirit",
         "If you have two Nether Spirits in your graveyard, they stop each other from returning."

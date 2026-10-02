@@ -38,9 +38,15 @@ fn crimson_honor_guard_spares_players_who_control_a_commander() {
     assert_supported(&["Crimson Honor Guard"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Crimson Honor Guard");
-    // P1 controls P0's commander.
-    let cmdr = t.battlefield(P1, "Grizzly Bears");
-    t.g.objects[cmdr.0 as usize].is_commander = true;
+    // P1 controls P0's commander (owned by P0).
+    let cmdr = t.battlefield(P0, "Grizzly Bears");
+    let o = &mut t.g.objects[cmdr.0 as usize];
+    o.is_commander = true;
+    o.base_controller = P1;
+    o.controller = P1;
+    t.g.recompute();
+    assert_eq!(t.obj_now(cmdr).owner, P0);
+    assert_eq!(t.obj_now(cmdr).controller, P1);
     t.set_step(P0, Step::Upkeep);
     t.advance_to_step(Step::End);
     t.resolve_all();
@@ -333,6 +339,39 @@ fn rhystic_circle_prevents_unless_any_player_pays() {
     t.resolve();
     t.resolve_all();
     assert_eq!(t.life(P0), 20);
+    // P1 pays {1}: nothing is prevented.
+    let mut t = TestGame::new(2);
+    let circle = t.battlefield(P0, "Rhystic Circle");
+    t.lands(P0, "Plains", 1);
+    t.lands(P1, "Mountain", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, true);
+    t.activate(P0, circle, 0, &[]).unwrap();
+    t.resolve();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    // It prevents damage to P0 only: the Bolt's damage to P0's creature isn't prevented.
+    let mut t = TestGame::new(2);
+    let circle = t.battlefield(P0, "Rhystic Circle");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Plains", 1);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let bolt_spell = t.cast(P1, bolt).target(giant).go();
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, false);
+    t.answer(
+        P0,
+        DecisionKind::Any,
+        Answer::Entities(vec![Entity::Object(bolt_spell)]),
+    );
+    t.activate(P0, circle, 0, &[]).unwrap();
+    t.resolve();
+    t.resolve_all();
+    assert!(!t.on_battlefield(giant));
+    assert_eq!(t.life(P0), 20);
 }
 
 #[test]
@@ -360,6 +399,17 @@ fn rhystic_lightning_deals_less_if_paid() {
     t.cast(P0, rl).target(wall).go();
     t.resolve_all();
     assert_eq!(t.obj_now(wall).damage, 4);
+    // The creature's controller pays {2}: 2 damage to it instead.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    t.lands(P1, "Island", 2);
+    let wall = t.battlefield(P1, "Wall of Stone");
+    let rl = t.hand(P0, "Rhystic Lightning");
+    t.answer_yes(P1, true);
+    t.cast(P0, rl).target(wall).go();
+    t.resolve_all();
+    assert_eq!(t.obj_now(wall).damage, 2);
+    assert_eq!(t.life(P1), 20);
 }
 
 #[test]
@@ -429,6 +479,25 @@ fn mishras_war_machine_taps_only_if_it_dealt_damage() {
     t.set_step(P1, Step::End);
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[Entity::Object(card)]);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert!(!t.obj_now(m).tapped);
+    // All of the damage is prevented (a permanent of each color with Spirit of
+    // Resistance): none was dealt this way, so it stays untapped.
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Mishra's War Machine");
+    for c in [
+        "Spirit of Resistance",
+        "Grizzly Bears",
+        "Dimir Guildmage",
+        "Gray Ogre",
+    ] {
+        t.battlefield(P0, c);
+    }
+    t.g.player_mut(P0).hand.clear();
+    t.set_step(P1, Step::End);
+    t.answer_yes(P0, true);
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert_eq!(t.life(P0), 20);
@@ -524,7 +593,7 @@ fn aerial_surveyor_searches_when_the_defender_has_more_lands() {
 
 #[test]
 fn chrome_replicator_needs_two_permanents_sharing_a_name() {
-    cr!("603.4", "201.2");
+    cr!("603.4", "201.2a");
     assert_supported(&["Chrome Replicator"]);
     // Two differently named nonland, nontoken permanents: no token.
     let mut t = TestGame::new(2);
