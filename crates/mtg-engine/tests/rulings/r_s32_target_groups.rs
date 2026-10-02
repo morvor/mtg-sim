@@ -32,7 +32,7 @@ fn advocate_needs_two_cards_in_a_single_opponents_graveyard() {
 
     // A second card in one opponent's graveyard: now it can be activated, but only with
     // both cards from that graveyard. Choosing one from each graveyard isn't allowed.
-    let giant = t.graveyard(P2, "Hill Giant");
+    t.graveyard(P2, "Hill Giant");
     t.answer_targets(P0, &[Entity::Object(bears), Entity::Object(elves)]);
     t.answer_targets(P0, &[Entity::Object(anthem)]);
     t.activate(P0, advocate, 0, &[]).unwrap();
@@ -41,7 +41,6 @@ fn advocate_needs_two_cards_in_a_single_opponents_graveyard() {
     assert!(t.in_hand(P2, "Llanowar Elves"));
     assert!(t.in_hand(P2, "Hill Giant"));
     assert!(t.in_graveyard(P1, "Glorious Anthem"));
-    let _ = giant;
 }
 
 #[test]
@@ -91,17 +90,23 @@ fn creature_cards_that_share_a_type_one_leaves_the_other_still_returns() {
         assert!(t.in_graveyard(P0, "Llanowar Elves"), "{name}");
 
         // With no two creature cards sharing a creature type, the second mode can't be
-        // chosen.
+        // chosen: asking for it, P0 gets the first mode (one card returned) instead.
         let mut t = TestGame::new(2);
         let spell = t.hand(P0, name);
-        t.graveyard(P0, "Grizzly Bears");
-        t.graveyard(P0, "Llanowar Elves");
+        let bears = t.graveyard(P0, "Grizzly Bears");
+        let elves = t.graveyard(P0, "Llanowar Elves");
         add_mana(&mut t, P0, ManaType::B, 2);
-        let r = t.cast(P0, spell).modes(&[1]).try_go();
-        if r.is_ok() {
-            t.resolve();
-            // Only the first mode (one card) could be chosen.
-            assert_eq!(t.hand_size(P0), 1, "{name}");
-        }
+        t.cast(P0, spell)
+            .modes(&[1])
+            .targets(&[Entity::Object(bears), Entity::Object(elves)])
+            .try_go()
+            .unwrap_or_else(|e| panic!("{name}: the first mode is still castable: {e:?}"));
+        t.resolve();
+        assert_eq!(t.hand_size(P0), 1, "{name}: only one card returned");
+        assert_eq!(
+            t.graveyard_size(P0),
+            2,
+            "{name}: the spell and the other card"
+        );
     }
 }
