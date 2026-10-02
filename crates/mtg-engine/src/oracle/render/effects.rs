@@ -515,11 +515,17 @@ impl Renderer<'_> {
                     format!("{w} chooses one —")
                 };
                 let mut s = head;
+                let mut texts = Vec::new();
                 for (_, eff) in options {
                     let t = self.effect_sentences(eff);
                     s.push_str(&format!("\n• {t}"));
+                    texts.push(t);
                 }
-                s
+                // A choice made as the effect happens (CR 608.2d): "X or Y".
+                match tail_parts::or_form(&texts) {
+                    Some(o) if w == "you" => format!("{{alt:{s}|{o}}}"),
+                    _ => s,
+                }
             }
             Effect::Store { sel, var } if matches!(sel, Sel::All(_)) => {
                 self.var_defs.push((*var, sel.clone(), false));
@@ -2245,7 +2251,10 @@ impl Renderer<'_> {
             // Whether an earlier instruction exiled something (`after_exile`).
             let saved_exile = self.after_exile;
             self.after_exile |= v[..i].iter().any(exiles);
+            let saved_this_way = self.this_way.clone();
+            self.this_way.extend(tail_parts::this_way(&v[..i]));
             let s = self.effect(&v[i]);
+            self.this_way = saved_this_way;
             self.after_exile = saved_exile;
             if !s.is_empty() {
                 parts.push(s);
@@ -2818,7 +2827,10 @@ impl Renderer<'_> {
                 if p.all || p.up_to || !matches!(p.count, Value::Const(1)) {
                     many = true;
                 }
-                self.noun_det(&p.filter, det)
+                // What's searched for is a card ("a card named Ashiok, Sculptor of
+                // Fears"), though the filter needn't say so.
+                let f = Filter::And(vec![Filter::Card, p.filter.clone()]);
+                self.noun_det(&f, det)
             })
             .collect();
         if parts.len() > 1 {
@@ -2866,7 +2878,24 @@ impl Renderer<'_> {
             s.push_str(&format!(", put {}", dests.join(" and ")));
         }
         if spec.shuffle == SearchShuffle::After {
-            s.push_str(", then shuffle");
+            // "Search your library and/or graveyard": the library is shuffled only if it
+            // was searched.
+            if spec.zones_optional
+                && spec.zones.len() > 1
+                && spec.zones.contains(&ZoneKind::Library)
+            {
+                if matches!(spec.who, PlayerRef::You) {
+                    s.push_str(". If you search your library this way, shuffle");
+                } else {
+                    let w = self.player(&spec.who, Case::Subj);
+                    s.push_str(&format!(
+                        ". If {w} searches {} library this way, {w} shuffles",
+                        self.player(&spec.who, Case::Poss)
+                    ));
+                }
+            } else {
+                s.push_str(", then shuffle");
+            }
         }
         s
     }
@@ -3726,11 +3755,26 @@ impl Renderer<'_> {
                     other => self.amount(other),
                 };
                 let syms: Vec<String> = types.iter().map(|t| mana_symbol(*t)).collect();
-                format!(
+                let s = format!(
                     "{a} mana in any combination of {}{}",
                     join_list(&syms, "and/or"),
                     w.unwrap_or_default()
-                )
+                );
+                // "Add {R} or {G} for each Raccoon you control": one of them for each
+                // (each chosen separately).
+                let counted = match n {
+                    Value::Count(_) | Value::CountSel(_) => {
+                        let v = self.value(n);
+                        v.strip_prefix("the number of ").map(singular_head)
+                    }
+                    _ => None,
+                };
+                match counted {
+                    Some(c) if !s.contains(['|', '\n']) && !c.contains(['|', '\n']) => {
+                        format!("{{alt:{s}|{} for each {c}}}", join_list(&syms, "or"))
+                    }
+                    _ => s,
+                }
             }
             ManaProduction::OneOf(types) => {
                 let syms: Vec<String> = types.iter().map(|t| mana_symbol(*t)).collect();

@@ -1160,7 +1160,14 @@ pub fn oracle_units(text: &str, names: &[String]) -> Vec<String> {
         if l.starts_with('•') || l.starts_with(|c: char| c.is_ascii_digit()) && l.contains('|') {
             if let Some(last) = lines.last_mut() {
                 last.push('\n');
-                last.push_str(l);
+                // A mode's flavor word ("• Cure Wounds — You gain 2 life.", CR 207.2d).
+                match l.strip_prefix("• ") {
+                    Some(m) => {
+                        last.push_str("• ");
+                        last.push_str(&strip_ability_word(m));
+                    }
+                    None => last.push_str(l),
+                }
                 continue;
             }
         }

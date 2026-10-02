@@ -27,6 +27,7 @@ mod outcomes;
 mod play_terms;
 mod players;
 mod statics;
+mod tail_parts;
 mod this_turn;
 mod trigger_causes;
 mod triggers;
@@ -600,6 +601,10 @@ pub struct Renderer<'a> {
     pub(crate) play_terms: Option<PlayTerms>,
     /// An earlier instruction of the sequence being rendered exiled objects.
     pub(crate) after_exile: bool,
+    /// Variables an earlier instruction of the sequence being rendered filled with the
+    /// objects it acted on, and what it did to them ("destroyed", "discarded"): "the
+    /// number of creatures destroyed this way" (see `tail_parts.rs`).
+    pub(crate) this_way: Vec<(Var, &'static str, Option<CardType>)>,
     /// The target an effect done "for each" target is about (a single target).
     pub(crate) each_target: Option<u8>,
     /// Targets remembered in variables, first mentioned through them: (variable, target
@@ -644,6 +649,7 @@ impl<'a> Renderer<'a> {
             plural_vars: Vec::new(),
             play_terms: None,
             after_exile: false,
+            this_way: Vec::new(),
             each_target: None,
             target_vars: Vec::new(),
         }

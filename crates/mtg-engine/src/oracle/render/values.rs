@@ -26,6 +26,10 @@ impl Renderer<'_> {
                     format!("the number of {n}")
                 }
             }
+            Value::CountSel(s) if self.this_way_of(s).is_some() => {
+                let n = self.noun(&Filter::In(Box::new((**s).clone())), Num::Many);
+                format!("the number of {n}")
+            }
             Value::CountSel(s) => {
                 let s = self.sel(s, Case::Obj);
                 format!("the number of {s}")

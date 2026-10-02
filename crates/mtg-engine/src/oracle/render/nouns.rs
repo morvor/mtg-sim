@@ -527,6 +527,17 @@ impl Renderer<'_> {
                 np.post.push("revealed this way".into());
                 np.kind.get_or_insert("card");
             }
+            // "for each permanent destroyed this way".
+            Filter::In(s) if self.this_way_of(s).is_some() => {
+                let (verb, card, ty) = self.this_way_of(s).unwrap_or(("", false, None));
+                np.post.push(format!("{verb} this way"));
+                if let (Some(t), true) = (ty, np.types.is_empty()) {
+                    np.types.push(t);
+                }
+                if card {
+                    np.kind.get_or_insert("card");
+                }
+            }
             Filter::In(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("among {s}"));
@@ -1080,7 +1091,8 @@ impl Renderer<'_> {
             if !matches!(
                 sel.as_ref(),
                 Sel::Var(crate::kw::reveal_from_hand::REVEALED)
-            ) {
+            ) && self.this_way_of(sel).is_none()
+            {
                 return self.sel(sel, Case::Obj);
             }
         }
