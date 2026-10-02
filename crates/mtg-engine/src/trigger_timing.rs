@@ -14,10 +14,16 @@
 //! stack calls it once a spell's or ability's instructions are done), which checks the
 //! events queued so far — unless an action is still in progress: an atomic effect
 //! (destroying, creating tokens, moving objects, ...), a zone move, or the application of
-//! replacement effects. Those produce simultaneous events, and their nested instructions
-//! ("as this enters, choose ...", the "instead" part of a replacement effect) are part of
-//! the same event: checking in the middle would split a simultaneous event (CR 603.2c,
-//! "one or more" triggers) and show triggers a half-done action.
+//! replacement effects. Their nested instructions ("as this enters, choose ...", the
+//! "instead" part of a replacement effect) are part of that action: checking in the
+//! middle would show triggers a half-done action, and a check splits the "one or more"
+//! batch (CR 603.2c) at that point.
+//!
+//! Every instruction, nested ones included, still ends the current batch of simultaneous
+//! events ([`Game::end_event_batch`]): an "instead" instruction run for one object in the
+//! middle of an event that affects several (a replacement effect applied while all
+//! creatures are destroyed) starts a new batch. Keeping such an event in one batch is a
+//! matter of simultaneity, not of when triggers are checked.
 //!
 //! An atomic action that itself consists of steps the rules perform one after another
 //! (amass: create an Army, then put counters on it, CR 701.47a) calls
@@ -35,8 +41,8 @@ pub struct TriggerTiming {
     /// moves, replacement effects being applied.
     pub(crate) atomic: u32,
     /// Set while [`Game::flush_events`] runs: events emitted while triggers are being
-    /// detected (by a triggered mana ability resolving right away, CR 605.4a) wait for
-    /// the next check instead of being checked in the middle of this one.
+    /// detected (by a triggered mana ability resolving right away, CR 605.4a) are checked
+    /// once this check is done instead of in the middle of it.
     pub(crate) flushing: bool,
 }
 

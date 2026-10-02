@@ -307,6 +307,10 @@ fn putting_a_card_into_your_hand_isnt_drawing_it() {
         "Orcish Bowmasters",
         "If a spell or ability causes an opponent to put cards into their hand without specifically using the word \"draw,\" it's not a card drawn."
     );
+    ruling!(
+        "Xyris, the Writhing Storm",
+        "If a spell or ability causes an opponent to put cards into their hand without specifically using the word \"draw,\" it's not a card drawn."
+    );
     supported("Orcish Bowmasters");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Teferi's Ageless Insight");
@@ -324,10 +328,6 @@ fn putting_a_card_into_your_hand_isnt_drawing_it() {
 #[test]
 fn bowmasters_and_xyris_trigger_on_each_card_but_the_draw_step_one() {
     cr!("504.1", "603.2", "121.2");
-    ruling!(
-        "Xyris, the Writhing Storm",
-        "If a spell or ability causes an opponent to put cards into their hand without specifically using the word \"draw,\" it's not a card drawn."
-    );
     let mut t = TestGame::new(2);
     // "When this creature enters and whenever an opponent draws a card except the first
     // one they draw in each of their draw steps, this creature deals 1 damage to any
@@ -435,12 +435,24 @@ fn xyris_you_and_that_player_each_draw_and_lose_together() {
 }
 
 #[test]
-fn xyris_each_draw_that_many_cards() {
-    cr!("121.2c", "510.2");
+fn xyris_each_draw_that_many_cards_the_active_player_first() {
+    cr!("121.2", "121.2c");
     let mut t = TestGame::new(2);
     xyris_hits(&mut t);
     assert_eq!(t.hand_size(P0), 3);
     assert_eq!(t.hand_size(P1), 3);
+    // P0, the active player, performs all of their draws first, then P1.
+    let drawers: Vec<PlayerId> =
+        t.g.turn_events
+            .iter()
+            .filter_map(|e| match e {
+                mtg_engine::events::Event::Drew { player, .. } => Some(*player),
+                _ => None,
+            })
+            .collect();
+    assert_eq!(drawers, vec![P0, P0, P0, P1, P1, P1]);
+    // P1's draws aren't the first ones in one of their draw steps: three Snakes.
+    assert_eq!(with_subtype(&t, P0, "Snake").len(), 1 + 3);
 }
 
 #[test]

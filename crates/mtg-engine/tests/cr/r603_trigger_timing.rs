@@ -6,6 +6,7 @@
 //! together, once the action is complete.
 
 use crate::r703_common::{oracle_card, supported};
+use mtg_engine::decision::Answer;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
@@ -107,15 +108,30 @@ fn as_enters_choices_dont_split_a_simultaneous_event() {
     // "Whenever one or more artifacts you control enter, this creature deals that much
     // damage to each opponent."
     t.battlefield(P0, "Ingenious Artillerist");
-    // "As this creature enters, choose a creature type."
+    // "As this creature enters, choose a creature type." / "Other creatures you control
+    // of the chosen type get +1/+1."
     t.graveyard(P0, "Adaptive Automaton");
     t.graveyard(P0, "Adaptive Automaton");
     let spell = t.hand(P0, "Brilliant Restoration");
     t.lands(P0, "Plains", 4);
     t.lands(P0, "Wastes", 3);
     t.cast(P0, spell).go();
+    // Each one's choice is made as it enters: Elf for both.
+    let elf = subtype_lists()
+        .creature
+        .iter()
+        .position(|s| s == "Elf")
+        .expect("Elf");
+    t.answer(P0, DecisionKind::Option, Answer::Index(elf));
+    t.answer(P0, DecisionKind::Option, Answer::Index(elf));
     t.resolve();
-    assert_eq!(t.named_on_battlefield("Adaptive Automaton").len(), 2);
+    let automatons = t.named_on_battlefield("Adaptive Automaton");
+    assert_eq!(automatons.len(), 2);
+    for a in automatons {
+        assert!(t.obj_now(a).chars.has_subtype("Elf"));
+        // The other one's chosen type is Elf: +1/+1.
+        assert_eq!(t.pt(a), (3, 3));
+    }
     // One event put both onto the battlefield: the ability triggers once, for two.
     assert_eq!(triggered(&t, "one or more artifacts"), 1);
     t.resolve_all();

@@ -122,13 +122,20 @@ fn phase_out_trigger(cond: &TriggerCond) -> bool {
 impl Game {
     /// Processes pending events: records turn history and detects triggered abilities.
     /// Events emitted while this runs (by a triggered mana ability resolving right away,
-    /// CR 605.4a) are processed by the next call, not in the middle of this one.
+    /// CR 605.4a) aren't processed in the middle of it but right after it, before this
+    /// returns — not left for a later check that might come only after a player has
+    /// received priority.
     pub fn flush_events(&mut self) {
         if self.events.is_empty() || self.timing.flushing {
             return;
         }
         self.timing.flushing = true;
-        self.flush_events_now();
+        for _ in 0..100 {
+            self.flush_events_now();
+            if self.events.is_empty() {
+                break;
+            }
+        }
         self.timing.flushing = false;
     }
 
@@ -174,7 +181,8 @@ impl Game {
         // you've cast two or more spells this turn"): characteristics must be computed
         // again (CR 611.3a, 613.1).
         self.dirty = true;
-        // Events emitted while detecting triggers (rare) are handled on the next flush.
+        // Events emitted while detecting triggers (rare) are handled by the next pass of
+        // `flush_events`.
     }
 
     /// Marks the end of a group of simultaneous events (see [`Event::BatchBoundary`]).
