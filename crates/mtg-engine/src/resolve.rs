@@ -2467,11 +2467,23 @@ impl Game {
         for (k, v) in &to.with_counters {
             counters.push((k.clone(), self.eval_value(v, ctx).max(0) as u32));
         }
-        let attack = if to.attacking {
-            self.attack_target_for_new_attacker(ctx)
-        } else {
-            None
-        };
+        // CR 508.4: each object put onto the battlefield attacking has its own attack
+        // target, chosen by the player who'll control it.
+        let mut attack: Vec<Option<Entity>> = Vec::with_capacity(objs.len());
+        for o in &objs {
+            let target = if to.attacking && self.is_live(*o) {
+                let owner = self.obj(*o).owner;
+                let who = if owners_control {
+                    owner
+                } else {
+                    controller.unwrap_or(ctx.controller)
+                };
+                self.attack_target_for_new_attacker(who, ctx)
+            } else {
+                None
+            };
+            attack.push(target);
+        }
         let with_mods = if to.zone == ZoneKind::Battlefield && !to.with_mods.is_empty() {
             Some((
                 ctx.source,
@@ -2489,8 +2501,9 @@ impl Game {
         };
         let moves: Vec<MoveEv> = objs
             .iter()
-            .filter(|o| self.is_live(**o))
-            .map(|o| {
+            .zip(attack)
+            .filter(|(o, _)| self.is_live(**o))
+            .map(|(o, attack)| {
                 let owner = self.obj(*o).owner;
                 MoveEv {
                     obj: *o,
@@ -2555,12 +2568,16 @@ impl Game {
     }
 
     /// What a creature put onto the battlefield attacking attacks when the effect doesn't
-    /// say: its controller chooses (CR 508.4), by default what the source is attacking if
+    /// say: its controller (`controller`) chooses (CR 508.4), by default what the source is attacking if
     /// it's attacking (Geist of Saint Traft's Angel needn't attack what Geist attacks).
-    fn attack_target_for_new_attacker(&mut self, ctx: &Ctx) -> Option<Entity> {
+    fn attack_target_for_new_attacker(
+        &mut self,
+        controller: PlayerId,
+        ctx: &Ctx,
+    ) -> Option<Entity> {
         let combat = self.combat.as_ref()?;
         let preferred = ctx.source.and_then(|src| combat.attack_target(src));
-        crate::combat::choose_attack_target_preferring(self, ctx.controller, preferred)
+        crate::combat::choose_attack_target_preferring(self, controller, preferred)
     }
 
     /// Determines the mana types produced by an AddMana effect (CR 106).

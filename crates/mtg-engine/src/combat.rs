@@ -1847,10 +1847,14 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
     };
     let mut assignments: Vec<(ObjectId, Entity, u32)> = Vec::new();
     // Attacking player assigns first, then defending players (CR 510.1).
-    for ai in &combat.attackers {
-        if !deals.contains(&ai.id) || !g.is_live(ai.id) || g.obj(ai.id).zone != Zone::Battlefield {
-            continue;
-        }
+    let attackers: Vec<&AttackerInfo> = combat
+        .attackers
+        .iter()
+        .filter(|ai| {
+            deals.contains(&ai.id) && g.is_live(ai.id) && g.obj(ai.id).zone == Zone::Battlefield
+        })
+        .collect();
+    for ai in trample_assignment_order(g, attackers) {
         let a = assign_attacker_damage(g, ai, &assignments);
         assignments.extend(a);
     }
@@ -1863,6 +1867,49 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
     // CR 510.2: all combat damage is dealt simultaneously.
     crate::keyword_impls::before_combat_damage(g, &mut assignments);
     g.deal_damage_batch(assignments, true);
+}
+
+/// The order in which the attacking creatures' combat damage is assigned. Lethal damage
+/// for trample counts damage other creatures are assigning in the same step (CR 702.19b,
+/// 702.19c), and the player makes those assignments in whatever order they like: creatures
+/// without trample (whose assignments never depend on others') first, then those with
+/// trample — in an order the attacking player chooses when two of them are blocked by the
+/// same creature or attack the same planeswalker.
+fn trample_assignment_order<'a>(
+    g: &mut Game,
+    attackers: Vec<&'a AttackerInfo>,
+) -> Vec<&'a AttackerInfo> {
+    let (mut tramplers, mut out): (Vec<&AttackerInfo>, Vec<&AttackerInfo>) = attackers
+        .into_iter()
+        .partition(|ai| g.obj(ai.id).has_keyword(KeywordKind::Trample));
+    let shares = |a: &AttackerInfo, b: &AttackerInfo| {
+        a.blockers.iter().any(|x| b.blockers.contains(x))
+            || matches!(a.target, Some(Entity::Object(pw))
+                if b.target == Some(Entity::Object(pw)) && g.obj(pw).is(CardType::Planeswalker))
+    };
+    let shared = tramplers
+        .iter()
+        .enumerate()
+        .any(|(i, a)| tramplers[i + 1..].iter().any(|b| shares(a, b)));
+    if shared {
+        let chooser = g
+            .combat
+            .as_ref()
+            .and_then(|c| c.attacking_player)
+            .unwrap_or(g.turn.active);
+        let names: Vec<String> = tramplers
+            .iter()
+            .map(|ai| g.obj(ai.id).chars.name.to_string())
+            .collect();
+        let order = g.ask_order(
+            chooser,
+            "Order in which to assign the combat damage of attacking creatures with trample",
+            names,
+        );
+        tramplers = order.into_iter().map(|i| tramplers[i]).collect();
+    }
+    out.append(&mut tramplers);
+    out
 }
 
 fn damage_amount(g: &Game, id: ObjectId) -> u32 {
