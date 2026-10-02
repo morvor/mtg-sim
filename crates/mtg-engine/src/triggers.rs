@@ -199,9 +199,12 @@ impl Game {
         crate::monarch_initiative::detect_batch(self, batch);
         let mut sources = self.current_trigger_sources();
         // Leaves-the-battlefield look back in time (CR 603.10a): permanents that left in
-        // this batch still see the batch.
+        // this batch still see the batch's events that look back. (A permanent that left
+        // keeps its last known information, zone included, under its old id; it's no
+        // longer live.)
         let mut seen: BTreeSet<(ObjectId, u64)> =
             sources.iter().map(|(id, _, a)| (*id, a.uid)).collect();
+        let mut looking_back: BTreeSet<(ObjectId, u64)> = BTreeSet::new();
         for ev in batch {
             if let Event::ZoneChange {
                 from: Zone::Battlefield,
@@ -210,7 +213,9 @@ impl Game {
             } = ev
             {
                 for (id, ctl, a) in &lb.sources {
-                    if self.obj(*id).zone != Zone::Battlefield && seen.insert((*id, a.uid)) {
+                    let gone = !self.is_live(*id) || self.obj(*id).zone != Zone::Battlefield;
+                    if gone && seen.insert((*id, a.uid)) {
+                        looking_back.insert((*id, a.uid));
                         sources.push((*id, *ctl, a.clone()));
                     }
                 }
@@ -229,7 +234,11 @@ impl Game {
             base.link = a.link;
             base.ability_uid = a.uid;
             let mut infos: Vec<EventInfo> = Vec::new();
+            let gone = looking_back.contains(&(src, a.uid));
             for ev in batch {
+                if gone && !looks_back(trigger, ev) {
+                    continue;
+                }
                 infos.extend(self.trigger_matches_ctx(trigger, &base, ev));
             }
             if infos.is_empty() {
