@@ -149,7 +149,17 @@ fn chosen_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
         .iter()
         .filter_map(|p| before.rfind(p))
         .max();
-    let article_at = [" a ", " an "].iter().filter_map(|p| before.rfind(p)).max();
+    // The article starting the object phrase, not one in a qualifier ("a creature an
+    // opponent controls").
+    let article_at = [" a ", " an "]
+        .iter()
+        .flat_map(|p| before.match_indices(p).map(|(i, m)| (i, m.len())))
+        .filter(|(i, len)| {
+            let next = &before[i + len..];
+            !next.starts_with("opponent") && !next.starts_with("player")
+        })
+        .map(|(i, _)| i)
+        .max();
     if let Some(t) = target_at.filter(|t| article_at.is_none_or(|a| a < *t)) {
         let _ = t;
         let text = format!("{before}{after}");

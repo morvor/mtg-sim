@@ -1347,6 +1347,10 @@ fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             }
         }
     }
+    // Players the text named earlier ("the chosen player"; see `choice_grammar`).
+    if let Some((who, rest)) = super::patterns::choice_grammar::player_phrase(s, b) {
+        return Some((Sel::Players(who), rest));
+    }
     let (sel, rest) = object_ref(s, b)?;
     Some((sel, rest))
 }

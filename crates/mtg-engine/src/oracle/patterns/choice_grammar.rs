@@ -102,6 +102,19 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     if named.is_some() {
         return named;
     }
+    // "As ~ enters, choose a player." ... "the chosen player" (CR 607.2d): the player
+    // chosen as the permanent entered.
+    if let Some(r) = s.strip_prefix("the chosen player") {
+        let raw = crate::oracle::raw_text().to_lowercase();
+        let chose = raw.lines().any(|line| {
+            line.starts_with("as ")
+                && line.contains(" enters, choose ")
+                && (line.contains("choose a player") || line.contains("choose an opponent"))
+        });
+        if chose && (r.is_empty() || r.starts_with([' ', '\'', ',', '.'])) {
+            return Some((PlayerRef::ChosenOpponent, r.to_string()));
+        }
+    }
     // "Whenever a player attacks enchanted player ..., that attacking player ...".
     if let Some(r) = s.strip_prefix("that attacking player") {
         let attacking = crate::oracle::raw_text().to_lowercase().contains("whenever a player attacks");
@@ -542,3 +555,55 @@ fn and_followup(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: A and [followup of A]", priority: 993, parse: and_followup } }
+
+/// The players an instruction affected as a group ("each opponent", "each player"), as
+/// the subject words naming them.
+fn affected_players(e: &Effect) -> Option<&'static str> {
+    let who = match e {
+        Effect::Seq(v) => return v.last().and_then(affected_players),
+        Effect::DealDamage {
+            to: Sel::Players(r),
+            ..
+        } => r,
+        Effect::LoseLife { who, .. } | Effect::GainLife { who, .. } => who,
+        _ => return None,
+    };
+    match who {
+        PlayerRef::EachOpponent => Some("each opponent"),
+        PlayerRef::EachPlayer => Some("each player"),
+        PlayerRef::EachOtherPlayer => Some("each other player"),
+        _ => None,
+    }
+}
+
+/// "~ deals 2 damage to each opponent. Those players each discard two cards at random.":
+/// "those players" are the players the previous instruction affected.
+fn those_players_each(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l)
+        .strip_prefix("those players each ")
+        .or_else(|| end(l).strip_prefix("each of those players "))
+    else {
+        return false;
+    };
+    let Some(subject) = affected_players(prev) else {
+        return false;
+    };
+    // Third person singular verb ("discard" -> "discards").
+    let (verb, rest) = r.split_once(' ').unwrap_or((r, ""));
+    let verb = if l.starts_with("each of those players ") {
+        verb.to_string()
+    } else if verb.ends_with("sh") || verb.ends_with("ch") || verb.ends_with('s') || verb.ends_with('x') {
+        format!("{verb}es")
+    } else {
+        format!("{verb}s")
+    };
+    let text = format!("{subject} {verb} {rest}");
+    let Some(e) = crate::oracle::effects::parse_sentence(text.trim(), b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "choice grammar: those players each [verb]", priority: 60, apply: those_players_each } }

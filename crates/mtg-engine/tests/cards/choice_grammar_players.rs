@@ -176,3 +176,77 @@ fn keepers_of_the_beasts_and_mind_compare_with_you() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), before + 1);
 }
+
+#[test]
+fn skull_rend_those_players_each_discard_at_random() {
+    cr!("701.9b", "120.3a");
+    compiles("Skull Rend");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 3);
+    for p in [P1, P2] {
+        t.hand(p, "Forest");
+        t.hand(p, "Island");
+        t.hand(p, "Plains");
+    }
+    let mine = t.hand_size(P0);
+    let spell = t.hand(P0, "Skull Rend");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    for p in [P1, P2] {
+        assert_eq!(t.life(p), 18);
+        assert_eq!(t.hand_size(p), 1, "{}", t.dump_log());
+    }
+    assert_eq!(t.hand_size(P0), mine);
+}
+
+#[test]
+fn stuffy_doll_deals_that_much_damage_to_the_chosen_player() {
+    cr!("607.2d", "614.12");
+    compiles("Stuffy Doll");
+    let mut t = TestGame::new(3);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let doll = t.enter(P0, "Stuffy Doll");
+    t.resolve_all();
+    t.g.obj_mut(doll).summoning_sick = false;
+    // "{T}: Stuffy Doll deals 1 damage to itself."
+    t.activate(P0, doll, 0, &[]).expect("activates");
+    t.resolve_all();
+    assert_eq!(t.life(P2), 19, "{}", t.dump_log());
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn saskia_combat_damage_is_dealt_again_to_the_chosen_player() {
+    cr!("607.2d", "510.2");
+    compiles("Saskia the Unyielding");
+    let mut t = TestGame::new(3);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    t.enter(P0, "Saskia the Unyielding");
+    t.resolve_all();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P2), 18, "{}", t.dump_log());
+}
+
+#[test]
+fn cinderheart_giant_damage_to_a_random_creature_an_opponent_controls() {
+    cr!("608.2d", "120.3");
+    compiles("Cinderheart Giant");
+    compiles("Scab-Clan Giant");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Cinderheart Giant");
+    let mine = t.battlefield(P0, "Hill Giant");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    // Kill the Giant (7/6) with damage: "When ~ dies, it deals 7 damage to a creature an
+    // opponent controls chosen at random."
+    t.g.obj_mut(giant).damage = 5;
+    t.cast(P0, bolt).target(giant).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(theirs), "{}", t.dump_log());
+    assert!(t.on_battlefield(mine));
+}
