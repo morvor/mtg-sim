@@ -340,6 +340,46 @@ impl Renderer<'_> {
                 // ("target player loses 4 life").
                 let inner = self.effect(effect);
                 let inner = inner.strip_prefix("you ").unwrap_or(&inner);
+                // "loses 3 life unless they discard a card" / "... unless that player
+                // discards a card": the same player performs the alternative.
+                let inner = match inner.split_once(" unless you ") {
+                    Some((head, alt)) => {
+                        let alt = format!(" {alt} ")
+                            .replace(" your ", " their ")
+                            .replace(" to you ", " to them ");
+                        let alt = alt.trim();
+                        let third: Vec<String> = alt
+                            .split(" or ")
+                            .enumerate()
+                            .map(|(i, a)| {
+                                let verb = a.split(' ').next().unwrap_or("");
+                                let is_verb = matches!(
+                                    verb,
+                                    "sacrifice"
+                                        | "discard"
+                                        | "pay"
+                                        | "have"
+                                        | "exile"
+                                        | "return"
+                                        | "remove"
+                                        | "put"
+                                        | "tap"
+                                        | "reveal"
+                                );
+                                if i == 0 || is_verb {
+                                    third_person(a)
+                                } else {
+                                    a.to_string()
+                                }
+                            })
+                            .collect();
+                        format!(
+                            "{head} unless {{alt:they {alt}|that player {}}}",
+                            third.join(" or ")
+                        )
+                    }
+                    None => inner.to_string(),
+                };
                 let inner = format!(" {inner} ")
                     .replace(" your ", " their ")
                     .replace(" you ", " they ")
@@ -1330,6 +1370,9 @@ impl Renderer<'_> {
                 (self.self_salient, self.other_salient, self.trigger_is_self) = saved;
                 format!("{t}, {}", lower_first(&b))
             }
+            // Noting what the ability affected has no words of its own: the linked
+            // ability says "that player" (CR 607.1).
+            Effect::NoteLinked { .. } => String::new(),
             Effect::Reflexive { body } => {
                 let b = self.in_event_scope(|r| r.body(body));
                 format!("when you do, {}", lower_first(&b))
@@ -1382,7 +1425,10 @@ impl Renderer<'_> {
                 what,
                 free,
                 optional,
-            } => self.play_card("cast", who, what, *free, *optional),
+            } => match self.cast_up_to_one(e) {
+                Some(c) => c,
+                None => self.play_card("cast", who, what, *free, *optional),
+            },
             Effect::PlayCard {
                 who,
                 what,
@@ -2132,12 +2178,13 @@ impl Renderer<'_> {
         }
     }
 
-    fn may(&mut self, who: &PlayerRef, effect: &Effect) -> String {
-        // "You may cast an instant or sorcery spell from your hand without paying its mana
-        // cost": up to one card, chosen as it's cast. Only a nonland card can be cast
-        // (CR 305.9), and the card cast is a spell (CR 601.2a).
-        if let Effect::CastCard {
-            who: caster,
+    /// "You may cast an instant or sorcery spell from your hand without paying its mana
+    /// cost": you cast up to one card, chosen as it's cast (choosing none is not casting).
+    /// Only a nonland card can be cast (CR 305.9), and the card cast is a spell (CR
+    /// 601.2a).
+    fn cast_up_to_one(&mut self, effect: &Effect) -> Option<String> {
+        let Effect::CastCard {
+            who: PlayerRef::You,
             what:
                 Sel::Choose {
                     chooser: PlayerRef::You,
@@ -2149,30 +2196,37 @@ impl Renderer<'_> {
             free,
             optional: false,
         } = effect
-        {
-            if same_player(caster, who) && matches!(who, PlayerRef::You) {
-                let f = match filter {
-                    Filter::And(v) => Filter::and(
-                        v.iter()
-                            .filter(|x| !matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::Type(CardType::Land))))
-                            .cloned()
-                            .collect(),
-                    ),
-                    other => other.clone(),
-                };
-                let n = self.noun_det(&f, super::nouns::Det::A);
-                let n = match n.find(" card") {
-                    Some(i) if n[i + 5..].is_empty() || n[i + 5..].starts_with(' ') => {
-                        format!("{} spell{}", &n[..i], &n[i + 5..])
-                    }
-                    _ => n,
-                };
-                let fr = if *free {
-                    " without paying its mana cost"
-                } else {
-                    ""
-                };
-                return format!("you may cast {n}{fr}");
+        else {
+            return None;
+        };
+        let f = match filter {
+            Filter::And(v) => Filter::and(
+                v.iter()
+                    .filter(|x| !matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::Type(CardType::Land))))
+                    .cloned()
+                    .collect(),
+            ),
+            other => other.clone(),
+        };
+        let n = self.noun_det(&f, super::nouns::Det::A);
+        let n = match n.find(" card") {
+            Some(i) if n[i + 5..].is_empty() || n[i + 5..].starts_with(' ') => {
+                format!("{} spell{}", &n[..i], &n[i + 5..])
+            }
+            _ => n,
+        };
+        let fr = if *free {
+            " without paying its mana cost"
+        } else {
+            ""
+        };
+        Some(format!("you may cast {n}{fr}"))
+    }
+
+    fn may(&mut self, who: &PlayerRef, effect: &Effect) -> String {
+        if matches!(who, PlayerRef::You) {
+            if let Some(c) = self.cast_up_to_one(effect) {
+                return c;
             }
         }
         if let Some((w, vp, _)) = self.actor_vp(effect) {
@@ -2214,13 +2268,57 @@ impl Renderer<'_> {
         otherwise: &Effect,
     ) -> String {
         if matches!(then, Effect::Noop) && !matches!(otherwise, Effect::Noop) {
-            let o = self.effect(otherwise);
-            let p = self.player(who, Case::Subj);
-            let pays = self.cost_as_payment(cost);
-            if p == "you" {
-                return format!("{o} unless you {pays}");
+            // "unless that player sacrifices a nonland permanent or discards a card": the
+            // same player's alternatives, nested.
+            let mut costs = vec![cost];
+            let mut otherwise = otherwise;
+            while let Effect::PayOptional {
+                who: w,
+                cost: c,
+                then: t,
+                otherwise: o,
+            } = otherwise
+            {
+                if !same_player(w, who)
+                    || !matches!(**t, Effect::Noop)
+                    || matches!(**o, Effect::Noop)
+                {
+                    break;
+                }
+                costs.push(c);
+                otherwise = o;
             }
-            return format!("{o} unless {p} {}", third_person(&pays));
+            let o = self.effect(otherwise);
+            // Any one of several players may pay ("unless any player pays {1}").
+            let p = match who {
+                PlayerRef::EachPlayer => "{alt:any player|a player}".to_string(),
+                PlayerRef::EachOpponent => "{alt:an opponent|any opponent}".to_string(),
+                _ => self.player(who, Case::Subj),
+            };
+            let mut pays: Vec<String> = costs
+                .into_iter()
+                .map(|c| {
+                    let pays = self.cost_as_payment(c);
+                    if p == "you" {
+                        pays
+                    } else {
+                        // The payment is worded for the player who pays.
+                        let pays = format!(" {pays} ")
+                            .replace(" your ", " their ")
+                            .replace(" you control", " they control")
+                            .replace(" to you ", " to them ");
+                        third_person(pays.trim())
+                    }
+                })
+                .collect();
+            // "pays {1} or 1 life": one verb for payments of the same kind.
+            let pay = if p == "you" { "pay " } else { "pays " };
+            if pays.len() > 1 && pays.iter().all(|x| x.starts_with(pay)) {
+                for x in pays.iter_mut().skip(1) {
+                    *x = x[pay.len()..].to_string();
+                }
+            }
+            return format!("{o} unless {p} {}", pays.join(" or "));
         }
         let p = self.player(who, Case::Subj);
         let pays = self.cost_as_payment(cost);
@@ -3057,8 +3155,38 @@ impl Renderer<'_> {
                         join_list(&k, "and")
                     ));
                 }
+                Modification::AddAbilitiesOf { from, which } => {
+                    let kinds = match (which.activated, which.triggered, which.only) {
+                        (_, _, Some(AbilityClass::Loyalty)) => "loyalty",
+                        (_, _, Some(AbilityClass::Mana)) => "mana",
+                        (true, true, _) => "activated and triggered",
+                        (false, true, _) => "triggered",
+                        _ => "activated",
+                    };
+                    let from = self.sel(from, Case::Obj);
+                    let except = match which.except {
+                        Some(AbilityClass::Mana) => " except mana abilities",
+                        Some(AbilityClass::Loyalty) => " except for loyalty abilities",
+                        _ => "",
+                    };
+                    abilities.push(format!("all {kinds} abilities of {from}{except}"));
+                }
                 Modification::RemoveKeyword(k) => {
                     parts.push(format!("loses {}", self.keyword_kind_word(*k)))
+                }
+                Modification::LoseKeywordWithQuality { kind, quality } => {
+                    let k = match quality {
+                        Some(q) => {
+                            let mut kw = crate::keywords::Keyword::new(*kind);
+                            kw.filter = Some(q.clone());
+                            self.keyword_lower(&kw)
+                        }
+                        None if *kind == crate::keywords::KeywordKind::Banding => {
+                            "all \"bands with other\" abilities".into()
+                        }
+                        None => self.keyword_kind_word(*kind),
+                    };
+                    parts.push(format!("loses {k}"))
                 }
                 Modification::LoseKeyword(k) => {
                     let t = k
@@ -3445,6 +3573,10 @@ impl Renderer<'_> {
                 format!("to activate abilities of {n}")
             }
             M::ClassLevel => "to gain a Class level".into(),
+            M::NotCastSpell(f) => {
+                let n = self.noun(&f.0, Num::Many);
+                format!("This mana can't be spent to cast {n}")
+            }
         }
     }
 

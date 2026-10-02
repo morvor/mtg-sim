@@ -1142,6 +1142,10 @@ impl Game {
         if crate::counter_rules::stun_instead_of_untap(self, obj) {
             return false;
         }
+        // "can't become untapped".
+        if crate::prohibitions::object_cant(self, obj, ObjectAction::Untapped) {
+            return false;
+        }
         self.objects[obj.0 as usize].tapped = false;
         self.dirty = true;
         self.emit(Event::Untapped { obj });
@@ -1331,10 +1335,12 @@ impl Game {
         new
     }
 
+    /// Whether a static ability or a resolved effect ("You can't sacrifice those
+    /// creatures this turn") says the object can't be sacrificed.
     pub fn cant_be_sacrificed(&self, obj: ObjectId) -> bool {
-        self.statics.restrictions.iter().any(|(s, c, r)| match r {
-            Restriction::CantBeSacrificed(f) => self.matches(obj, f, &Ctx::new(Some(*s), *c)),
-            _ => false,
+        self.restricted_obj(obj, |r| match r {
+            Restriction::CantBeSacrificed(f) => Some(f),
+            _ => None,
         })
     }
 

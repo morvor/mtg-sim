@@ -623,13 +623,20 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
     // Tokenize: keep {..} symbols, +1/+1, ~, words with apostrophes and hyphens.
     let mut tokens = Vec::new();
     let mut cur = String::new();
-    let mut in_brace = false;
+    // Braces nest: "{alt:they pay {2}|that player pays {2}}" is one token.
+    let mut depth = 0usize;
     for ch in s.chars() {
-        if in_brace {
+        if depth > 0 {
             cur.push(ch);
-            if ch == '}' {
-                in_brace = false;
-                tokens.push(std::mem::take(&mut cur));
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        tokens.push(std::mem::take(&mut cur));
+                    }
+                }
+                _ => {}
             }
             continue;
         }
@@ -639,7 +646,7 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
                     tokens.push(std::mem::take(&mut cur));
                 }
                 cur.push(ch);
-                in_brace = true;
+                depth = 1;
             }
             c if c.is_alphanumeric() || matches!(c, '\'' | '+' | '-' | '/' | '~' | '*') => {
                 cur.push(c)
@@ -1260,9 +1267,28 @@ fn special_token(t: &str) -> Option<(bool, Vec<Vec<String>>)> {
         return Some((true, vec![normalize_unit(inner)]));
     }
     if let Some(inner) = t.strip_prefix("{alt:").and_then(|x| x.strip_suffix('}')) {
-        return Some((false, inner.split('|').map(normalize_unit).collect()));
+        return Some((false, split_top_level(inner).map(normalize_unit).collect()));
     }
     None
+}
+
+/// The alternatives of an `{alt:...}` token: split at each `|` outside nested braces.
+fn split_top_level(s: &str) -> impl Iterator<Item = &str> {
+    let mut parts = Vec::new();
+    let (mut depth, mut start) = (0usize, 0);
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => depth = depth.saturating_sub(1),
+            '|' if depth == 0 => {
+                parts.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&s[start..]);
+    parts.into_iter()
 }
 
 /// Matches `r` (which may contain special tokens) against `o`.

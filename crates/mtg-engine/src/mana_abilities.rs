@@ -1042,7 +1042,10 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             if act.timing == ActivationTiming::AsInstant {
                 continue;
             }
-            if o.controller != p && !act.any_player {
+            if o.controller != p && !act.any_player && !act.only_opponents {
+                continue;
+            }
+            if act.only_opponents && !g.are_opponents(o.controller, p) {
                 continue;
             }
             // "Its activated abilities can't be activated" covers mana abilities.
@@ -1151,6 +1154,11 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
             }
             if let Some(max) = act.max_per_turn {
                 if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) >= max {
+                    ok = false;
+                }
+            }
+            if let Some(max) = act.max_total {
+                if o.activations.get(&a.uid).copied().unwrap_or(0) >= max {
                     ok = false;
                 }
             }

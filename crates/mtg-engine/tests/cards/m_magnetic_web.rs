@@ -1,4 +1,5 @@
-//! Magnetic Web (hand-written, `src/cards/magnetic_web.rs`).
+//! Magnetic Web (its block requirement is hand-written, `src/cards/magnetic_web.rs`; its
+//! attack requirement is compiled).
 
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;

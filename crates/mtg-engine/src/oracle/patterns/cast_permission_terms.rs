@@ -238,6 +238,7 @@ fn land_and_spell_of_each_permanent_type(
             spells: !land,
             cost: None,
             flash: false,
+            terms: Default::default(),
         }));
         s.condition = Some(Condition::And(vec![Condition::YourTurn, once_unused(slot)]));
         AbilityDef::new(AbilityKind::Static(s), text)
@@ -282,6 +283,7 @@ fn play_from_graveyard_this_turn(l: &str, _b: &mut Builder) -> Option<Effect> {
             spells,
             cost: None,
             flash: false,
+            terms: Default::default(),
         }),
         duration: Duration::EndOfTurn,
     })

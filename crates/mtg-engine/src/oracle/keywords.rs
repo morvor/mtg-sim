@@ -206,6 +206,14 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
         // CR 702.16g–i, 702.11f–g: "from A and from B" and "from each [characteristic]"
         // are shorthand for separate abilities, one per quality.
         KeywordKind::Protection | KeywordKind::Hexproof => {
+            // "Hexproof from activated and triggered abilities": a quality of the
+            // targeting ability itself (CR 702.11d; see `kw::hexproof`).
+            if name.as_str() == "hexproof from" {
+                if let Some(f) = crate::kw::hexproof::ability_quality(rest) {
+                    kw.filter = Some(f);
+                    return Some(vec![kw]);
+                }
+            }
             let qualities = if name.as_str() == "hexproof from" {
                 protection_qualities(rest)?
             } else if let Some(r) = rest.strip_prefix("from ") {

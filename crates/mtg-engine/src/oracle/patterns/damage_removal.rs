@@ -838,7 +838,29 @@ fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
         let r = r.strip_suffix(" until an opponent becomes the monarch")?;
         (r, UntilEvent::OpponentBecomesMonarch)
     };
-    let (what, tail) = object_ref(r, b)?;
+    let (what, tail) = match object_ref(r, b) {
+        Some(x) => x,
+        // "exile another artifact you control until ~ leaves the battlefield" (Idris): a
+        // permanent its controller chooses as the effect resolves.
+        None => {
+            let one = r
+                .strip_prefix("a ")
+                .or_else(|| r.strip_prefix("an "))
+                .or_else(|| r.starts_with("another ").then_some(r))?;
+            let (filter, plural, tail) = parse_object_phrase(one)?;
+            if plural || filter.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+                return None;
+            }
+            let chosen = Sel::Choose {
+                chooser: PlayerRef::You,
+                filter,
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            };
+            (chosen, tail.to_string())
+        }
+    };
     if !end(&tail).is_empty() {
         return None;
     }
@@ -849,6 +871,9 @@ fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
             _ => false,
         },
         Sel::All(f) => f.zone().is_none_or(|z| z == ZoneKind::Battlefield),
+        // "exile another artifact you control until ~ leaves the battlefield" (Idris): a
+        // permanent chosen as the effect resolves.
+        Sel::Choose { filter, .. } => filter.zone().is_none_or(|z| z == ZoneKind::Battlefield),
         _ => false,
     };
     if !on_battlefield {
@@ -1233,6 +1258,10 @@ fn set_no_regen(e: &mut Effect) -> bool {
         Effect::Seq(v) => v.iter_mut().rev().any(set_no_regen),
         Effect::May { effect, .. } => set_no_regen(effect),
         Effect::If { then, .. } => set_no_regen(then),
+        // "Destroy target creature unless its controller pays ...".
+        Effect::PayOptional {
+            then, otherwise, ..
+        } => set_no_regen(otherwise) || set_no_regen(then),
         Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
             set_no_regen(effect)
         }

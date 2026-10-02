@@ -713,7 +713,17 @@ fn the_exiled_found_cards_may_be_cast_this_turn() {
     let shock = t.graveyard(P0, "Shock");
     let bears = t.library_top(P0, "Grizzly Bears");
     t.answer_choose(P0, &[Entity::Object(bolt), Entity::Object(shock)]);
-    t.activate(P0, chandra, 1, &[]).unwrap();
+    // The -9 ability, whichever of its other abilities compile.
+    let search = t
+        .g
+        .obj(chandra)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, ability::AbilityKind::Activated(_)))
+        .position(|a| a.text.contains("Search"))
+        .expect("the -9 ability");
+    t.activate(P0, chandra, search, &[]).unwrap();
     t.resolve_all();
     let offered = choice_candidates(&t, 0);
     assert!(offered.contains(&Entity::Object(bolt)) && offered.contains(&Entity::Object(shock)));

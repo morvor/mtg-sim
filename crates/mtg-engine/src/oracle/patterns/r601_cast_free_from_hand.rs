@@ -33,6 +33,7 @@ fn cast_free_from_hand(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
         spells: true,
         cost: Some(Cost::free()),
         flash: false,
+        terms: Default::default(),
     }));
     Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
 }
