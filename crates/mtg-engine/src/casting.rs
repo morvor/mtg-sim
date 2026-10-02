@@ -308,6 +308,12 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // Listing what could be done only checks legality: it doesn't exercise the
+        // abilities it consults (see `structure`).
+        crate::structure::unlogged(|| self.legal_actions_now(p))
+    }
+
+    fn legal_actions_now(&mut self, p: PlayerId) -> Vec<Action> {
         let mut out = vec![Action::Pass];
         // Lands (CR 305.1, 505.6b).
         if self.can_play_land_now(p) {
@@ -1615,6 +1621,7 @@ impl Game {
             crate::designations::prepared_copy_left_exile(self, card);
         }
         self.log(|g| format!("{p} casts {}", g.describe(id)));
+        crate::structure::record_cast(self, id);
         self.emit(Event::SpellCast {
             spell: id,
             player: p,
@@ -2096,6 +2103,7 @@ impl Game {
                 .collect();
             let body = act.body.clone();
             self.exec(&body.effect, &mut ctx);
+            crate::structure::record(a, &src_chars.name, "mana");
             self.mana_ability_resolving = None;
             // CR 106.12a: "tapped for mana" triggers when such an ability resolves and
             // produces mana.

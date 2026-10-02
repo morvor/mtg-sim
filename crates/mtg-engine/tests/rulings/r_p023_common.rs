@@ -39,6 +39,7 @@ pub fn wolf_token(t: &mut TestGame, p: PlayerId) -> ObjectId {
             toughness: Some(2),
             abilities: vec![],
             scryfall_name: None,
+            pt_values: None,
         },
     )
 }

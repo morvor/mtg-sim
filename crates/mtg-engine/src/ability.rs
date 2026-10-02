@@ -1695,6 +1695,11 @@ pub struct TokenSpec {
     pub abilities: Vec<Ability>,
     /// Name of a Scryfall token card to copy characteristics from, when available.
     pub scryfall_name: Option<SmolStr>,
+    /// Power and toughness given by values ("an X/X ... token, where X is ..."): each is
+    /// determined once, as the token is created, and becomes part of the token's
+    /// copiable values in place of `power`/`toughness` (CR 111.3, 107.3, 608.2h).
+    #[serde(default)]
+    pub pt_values: Option<Box<(Value, Value)>>,
 }
 
 /// What mana an effect adds (CR 106).
@@ -2772,6 +2777,18 @@ pub enum Effect {
         times: Value,
         effect: Box<Effect>,
     },
+    /// "[instructions]. If [condition], repeat this process." / "You may repeat this
+    /// process any number of times.": the process (`body`) is performed, and performed
+    /// again, with new choices, after each pass in which it performed
+    /// [`Effect::RepeatThisProcess`] — so whether to repeat is decided anew after every
+    /// pass, from that pass's results, and repeating includes the instruction to repeat
+    /// (CR 608.2c). See [`crate::repeat_process`].
+    RepeatProcess {
+        body: Box<Effect>,
+    },
+    /// "repeat this process", inside the body of [`Effect::RepeatProcess`]: once the
+    /// current pass ends, the process is performed again.
+    RepeatThisProcess,
     /// Choose one of several effects at resolution ("choose one —" when not modal on cast,
     /// or "choose one at random").
     ChooseOne {

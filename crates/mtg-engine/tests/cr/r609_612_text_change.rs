@@ -244,6 +244,7 @@ fn token_names_that_are_creature_types_can_change() {
         toughness: Some(1),
         abilities: vec![],
         scryfall_name: None,
+        pt_values: None,
     };
     let make = t.custom(
         P0,
@@ -371,6 +372,7 @@ fn token_subtypes_and_rules_text_can_change() {
         toughness: Some(1),
         abilities: vec![AbilityDef::new(AbilityKind::Keyword(walk), "Mountainwalk")],
         scryfall_name: None,
+        pt_values: None,
     };
     resolve_effect(
         &mut t,

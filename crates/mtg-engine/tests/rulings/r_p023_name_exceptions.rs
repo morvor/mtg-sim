@@ -40,6 +40,7 @@ fn spec(sub: &str, color: Color, n: i32) -> TokenSpec {
         toughness: Some(n),
         abilities: vec![],
         scryfall_name: None,
+        pt_values: None,
     }
 }
 

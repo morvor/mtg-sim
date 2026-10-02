@@ -260,6 +260,7 @@ fn tokens_may_be_materials_but_arent_cards_used_to_craft_it() {
                 toughness: Some(1),
                 abilities: vec![],
                 scryfall_name: None,
+                pt_values: None,
             },
             count: mtg_engine::ability::Value::c(1),
             controller: mtg_engine::ability::PlayerRef::You,

@@ -48,6 +48,11 @@ pub struct Ctx {
     /// to how the permanent enters made by [`Effect::EnterTapped`] and
     /// [`Effect::EnterWithCounters`] (CR 614.1c, 614.12).
     pub entering: Option<EntryMods>,
+    /// For a reflexive triggered ability (CR 603.12): the printed ability that created it,
+    /// which is what "this ability" in its text refers to ("When you do, ~ becomes a copy
+    /// of ..., except it has this ability", CR 707.9a).
+    #[serde(default)]
+    pub reflexive_parent: Option<Box<crate::ability::Ability>>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
