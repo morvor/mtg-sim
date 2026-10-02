@@ -333,7 +333,11 @@ impl Game {
                 }
             }
             Effect::Move { what, to } => {
-                let objs = self.resolve_objects(what, ctx);
+                let objs: Vec<ObjectId> = self
+                    .resolve_objects(what, ctx)
+                    .into_iter()
+                    .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
+                    .collect();
                 let res = self.move_to_destination(objs, to, ctx);
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
                 let res = crate::merge::found_all(self, res);
@@ -458,6 +462,7 @@ impl Game {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut placed = 0;
                 for t in self.resolve_sel(what, ctx) {
+                    let t = self.found_after_move(t, ctx);
                     placed += self.add_counters(t, kind, k, ctx.source);
                 }
                 // "Put a coin counter on this artifact. When you do, ..." (CR 603.12):
@@ -558,6 +563,7 @@ impl Game {
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
+                    .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
                     .filter(|o| self.is_live(*o))
                     .collect();
                 if objs.is_empty() {
@@ -1214,6 +1220,7 @@ impl Game {
                 ctx.prev_value = discarded.len() as i64;
                 ctx.prev_happened = !discarded.is_empty();
                 ctx.prev_affected = discarded.clone();
+                ctx.set_var(crate::discard_rules::DISCARDED, discarded.clone());
                 ctx.set_var(vars::IT, discarded);
             }
             Effect::DiscardHand { who } => {
@@ -1493,10 +1500,14 @@ impl Game {
             }
             // CR 701.20a: the cards are revealed while the rest of the effect needs them.
             Effect::RevealHand { who } => {
+                let mut revealed = Vec::new();
                 for p in self.eval_players(who, ctx) {
                     let hand = self.player(p).hand.clone();
                     crate::reveal::reveal_in(self, p, &hand, Some(ctx));
+                    revealed.extend(hand.into_iter().map(Entity::Object));
                 }
+                // "If a card with the chosen name is revealed this way" (CR 701.20a).
+                ctx.set_var(vars::REVEALED, revealed);
             }
             Effect::LookAtHand { who } => {
                 // Looking gives the controller information only; the cards aren't
@@ -2063,6 +2074,28 @@ impl Game {
                 }
             }
             _ => e,
+        }
+    }
+
+    /// CR 400.7j: an object an earlier part of the same effect moved to a public zone can
+    /// be found by later parts of it ("Exile target creature and put two time counters on
+    /// it"): the object it became, when that instruction recorded it.
+    fn found_after_move(&self, e: Entity, ctx: &Ctx) -> Entity {
+        let Entity::Object(o) = e else {
+            return e;
+        };
+        if self.is_live(o) {
+            return e;
+        }
+        let now = self.current(o);
+        let moved = ctx
+            .vars
+            .get(&vars::IT)
+            .is_some_and(|v| v.contains(&Entity::Object(now)));
+        if moved && !matches!(self.obj(now).zone, Zone::Hand(_) | Zone::Library(_)) {
+            Entity::Object(now)
+        } else {
+            e
         }
     }
 
