@@ -95,7 +95,8 @@ fn parse_loyalty(s: &str) -> Option<i32> {
 }
 
 fn split_cost_parts(s: &str) -> Vec<&str> {
-    let mut out = Vec::new();
+    // (start, end) byte ranges of the comma-separated parts.
+    let mut out: Vec<(usize, usize)> = Vec::new();
     let mut start = 0;
     let mut depth = 0;
     for (i, ch) in s.char_indices() {
@@ -103,14 +104,30 @@ fn split_cost_parts(s: &str) -> Vec<&str> {
             '{' => depth += 1,
             '}' => depth -= 1,
             ',' if depth == 0 => {
-                out.push(&s[start..i]);
+                out.push((start, i));
                 start = i + 1;
             }
             _ => {}
         }
     }
-    out.push(&s[start..]);
-    out
+    out.push((start, s.len()));
+    // A comma list inside one part ("Discard an enchantment, instant, or sorcery card"):
+    // a part starting with "or" continues the previous one, and so does each one-word
+    // list item before it.
+    let mut merged: Vec<(usize, usize)> = Vec::new();
+    for (a, b) in out {
+        let part = s[a..b].trim_start().to_lowercase();
+        if part.starts_with("or ") && !merged.is_empty() {
+            let mut first = merged.pop().unwrap();
+            while !s[first.0..first.1].trim().contains(' ') && !merged.is_empty() {
+                first = merged.pop().unwrap();
+            }
+            merged.push((first.0, b));
+        } else {
+            merged.push((a, b));
+        }
+    }
+    merged.into_iter().map(|(a, b)| &s[a..b]).collect()
 }
 
 fn parse_cost_part(p: &str) -> Option<CostPart> {

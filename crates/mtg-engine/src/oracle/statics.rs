@@ -759,6 +759,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         if let Some((v, rest)) = super::patterns::mana_values_among::value(r) {
             return Some((v, rest.to_string()));
         }
+        // "the number of card types among other nonland permanents you control".
+        if let Some((v, rest)) = super::patterns::card_types_among::value(r) {
+            return Some((v, rest.to_string()));
+        }
         let (f, _, rest) = parse_object_phrase(r)?;
         // "the number of creatures blocking it"
         if let Some((f, rest)) = super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {
@@ -812,6 +816,10 @@ pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(r) = s.strip_prefix("the total power of ") {
         let (f, _, rest) = parse_object_phrase(r)?;
         return Some((Value::PowerOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
+    if let Some(v) = super::patterns::spells_cast_this_turn::total_mana_value_of_spells_you_cast(s)
+    {
+        return Some(v);
     }
     if let Some(r) = s.strip_prefix("the total toughness of ") {
         let (f, _, rest) = parse_object_phrase(r)?;

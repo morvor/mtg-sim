@@ -52,7 +52,10 @@ pub fn lethal_damage(
     }
     let base = crate::combat::lethal_damage(g, source, creature);
     let o = g.obj(creature);
-    let left = (o.toughness() - o.damage as i32 - pending_to(pending, e) as i32).max(0) as u32;
+    let left = (crate::kw::lethal_damage_basis(g, creature)
+        - o.damage as i32
+        - pending_to(pending, e) as i32)
+        .max(0) as u32;
     base.min(left)
 }
 

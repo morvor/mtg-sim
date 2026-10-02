@@ -213,6 +213,11 @@ pub fn types_could_produce(g: &Game, f: &Filter, ctx: &Ctx) -> Vec<ManaType> {
     out
 }
 
+/// Mana types the permanent `o` could produce (CR 106.7), as [`types_could_produce`].
+pub fn could_produce(g: &Game, o: ObjectId) -> Vec<ManaType> {
+    could_produce_of(g, o, &mut Vec::new())
+}
+
 /// Types one permanent could produce. `path` holds the permanents whose "could produce"
 /// abilities are being evaluated, so that mutually referential abilities (two Exotic
 /// Orchards) don't recurse forever: a permanent can't help itself produce mana.

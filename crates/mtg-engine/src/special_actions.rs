@@ -70,6 +70,9 @@ pub struct SpecialState {
     /// Cards a player may spend mana of any type to cast (CR 118.14): (player, card,
     /// duration, source, turn created).
     pub any_type_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,
+    /// Cards a player may spend mana as though it were mana of any color to cast (CR
+    /// 609.4b; colorless symbols still need colorless mana), as `any_type_mana`.
+    pub any_color_mana: Vec<(PlayerId, ObjectId, Duration, Option<ObjectId>, u32)>,
     /// (source, player, turn): the player ignores the source's static effects until end
     /// of that turn (CR 116.2d).
     pub ignoring: Vec<(ObjectId, PlayerId, u32)>,

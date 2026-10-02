@@ -416,6 +416,7 @@ impl Game {
                 .rule_effects
                 .iter()
                 .any(|e| check(&e.restriction, e.source, e.controller))
+            || crate::kw::land_play_prohibited(self, p, card)
     }
 
     /// Characteristics of the face a card would be played with as a land.
@@ -1675,6 +1676,7 @@ impl Game {
             crate::designations::prepare_spell_cast(self, card, id);
             crate::designations::prepared_copy_left_exile(self, card);
         }
+        crate::next_spell::recheck_static_cast_grants(self, id);
         self.log(|g| format!("{p} casts {}", g.describe(id)));
         crate::structure::record_cast(self, id);
         self.emit(Event::SpellCast {
@@ -1796,6 +1798,8 @@ impl Game {
             crate::cost_rules::chosen_half(self, card, i, cur, s)
         });
         crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
+        // Changes applied after all others (e.g. a minimum total cost).
+        crate::kw::global_spell_cost(self, p, card, &mut cost);
         cost
     }
 

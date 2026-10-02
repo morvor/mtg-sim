@@ -10,6 +10,10 @@ use crate::keywords::KeywordKind;
 
 /// `Value::Custom` name: how many dungeons the player has completed this game.
 pub const DUNGEONS_COMPLETED: &str = "dungeons completed";
+/// `Value::Custom` name prefix: "dungeon completed:NAME" is how many times the player has
+/// completed the dungeon named NAME this game ("if you haven't completed Tomb of
+/// Annihilation").
+pub const DUNGEON_NAMED_COMPLETED: &str = "dungeon completed:";
 
 pub struct DungeonCompletion;
 
@@ -19,7 +23,18 @@ impl KeywordRules for DungeonCompletion {
     }
 
     fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
-        (name == DUNGEONS_COMPLETED).then(|| g.player(ctx.controller).dungeons_completed as i64)
+        let player = g.player(ctx.controller);
+        if name == DUNGEONS_COMPLETED {
+            return Some(player.dungeons_completed as i64);
+        }
+        let dungeon = name.strip_prefix(DUNGEON_NAMED_COMPLETED)?;
+        Some(
+            player
+                .completed_dungeons
+                .iter()
+                .filter(|n| n.eq_ignore_ascii_case(dungeon))
+                .count() as i64,
+        )
     }
 }
 

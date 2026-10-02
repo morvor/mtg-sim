@@ -862,7 +862,7 @@ impl Game {
                 if *amount == 0 || (*combat_only && !combat) {
                     return false;
                 }
-                if !self.matches(*s, source, ctx) {
+                if !crate::kw::damage_source_matches(self, *s, source, ctx) {
                     return false;
                 }
                 match target {
