@@ -2907,6 +2907,15 @@ pub enum Effect {
         tapped: bool,
         attacking: bool,
     },
+    /// "create an X/X green Ooze creature token": the tokens `create` (an
+    /// [`Effect::CreateToken`]) makes, with power and toughness these values, determined
+    /// as the effect is performed (CR 608.2h) and part of the tokens' copiable values (CR
+    /// 111.4, 707.2).
+    CreateTokenWithPT {
+        power: Value,
+        toughness: Value,
+        create: Box<Effect>,
+    },
     /// "Create a Monster Role token attached to it": tokens that enter the battlefield
     /// attached to an object or player (CR 111.10j, 303.4f–i, 301.5e). An Aura token that
     /// can't legally enchant it isn't created.

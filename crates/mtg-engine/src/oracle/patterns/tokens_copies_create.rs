@@ -450,7 +450,9 @@ inventory::submit! { EffectPattern { name: "tokens_copies: create described toke
 pub(crate) fn last_create(e: &mut Effect) -> Option<&mut Effect> {
     match e {
         Effect::Seq(v) => v.last_mut().and_then(last_create),
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } => Some(e),
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenCopy { .. }
+        | Effect::CreateTokenWithPT { .. } => Some(e),
         Effect::If {
             then, otherwise, ..
         }
@@ -465,7 +467,9 @@ pub(crate) fn last_create(e: &mut Effect) -> Option<&mut Effect> {
 fn is_create(e: &Effect) -> bool {
     matches!(
         e,
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. }
+        Effect::CreateToken { .. }
+            | Effect::CreateTokenCopy { .. }
+            | Effect::CreateTokenWithPT { .. }
     )
 }
 
@@ -487,7 +491,9 @@ fn several_kinds(e: &Effect) -> bool {
 /// Whether `e` creates tokens anywhere.
 fn has_create(e: &Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } => true,
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenCopy { .. }
+        | Effect::CreateTokenWithPT { .. } => true,
         Effect::Seq(v) => v.iter().any(has_create),
         Effect::If { then, .. } | Effect::PayOptional { then, .. } => has_create(then),
         Effect::May { effect, .. } => has_create(effect),
@@ -499,7 +505,9 @@ fn has_create(e: &Effect) -> bool {
 /// "if you do" / "you may" branch.
 pub(crate) fn append_after_create(e: &mut Effect, new: Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } => {
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenCopy { .. }
+        | Effect::CreateTokenWithPT { .. } => {
             let c = std::mem::take(e);
             *e = Effect::Seq(vec![c, new]);
             true

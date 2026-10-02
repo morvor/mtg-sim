@@ -28,6 +28,33 @@ use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
 use crate::types::CounterKind;
 
+thread_local! {
+    static X_DEFINED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether the text being compiled defines X: the ability's cost has an X in it (CR
+/// 107.3a, 107.3k), or the sentence says "where X is ..." (CR 107.3c). Instructions that
+/// only make sense with a known X ("look at the top X cards of your library") accept X
+/// then.
+pub fn x_defined() -> bool {
+    X_DEFINED.with(|c| c.get())
+}
+
+/// Runs `f` with [`x_defined`] set to `defined` (restored afterwards).
+pub fn with_x_defined<T>(defined: bool, f: impl FnOnce() -> T) -> T {
+    let saved = X_DEFINED.with(|c| c.replace(defined));
+    let out = f();
+    X_DEFINED.with(|c| c.set(saved));
+    out
+}
+
+/// Whether an activation cost has an X in it: "{X}", "Remove X counters", "Tap X
+/// untapped creatures you control", "Pay X life".
+pub fn cost_has_x(cost: &str) -> bool {
+    let c = cost.to_lowercase();
+    c.contains("{x}") || c.split(|ch: char| !ch.is_alphanumeric()).any(|w| w == "x")
+}
+
 /// Parses a value phrase at the start of `s`; returns the value and the rest of the text.
 pub fn parse_value(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim_start();
@@ -412,6 +439,19 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
             }
         }
     }
+    // "permanents you own that your opponents control".
+    for (p, rel) in [
+        ("that your opponents control", PlayerRel::Opponent),
+        ("that an opponent controls", PlayerRel::Opponent),
+        ("that you control", PlayerRel::You),
+        ("that you don't control", PlayerRel::NotYou),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            if word_end(r) {
+                return Some((Filter::ControlledBy(rel), r));
+            }
+        }
+    }
     // "that are instant cards, sorcery cards, and/or have an Adventure", "that are
     // Oozes or are named ~": either description.
     if let Some(r) = t.strip_prefix("that are ") {
@@ -754,6 +794,31 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             return None;
         }
     }
+    // CR 700.8a: "creatures in your party".
+    for p in ["creatures in your party", "creature in your party"] {
+        if let Some(rest) = r.strip_prefix(p) {
+            return Some((
+                Value::Custom(crate::game_terms::PARTY_SIZE.into()),
+                rest.to_string(),
+            ));
+        }
+    }
+    // "graveyards with seven or more cards in them": players whose graveyard has that
+    // many cards (CR 404.2: each player has their own graveyard).
+    if let Some(x) = r
+        .strip_prefix("graveyards with ")
+        .or_else(|| r.strip_prefix("graveyard with "))
+    {
+        let (cmp, n, tail) = amount(x)?;
+        let tail = tail.trim_start();
+        let rest = tail
+            .strip_prefix("cards in them")
+            .or_else(|| tail.strip_prefix("cards in it"))?;
+        return Some((
+            Value::CountPlayers(PlayerFilter::GraveyardSize(cmp, Box::new(n))),
+            rest.to_string(),
+        ));
+    }
     // Players.
     if let Some(rest) = r
         .strip_prefix("opponents you're attacking")
@@ -983,6 +1048,37 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// After "the greatest"/"the least": "power among [objects]", "mana value among
 /// [objects]", "life total among all players", "number of [objects] a player controls".
 fn extreme(op: AggOp, r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // CR 903.3: "your commanders", wherever they are.
+    if op == AggOp::Max {
+        if let Some(rest) = r.strip_prefix("mana value among your commanders") {
+            return Some((
+                Value::Custom(crate::commander_rules::YOUR_COMMANDER_MANA_VALUE.into()),
+                rest.to_string(),
+            ));
+        }
+        if let Some(rest) = r.strip_prefix(
+            "mana value of a commander you own on the battlefield or in the command zone",
+        ) {
+            let among = |z: ZoneKind| {
+                Value::Aggregate(
+                    AggOp::Max,
+                    Stat::ManaValue,
+                    Box::new(Sel::All(Filter::and(vec![
+                        Filter::Commander,
+                        Filter::OwnedBy(PlayerRel::You),
+                        Filter::InZone(z),
+                    ]))),
+                )
+            };
+            return Some((
+                Value::Max(
+                    Box::new(among(ZoneKind::Battlefield)),
+                    Box::new(among(ZoneKind::Command)),
+                ),
+                rest.to_string(),
+            ));
+        }
+    }
     if let Some((stat, x)) = stat_word(r) {
         let x = x.strip_prefix(" among ")?;
         let (f, rest) = objects(x, b)?;

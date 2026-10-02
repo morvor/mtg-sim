@@ -989,7 +989,9 @@ fn f_delayed_after(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // combat." (Mirror Mockery): the tokens an optional instruction created.
     let mut optional_create = false;
     let var = match last_effect(prev) {
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } => vars::CREATED,
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenCopy { .. }
+        | Effect::CreateTokenWithPT { .. } => vars::CREATED,
         Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => vars::IT,
         _ => {
             if super::tokens_copies_create::last_create(prev).is_none() {

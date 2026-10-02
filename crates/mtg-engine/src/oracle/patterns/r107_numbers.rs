@@ -34,6 +34,49 @@ fn substitute_x(e: &Effect, x: &Value) -> Option<Effect> {
     substitute_x_in(e, x)
 }
 
+/// The numeric variable holding a defined X used by several instructions.
+const DEFINED_X: Var = vars::USER + 1073;
+
+/// Replaces X in an effect with its defined value. An X several instructions use ("you
+/// gain X life and draw X cards") is determined once, before the first of them (CR
+/// 608.2h), unless it depends on each player or object in turn.
+fn bind_x(e: &Effect, x: &Value) -> Option<Effect> {
+    let uses = serde_json::to_string(e)
+        .map(|j| j.matches("\"X\"").count())
+        .unwrap_or(0);
+    let xj = serde_json::to_string(x).unwrap_or_default();
+    let per_each = xj.contains("Iterated") || xj.contains(&format!("{{\"Var\":{}}}", vars::AFFECTED));
+    if uses < 2 || x.as_const().is_some() || per_each {
+        return substitute_x(e, x);
+    }
+    let store = Effect::StoreValue {
+        var: DEFINED_X,
+        value: x.clone(),
+    };
+    let e = substitute_x(e, &Value::Var(DEFINED_X))?;
+    Some(store_before_first_use(e, store))
+}
+
+/// Puts `store` right before the first instruction of `e` that uses [`DEFINED_X`] (the
+/// value is determined as that instruction is performed: "mill two cards, then ~ gets
+/// +X/+X ..., where X is the number of creature cards in your graveyard").
+fn store_before_first_use(e: Effect, store: Effect) -> Effect {
+    let uses = |e: &Effect| {
+        serde_json::to_string(e).is_ok_and(|j| j.contains(&format!("{{\"Var\":{DEFINED_X}}}")))
+    };
+    match e {
+        Effect::Seq(mut v) => match v.iter().position(uses) {
+            Some(i) => {
+                let first = std::mem::take(&mut v[i]);
+                v[i] = store_before_first_use(first, store);
+                Effect::Seq(v)
+            }
+            None => Effect::Seq(v),
+        },
+        e => Effect::Seq(vec![store, e]),
+    }
+}
+
 /// Replaces `Value::X` in any part of an ability (an effect, a target's number or
 /// division).
 fn substitute_x_in<T: serde::Serialize + serde::de::DeserializeOwned>(
@@ -87,30 +130,115 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
 /// ("that spell's mana value"); then "it" in the clause names `it` (e.g. a token the
 /// previous instruction created: "Put X +1/+1 counters on it, where X is ...").
 pub fn where_x_is_parts(clause: &str, value_s: &str, b: &mut Builder, it: Sel) -> Option<Effect> {
+    // "where X is the number of creatures on the battlefield as you cast ~", "... you
+    // controlled as you cast ~", "... as you activate this ability": the value as the
+    // spell or ability is put on the stack. That's when the number of targets and the
+    // division of damage or counters among them are chosen (CR 601.2c-d, 602.2b); the
+    // value isn't remembered for its resolution, so the X may only be used for those.
+    let value_s = end(value_s);
+    let as_cast = [" as you cast ~", " as you cast this spell", " as you activate this ability"]
+        .iter()
+        .find_map(|p| value_s.strip_suffix(p));
+    let owned;
+    let value_s = match as_cast {
+        Some(v) => {
+            owned = v.replace(" you controlled", " you control");
+            owned.as_str()
+        }
+        None => value_s,
+    };
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    if let Some((v, tail)) = value_phrase(value_s, b) {
+        if end(&tail).is_empty() {
+            return where_x_is_value_inner(clause, v, b, it, as_cast.is_some());
+        }
+    }
+    b.targets.truncate(saved.0);
+    b.it = saved.1;
+    b.it_player = saved.2;
+    // The value may refer to what the instruction names ("Target player draws X cards,
+    // where X is the number of cards in their graveyard"): read the instruction first.
+    where_x_is_clause_first(clause, value_s, b, it, as_cast.is_some())
+}
+
+/// "[clause], where X is [value]" with the value read after the clause, so that its
+/// pronouns can refer to the clause's targets.
+fn where_x_is_clause_first(
+    clause: &str,
+    value_s: &str,
+    b: &mut Builder,
+    it: Sel,
+    targets_only: bool,
+) -> Option<Effect> {
+    let first_target = b.targets.len();
+    b.it = it;
+    let e = super::value_grammar::with_x_defined(true, || {
+        crate::oracle::effects::parse_clause(clause, b)
+    })?;
     let (v, tail) = value_phrase(value_s, b)?;
     if !end(&tail).is_empty() {
         return None;
     }
-    where_x_is_value(clause, v, b, it)
+    let x = nonnegative(v);
+    let mentions_x =
+        |j: Result<String, serde_json::Error>| j.is_ok_and(|j| j.contains("\"X\""));
+    let clause_targets = first_target..b.targets.len();
+    if targets_only
+        && (mentions_x(serde_json::to_string(&e))
+            || !b.targets[clause_targets.clone()]
+                .iter()
+                .any(|t| mentions_x(serde_json::to_string(t))))
+    {
+        return None;
+    }
+    for i in clause_targets {
+        b.targets[i] = substitute_x_in(&b.targets[i], &x)?;
+    }
+    bind_x(&e, &x)
 }
 
 /// "[clause], where X is [value]" with the value already read.
 pub fn where_x_is_value(clause: &str, v: Value, b: &mut Builder, it: Sel) -> Option<Effect> {
+    where_x_is_value_inner(clause, v, b, it, false)
+}
+
+/// [`where_x_is_value`]; with `targets_only`, X may only be the number of targets or the
+/// amount divided among them (a value determined as the spell or ability is put on the
+/// stack).
+fn where_x_is_value_inner(
+    clause: &str,
+    v: Value,
+    b: &mut Builder,
+    it: Sel,
+    targets_only: bool,
+) -> Option<Effect> {
     // An object the value named ("cards equal to the sacrificed creature's power") is
     // what a later "its" refers to, unless the clause names another.
     let value_it = std::mem::replace(&mut b.it, it.clone());
     let first_target = b.targets.len();
-    let e = crate::oracle::effects::parse_clause(clause, b)?;
+    let e = super::value_grammar::with_x_defined(true, || {
+        crate::oracle::effects::parse_clause(clause, b)
+    })?;
     if format!("{:?}", b.it) == format!("{it:?}") {
         b.it = value_it;
     }
     let x = nonnegative(v);
+    if targets_only {
+        let mentions_x = |j: Result<String, serde_json::Error>| j.is_ok_and(|j| j.contains("\"X\""));
+        if mentions_x(serde_json::to_string(&e))
+            || !b.targets[first_target..]
+                .iter()
+                .any(|t| mentions_x(serde_json::to_string(t)))
+        {
+            return None;
+        }
+    }
     // "Return up to X target permanents ..., where X is ...": the defined X is also the
     // number of targets (or the amount divided among them).
     for i in first_target..b.targets.len() {
         b.targets[i] = substitute_x_in(&b.targets[i], &x)?;
     }
-    substitute_x(&e, &x)
+    bind_x(&e, &x)
 }
 
 inventory::submit! { EffectPattern { name: "r107 where x is", priority: 70, parse: where_x_is } }
@@ -148,12 +276,9 @@ fn cast_x_spell_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
             ..first
         }
     } else {
-        let body = crate::oracle::effects::parse_trigger_body(
-            eff,
-            ctx,
-            Sel::TriggerSpell,
-            PlayerRef::You,
-        )?;
+        let body = super::value_grammar::with_x_defined(true, || {
+            crate::oracle::effects::parse_trigger_body(eff, ctx, Sel::TriggerSpell, PlayerRef::You)
+        })?;
         let effect = substitute_x(&body.effect, &x)?;
         Body { effect, ..body }
     };

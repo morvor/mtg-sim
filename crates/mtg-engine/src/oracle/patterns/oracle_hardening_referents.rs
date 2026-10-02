@@ -94,7 +94,11 @@ pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) 
     count_creates(e, &mut creates);
     let last = last_instruction_mut(e);
     match last {
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } if creates == 1 => {
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenCopy { .. }
+        | Effect::CreateTokenWithPT { .. }
+            if creates == 1 =>
+        {
             b.it = Sel::Var(vars::CREATED);
         }
         Effect::Search { .. } => {
@@ -120,8 +124,8 @@ pub fn finish_introduced(e: Effect, b: &mut Builder, intro: Introduced) -> Effec
     let Some(before) = intro.0 else {
         return e;
     };
-    let mentioned = serde_json::to_string(&e)
-        .is_ok_and(|s| s.contains(&format!("{{\"Var\":{INTRODUCED}}}")));
+    let mentioned =
+        serde_json::to_string(&e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{INTRODUCED}}}")));
     if mentioned {
         return e;
     }
@@ -223,7 +227,9 @@ fn count_creates(e: &Effect, n: &mut usize) {
             count_creates(then, n);
             count_creates(otherwise, n);
         }
-        Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. } => *n += 1,
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenCopy { .. }
+        | Effect::CreateTokenWithPT { .. } => *n += 1,
         _ => {}
     }
 }

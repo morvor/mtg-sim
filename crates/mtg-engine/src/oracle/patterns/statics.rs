@@ -1301,9 +1301,12 @@ fn grant_list(
 /// "N/N" base P/T.
 fn base_pt(s: &str) -> Option<(Value, Value)> {
     let (p, t) = s.split_once('/')?;
-    let p: i32 = p.parse().ok()?;
-    let t: i32 = t.parse().ok()?;
-    Some((Value::c(p), Value::c(t)))
+    // "becomes an X/X creature" where the ability defines X (its cost, "where X is").
+    let num = |v: &str| match v {
+        "x" if super::value_grammar::x_defined() => Some(Value::X),
+        v => v.parse::<i32>().ok().map(Value::c),
+    };
+    Some((num(p)?, num(t)?))
 }
 
 /// Type words after "is"/"are": colors, card types and subtypes ("a blue Frog

@@ -768,6 +768,20 @@ impl Game {
                     created.into_iter().map(Entity::Object).collect(),
                 );
             }
+            Effect::CreateTokenWithPT {
+                power,
+                toughness,
+                create,
+            } => {
+                let p = self.eval_value(power, ctx).max(0) as i32;
+                let t = self.eval_value(toughness, ctx).max(0) as i32;
+                let mut e = (**create).clone();
+                if let Effect::CreateToken { spec, .. } = &mut e {
+                    spec.power = Some(p);
+                    spec.toughness = Some(t);
+                }
+                self.exec(&e, ctx);
+            }
             Effect::CreateTokenAttached {
                 spec,
                 count,

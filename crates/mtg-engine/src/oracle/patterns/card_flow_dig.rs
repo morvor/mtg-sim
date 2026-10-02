@@ -58,7 +58,10 @@ fn look_at_top(l: &str, b: &mut Builder) -> Option<Effect> {
         let (n, r) = parse_number(r)?;
         // A number, or an instant's or sorcery's X ("Reveal the top X cards of your
         // library." on a spell with {X} in its mana cost).
-        let spell_x = matches!(n, Value::X) && b.ctx.is_spell() && !b.in_trigger;
+        // Or an X the ability defines (an X in its activation cost, "where X is ...").
+        let spell_x = matches!(n, Value::X)
+            && ((b.ctx.is_spell() && !b.in_trigger)
+                || super::value_grammar::x_defined());
         if n.as_const().is_none() && !spell_x {
             return None;
         }
