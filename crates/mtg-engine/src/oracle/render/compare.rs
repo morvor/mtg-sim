@@ -86,10 +86,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "CR 700.4 (plural).",
     },
     Equivalence {
-        pattern: r"\b(to|into|on top of|on the bottom of|onto) (your|its owner's|their owners'|their owner's|its owners'|that player's) (hand|library|graveyard)",
+        pattern: r"\b(to|into|on top of|on the bottom of|onto) (your|its owner's|their owners'|their owner's|its owners'|that player's|their) (hand|library|graveyard)",
         replacement: "$1 owner's $3",
         why: "A card always goes to its owner's hand, library, or graveyard (CR 400.3); \
-              \"your hand\" on a card you own is its owner's hand.",
+              \"your hand\" on a card you own is its owner's hand, and \"their hand\" or \"their \
+              library\" for the cards a player moves from their own zones is too.",
     },
     Equivalence {
         pattern: r"\bfrom (your|a|an|their|its owner's|that player's|target player's|target opponent's|an opponent's|each|all|any) ((?:opponent's |player's )?)(graveyards?|hands?|library|libraries)\b",
