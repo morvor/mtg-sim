@@ -88,3 +88,33 @@ fn cards_that_cant_be_melded_stay_where_they_are() {
     assert!(t.g.is_live(rats) && t.g.is_live(bears));
     assert_eq!(t.g.exile.len(), 2);
 }
+
+#[test]
+fn a_copy_of_a_meld_card_exiles_both_and_they_stay_in_exile() {
+    cr!("701.42b", "701.42c", "707.2");
+    // Clone copying Graf Rats has its ability: at the beginning of combat both it and
+    // Midnight Scavengers (both owned and controlled by P0) are exiled. Clone isn't a meld
+    // card, so nothing melds and both cards stay in exile.
+    let mut t = TestGame::new(2);
+    let rats = t.battlefield(P0, "Graf Rats");
+    let scavengers = t.battlefield(P0, "Midnight Scavengers");
+    // The real Graf Rats is someone else's, so only the copy's condition holds.
+    t.g.objects[rats.0 as usize].owner = P1;
+    t.g.objects[rats.0 as usize].base_controller = P1;
+    t.lands(P0, "Island", 4);
+    let clone = t.hand(P0, "Clone");
+    t.cast(P0, clone).go();
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(rats)]);
+    t.resolve();
+    let clone = t.g.current(clone);
+    assert_eq!(t.obj(clone).chars.name, "Graf Rats");
+    to_combat(&mut t);
+    assert!(t.named_on_battlefield("Chittering Host").is_empty());
+    assert_eq!(t.zone(clone), Zone::Exile);
+    assert_eq!(t.zone(scavengers), Zone::Exile);
+    assert!(t.in_exile("Clone"));
+    assert!(t.in_exile("Midnight Scavengers"));
+    // The real Graf Rats (not owned by P0) stays.
+    assert!(t.on_battlefield(rats));
+}
