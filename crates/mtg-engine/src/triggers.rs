@@ -154,11 +154,34 @@ impl Game {
         // back in time (sacrifices, countering, becoming unattached).
         let mut recent: Vec<(ObjectId, Arc<LookbackSnapshot>)> = Vec::new();
         let mut once_delayed: Vec<(u32, EventInfo)> = Vec::new();
+        // CR 603.2: an ability triggers when its event occurs. Objects that came into
+        // their zone in a later batch of these events (a card put into a graveyard after a
+        // land entered) didn't exist then, so they can't trigger on earlier events.
+        let mut born_later: BTreeSet<ObjectId> = BTreeSet::new();
+        let mut batch_of_event = 0;
+        for ev in &events {
+            match ev {
+                Event::BatchBoundary => batch_of_event += 1,
+                Event::ZoneChange { new, .. } if batch_of_event > 0 => {
+                    born_later.insert(*new);
+                }
+                _ => {}
+            }
+        }
         let mut batch_start = 0;
         for (i, ev) in events.iter().enumerate() {
             if matches!(ev, Event::BatchBoundary) {
-                self.check_batch_triggers(&events[batch_start..i]);
+                self.check_batch_triggers(&events[batch_start..i], &born_later);
                 batch_start = i + 1;
+                // The next batch's objects exist from now on.
+                for e in events[batch_start..]
+                    .iter()
+                    .take_while(|e| !matches!(e, Event::BatchBoundary))
+                {
+                    if let Event::ZoneChange { new, .. } = e {
+                        born_later.remove(new);
+                    }
+                }
                 continue;
             }
             self.record_history(ev);
@@ -176,9 +199,9 @@ impl Game {
             if let Some(f) = self.observer.as_ref().map(|o| o.on_event.clone()) {
                 f(self, ev);
             }
-            once_delayed.extend(self.detect_triggers(ev, &recent));
+            once_delayed.extend(self.detect_triggers(ev, &recent, &born_later));
         }
-        self.check_batch_triggers(&events[batch_start..]);
+        self.check_batch_triggers(&events[batch_start..], &born_later);
         self.fire_once_delayed(once_delayed);
         // Static abilities' conditions can depend on what happened this turn ("as long as
         // you've cast two or more spells this turn"): characteristics must be computed
@@ -202,7 +225,7 @@ impl Game {
 
     /// Detects "whenever one or more …" triggers for a batch of simultaneous events
     /// (CR 603.2c): each such ability triggers once per batch (or once per player involved).
-    fn check_batch_triggers(&mut self, batch: &[Event]) {
+    fn check_batch_triggers(&mut self, batch: &[Event], born_later: &BTreeSet<ObjectId>) {
         // Permanents whose entering triggers nothing (Torpor Orb) aren't part of it.
         let kept: Vec<Event>;
         let batch = if batch
@@ -225,6 +248,7 @@ impl Game {
         // damage to the player who has the initiative" (CR 726.2).
         crate::monarch_initiative::detect_batch(self, batch);
         let mut sources = self.current_trigger_sources();
+        sources.retain(|(id, _, _)| !born_later.contains(id));
         // Leaves-the-battlefield look back in time (CR 603.10a): permanents that left in
         // this batch still see the batch's events that look back. (A permanent that left
         // keeps its last known information, zone included, under its old id; it's no
@@ -253,8 +277,21 @@ impl Game {
             let AbilityKind::Triggered(t) = &a.kind else {
                 continue;
             };
-            let TriggerCond::Batched { trigger, per } = &t.trigger else {
-                continue;
+            let (trigger, per) = match &t.trigger {
+                TriggerCond::Batched { trigger, per } => (trigger, per),
+                // A batched alternative of a trigger with several conditions ("when
+                // enchanted creature becomes tapped or is dealt damage"); the other
+                // alternatives trigger per event.
+                TriggerCond::AnyOf(v) => {
+                    match v.iter().find_map(|c| match c {
+                        TriggerCond::Batched { trigger, per } => Some((trigger, per)),
+                        _ => None,
+                    }) {
+                        Some(x) => x,
+                        None => continue,
+                    }
+                }
+                _ => continue,
             };
             // Filters like "the chosen color" refer to the ability's linked choices.
             let mut base = Ctx::new(Some(src), ctl);
@@ -430,7 +467,7 @@ impl Game {
 
     /// Detects triggered abilities for one event (CR 603.2).
     pub fn check_triggers(&mut self, ev: &Event) {
-        let once = self.detect_triggers(ev, &[]);
+        let once = self.detect_triggers(ev, &[], &BTreeSet::new());
         self.fire_once_delayed(once);
     }
 
@@ -441,6 +478,7 @@ impl Game {
         &mut self,
         ev: &Event,
         recent: &[(ObjectId, Arc<LookbackSnapshot>)],
+        born_later: &BTreeSet<ObjectId>,
     ) -> Vec<(u32, EventInfo)> {
         // "Creatures entering don't cause abilities to trigger" (Torpor Orb).
         if crate::kw::torpor::entering_triggers_nothing(self, ev) {
@@ -469,6 +507,9 @@ impl Game {
             let AbilityKind::Triggered(t) = &a.kind else {
                 continue;
             };
+            if born_later.contains(&id) {
+                continue;
+            }
             if lookback.is_some() && looks_back(&t.trigger, ev) {
                 continue;
             }

@@ -262,6 +262,10 @@ pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
     if o.card.is_none() {
         return false;
     }
+    // "[Permanents] can't be turned face up" (CR 708.7).
+    if crate::rule_statics::face_up::cant_be_turned_face_up(g, id) {
+        return false;
+    }
     // CR 701.40g, 701.58g: one represented by an instant or sorcery card is revealed and
     // stays face down; "turned face up" abilities don't trigger.
     let front = revealed_characteristics(g, id);

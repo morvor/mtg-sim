@@ -5,40 +5,6 @@ use crate::game::Game;
 use crate::object::*;
 use crate::types::*;
 
-/// `StaticEffect::Custom` name of "This spell can't be copied." (it functions on the
-/// stack, CR 113.6g).
-pub const CANT_BE_COPIED: &str = "can't be copied";
-/// `StaticEffect::Custom` name of "This ability can't be copied.", linked (CR 607) to the
-/// activated or triggered ability it's about (they share a nonzero `link`).
-pub const ABILITY_CANT_BE_COPIED: &str = "ability can't be copied";
-
-/// Whether the spell or ability `id` on the stack can't be copied: a spell with "This
-/// spell can't be copied.", or an ability whose source had "This ability can't be
-/// copied." for it (as it last existed, CR 113.7a).
-pub fn cant_be_copied(g: &Game, id: ObjectId) -> bool {
-    let has = |c: &Characteristics, name: &str, link: Option<u16>| {
-        c.abilities.iter().any(|a| {
-            link.is_none_or(|l| a.link == l)
-                && matches!(&a.kind, crate::ability::AbilityKind::Static(s)
-                    if matches!(&s.effect, crate::ability::StaticEffect::Custom(n) if n == name))
-        })
-    };
-    let o = g.obj(id);
-    match o.stack.as_deref() {
-        Some(StackInfo {
-            kind: StackKind::Activated { ability, .. } | StackKind::Triggered { ability, .. },
-            source_lki,
-            ..
-        }) => {
-            ability.link != 0
-                && source_lki
-                    .as_deref()
-                    .is_some_and(|c| has(c, ABILITY_CANT_BE_COPIED, Some(ability.link)))
-        }
-        _ => has(&o.chars, CANT_BE_COPIED, None),
-    }
-}
-
 /// Puts a copy of a spell (or ability) on the stack under `controller`'s control,
 /// optionally letting them choose new targets (CR 707.10c). Returns the copy.
 pub fn copy_spell(
@@ -58,7 +24,8 @@ pub fn copy_spell(
     if !ability_lki && (o.zone != Zone::Stack || !(g.is_live(spell) || spell_lki)) {
         return None;
     }
-    if cant_be_copied(g, spell) {
+    // "This spell can't be copied." (CR 113.6g, 707.10).
+    if crate::rule_statics::cant_be_copied::cant_be_copied(g, spell) {
         return None;
     }
     let orig = g.obj(spell).clone();

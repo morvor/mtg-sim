@@ -332,6 +332,9 @@ impl Game {
         self.turn.attacked_players.clear();
         self.last_turn_history = std::mem::take(&mut self.history);
         self.turn_events.clear();
+        for p in self.active_players() {
+            self.players[p.idx()].turns_taken += 1;
+        }
         // Per-turn records start afresh (in Grand Melee, not those of players taking
         // another turn at the same time, CR 807.4).
         for i in 0..self.players.len() {
@@ -931,6 +934,9 @@ impl Game {
         }
         // CR 514.2: remove damage; end "until end of turn" effects.
         crate::special_actions::end_of_turn(self);
+        if self.dirty {
+            self.recompute();
+        }
         for id in self.battlefield.clone() {
             if crate::kw::keeps_damage_in_cleanup(self, id) {
                 continue;

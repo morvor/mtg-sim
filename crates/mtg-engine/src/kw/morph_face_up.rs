@@ -73,6 +73,9 @@ pub(crate) fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
     if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) || o.card.is_none() {
         return None;
     }
+    if crate::rule_statics::face_up::cant_be_turned_face_up(g, id) {
+        return None;
+    }
     let card = o.card.as_ref()?;
     let (kind, megamorph, cost, each) = if effects_could_change_abilities(g) {
         // The characteristics it would have face up, with the effects that would apply

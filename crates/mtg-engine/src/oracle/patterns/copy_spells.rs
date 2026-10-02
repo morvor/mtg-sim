@@ -10,8 +10,8 @@ use crate::oracle::phrases::*;
 /// instant or sorcery spell twice".
 fn copy_target_spell(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("copy ")?;
-    // "Copy any number of target instant and/or sorcery spells." (Display of Power): each
-    // target once.
+    // "Copy any number of target instant and/or sorcery spells" (Display of Power): one
+    // copy of each.
     if !r.starts_with("target ") && !r.starts_with("any number of target ") {
         return None;
     }

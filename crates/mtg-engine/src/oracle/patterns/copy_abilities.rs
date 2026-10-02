@@ -47,14 +47,6 @@ fn copy_target_ability(l: &str, b: &mut Builder) -> Option<Effect> {
     if !r.starts_with("target ") {
         return None;
     }
-    // "... twice" (Mister Fantastic), "... X times" (Gogo, Master of Mimicry).
-    let (r, count) = if let Some(r) = r.strip_suffix(" twice") {
-        (r, Value::c(2))
-    } else if let Some(r) = r.strip_suffix(" x times") {
-        (r, Value::X)
-    } else {
-        (r, Value::c(1))
-    };
     let (mut spec, tail) = parse_target(r)?;
     let TargetKind::Ability(f) = &mut spec.what else {
         return None;
@@ -68,6 +60,15 @@ fn copy_target_ability(l: &str, b: &mut Builder) -> Option<Effect> {
     if let Some(x) = strip(rest, "from ") {
         let (source, x) = source_description(x)?;
         parts.push(Filter::AbilityFrom(Box::new(source)));
+        rest = x;
+    }
+    // "... X times" (Gogo, Master of Mimicry): X copies; "... twice" (Mister Fantastic).
+    let mut count = Value::c(1);
+    if let Some(x) = strip(rest, "x times") {
+        count = Value::X;
+        rest = x;
+    } else if let Some(x) = strip(rest, "twice") {
+        count = Value::c(2);
         rest = x;
     }
     if !end(rest).is_empty() {

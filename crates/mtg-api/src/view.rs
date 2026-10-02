@@ -283,11 +283,11 @@ pub fn object_view(g: &Game, viewer: Viewer, id: ObjectId) -> ObjectView {
         // nothing but its existence (CR 406.3a).
         return hidden_object(o);
     }
-    let chars = if o.face_down && !visible {
-        mtg_engine::facedown::face_down_characteristics(g, id)
-    } else {
-        o.chars.clone()
-    };
+    // A face-down permanent's or spell's characteristics are its face-down ones (CR 708.2,
+    // layer 1b) with every other effect applied: public, so the same for every viewer
+    // ("It becomes a 2/2 Cyberman artifact creature", counters, anthems). Only the card's
+    // own face (`face_down_card`) is hidden.
+    let chars = o.chars.clone();
     let mv = if o.face_down { 0 } else { g.mana_value_of(id) };
     let face_down_card = (o.face_down && visible).then(|| {
         let real = mtg_engine::facedown::revealed_characteristics(g, id);
