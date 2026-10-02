@@ -73,11 +73,13 @@ impl CostChanges {
                 .reductions
                 .push(Reduction::Mana(mana.clone(), *colored_only)),
             CostChange::AlternativeCost(_)
+            | CostChange::AlternativeCostWithFlash(_)
             | CostChange::FlashForAdditionalCost(_)
             | CostChange::OptionalAdditionalCost { .. }
             | CostChange::AdditionalCostChoice(_) => return false,
-            // How the cost is paid, not what it is (see `cost_rules::spend_any_type`).
-            CostChange::SpendAnyType => return false,
+            // How the cost is paid, not what it is (see `cost_rules::spend_any_type`,
+            // `payment_rules`).
+            CostChange::SpendAnyType | CostChange::Rule(_) => return false,
         }
         true
     }

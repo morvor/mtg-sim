@@ -183,7 +183,9 @@ fn domri_leaving_before_its_fight_resolves_loses_the_bonus() {
         "Domri, Anarch of Bolas",
         "Target creature you control fights target creature you don't control.",
     );
-    only_unsupported("Domri, Anarch of Bolas", "Creature spells you cast this turn can't be countered");
+    // Its "+1: Add {R} or {G}. Creature spells you cast this turn can't be countered." is
+    // compiled too now (see `tests/cards/restriction_grammar_rules.rs`).
+    supported("Domri, Anarch of Bolas");
     // Domri: "Creatures you control get +1/+0." and "−2: Target creature you control
     // fights target creature you don't control." Grizzly Bears (3/2 with Domri) fight
     // Hill Giant (3/3).

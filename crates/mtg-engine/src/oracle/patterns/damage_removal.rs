@@ -494,9 +494,20 @@ fn damage_part(
         return Some((damage(src, v, to), tail));
     }
     if let Some(r) = s.strip_prefix("damage to ") {
+        let before = b.it.clone();
         let (to, tail) = recipients(r, src, b)?;
         let r2 = tail.trim_start().strip_prefix("equal to ")?.to_string();
-        let (v, tail2) = value_phrase(&r2, b)?;
+        // "Exile cards ... until you exile a nonland card. ~ deals damage to any target
+        // equal to that card's mana value": "that card" is the card named before, never
+        // the permanent or player the damage is dealt to (who stays "it" afterwards).
+        let (v, tail2) = if r2.starts_with("that card") {
+            let recipient = std::mem::replace(&mut b.it, before);
+            let read = value_phrase(&r2, b);
+            b.it = recipient;
+            read?
+        } else {
+            value_phrase(&r2, b)?
+        };
         return Some((damage(src, v, to), tail2));
     }
     let (amount, r) = amount_phrase(s, where_x)?;
@@ -827,7 +838,29 @@ fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
         let r = r.strip_suffix(" until an opponent becomes the monarch")?;
         (r, UntilEvent::OpponentBecomesMonarch)
     };
-    let (what, tail) = object_ref(r, b)?;
+    let (what, tail) = match object_ref(r, b) {
+        Some(x) => x,
+        // "exile another artifact you control until ~ leaves the battlefield" (Idris): a
+        // permanent its controller chooses as the effect resolves.
+        None => {
+            let one = r
+                .strip_prefix("a ")
+                .or_else(|| r.strip_prefix("an "))
+                .or_else(|| r.starts_with("another ").then_some(r))?;
+            let (filter, plural, tail) = parse_object_phrase(one)?;
+            if plural || filter.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+                return None;
+            }
+            let chosen = Sel::Choose {
+                chooser: PlayerRef::You,
+                filter,
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            };
+            (chosen, tail.to_string())
+        }
+    };
     if !end(&tail).is_empty() {
         return None;
     }
@@ -838,6 +871,9 @@ fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
             _ => false,
         },
         Sel::All(f) => f.zone().is_none_or(|z| z == ZoneKind::Battlefield),
+        // "exile another artifact you control until ~ leaves the battlefield" (Idris): a
+        // permanent chosen as the effect resolves.
+        Sel::Choose { filter, .. } => filter.zone().is_none_or(|z| z == ZoneKind::Battlefield),
         _ => false,
     };
     if !on_battlefield {
@@ -1021,7 +1057,12 @@ pub(crate) fn delayed_removal(
             then: Box::new(Effect::SacrificeObjects { what: delayed }),
             otherwise: Box::new(Effect::Noop),
         },
-        ("return", "to its owner's hand" | "to their owners' hands" | "to their owner's hand") => {
+        // "Return it to your hand": a card goes to its owner's hand (CR 400.3).
+        (
+            "return",
+            "to its owner's hand" | "to their owners' hands" | "to their owner's hand"
+            | "to your hand",
+        ) => {
             Effect::Move {
                 what: delayed,
                 to: Destination::zone(ZoneKind::Hand),
@@ -1046,27 +1087,56 @@ pub(crate) fn delayed_removal(
 /// beginning of the next end step" (CR 603.7).
 fn p_delayed_removal(l: &str, b: &mut Builder) -> Option<Effect> {
     let (verb, r, step) = delayed_parts(l)?;
+    // "destroy that Wall at end of combat": the creature the trigger is about, by its
+    // subtype.
+    let renamed = super::basic_effects_targets::that_subtype_as_creature(r);
+    let r = renamed.as_deref().unwrap_or(r);
     let n_targets = b.targets.len();
-    let (what, tail) = object_ref(r, b)?;
-    // Only an object named earlier (no new targets for a delayed effect), and only one
-    // that can't have changed zones since: the source or trigger object in the first
-    // sentence of a triggered ability, or a targeted permanent. (A pronoun after "create
-    // a token" or "return ... to the battlefield" is handled by `f_delayed_after`.)
+    let (first, tail) = object_ref(r, b)?;
+    // "destroy it and ~ at end of combat", "destroy it and all creatures it blocked this
+    // turn": both objects.
+    let mut sels = vec![first];
+    let mut tail = tail;
+    if let Some(x) = tail.trim_start().strip_prefix("and ") {
+        let x = match x.strip_suffix(" it blocked this turn") {
+            Some(h) if matches!(b.it, Sel::This) || sels.iter().any(|s| matches!(s, Sel::This)) => {
+                format!("{h} ~ blocked this turn")
+            }
+            _ => x.to_string(),
+        };
+        let (second, t2) = object_ref(&x, b)?;
+        sels.push(second);
+        tail = t2;
+    }
+    // Only objects named earlier (no new targets for a delayed effect), and only ones that
+    // can't have changed zones since: the source or trigger object in the first sentence
+    // of a triggered ability, or a targeted permanent. (A pronoun after "create a token"
+    // or "return ... to the battlefield" is handled by `f_delayed_after`.) A group of
+    // creatures ("all creatures it blocked this turn") is the group at that time.
     if b.targets.len() != n_targets {
         return None;
     }
-    let safe = match &what {
-        Sel::This | Sel::TriggerObject | Sel::TriggerLki => b.in_trigger && b.sentences == 0,
+    let several = sels.len() > 1;
+    let safe = |what: &Sel| match what {
+        Sel::This | Sel::TriggerObject | Sel::TriggerLki => {
+            (b.in_trigger && b.sentences == 0) || (several && matches!(what, Sel::This))
+        }
         Sel::AttachedTo => true,
         Sel::Target(n) => matches!(
             &b.targets[*n as usize].what,
             TargetKind::Object(f) if f.zone().is_none_or(|z| z == ZoneKind::Battlefield)
         ),
+        Sel::All(_) => several,
         _ => false,
     };
-    if !safe {
+    if !sels.iter().all(safe) {
         return None;
     }
+    let what = if several {
+        Sel::Union(sels)
+    } else {
+        sels.pop()?
+    };
     delayed_removal(verb, what, tail.trim(), step)
 }
 
@@ -1188,6 +1258,10 @@ fn set_no_regen(e: &mut Effect) -> bool {
         Effect::Seq(v) => v.iter_mut().rev().any(set_no_regen),
         Effect::May { effect, .. } => set_no_regen(effect),
         Effect::If { then, .. } => set_no_regen(then),
+        // "Destroy target creature unless its controller pays ...".
+        Effect::PayOptional {
+            then, otherwise, ..
+        } => set_no_regen(otherwise) || set_no_regen(then),
         Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
             set_no_regen(effect)
         }
@@ -1224,7 +1298,7 @@ fn last_effect(e: &Effect) -> &Effect {
 
 /// "to the battlefield [tapped] [transformed] under its owner's control" etc. `owned`
 /// is the selection whose owners control the returned objects.
-fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
+pub(crate) fn battlefield_destination(s: &str, owned: Sel) -> Option<Destination> {
     let mut r = s.strip_prefix("to the battlefield")?.trim_start();
     let mut d = Destination::battlefield();
     let mut owner = false;

@@ -281,14 +281,31 @@ fn payment_options(s: ManaSymbol) -> Option<(Vec<Half>, bool)> {
 }
 
 /// The labels of the question "How will you pay {s}?": "either way" (left to the
-/// automatic payment), each half, and "2 life" for a Phyrexian symbol.
-fn payment_labels(s: ManaSymbol, options: &[Half], phyrexian: bool) -> Vec<String> {
+/// automatic payment), each half, and the life that may pay it ("2 life" for a Phyrexian
+/// symbol).
+fn payment_labels(s: ManaSymbol, options: &[Half], life: Option<u32>) -> Vec<String> {
     let mut labels = vec![format!("{s}: either way")];
     labels.extend(options.iter().map(|h| half_label(*h)));
-    if phyrexian {
-        labels.push("2 life".into());
+    if let Some(n) = life {
+        labels.push(format!("{n} life"));
     }
     labels
+}
+
+/// The life an effect lets `p` pay rather than pay a mana symbol of (or with a half of) a
+/// color ("For each {B} in a cost, you may pay 2 life rather than pay that mana"; see
+/// `payment_rules.rs`): for a hybrid symbol, by choosing that half (K'rrik ruling).
+/// Phyrexian symbols may already be paid with 2 life.
+fn life_instead(s: ManaSymbol, life_for: &[(Color, u32)]) -> Option<u32> {
+    let of = |c: Color| life_for.iter().find(|(x, _)| *x == c).map(|(_, n)| *n);
+    match s {
+        ManaSymbol::Colored(c) | ManaSymbol::TwoHybrid(c) | ManaSymbol::ColorlessHybrid(c) => of(c),
+        ManaSymbol::Hybrid(a, b) => match (of(a), of(b)) {
+            (Some(x), Some(y)) => Some(x.min(y)),
+            (x, y) => x.or(y),
+        },
+        _ => None,
+    }
 }
 
 /// CR 601.2b, 602.2b: as a spell or activated ability is proposed — as its modes and the
@@ -302,7 +319,7 @@ pub fn announce_phyrexian(g: &mut Game, p: PlayerId, stack_obj: ObjectId, cost: 
         let Some((options, true)) = payment_options(s) else {
             continue;
         };
-        let labels = payment_labels(s, &options, true);
+        let labels = payment_labels(s, &options, Some(2));
         let pick = g.ask_option(
             p,
             Some(stack_obj),
@@ -346,18 +363,28 @@ pub fn choose_payment_ways_for(
     announced: Option<ObjectId>,
     cost: &mut Cost,
 ) {
+    let life_for = crate::payment_rules::life_for_mana(g, p);
     let Some(mana) = cost.mana.as_mut() else {
         return;
     };
+    // Life paid for Phyrexian symbols (CR 107.4f), and for other symbols an effect lets
+    // the player pay with life.
     let mut life = 0;
+    let mut other_life = 0;
     let mut out: Vec<ManaSymbol> = Vec::new();
     let mut k = 0u16;
     for s in mana.symbols.clone() {
-        let Some((mut options, phyrexian)) = payment_options(s) else {
+        let instead = life_instead(s, &life_for);
+        let options = payment_options(s).or_else(|| match (s, instead) {
+            (ManaSymbol::Colored(c), Some(_)) => Some((vec![Half::Color(c)], false)),
+            _ => None,
+        });
+        let Some((mut options, phyrexian)) = options else {
             out.push(s);
             continue;
         };
-        let labels = payment_labels(s, &options, phyrexian);
+        let life_option = if phyrexian { Some(2) } else { instead };
+        let labels = payment_labels(s, &options, life_option);
         let n = labels.len();
         let before = if phyrexian {
             k += 1;
@@ -373,8 +400,10 @@ pub fn choose_payment_ways_for(
             out.push(s);
         } else if pick <= options.len() {
             out.push(half_symbol(options.swap_remove(pick - 1)));
-        } else {
+        } else if phyrexian {
             life += 2;
+        } else {
+            other_life += life_option.unwrap_or(0);
         }
     }
     let mut m = ManaCost::default();
@@ -386,11 +415,12 @@ pub fn choose_payment_ways_for(
         m.symbols.insert(0, ManaSymbol::Generic(generic));
     }
     *mana = m;
-    if life > 0 {
-        cost.parts.push(CostPart::PayLife(Value::c(life)));
-        if let Some(s) = source {
-            crate::kw::compleated::record_phyrexian_life(g, s, (life / 2) as u32);
-        }
+    if life + other_life > 0 {
+        cost.parts
+            .push(CostPart::PayLife(Value::c((life + other_life) as i32)));
+    }
+    if let (Some(s), true) = (source, life > 0) {
+        crate::kw::compleated::record_phyrexian_life(g, s, (life / 2) as u32);
     }
 }
 

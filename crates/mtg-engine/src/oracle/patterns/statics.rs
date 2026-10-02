@@ -1816,6 +1816,11 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
 
 /// Restrictions and requirements on the affected objects (CR 613.11).
 pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
+    restriction_predicate_core(p, f)
+        .or_else(|| super::restriction_grammar::object_predicate(p, f))
+}
+
+fn restriction_predicate_core(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
     let fc = f.clone();
     match p {
         // CR 701.15b; a static "is goaded" goads for the source's controller.
@@ -1976,7 +1981,7 @@ pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restricti
 /// Which spells and abilities can't target: "spells", "Aura spells", "white spells or
 /// abilities from white sources", "blue or black spells", "abilities from artifact
 /// sources". An ability's qualities are those of its source (CR 113.7).
-fn targeting_sources(x: &str) -> Option<Filter> {
+pub(crate) fn targeting_sources(x: &str) -> Option<Filter> {
     let quality = |w: &str| -> Option<Filter> {
         if let Some(c) = w.strip_prefix("non").and_then(Color::from_word) {
             return Some(Filter::not(Filter::Color(c)));
@@ -2278,9 +2283,16 @@ fn parse_predicate(
         }
         let mut out = Vec::new();
         for item in split_list(r) {
-            out.push(Out::Mod(Modification::RemoveKeyword(
-                KeywordKind::from_name(item)?,
-            )));
+            match KeywordKind::from_name(item) {
+                Some(k) => out.push(Out::Mod(Modification::RemoveKeyword(k))),
+                // One ability of a keyword with a quality ("islandwalk", "protection
+                // from red", CR 702.14, 702.16g).
+                None => out.extend(
+                    super::keywords_702_11_17::lost_keywords(item)?
+                        .into_iter()
+                        .map(Out::Mod),
+                ),
+            }
         }
         return Some(out);
     }

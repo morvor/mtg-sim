@@ -350,6 +350,12 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     }
     items.retain(|v| !v.is_empty());
     if disjunctive && items.len() > 1 {
+        // "blue or black noncreature permanent": adjectives after the last alternative
+        // describe them all.
+        if let Some(last) = items.last_mut().filter(|v| v.len() > 1) {
+            let shared = last.split_off(1);
+            parts.extend(shared);
+        }
         parts.push(Filter::Or(
             items.into_iter().map(Filter::and).collect::<Vec<_>>(),
         ));
@@ -1337,6 +1343,10 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
             r,
         ));
     }
+    // "with power 4, 5, or 6"
+    if let Some(x) = super::patterns::basic_effects_filters::stat_in_list(t) {
+        return Some(x);
+    }
     let (stat, rest) = if let Some(r) = t.strip_prefix("with power ") {
         ("power", r)
     } else if let Some(r) = t.strip_prefix("with toughness ") {
@@ -1550,13 +1560,38 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
             (TargetKind::Object(f), r)
         }
     };
+    // "any target of an opponent's choice" (CR 115.1, 601.2c): an opponent chooses it.
+    let (chosen_by_opponent, rest) = match rest.trim_start().strip_prefix("of an opponent's choice")
+    {
+        Some(r) => (true, r),
+        None => (false, rest),
+    };
+    // "target creature card of an opponent's choice from your graveyard": the zone
+    // follows the choice and still describes the target.
+    let (what, rest) = match (chosen_by_opponent, what) {
+        (true, TargetKind::Object(f)) => {
+            match rest.trim_start().strip_prefix("from your graveyard") {
+                Some(r) => (
+                    TargetKind::Object(Filter::and(vec![
+                        f,
+                        Filter::InZone(ZoneKind::Graveyard),
+                        Filter::OwnedBy(PlayerRel::You),
+                    ])),
+                    r,
+                ),
+                None if rest.trim_start().starts_with("from ") => return None,
+                None => (TargetKind::Object(f), rest),
+            }
+        }
+        (_, w) => (w, rest),
+    };
     let spec = TargetSpec {
         what,
         min,
         max,
         distinct_from: vec![],
         divide: None,
-        chosen_by_opponent: false,
+        chosen_by_opponent,
         text: String::new(),
         condition: None,
         together,
@@ -1707,8 +1742,11 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
 /// "its controller", "its owner", "defending player". Returns (ref, target spec if any, rest).
 pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
-    let pairs: [(&str, PlayerRef); 13] = [
+    let pairs: [(&str, PlayerRef); 14] = [
         ("you ", PlayerRef::You),
+        // Internal form of "that player" in an ability linked to one that targeted a
+        // player (CR 607.1, see `patterns::r607_linked_targets`).
+        ("the noted player ", PlayerRef::LinkedNoted),
         // A Curse's player (CR 303.4).
         (
             "enchanted player ",

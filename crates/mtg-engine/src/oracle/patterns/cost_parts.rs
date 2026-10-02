@@ -231,8 +231,24 @@ fn exile(p: &str) -> Option<CostPart> {
     if plural != (n.as_const() != Some(1)) {
         return None;
     }
+    // Cards from a graveyard: the payer's ("from your graveyard"), any player's ("a Fungus
+    // card from a graveyard", CR 404.1), or any one player's ("from a single graveyard").
+    let graveyard = match (end(tail), f.zone()) {
+        ("from your graveyard", _) => Some(f.clone()),
+        ("", Some(ZoneKind::Graveyard)) => Some(crate::oracle::costs::from_any_graveyard(f.clone())),
+        ("from a single graveyard", None) => Some(crate::oracle::costs::from_a_single_graveyard(
+            Filter::and(vec![f.clone(), Filter::InZone(ZoneKind::Graveyard)]),
+        )),
+        _ => None,
+    };
+    if let Some(filter) = graveyard {
+        return Some(CostPart::Exile {
+            filter,
+            zone: ZoneKind::Graveyard,
+            count: n,
+        });
+    }
     let zone = match (end(tail), f.zone()) {
-        ("from your graveyard", _) | ("", Some(ZoneKind::Graveyard)) => ZoneKind::Graveyard,
         ("from your hand", _) | ("", Some(ZoneKind::Hand)) => ZoneKind::Hand,
         // "a creature you control".
         ("", None) if format!("{f:?}").contains("ControlledBy(You)") => ZoneKind::Battlefield,
@@ -479,6 +495,21 @@ pub fn parse_compound(p: &str) -> Option<Vec<CostPart>> {
         let (a, b) = p.rsplit_once(" and ")?;
         let first = crate::oracle::costs::parse_cost_part(a)?;
         return Some(vec![first, self_followup(b)?]);
+    }
+    // "Discard a card and sacrifice a creature": two parts, each with its own verb.
+    if let Some((a, b)) = p.split_once(" and ") {
+        let second = split_word(b).0;
+        if matches!(
+            second,
+            "discard" | "sacrifice" | "exile" | "pay" | "tap" | "return" | "reveal" | "remove"
+        ) {
+            if let (Some(x), Some(y)) = (
+                crate::oracle::costs::parse_cost_part(a),
+                crate::oracle::costs::parse_cost_part(b),
+            ) {
+                return Some(vec![x, y]);
+            }
+        }
     }
     let (verb, rest) = split_word(p);
     if !matches!(verb, "sacrifice" | "exile") {

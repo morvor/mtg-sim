@@ -374,6 +374,8 @@ impl Game {
                         tapped.push(Entity::Object(o));
                     }
                 }
+                // "Tap any number of ... When you do, ...": whether anything was tapped.
+                ctx.prev_happened = !tapped.is_empty();
                 ctx.set_var(vars::TAPPED, tapped);
             }
             Effect::Untap { what } => {
@@ -840,7 +842,10 @@ impl Game {
             }
             Effect::ExchangeControl { a, b } => {
                 // CR 701.12a: exactly two permanents, or no part of the exchange occurs
-                // ("two target creatures" select both from one target slot).
+                // ("two target creatures" select both from one target slot). Whether it
+                // happened is what "If you do" / "If you don't or can't make an exchange"
+                // ask about (CR 701.12b: between one player's permanents it does nothing).
+                ctx.prev_happened = false;
                 let mut both: Vec<ObjectId> = Vec::new();
                 for o in self
                     .resolve_objects(a, ctx)
@@ -875,6 +880,7 @@ impl Game {
                         });
                     }
                     self.dirty = true;
+                    ctx.prev_happened = true;
                 }
             }
             Effect::CreateToken {
@@ -1419,11 +1425,13 @@ impl Game {
                 add,
                 spell_filter,
                 body,
+                abilities,
             } => {
                 crate::mana_abilities::resolve_add_mana_with_rider(
                     self,
                     add,
                     spell_filter,
+                    *abilities,
                     body,
                     ctx,
                 );
@@ -1710,6 +1718,9 @@ impl Game {
                     performer,
                 });
             }
+            Effect::NoteLinked { what, replace } => {
+                crate::linked_notes::exec(self, what, *replace, ctx);
+            }
             Effect::Reflexive { body } => {
                 // CR 603.12: a reflexive triggered ability is checked immediately after it's
                 // created; it triggers now and waits to be put on the stack (with its own
@@ -1844,7 +1855,11 @@ impl Game {
                 // "You may cast ... If you do, ...": whether a spell was cast.
                 ctx.prev_happened = !cast.is_empty();
                 // CR 400.7h: other parts of the effect can find the spells cast this way.
-                ctx.set_var(vars::IT, cast);
+                // When none was, "it" still means the cards ("You may cast it without
+                // paying its mana cost. If you don't, put it into your hand.").
+                if !cast.is_empty() {
+                    ctx.set_var(vars::IT, cast);
+                }
             }
             Effect::PlayCard {
                 who,
@@ -1853,6 +1868,7 @@ impl Game {
                 optional,
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                let mut played = false;
                 for o in self.resolve_objects(what, ctx) {
                     if *optional && !self.ask_yes_no(p, Some(o), "Play this card?", true) {
                         continue;
@@ -1860,7 +1876,7 @@ impl Game {
                     // A face-down card (e.g. exiled with hideaway) is played face up.
                     if self.face_characteristics(o, FaceState::Front).is_land() {
                         // CR 305.2b, 305.3: ignored if the player can't play a land now.
-                        let _ = self.play_land_during_resolution(p, o);
+                        played |= self.play_land_during_resolution(p, o).is_ok();
                         continue;
                     }
                     let method = if *free {
@@ -1868,8 +1884,11 @@ impl Game {
                     } else {
                         CastMethod::Normal
                     };
-                    let _ = crate::casting::cast_during_resolution(self, p, o, method);
+                    played |= crate::casting::cast_during_resolution(self, p, o, method).is_ok();
                 }
+                // "You may play that card without paying its mana cost. If you don't, ...":
+                // whether a card was played.
+                ctx.prev_happened = played;
             }
             Effect::GrantPlayPermission {
                 who,
@@ -1895,6 +1914,7 @@ impl Game {
                 for g in self.play_grants.iter_mut().skip(before) {
                     g.terms.merge(terms);
                 }
+                crate::permissions::given(self, before);
             }
             Effect::PreventDamage {
                 to,
@@ -2280,12 +2300,9 @@ impl Game {
                         .collect()
                 }
                 // "gains all activated abilities of target creature until end of turn":
-                // which abilities is determined as the effect is created (CR 611.2c).
-                Modification::AddActivatedAbilitiesOf(from) => {
-                    crate::layers::activated_abilities_of(self, from, ctx, ObjectId(u32::MAX))
-                        .into_iter()
-                        .map(Modification::AddAbility)
-                        .collect()
+                // the abilities it has as the effect is created (CR 608.2h).
+                Modification::AddAbilitiesOf { from, which } => {
+                    crate::ability_grants::snapshot(self, from, which, ctx)
                 }
                 other => vec![other.clone()],
             })
@@ -2435,6 +2452,16 @@ impl Game {
                 }
             }
         }
+        // "That permanent's activated abilities can't be activated this turn": the
+        // permanent named as the effect began.
+        // "That creature can block up to two additional creatures this turn."
+        if let Restriction::CantActivate { sources: f, .. }
+        | Restriction::ExtraBlocks { blocker: f, .. } = &mut r
+        {
+            if filter_references_specific(f) {
+                *f = Filter::Objects(self.named_objects(f, ctx));
+            }
+        }
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
         if let Some(pf) = restriction_player_filter(&mut r) {
@@ -2484,6 +2511,14 @@ impl Game {
                     })
                     .collect();
                 Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+            }
+            // "creatures that player controls", "creatures the active player controls":
+            // the players as the effect begins.
+            Filter::ControlledByPlayer(r) => {
+                let ps = self.eval_players(r, ctx);
+                Filter::ControllerMatches(Box::new(PlayerFilter::Or(
+                    ps.into_iter().map(PlayerFilter::Is).collect(),
+                )))
             }
             Filter::And(v) => {
                 Filter::And(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
@@ -2948,7 +2983,20 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::BlockAsThoughUntapped(f)
         | Restriction::Goaded(f)
         | Restriction::DamageByToughness(f)
-        | Restriction::AssignsNoCombatDamage(f) => Some(f),
+        | Restriction::AssignsNoCombatDamage(f)
+        | Restriction::CantAttackAlone(f)
+        | Restriction::CantBlockAlone(f)
+        | Restriction::AttackOnlyAlone(f)
+        | Restriction::CantTransform(f) => Some(f),
+        Restriction::CantBe { what, .. } => Some(what),
+        Restriction::AttackTogether { attackers, .. }
+        | Restriction::MustAttackOtherThan { attackers, .. } => Some(attackers),
+        Restriction::CantActivate { sources, .. } => Some(sources),
+        Restriction::ExtraBlocks { blocker, .. } => Some(blocker),
+        Restriction::MinBlockers { attacker, .. }
+        | Restriction::MaxBlockedBy { attacker, .. }
+        | Restriction::MustBeBlockedBy { attacker, .. }
+        | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
@@ -2968,9 +3016,20 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::CantPlayLands(f)
         | Restriction::MaxDrawsPerTurn(f, _)
         | Restriction::MaxSpellsPerTurn(f, _)
+        | Restriction::MaxSpellsOfKindPerTurn { who: f, .. }
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         Restriction::CantCast { who, .. } => Some(who),
         Restriction::MustAttackPlayer { defender, .. }
+        | Restriction::CantAttackPlayer { defender, .. }
+        | Restriction::AttackCost { defender, .. }
+        | Restriction::MustAttackOtherThan {
+            players: defender, ..
+        }
+        | Restriction::MaxBlockersOf { who: defender, .. }
+        | Restriction::MaxAttackersAgainst {
+            player: Some(defender),
+            ..
+        }
         | Restriction::AttackAsThoughHaste {
             defender: Some(defender),
             ..

@@ -112,6 +112,11 @@ impl<'c> Builder<'c> {
         // "Destroy target creature an opponent controls. That player loses 3 life.": the
         // opponent mentioned is that object's controller.
         let opponents = matches!(&spec.what, TargetKind::Object(f) if controlled_by_opponent(f));
+        // "Exile target card from an opponent's graveyard. If it was a creature card, that
+        // player loses 1 life.": the opponent is the card's owner.
+        let owned_by_opponent = matches!(&spec.what, TargetKind::Object(Filter::And(v))
+            if v.iter().any(|f| matches!(f, Filter::OwnedBy(PlayerRel::Opponent)))
+                && v.iter().any(|f| matches!(f, Filter::InZone(z) if *z != ZoneKind::Battlefield)));
         self.targets.push(spec);
         let slot = (self.targets.len() - 1) as u8;
         if !is_player {
@@ -124,6 +129,8 @@ impl<'c> Builder<'c> {
         }
         if opponents {
             self.it_player = PlayerRef::ControllerOf(Box::new(Sel::Target(slot)));
+        } else if owned_by_opponent {
+            self.it_player = PlayerRef::OwnerOf(Box::new(Sel::Target(slot)));
         }
         slot
     }
@@ -537,8 +544,17 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
     if l.starts_with("you may pay ")
         || (l.starts_with("you may ") && l.contains(" unless that player pays "))
         || (l.starts_with("you may cast ") && l.ends_with(" as though they had flash"))
+        // A permission to play cards (see `patterns::permission_grammar`).
+        || (l.starts_with("you may ") && super::patterns::permission_grammar::parse(l).is_some())
     {
         if let Some(e) = parse_simple(l, b) {
+            return Some(e);
+        }
+    }
+    // "You may tap two untapped creatures you control": a cost paid on resolution
+    // (CR 118.12, see `patterns::basic_effects_choose`).
+    if l.starts_with("you may tap ") || l.starts_with("you may exile ") {
+        if let Some(e) = super::patterns::basic_effects_choose::may_pay_action(l, b) {
             return Some(e);
         }
     }
@@ -589,7 +605,13 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         let e = parse_clause(rest, b)?;
         // CR 601.2c, 702.33g: targets of a part that has its effect only if an optional
         // cost was paid as the spell was cast are chosen only if it was paid.
-        if matches!(cond, Condition::CostPaid(_)) {
+        // "If this spell's additional cost was paid, destroy target ..." too.
+        let paid_check = match &cond {
+            Condition::CostPaid(_) => true,
+            Condition::Custom(n) => n == crate::player_control::ADDITIONAL_COST_PAID,
+            _ => false,
+        };
+        if paid_check {
             for spec in &mut b.targets[first_new_target..] {
                 spec.condition = Some(cond.clone());
             }
@@ -1125,6 +1147,11 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         return None;
     };
+    // "Each creature deals 1 damage to its controller": each to its own controller (see
+    // `patterns::basic_effects_targets`).
+    if matches!(src, Sel::All(_)) && end(&rest).ends_with(" damage to its controller") {
+        return None;
+    }
     let rest = rest.as_str();
     let owned_tail: String;
     let (amount, rest) = if let Some(r) = rest.strip_prefix("damage equal to ") {

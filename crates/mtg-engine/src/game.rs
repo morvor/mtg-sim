@@ -491,6 +491,14 @@ pub struct TurnHistory {
     /// [`Event::Custom`]: crate::events::Event::Custom
     #[serde(default)]
     pub custom_actions: Vec<(PlayerId, SmolStr)>,
+    /// Cards milled this turn (CR 701.17), as the objects they became, and cards
+    /// discarded this turn with the player who discarded each ("a card in a graveyard
+    /// that was milled this turn", "cards you cycled or discarded this turn"). Recorded
+    /// by `kw/zone_moves.rs`.
+    #[serde(default)]
+    pub milled: Vec<ObjectId>,
+    #[serde(default)]
+    pub discarded: Vec<(PlayerId, ObjectId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -561,6 +569,10 @@ pub struct ActiveStatics {
     pub flash_permissions: Vec<(ObjectId, PlayerId, PlayerRel, Filter)>,
     pub customs: Vec<(ObjectId, PlayerId, SmolStr)>,
     pub other: Vec<(ObjectId, PlayerId, StaticEffect)>,
+    /// Alternative costs other objects offer for the spells players cast ("You may pay
+    /// {W}{U}{B}{R}{G} rather than pay the mana cost for spells you cast"), with the
+    /// once-each-turn use each is: see `kw/offered_costs.rs`.
+    pub offered_alt_costs: Vec<crate::kw::offered_costs::OfferedAltCost>,
 }
 
 #[derive(Clone, Debug)]
@@ -723,6 +735,8 @@ pub struct Game {
     pub planechase: crate::planechase::PlanarState,
     /// Records kept by hand-written card abilities (see `cards/`).
     pub cards: crate::cards::CardState,
+    /// Players and objects abilities noted for their linked abilities (CR 607.1).
+    pub linked_notes: crate::linked_notes::LinkedNotes,
     /// Every event, for observers outside the engine (off unless enabled).
     pub event_feed: crate::event_feed::EventFeed,
     /// Watches every event as it's processed, with the game as it is then (see
@@ -838,6 +852,7 @@ impl Game {
             multiplayer: Default::default(),
             planechase: Default::default(),
             cards: Default::default(),
+            linked_notes: Default::default(),
             event_feed: Default::default(),
             observer: None,
             timing: Default::default(),

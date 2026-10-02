@@ -125,10 +125,12 @@ fn you_gain_protection(l: &str, _b: &mut Builder) -> Option<Effect> {
     ))
 }
 
-/// The keywords an object loses: whole keywords only ("hexproof", "indestructible",
-/// "protection" — all protection abilities, "all landwalk abilities"). Losing one
-/// particular protection or landwalk ability isn't supported.
-fn lost_keywords(s: &str) -> Option<Vec<Modification>> {
+/// What an object loses: whole keywords ("hexproof", "indestructible", "protection" — all
+/// protection abilities, "all landwalk abilities"), or single abilities of a keyword with
+/// a quality: one protection or landwalk ability ("protection from black", "forestwalk";
+/// each is a separate ability, CR 702.14, 702.16g), or every "bands with other" ability
+/// but not plain banding (CR 702.22b).
+pub(crate) fn lost_keywords(s: &str) -> Option<Vec<Modification>> {
     let mut out = Vec::new();
     for p in split_keyword_phrases(s) {
         match p.as_str() {
@@ -136,19 +138,27 @@ fn lost_keywords(s: &str) -> Option<Vec<Modification>> {
             "all landwalk abilities" | "landwalk" => {
                 out.push(Modification::RemoveKeyword(KeywordKind::Landwalk))
             }
+            "all \"bands with other\" abilities" => out.push(Modification::LoseKeywordWithQuality {
+                kind: KeywordKind::Banding,
+                quality: None,
+            }),
             _ => {
                 for k in keyword_list(&p)? {
-                    // "loses protection from black" (Cephalid Snitch): that one ability
-                    // (CR 702.16).
-                    if k.kind == KeywordKind::Protection && k.filter.is_some() && k.text.is_some()
-                    {
-                        out.push(Modification::LoseKeyword(k));
-                        continue;
-                    }
-                    if k.filter.is_some() || k.cost.is_some() || k.n.is_some() {
+                    if k.cost.is_some() || k.n.is_some() {
                         return None;
                     }
-                    out.push(Modification::RemoveKeyword(k.kind));
+                    match k.filter {
+                        None => out.push(Modification::RemoveKeyword(k.kind)),
+                        Some(q)
+                            if matches!(k.kind, KeywordKind::Protection | KeywordKind::Landwalk) =>
+                        {
+                            out.push(Modification::LoseKeywordWithQuality {
+                                kind: k.kind,
+                                quality: Some(q),
+                            })
+                        }
+                        Some(_) => return None,
+                    }
                 }
             }
         }

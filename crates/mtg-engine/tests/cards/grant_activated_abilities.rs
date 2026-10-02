@@ -1,5 +1,5 @@
 //! Having or gaining the activated abilities of other objects
-//! (`src/oracle/patterns/grant_activated_abilities.rs`, `Modification::AddActivatedAbilitiesOf`;
+//! (`src/oracle/patterns/grant_activated_abilities.rs`, `Modification::AddAbilitiesOf`;
 //! CR 113.6, 602.5c, 611.2c) and spending mana as though it were any color to activate an
 //! object's own abilities (CR 609.4b).
 

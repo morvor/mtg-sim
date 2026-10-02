@@ -64,10 +64,7 @@ fn may_tap_or_untap(l: &str, b: &mut Builder) -> Option<Effect> {
         None => (false, l.strip_prefix("tap or untap ")?),
     };
     // "..., then you may tap or untap another target permanent": "another" there means
-    // other than the first target, which isn't modeled; leave such sentences alone.
-    if r.starts_with("another target") && !b.targets.is_empty() {
-        return None;
-    }
+    // other than the first target (see `Builder::add_target`).
     let (what, tail) = object_ref(r, b)?;
     if !end(&tail).is_empty() || matches!(what, Sel::None) {
         return None;

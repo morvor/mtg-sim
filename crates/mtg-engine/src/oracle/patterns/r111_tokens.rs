@@ -113,11 +113,14 @@ fn legendary_named_token(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let desc = desc.strip_prefix("legendary ")?;
-    // Descriptions with quoted abilities go to the full description parser.
+    // Descriptions with quoted abilities go to the full description parser; the quotes
+    // refer to the token by its name (CR 201.5).
     let mut spec = match parse_token_description(desc) {
         Some(spec) => spec,
         None => {
-            let d = super::tokens_copies_create::token_desc(desc, b.ctx)?;
+            let d = super::tokens_copies_create::with_token_name(&title_case(&name), || {
+                super::tokens_copies_create::token_desc(desc, b.ctx)
+            })?;
             if d.attacking {
                 return None;
             }

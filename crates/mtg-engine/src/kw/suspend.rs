@@ -200,7 +200,14 @@ impl KeywordRules for Suspend {
             let payable = |g: &Game, x: u32| {
                 g.can_pay_cost(p, &cost_with_x(&kw, x), Some(card), &Ctx::new(Some(card), p))
             };
-            match g.ask(p, Decision::ChooseX { source: card, max }) {
+            match g.ask(
+                p,
+                Decision::ChooseX {
+                    source: card,
+                    min: 1,
+                    max,
+                },
+            ) {
                 // X can't be 0, and the cost with the chosen X must be payable.
                 Answer::Number(n) if n >= 1 && n <= max && payable(g, n as u32) => n as u32,
                 _ => (1..=max.max(1) as u32)

@@ -501,6 +501,12 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
         .then(|| patterns::r107_x_cant_be_zero::strip(eff_text))
         .flatten();
     let eff_text = x_not_zero.as_deref().unwrap_or(eff_text);
+    // "Spend only black mana on X." (see `payment_rules.rs`): a rule about paying the X in
+    // the cost.
+    let x_spend = cost_has_x
+        .then(|| patterns::payment_rules::strip_x_spend(eff_text))
+        .flatten();
+    let eff_text = x_spend.as_ref().map_or(eff_text, |(t, _)| t.as_str());
     // "Remove any number of +1/+1 counters from ~: Create that many ... tokens."
     let amount_eff = amount_x
         .as_ref()
@@ -563,6 +569,12 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
             act.condition.take(),
         ));
     }
+    if let Some((_, rule)) = x_spend {
+        act.own_cost_changes.push(OwnCostChange {
+            change: CostChange::Rule(rule),
+            condition: None,
+        });
+    }
     Some(AbilityDef::new(AbilityKind::Activated(act), full))
 }
 
@@ -591,6 +603,11 @@ fn activated_zone(cost: &str, effect: &str) -> FunctionZone {
                 })
         })
     };
+    // "Put ~ from exile onto the battlefield", "Return ~ and target land card from your
+    // graveyard to the battlefield" (see `patterns::zone_move_grammar`).
+    if let Some(z) = patterns::zone_move_grammar::self_move_zone(&e) {
+        return z;
+    }
     if moves_self_from(&c, "hand") || c.contains("discard ~") || c.contains("discard this card") {
         FunctionZone::Hand
     } else if moves_self_from(&c, "graveyard") || moves_self_from(&e, "graveyard") {

@@ -76,6 +76,11 @@ fn trailing_condition(l: &str, b: &mut Builder) -> Option<Effect> {
     {
         return None;
     }
+    // "You may play it if you control a Kavu": a condition on playing the card later, not
+    // on giving the permission (see `permission_grammar`).
+    if super::permission_grammar::parse(x).is_some_and(|p| p.duration.is_some()) {
+        return None;
+    }
     let cond = parse_condition(c, b.ctx)?;
     let cond = if negate {
         Condition::Not(Box::new(cond))

@@ -40,13 +40,29 @@ fn pronoun_free(c: &str) -> bool {
 
 /// "[source] deals N damage" with the recipients of the previous damage effect.
 fn damage_amount(x: &str, prev: &Effect) -> Option<Effect> {
-    let Effect::DealDamage { source, to, .. } = prev else {
+    let Effect::DealDamage { source, to, amount } = prev else {
         return None;
     };
+    // "the creature you control deals twice that much damage instead" after "target
+    // creature you control deals damage ...": the same source, named again.
+    let named_again = x
+        .split_once(" deals ")
+        .filter(|(subject, _)| subject.starts_with("the ") && matches!(source, Sel::Target(_)))
+        .map(|(_, r)| r);
     let r = ["it deals ", "~ deals ", "this creature deals ", "he deals ", "she deals "]
         .iter()
-        .find_map(|p| x.strip_prefix(p))?;
-    let (n, r) = parse_number(r)?;
+        .find_map(|p| x.strip_prefix(p))
+        .or(named_again)?;
+    // "twice that much damage": twice the amount it would have dealt.
+    if r.trim() == "twice that much damage" {
+        return Some(Effect::DealDamage {
+            source: source.clone(),
+            amount: Value::Mul(Box::new(Value::Const(2)), Box::new(amount.clone())),
+            to: to.clone(),
+        });
+    }
+    // "X plus 2 damage", "five times X damage".
+    let (n, r) = super::basic_effects_targets::number_expr(r)?;
     if r.trim() != "damage" {
         return None;
     }

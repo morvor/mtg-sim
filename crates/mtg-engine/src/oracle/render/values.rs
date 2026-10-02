@@ -16,10 +16,10 @@ impl Renderer<'_> {
             Value::Const(n) => n.to_string(),
             Value::X => "X".into(),
             Value::Count(f) => {
-                let saved = self.alt_and;
-                self.alt_and = true;
+                let saved = (self.alt_and, self.plural_alts);
+                (self.alt_and, self.plural_alts) = (true, true);
                 let n = self.noun_det(f, Det::Plural);
-                self.alt_and = saved;
+                (self.alt_and, self.plural_alts) = saved;
                 if Self::counts_all_permanents(f, &n) {
                     format!("the number of {n} {{opt:on the battlefield}}")
                 } else {
@@ -175,12 +175,21 @@ impl Renderer<'_> {
                     Stat::Counters(None) if *op == AggOp::Sum => {
                         return format!("the number of counters among {s}");
                     }
+                    // "the number of white mana symbols in its mana cost".
+                    Stat::ManaSymbols(c) if *op == AggOp::Sum => {
+                        let p = match s.as_str() {
+                            "it" => "its".to_string(),
+                            other => super::nouns::possessive(other),
+                        };
+                        return format!("the number of {} mana symbols in {p} mana cost", c.word());
+                    }
                     other => return self.gap(format!("Value::Aggregate {other:?}")),
                 };
                 let o = match op {
                     AggOp::Max => "greatest",
                     AggOp::Min => "least",
-                    AggOp::Sum => "total",
+                    // "the total power of creatures you control"
+                    AggOp::Sum => return format!("the total {st} of {s}"),
                 };
                 format!("the {o} {st} among {s}")
             }
@@ -200,14 +209,18 @@ impl Renderer<'_> {
                     Among::Powers => "different powers",
                     Among::Names => "different names",
                     Among::CounterKinds => "kinds of counters",
+                    // "the greatest number of creatures you control that have a creature
+                    // type in common".
                     Among::LargestCreatureTypeGroup => {
-                        return self.gap("Among::LargestCreatureTypeGroup");
+                        return format!(
+                            "the greatest number of {s} that have a creature type in common"
+                        );
                     }
                 };
                 format!("the number of {what} among {s}")
             }
-            Value::OverPlayers(..) => self.gap("Value::OverPlayers"),
-            Value::Extreme(..) => self.gap("Value::Extreme"),
+            Value::OverPlayers(op, pf, v) => self.over_players_value(*op, pf, v),
+            Value::Extreme(v, s, greatest) => self.extreme_value(v, s, *greatest),
             Value::GreatestPower(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("the greatest power among {n}")
@@ -327,6 +340,7 @@ impl Renderer<'_> {
             && f.zone().is_none_or(|z| z == ZoneKind::Battlefield)
             && !n.contains(" you ")
             && !n.contains("among")
+            && !n.contains(" this way")
             && !n.contains("attacking")
             && !n.contains("blocking")
             && !n.contains("{opt:")
@@ -420,6 +434,14 @@ impl Renderer<'_> {
                 let l = crate::rule_statics::turns_taken::ordinal_list(n);
                 format!("it's your {l} turn of the game")
             }
+            // CR 730.1: "it's neither day nor night" (the game has neither designation).
+            Condition::And(v)
+                if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Condition::Not(c) if matches!(c.as_ref(), Condition::IsDay)))
+                    && v.iter().any(|x| matches!(x, Condition::Not(c) if matches!(c.as_ref(), Condition::IsNight))) =>
+            {
+                "it's neither day nor night".into()
+            }
             Condition::And(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
                 merge_subject(&parts, "and")
@@ -435,6 +457,9 @@ impl Renderer<'_> {
                 format!("{s} exists")
             }
             Condition::SelMatches(s, f) => {
+                if let Some(c) = self.custom_condition_clause(s, f, false) {
+                    return c;
+                }
                 let subj = self.sel(s, Case::Subj);
                 let pred = self.is_predicate(f, false);
                 format!("{subj} {pred}")
@@ -442,7 +467,19 @@ impl Renderer<'_> {
             Condition::PlayerMatches(p, pf) => {
                 let subj = self.some_player(p);
                 let pred = self.player_predicate(pf, &subj, false);
-                format!("{subj} {pred}")
+                // "an opponent has less life than you" is said from your side: "you have
+                // more life than an opponent".
+                let mirrored = match pred.as_str() {
+                    "has less life than you" => Some("more life"),
+                    "has fewer cards in hand than you" => Some("more cards in hand"),
+                    _ => None,
+                };
+                match mirrored {
+                    Some(m) if !subj.contains(['{', '|', '}']) => {
+                        format!("{{alt:{subj} {pred}|you have {m} than {subj}}}")
+                    }
+                    _ => format!("{subj} {pred}"),
+                }
             }
             Condition::YourTurn => "it's your turn".into(),
             Condition::NotYourTurn => "it's not your turn".into(),
@@ -451,8 +488,9 @@ impl Renderer<'_> {
             Condition::PrevHappened => "you do".into(),
             Condition::PrevAffectedAny => "a card was affected this way".into(),
             Condition::CastFrom(z) => format!("you cast it from your {}", zone_word(*z)),
-            Condition::AllTriggerConditionsThisTurn(_) => {
-                self.gap("Condition::AllTriggerConditionsThisTurn")
+            Condition::AllTriggerConditionsThisTurn(v) => {
+                let parts: Vec<String> = v.iter().map(|t| self.happened_this_turn(t)).collect();
+                join_list(&parts, "and")
             }
             Condition::ChosenWord(w) => format!("{w} was chosen"),
             Condition::Phase(p) => match p {
@@ -509,11 +547,23 @@ impl Renderer<'_> {
             Condition::NotYourTurn => "it's your turn".into(),
             Condition::PrevHappened => "you don't".into(),
             Condition::SelMatches(s, f) => {
+                if let Some(c) = self.custom_condition_clause(s, f, true) {
+                    return c;
+                }
                 let subj = self.sel(s, Case::Subj);
                 let pred = self.is_predicate(f, true);
                 format!("{subj} {pred}")
             }
-            Condition::PlayerMatches(p, pf) => {
+            // Only the predicates worded negatively; the others would lose the negation.
+            Condition::PlayerMatches(p, pf)
+                if matches!(
+                    pf,
+                    PlayerFilter::Life(..)
+                        | PlayerFilter::Opponent
+                        | PlayerFilter::You
+                        | PlayerFilter::Any
+                ) =>
+            {
                 let subj = self.some_player(p);
                 let pred = self.player_predicate(pf, &subj, true);
                 format!("{subj} {pred}")
@@ -536,6 +586,9 @@ impl Renderer<'_> {
             {
                 "you haven't committed a crime this turn".into()
             }
+            Condition::Custom(n) if n == "you_were_the_starting_player" => {
+                "you weren't the starting player".into()
+            }
             other => {
                 let s = self.condition(other);
                 format!("it's not true that {s}")
@@ -545,9 +598,26 @@ impl Renderer<'_> {
 
     /// "you control an artifact", "you control no Islands", "there are ... in your graveyard".
     pub(crate) fn exists(&mut self, f: &Filter, negated: bool) -> String {
+        // "if you don't control a Ring-bearer" (your Ring-bearer is a creature you
+        // control, CR 701.54a).
+        if matches!(f, Filter::Custom(n) if n == crate::kwa::ring::RING_BEARER) {
+            return if negated {
+                "you don't control a Ring-bearer".into()
+            } else {
+                "you control a Ring-bearer".into()
+            };
+        }
         let (ctrl, rest) = split_controller(f);
         let zone = f.zone();
         match (ctrl, zone) {
+            // "your opponents control no creatures": no opponent controls one.
+            (Some(PlayerRel::Opponent), None)
+            | (Some(PlayerRel::Opponent), Some(ZoneKind::Battlefield))
+                if negated =>
+            {
+                let n = self.noun(&rest, Num::Many);
+                format!("your opponents control no {n}")
+            }
             (Some(r), None) | (Some(r), Some(ZoneKind::Battlefield)) => {
                 let subj = self.rel_subject(r);
                 let verb = if subj == "you" { "control" } else { "controls" };
@@ -594,6 +664,37 @@ impl Renderer<'_> {
                 atoms.retain(|a| !matches!(a, Filter::InZone(_) | Filter::OwnedBy(PlayerRel::You)));
                 parts.push(format!("in your {}", zone_word(z)));
             }
+        }
+        // "is a creature card", "is a noncreature, nonland card": a card's types and
+        // qualities make one noun phrase.
+        let card_noun = |a: &&Filter| {
+            matches!(
+                a,
+                Filter::Card
+                    | Filter::Type(_)
+                    | Filter::Subtype(_)
+                    | Filter::Supertype(_)
+                    | Filter::Color(_)
+                    | Filter::Colorless
+                    | Filter::Multicolored
+                    | Filter::Monocolored
+                    | Filter::Historic
+                    | Filter::Or(_)
+                    | Filter::Not(_)
+            )
+        };
+        if parts.is_empty()
+            && atoms.len() > 1
+            && atoms.iter().any(|a| matches!(a, Filter::Card))
+            && atoms.iter().all(card_noun)
+        {
+            let f = Filter::And(atoms.into_iter().cloned().collect());
+            let n = self.noun_det(&f, Det::A);
+            return if negated {
+                format!("isn't {n}")
+            } else {
+                format!("is {n}")
+            };
         }
         for a in atoms {
             let p = match a {
@@ -688,6 +789,43 @@ impl Renderer<'_> {
         } else {
             ("has", "has")
         };
+        // "has more life than you", "has at least four more cards in hand than you".
+        let than_you = |v: &Value| -> Option<(bool, Option<i32>)> {
+            match v {
+                Value::LifeTotal(PlayerRef::You) => Some((true, None)),
+                Value::HandSize(PlayerRef::You) => Some((false, None)),
+                Value::Sum(xs) => match xs.as_slice() {
+                    [Value::LifeTotal(PlayerRef::You), Value::Const(n)] => Some((true, Some(*n))),
+                    [Value::HandSize(PlayerRef::You), Value::Const(n)] => Some((false, Some(*n))),
+                    _ => None,
+                },
+                _ => None,
+            }
+        };
+        if !negated && !you {
+            if let PlayerFilter::Life(c, v) | PlayerFilter::HandSize(c, v) = pf {
+                if let Some((life, extra)) = than_you(v) {
+                    let what = if life { "life" } else { "cards in hand" };
+                    let is_life = matches!(pf, PlayerFilter::Life(..));
+                    if is_life == life {
+                        match (c, extra) {
+                            (Cmp::Gt, None) => return format!("{have} more {what} than you"),
+                            (Cmp::Lt, None) if life => {
+                                return format!("{have} less {what} than you")
+                            }
+                            (Cmp::Lt, None) => return format!("{have} fewer {what} than you"),
+                            (Cmp::Ge, Some(n)) => {
+                                return format!(
+                                    "{have} at least {} more {what} than you",
+                                    number_word(n)
+                                )
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
         match pf {
             PlayerFilter::Life(c, v) => {
                 let v = self.value(v);
@@ -773,10 +911,48 @@ impl Renderer<'_> {
         if let Some(s) = self.this_turn_compare(a, cmp, b) {
             return s;
         }
+        // "if you have more life than an opponent": more than the lowest life total among
+        // your opponents.
+        if let (
+            Value::LifeTotal(PlayerRef::You),
+            Cmp::Gt,
+            Value::OverPlayers(AggOp::Min, PlayerFilter::Opponent, v),
+        ) = (a, cmp, b)
+        {
+            if matches!(v.as_ref(), Value::LifeTotal(PlayerRef::Iterated)) {
+                return "you have more life than an opponent".into();
+            }
+        }
+        // "if a graveyard has twenty or more cards in it".
+        if let (Value::OverPlayers(AggOp::Max, pf, v), Cmp::Ge) = (a, cmp) {
+            if let Some(s) = self.over_players_at_least(pf, v, b) {
+                return s;
+            }
+        }
+        // "an opponent controls more lands than you".
+        if let (Value::CountPlayers(PlayerFilter::And(v)), Cmp::Ge, Value::Const(1)) = (a, cmp, b) {
+            if let [base @ (PlayerFilter::Opponent | PlayerFilter::Any), PlayerFilter::Controls(f, c, n)] =
+                v.as_slice()
+            {
+                let who = self.player_filter_object(base);
+                let what = self.count_phrase(f, *c, n);
+                return format!("{who} controls {what}");
+            }
+        }
         // "you have two or more opponents".
         if let (Value::CountPlayers(PlayerFilter::Opponent), Value::Const(n), Cmp::Ge) = (a, b, cmp)
         {
             return format!("you have {} or more opponents", number_word(*n));
+        }
+        // "a player has more life than each other player": exactly one player has the most.
+        if let (Value::CountPlayers(pf), Value::Const(1), Cmp::Eq) = (a, b, cmp) {
+            if let Some((stat, controls)) = self.most_of(pf) {
+                return if controls {
+                    format!("a player controls more {stat} than each other player")
+                } else {
+                    format!("a player has more {stat} than each other player")
+                };
+            }
         }
         // "creatures you control have total power 8 or greater".
         if let (Value::PowerOf(s), Value::Const(n)) = (a, b) {

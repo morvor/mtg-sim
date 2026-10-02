@@ -195,6 +195,14 @@ pub struct ActivatedAbility {
     pub zone: FunctionZone,
     /// "Any player may activate this ability."
     pub any_player: bool,
+    /// "Only your opponents may activate this ability" (CR 602.2): an opponent of the
+    /// source's controller may activate it, and its controller can't.
+    #[serde(default)]
+    pub only_opponents: bool,
+    /// "Activate only once": how many times the ability may be activated over the
+    /// object's existence (CR 400.7: a new object can activate it again).
+    #[serde(default)]
+    pub max_total: Option<u32>,
     /// "This ability costs {1} less to activate for each ...": changes to this ability's
     /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
     #[serde(default)]
@@ -226,6 +234,8 @@ impl ActivatedAbility {
             condition: None,
             zone: FunctionZone::Battlefield,
             any_player: false,
+            only_opponents: false,
+            max_total: None,
             own_cost_changes: Vec::new(),
             cant_be_copied: false,
         }
@@ -744,7 +754,8 @@ pub enum TargetGroup {
     SharePermanentType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
-    /// No two of them are controlled by the same player ("with different controllers").
+    /// No two of them are controlled by the same player ("with different controllers",
+    /// "up to two target artifacts controlled by different players").
     DifferentControllers,
     /// No two of them have the same name ("with different names", CR 201.2).
     DifferentNames,
@@ -943,6 +954,10 @@ pub enum Sel {
     /// The top N cards of each of the players' libraries ("the top two cards of your
     /// library"), top first.
     TopOfLibrary(PlayerRef, Value),
+    /// The objects the linked abilities of the source noted ([`Effect::NoteLinked`],
+    /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
+    /// has since changed zones is a new object the note doesn't find (CR 400.7).
+    LinkedNoted,
 }
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
@@ -987,6 +1002,11 @@ pub enum PlayerRef {
     ChosenOpponent,
     /// The monarch / initiative holder etc.
     Monarch,
+    /// The players the linked abilities of the source noted, or that such an ability
+    /// still on the stack targets ([`Effect::NoteLinked`], CR 607.1): "When ~ enters,
+    /// target player loses 6 life. When ~ leaves the battlefield, that player gains 6
+    /// life." (Laquatus's Champion).
+    LinkedNoted,
 }
 
 /// Player predicates, used in targets and filters.
@@ -1021,6 +1041,9 @@ pub enum PlayerFilter {
     Defending,
     /// The active player.
     Active,
+    /// A player who attacked with creatures this turn ("target player who attacked this
+    /// turn"): only the active player declares attackers (CR 508.1).
+    AttackedThisTurn,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
@@ -1878,15 +1901,32 @@ pub enum Modification {
         kinds: Vec<KeywordKind>,
         from: Filter,
     },
-    /// "has all activated abilities of all creatures your opponents control" (Drana and
-    /// Linvala), "gains all activated abilities of target creature" (Quicksilver
-    /// Elemental): each activated ability of each other object matching the filter, as
-    /// acquired from that object (CR 113.6, 602.5c, 607.5).
-    AddActivatedAbilitiesOf(Filter),
+    /// "has all activated abilities of [objects]", "gains all activated and triggered
+    /// abilities of target creature" (CR 113.10, 613.1f): the abilities of the selected
+    /// objects of the selected kinds, as those objects' characteristics stand when this
+    /// applies (an object's own abilities and those it has gained in earlier layer-6
+    /// effects, CR 613.8). Keyword abilities that stand for only abilities of those kinds
+    /// come along ("Some keywords are activated abilities"). The gained abilities refer to
+    /// the object that has them (CR 201.5b) and linked abilities gained together stay
+    /// linked only to each other (CR 607.5). A resolving effect fixes which abilities as
+    /// it's created (CR 608.2h; see `Game::fix_mods`). See `ability_grants.rs`.
+    AddAbilitiesOf {
+        from: Box<Sel>,
+        which: AbilitySelection,
+    },
     RemoveKeyword(KeywordKind),
     /// Loses one particular keyword ability: the instances of that kind with the same
     /// parameter text (Animate Dead: "it loses \"enchant creature card in a graveyard\"").
     LoseKeyword(Keyword),
+    /// Loses the keyword abilities of a kind with a quality: those whose quality is
+    /// `quality` ("loses islandwalk", "loses protection from red": each landwalk and each
+    /// protection ability is a separate ability, CR 702.14, 702.16g), or, with `None`,
+    /// every one that has a quality ("loses all \"bands with other\" abilities" leaves plain
+    /// banding, CR 702.22b).
+    LoseKeywordWithQuality {
+        kind: KeywordKind,
+        quality: Option<Filter>,
+    },
     RemoveAllAbilities,
     /// "can't have or gain [ability]".
     CantHaveKeyword(KeywordKind),
@@ -1942,9 +1982,10 @@ impl Modification {
             | AddKeyword(_)
             | AddKeywordX(..)
             | AddKeywordsOf { .. }
-            | AddActivatedAbilitiesOf(_)
+            | AddAbilitiesOf { .. }
             | RemoveKeyword(_)
             | LoseKeyword(_)
+            | LoseKeywordWithQuality { .. }
             | RemoveAllAbilities
             | CantHaveKeyword(_) => Layer::L6Ability,
             CdaPT(..) => Layer::L7aCda,
@@ -2395,6 +2436,15 @@ pub enum Restriction {
     MaxDrawsPerTurn(PlayerFilter, u32),
     /// "can't cast more than one spell each turn".
     MaxSpellsPerTurn(PlayerFilter, u32),
+    /// "Each player can't cast more than one noncreature spell each turn.", "Each player
+    /// who has cast a nonartifact spell this turn can't cast additional nonartifact
+    /// spells.": a player who has cast `n` spells matching `what` this turn can't cast
+    /// another one (counting spells cast before the effect began, CR 601.3).
+    MaxSpellsOfKindPerTurn {
+        who: PlayerFilter,
+        what: Filter,
+        n: u32,
+    },
     /// "can't be sacrificed".
     CantBeSacrificed(Filter),
     /// "Players can't pay life [or sacrifice (permanents)] to cast spells or activate
@@ -2462,8 +2512,75 @@ pub enum Restriction {
         chooser: PlayerFilter,
         what: Filter,
     },
+    /// "[objects] can't become untapped / phase in / be turned face up / be equipped /
+    /// be enchanted by other Auras / become suspected": an action the rules would
+    /// otherwise allow doesn't happen to them (see `prohibitions.rs`).
+    CantBe {
+        what: Filter,
+        action: ObjectAction,
+    },
+    /// "can only attack alone" (CR 506.5): it can attack only if no other creatures
+    /// attack.
+    AttackOnlyAlone(Filter),
+    /// "No more than N creatures can attack you each combat" (`player`), "... can attack
+    /// ~ each combat" (`object`): a limit on the creatures attacking that player or
+    /// planeswalker (CR 508.1c).
+    MaxAttackersAgainst {
+        player: Option<PlayerFilter>,
+        object: Option<Filter>,
+        n: u32,
+    },
+    /// "[attacker] must be blocked by [a Dalek] if able": a requirement that a creature
+    /// matching `blocker` blocks it (CR 509.1c).
+    MustBeBlockedBy {
+        attacker: Filter,
+        blocker: Filter,
+    },
+    /// "[attacker] must be blocked by two or more creatures if able" (`min` 2), "... by
+    /// exactly one creature if able" (`min` 1, `max` 1): a requirement on how many
+    /// creatures block it (CR 509.1c).
+    BlockerCountRequirement {
+        attacker: Filter,
+        min: u32,
+        max: Option<u32>,
+    },
+    /// "If a creature you control attacks, ~ also attacks if able", "If ~ attacks, all
+    /// creatures you control attack if able": each creature matching `attackers` attacks
+    /// if able if another creature matching `triggers` attacks (with `same_controller`,
+    /// one its controller controls) (CR 508.1d).
+    AttackTogether {
+        attackers: Filter,
+        triggers: Filter,
+        same_controller: bool,
+    },
+    /// "[creatures] attack a player other than [players] if able" (the second requirement
+    /// of goad, CR 701.15b, without goading).
+    MustAttackOtherThan {
+        attackers: Filter,
+        players: PlayerFilter,
+    },
+    /// "[players] can't block with more than one creature (this combat)" (CR 509.1b).
+    MaxBlockersOf {
+        who: PlayerFilter,
+        n: u32,
+    },
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
+}
+
+/// Something that can't happen to an object ([`Restriction::CantBe`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObjectAction {
+    /// "can't become untapped" (CR 701.26b: it doesn't untap, by any means).
+    Untapped,
+    /// "can't phase in" (CR 702.26).
+    PhasedIn,
+    /// "can't be equipped" (CR 301.5c).
+    Equipped,
+    /// "can't be enchanted by other Auras" (CR 303.4).
+    EnchantedByOtherAuras,
+    /// "can't become suspected" (CR 701.60).
+    Suspected,
 }
 
 /// The spells and abilities a [`Restriction::CantCauseSacrifice`] is about, relative to
@@ -2484,6 +2601,10 @@ pub enum TargetRestriction {
     Any,
     /// By sources matching the filter (protection-like).
     Sources(Filter),
+    /// By spells and abilities the restriction's controller's opponents control whose
+    /// sources match the filter ("black or red spells your opponents control",
+    /// "abilities your opponents control").
+    OpponentsSources(Filter),
 }
 
 /// Cost modification static effects (CR 601.2f).
@@ -2543,6 +2664,34 @@ impl AbilityScope {
     }
 }
 
+/// Which abilities of other objects [`Modification::AddAbilitiesOf`] gives: "all activated
+/// abilities", "all activated and triggered abilities", "all loyalty abilities", "...
+/// except mana abilities", "... except for loyalty abilities".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbilitySelection {
+    pub activated: bool,
+    pub triggered: bool,
+    /// Only activated abilities of this class ("all loyalty abilities").
+    pub only: Option<AbilityClass>,
+    /// Not activated abilities of this class ("except mana abilities").
+    pub except: Option<AbilityClass>,
+}
+
+impl AbilitySelection {
+    pub const ACTIVATED: AbilitySelection = AbilitySelection {
+        activated: true,
+        triggered: false,
+        only: None,
+        except: None,
+    };
+    pub const ACTIVATED_AND_TRIGGERED: AbilitySelection = AbilitySelection {
+        activated: true,
+        triggered: true,
+        only: None,
+        except: None,
+    };
+}
+
 /// A kind of activated ability.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AbilityClass {
@@ -2592,6 +2741,11 @@ pub enum CostChange {
     AdditionalCost(Cost),
     /// "You may pay X rather than pay this spell's mana cost."
     AlternativeCost(Cost),
+    /// An alternative cost that also lets the spell be cast as though it had flash: "You
+    /// may cast creature spells with mana value 3 or less by paying {E} rather than paying
+    /// their mana costs. If you cast a spell this way, you may cast it as though it had
+    /// flash." (CR 118.9, 601.3c; see `kw/offered_costs.rs`).
+    AlternativeCostWithFlash(Cost),
     /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
     /// (CR 601.3c).
     FlashForAdditionalCost(Cost),
@@ -2606,6 +2760,28 @@ pub enum CostChange {
     /// "You can spend mana of any type to cast creature spells." (CR 609.4b, 118.14): the
     /// cost doesn't change, but each of its mana symbols can be paid with mana of any type.
     SpendAnyType,
+    /// A rule the text of a spell or activated ability makes about announcing or paying
+    /// its own cost ("X can't be 0.", "Spend only black mana on X.", "You can't spend mana
+    /// to cast this spell."): the cost doesn't change (see `payment_rules.rs`).
+    Rule(CostRule),
+}
+
+/// A rule about announcing or paying the cost of the spell or activated ability whose text
+/// states it (see `payment_rules.rs`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CostRule {
+    /// "X can't be 0." (CR 107.3a): the least value that may be announced for X.
+    XAtLeast(u32),
+    /// "Spend only black mana on X.", "Spend only black and/or red mana on X.", "Spend
+    /// only colored mana on X.": only mana of these colors may pay the part of the cost
+    /// that X represents (CR 107.3a, 601.2h). It's still generic mana (cost reductions
+    /// may reduce it, and life can't pay it). `distinct`: "No more than one mana of each
+    /// color may be spent this way."
+    XOnlyColors { colors: ColorSet, distinct: bool },
+    /// "You can't spend mana to cast this spell." (Hogaak, Arisen Necropolis): no mana may
+    /// pay its total cost, so only other ways of paying it can (CR 601.2h): convoke, delve,
+    /// and life where an effect lets a mana symbol be paid with life (CR 118.3).
+    NoMana,
 }
 
 /// Static abilities (CR 604) and what they do.
@@ -2764,6 +2940,14 @@ pub enum PlayerModification {
     /// abilities of Jace planeswalkers you control on any player's turn any time you could
     /// cast an instant."). Collected with the static permissions (`collect_statics`).
     ActivationPermission(ActivationPermission),
+    /// "For each {B} in a cost, you may pay 2 life rather than pay that mana." (K'rrik,
+    /// Son of Yawgmoth): each mana symbol of that color in a cost the player pays may be
+    /// paid with `life` life instead (CR 118.3b, 119.4). It changes only how costs are paid,
+    /// not the costs (see `payment_rules.rs`).
+    PayLifeForMana {
+        color: Color,
+        life: u32,
+    },
     /// "Spells you cast have ..." etc. are handled elsewhere.
     /// Skip draw step etc. handled via replacements.
     /// "You can't be attacked", etc.
@@ -2788,6 +2972,13 @@ pub struct PlayPermission {
     /// instant.
     #[serde(default)]
     pub flash: bool,
+    /// Other terms the permission comes with (see [`PlayTerms`]): an additional cost ("by
+    /// discarding a card in addition to paying its other costs", CR 601.2b, 601.2f), mana
+    /// flexibility ("and you may spend mana as though it were mana of any color to cast
+    /// those spells", CR 609.4b), "you can't cast more than one spell this way each turn"
+    /// (`limit`), ...
+    #[serde(default)]
+    pub terms: PlayTerms,
 }
 
 /// The terms an effect's permission to play particular cards comes with (CR 601.3,
@@ -2830,11 +3021,65 @@ pub struct PlayTerms {
     /// only (CR 118.14).
     #[serde(default)]
     pub spend_any_type: bool,
+    /// "You may cast red spells from among them", "a creature spell from among those
+    /// cards": the qualities the card must have as it's played with the permission, judged
+    /// by the characteristics it would have as it's played (CR 601.3e). Relative to the
+    /// permission's source and player.
+    #[serde(default)]
+    pub what: Option<Filter>,
+    /// "You may cast a spell from among those cards", "you may play one of those cards",
+    /// "up to two of those cards": how many of the cards the effect's permissions are for
+    /// may be played with them; once that many are, the others' permissions end.
+    #[serde(default)]
+    pub limit: Option<u32>,
+    /// The permissions an effect gave together with a `limit` share this number, given
+    /// as they're given (0: none).
+    #[serde(default)]
+    pub group: u32,
+    /// "You may play it until you exile another card with ~": the permission ends when
+    /// its source gives another such permission.
+    #[serde(default)]
+    pub until_another: bool,
+    /// "During any turn you attacked with ~, you may play that card", "you may play it if
+    /// you control a Kavu": the card may be played with the permission only while the
+    /// condition holds (relative to the permission's source and player).
+    #[serde(default)]
+    pub condition: Option<Condition>,
+    /// "During your next turn, you may play that card": not during the turn the
+    /// permission was given.
+    #[serde(default)]
+    pub later_turn: bool,
+    /// "If that spell would be put into your graveyard, exile it instead": a replacement
+    /// effect for each spell cast with the permission (CR 614.1a), for as long as it's
+    /// that object (CR 400.7).
+    #[serde(default)]
+    pub exile_instead: bool,
 }
 
 impl PlayTerms {
     /// Adds `other`'s terms to these.
     pub fn merge(&mut self, other: &PlayTerms) {
+        if let Some(f) = &other.what {
+            self.what = Some(match self.what.take() {
+                Some(w) => Filter::and(vec![w, f.clone()]),
+                None => f.clone(),
+            });
+        }
+        if other.limit.is_some() {
+            self.limit = other.limit;
+        }
+        if other.group != 0 {
+            self.group = other.group;
+        }
+        self.until_another |= other.until_another;
+        if let Some(c) = &other.condition {
+            self.condition = Some(match self.condition.take() {
+                Some(w) => Condition::And(vec![w, c.clone()]),
+                None => c.clone(),
+            });
+        }
+        self.later_turn |= other.later_turn;
+        self.exile_instead |= other.exile_instead;
         self.spells_only |= other.spells_only;
         if other.alt_cost.is_some() {
             self.alt_cost = other.alt_cost.clone();
@@ -3684,11 +3929,15 @@ pub enum Effect {
     },
     /// "Add [mana]. When that mana is spent to cast [a spell], [effect]." (CR 106.6): the
     /// inner `AddMana` adds mana carrying a delayed triggered ability that triggers when
-    /// that mana is spent (one per mana produced, CR 106.6a).
+    /// that mana is spent (one per mana produced, CR 106.6a). `abilities`: "... to cast a
+    /// spell or activate an ability" (Sunken Palace): it also triggers when the mana is
+    /// spent to activate an ability, which is then "that ability".
     AddManaWithSpentTrigger {
         add: Box<Effect>,
         spell_filter: Filter,
         body: Box<Body>,
+        #[serde(default)]
+        abilities: bool,
     },
     /// "[Add mana]. Until end of turn, you don't lose this mana as steps and phases end."
     /// (CR 500.4): the mana the inner effect adds stays in its pool until the turn's cleanup
@@ -3816,6 +4065,16 @@ pub enum Effect {
         body: Box<Body>,
         /// Fires once and is then removed.
         once: bool,
+    },
+    /// Notes the selected objects and players for the abilities linked to this one
+    /// (CR 607.1, 607.2e): what the ability affected or what a player chose, which a
+    /// linked ability refers to as "that player" or "the last chosen card"
+    /// ([`PlayerRef::LinkedNoted`], [`Sel::LinkedNoted`]). With `replace`, the new note
+    /// replaces earlier ones ("the last chosen card"); otherwise it adds to them
+    /// (CR 607.3). See `linked_notes.rs`.
+    NoteLinked {
+        what: Sel,
+        replace: bool,
     },
     /// A reflexive triggered ability ("When you do, ..."): created during resolution, it
     /// triggers immediately and is put on the stack the next time a player would receive

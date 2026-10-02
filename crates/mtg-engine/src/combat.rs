@@ -479,13 +479,13 @@ impl Game {
     /// an additional creature").
     pub fn max_blocks(&self, blocker: ObjectId) -> Option<u32> {
         let mut n = 1u32;
-        for (s, c, r, _) in self.all_restrictions() {
+        for (s, c, r, locked) in self.all_restrictions() {
             if let Restriction::ExtraBlocks {
                 blocker: bf,
                 n: extra,
             } = &r
             {
-                if self.matches(blocker, bf, &Ctx::new(s, c)) {
+                if self.restriction_applies(blocker, bf, &Ctx::new(s, c), &locked) {
                     match extra {
                         None => return None,
                         Some(k) => n += k,
@@ -518,9 +518,9 @@ impl Game {
         if self.obj(attacker).has_keyword(KeywordKind::Menace) {
             n = 2; // CR 702.111b
         }
-        for (s, c, r, _) in self.all_restrictions() {
+        for (s, c, r, locked) in self.all_restrictions() {
             if let Restriction::MinBlockers { attacker: af, n: k } = &r {
-                if self.matches(attacker, af, &Ctx::new(s, c)) {
+                if self.restriction_applies(attacker, af, &Ctx::new(s, c), &locked) {
                     n = n.max(*k);
                 }
             }
@@ -841,7 +841,9 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
             cost,
         } = &r
         {
-            let ctx = Ctx::new(s, c);
+            let mut ctx = Ctx::new(s, c);
+            // "where X is the number of counters on that creature": the attacker.
+            ctx.set_var(vars::AFFECTED, vec![Entity::Object(creature)]);
             if !g.restriction_applies(creature, attackers, &ctx, &locked) {
                 continue;
             }
@@ -849,12 +851,19 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
                 Entity::Player(p) => g.player_filter_matches(defender, p, &ctx),
                 Entity::Object(o) => {
                     *planeswalkers
-                        && g.obj(o).is(CardType::Planeswalker)
-                        && g.player_filter_matches(defender, g.obj(o).controller, &ctx)
+                        && ((g.obj(o).is(CardType::Planeswalker)
+                            && g.player_filter_matches(defender, g.obj(o).controller, &ctx))
+                            // "can't attack unless ...": whatever it attacks, a battle too.
+                            || (g.obj(o).is(CardType::Battle)
+                                && matches!(defender, PlayerFilter::Any)))
                 }
             };
             if hit {
-                crate::casting::add_cost(&mut total, cost);
+                // "{1} for each +1/+1 counter on it", "{X}, where X is the number of
+                // enchantments you control": counted from the restriction's point of view
+                // as the cost is determined (CR 508.1h).
+                let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                crate::casting::add_cost(&mut total, &cost);
                 any = true;
             }
         }
@@ -1240,6 +1249,11 @@ pub enum BlockRequirement {
     AttackerBlocked(ObjectId),
     /// "All creatures able to block [attacker] do so": this creature blocks that attacker.
     BlocksAttacker(ObjectId, ObjectId),
+    /// "[attacker] must be blocked by [a Dalek] if able": one of these creatures blocks it.
+    AttackerBlockedByAny(ObjectId, Vec<ObjectId>),
+    /// "[attacker] must be blocked by two or more creatures / exactly one creature if
+    /// able": the number of creatures blocking it is within the bounds.
+    AttackerBlockerCount(ObjectId, u32, Option<u32>),
 }
 
 impl BlockRequirement {
@@ -1248,6 +1262,13 @@ impl BlockRequirement {
             BlockRequirement::Blocks(b) => decl.iter().any(|(x, _)| x == b),
             BlockRequirement::AttackerBlocked(a) => decl.iter().any(|(_, y)| y == a),
             BlockRequirement::BlocksAttacker(b, a) => decl.iter().any(|(x, y)| x == b && y == a),
+            BlockRequirement::AttackerBlockedByAny(a, bs) => {
+                decl.iter().any(|(x, y)| y == a && bs.contains(x))
+            }
+            BlockRequirement::AttackerBlockerCount(a, min, max) => {
+                let n = decl.iter().filter(|(_, y)| y == a).count() as u32;
+                n >= *min && max.is_none_or(|m| n <= m)
+            }
         }
     }
 }
@@ -1314,6 +1335,36 @@ pub fn block_requirements(
                     out.push(BlockRequirement::BlocksAttacker(*b, a));
                 }
             }
+        }
+    }
+    // "[attacker] must be blocked by [a Dalek] if able", "... by two or more creatures if
+    // able" (CR 509.1c).
+    for (s, c, r, locked) in g.all_restrictions() {
+        let ctx = Ctx::new(s, c);
+        match &r {
+            Restriction::MustBeBlockedBy { attacker, blocker } => {
+                for a in options.iter().flat_map(|(_, a)| a).collect::<BTreeSet<_>>() {
+                    if !g.restriction_applies(*a, attacker, &ctx, &locked) {
+                        continue;
+                    }
+                    let bs: Vec<ObjectId> = options
+                        .iter()
+                        .filter(|(b, atts)| atts.contains(a) && g.matches(*b, blocker, &ctx))
+                        .map(|(b, _)| *b)
+                        .collect();
+                    if !bs.is_empty() {
+                        out.push(BlockRequirement::AttackerBlockedByAny(*a, bs));
+                    }
+                }
+            }
+            Restriction::BlockerCountRequirement { attacker, min, max } => {
+                for a in options.iter().flat_map(|(_, a)| a).collect::<BTreeSet<_>>() {
+                    if g.restriction_applies(*a, attacker, &ctx, &locked) {
+                        out.push(BlockRequirement::AttackerBlockerCount(*a, *min, *max));
+                    }
+                }
+            }
+            _ => {}
         }
     }
     // "[blocker] blocks [attacker] this combat if able" (CR 702.39a).
@@ -1439,8 +1490,12 @@ pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
     let mut any = false;
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::BlockCost { blockers, cost } = &r {
-            if g.restriction_applies(blocker, blockers, &Ctx::new(s, c), &locked) {
-                crate::casting::add_cost(&mut total, cost);
+            let mut ctx = Ctx::new(s, c);
+            ctx.set_var(vars::AFFECTED, vec![Entity::Object(blocker)]);
+            if g.restriction_applies(blocker, blockers, &ctx, &locked) {
+                // Scaled amounts are counted from the restriction's point of view (CR 509.1d).
+                let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                crate::casting::add_cost(&mut total, &cost);
                 any = true;
             }
         }
@@ -1547,7 +1602,9 @@ pub fn best_blocks(
                         decl.push((*b, a));
                     }
                 }
-                BlockRequirement::AttackerBlocked(_) => {}
+                BlockRequirement::AttackerBlocked(_)
+                | BlockRequirement::AttackerBlockedByAny(..)
+                | BlockRequirement::AttackerBlockerCount(..) => {}
             }
         }
         let n = obeyed_block_requirements(reqs, &decl);
@@ -1581,7 +1638,14 @@ fn block_dfs(
     // "must be blocked" requirements not yet obeyed.
     let open_attacker_reqs = reqs
         .iter()
-        .filter(|r| matches!(r, BlockRequirement::AttackerBlocked(_)) && !r.obeyed(cur))
+        .filter(|r| {
+            matches!(
+                r,
+                BlockRequirement::AttackerBlocked(_)
+                    | BlockRequirement::AttackerBlockedByAny(..)
+                    | BlockRequirement::AttackerBlockerCount(..)
+            ) && !r.obeyed(cur)
+        })
         .count() as u32;
     if now + suffix[i] + open_attacker_reqs <= best.0 {
         return;

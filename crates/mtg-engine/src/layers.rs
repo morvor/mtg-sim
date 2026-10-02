@@ -617,6 +617,20 @@ impl Game {
         self.rule_effects.retain(|e| !rm.contains(&e.id));
         self.player_effects.retain(|e| !pm.contains(&e.id));
         self.replacements.retain(|e| !rp.contains(&e.id));
+        // "You may play that card for as long as you control ~": once over, it's over,
+        // even if that player controls it again.
+        let ended: Vec<bool> = self
+            .play_grants
+            .iter()
+            .map(|g| self.effect_expired(&g.duration, g.source, g.player))
+            .collect();
+        if ended.contains(&true) {
+            let mut i = 0;
+            self.play_grants.retain(|_| {
+                i += 1;
+                !ended[i - 1]
+            });
+        }
     }
 
     /// The characteristics listed by the effects that turned the face-down permanent `id`
@@ -1127,7 +1141,7 @@ impl Game {
                     | Modification::AddKeyword(_)
                     | Modification::AddKeywordX(..)
                     | Modification::AddKeywordsOf { .. }
-                    | Modification::AddActivatedAbilitiesOf(_)
+                    | Modification::AddAbilitiesOf { .. }
             );
             if !trial && grants {
                 let after = self.obj(t).chars.abilities.len();
@@ -1303,7 +1317,16 @@ impl Game {
                 match &s.effect {
                     StaticEffect::Continuous { .. } => {}
                     StaticEffect::Restriction(r) => st.restrictions.push((id, ctl, r.clone())),
-                    StaticEffect::CostModifier(c) => st.cost_modifiers.push((id, ctl, c.clone())),
+                    StaticEffect::CostModifier(c) => {
+                        crate::kw::offered_costs::collect(
+                            &mut st.offered_alt_costs,
+                            id,
+                            ctl,
+                            c,
+                            s.condition.as_ref(),
+                        );
+                        st.cost_modifiers.push((id, ctl, c.clone()))
+                    }
                     StaticEffect::Replacement(r) => {
                         st.replacements
                             .push((id, ctl, o.timestamp, a.clone(), r.clone()))
@@ -1329,14 +1352,28 @@ impl Game {
             match (&e.effect, e.source) {
                 (PlayerModification::CostModifier(cm), Some(src)) => {
                     for p in &e.players {
+                        crate::kw::offered_costs::collect(
+                            &mut st.offered_alt_costs,
+                            src,
+                            *p,
+                            cm,
+                            None,
+                        );
                         st.cost_modifiers.push((src, *p, cm.clone()));
                     }
                 }
                 // "Until end of turn, you may play lands and cast spells from the top of
                 // your library."
                 (PlayerModification::PlayPermission(pp), Some(src)) => {
+                    // "You may cast a creature spell from your graveyard this turn": a
+                    // single use, this effect's own (see `permissions.rs`).
+                    let once = pp
+                        .terms
+                        .limit
+                        .map(|_| smol_str::SmolStr::from(format!("effect {}", e.id)));
                     for p in &e.players {
-                        st.play_permissions.push((src, *p, pp.clone(), None));
+                        st.play_permissions
+                            .push((src, *p, pp.clone(), once.clone()));
                     }
                 }
                 // "You may cast sorcery spells this turn as though they had flash."
@@ -1477,6 +1514,19 @@ fn mod_values(g: &Game, mods: &[Modification], layer: Layer, ctx: &Ctx) -> Vec<i
                 out.push(g.eval_value(p, ctx));
                 out.push(g.eval_value(t, ctx));
             }
+            // What abilities it gives depends on the abilities other objects have, which
+            // other layer-6 effects can change (CR 613.8a).
+            Modification::AddAbilitiesOf { from, which } => {
+                out.extend(crate::ability_grants::copied_uids(g, from, which, ctx))
+            }
+            Modification::AddKeywordsOf { kinds, from } => {
+                out.extend(keywords_of(g, kinds, from, ctx).iter().map(|k| {
+                    use std::hash::{Hash, Hasher};
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    format!("{k:?}").hash(&mut h);
+                    h.finish() as i64
+                }))
+            }
             _ => {}
         }
     }
@@ -1555,44 +1605,6 @@ pub fn keywords_of(g: &Game, kinds: &[KeywordKind], from: &Filter, ctx: &Ctx) ->
             if !seen.contains(&key) {
                 seen.push(key);
                 out.push(k.clone());
-            }
-        }
-    }
-    out
-}
-
-/// The activated abilities of the objects other than `target` matching `from`, each as
-/// acquired from its object (`Modification::AddActivatedAbilitiesOf`). Only activated
-/// abilities (including the activated abilities of keywords), not triggered or static
-/// ones.
-pub fn activated_abilities_of(
-    g: &Game,
-    from: &Filter,
-    ctx: &Ctx,
-    target: ObjectId,
-) -> Vec<Ability> {
-    let mut out = Vec::new();
-    for o in g.objects_matching(from, ctx) {
-        if o == target {
-            continue;
-        }
-        let abilities = &g.obj(o).chars.abilities;
-        for a in abilities.iter() {
-            match &a.kind {
-                AbilityKind::Activated(_) => out.push(acquired_ability(a, Some(o), target)),
-                // A keyword that is an activated ability (equip, outlast, ...): its
-                // activated ability.
-                AbilityKind::Keyword(k) => {
-                    for d in crate::keyword_impls::derived_abilities(k) {
-                        // (Unless the keyword's abilities were already expanded.)
-                        if matches!(d.kind, AbilityKind::Activated(_))
-                            && !abilities.iter().any(|x| x.uid == d.uid)
-                        {
-                            out.push(acquired_ability(&d, Some(o), target));
-                        }
-                    }
-                }
-                _ => {}
             }
         }
     }
@@ -1820,16 +1832,18 @@ pub fn apply_mod(
                 apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
             }
         }
-        Modification::AddActivatedAbilitiesOf(from) => {
-            for a in activated_abilities_of(g, from, ctx, _target) {
-                c.abilities.push(a);
-            }
-        }
+        Modification::AddAbilitiesOf { from, which } => c.abilities.extend(
+            crate::ability_grants::abilities_for(g, from, which, ctx, _target),
+        ),
         Modification::RemoveKeyword(k) => c
             .abilities
             .retain(|a| !matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == *k)),
         Modification::LoseKeyword(k) => c.abilities.retain(|a| {
             !matches!(&a.kind, AbilityKind::Keyword(kw) if crate::keywords::same_instance(kw, k))
+        }),
+        Modification::LoseKeywordWithQuality { kind, quality } => c.abilities.retain(|a| {
+            !matches!(&a.kind, AbilityKind::Keyword(kw)
+                if kw.kind == *kind && crate::keywords::has_quality(kw, quality.as_ref()))
         }),
         Modification::RemoveAllAbilities => c.abilities.clear(),
         Modification::CantHaveKeyword(k) => c

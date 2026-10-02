@@ -53,7 +53,10 @@ fn has_activated_abilities_of(l: &str, text: &str, _ctx: &CompileContext) -> Opt
     Some(vec![AbilityDef::new(
         AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
             affected: Filter::Source,
-            mods: vec![Modification::AddActivatedAbilitiesOf(from)],
+            mods: vec![Modification::AddAbilitiesOf {
+                from: Box::new(Sel::All(from)),
+                which: AbilitySelection::ACTIVATED,
+            }],
         })),
         text,
     )])
@@ -86,42 +89,12 @@ fn gains_activated_abilities_of(l: &str, b: &mut Builder) -> Option<Effect> {
     let slot = b.add_target(spec, of);
     Some(Effect::Modify {
         what,
-        mods: vec![Modification::AddActivatedAbilitiesOf(Filter::In(Box::new(
-            Sel::Target(slot),
-        )))],
+        mods: vec![Modification::AddAbilitiesOf {
+            from: Box::new(Sel::Target(slot)),
+            which: AbilitySelection::ACTIVATED,
+        }],
         duration: Duration::EndOfTurn,
     })
 }
 
 inventory::submit! { EffectPattern { name: "grants: gains all activated abilities of target ...", priority: 100, parse: gains_activated_abilities_of } }
-
-/// "You may spend blue mana as though it were mana of any color to pay the activation
-/// costs of ~'s abilities." (Quicksilver Elemental), "You may spend mana as though it were
-/// mana of any color to pay the activation costs of ~'s abilities." (Manascape
-/// Refractor): any of its activated abilities, including those it gained (CR 609.4b).
-fn spend_for_own_abilities(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let r = end(l).strip_prefix("you may spend ")?;
-    let (kind, r) = r.split_once(" as though it were mana of any color to pay the activation costs of ~'s abilities")?;
-    if !r.is_empty() {
-        return None;
-    }
-    let types = match kind {
-        "mana" => vec![],
-        "white mana" => vec![crate::mana::ManaType::W],
-        "blue mana" => vec![crate::mana::ManaType::U],
-        "black mana" => vec![crate::mana::ManaType::B],
-        "red mana" => vec![crate::mana::ManaType::R],
-        "green mana" => vec![crate::mana::ManaType::G],
-        "colorless mana" => vec![crate::mana::ManaType::C],
-        _ => return None,
-    };
-    Some(vec![AbilityDef::new(
-        AbilityKind::Static(StaticAbility::new(StaticEffect::SpendAsAnyColor {
-            applies_to: CostTarget::Abilities(Filter::Source),
-            types,
-        })),
-        text,
-    )])
-}
-
-inventory::submit! { StaticPattern { name: "grants: spend mana as though any color for ~'s abilities", priority: 100, parse: spend_for_own_abilities } }

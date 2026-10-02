@@ -316,12 +316,19 @@ impl Game {
             base.link = a.link;
             base.ability_uid = a.uid;
             let mut infos: Vec<EventInfo> = Vec::new();
+            // CR 603.2d: how many additional times each event makes it trigger.
+            let mut extras: Vec<usize> = Vec::new();
             let gone = looking_back.contains(&(src, a.uid));
             for ev in batch {
                 if gone && !looks_back(trigger, ev) {
                     continue;
                 }
-                infos.extend(self.trigger_matches_ctx(trigger, &base, ev));
+                let matched = self.trigger_matches_ctx(trigger, &base, ev);
+                if !matched.is_empty() {
+                    let extra = self.additional_triggers(src, &t.trigger, ev, None);
+                    extras.extend(std::iter::repeat_n(extra, matched.len()));
+                }
+                infos.extend(matched);
             }
             if infos.is_empty() {
                 continue;
@@ -333,10 +340,17 @@ impl Game {
                 BatchPer::Other => i.other.map(Entity::Object),
             };
             let mut groups: Vec<Vec<EventInfo>> = Vec::new();
-            for info in infos {
-                match groups.iter_mut().find(|g| key(&g[0]) == key(&info)) {
-                    Some(g) => g.push(info),
-                    None => groups.push(vec![info]),
+            let mut group_extra: Vec<usize> = Vec::new();
+            for (info, extra) in infos.into_iter().zip(extras) {
+                match groups.iter().position(|g| key(&g[0]) == key(&info)) {
+                    Some(i) => {
+                        groups[i].push(info);
+                        group_extra[i] = group_extra[i].max(extra);
+                    }
+                    None => {
+                        groups.push(vec![info]);
+                        group_extra.push(extra);
+                    }
                 }
             }
             if first_time {
@@ -347,9 +361,16 @@ impl Game {
                     .flat_map(|e| self.trigger_matches_ctx(trigger, &base, e))
                     .map(|i| key(&i))
                     .collect();
-                groups.retain(|g| !earlier.iter().any(|k| k.is_none() || *k == key(&g[0])));
+                let keep: Vec<bool> = groups
+                    .iter()
+                    .map(|g| !earlier.iter().any(|k| k.is_none() || *k == key(&g[0])))
+                    .collect();
+                let mut k = keep.iter();
+                groups.retain(|_| *k.next().unwrap_or(&true));
+                let mut k = keep.iter();
+                group_extra.retain(|_| *k.next().unwrap_or(&true));
             }
-            for g in groups {
+            for (g, extra) in groups.into_iter().zip(group_extra) {
                 let mut info = g[0].clone();
                 // "That much"/"that many": the total amount (damage, life, ...), or the
                 // number of events for events without an amount (objects entering, ...).
@@ -404,17 +425,19 @@ impl Game {
                     }
                     *n += 1;
                 }
-                self.trigger_order += 1;
-                found.push(PendingTrigger {
-                    source: src,
-                    controller: ctl,
-                    ability: a.clone(),
-                    event: info,
-                    source_lki: Some(Box::new(self.obj(src).chars.clone())),
-                    saved: None,
-                    body: None,
-                    order: self.trigger_order,
-                });
+                for _ in 0..1 + extra {
+                    self.trigger_order += 1;
+                    found.push(PendingTrigger {
+                        source: src,
+                        controller: ctl,
+                        ability: a.clone(),
+                        event: info.clone(),
+                        source_lki: Some(Box::new(self.obj(src).chars.clone())),
+                        saved: None,
+                        body: None,
+                        order: self.trigger_order,
+                    });
+                }
             }
         }
         // CR 801.7: only events entirely within the controller's range of influence.

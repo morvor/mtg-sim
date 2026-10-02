@@ -2,6 +2,7 @@
 //! what they do. Each name the renderer can put into words is listed here; any other
 //! name is a gap, reported as a mismatch.
 
+use super::custom_more::custom_player_mod_more;
 use super::players::Case;
 use super::*;
 
@@ -49,7 +50,14 @@ impl Renderer<'_> {
             "foretell:it becomes foretold" => "it becomes foretold".into(),
             "chaos ensues (effect)" => "chaos ensues".into(),
             "ascend:spell" => "ascend".into(),
-            "saddle:becomes saddled" => format!("{} becomes saddled", me(self)),
+            // A saddled permanent stays saddled until end of turn (CR 702.171b).
+            "saddle:becomes saddled" => {
+                let w = match self.each_target {
+                    Some(i) => self.target_mention(i, Case::Subj),
+                    None => me(self),
+                };
+                format!("{w} becomes saddled {{opt:until end of turn}}")
+            }
             "plot:becomes plotted" => "it becomes plotted".into(),
             "friend or foe:choose" => "for each player, choose friend or foe".into(),
             n if n.starts_with("cast from hand free with mana value at most:") => {
@@ -163,7 +171,14 @@ impl Renderer<'_> {
                 }
                 s
             }
-            other => return self.gap(format!("Effect::Custom({other})")),
+            n if n.starts_with("play permission terms:") => match self.permission_terms(n) {
+                Some(s) => s,
+                None => return self.gap(format!("Effect::Custom({n})")),
+            },
+            other => match self.custom_effect_more(other) {
+                Some(s) => s,
+                None => return self.gap(format!("Effect::Custom({other})")),
+            },
         };
         s
     }
@@ -218,6 +233,11 @@ impl Renderer<'_> {
                 let k = &n["has landwalk:".len()..];
                 (false, format!("with {k}"))
             }
+            // "if you paid life this way" (see `kw/offered_costs.rs`).
+            n if n.starts_with(crate::kw::offered_costs::PAID_OFFERED_COST) => {
+                let cost = &n[crate::kw::offered_costs::PAID_OFFERED_COST.len()..];
+                (false, format!("for which you chose to {cost}"))
+            }
             other => {
                 let g = self.gap(format!("Filter::Custom({other})"));
                 (false, g)
@@ -226,6 +246,10 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_value(&mut self, name: &str) -> String {
+        // "the amount of {B} spent on X" (see `payment_rules`).
+        if let Some(t) = name.strip_prefix(crate::payment_rules::MANA_SPENT_ON_X) {
+            return format!("the amount of {{{t}}} spent on X");
+        }
         match name {
             "party_size" => "the number of creatures in your party".into(),
             crate::kw::hand_graveyard_actions::THAT_MANY => "that many".into(),
@@ -263,6 +287,11 @@ impl Renderer<'_> {
                 let l = &n["mana_spent_of:".len()..];
                 format!("the amount of {{{l}}} spent to cast {}", self.me())
             }
+            // "that many": the amount paid for "you may pay any amount of mana" (see
+            // `kw/offered_costs.rs`).
+            n if n.starts_with(crate::kw::offered_costs::PAID_OFFERED_AMOUNT) => {
+                "the amount of mana you paid this way".into()
+            }
             "opponents_counters:poison" => {
                 "the number of poison counters your opponents have".into()
             }
@@ -278,7 +307,10 @@ impl Renderer<'_> {
                 "the number of creatures that convoked it".into()
             }
             "bushido:points of bushido it has" => "the number of points of bushido it has".into(),
-            other => self.gap(format!("Value::Custom({other})")),
+            other => match self.custom_value_more(other) {
+                Some(s) => s,
+                None => self.gap(format!("Value::Custom({other})")),
+            },
         }
     }
 
@@ -344,6 +376,11 @@ impl Renderer<'_> {
             ),
             "turn:creature cards put into graveyards" => format!(
                 "{} or more creature cards were put into graveyards from anywhere this turn",
+                number_word(min)
+            ),
+            // "if an opponent was dealt 7 or more damage this turn".
+            "hideaway:most damage dealt to an opponent this turn" => format!(
+                "an opponent was dealt {} or more damage this turn",
                 number_word(min)
             ),
             "max_mana_spent_of_one_color" => format!(
@@ -473,7 +510,10 @@ impl Renderer<'_> {
                 let t = &n[crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN.len()..];
                 format!("you've sacrificed {} this turn", with_article(t))
             }
-            other => self.gap(format!("Condition::Custom({other})")),
+            other => match self.custom_condition_more(other) {
+                Some(s) => s,
+                None => self.gap(format!("Condition::Custom({other})")),
+            },
         }
     }
 
@@ -543,6 +583,9 @@ impl Renderer<'_> {
                 "you may have {} assign its combat damage as though it weren't blocked",
                 me(self)
             ),
+            "may look at cards exiled with this" => {
+                format!("you may look at cards exiled with {}", me(self))
+            }
             "hands revealed:each" => "players play with their hands revealed".into(),
             "hands revealed:opponents" => "your opponents play with their hands revealed".into(),
             "opponents' creatures targetable as though no hexproof" => "creatures your opponents control with hexproof can be the targets of spells and abilities you control as though they didn't have hexproof".into(),
@@ -564,7 +607,7 @@ impl Renderer<'_> {
                     other => format!("partner—{other}"),
                 }
             }
-            n if n.starts_with("tap_total_power:") => {
+            n if n.starts_with("tap_total_power:") && !n.ends_with(":toughness") => {
                 let mut it = n["tap_total_power:".len()..].split(':');
                 let kw = it.next().unwrap_or("");
                 let delta = it.next().unwrap_or("");
@@ -579,7 +622,10 @@ impl Renderer<'_> {
                         me(self),
                         number_word(d.parse().unwrap_or(0))
                     ),
-                    None => self.gap(format!("StaticEffect::Custom({n})")),
+                    None => match self.custom_static_more(n) {
+                        Some(s) => s,
+                        None => self.gap(format!("StaticEffect::Custom({n})")),
+                    },
                 }
             }
             n if n.starts_with("entering doesn't cause abilities to trigger:") => {
@@ -683,7 +729,10 @@ impl Renderer<'_> {
                 "{} stations permanents using its toughness rather than its power",
                 me(self)
             ),
-            other => self.gap(format!("StaticEffect::Custom({other})")),
+            other => match self.custom_static_more(other) {
+                Some(s) => s,
+                None => self.gap(format!("StaticEffect::Custom({other})")),
+            },
         }
     }
 
@@ -709,7 +758,10 @@ impl Renderer<'_> {
 
     /// A modification implemented in code (`Modification::Custom`), as a verb phrase.
     pub(crate) fn custom_modification(&mut self, name: &str) -> String {
-        self.gap(format!("Modification::Custom({name})"))
+        match self.custom_modification_more(name) {
+            Some(s) => s,
+            None => self.gap(format!("Modification::Custom({name})")),
+        }
     }
 
     /// A custom rule for players: `subj` is "you", "players", ...; `poss` its possessive.
@@ -738,7 +790,10 @@ impl Renderer<'_> {
             "may look at the top card of their library any time" => {
                 format!("{subj} may look at the top card of {poss} library any time")
             }
-            other => self.gap(format!("PlayerModification::Custom({other})")),
+            other => match custom_player_mod_more(other, subj) {
+                Some(s) => s,
+                None => self.gap(format!("PlayerModification::Custom({other})")),
+            },
         }
     }
 }

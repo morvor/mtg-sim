@@ -1315,17 +1315,21 @@ fn parse_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)> {
             if let Some(x) = r.strip_prefix(" untapped") {
                 f = Filter::and(vec![f, Filter::Untapped]);
                 r = x;
-            } else if let Some(x) = r
-                .strip_prefix(" from a graveyard")
-                .or_else(|| r.strip_prefix(" from your graveyard"))
-            {
+            } else if let Some(x) = r.strip_prefix(" from a graveyard") {
                 from = Some(ZoneKind::Graveyard);
+                r = x;
+            } else if let Some(x) = r.strip_prefix(" from your graveyard") {
+                // A card goes to its owner's graveyard (CR 400.3): one from your graveyard is yours.
+                from = Some(ZoneKind::Graveyard);
+                f = Filter::and(vec![f, Filter::OwnedBy(PlayerRel::You)]);
                 r = x;
             } else if let Some(x) = r.strip_prefix(" from exile") {
                 from = Some(ZoneKind::Exile);
                 r = x;
             } else if let Some(x) = r.strip_prefix(" from your hand") {
+                // A card in your hand is one you own (CR 400.3).
                 from = Some(ZoneKind::Hand);
+                f = Filter::and(vec![f, Filter::OwnedBy(PlayerRel::You)]);
                 r = x;
             }
             // "Whenever a nonland permanent an opponent owns enters the battlefield under
@@ -2074,6 +2078,13 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
     let parsed = match (&to, subj.self_only) {
         // "~ deals damage to a creature, destroy that creature"
         (DamageRecipient::Object(_), true) => (
+            cond,
+            Sel::TriggerObject,
+            PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+        ),
+        // "Whenever enchanted creature deals damage to a creature, destroy the other
+        // creature": one source, so "it" is the damaged creature, as for `~`.
+        (DamageRecipient::Object(_), false) if matches!(subj.filter, Filter::AttachedToSource) => (
             cond,
             Sel::TriggerObject,
             PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),

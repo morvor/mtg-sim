@@ -104,10 +104,8 @@ pub fn own_permissions_only<R>(f: impl FnOnce() -> R) -> R {
 /// your hand without paying their mana costs" offers an alternative cost instead, see
 /// `casting.rs`); spells cast with one may have flash.
 fn static_terms(perm: &PlayPermission) -> (bool, PlayTerms) {
-    let mut terms = PlayTerms {
-        flash: perm.flash,
-        ..Default::default()
-    };
+    let mut terms = perm.terms.clone();
+    terms.flash |= perm.flash;
     let mut free = false;
     if perm.zone != ZoneKind::Hand {
         match &perm.cost {
@@ -159,13 +157,42 @@ pub fn allowing(
         if gr.player != p || gr.object != card || (land && gr.terms.spells_only) {
             continue;
         }
+        // "For as long as you control ~", "during any turn you attacked with ~", "during
+        // your next turn", "you may cast red spells from among them" (see `PlayTerms`).
+        let ctx = Ctx::new(gr.source, gr.player);
+        if g.effect_expired(&gr.duration, gr.source, gr.player)
+            // "During your next turn": not before that turn begins (when the permission
+            // becomes one that lasts until end of turn, see `turn.rs`).
+            || (gr.terms.later_turn && matches!(gr.duration, Duration::UntilEndOfYourNextTurn))
+            || gr
+                .terms
+                .condition
+                .as_ref()
+                .is_some_and(|c| !g.eval_cond(c, &ctx))
+        {
+            continue;
+        }
+        let qualities = match &gr.terms.what {
+            Some(f) => {
+                let f = if land {
+                    f.clone()
+                } else {
+                    crate::casting::as_spell_filter(f)
+                };
+                if !matches_with_chars(g, card, chars, &f, &ctx) {
+                    continue;
+                }
+                Some((f, gr.source, gr.player))
+            }
+            None => None,
+        };
         out.push(CastPermission {
             kind: PermissionKind::Grant(i),
             source: gr.source,
             free: gr.free,
             terms: gr.terms.clone(),
             once: None,
-            qualities: None,
+            qualities,
         });
     }
     // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission to
@@ -178,6 +205,21 @@ pub fn allowing(
         }
         let ctx = Ctx::new(Some(*src), *ctl);
         if !g.player_rel_matches(perm.who, p, &ctx) || !in_permission_zone(g, p, card, perm) {
+            continue;
+        }
+        // A single-use permission already used ("You may cast a creature spell from your
+        // graveyard this turn"), or one that applies only while a condition holds.
+        if once.as_ref().is_some_and(|slot| {
+            g.history
+                .once_permissions_used
+                .iter()
+                .any(|(o, s)| o == src && s == slot)
+        }) || perm
+            .terms
+            .condition
+            .as_ref()
+            .is_some_and(|c| !g.eval_cond(c, &ctx))
+        {
             continue;
         }
         let f = if land {
@@ -195,7 +237,7 @@ pub fn allowing(
             free,
             terms,
             once: once.clone().map(|slot| (*src, slot)),
-            qualities: Some((f, Some(*src), *ctl)),
+            qualities: Some((spell_qualities(&f), Some(*src), *ctl)),
         });
     }
     out.sort_by_key(|c| {
@@ -206,6 +248,17 @@ pub fn allowing(
         )
     });
     out
+}
+
+/// The qualities of a permission's filter a spell must still have once its proposal is
+/// complete (CR 601.2e, 601.3e): not where the card was ("cards exiled with ~", "in your
+/// graveyard"), which was judged as it began to be cast, before it moved to the stack.
+fn spell_qualities(f: &Filter) -> Filter {
+    match f {
+        Filter::In(_) | Filter::InZone(_) => Filter::Any,
+        Filter::And(v) => Filter::And(v.iter().map(spell_qualities).collect()),
+        other => other.clone(),
+    }
 }
 
 /// Whether an effect's permission (not a rule's) may let `p` play `card` from where it is,
@@ -272,6 +325,7 @@ pub fn same_way(a: &CastOption, b: &CastOption) -> bool {
         && a.tag == b.tag
         && a.flash == b.flash
         && a.any_time == b.any_time
+        && a.alt_source == b.alt_source
         && format!("{:?}", a.alt_cost) == format!("{:?}", b.alt_cost)
         && format!("{:?}", a.extra_cost) == format!("{:?}", b.extra_cost)
 }
@@ -548,11 +602,107 @@ pub fn spend_terms(perm: Option<&CastPermission>, cost: &mut Cost) {
     }
 }
 
-/// Records that `perm` was used to play a card: a once-each-turn permission is used up.
+/// Records that `perm` was used to play a card: a once-each-turn permission is used up;
+/// so is one of the cards an effect's permissions with a limit let the player play ("you
+/// may cast a spell from among those cards"): once that many are played, the other cards'
+/// permissions end.
 pub fn record_use(g: &mut Game, perm: Option<&CastPermission>) {
     if let Some((src, slot)) = perm.and_then(|c| c.once.clone()) {
         g.history.once_permissions_used.push((src, slot));
         g.dirty = true;
+    }
+    if let Some(CastPermission {
+        kind: PermissionKind::Grant(_),
+        terms,
+        ..
+    }) = perm
+    {
+        let group = terms.group;
+        if group == 0 {
+            return;
+        }
+        // How many more of those cards may still be played (the group's current count).
+        let Some(now) = g
+            .play_grants
+            .iter()
+            .find(|x| x.terms.group == group)
+            .map(|x| x.terms.limit.unwrap_or(1))
+        else {
+            return;
+        };
+        let left = now.saturating_sub(1);
+        if left == 0 {
+            g.play_grants.retain(|x| x.terms.group != group);
+        } else {
+            for x in g.play_grants.iter_mut().filter(|x| x.terms.group == group) {
+                x.terms.limit = Some(left);
+            }
+        }
+    }
+}
+
+/// The spell `spell` was just put on the stack, cast with the permission `perm`: "If that
+/// spell would be put into your graveyard, exile it instead" applies to it (a replacement
+/// effect for that object only, CR 614.1a, 400.7).
+pub fn spell_cast_with(g: &mut Game, perm: Option<&CastPermission>, spell: ObjectId) {
+    let Some(c) = perm else {
+        return;
+    };
+    if c.terms.exile_instead {
+        let mut ctx = Ctx::new(c.source, g.obj(spell).controller);
+        ctx.set_var(vars::IT, vec![Entity::Object(spell)]);
+        g.exec(
+            &Effect::AddReplacement {
+                def: ReplacementDef {
+                    event: ReplacementEvent::ZoneChange {
+                        filter: Filter::In(Box::new(Sel::Var(vars::IT))),
+                        from: None,
+                        to: Some(ZoneKind::Graveyard),
+                    },
+                    action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+                    self_replacement: false,
+                    optional: false,
+                },
+                duration: Duration::Permanent,
+                uses: None,
+            },
+            &mut ctx,
+        );
+    }
+}
+
+/// The permissions `g.play_grants[before..]` were just given with their terms: those
+/// with a limit ("you may cast a spell from among those cards") share a group, used up
+/// together (see [`record_use`]); one given "until you exile another card with ~" ends
+/// its source's earlier such permissions.
+pub fn given(g: &mut Game, before: usize) {
+    if before >= g.play_grants.len() {
+        return;
+    }
+    if g.play_grants[before..]
+        .iter()
+        .any(|gr| gr.terms.limit.is_some() && gr.terms.group == 0)
+    {
+        // Never 0 (no group).
+        let id = g.new_effect_id() + 1;
+        for gr in g.play_grants[before..].iter_mut() {
+            if gr.terms.limit.is_some() && gr.terms.group == 0 {
+                gr.terms.group = id;
+            }
+        }
+    }
+    let newer: Vec<Option<ObjectId>> = g.play_grants[before..]
+        .iter()
+        .filter(|gr| gr.terms.until_another && gr.source.is_some())
+        .map(|gr| gr.source)
+        .collect();
+    if !newer.is_empty() {
+        let mut i = 0;
+        g.play_grants.retain(|gr| {
+            let keep = i >= before || !(gr.terms.until_another && newer.contains(&gr.source));
+            i += 1;
+            keep
+        });
     }
 }
 

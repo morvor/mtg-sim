@@ -228,7 +228,8 @@ impl Renderer<'_> {
             Filter::ChosenColor => "the chosen color".into(),
             Filter::ChosenName => "the chosen name".into(),
             Filter::ControlledBy(PlayerRel::Chosen) => "the chosen player".into(),
-            Filter::ControlledBy(PlayerRel::Opponent) => "your opponents".into(),
+            // CR 702.16i, 702.16k: protection from each opponent.
+            Filter::ControlledBy(PlayerRel::Opponent) => "each of your opponents".into(),
             Filter::ManaValueOfChosenQuality => "each mana value of the chosen quality".into(),
             Filter::Supertype(s) => nouns::supertype_word(*s).into(),
             Filter::ManaValue(c, v) => {

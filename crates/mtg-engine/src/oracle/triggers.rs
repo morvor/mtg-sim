@@ -25,7 +25,7 @@ fn parse_triggered_at(
     ctx: &CompileContext,
 ) -> Option<Ability> {
     let lower = cond_s.to_lowercase();
-    let (trigger, it, it_player) = parse_trigger_condition(&lower)?;
+    let (trigger, it, mut it_player) = parse_trigger_condition(&lower)?;
     let mut eff = eff_s.trim();
     // "This ability triggers only once each turn." is a rule about the ability, not part
     // of its effect.
@@ -118,6 +118,16 @@ fn parse_triggered_at(
                     body_it = Some(Sel::This);
                 }
                 intervening = Some(cond);
+                // "Whenever ~ attacks, if defending player controls no Walls, it deals 2
+                // damage to each creature without flying that player controls."
+                if c.starts_with("defending player ")
+                    && (matches!(it_player, PlayerRef::You)
+                        || super::patterns::oracle_hardening_referents::is_no_player_referent(
+                            &it_player,
+                        ))
+                {
+                    it_player = PlayerRef::DefendingPlayer;
+                }
                 eff = &eff[3 + c.len() + 2..];
                 // "..., if ~ is an enchantment, it becomes a 3/3 Knight creature": the
                 // subject "it" is the condition's.
@@ -164,7 +174,15 @@ fn parse_triggered_at(
     } else {
         eff
     };
+    let trigger_it = it.clone();
     let mut body = parse_trigger_body(eff, ctx, it, it_player)?;
+    // "Whenever a permanent other than a basic land enters, destroy all other permanents
+    // with that name": with no name chosen, "that name" is the triggering object's.
+    super::patterns::basic_effects_targets::that_name_of_trigger_object(
+        &mut body,
+        &trigger_it,
+        eff,
+    )?;
     // "Whenever you cast your first spell with {X} in its mana cost each turn, put X +1/+1
     // counters on ~": a triggered ability has no X of its own; X is the spell's (CR 107.3e).
     if casts_spell_with_x(&trigger) {
@@ -187,6 +205,14 @@ fn parse_triggered_at(
         .is_some_and(super::patterns::graveyard_order::requires_source_in_graveyard)
     {
         tr.zone = FunctionZone::Graveyard;
+    }
+    // "if ~ is in the command zone" / "if ~ is exiled": it functions there (CR 113.6b).
+    if let Some(z) = tr
+        .intervening_if
+        .as_ref()
+        .and_then(super::patterns::conditions_state::required_source_zone)
+    {
+        tr.zone = z;
     }
     // CR 113.6: an instant or sorcery is never on the battlefield, so a triggered ability
     // that would only function there can't be what the text means.
