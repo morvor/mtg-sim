@@ -197,7 +197,7 @@ impl Game {
                 let base = &self.obj(*id).base.abilities;
                 base.iter().any(|a| {
                     matches!(&a.kind, AbilityKind::Static(s)
-                        if s.is_cda || s.zone == FunctionZone::Anywhere)
+                        if s.is_cda || matches!(s.zone, FunctionZone::Anywhere | FunctionZone::AnywhereExcept(_)))
                 }) || crate::keyword_impls::derives_ability_functioning_everywhere(base)
             }));
         }

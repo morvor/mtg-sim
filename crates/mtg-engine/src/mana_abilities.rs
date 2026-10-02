@@ -773,8 +773,15 @@ pub fn empty_pool(g: &mut Game, p: PlayerId) {
     // of combat step (and so the combat phase) ends (CR 702.189a).
     let step = g.turn.step;
     let in_combat = step.is_combat() && step != crate::turn::Step::EndOfCombat;
+    // In Grand Melee, mana added during another turn being taken at the same time empties
+    // as that turn's steps end (CR 807.4).
+    let this_turn = crate::multiplayer::grand_melee::current_turn_key(g);
     let pool = &mut g.players[p.idx()].mana_pool;
-    let stays = |m: &crate::mana::Mana| m.persistent || (in_combat && m.until_end_of_combat);
+    let stays = |m: &crate::mana::Mana| {
+        m.persistent
+            || (in_combat && m.until_end_of_combat)
+            || this_turn.is_some_and(|n| m.turn != n)
+    };
     if let Some(t) = becomes.first() {
         // CR 616.1: with several such effects the player would choose one; the first
         // applies (each makes the mana stay).
@@ -878,6 +885,7 @@ fn add_mana_with(
             restriction: restriction.clone(),
             persistent: false,
             until_end_of_combat: false,
+            turn: 0,
             // A separate delayed triggered ability for each mana (CR 106.6a).
             rider: rider.as_ref().map(|r| {
                 Box::new(ManaRider {

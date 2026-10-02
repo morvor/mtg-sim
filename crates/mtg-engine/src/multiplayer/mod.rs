@@ -53,10 +53,14 @@ pub fn zone_size(g: &Game, p: PlayerId, zone: crate::ability::ZoneKind) -> usize
         };
     }
     let pl = g.player(p);
+    // Only cards count: a token briefly in a hand or graveyard (until the next
+    // state-based action check, CR 111.7) isn't a card (CR 108.2b).
+    let cards =
+        |ids: &[crate::types::ObjectId]| ids.iter().filter(|o| g.obj(**o).is_card()).count();
     match zone {
-        ZoneKind::Hand => pl.hand.len(),
-        ZoneKind::Library => pl.library.len(),
-        ZoneKind::Graveyard => pl.graveyard.len(),
+        ZoneKind::Hand => cards(&pl.hand),
+        ZoneKind::Library => cards(&pl.library),
+        ZoneKind::Graveyard => cards(&pl.graveyard),
         _ => 0,
     }
 }
@@ -106,11 +110,11 @@ pub fn remove_player_objects(g: &mut Game, p: PlayerId) {
     // CR 901.6, 901.10, 901.14b: planar cards and the planar controller.
     let planar = crate::planechase::player_leaving(g, p);
     // CR 800.4i: remember what the player's zones held as they left.
-    let pl = g.player(p);
+    use crate::ability::ZoneKind;
     let info = DepartedPlayer {
-        hand: pl.hand.len(),
-        library: pl.library.len(),
-        graveyard: pl.graveyard.len(),
+        hand: zone_size(g, p, ZoneKind::Hand),
+        library: zone_size(g, p, ZoneKind::Library),
+        graveyard: zone_size(g, p, ZoneKind::Graveyard),
     };
     g.multiplayer.departed.insert(p, info);
     // Objects owned by the player leave the game — except in the ante zone (CR 800.4n).

@@ -51,7 +51,7 @@ enum Subject {
 /// Base verbs a third-person form may be turned into (the whitelist keeps nouns and
 /// other words ending in "s" from being "conjugated").
 const VERBS: &[&str] = &[
-    "attach", "become", "bid", "cast", "choose", "control", "create", "discard",
+    "ante", "attach", "become", "bid", "cast", "choose", "control", "create", "discard",
     "discover", "draw", "exile", "gain", "get", "have", "investigate", "look", "lose",
     "mill", "own", "pay", "play", "proliferate", "put", "reveal", "return", "sacrifice",
     "scry", "search", "separate", "shuffle", "surveil", "take", "tap", "untap", "do",
