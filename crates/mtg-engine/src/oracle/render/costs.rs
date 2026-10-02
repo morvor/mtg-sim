@@ -142,8 +142,20 @@ impl Renderer<'_> {
                     None => "counter".into(),
                 };
                 let (c, w) = self.counted(count, &noun);
+                let w = w.unwrap_or_default();
+                // "Remove two counters from ~" (counters of any kinds).
+                if matches!(filter, Filter::Source) {
+                    let m = self.me();
+                    return format!("remove {c} from {m}{w}");
+                }
+                // "Remove a counter from a creature you control": one counter comes from
+                // one of them.
+                if matches!(count, Value::Const(1)) {
+                    let f = self.noun_det(filter, nouns::Det::A);
+                    return format!("remove {c} from {f}{w}");
+                }
                 let f = self.noun(filter, Num::Many);
-                format!("remove {c} from among {f}{}", w.unwrap_or_default())
+                format!("remove {c} from among {f}{w}")
             }
             CostPart::AddCounters { kind, count } => {
                 let (c, w) = self.counted(count, &counter_name(kind));

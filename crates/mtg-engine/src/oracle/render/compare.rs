@@ -152,6 +152,19 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Anaphora (plural).",
     },
     Equivalence {
+        pattern: r"\b(until end of turn|this turn)\. (?:it's|it is) still an? (?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)\b",
+        replacement: "in addition to its other types $1",
+        why: "CR 205.1b: an effect that says the object is \"still a [type]\" and one that \
+              gives types \"in addition to its other types\" both keep all its prior card \
+              types, supertypes and subtypes. (The sentence after a duration applies for \
+              that duration.)",
+    },
+    Equivalence {
+        pattern: r"(?:\. (?:it's|it is)| (?:that's|that is)) still an? (?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)\b",
+        replacement: " in addition to its other types",
+        why: "CR 205.1b, as above.",
+    },
+    Equivalence {
         pattern: r"\buntil end of turn\b",
         replacement: "this turn",
         why: "\"Until end of turn\" and \"this turn\" effects both end in the cleanup step \

@@ -180,7 +180,8 @@ impl Renderer<'_> {
                 let o = match op {
                     AggOp::Max => "greatest",
                     AggOp::Min => "least",
-                    AggOp::Sum => "total",
+                    // "the total power of creatures you control"
+                    AggOp::Sum => return format!("the total {st} of {s}"),
                 };
                 format!("the {o} {st} among {s}")
             }
