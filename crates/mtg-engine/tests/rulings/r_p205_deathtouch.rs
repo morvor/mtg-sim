@@ -27,6 +27,14 @@ fn a_deathtouch_trampler_dealt_lethal_damage_dies_before_avelines_trigger_resolv
     attack_with(&mut t, &[(aveline, Entity::Player(P1))]);
     block_and_finish(&mut t, P1, &[(giant, aveline)]);
     t.resolve_all();
+    // Aveline's ability did trigger and go on the stack (after Aveline died).
+    assert_eq!(
+        t.g.turn_events
+            .iter()
+            .filter(|e| matches!(e, Event::AbilityTriggeredOnStack { source, .. } if *source == aveline))
+            .count(),
+        1
+    );
     // One damage was lethal to the Giant (deathtouch); four trampled over.
     assert!(t.in_graveyard(P1, "Hill Giant"));
     assert_eq!(t.life(P1), 16);
@@ -68,11 +76,9 @@ fn ochran_assassin_destroys_only_as_many_blockers_as_it_deals_damage_to() {
 fn a_daybound_spell_cast_at_night_enters_nightbound_face_up_without_transforming() {
     cr!("702.145b", "712.14a");
     ruling!(
-        "Werewhat",
-        "If you cast a double-faced spell with daybound during night, that spell will be front face up (that is, daybound face up) on the stack. However, it will enter the battlefield with its back face up (that is, with its nightbound face up). It won’t enter the battlefield with its daybound face up and then transform."
+        "Tavern Ruffian // Tavern Smasher",
+        "If you cast a spell with daybound during night, that spell will be front face up (that is, daybound face up) on the stack. However, it will enter the battlefield with its back face up (that is, with its nightbound face up). It won't enter with its daybound face up and then transform."
     );
-    // Werewhat itself isn't supported; Tavern Ruffian // Tavern Smasher is a typical
-    // double-faced daybound card.
     supported("Tavern Ruffian // Tavern Smasher");
     let mut t = TestGame::new(2);
     t.g.set_day(false);

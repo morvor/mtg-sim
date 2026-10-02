@@ -434,10 +434,14 @@ fn wakestone_gargoyle_affects_defenders_that_arrive_after_it_resolves() {
     // With haste (Fervor: "Creatures you control have haste."), it can attack.
     t.battlefield(P0, "Fervor");
     assert!(can_attack(&mut t, wall));
-    // Only creatures P0 controls: P1's Wall still can't attack in P1's turn.
+    // Only creatures P0 controls: P1's Wall isn't affected, even this turn.
     let theirs = t.battlefield(P1, "Wall of Wood");
-    to_beginning_of_combat(&mut t, P1);
     assert!(!can_attack(&mut t, theirs));
+    // A Wall P0 gains control of later this turn is affected.
+    give_control(&mut t, theirs, P0);
+    let theirs = t.g.current(theirs);
+    t.g.objects[theirs.0 as usize].summoning_sick = false;
+    assert!(can_attack(&mut t, theirs));
     // Without the Gargoyle's effect, a hasty Wall still couldn't.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Fervor");

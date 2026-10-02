@@ -61,7 +61,9 @@ fn voracious_dragon_counts_goblins_devoured_as_they_last_existed() {
     // A Goblin token (it ceases to exist once sacrificed) and a Grizzly Bears.
     let goblin = create_token(&mut t, P0, "Goblin");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    // A Goblin that isn't devoured doesn't count.
+    // Goblins that aren't devoured don't count (counting them, or every devoured
+    // creature, would deal 4).
+    t.battlefield(P0, "Raging Goblin");
     t.battlefield(P0, "Raging Goblin");
     t.answer_choose(P0, &objs(&[goblin, bears]));
     t.answer_targets(P0, &[Entity::Player(P1)]);

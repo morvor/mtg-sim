@@ -102,12 +102,27 @@ fn delve_pays_only_generic_mana_up_to_the_generic_requirement() {
         });
         t.lands(P0, "Island", colored - 1);
         let card = t.hand(P0, name);
-        assert!(
-            t.cast(P0, card).target(Entity::Player(P1)).try_go().is_err(),
-            "{name}"
-        );
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        assert!(t.cast(P0, card).try_go().is_err(), "{name}");
         assert_eq!(t.graveyard_size(P0), 8, "{name}");
     }
+}
+
+#[test]
+fn delve_can_pay_for_generic_mana_added_by_a_cost_increase() {
+    cr!("702.66a", "702.66b", "601.2f");
+    ruling!(
+        "Sorcerous Squall",
+        "You can exile cards to pay only for generic mana, and you can't exile more cards than the generic mana requirement of a spell with delve. For example, you can't exile more than six cards from your graveyard to cast Sorcerous Squall unless an effect has increased its cost."
+    );
+    // Thalia, Guardian of Thraben: noncreature spells cost {1} more. The total cost is
+    // {7}{U}{U}{U}, so delve can pay for seven.
+    supported("Thalia, Guardian of Thraben");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Thalia, Guardian of Thraben");
+    let (_, offers) = cast_with_delve(&mut t, "Sorcerous Squall", 8, 3);
+    assert_eq!(offers, vec![(8, 7)]);
+    assert_eq!(t.graveyard_size(P0), 1);
 }
 
 // ---------------------------------------------------------------------------
