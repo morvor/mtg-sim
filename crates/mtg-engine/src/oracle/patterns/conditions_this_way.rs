@@ -361,15 +361,28 @@ fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     };
     let in_var = Filter::In(Box::new(Sel::Var(SNAPSHOT)));
     let graveyard = word == "put into a graveyard";
-    let affected = Filter::and(vec![
+    let what = Filter::and(vec![
         f.clone(),
         if graveyard {
             Filter::InZone(ZoneKind::Graveyard)
         } else {
             Filter::Any
         },
-        in_var.clone(),
     ]);
+    let affected = Filter::and(vec![what.clone(), in_var.clone()]);
+    // Some affected object matches. (The sacrificed objects are their last known
+    // information: they're checked as they were, not looked for where they are.)
+    let snapshot = Sel::Var(SNAPSHOT);
+    let any_matches = match &what {
+        Filter::Any => Condition::SelNonEmpty(snapshot.clone()),
+        w => Condition::And(vec![
+            Condition::SelNonEmpty(snapshot.clone()),
+            Condition::Not(Box::new(Condition::SelMatches(
+                snapshot.clone(),
+                Filter::not(w.clone()),
+            ))),
+        ]),
+    };
     // What the condition checks, and what "it" in the effect refers to.
     let destroyed_target = match &instr {
         Effect::Destroy {
@@ -381,20 +394,17 @@ fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let (mut conds, it) = match (&destroyed_target, word, that) {
         // "that artifact is put into a graveyard this way": the object as it last existed
         // is still "that artifact".
-        (_, _, true) => (vec![Condition::Exists(affected.clone())], None),
+        (_, _, true) => (vec![any_matches.clone()], None),
         // "If a creature is destroyed this way, you gain life equal to its toughness": the
         // destroyed creature as it last existed on the battlefield (CR 608.2h).
         (Some(t), "destroyed", false) => {
-            let mut v = vec![Condition::SelNonEmpty(Sel::Var(SNAPSHOT))];
+            let mut v = vec![Condition::SelNonEmpty(snapshot.clone())];
             if !matches!(f, Filter::Any) {
                 v.push(Condition::SelMatches(t.clone(), f.clone()));
             }
             (v, Some(t.clone()))
         }
-        _ => (
-            vec![Condition::Exists(affected.clone())],
-            Some(Sel::Var(THIS_WAY)),
-        ),
+        _ => (vec![any_matches.clone()], Some(Sel::Var(THIS_WAY))),
     };
     let cond = if conds.len() == 1 {
         conds.pop().unwrap_or(Condition::Always)

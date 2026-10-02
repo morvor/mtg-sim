@@ -98,11 +98,48 @@ pub fn leading_if(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let then = crate::oracle::effects::parse_sentence(rest, b)?;
+    let then = other_than_antecedent(then, b)?;
     Some(Effect::If {
         cond,
         then: Box::new(then),
         otherwise: Box::new(Effect::Noop),
     })
+}
+
+/// In a spell's text, "other" ("destroy all other creatures") can't mean other than the
+/// spell: it means other than what the text named before ("Create X 1/1 white Soldier
+/// creature tokens. If X is 5 or more, destroy all other creatures."). Without such an
+/// antecedent, not understood.
+fn other_than_antecedent(e: Effect, b: &Builder) -> Option<Effect> {
+    if !b.ctx.is_spell() {
+        return Some(e);
+    }
+    let json = serde_json::to_value(&e).ok()?;
+    fn has_other(v: &serde_json::Value) -> bool {
+        match v {
+            serde_json::Value::String(s) => s == "Other",
+            serde_json::Value::Array(a) => a.iter().any(has_other),
+            serde_json::Value::Object(m) => m.values().any(has_other),
+            _ => false,
+        }
+    }
+    if !has_other(&json) {
+        return Some(e);
+    }
+    if matches!(b.it, Sel::This | Sel::None) || is_no_referent(&b.it) {
+        return None;
+    }
+    let not_it = serde_json::to_value(Filter::not(Filter::In(Box::new(b.it.clone())))).ok()?;
+    fn replace(v: serde_json::Value, with: &serde_json::Value) -> serde_json::Value {
+        use serde_json::Value as J;
+        match v {
+            J::String(s) if s == "Other" => with.clone(),
+            J::Array(a) => J::Array(a.into_iter().map(|x| replace(x, with)).collect()),
+            J::Object(m) => J::Object(m.into_iter().map(|(k, x)| (k, replace(x, with))).collect()),
+            other => other,
+        }
+    }
+    serde_json::from_value(replace(json, &not_it)).ok()
 }
 
 /// The object a condition is about ("enchanted creature is red" → the enchanted
