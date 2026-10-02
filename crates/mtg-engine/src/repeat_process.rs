@@ -77,3 +77,18 @@ pub fn has_open_repeat(e: &Effect) -> bool {
         _ => false,
     }
 }
+
+/// Whether `a` has an instruction to repeat its process that no process contains: one
+/// the compiler couldn't place ("... unless you pay {3} and repeat this process" in a
+/// coin flip's result). Performing it would do nothing, so such text isn't supported.
+pub fn has_stray_repeat(a: &AbilityDef) -> bool {
+    fn walk(v: &serde_json::Value) -> bool {
+        match v {
+            serde_json::Value::String(s) => s == "RepeatThisProcess",
+            serde_json::Value::Object(m) => m.iter().any(|(k, x)| k != "RepeatProcess" && walk(x)),
+            serde_json::Value::Array(a) => a.iter().any(walk),
+            _ => false,
+        }
+    }
+    serde_json::to_value(&a.kind).is_ok_and(|v| walk(&v))
+}

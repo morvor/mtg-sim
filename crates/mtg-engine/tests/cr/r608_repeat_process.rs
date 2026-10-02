@@ -85,3 +85,26 @@ fn ad_nauseam_asks_after_each_pass() {
     assert_eq!(t.life(P0), 14);
     assert_eq!(yes_no_asked(&t, P0), 2);
 }
+
+#[test]
+fn hoarders_greed_repeats_after_a_clash_won_by_a_followup_sentence() {
+    // "If you win, repeat this process." modifies the clash sentence (a follow-up): the
+    // process still includes everything before it.
+    cr!("608.2c");
+    assert_supported("Hoarder's Greed");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    // P0's library, top first: Forest, Forest, Hill Giant (revealed by the first clash,
+    // mana value 4 beats P1's Filler), Forest, Forest; then Fillers (the second clash
+    // ties at 0 and isn't won).
+    for name in ["Forest", "Forest", "Hill Giant", "Forest", "Forest"] {
+        t.library_top(P0, name);
+    }
+    let lib = t.library_size(P0);
+    let spell = t.hand(P0, "Hoarder's Greed");
+    t.cast(P0, spell).go();
+    t.resolve();
+    // Two passes: 4 life lost and 4 cards drawn.
+    assert_eq!(t.life(P0), 16);
+    assert_eq!(t.library_size(P0), lib - 4);
+}

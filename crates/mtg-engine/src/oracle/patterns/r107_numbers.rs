@@ -42,6 +42,37 @@ pub(crate) fn nonnegative(v: Value) -> Value {
     Value::Max(Box::new(v), Box::new(Value::c(0)))
 }
 
+/// Where an X a sentence defined ("..., where X is ...") is kept for later sentences of
+/// the same ability that use it (CR 107.3c, 608.2h).
+pub const DEFINED_X: Var = u16::MAX - 1073;
+
+/// The value a sentence "..., where X is [value]." defines, as a calculation that uses 0
+/// instead of a negative number (CR 107.1b). Reading it leaves `b` as it was.
+pub(crate) fn defined_x(sentence: &str, b: &mut Builder) -> Option<Value> {
+    let lower = sentence.to_lowercase();
+    let (_, value_s) = end(&lower).rsplit_once(", where x is ")?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let read = value_phrase(value_s, b);
+    b.targets.truncate(saved.0);
+    b.it = saved.1;
+    b.it_player = saved.2;
+    let (v, tail) = read?;
+    end(&tail).is_empty().then(|| nonnegative(v))
+}
+
+/// Whether `e` uses the X chosen for its spell or ability (`Value::X`, or `{X}` in a cost).
+pub(crate) fn uses_x(e: &Effect) -> bool {
+    fn walk(v: &serde_json::Value) -> bool {
+        match v {
+            serde_json::Value::String(s) => s == "X",
+            serde_json::Value::Object(m) => m.values().any(walk),
+            serde_json::Value::Array(a) => a.iter().any(walk),
+            _ => false,
+        }
+    }
+    serde_json::to_value(e).is_ok_and(|v| walk(&v))
+}
+
 /// Replaces `Value::X` (and optionally `Value::Y` written as the variable `y`) in an
 /// effect.
 pub(crate) fn substitute_x(e: &Effect, x: &Value) -> Option<Effect> {
