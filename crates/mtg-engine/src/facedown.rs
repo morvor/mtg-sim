@@ -257,6 +257,10 @@ pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
     if !o.face_down || o.zone != Zone::Battlefield {
         return false;
     }
+    // "can't be turned face up".
+    if crate::prohibitions::object_cant(g, id, crate::ability::ObjectAction::TurnedFaceUp) {
+        return false;
+    }
     // CR 708.8: a face-down permanent that's not a card (e.g. a manifested token) can't be
     // turned face up unless it represents a card.
     if o.card.is_none() {

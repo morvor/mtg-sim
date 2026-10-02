@@ -201,6 +201,9 @@ pub fn turn_face_up_cost(g: &Game, id: ObjectId) -> Option<Cost> {
     if !o.face_down || o.zone != Zone::Battlefield {
         return None;
     }
+    if crate::prohibitions::object_cant(g, id, ObjectAction::TurnedFaceUp) {
+        return None;
+    }
     let card = o.card.as_ref()?;
     let face = card.characteristics(FaceState::Front);
     let kind = o.choices.text.as_deref().unwrap_or("");

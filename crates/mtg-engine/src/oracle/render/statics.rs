@@ -1210,6 +1210,62 @@ impl Renderer<'_> {
                     "while {c} is choosing targets as part of casting a spell or activating an ability, that player must choose at least {n} if able"
                 )
             }
+            Restriction::CantBe { what, action } => {
+                let w = subj(self, what);
+                let a = match action {
+                    ObjectAction::Untapped => "can't become untapped",
+                    ObjectAction::PhasedIn => "can't phase in",
+                    ObjectAction::TurnedFaceUp => "can't be turned face up",
+                    ObjectAction::Equipped => "can't be equipped",
+                    ObjectAction::EnchantedByOtherAuras => "can't be enchanted by other Auras",
+                    ObjectAction::Suspected => "can't become suspected",
+                };
+                format!("{w} {a}")
+            }
+            Restriction::CantEnterFrom { what } => {
+                let n = self.noun(what, Num::Many);
+                format!("{n} can't enter the battlefield")
+            }
+            Restriction::AttackOnlyAlone(f) => format!("{} can only attack alone", subj(self, f)),
+            Restriction::MaxAttackersAgainst { player, object, n } => {
+                let d = match (player, object) {
+                    (Some(p), _) => self.player_filter_object(p),
+                    (None, Some(o)) => self.noun_det(o, Det::A),
+                    (None, None) => "anything".into(),
+                };
+                let (n, noun) = if *n == 1 {
+                    ("one".to_string(), "creature")
+                } else {
+                    (number_word(*n as i32), "creatures")
+                };
+                format!("no more than {n} {noun} can attack {d} each combat")
+            }
+            Restriction::MustBeBlockedBy { attacker, blocker } => {
+                let a = subj(self, attacker);
+                let b = self.noun_det(blocker, Det::A);
+                format!("{a} must be blocked by {b} if able")
+            }
+            Restriction::BlockerCountRequirement { attacker, min, max } => {
+                let a = subj(self, attacker);
+                let n = match max {
+                    Some(m) if m == min => format!("exactly {}", number_word(*m as i32)),
+                    _ => format!("{} or more", number_word(*min as i32)),
+                };
+                let noun = if *min == 1 && *max == Some(1) {
+                    "creature"
+                } else {
+                    "creatures"
+                };
+                format!("{a} must be blocked by {n} {noun} if able")
+            }
+            Restriction::MaxBlockersOf { who, n } => {
+                let w = self.player_filter_subject(who);
+                let noun = if *n == 1 { "creature" } else { "creatures" };
+                format!(
+                    "{w} can't block with more than {} {noun}",
+                    number_word(*n as i32)
+                )
+            }
             Restriction::Custom(name) => self.custom_restriction(name),
         }
     }
@@ -1235,6 +1291,14 @@ impl Renderer<'_> {
                     n
                 } else {
                     format!("{n} spells or abilities from {n} sources")
+                }
+            }
+            TargetRestriction::OpponentsSources(f) => {
+                let n = self.noun(f, Num::Many);
+                if n.contains("spell") || n.contains("abilit") {
+                    format!("{n} your opponents control")
+                } else {
+                    format!("{n} spells your opponents control or abilities from {n} sources your opponents control")
                 }
             }
         }

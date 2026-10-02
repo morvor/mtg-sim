@@ -651,6 +651,12 @@ impl Game {
                     TargetRestriction::Sources(f) => source.is_some_and(|s| {
                         self.matches(self.ability_source_of(s), f, &Ctx::new(rs, rc))
                     }),
+                    TargetRestriction::OpponentsSources(f) => {
+                        self.are_opponents(by, rc)
+                            && source.is_some_and(|s| {
+                                self.matches(self.ability_source_of(s), f, &Ctx::new(rs, rc))
+                            })
+                    }
                 }
             } else {
                 false
@@ -702,6 +708,12 @@ impl Game {
                     TargetRestriction::Sources(f) => source.is_some_and(|s| {
                         self.matches(self.ability_source_of(s), f, &Ctx::new(rs, rc))
                     }),
+                    TargetRestriction::OpponentsSources(f) => {
+                        self.are_opponents(by, rc)
+                            && source.is_some_and(|s| {
+                                self.matches(self.ability_source_of(s), f, &Ctx::new(rs, rc))
+                            })
+                    }
                 }
             } else {
                 false

@@ -236,7 +236,9 @@ impl Game {
     /// object as it would exist on the battlefield (CR 614.17d).
     pub fn cant_enter_battlefield(&self, obj: ObjectId) -> bool {
         self.statics.restrictions.iter().any(|(s, c, r)| match r {
-            Restriction::CantEnterBattlefield(f) | Restriction::CantEnter(f) => {
+            Restriction::CantEnterBattlefield(f)
+            | Restriction::CantEnter(f)
+            | Restriction::CantEnterFrom { what: f } => {
                 self.matches(obj, f, &Ctx::new(Some(*s), *c))
             }
             _ => false,
@@ -1110,6 +1112,10 @@ impl Game {
         }
         // CR 122.1d: a stun counter's replacement effect.
         if crate::counter_rules::stun_instead_of_untap(self, obj) {
+            return false;
+        }
+        // "can't become untapped".
+        if crate::prohibitions::object_cant(self, obj, ObjectAction::Untapped) {
             return false;
         }
         self.objects[obj.0 as usize].tapped = false;

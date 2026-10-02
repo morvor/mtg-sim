@@ -42,6 +42,10 @@ pub fn suspect(g: &mut Game, obj: ObjectId) -> bool {
     if !on_battlefield(g, obj) || g.obj(obj).suspected {
         return false;
     }
+    // "can't become suspected".
+    if crate::prohibitions::object_cant(g, obj, crate::ability::ObjectAction::Suspected) {
+        return false;
+    }
     g.objects[obj.0 as usize].suspected = true;
     let controller = g.obj(obj).controller;
     let id = g.new_effect_id();

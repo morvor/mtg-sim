@@ -2412,8 +2412,67 @@ pub enum Restriction {
         chooser: PlayerFilter,
         what: Filter,
     },
+    /// "[cards] in graveyards can't enter the battlefield" (CR 614.17d): judged by the
+    /// object before it moves, in the zone it would leave.
+    CantEnterFrom {
+        what: Filter,
+    },
+    /// "[objects] can't become untapped / phase in / be turned face up / be equipped /
+    /// be enchanted by other Auras / become suspected": an action the rules would
+    /// otherwise allow doesn't happen to them (see `prohibitions.rs`).
+    CantBe {
+        what: Filter,
+        action: ObjectAction,
+    },
+    /// "can only attack alone" (CR 506.5): it can attack only if no other creatures
+    /// attack.
+    AttackOnlyAlone(Filter),
+    /// "No more than N creatures can attack you each combat" (`player`), "... can attack
+    /// ~ each combat" (`object`): a limit on the creatures attacking that player or
+    /// planeswalker (CR 508.1c).
+    MaxAttackersAgainst {
+        player: Option<PlayerFilter>,
+        object: Option<Filter>,
+        n: u32,
+    },
+    /// "[attacker] must be blocked by [a Dalek] if able": a requirement that a creature
+    /// matching `blocker` blocks it (CR 509.1c).
+    MustBeBlockedBy {
+        attacker: Filter,
+        blocker: Filter,
+    },
+    /// "[attacker] must be blocked by two or more creatures if able" (`min` 2), "... by
+    /// exactly one creature if able" (`min` 1, `max` 1): a requirement on how many
+    /// creatures block it (CR 509.1c).
+    BlockerCountRequirement {
+        attacker: Filter,
+        min: u32,
+        max: Option<u32>,
+    },
+    /// "[players] can't block with more than one creature (this combat)" (CR 509.1b).
+    MaxBlockersOf {
+        who: PlayerFilter,
+        n: u32,
+    },
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
+}
+
+/// Something that can't happen to an object ([`Restriction::CantBe`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObjectAction {
+    /// "can't become untapped" (CR 701.26b: it doesn't untap, by any means).
+    Untapped,
+    /// "can't phase in" (CR 702.26).
+    PhasedIn,
+    /// "can't be turned face up" (CR 708.8).
+    TurnedFaceUp,
+    /// "can't be equipped" (CR 301.5c).
+    Equipped,
+    /// "can't be enchanted by other Auras" (CR 303.4).
+    EnchantedByOtherAuras,
+    /// "can't become suspected" (CR 701.60).
+    Suspected,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2424,6 +2483,10 @@ pub enum TargetRestriction {
     Any,
     /// By sources matching the filter (protection-like).
     Sources(Filter),
+    /// By spells and abilities the restriction's controller's opponents control whose
+    /// sources match the filter ("black or red spells your opponents control",
+    /// "abilities your opponents control").
+    OpponentsSources(Filter),
 }
 
 /// Cost modification static effects (CR 601.2f).

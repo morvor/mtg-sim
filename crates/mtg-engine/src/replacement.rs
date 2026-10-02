@@ -839,6 +839,24 @@ impl Game {
                 Restriction::CantEnter(_) | Restriction::CantEnterBattlefield(_)
             )
         });
+        // "Creature cards in graveyards can't enter the battlefield": the card where it
+        // is now.
+        let from = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| match r {
+            Restriction::CantEnterFrom { what } => self.matches(m.obj, what, &Ctx::new(s, c)),
+            _ => false,
+        };
+        if self
+            .statics
+            .restrictions
+            .iter()
+            .any(|(s, c, r)| from(r, Some(*s), *c))
+            || self
+                .rule_effects
+                .iter()
+                .any(|e| from(&e.restriction, e.source, e.controller))
+        {
+            return true;
+        }
         if !any {
             return false;
         }

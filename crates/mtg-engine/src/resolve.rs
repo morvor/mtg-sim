@@ -2909,7 +2909,17 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::BlockAsThoughUntapped(f)
         | Restriction::Goaded(f)
         | Restriction::DamageByToughness(f)
-        | Restriction::AssignsNoCombatDamage(f) => Some(f),
+        | Restriction::AssignsNoCombatDamage(f)
+        | Restriction::CantAttackAlone(f)
+        | Restriction::CantBlockAlone(f)
+        | Restriction::AttackOnlyAlone(f)
+        | Restriction::CantTransform(f) => Some(f),
+        Restriction::CantBe { what, .. } => Some(what),
+        Restriction::ExtraBlocks { blocker, .. } => Some(blocker),
+        Restriction::MinBlockers { attacker, .. }
+        | Restriction::MaxBlockedBy { attacker, .. }
+        | Restriction::MustBeBlockedBy { attacker, .. }
+        | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
