@@ -815,7 +815,7 @@ fn parse_group(s: &str) -> Option<Subject> {
         None => {
             let u = union_nouns(s);
             let (f, plural) = whole_object_phrase(&u)?;
-            if !plural && !quantified {
+            if !plural && !quantified && !invariant_plural(&u) {
                 return None;
             }
             f
@@ -826,6 +826,18 @@ fn parse_group(s: &str) -> Option<Subject> {
         return None;
     }
     Some(group_subject(f))
+}
+
+/// A bare group of a subtype whose plural is the same word: "Eldrazi you control",
+/// "Merfolk you control" (Path of Annihilation).
+fn invariant_plural(s: &str) -> bool {
+    const INVARIANT: &[&str] = &[
+        "eldrazi", "merfolk", "kithkin", "moonfolk", "sheep", "fish", "kor", "samurai", "deer",
+        "elk", "moose", "bison", "squid", "kavu", "slith",
+    ];
+    let w = s.split(' ').next().unwrap_or("");
+    INVARIANT.contains(&w)
+        && (s.ends_with(" you control") || s.ends_with(" your opponents control"))
 }
 
 // ---------------------------------------------------------------------------

@@ -449,9 +449,25 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             } else {
                 Filter::Or(group)
             };
+            let subtype_pair = matches!(nf, Filter::Subtype(_));
             heads.push(Filter::and(vec![joined, nf]));
             group_start = heads.len();
             s = nrest;
+            // "Goblin Warrior creatures", "Eldrazi Spawn creatures": two subtypes, then a
+            // card type.
+            if subtype_pair {
+                let (tw, trest) = split_word(s);
+                let tw2 = tw.trim_end_matches(',');
+                if let Some(tf @ Filter::Type(_)) = head_noun(tw2) {
+                    if tw2.ends_with('s') && singular(tw2) != tw2 {
+                        plural = true;
+                    }
+                    let last = heads.pop().unwrap();
+                    heads.push(Filter::and(vec![last, tf]));
+                    group_start = heads.len();
+                    s = trest;
+                }
+            }
             // "Dragon creature cards": a subtype narrowed by a card type, then by "card".
             let mut ends_in_card = matches!(nw2, "card" | "cards");
             let (cw, crest) = split_word(s);

@@ -1122,3 +1122,75 @@ fn delayed_after_grant(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "grants: delayed removal after a grant", priority: 70, apply: delayed_after_grant } }
+
+/// "That creature also gains trample until end of turn if you control a creature with
+/// power 4 or greater." (Temur Battle Rage): a grant or pump with a trailing condition, checked
+/// as the instruction is performed (CR 608.2c). "Also" only says the grant is in addition
+/// to the previous instruction.
+fn trailing_condition_grant(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    if l.contains('"') || l.starts_with("if ") {
+        return None;
+    }
+    let (body, cond) = l.split_once(" if ")?;
+    // Only "also": the core grammar reads other trailing conditions.
+    if !body.contains(" also gains ") && !body.contains(" also gets ") || body.contains(" and ")
+    {
+        return None;
+    }
+    let body = body.replacen(" also gains ", " gains ", 1).replacen(" also gets ", " gets ", 1);
+    let saved = (b.targets.len(), b.it.clone());
+    let cond = crate::oracle::patterns::conditions_referents::parse_condition_with(cond, b)
+        .or_else(|| crate::oracle::statics::parse_condition(cond, b.ctx))?;
+    let Some(e) = crate::oracle::effects::parse_clause(&body, b) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    Some(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "grants: ... gains ... if [condition]", priority: 230, parse: trailing_condition_grant } }
+
+/// "Draw a card for each creature you control with a +1/+1 counter on it. Those creatures
+/// gain indestructible until end of turn." (Inspiring Call): "those creatures" are the
+/// ones the previous instruction counted, as the spell resolves.
+fn those_counted_gain(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(pred) = l.strip_prefix("those creatures ") else {
+        return false;
+    };
+    let f = match last_instruction(prev) {
+        Effect::Draw {
+            n: Value::Count(f), ..
+        }
+        | Effect::GainLife {
+            n: Value::Count(f), ..
+        } => f.clone(),
+        _ => return false,
+    };
+    let Some(pred) = pred
+        .strip_prefix("gain ")
+        .map(|p| format!("gains {p}"))
+        .or_else(|| pred.strip_prefix("get ").map(|p| format!("gets {p}")))
+    else {
+        return false;
+    };
+    let saved = b.it.clone();
+    b.it = Sel::All(f);
+    let e = crate::oracle::effects::parse_sentence(&format!("it {pred}"), b);
+    b.it = saved;
+    match e {
+        Some(e @ Effect::Modify { .. }) => {
+            let p = std::mem::replace(prev, Effect::Noop);
+            *prev = Effect::seq(vec![p, e]);
+            true
+        }
+        _ => false,
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "grants: those creatures (just counted) gain ...", priority: 70, apply: those_counted_gain } }
