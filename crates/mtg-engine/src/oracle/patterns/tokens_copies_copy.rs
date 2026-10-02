@@ -53,6 +53,22 @@ fn exception_clauses(masked: &str) -> Vec<String> {
     s.split('|').map(|x| x.trim().to_string()).collect()
 }
 
+/// "black", "red and white": a color list replacing the copied colors (CR 105.3).
+fn only_colors(s: &str) -> Option<ColorSet> {
+    let mut colors = ColorSet::NONE;
+    for w in s.split_whitespace().filter(|w| *w != "and") {
+        colors.insert(Color::from_word(w.trim_end_matches(','))?);
+    }
+    (!colors.is_colorless()).then_some(colors)
+}
+
+/// "an artifact": a single card type replacing the copied ones (CR 205.1a). Not "an
+/// artifact creature", which keeps the prior card types and subtypes (CR 205.1b).
+fn only_card_types(s: &str) -> Option<Vec<CardType>> {
+    let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    Some(vec![CardType::from_word(s)?])
+}
+
 /// "4/4" → (4, 4).
 fn pt(w: &str) -> Option<(i32, i32)> {
     let (p, t) = w.split_once('/')?;
@@ -102,9 +118,9 @@ fn added_types(s: &str) -> Option<Vec<Modification>> {
                 continue;
             }
         }
-        if let Some(t) = Supertype::from_word(w) {
-            // "it's legendary in addition to its other types" (Lazav, the Multifarious).
-            supertypes.push(t);
+        if let Some(st) = Supertype::from_word(w) {
+            // "it's legendary in addition to its other types" (Sarkhan, Soul Aflame).
+            supertypes.push(st);
         } else if let Some(t) = CardType::from_word(w) {
             card_types.push(t);
         } else {
@@ -164,18 +180,6 @@ fn replaced_characteristics(s: &str) -> Option<Vec<Modification>> {
         out.push(Modification::AddSubtypes(subtypes));
     }
     Some(out)
-}
-
-/// "black", "red and white": colors only.
-fn only_colors(s: &str) -> Option<ColorSet> {
-    let mut colors = ColorSet::NONE;
-    for w in s.split_whitespace() {
-        if w == "and" {
-            continue;
-        }
-        colors.insert(Color::from_word(w)?);
-    }
-    (!colors.is_colorless()).then_some(colors)
 }
 
 /// The original-case name after "its name is " (lowercase `name`).
@@ -284,15 +288,18 @@ pub(crate) fn copy_exceptions(
                 out.extend(added_colors_and_types(x)?);
             } else if let Some((p, t)) = pt(r) {
                 out.push(Modification::SetPT(Some(Value::c(p)), Some(Value::c(t))));
+            } else if let Some(types) = only_card_types(r) {
+                // "except it's an artifact" (Machine God's Effigy): its only card types
+                // are these (CR 205.1a).
+                out.push(Modification::SetTypes { types, subtypes: vec![] });
             } else if let Some(colors) = only_colors(r) {
-                // "the token is black" (Penumbra Umbra): its colors instead of the copied
-                // ones (CR 707.9b).
+                // "except the token is black" (Penumbra Umbra).
                 out.push(Modification::SetColors(colors));
             } else {
                 out.extend(replaced_characteristics(r)?);
             }
-        } else if ["its name is ~", "her name is ~", "his name is ~"].contains(&c) {
-            // "its name is ~": it keeps this object's name (Lazav, the Multifarious).
+        } else if matches!(c, "its name is ~" | "her name is ~" | "his name is ~") {
+            // The copy keeps this object's own name (Sunfrill Imitator, CR 707.9b).
             out.push(Modification::SetName(SmolStr::new(ctx.card_name)));
         } else if let Some(n) = c.strip_prefix("its name is ") {
             if n.is_empty() || n.contains('~') || n.contains('"') || n.split(' ').count() > 4 {
