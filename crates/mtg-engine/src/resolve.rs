@@ -2456,70 +2456,24 @@ impl Game {
         to: &Destination,
         ctx: &mut Ctx,
     ) -> Vec<ObjectId> {
-        let controller = to
-            .controller
-            .as_ref()
-            .and_then(|r| self.eval_player(r, ctx));
-        // "under its owner's control" / "under their owners' control": each object
-        // enters under its own owner's control.
-        let owners_control = matches!(to.controller, Some(PlayerRef::OwnerOf(_)));
-        let mut counters: Vec<(CounterKind, u32)> = Vec::new();
-        for (k, v) in &to.with_counters {
-            counters.push((k.clone(), self.eval_value(v, ctx).max(0) as u32));
+        let objs: Vec<ObjectId> = objs.into_iter().filter(|o| self.is_live(*o)).collect();
+        if objs.is_empty() {
+            return vec![];
         }
-        let attack = if to.attacking {
-            self.attack_target_for_new_attacker(ctx)
-        } else {
-            None
-        };
-        let with_mods = if to.zone == ZoneKind::Battlefield && !to.with_mods.is_empty() {
-            Some((
-                ctx.source,
-                ctx.controller,
-                self.fix_mods(&to.with_mods, ctx),
-            ))
-        } else {
-            None
-        };
-        // "Put onto the battlefield attached to [x]": `None` if x is undefined
-        // (CR 301.5e, 303.4i).
-        let attach_to = match (&to.attached_to, to.zone) {
-            (Some(sel), ZoneKind::Battlefield) => Some(self.resolve_sel(sel, ctx).first().copied()),
-            _ => None,
-        };
+        // "Under its owner's control", "tapped", "with N counters", "your choice of the top
+        // or bottom" ...: see `destinations.rs`.
+        let dest = self.prepare_destination(to, ctx);
         let moves: Vec<MoveEv> = objs
             .iter()
-            .filter(|o| self.is_live(**o))
             .map(|o| {
                 let owner = self.obj(*o).owner;
                 MoveEv {
                     obj: *o,
-                    to: Zone::of_kind(to.zone, owner),
-                    pos: to.position,
+                    to: dest.zone(owner),
+                    pos: dest.position(),
                     cause: MoveCause::Effect,
                     by: Some(ctx.controller),
-                    etb: EtbInfo {
-                        tapped: to.tapped,
-                        counters: counters.clone(),
-                        controller: if to.zone == ZoneKind::Battlefield && owners_control {
-                            Some(owner)
-                        } else if to.zone == ZoneKind::Battlefield {
-                            Some(controller.unwrap_or(ctx.controller))
-                        } else {
-                            None
-                        },
-                        face_down: if to.face_down {
-                            Some(KeywordKind::Morph)
-                        } else {
-                            None
-                        },
-                        transformed: to.transformed,
-                        attacking: attack,
-                        with_mods: with_mods.clone(),
-                        attach_to: attach_to.flatten(),
-                        attach_specified: attach_to.is_some(),
-                        ..Default::default()
-                    },
+                    etb: dest.etb(owner),
                     source: ctx.source,
                 }
             })
@@ -2557,7 +2511,7 @@ impl Game {
     /// What a creature put onto the battlefield attacking attacks when the effect doesn't
     /// say: its controller chooses (CR 508.4), by default what the source is attacking if
     /// it's attacking (Geist of Saint Traft's Angel needn't attack what Geist attacks).
-    fn attack_target_for_new_attacker(&mut self, ctx: &Ctx) -> Option<Entity> {
+    pub(crate) fn attack_target_for_new_attacker(&mut self, ctx: &Ctx) -> Option<Entity> {
         let combat = self.combat.as_ref()?;
         let preferred = ctx.source.and_then(|src| combat.attack_target(src));
         crate::combat::choose_attack_target_preferring(self, ctx.controller, preferred)

@@ -272,6 +272,13 @@ impl Renderer<'_> {
                 let s = self.sel(sel, Case::Obj);
                 format!("double the number of {k} on {s}")
             }
+            // "If it doesn't have suspend, it gains suspend."
+            Effect::ForEach { sel, .. }
+                if crate::oracle::patterns::r702_062_gains_suspend::is_gains_suspend(e) =>
+            {
+                let s = self.sel(sel, Case::Subj);
+                format!("if {s} doesn't have suspend, it gains suspend")
+            }
             // "Return the exiled card to the battlefield": each card linked to this object.
             Effect::ForEach {
                 sel: Sel::Linked | Sel::CreatorLinked,
@@ -601,6 +608,33 @@ impl Renderer<'_> {
                     Some(k) => format!("put {f} {k} counters on {t}"),
                     None => format!("put {f} counters on {t}"),
                 }
+            }
+            // "Exile that card with three time counters on it instead of putting it into
+            // your graveyard as it resolves. Then if the exiled card doesn't have suspend,
+            // it gains suspend." (see `kw/suspend_as_it_resolves.rs`)
+            Effect::Modify {
+                what: Sel::TriggerSpell,
+                mods,
+                ..
+            } if matches!(mods.as_slice(), [Modification::AddAbility(a)]
+                if crate::kw::suspend_as_it_resolves::parse_marker(&a.text).is_some()) =>
+            {
+                let [Modification::AddAbility(a)] = mods.as_slice() else {
+                    return self.gap("exile as it resolves");
+                };
+                let Some((kind, n, suspend)) =
+                    crate::kw::suspend_as_it_resolves::parse_marker(&a.text)
+                else {
+                    return self.gap("exile as it resolves");
+                };
+                let (c, _) = self.counted(&Value::c(n as i32), &counter_name(&kind));
+                let mut s = format!(
+                    "exile that card with {c} on it instead of putting it into your graveyard as it resolves"
+                );
+                if suspend {
+                    s.push_str(". Then if the exiled card doesn't have suspend, it gains suspend");
+                }
+                s
             }
             Effect::Modify {
                 what,
@@ -1371,6 +1405,45 @@ impl Renderer<'_> {
                 let u = until_event(until);
                 format!("{w} phases out until {u}")
             }
+            // "Counter target spell. If that spell is countered this way, exile it instead of
+            // putting it into its owner's graveyard."
+            Effect::SelfReplace {
+                replacement:
+                    ReplacementDef {
+                        event:
+                            ReplacementEvent::ZoneChange {
+                                filter,
+                                from: Some(ZoneKind::Stack),
+                                to: Some(ZoneKind::Graveyard),
+                            },
+                        action: ReplacementAction::MoveInstead(d),
+                        ..
+                    },
+                effect,
+            } if countered_this_way(effect, filter).is_some() => {
+                let only = countered_this_way(effect, filter).flatten();
+                let e = self.effect(effect);
+                let which = match only {
+                    Some(Filter::PermanentCard) => "a permanent spell".into(),
+                    Some(f) => {
+                        let n = self.noun_det(f, Det::A);
+                        format!("{n} spell")
+                    }
+                    None => "that spell".into(),
+                };
+                let instead = if d.zone == ZoneKind::Exile {
+                    let mut w = String::new();
+                    for (k, n) in &d.with_counters {
+                        let (c, _) = self.counted(n, &counter_name(k));
+                        w.push_str(&format!(" with {c} on it"));
+                    }
+                    format!("exile it{w} instead of putting it into its owner's graveyard")
+                } else {
+                    let dest = self.destination_phrase(d, false, false);
+                    format!("put it {dest} instead of into its owner's graveyard")
+                };
+                format!("{e}. If {which} is countered this way, {instead}")
+            }
             Effect::SelfReplace {
                 replacement,
                 effect,
@@ -2053,6 +2126,9 @@ impl Renderer<'_> {
             ZoneKind::Hand => format!("to {owner} hand"),
             ZoneKind::Graveyard => format!("into {owner} graveyard"),
             ZoneKind::Exile => String::new(),
+            ZoneKind::Library if to.position_choice.len() == 2 => {
+                format!("on your choice of the top or bottom of {owner} library")
+            }
             ZoneKind::Library => match to.position {
                 LibraryPosition::Top => format!("on top of {owner} library"),
                 LibraryPosition::Bottom => format!("on the bottom of {owner} library"),
@@ -3543,4 +3619,27 @@ pub(crate) fn third_person(vp: &str) -> String {
         v => format!("{v}s"),
     };
     format!("{v}{rest}")
+}
+
+/// For a counter effect wrapped in a self-replacement effect for the countered spell's move
+/// from the stack to a graveyard (see `oracle/patterns/replacements_counter.rs`): `Some`
+/// with the kind of spell that moves elsewhere ("if an artifact or creature spell is
+/// countered this way"), if only some do.
+fn countered_this_way<'a>(effect: &'a Effect, filter: &'a Filter) -> Option<Option<&'a Filter>> {
+    let what = match effect {
+        Effect::CounterSpell { what } => what,
+        Effect::PayOptional {
+            then, otherwise, ..
+        } if matches!(**then, Effect::Noop) => match &**otherwise {
+            Effect::CounterSpell { what } => what,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    let is_what = |f: &Filter| matches!(f, Filter::In(s) if same_sel(s, what));
+    match filter {
+        f if is_what(f) => Some(None),
+        Filter::And(v) if v.len() == 2 && is_what(&v[0]) => Some(Some(&v[1])),
+        _ => None,
+    }
 }

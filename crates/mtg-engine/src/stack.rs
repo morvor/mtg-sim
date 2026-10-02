@@ -1291,17 +1291,26 @@ impl Game {
             return;
         }
         let owner = o.owner;
-        let dest = crate::keyword_impls::countered_spell_destination(self, id);
-        let _ = owner;
-        self.move_object_ev(MoveEv {
+        let mut dest = crate::keyword_impls::countered_spell_destination(self, id);
+        let mv = |to: (Zone, LibraryPosition)| MoveEv {
             obj: id,
-            to: dest.0,
-            pos: dest.1,
+            to: to.0,
+            pos: to.1,
             cause,
             by: None,
             etb: EtbInfo::default(),
             source: None,
-        });
+        };
+        // CR 701.6a, 616.1a: a countered spell is put into its owner's graveyard; a
+        // self-replacement effect of the effect countering it ("if that spell is countered
+        // this way, exile it with three time counters on it instead") applies to that
+        // event before the replacement effect of how it was cast (flashback's "exile it
+        // instead of putting it anywhere else"), which then applies to the modified event.
+        let graveyard = (Zone::Graveyard(owner), LibraryPosition::Top);
+        if dest != graveyard && self.self_replacement_applies(&ReplEvent::Move(mv(graveyard))) {
+            dest = graveyard;
+        }
+        self.move_object_ev(mv(dest));
     }
 
     /// Counters a spell or ability (CR 701.6) by the spell or ability `by` (its

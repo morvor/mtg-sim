@@ -760,6 +760,19 @@ impl Game {
                     .push(new_id);
             }
         }
+        // Counters it's given as it moves to another zone ("exile it with three time
+        // counters on it", see `destinations.rs`); a permanent's are put on it as it
+        // enters, above.
+        if m.to != Zone::Battlefield && !m.etb.counters.is_empty() {
+            let how = crate::event_causes::CounterPut {
+                source: m.source,
+                by: m.by,
+                origin: crate::events::CounterOrigin::Effect,
+            };
+            for (k, n) in m.etb.counters.clone() {
+                self.put_counters(Entity::Object(new_id), &k, n, how);
+            }
+        }
         if m.to == Zone::Battlefield && self.obj(new_id).zone == Zone::Battlefield {
             self.history.permanents_entered.push(EnteredPermanent {
                 controller: self.obj(new_id).controller,

@@ -544,6 +544,11 @@ pub struct Destination {
     /// 303.4f–i).
     #[serde(default)]
     pub attached_to: Option<Sel>,
+    /// Library: a choice between positions ("your choice of the top or bottom of its
+    /// owner's library"), made by the controller of the effect as the object moves; empty
+    /// for the single `position`.
+    #[serde(default)]
+    pub position_choice: Vec<LibraryPosition>,
 }
 
 impl Destination {
@@ -559,6 +564,7 @@ impl Destination {
             with_counters: vec![],
             with_mods: vec![],
             attached_to: None,
+            position_choice: vec![],
         }
     }
     pub fn battlefield() -> Destination {
