@@ -455,3 +455,20 @@ fn tamiyos_compleation_unattaches_only_an_equipment() {
     assert!(t.obj_now(bears).tapped);
     assert_eq!(attached(&t, strength), Some(Entity::Object(bears)));
 }
+
+#[test]
+fn lynde_attaches_a_curse_attached_to_you_to_an_opponent() {
+    cr!("701.3a", "303.4");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lynde, Cheerful Tormentor");
+    let curse = t.battlefield(P1, "Curse of the Pierced Heart");
+    assert!(t.g.attach(curse, Entity::Player(P0)));
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(curse)]);
+    let hand = t.hand_size(P0);
+    t.set_step(P0, Step::Untap);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(attached(&t, curse), Some(Entity::Player(P1)));
+    assert_eq!(t.hand_size(P0), hand + 2);
+}

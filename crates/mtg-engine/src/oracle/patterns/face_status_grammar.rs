@@ -1004,3 +1004,41 @@ fn p_exiled_cards_owner_manifests(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "face grammar: the exiled card's owner manifests dread", priority: 110, parse: p_exiled_cards_owner_manifests } }
+
+/// "Put the rest of those cards on the bottom of your library in a random order." after
+/// taking some of the looked-at cards (and perhaps doing something with them).
+fn f_rest_of_those_cards(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if super::zz_probe_ps::disabled() {
+        return false;
+    }
+    let l = end(l);
+    let Some(r) = l.strip_prefix("put the rest of those cards ") else {
+        return false;
+    };
+    let Some(d) = super::card_flow_dig::rest_destination(r, false) else {
+        return false;
+    };
+    // The look itself: the effect, or the first instruction of it.
+    let dig = match prev {
+        Effect::Seq(v) => v.first_mut(),
+        e => Some(e),
+    };
+    match dig {
+        Some(Effect::Dig {
+            who: PlayerRef::You,
+            take,
+            take_to,
+            rest_to,
+            ..
+        }) if super::card_flow_dig::is_in_place(rest_to)
+            && !matches!(take, Value::Const(0))
+            && take_to.zone != d.zone =>
+        {
+            *rest_to = d;
+            true
+        }
+        _ => false,
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "face grammar: put the rest of those cards ...", priority: 95, apply: f_rest_of_those_cards } }

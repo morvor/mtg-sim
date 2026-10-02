@@ -267,6 +267,32 @@ fn p_attach(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let r = end(l).strip_prefix("attach ")?;
+    // "attach a Curse attached to you to one of your opponents" (Lynde, Cheerful
+    // Tormentor): an opponent chosen as it's performed.
+    if let Some(a) = r.strip_suffix(" to one of your opponents") {
+        let saved = (b.targets.len(), b.it.clone());
+        let parsed = attachments(a, b).filter(|(w, rest)| {
+            end(rest).is_empty() && matches!(w, Sel::Choose { .. })
+        });
+        let Some((what, _)) = parsed else {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            return None;
+        };
+        if let Sel::Choose { store: Some(v), .. } = &what {
+            b.it = Sel::Var(*v);
+        }
+        return Some(Effect::seq(vec![
+            Effect::Choose {
+                who: PlayerRef::You,
+                kind: ChoiceKind::Opponent,
+            },
+            crate::kw::attach_choice::attach_chosen(
+                what,
+                Sel::Players(PlayerRef::ChosenOpponent),
+            ),
+        ]));
+    }
     // The attachment phrase may itself contain " to " ("target Aura attached to a
     // creature you control to target creature you control"): try each split.
     for (i, _) in r.match_indices(" to ") {
@@ -353,6 +379,13 @@ fn attached_to_suffix<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a s
         .strip_prefix("attached to ")
         .or_else(|| t.strip_prefix("that's attached to "))
         .or_else(|| t.strip_prefix("that are attached to "))?;
+    // "a Curse attached to you": attached to the source's controller (CR 303.4).
+    if let Some(rest) = r.strip_prefix("you").filter(|x| word_end(x)) {
+        return Some((
+            Filter::AttachedToAnyOf(Box::new(Sel::Players(PlayerRef::You))),
+            rest,
+        ));
+    }
     let named = ["a ", "an ", "~", "enchanted ", "equipped "];
     let (sel, rest) = if named.iter().any(|p| r.starts_with(p)) {
         super::filters_relational::object_in(r)?
@@ -1018,3 +1051,83 @@ fn p_when_you_lose_control(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "attach grammar: when you lose control of that [object], [effect] (delayed)", priority: 110, parse: p_when_you_lose_control } }
+
+/// "If an Equipment is put onto the battlefield this way, you may attach it to a creature
+/// you control." (Armored Skyhunter) after putting a card from among the looked-at cards
+/// onto the battlefield: only an Equipment that was, attached to a creature chosen among
+/// those it can equip.
+fn f_if_put_this_way_attach(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if super::zz_probe_ps::disabled() {
+        return false;
+    }
+    let l = end(l);
+    let Some(r) = l
+        .strip_prefix("if an ")
+        .or_else(|| l.strip_prefix("if a "))
+    else {
+        return false;
+    };
+    let Some((noun, instr)) = r.split_once(" is put onto the battlefield this way, ") else {
+        return false;
+    };
+    let Some((f, false, tail)) = parse_object_phrase(noun) else {
+        return false;
+    };
+    if !end(tail).is_empty() || f.zone().is_some() {
+        return false;
+    }
+    // After a look at the top cards that put some of them onto the battlefield.
+    let took = matches!(&*prev, Effect::Dig { take_to, take, .. }
+        if take_to.zone == ZoneKind::Battlefield && !matches!(take, Value::Const(0)));
+    if !took {
+        return false;
+    }
+    let (may, instr) = match instr.strip_prefix("you may ") {
+        Some(x) => (true, x),
+        None => (false, instr),
+    };
+    let Some(r) = instr.strip_prefix("attach it to ") else {
+        return false;
+    };
+    let put = Sel::All(Filter::and(vec![
+        f.clone(),
+        Filter::In(Box::new(Sel::Var(vars::IT))),
+        Filter::InZone(ZoneKind::Battlefield),
+    ]));
+    let saved = (b.targets.len(), b.it.clone());
+    let Some((to, rest)) = recipient(r, &put, b) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    };
+    if !end(&rest).is_empty() || b.targets.len() != saved.0 || !matches!(to, Sel::Choose { .. }) {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    }
+    let attach = Effect::Attach { what: put, to };
+    let then = if may {
+        Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(attach),
+        }
+    } else {
+        attach
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::Seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::Exists(Filter::and(vec![
+                f,
+                Filter::In(Box::new(Sel::Var(vars::IT))),
+                Filter::InZone(ZoneKind::Battlefield),
+            ])),
+            then: Box::new(then),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "attach grammar: if an Equipment is put onto the battlefield this way, attach it", priority: 95, apply: f_if_put_this_way_attach } }

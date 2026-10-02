@@ -250,3 +250,34 @@ fn forum_filibuster_returns_an_aura_attached_to_the_new_token() {
     assert!(t.g.obj(host).chars.has_subtype("Inkling"));
     assert_eq!(t.pt(host), (3, 3));
 }
+
+#[test]
+fn armored_skyhunter_attaches_an_equipment_put_onto_the_battlefield_this_way() {
+    cr!("701.3a", "301.5c");
+    assert_compiles(&["Armored Skyhunter"]);
+    let mut t = TestGame::new(2);
+    let skyhunter = t.battlefield(P0, "Armored Skyhunter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let names = ["Shock", "Island", "Bonesplitter", "Swamp", "Plains", "Forest"];
+    let cards: Vec<ObjectId> = names.iter().map(|n| t.library_top(P0, n)).collect();
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(cards[2])]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.attack(&[(skyhunter, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    let blade = t.g.current(cards[2]);
+    assert!(t.on_battlefield(blade));
+    assert_eq!(attached(&t, blade), Some(Entity::Object(bears)));
+    // The other five are on the bottom of the library.
+    let lib = t.g.player(P0).library.clone();
+    let mut bottom = lib[..5].to_vec();
+    bottom.sort();
+    let mut expected: Vec<ObjectId> = cards
+        .iter()
+        .copied()
+        .filter(|c| *c != cards[2])
+        .collect();
+    expected.sort();
+    assert_eq!(bottom, expected);
+}
