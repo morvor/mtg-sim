@@ -2786,7 +2786,22 @@ impl Renderer<'_> {
             // Whether an earlier instruction exiled something (`after_exile`).
             let saved_exile = self.after_exile;
             self.after_exile |= v[..i].iter().any(exiles);
+            let saved_mandatory = std::mem::replace(
+                &mut self.prev_mandatory,
+                i > 0
+                    && matches!(
+                        v[i - 1],
+                        Effect::Sacrifice {
+                            who: PlayerRef::You,
+                            ..
+                        } | Effect::Discard {
+                            who: PlayerRef::You,
+                            ..
+                        }
+                    ),
+            );
             let s = self.effect(&v[i]);
+            self.prev_mandatory = saved_mandatory;
             self.after_exile = saved_exile;
             if !s.is_empty() {
                 parts.push(s);
@@ -2858,7 +2873,14 @@ impl Renderer<'_> {
                 }
                 if !else_empty {
                     let o = self.effect(otherwise);
-                    let o = format!("if {who} don't, {o}");
+                    // "Sacrifice a creature. If you can't, ...": a mandatory instruction
+                    // isn't followed only when it can't be.
+                    let dont = if self.prev_mandatory && who == "you" {
+                        "{alt:don't|can't}"
+                    } else {
+                        "don't"
+                    };
+                    let o = format!("if {who} {dont}, {o}");
                     s = if s.is_empty() { o } else { format!("{s}. {o}") };
                 }
                 s

@@ -523,7 +523,12 @@ impl Renderer<'_> {
                 } else {
                     "damage"
                 };
-                Ev::new(self.rel_subject(*who), format!("is dealt {c}"))
+                let w = self.rel_subject(*who);
+                if w == "you" {
+                    // "Whenever you're dealt damage".
+                    return Ev::new("", format!("you're dealt {c}"));
+                }
+                Ev::new(w, format!("is dealt {c}"))
             }
             TriggerCond::BeginningOf { step, whose } => {
                 let s = self.step_name(*step);

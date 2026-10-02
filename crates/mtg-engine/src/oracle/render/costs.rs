@@ -256,6 +256,11 @@ impl Renderer<'_> {
                         let n = self.for_each_noun(f);
                         format!("for each {n}")
                     }
+                    // "{X}, where X is ~'s power": X generic mana is {1} X times.
+                    other if c == "{1}" => {
+                        let v = self.value(other);
+                        return format!("{{X}}, where X is {v}");
+                    }
                     other => {
                         let v = self.value(other);
                         format!("X times, where X is {v}")

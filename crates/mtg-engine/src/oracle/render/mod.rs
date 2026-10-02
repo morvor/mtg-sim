@@ -664,6 +664,9 @@ pub struct Renderer<'a> {
     /// Rendering a trigger event that triggers once for a whole batch of events
     /// (`BatchPer::Batch`): "one or more players", "one or more Humans".
     pub(crate) batch_once: bool,
+    /// The instruction before is one the player must follow if able ("Sacrifice a
+    /// creature. If you can't, ...").
+    pub(crate) prev_mandatory: bool,
     /// How the trigger's player is called in the ability being rendered ("that spell's
     /// controller" for a targeting trigger).
     pub(crate) trigger_player: Option<&'static str>,
@@ -730,6 +733,7 @@ impl<'a> Renderer<'a> {
             outer_vars: Vec::new(),
             it_done: None,
             batch_once: false,
+            prev_mandatory: false,
             trigger_player: None,
             revealed_hand: false,
             x_for_each: None,
