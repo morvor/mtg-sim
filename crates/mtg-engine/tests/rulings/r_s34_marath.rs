@@ -16,6 +16,15 @@ use mtg_engine::*;
 
 const MARATH: &str = "Marath, Will of the Wild";
 
+/// Whether P0 could activate an ability of `src` now.
+fn activatable(t: &mut TestGame, src: ObjectId) -> bool {
+    t.g.recompute();
+    t.g.turn.priority = Some(P0);
+    t.g.legal_actions(P0)
+        .iter()
+        .any(|a| matches!(a, Action::Activate { source, .. } if *source == src))
+}
+
 /// One Mountain, Forest and Plains for P0, plus `extra` Wastes.
 fn marath_mana(t: &mut TestGame, extra: usize) {
     t.lands(P0, "Mountain", 1);
@@ -76,7 +85,7 @@ fn marath_put_onto_the_battlefield_without_being_cast_gets_no_counters_and_dies(
 
 #[test]
 fn marath_s_x_is_paid_in_mana_and_in_counters() {
-    cr!("107.3a", "602.2b", "118.3");
+    cr!("107.3a", "602.2b", "601.2h");
     ruling!(
         "Marath, Will of the Wild",
         "You announce the value of X as you activate the ability, and all instances of X in the activation cost are equal to the announced value. For example, if you choose 2 as the value of X, then you pay 2 and remove two +1/+1 counters to pay the cost."
@@ -103,7 +112,7 @@ fn marath_s_x_is_paid_in_mana_and_in_counters() {
 
 #[test]
 fn marath_s_x_cant_be_0() {
-    cr!("107.3a", "602.2b", "602.5");
+    cr!("107.3a", "602.2b", "118.3");
     supported(MARATH);
     // "X can't be 0": without mana for X, Marath's ability can't be activated (X = 0
     // would cost nothing). An announced 0 is replaced by the least legal value, 1.
@@ -113,16 +122,9 @@ fn marath_s_x_cant_be_0() {
     t.cast(P0, card).go();
     t.resolve_all();
     let marath = t.g.current(card);
-    let activatable = |t: &mut TestGame| {
-        t.g.recompute();
-        t.g.turn.priority = Some(P0);
-        t.g.legal_actions(P0)
-            .iter()
-            .any(|a| matches!(a, Action::Activate { source, .. } if *source == marath))
-    };
-    assert!(!activatable(&mut t));
+    assert!(!activatable(&mut t, marath));
     t.lands(P0, "Wastes", 1);
-    assert!(activatable(&mut t));
+    assert!(activatable(&mut t, marath));
     t.answer(P0, DecisionKind::X, Answer::Number(0));
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![2]));
     t.activate(P0, marath, 0, &[]).unwrap();
@@ -135,4 +137,26 @@ fn marath_s_x_cant_be_0() {
         .collect();
     assert_eq!(tokens.len(), 1);
     assert_eq!(t.pt(tokens[0]), (1, 1));
+}
+
+#[test]
+fn marath_without_counters_cant_activate_its_ability_although_x_could_be_paid_in_mana() {
+    cr!("107.3a", "602.2b", "118.3");
+    supported(MARATH);
+    // Marath put onto the battlefield has no counters; Glorious Anthem keeps it alive. With
+    // mana for X but no counter to remove, X = 1 can't be paid and X = 0 isn't allowed: the
+    // ability can't be activated. Once it has a counter, it can.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Glorious Anthem");
+    let marath = t.enter(P0, MARATH);
+    t.settle();
+    assert!(t.on_battlefield(marath));
+    assert_eq!(t.counters(marath, "+1/+1"), 0);
+    t.lands(P0, "Wastes", 2);
+    assert!(!activatable(&mut t, marath));
+    t.answer(P0, DecisionKind::X, Answer::Number(1));
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![2]));
+    assert!(t.activate(P0, marath, 0, &[]).is_err());
+    t.g.add_counters(Entity::Object(marath), "+1/+1", 1, None);
+    assert!(activatable(&mut t, marath));
 }

@@ -27,8 +27,11 @@ pub(crate) fn strip(eff: &str) -> Option<String> {
         let lower = line.to_lowercase();
         let t = lower.trim_end();
         let kept = match t.strip_suffix(SENTENCE) {
+            // A sentence of its own ("... target creature. X can't be 0."), not the end of
+            // another one ("This ability can't be copied and X can't be 0.").
             Some(head)
-                if (head.is_empty() || head.ends_with(' ')) && line.is_char_boundary(head.len()) =>
+                if (head.is_empty() || head.ends_with(". ") || head.ends_with(".) "))
+                    && line.is_char_boundary(head.len()) =>
             {
                 said += is_mode as usize;
                 line[..head.len()].trim_end().to_string()

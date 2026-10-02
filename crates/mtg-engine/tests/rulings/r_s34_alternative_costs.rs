@@ -195,7 +195,8 @@ fn ingenious_mastery_cast_for_its_alternative_cost_has_the_mana_value_of_its_man
     // cost. If the {2}{U} cost was paid, you draw three cards, then an opponent creates two
     // Treasure tokens and they scry 2. If that cost wasn't paid, you draw X cards." With
     // P1's Thalia the alternative cost totals {3}{U}, but the spell's mana value comes
-    // from {X}{2}{U} with X = 0 (no X was chosen for the alternative cost): 3.
+    // from {X}{2}{U} with X = 0: no X can be chosen when paying an alternative cost
+    // without X (an attempt to announce 3 is ignored), so its mana value is 3.
     let mut t = TestGame::new(2);
     kaervek(&mut t);
     t.battlefield(P1, "Thalia, Guardian of Thraben");
@@ -204,7 +205,7 @@ fn ingenious_mastery_cast_for_its_alternative_cost_has_the_mana_value_of_its_man
     let alt = alternative(&mut t, mastery);
     aim_kaervek_at_p0(&mut t);
     let hand = t.hand_size(P0);
-    let spell = t.cast(P0, mastery).method(alt).go();
+    let spell = t.cast(P0, mastery).method(alt).x(3).go();
     assert_eq!(tapped_lands(&t, P0), 4);
     assert_eq!(
         t.obj(spell).chars.mana_cost.as_ref().unwrap().to_string(),

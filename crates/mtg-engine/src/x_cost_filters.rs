@@ -63,18 +63,20 @@ pub fn payable_x_values(
     }
     candidates.sort_unstable();
     candidates.dedup();
-    let (taps, untaps) = (cost.has_tap(), cost.has_untap());
-    let mut ctx = Ctx::new(src, p);
-    ctx.x_defined = true;
     Some(
         candidates
             .into_iter()
-            .filter(|x| *x >= 0)
-            .filter(|x| {
-                ctx.x = *x as i32;
-                x_filter_parts(cost)
-                    .all(|part| g.cost_part_payable(p, part, src, taps, untaps, &ctx))
-            })
+            .filter(|x| *x >= 0 && payable_with_x(g, p, src, cost, *x))
             .collect(),
     )
+}
+
+/// Whether `p` could pay every part of `cost` whose object description mentions X with
+/// `x` announced as X.
+pub fn payable_with_x(g: &Game, p: PlayerId, src: Option<ObjectId>, cost: &Cost, x: i64) -> bool {
+    let mut ctx = Ctx::new(src, p);
+    ctx.x = x as i32;
+    ctx.x_defined = true;
+    let (taps, untaps) = (cost.has_tap(), cost.has_untap());
+    x_filter_parts(cost).all(|part| g.cost_part_payable(p, part, src, taps, untaps, &ctx))
 }

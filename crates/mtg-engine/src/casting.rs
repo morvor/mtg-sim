@@ -1500,10 +1500,16 @@ impl Game {
                     bound
                 };
             }
-            x = match self.ask(p, Decision::ChooseX { source: id, max }) {
-                Answer::Number(n) if n >= 0 && x_values.as_ref().is_none_or(|v| v.contains(&n)) => {
-                    n
+            // (A value the alternative cost can't be paid with isn't a legal choice.)
+            let answer = self.ask(p, Decision::ChooseX { source: id, max });
+            let payable = |n: i64| match (&x_values, &opt.alt_cost) {
+                (Some(_), Some(c)) => {
+                    crate::x_cost_filters::payable_with_x(self, p, Some(id), c, n)
                 }
+                _ => true,
+            };
+            x = match answer {
+                Answer::Number(n) if n >= 0 && payable(n) => n,
                 _ => max.max(0),
             };
         }
@@ -1886,23 +1892,29 @@ impl Game {
                 return false;
             }
         }
+        // A condition on X ("X can't be 0", CR 107.3a) holds if it does for some value that
+        // could be announced (CR 602.2b): the least such value, at which the cost must
+        // then be payable.
+        let mut least_x: Option<i32> = None;
         if let Some(c) = &act.condition {
-            // A condition on X ("X can't be 0", CR 107.3a) holds if it does for some value
-            // that could be announced (CR 602.2b).
             let ctx = Ctx::new(Some(src), p);
-            let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
-                || act.cost.parts.iter().any(cost_part_has_x);
-            let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
-            let for_some_x = || {
-                (1..=max_x as i32).any(|x| {
-                    let mut ctx = ctx.clone();
-                    ctx.x = x;
-                    ctx.x_defined = true;
-                    self.eval_cond(c, &ctx)
-                })
-            };
-            if !self.eval_cond(c, &ctx) && !(has_x && for_some_x()) {
-                return false;
+            if !self.eval_cond(c, &ctx) {
+                let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
+                    || act.cost.parts.iter().any(cost_part_has_x);
+                let max_x = self.max_mana_available(p) + o.counter(counters::LOYALTY);
+                least_x = has_x
+                    .then(|| {
+                        (1..=max_x as i32).find(|x| {
+                            let mut ctx = ctx.clone();
+                            ctx.x = *x;
+                            ctx.x_defined = true;
+                            self.eval_cond(c, &ctx)
+                        })
+                    })
+                    .flatten();
+                if least_x.is_none() {
+                    return false;
+                }
             }
         }
         if self.activation_prohibited(p, src, act.is_mana_ability)
@@ -1933,15 +1945,22 @@ impl Game {
                 return false;
             }
         }
-        let cost = self.ability_total_cost(p, src, a, act);
+        let x = least_x.unwrap_or(0);
+        let mut pay_ctx = Ctx::new(Some(src), p);
+        if least_x.is_some() {
+            pay_ctx.x = x;
+            pay_ctx.x_defined = true;
+        }
+        let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
         let chars = o.chars.clone();
-        self.can_pay_cost_optimistic(p, &cost, Some(src), &chars)
+        self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
             // CR 118.9: or an alternative cost it could be activated for.
             || crate::activation_costs::alternative_costs(self, p, src, a, act)
                 .iter()
                 .any(|(_, alt)| {
-                    let cost = self.ability_total_cost_with(p, src, a, act, None, 0, Some(alt));
-                    self.can_pay_cost_optimistic(p, &cost, Some(src), &chars)
+                    let cost =
+                        self.ability_total_cost_with(p, src, a, act, None, x as u32, Some(alt));
+                    self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
                 })
     }
 
@@ -2385,10 +2404,22 @@ impl Game {
         p: PlayerId,
         cost: &Cost,
         src: Option<ObjectId>,
-        _chars: &Characteristics,
+        chars: &Characteristics,
     ) -> bool {
-        let ctx = Ctx::new(src, p);
-        let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, &ctx);
+        self.can_pay_cost_optimistic_in(p, cost, src, chars, &Ctx::new(src, p))
+    }
+
+    /// [`Self::can_pay_cost_optimistic`] with the parts' values read in `ctx` (e.g. with
+    /// the value announced for X: "Remove X +1/+1 counters from ~").
+    pub fn can_pay_cost_optimistic_in(
+        &self,
+        p: PlayerId,
+        cost: &Cost,
+        src: Option<ObjectId>,
+        _chars: &Characteristics,
+        ctx: &Ctx,
+    ) -> bool {
+        let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
         // CR 107.3a: parts that use an object described with X can be paid if they could
         // be for some value of X.
         if crate::x_cost_filters::payable_x_values(self, p, src, cost).is_some_and(|v| v.is_empty())
@@ -2397,7 +2428,7 @@ impl Game {
         }
         for part in &cost.parts {
             if !crate::x_cost_filters::part_has_x_filter(part)
-                && !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), &ctx)
+                && !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx)
             {
                 return false;
             }

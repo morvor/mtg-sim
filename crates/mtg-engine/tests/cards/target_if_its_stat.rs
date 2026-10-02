@@ -99,7 +99,7 @@ fn dispersal_shield_compares_with_the_greatest_mana_value_you_control() {
 
 #[test]
 fn sage_eye_avengers_returns_a_creature_with_less_power() {
-    cr!("608.2c", "603.3c");
+    cr!("608.2c");
     compiles("Sage-Eye Avengers");
     // "Whenever this creature attacks, you may return target creature to its owner's hand
     // if its power is less than this creature's power." Sage-Eye Avengers is 4/5: Hill
