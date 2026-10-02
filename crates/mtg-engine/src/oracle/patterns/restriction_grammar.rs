@@ -347,6 +347,19 @@ fn players_cant_use(who: &PlayerFilter, p: &str) -> Option<Vec<Restriction>> {
             n,
         }]);
     }
+    // "Your opponents can't play land cards from graveyards."
+    if let Some(z) = p.strip_prefix("can't play land cards from ") {
+        let zone = match z {
+            "graveyards" => ZoneKind::Graveyard,
+            "libraries" => ZoneKind::Library,
+            "exile" => ZoneKind::Exile,
+            _ => return None,
+        };
+        return Some(vec![Restriction::CantPlayLandCards {
+            who: who.clone(),
+            what: Filter::InZone(zone),
+        }]);
+    }
     for (prefix, attack) in [("can't block with ", false), ("can't attack with ", true)] {
         if let Some(r) = p.strip_prefix(prefix) {
             let (f, plural) = whole_object_phrase(r)?;
@@ -520,28 +533,73 @@ fn restriction_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
 
 inventory::submit! { StaticPattern { name: "restriction grammar: static restrictions", priority: 105, parse: restriction_static } }
 
+/// "Spells with flash you cast cost {1} less to cast and can't be countered.": the cost
+/// change, and the same spells can't be countered (CR 601.2f, 701.6).
+fn cost_and_cant_be_countered(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l.trim());
+    let head = l.strip_suffix(" and can't be countered")?;
+    let mut abilities =
+        crate::oracle::statics::parse_static(&format!("{}.", &text[..head.len()]), ctx)?;
+    if abilities.len() != 1 {
+        return None;
+    }
+    let AbilityKind::Static(st) = &abilities[0].kind else {
+        return None;
+    };
+    let StaticEffect::CostModifier(cm) = &st.effect else {
+        return None;
+    };
+    let CostTarget::Spells(f) = &cm.applies_to else {
+        return None;
+    };
+    let rel = match cm.who {
+        PlayerRel::You => PlayerRel::You,
+        PlayerRel::Opponent => PlayerRel::Opponent,
+        _ => return None,
+    };
+    let what = Filter::and(vec![f.clone(), Filter::Spell, Filter::ControlledBy(rel)]);
+    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBeCountered(what)));
+    s.condition = st.condition.clone();
+    abilities.push(AbilityDef::new(AbilityKind::Static(s), text));
+    Some(abilities)
+}
+
+inventory::submit! { StaticPattern { name: "restriction grammar: [spells] cost less and can't be countered", priority: 105, parse: cost_and_cant_be_countered } }
+
 /// "Enchanted creature gets +4/+4 and has first strike, and all creatures able to block
 /// it do so.": the rest of the line, and a blocking requirement on the same object(s)
 /// under the same condition (CR 509.1c).
 fn and_all_able_to_block_it(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l.trim());
-    let head = l
+    let (head, lure) = if let Some(h) = l
         .strip_suffix(", and all creatures able to block it do so")
-        .or_else(|| l.strip_suffix(" and all creatures able to block it do so"))?;
+        .or_else(|| l.strip_suffix(" and all creatures able to block it do so"))
+    {
+        (h, true)
+    } else if let Some(h) = l.strip_suffix(" and can't have counters put on it") {
+        (h, false)
+    } else {
+        return None;
+    };
     let head_text = &text[..head.len()];
     let mut abilities = crate::oracle::statics::parse_static(&format!("{head_text}."), ctx)?;
     let AbilityKind::Static(first) = &abilities.first()?.kind else {
         return None;
     };
-    let StaticEffect::Continuous { affected, .. } = &first.effect else {
-        return None;
+    let affected = match &first.effect {
+        StaticEffect::Continuous { affected, .. } => affected,
+        StaticEffect::Restriction(Restriction::CantBe { what, .. }) => what,
+        _ => return None,
     };
     if !matches!(affected, Filter::AttachedToSource | Filter::Source) {
         return None;
     }
-    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::MustBeBlockedByAll(
-        affected.clone(),
-    )));
+    let mut s = StaticAbility::new(if lure {
+        StaticEffect::Restriction(Restriction::MustBeBlockedByAll(affected.clone()))
+    } else {
+        // "can't have counters put on it" (CR 614.1, see `r122_cant_have_counters_put`).
+        put_counters_prevented(Some(affected.clone()), None)
+    });
     s.condition = first.condition.clone();
     abilities.push(AbilityDef::new(AbilityKind::Static(s), text));
     Some(abilities)
@@ -727,6 +785,24 @@ fn players_cant_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     if let Some(rs) = players_cant_use(&who, &format!("can't {pred}")) {
         return Some(add(rs, dur));
     }
+    // "You can't sacrifice those creatures this turn." (only you control them).
+    if let Some(o) = pred.strip_prefix("sacrifice ") {
+        if !matches!(who, PlayerFilter::You) {
+            return None;
+        }
+        let (what, rest) = crate::oracle::effects::object_ref(o, b)?;
+        if !end(&rest).is_empty() {
+            return None;
+        }
+        let f = subject_filter(&what, o)?;
+        if !matches!(f, Filter::In(_)) {
+            return None;
+        }
+        // A player sacrifices only permanents they control (CR 701.21a): while you
+        // control them.
+        let f = Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]);
+        return Some(add(vec![Restriction::CantBeSacrificed(f)], dur));
+    }
     // "You can't attack that player this turn."
     if let Some(d) = pred.strip_prefix("attack ") {
         let defender = effect_players(d, b)?;
@@ -766,6 +842,11 @@ inventory::submit! { EffectPattern { name: "restriction grammar: players can't [
 /// can't attack or block").
 fn objects_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim());
+    // "can't be blocked this turn except by creatures with flying": the duration is in
+    // the middle.
+    if let Some((x, y)) = l.split_once(" this turn except by ") {
+        return objects_restriction_effect(&format!("{x} except by {y} this turn"), b);
+    }
     let (dur, main) = effect_duration(l)?;
     if matches!(dur, Duration::Permanent) {
         return None;
@@ -1140,6 +1221,65 @@ fn attack_other_than_effect(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "restriction grammar: attack a player other than you if able", priority: 110, parse: attack_other_than_effect } }
 
+/// "Until your next turn, creatures can't attack you (or planeswalkers you control)
+/// unless their controller pays {2} / 2 life for each of those creatures" (CR 508.1d,
+/// 508.1h).
+fn attack_tax_effect(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (lead, l) = leading_duration(l);
+    let dur = lead?;
+    let (planeswalkers, rest) = if let Some(r) =
+        l.strip_prefix("creatures can't attack you or planeswalkers you control unless their controller pays ")
+    {
+        (true, r)
+    } else {
+        (
+            false,
+            l.strip_prefix("creatures can't attack you unless their controller pays ")?,
+        )
+    };
+    let cost_s = rest.strip_suffix(" for each of those creatures")?;
+    let cost_s = if cost_s.ends_with(" life") {
+        format!("pay {cost_s}")
+    } else {
+        cost_s.to_string()
+    };
+    let (cost, _) = crate::oracle::costs::parse_cost(&cost_s)?;
+    Some(add(
+        vec![Restriction::AttackCost {
+            attackers: Filter::creature(),
+            defender: PlayerFilter::You,
+            planeswalkers,
+            cost,
+        }],
+        dur,
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "restriction grammar: attack taxes for a duration", priority: 110, parse: attack_tax_effect } }
+
+/// "~ gains shroud until end of turn and doesn't untap during your next untap step."
+fn gains_and_doesnt_untap(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let head = l.strip_suffix(" and doesn't untap during your next untap step")?;
+    if !head.ends_with(" until end of turn") || !head.starts_with('~') {
+        return None;
+    }
+    let modify = crate::oracle::effects::parse_simple(head, b)?;
+    if !matches!(&modify, Effect::Modify { what: Sel::This, .. }) {
+        return None;
+    }
+    Some(Effect::seq(vec![
+        modify,
+        Effect::AddRestriction {
+            restriction: Restriction::DoesntUntap(Filter::In(Box::new(Sel::This))),
+            duration: Duration::ThroughYourNextUntapStep,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "restriction grammar: gains [ability] until end of turn and doesn't untap", priority: 110, parse: gains_and_doesnt_untap } }
+
 /// A list of whole groups as a subject: "Green creatures and white creatures", "White
 /// creatures and blue creatures".
 fn group_list(s: &str) -> Option<Filter> {
@@ -1301,6 +1441,30 @@ fn pump_and_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "restriction grammar: [duration], [object] gets +X/+Y and [restriction]", priority: 110, parse: pump_and_restriction_effect } }
+
+/// "no permanents named ~ are on the battlefield", "there are no [permanents] on the
+/// battlefield".
+fn none_on_battlefield(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let noun = c
+        .strip_prefix("no ")
+        .and_then(|r| r.strip_suffix(" are on the battlefield"))
+        .or_else(|| {
+            c.strip_prefix("there are no ")
+                .and_then(|r| r.strip_suffix(" on the battlefield"))
+        })?;
+    let (f, plural) = whole_object_phrase(noun)?;
+    if !plural {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![f, Filter::Permanent])),
+        Cmp::Eq,
+        Value::c(0),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "restriction grammar: no [permanents] are on the battlefield", priority: 100, parse: none_on_battlefield } }
 
 /// "with no abilities", "with abilities" (CR 113).
 fn with_abilities<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {

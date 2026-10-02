@@ -292,6 +292,72 @@ fn cast_another_spell(c: &str) -> Option<Condition> {
 
 inventory::submit! { super::ConditionPattern { name: "activation restrictions: you've cast another [color] spell this turn", priority: 100, parse: cast_another_spell } }
 
+/// A whole value phrase ("the number of Caves you control plus ..."), with no targets.
+fn whole_value(s: &str) -> Option<Value> {
+    let tl = crate::types::TypeLine::default();
+    let ctx = CompileContext {
+        card_name: "",
+        full_name: "",
+        type_line: &tl,
+        layout: crate::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let mut b = crate::oracle::effects::Builder::new(&ctx);
+    let (v, rest) = super::value_grammar::parse_value(s, &mut b)?;
+    (rest.trim().is_empty() && b.targets.is_empty()).then_some(v)
+}
+
+/// Comparisons with a counted value: "the number of other Caves you control plus the
+/// number of Cave cards in your graveyard is three or greater", "there are four or more
+/// permanent types among cards in your graveyard", "you have exactly zero or seven cards
+/// in hand".
+fn value_comparison(c: &str) -> Option<Condition> {
+    use super::statics_conditions::amount_cmp;
+    let c = crate::oracle::phrases::end(c);
+    // "you have exactly zero or seven cards in hand": either count.
+    if let Some(r) = c
+        .strip_prefix("you have exactly ")
+        .and_then(|r| r.strip_suffix(" cards in hand"))
+    {
+        let (a, b) = r.split_once(" or ")?;
+        let n = |w: &str| {
+            if w == "zero" {
+                return Some(Value::c(0));
+            }
+            let (v, rest) = crate::oracle::phrases::parse_number(w)?;
+            rest.trim().is_empty().then_some(v)
+        };
+        let hand = || Value::HandSize(PlayerRef::You);
+        return Some(Condition::Or(vec![
+            Condition::Compare(hand(), Cmp::Eq, n(a)?),
+            Condition::Compare(hand(), Cmp::Eq, n(b)?),
+        ]));
+    }
+    if let Some(r) = c.strip_prefix("there are ") {
+        if r.contains(" among ") {
+            let (cmp, n, rest) = amount_cmp(r)?;
+            let v = whole_value(&format!("the number of {}", rest.trim()))?;
+            return Some(Condition::Compare(v, cmp, n));
+        }
+        return None;
+    }
+    let (v, rest) = c.rsplit_once(" is ")?;
+    if !v.starts_with("the number of ") {
+        return None;
+    }
+    let (cmp, n, tail) = amount_cmp(rest)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let v = whole_value(v)?;
+    Some(Condition::Compare(v, cmp, n))
+}
+
+inventory::submit! { super::ConditionPattern { name: "activation restrictions: counted value comparisons", priority: 110, parse: value_comparison } }
+
 inventory::submit! { super::ConditionPattern { name: "activation restrictions: source and hand states", priority: 100, parse: restriction_state } }
 
 inventory::submit! { super::ConditionPattern { name: "activation restrictions: you've been attacked this step", priority: 100, parse: attacked_this_step } }
