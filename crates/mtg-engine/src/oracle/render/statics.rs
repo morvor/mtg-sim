@@ -95,6 +95,17 @@ impl Renderer<'_> {
                 };
                 format!("{when}, {}", lower_first(&e))
             }
+            // "You may pay {0} rather than pay the power-up cost of the first power-up
+            // ability you activate during each of your turns."
+            Some(Condition::YourTurn)
+                if matches!(&s.effect, StaticEffect::CostModifier(cm)
+                    if super::tail_parts::first_ability_alt_cost(self, cm, true).is_some()) =>
+            {
+                let StaticEffect::CostModifier(cm) = &s.effect else {
+                    return self.gap("cost modifier");
+                };
+                super::tail_parts::first_ability_alt_cost(self, cm, true).unwrap_or_default()
+            }
             // Cost modifiers state their condition with "if" ("This spell costs {2} less
             // to cast if ...").
             Some(c) if matches!(s.effect, StaticEffect::CostModifier(_)) => {
@@ -1024,6 +1035,11 @@ impl Renderer<'_> {
                         "you may cast ~ by paying {c} rather than paying its mana cost. {flash}"
                     )
                 }
+            }
+            CostChange::AlternativeCost(_)
+                if super::tail_parts::first_ability_alt_cost(self, cm, false).is_some() =>
+            {
+                super::tail_parts::first_ability_alt_cost(self, cm, false).unwrap_or_default()
             }
             CostChange::AlternativeCost(c) if c.is_free() => {
                 let m = self.me();

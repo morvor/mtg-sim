@@ -667,3 +667,39 @@ impl Renderer<'_> {
         Some(out.join(". "))
     }
 }
+
+/// "You may pay {0} rather than pay the equip cost of the first equip ability you activate
+/// each turn" (an alternative cost for a keyword's activated abilities, CR 118.9).
+pub(crate) fn first_ability_alt_cost(
+    r: &mut Renderer<'_>,
+    cm: &CostModifier,
+    your_turns: bool,
+) -> Option<String> {
+    let CostChange::AlternativeCost(c) = &cm.change else {
+        return None;
+    };
+    let CostTarget::ActivatedAbilities(scope) = &cm.applies_to else {
+        return None;
+    };
+    let AbilityClass::Keyword(k) = scope.class else {
+        return None;
+    };
+    if !scope.first_each_turn
+        || !matches!(scope.sources, Filter::Any)
+        || scope.targeting.is_some()
+        || cm.who != PlayerRel::You
+    {
+        return None;
+    }
+    let pay = r.cost_as_payment(c);
+    let pay = pay.strip_prefix("pay ").unwrap_or(&pay).to_string();
+    let k = k.name().to_lowercase();
+    let when = if your_turns {
+        "during each of your turns"
+    } else {
+        "each turn"
+    };
+    Some(format!(
+        "you may pay {pay} rather than pay the {k} cost of the first {k} ability you activate {when}"
+    ))
+}

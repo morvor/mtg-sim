@@ -2812,7 +2812,7 @@ impl Renderer<'_> {
         // The searching player puts the card onto the battlefield under their own control
         // (CR 110.2a).
         let mut to2 = to.clone();
-        if to2.controller.as_ref().is_some_and(|c| same_player(c, who)) {
+        if to2.controller.as_ref().is_some_and(|c| same_player(c, who)) && same_player(who, whose) {
             to2.controller = None;
         }
         let mut dest = self.destination_phrase(&to2, many, same_player(who, whose));
@@ -2836,7 +2836,13 @@ impl Renderer<'_> {
             s.push_str(&format!(", put {pron} {dest}"));
         }
         if *shuffle {
-            s.push_str(", then shuffle");
+            // "Search target opponent's library ... Then that player shuffles."
+            if same_player(who, whose) {
+                s.push_str(", then shuffle");
+            } else {
+                let p = self.player(whose, Case::Subj);
+                s.push_str(&format!(". Then {p} shuffles"));
+            }
         }
         s
     }
