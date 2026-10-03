@@ -482,6 +482,36 @@ pub fn remove_up_to_counters(
     remove_chosen_counters(g, target, kind, n.max(0) as u32, chooser, source)
 }
 
+/// The instruction `then` for each kind of counter on `from` ([`Effect::ForEachCounterKind`]).
+pub fn for_each_counter_kind(
+    g: &mut Game,
+    from: &Sel,
+    then: &Effect,
+    ctx: &mut crate::eval::Ctx,
+) -> Vec<Effect> {
+    let mut kinds: Vec<CounterKind> = Vec::new();
+    for e in g.resolve_sel(from, ctx) {
+        for (k, _) in counters_of(g, e) {
+            if !kinds.contains(&k) {
+                kinds.push(k);
+            }
+        }
+    }
+    let (Ok(json), Ok(placeholder)) = (
+        serde_json::to_string(then),
+        serde_json::to_string(CHOSEN_COUNTER_KIND),
+    ) else {
+        return vec![];
+    };
+    kinds
+        .iter()
+        .filter_map(|k| {
+            let chosen = serde_json::to_string(k.as_str()).ok()?;
+            serde_json::from_str(&json.replace(&placeholder, &chosen)).ok()
+        })
+        .collect()
+}
+
 /// [`Effect::ChooseCounterKind`]: the controller chooses a kind of counter among those on
 /// `from`; returns `then` with that kind in place of [`CHOSEN_COUNTER_KIND`], or None if
 /// there's no counter to choose.

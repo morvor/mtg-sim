@@ -152,6 +152,7 @@ pub mod transform_rules;
 pub mod trigger_timing;
 pub mod triggers;
 pub mod turn;
+pub mod turn_order_choices;
 pub mod turn_structure;
 pub mod types;
 pub mod untap_choice;

@@ -1044,6 +1044,15 @@ pub enum Sel {
     ThisTurn(Box<TriggerCond>),
 }
 
+/// Where an [`Effect::InTurnOrder`] instruction starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TurnOrderStart {
+    /// "starting with you".
+    You,
+    /// "starting with the next opponent in turn order".
+    NextOpponent,
+}
+
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
 pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
 
@@ -2195,6 +2204,9 @@ pub enum ManaProduction {
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
     AnyColorAmong(Filter),
+    /// One mana of each color among the matching objects ("For each color among
+    /// permanents you control, add one mana of that color", CR 105.4, 106.1).
+    EachColorAmong(Filter),
     /// One mana of any type the permanent tapped for mana produced (from the triggering
     /// event, "one mana of any type that land produced").
     AnyTypeProduced,
@@ -3679,6 +3691,16 @@ pub enum Effect {
         who: PlayerRef,
         effect: Box<Effect>,
     },
+    /// "Starting with you, each player chooses a creature", "starting with the next opponent
+    /// in turn order, each opponent chooses ...": each of the players matching `who`, one
+    /// at a time in turn order beginning with `first` (CR 101.4b), performs the whole
+    /// instruction, knowing what those before did; `PlayerRef::Iterated` is that player.
+    /// See `turn_order_choices.rs`.
+    InTurnOrder {
+        first: TurnOrderStart,
+        who: PlayerFilter,
+        effect: Box<Effect>,
+    },
     /// "[player] does the same": the player performs the effect in place of its
     /// controller, so "you" in it is that player (none if `who` names no player).
     AsPlayer {
@@ -3810,6 +3832,14 @@ pub enum Effect {
     /// players), then `then` is performed with [`CHOSEN_COUNTER_KIND`] standing for that
     /// kind. Nothing happens if there are none.
     ChooseCounterKind {
+        from: Sel,
+        then: Box<Effect>,
+    },
+    /// "For each kind of counter on target permanent or player, give that permanent or
+    /// player another counter of that kind": `then` is performed once for each kind of
+    /// counter on `from` (as the instruction begins, CR 608.2h), with
+    /// [`CHOSEN_COUNTER_KIND`] standing for that kind.
+    ForEachCounterKind {
         from: Sel,
         then: Box<Effect>,
     },
@@ -4358,6 +4388,11 @@ pub enum Effect {
         amount: Option<Value>,
         duration: Duration,
         combat_only: bool,
+        /// The rest of the effect, performed right after damage is prevented (CR 615.5):
+        /// "For each 1 damage prevented this way, put a +1/+1 counter on that creature."
+        /// The event amount is the damage prevented; the event object, the recipient.
+        #[serde(default)]
+        then: Option<Box<Effect>>,
     },
     /// "Prevent the next N damage that would be dealt this turn to any number of targets,
     /// divided as you choose": a prevention shield for each target of the slot, of the

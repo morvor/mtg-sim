@@ -123,6 +123,7 @@ fn shields_last_until_used_up_or_expired() {
             amount: Some(Value::c(3)),
             duration: Duration::EndOfTurn,
             combat_only: false,
+            then: None,
         },
     );
     deal_from(&mut t, src, 1, Entity::Object(c));
@@ -142,6 +143,7 @@ fn shields_last_until_used_up_or_expired() {
             amount: Some(Value::c(3)),
             duration: Duration::EndOfTurn,
             combat_only: false,
+            then: None,
         },
     );
     assert_eq!(t.g.replacements.len(), 1);
@@ -167,6 +169,7 @@ fn prevention_must_exist_before_the_damage() {
             amount: Some(Value::c(3)),
             duration: Duration::EndOfTurn,
             combat_only: false,
+            then: None,
         },
     );
     assert_eq!(t.obj_now(c).damage, 3);
@@ -296,6 +299,7 @@ fn the_shielded_player_chooses_which_simultaneous_damage_is_prevented() {
                 amount: Some(Value::c(3)),
                 duration: Duration::EndOfTurn,
                 combat_only: false,
+                then: None,
             },
         );
         t.answer(P0, DecisionKind::Order, Answer::Indices(order));
@@ -585,6 +589,7 @@ fn shields_for_each_of_a_set_of_creatures_are_locked_in() {
             amount: Some(Value::c(1)),
             duration: Duration::EndOfTurn,
             combat_only: false,
+            then: None,
         },
     );
     modify_target(
@@ -639,6 +644,7 @@ fn damage_that_cant_be_prevented() {
             amount: Some(Value::c(2)),
             duration: Duration::EndOfTurn,
             combat_only: false,
+            then: None,
         },
     );
     add_prevention(

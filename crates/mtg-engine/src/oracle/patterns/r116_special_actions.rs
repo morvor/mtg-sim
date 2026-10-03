@@ -161,6 +161,7 @@ fn prevent_next(l: &str, b: &mut Builder) -> Option<Effect> {
         amount: Some(amount),
         duration: Duration::EndOfTurn,
         combat_only: false,
+        then: None,
     })
 }
 
