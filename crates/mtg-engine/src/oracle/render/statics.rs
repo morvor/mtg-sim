@@ -2005,10 +2005,11 @@ impl Renderer<'_> {
                 format!("{} can't win the game", self.player_filter_subject(p))
             }
             Restriction::MaxDrawsPerTurn(p, n) => {
-                let w = self.player_filter_subject(p);
                 if *n == 0 {
+                    let w = self.player_filter_subject(p);
                     return format!("{w} can't draw cards");
                 }
+                let w = self.per_player_subject(p);
                 let c = if *n == 1 {
                     "one card".to_string()
                 } else {
@@ -2017,14 +2018,14 @@ impl Renderer<'_> {
                 format!("{w} can't draw more than {c} each turn")
             }
             Restriction::MaxSpellsOfKindPerTurn { who, what, n } => {
-                let w = self.player_filter_subject(who);
+                let w = self.per_player_subject(who);
                 let s = self.spell_noun_plural(what);
                 let s = s.trim_end_matches('s');
                 let c = number_word(*n as i32);
                 format!("{w} can't cast more than {c} {s} each turn")
             }
             Restriction::MaxSpellsPerTurn(p, n) => {
-                let w = self.player_filter_subject(p);
+                let w = self.per_player_subject(p);
                 let c = if *n == 1 {
                     "one spell".to_string()
                 } else {
@@ -2149,7 +2150,7 @@ impl Renderer<'_> {
                 format!("{a} must be blocked by {n} {noun} if able")
             }
             Restriction::MaxBlockersOf { who, n } => {
-                let w = self.player_filter_subject(who);
+                let w = self.per_player_subject(who);
                 let noun = if *n == 1 { "creature" } else { "creatures" };
                 format!(
                     "{w} can't block with more than {} {noun}",
@@ -2157,6 +2158,17 @@ impl Renderer<'_> {
                 )
             }
             Restriction::Custom(name) => self.custom_restriction(name),
+        }
+    }
+
+    /// The subject of a limit each player has of their own ("each opponent can't draw
+    /// more than one card each turn", "each player can't cast more than one spell each
+    /// turn"): counted per player, which "your opponents" or "players" leaves unsaid.
+    fn per_player_subject(&mut self, pf: &PlayerFilter) -> String {
+        match pf {
+            PlayerFilter::Opponent => "each opponent".into(),
+            PlayerFilter::Any => "each player".into(),
+            other => self.player_filter_subject(other),
         }
     }
 

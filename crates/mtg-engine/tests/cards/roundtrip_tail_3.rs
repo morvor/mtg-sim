@@ -79,3 +79,29 @@ fn damage_divided_among_x_targets_needs_exactly_x_targets() {
     let dead = [a, b].iter().filter(|o| !t.on_battlefield(**o)).count();
     assert_eq!(dead, 1, "exactly one creature was a target");
 }
+
+#[test]
+fn never_more_targets_than_the_damage_divided() {
+    cr!("601.2d");
+    // Meteor Swarm: "8 damage divided as you choose among X target creatures and/or
+    // planeswalkers". Each target gets at least 1 of the 8 damage, so X = 9 can't be
+    // chosen (the targets can't be), while X = 8 gives each of eight targets 1.
+    for (x, legal) in [(9, false), (8, true)] {
+        let mut t = TestGame::new(2);
+        for _ in 0..9 {
+            t.battlefield(P1, "Grizzly Bears");
+        }
+        let spell = t.hand(P0, "Meteor Swarm");
+        t.lands(P0, "Mountain", 4);
+        t.lands(P0, "Forest", 8);
+        let r = t.cast(P0, spell).x(x).try_go();
+        assert_eq!(r.is_ok(), legal, "X = {x}");
+        if legal {
+            t.resolve();
+            let bears = t.named_on_battlefield("Grizzly Bears");
+            assert_eq!(bears.len(), 9);
+            let damaged = bears.iter().filter(|b| t.obj_now(**b).damage == 1).count();
+            assert_eq!(damaged, 8);
+        }
+    }
+}

@@ -79,10 +79,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 113.6).",
     },
     Equivalence {
-        pattern: r#"\b(~|creatures?|permanents?) with the same name( (?:deals?|enters?|dies|die|attacks?|blocks?|gets?|has|have)\b|[.,"])"#,
+        pattern: r#"\b(or (?:an)?other (?:creature|permanent)) with the same name( (?:deals?|enters?|dies|die|attacks?|blocks?|gets?|has|have)\b|[.,"])"#,
         replacement: "$1 named ~$2",
         why: "\"~ or another creature with the same name deals damage\": the same name as \
-              ~, which the sentence names (as below).",
+              ~, which the sentence names (as below). Not \"two creatures with the same \
+              name\" (as each other).",
     },
     Equivalence {
         pattern: r"\bwith the same name as ~(?:it\b)?",
@@ -204,11 +205,6 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "A range of die results in a table, \"1-9\" or \"1—9\" (CR 706).",
     },
     Equivalence {
-        pattern: r"\btwelfth\b",
-        replacement: "12th",
-        why: "Ordinal written in words.",
-    },
-    Equivalence {
         pattern: r"\b(?:have not|has not|haven't|hasn't) (cast|attacked|gained|lost)\b",
         replacement: "didn't $1",
         why: "\"If you haven't cast a spell this turn\" and \"if you didn't cast a spell this \
@@ -233,11 +229,6 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               in it is a player's graveyard with twenty or more cards in it.",
     },
     Equivalence {
-        pattern: r"\bthe number of graveyards with (\S+ or (?:more|fewer)) cards in them\b",
-        replacement: "the number of players with $1 cards in their graveyard",
-        why: "As above (CR 404.1).",
-    },
-    Equivalence {
         pattern: r"\bcontrol creatures named ([^,.]+?) and ([^,.]+?),",
         replacement: "control a creature named $1 and a creature named $2,",
         why: "Controlling creatures named A and B is controlling a creature named A and a \
@@ -258,11 +249,6 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         pattern: r"\bis equal to\b",
         replacement: "is",
         why: "\"Your maximum hand size is equal to X\" is \"is X\".",
-    },
-    Equivalence {
-        pattern: r"\beach opponent can't\b",
-        replacement: "your opponents can't",
-        why: "A restriction on each opponent is one on your opponents.",
     },
     Equivalence {
         pattern: r"\bin a command zone\b",
@@ -605,12 +591,6 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         pattern: r"\bx cards?,? where x is that many plus (\d+|one|two|three)\b",
         replacement: "that many cards plus $1",
         why: "\"Draw that many cards plus one\": X cards, where X is that many plus 1.",
-    },
-    Equivalence {
-        pattern: r"\b(for each|the number of) ([^.;]*?) in (?:each|all) graveyards\b",
-        replacement: "$1 $2 in a graveyard",
-        why: "Counting the cards in each graveyard, in all graveyards, or in a graveyard \
-              counts the same cards (CR 404.1: each player has a graveyard).",
     },
     Equivalence {
         pattern: r"\bfrom graveyards\b",
@@ -966,7 +946,7 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
         "A leading duration, condition or delayed time applies to the whole sentence wherever it's written.",
     ),
     (
-        "\"Choose a creature type. [Instruction] ... the chosen type.\" -> \"[Instruction] ... the creature type of your choice.\" (also colors, card types, basic land types; when nothing later uses the choice)",
+        "\"Choose a creature type. [Instruction] ... the chosen type.\" -> \"[Instruction] ... the creature type of your choice.\" (also colors, card types, basic land types; when the next instruction uses the choice and nothing later does)",
         "The same choice, made as the instruction that uses it is followed (CR 608.2c).",
     ),
     (
@@ -1426,7 +1406,7 @@ fn sentence_rewrites(s: &str) -> String {
     // instruction that uses it is followed (CR 608.2c), when nothing later uses it.
     static CHOSEN: OnceLock<Option<Regex>> = OnceLock::new();
     if let Some(re) = CHOSEN.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n|, )choose an? (color|card type|creature type|basic land type)(?:\.|,) (?:then )?([^\n]*?)(?:\bthe chosen (?:type|color|card type|creature type|basic land type)\b|\bthat (?:type|color)\b|\{alt:the chosen (?:type|color)\|that (?:type|color)\})").ok()
+        Regex::new(r"(^|[.:—•] |\n|, )choose an? (color|card type|creature type|basic land type)(?:\.|,) (?:then )?([^.\n]*?)(?:\bthe chosen (?:type|color|card type|creature type|basic land type)\b|\bthat (?:type|color)\b|\{alt:the chosen (?:type|color)\|that (?:type|color)\})").ok()
     }) {
         let mut out = String::new();
         let mut last = 0;
@@ -1434,7 +1414,16 @@ fn sentence_rewrites(s: &str) -> String {
             let m = c.get(0).map_or(0..0, |m| m.range());
             let later = &s[m.end..];
             let next_line = later.find('\n').map_or(later, |i| &later[..i]);
-            if next_line.contains("chosen") || next_line.contains("that type") {
+            // Only when the choice is used by the very next instruction: anything done in
+            // between (revealing a hand, drawing) could inform the choice, so moving the
+            // choice past it would hide a misordered compilation (Persecute: the color
+            // is chosen before the hand is revealed).
+            let between = &c[3];
+            if next_line.contains("chosen")
+                || next_line.contains("that type")
+                || between.contains(" and ")
+                || between.contains(" then ")
+            {
                 continue;
             }
             out.push_str(&s[last..m.start]);
@@ -1569,7 +1558,23 @@ fn sentence_rewrites(s: &str) -> String {
                 let noun = &c[4];
                 let fits = c[2].contains(noun)
                     || (noun == "player" && (head == "opponent" || head == "player"));
-                if !fits || c[3].contains("choose ") {
+                // Not into the effect of a delayed trigger ("Choose target creature.
+                // Whenever you attack this turn, ~ deals damage to that creature"): a
+                // target named there is chosen each time it triggers (CR 603.3d), not once
+                // as the ability is activated. (In its trigger condition, "When target
+                // creature dies this turn", it can only be the ability's.)
+                let mid = &c[3];
+                let delayed = ["when ", "whenever ", "at the beginning ", "at end of "]
+                    .iter()
+                    .filter_map(|w| {
+                        mid.match_indices(w)
+                            .filter(|(i, _)| *i == 0 || mid[..*i].ends_with(". ") || mid[..*i].ends_with(", "))
+                            .map(|(i, _)| i)
+                            .last()
+                    })
+                    .max()
+                    .is_some_and(|i| mid[i..].contains(", "));
+                if !fits || c[3].contains("choose ") || delayed {
                     return c[0].to_string();
                 }
                 format!("{}{}{}", &c[1], &c[3], &c[2])
