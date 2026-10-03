@@ -645,6 +645,13 @@ pub(crate) fn required_source_zone(c: &Condition) -> Option<FunctionZone> {
         Condition::SelMatches(Sel::This, Filter::InZone(ZoneKind::Exile)) => {
             Some(FunctionZone::Exile)
         }
+        // "if ~ is in your graveyard or on the battlefield" (Firemane Angel): it functions
+        // in each of those zones; the clause itself keeps it from triggering elsewhere.
+        Condition::SelMatches(Sel::This, f)
+            if crate::eval::alternative_zones(f).is_some_and(|z| z.len() > 1) =>
+        {
+            Some(FunctionZone::Anywhere)
+        }
         Condition::And(v) => v.iter().find_map(required_source_zone),
         _ => None,
     }
