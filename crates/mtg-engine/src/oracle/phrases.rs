@@ -316,7 +316,48 @@ fn names_cards(f: &Filter) -> bool {
     }
 }
 
+/// "enchanted creature or enchantment creature", "artifact creature or enchantment
+/// creature": two noun phrases with the same head noun joined by "or" name objects either
+/// one describes (not "(enchanted creature or enchantment) creature").
+fn two_phrases_same_head(s: &str) -> Option<(Filter, bool, &str)> {
+    let s = s.trim_start();
+    let i = s.find(" or ")?;
+    let (left, right) = (&s[..i], &s[i + 4..]);
+    let head = left.rsplit(' ').next()?;
+    if !left.contains(' ') || head_noun(head).is_none() {
+        return None;
+    }
+    // The second phrase: words before the same head noun ("enchantment creature"), then
+    // what qualifies both ("you control").
+    let (first, after) = right.split_once(' ')?;
+    if first == head || head_noun(first).is_none() && adjective(first).is_none() {
+        return None;
+    }
+    let at = after
+        .split(' ')
+        .position(|w| w == head)
+        .filter(|&k| k <= 2)?;
+    let words: Vec<&str> = after.split(' ').collect();
+    let np = format!("{first} {}", words[..=at].join(" "));
+    let tail = words[at + 1..].join(" ");
+    if np.contains(" or ") {
+        return None;
+    }
+    let (a, b) = (format!("{left} {tail}"), format!("{np} {tail}"));
+    let (f1, plural1, rest1) = parse_object_phrase(&a)?;
+    let (f2, plural2, rest2) = parse_object_phrase(&b)?;
+    if rest1.trim() != rest2.trim() {
+        return None;
+    }
+    let n = rest2.len().min(s.len());
+    let rest = &s[s.len() - n..];
+    Some((Filter::Or(vec![f1, f2]), plural1 || plural2, rest))
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
+    if let Some(r) = two_phrases_same_head(s) {
+        return Some(r);
+    }
     let mut s = s.trim_start();
     let mut parts: Vec<Filter> = Vec::new();
     // "another"/"other"

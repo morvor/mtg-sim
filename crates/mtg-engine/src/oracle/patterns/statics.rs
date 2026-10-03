@@ -2555,14 +2555,16 @@ fn turn_condition(s: &str) -> Option<Condition> {
     match s {
         "during combat" => Some(Condition::Phase(PhaseCond::Combat)),
         "during your turn" | "during each of your turns" => Some(Condition::YourTurn),
+        // Any turn but yours, a teammate's too (in team games where teammates take
+        // separate turns).
+        "during turns other than yours" => Some(Condition::NotYourTurn),
         // Zurgo, Thunder's Decree.
         "during your end step" => Some(Condition::And(vec![
             Condition::YourTurn,
             Condition::Phase(PhaseCond::EndStep),
         ])),
         // An opponent is the active player (not a teammate, in team games).
-        "during turns other than yours"
-        | "during each opponent's turn"
+        "during each opponent's turn"
         | "during your opponents' turns"
         | "during an opponent's turn" => Some(Condition::PlayerMatches(
             PlayerRef::ActivePlayer,

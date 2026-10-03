@@ -253,11 +253,36 @@ fn with_action_referent(l: &str, b: &mut Builder) -> Option<Effect> {
         .replace(&format!("{phrase}'s"), "its")
         .replace(phrase, "it");
     let saved = b.it.clone();
-    b.it = sel;
+    // "Each player mills cards equal to your Ring-bearer's power": your Ring-bearer is
+    // found for you (the ability's controller) before any other player acts, so it's
+    // remembered first.
+    let ring = matches!(&sel, Sel::All(_));
+    b.it = if ring { Sel::Var(RING_BEARER_NOW) } else { sel.clone() };
     let e = crate::oracle::effects::parse_clause(&text, b);
     b.it = saved;
-    e
+    let e = e?;
+    if !ring {
+        return Some(e);
+    }
+    // Right before the first instruction that mentions it ("The Ring tempts you, then
+    // each player mills cards equal to your Ring-bearer's power": after the tempting).
+    let store = Effect::Store {
+        var: RING_BEARER_NOW,
+        sel,
+    };
+    let mentions = |x: &Effect| format!("{x:?}").contains(&format!("Var({RING_BEARER_NOW})"));
+    Some(match e {
+        Effect::Seq(mut v) => {
+            let i = v.iter().position(mentions).unwrap_or(0);
+            v.insert(i, store);
+            Effect::Seq(v)
+        }
+        other => Effect::Seq(vec![store, other]),
+    })
 }
+
+/// Your Ring-bearer, found as an instruction that mentions it begins.
+const RING_BEARER_NOW: Var = vars::USER + 5401;
 
 /// "The Ring tempts you" (CR 701.54).
 fn ring_tempts(l: &str, _b: &mut Builder) -> Option<Effect> {

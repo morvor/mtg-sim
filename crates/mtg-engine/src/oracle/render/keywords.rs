@@ -80,6 +80,45 @@ impl Renderer<'_> {
                     }
                 }
             },
+            // CR 702.167a: "Craft with [materials] [cost]"; the materials as the craft
+            // rules read them (`kw::craft::Materials`).
+            KeywordKind::Craft => {
+                let m = k.text.as_deref().and_then(|t| {
+                    let t = t.trim();
+                    crate::kw::craft::parse_materials(t.strip_prefix("with ").unwrap_or(t))
+                });
+                let Some(m) = m else {
+                    return self.gap("craft without materials");
+                };
+                let c = k.cost.as_ref().map(|c| cost(self, c)).unwrap_or_default();
+                let f = if m.cards_only {
+                    Filter::and(vec![m.filter.clone(), Filter::Card])
+                } else {
+                    m.filter.clone()
+                };
+                let what = if !m.slots.is_empty() {
+                    let parts: Vec<String> =
+                        m.slots.iter().map(|x| self.noun_det(x, Det::A)).collect();
+                    join_list(&parts, "and")
+                } else if m.share_card_type {
+                    format!("{} that share a card type", number_word(m.min as i32))
+                } else if matches!(m.filter, Filter::Any) && m.max.is_none() {
+                    format!("{} or more", number_word(m.min as i32))
+                } else {
+                    match m.max {
+                        Some(1) if m.min == 1 => self.noun_det(&f, Det::Bare),
+                        None => format!(
+                            "{} or more {}",
+                            number_word(m.min as i32),
+                            self.noun(&f, Num::Many)
+                        ),
+                        Some(_) => {
+                            format!("{} {}", number_word(m.min as i32), self.noun(&f, Num::Many))
+                        }
+                    }
+                };
+                format!("craft with {what}{c}")
+            }
             KeywordKind::Protection => match &k.filter {
                 Some(f) => {
                     let q = self.quality(f);
@@ -120,6 +159,20 @@ impl Renderer<'_> {
                 }
                 None => "banding".into(),
             },
+            // CR 702.124i: "Partner—[text]", as the partner rules read it.
+            KeywordKind::Partner
+                if matches!(
+                    crate::kw::partner::partner_keyword(k),
+                    crate::kw::partner::PartnerAbility::Text(_)
+                ) =>
+            {
+                let crate::kw::partner::PartnerAbility::Text(t) =
+                    crate::kw::partner::partner_keyword(k)
+                else {
+                    return self.gap("partner text");
+                };
+                format!("partner—{t}")
+            }
             KeywordKind::Partner if variant == Some("partner with") => {
                 let raw = k.text.as_deref().unwrap_or("");
                 let name = raw

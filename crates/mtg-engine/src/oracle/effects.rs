@@ -827,6 +827,23 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 }
                 // Not a group an earlier instruction affected: that's "they".
                 let it = super::patterns::pronoun_groups::singular_it(b);
+                // "Whenever ~ becomes blocked by a creature, it deals 2 damage to that
+                // creature": "that creature" is the other object, so "it" in the same
+                // sentence isn't; in a triggered ability that's the source. Only when
+                // "that creature" is another participant of the action, not a possessive
+                // that may well name the same object ("Whenever a creature you control is
+                // turned face up, it endures X, where X is that creature's toughness").
+                let other_participant = rest.match_indices(" that creature").any(|(i, m)| {
+                    let after = &rest[i + m.len()..];
+                    !after.starts_with('\'') && !after.starts_with('s')
+                });
+                if p == "it"
+                    && b.in_trigger
+                    && matches!(it, Sel::TriggerObject | Sel::TriggerLki)
+                    && other_participant
+                {
+                    return Some((Sel::This, rest.to_string()));
+                }
                 // No antecedent (a spell's first mention), or "that creature" meaning the
                 // source, which oracle text calls "~" (except "that card" for what the
                 // source became in its own trigger: "When ~ dies, return that card ..."):
@@ -1799,13 +1816,19 @@ fn p_search(l: &str, _b: &mut Builder) -> Option<Effect> {
     // "search your library for any card" (Demonic Counsel) is "a card".
     let any = r.strip_prefix("any card").map(|x| format!("a card{x}"));
     let r = any.as_deref().unwrap_or(r);
-    let (count, r) = if let Some(r2) = r.strip_prefix("up to ") {
+    let (count, r, up_to) = if let Some(r2) = r.strip_prefix("up to ") {
         let (n, r3) = parse_number(r2)?;
-        (n, r3)
+        (n, r3, true)
     } else {
-        parse_number(r)?
+        let (n, r3) = parse_number(r)?;
+        (n, r3, false)
     };
     let (filter, _, rest) = parse_object_phrase(r)?;
+    // "up to three cards" may find fewer; `Effect::Search` finds a quantity of cards
+    // exactly (CR 701.23d), so that's the search grammar's.
+    if up_to && crate::search_rules::quantity_only(&filter) {
+        return None;
+    }
     let rest = rest.trim().trim_start_matches(',').trim();
     let (dest_s, shuffle) = if let Some(x) = rest
         .strip_suffix(", then shuffle")

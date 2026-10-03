@@ -100,19 +100,20 @@ fn searcher(l: &str, b: &mut Builder) -> Option<(Searcher, String)> {
     Some((s, r.to_string()))
 }
 
-/// "a", "an", "up to N", "any number of", "N" before the card description.
-fn search_count(s: &str) -> Option<(Value, &str)> {
+/// "a", "an", "up to N", "any number of", "N" before the card description, and whether
+/// it said "up to".
+fn search_count(s: &str) -> Option<(Value, &str, bool)> {
     if let Some(r) = s.strip_prefix("any number of ") {
-        return Some((Value::c(999), r));
+        return Some((Value::c(999), r, true));
     }
     if let Some(r) = s.strip_prefix("up to ") {
         let (n, r) = parse_number(r)?;
-        return Some((n, r));
+        return Some((n, r, true));
     }
     let (n, r) = parse_number(s)?;
     // "X" alone would need the value of X from the spell; keep that to constants.
     n.as_const()?;
-    Some((n, r))
+    Some((n, r, false))
 }
 
 /// The description of the cards searched for: "basic land card", "Mercenary permanent
@@ -241,7 +242,7 @@ fn search_library(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         r
     };
-    let (count, r) = search_count(&r)?;
+    let (count, r, up_to) = search_count(&r)?;
     // The card description runs to the first action.
     const ACTIONS: [&str; 8] = [
         ", reveal ",
@@ -328,6 +329,12 @@ fn search_library(l: &str, b: &mut Builder) -> Option<Effect> {
     // Searching another player's library shuffles it only with "then that player
     // shuffles" (a follow-up sentence), and "then shuffle" names the searcher's own.
     if shuffle && !matches!(s.whose, PlayerRef::You) && matches!(s.who, PlayerRef::You) {
+        return None;
+    }
+    // `Effect::Search` finds exactly a quantity of cards (CR 701.23d); "up to three cards"
+    // lets the searcher find fewer (the search grammar, `SearchPart::up_to`). Cards with a
+    // stated quality needn't be found anyway (CR 701.23b).
+    if up_to && crate::search_rules::quantity_only(&filter) {
         return None;
     }
     let search = Effect::Search {
