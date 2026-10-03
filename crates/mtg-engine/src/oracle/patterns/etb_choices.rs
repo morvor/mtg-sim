@@ -353,6 +353,9 @@ fn counters(s: &str, ctx: &CompileContext) -> Option<Effect> {
         (Value::Mul(Box::new(Value::c(2)), Box::new(Value::X)), r)
     } else if additional && (s.starts_with('+') || s.starts_with('-')) {
         (Value::c(1), s)
+    } else if additional && parse_number(s).is_none() {
+        // "an additional loyalty counter on him"
+        (Value::c(1), s)
     } else {
         parse_number(s)?
     };
@@ -491,6 +494,23 @@ fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
 
 fn for_each_value_inner(s: &str, ctx: &CompileContext) -> Option<Value> {
     let s = end(s);
+    // "instant and sorcery spell you've cast this turn" (CR 601.2i)
+    if let Some(kind) = s.strip_suffix(" spell you've cast this turn") {
+        let f = match kind {
+            "instant and sorcery" | "instant or sorcery" => {
+                Filter::Or(vec![Filter::Type(CardType::Instant), Filter::Type(CardType::Sorcery)])
+            }
+            _ => {
+                let (f, plural, tail) = parse_object_phrase(&format!("{kind} spell"))
+                    .map(|(f, p, t)| (f, p, t.to_string()))?;
+                if plural || !tail.trim().is_empty() {
+                    return None;
+                }
+                f
+            }
+        };
+        return Some(Value::SpellsCastThisTurn(PlayerRef::You, f));
+    }
     // "{G}{G} spent to cast it": each two green mana spent
     if let Some(v) = s
         .strip_suffix(" spent to cast it")
@@ -859,7 +879,26 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
         }
         return entry(r, ctx);
     }
-    None
+    as_enters_instruction(l, ctx)
+}
+
+/// Any other instruction performed as the permanent enters ("discard your hand",
+/// "sacrifice all lands you control", "if it was kicked, mill four cards"): performed
+/// while the replacement effect applies, with the entering permanent as its source
+/// (CR 614.12a, 614.1c). It can't have targets (an "as enters" ability isn't put on the
+/// stack, CR 115.1) and can't refer to cards it exiles later (CR 607.2a would link them to
+/// the object that becomes the permanent).
+fn as_enters_instruction(l: &str, ctx: &CompileContext) -> Option<Effect> {
+    if l.contains("exile") || l.contains("target") {
+        return None;
+    }
+    let mut b = Builder::new(ctx);
+    b.it = Sel::This;
+    let e = crate::oracle::effects::parse_effect_text(&format!("{l}."), &mut b)?;
+    if !b.targets.is_empty() {
+        return None;
+    }
+    Some(e)
 }
 
 /// "it enters tapped", "~ enters tapped".

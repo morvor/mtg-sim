@@ -1417,7 +1417,26 @@ impl Game {
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::EnterUnderControl(r), ReplEvent::Move(mut m)) => {
-                if let Some(p) = self.eval_player(&r, &ctx) {
+                // "enters under the control of an opponent of your choice": the player
+                // who would control it chooses among them (CR 614.12a).
+                let choice = match &r {
+                    PlayerRef::Each(_) => {
+                        let cands: Vec<Entity> = self
+                            .eval_players(&r, &ctx)
+                            .into_iter()
+                            .map(Entity::Player)
+                            .collect();
+                        let chooser = self.entering_controller(&m);
+                        self.ask_entities(chooser, Some(m.obj), "Choose a player", cands, 1, 1)
+                            .into_iter()
+                            .find_map(|e| match e {
+                                Entity::Player(p) => Some(p),
+                                _ => None,
+                            })
+                    }
+                    _ => self.eval_player(&r, &ctx),
+                };
+                if let Some(p) = choice {
                     m.etb.controller = Some(p);
                 }
                 vec![ReplEvent::Move(m)]
