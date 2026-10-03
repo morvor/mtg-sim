@@ -2298,6 +2298,15 @@ pub enum ReplacementEvent {
         event: Box<ReplacementEvent>,
         cond: Condition,
     },
+    /// A spell or ability controlled by a player matching `by` would cause a player
+    /// matching `who` to discard a card matching `filter` (CR 701.9): "If a spell or
+    /// ability an opponent controls causes you to discard ~, ...". A discard to pay a cost
+    /// isn't caused by a spell's or ability's effect.
+    DiscardCausedBy {
+        who: PlayerFilter,
+        filter: Filter,
+        by: PlayerRel,
+    },
     /// A player matching `who` would perform a keyword action (CR 701), with the object
     /// matching `objects` for an action an object performs ("if a creature you control
     /// would explore"): "If you would proliferate, proliferate twice instead.", "If an

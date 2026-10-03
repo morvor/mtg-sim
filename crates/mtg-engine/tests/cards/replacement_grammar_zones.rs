@@ -206,3 +206,31 @@ fn nexus_of_fate_is_shuffled_into_its_library_as_it_resolves() {
     assert!(!t.in_graveyard(P0, "Nexus of Fate"));
     assert_eq!(t.library_size(P0), lib + 1);
 }
+
+#[test]
+fn obstinate_baloth_enters_when_an_opponent_makes_you_discard_it() {
+    cr!("701.9", "614.1a", "113.6");
+    compiles(&["Obstinate Baloth", "Loxodon Smiter", "Dodecapod", "Nephalia Academy"]);
+    let mut t = TestGame::new(2);
+    t.hand(P0, "Obstinate Baloth");
+    t.hand(P0, "Dodecapod");
+    t.lands(P1, "Swamp", 3);
+    let rot = t.hand(P1, "Mind Rot");
+    t.g.turn.active = P1;
+    t.cast(P1, rot).target(P0).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Obstinate Baloth").len(), 1, "{}", t.dump_log());
+    let pod = t.named_on_battlefield("Dodecapod");
+    assert_eq!(pod.len(), 1);
+    assert_eq!(t.counters(pod[0], "+1/+1"), 2);
+}
+
+#[test]
+fn obstinate_baloth_goes_to_the_graveyard_when_you_discard_it_yourself() {
+    cr!("701.9");
+    let mut t = TestGame::new(2);
+    let b = t.hand(P0, "Obstinate Baloth");
+    t.g.discard(P0, b, None);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Obstinate Baloth"));
+}

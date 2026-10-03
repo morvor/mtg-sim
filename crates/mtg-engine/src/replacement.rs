@@ -929,6 +929,17 @@ impl Game {
                     && self.player_filter_matches(pf, m.by.unwrap_or(o.owner), ctx)
                     && self.matches(m.obj, f, ctx)
             }
+            (ReplacementEvent::DiscardCausedBy { who, filter, by }, ReplEvent::Move(m)) => {
+                let o = self.obj(m.obj);
+                m.cause == MoveCause::Discard
+                    && matches!(o.zone, Zone::Hand(_))
+                    && self.special.casting == 0
+                    && locked_ok(m.obj)
+                    && self.player_filter_matches(who, m.by.unwrap_or(o.owner), ctx)
+                    && self.matches(m.obj, filter, ctx)
+                    && m.source
+                        .is_some_and(|s| self.player_rel_matches(*by, self.obj(s).controller, ctx))
+            }
             (ReplacementEvent::Dies(f), ReplEvent::Move(m)) => {
                 let o = self.obj(m.obj);
                 o.zone == Zone::Battlefield

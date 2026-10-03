@@ -382,3 +382,72 @@ fn a_spell_from_anywhere(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
 }
 
 inventory::submit! { super::AbilityPattern { name: "replacement grammar: spell put into a graveyard from anywhere", priority: 150, parse: a_spell_from_anywhere } }
+
+/// "If a spell or ability an opponent controls causes you to discard [~ | a card], [put it
+/// onto the battlefield [with N counters on it] instead of putting it into your graveyard
+/// | you may reveal that card and put it on top of your library instead of putting it
+/// anywhere else]." (CR 701.9, 614.1a, 614.6)
+fn s_discard_caused_by(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l.trim()).strip_prefix("if a spell or ability an opponent controls causes you to discard ")?;
+    let (what, act) = r.split_once(", ")?;
+    let filter = match what {
+        "~" => Filter::Source,
+        "a card" => Filter::Any,
+        _ => return None,
+    };
+    let (optional, act) = match act.strip_prefix("you may ") {
+        Some(x) => (true, x),
+        None => (false, act),
+    };
+    let dest = if let Some(x) = act
+        .strip_suffix(" instead of putting it into your graveyard")
+        .and_then(|x| x.strip_prefix("put it onto the battlefield"))
+    {
+        let mut d = Destination::battlefield();
+        let x = x.trim();
+        if let Some(c) = x.strip_prefix("with ").and_then(|c| c.strip_suffix(" on it")) {
+            let (n, rest) = parse_number(c)?;
+            let (kind, rest) = crate::oracle::costs::counter_kind(rest)?;
+            if !matches!(rest.trim(), "counter" | "counters") {
+                return None;
+            }
+            d.with_counters = vec![(kind, n)];
+        } else if !x.is_empty() {
+            return None;
+        }
+        d
+    } else {
+        match act {
+            "reveal that card and put it on top of your library instead of putting it anywhere else" => {
+                Destination::library_top()
+            }
+            _ => return None,
+        }
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility {
+            condition: None,
+            effect: StaticEffect::Replacement(ReplacementDef {
+                event: ReplacementEvent::DiscardCausedBy {
+                    who: PlayerFilter::You,
+                    filter,
+                    by: PlayerRel::Opponent,
+                },
+                action: ReplacementAction::MoveInstead(dest),
+                self_replacement: false,
+                optional,
+            }),
+            // The card's own ability functions in the hand it's discarded from (CR
+            // 113.6); a permanent's (Nephalia Academy) on the battlefield.
+            zone: if what == "~" {
+                FunctionZone::Hand
+            } else {
+                FunctionZone::Battlefield
+            },
+            is_cda: false,
+        }),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "replacement grammar: if an opponent's spell or ability causes you to discard", priority: 150, parse: s_discard_caused_by } }
