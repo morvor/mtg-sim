@@ -594,6 +594,8 @@ pub fn pay_mana_cost_of(
 /// and that choice is the value of X for the rest of the resolution.
 pub fn bind_x_for_payment(g: &mut Game, cost: &Cost, ctx: &mut Ctx) -> Cost {
     let Some(m) = cost.mana.as_ref().filter(|m| m.has_x()) else {
+        // "You may tap X untapped Myr you control" (CR 107.1c).
+        crate::kw::optional_cost_x::choose_x_for_optional_cost(g, cost, ctx);
         return cost.clone();
     };
     let defined = ctx.x_defined

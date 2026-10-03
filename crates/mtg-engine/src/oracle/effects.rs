@@ -1054,6 +1054,16 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         ),
         (" until end of combat", Duration::EndOfCombat),
         (
+            " until the end of your next turn",
+            Duration::UntilEndOfYourNextTurn,
+        ),
+        // CR 611.2b: a continuous effect "until ~ leaves the battlefield" lasts for as
+        // long as it remains there.
+        (
+            " until ~ leaves the battlefield",
+            Duration::WhileSourceOnBattlefield,
+        ),
+        (
             " for as long as ~ remains on the battlefield",
             Duration::WhileSourceOnBattlefield,
         ),
@@ -2047,6 +2057,10 @@ pub(crate) fn is_class_filter(f: &Filter) -> bool {
         Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
             matches!(**v, Value::Const(_))
         }
+        // An object's stats compared with its own ("with toughness greater than its
+        // power", "with total power and toughness 5 or less").
+        Filter::ValueCmp(a, _, b) => own_stat_value(a) && own_stat_value(b),
+        Filter::Custom(n) => n == "toughness_gt_power",
         // Relative to the effect's controller, which doesn't change.
         Filter::ControlledBy(r) | Filter::OwnedBy(r) => matches!(
             r,
@@ -2066,6 +2080,18 @@ pub(crate) fn is_class_filter(f: &Filter) -> bool {
         | Filter::Tapped
         | Filter::Untapped
         | Filter::HasKeyword(_) => true,
+        _ => false,
+    }
+}
+
+/// A value computed from the tested object's own stats and constants only.
+fn own_stat_value(v: &Value) -> bool {
+    match v {
+        Value::Const(_) => true,
+        Value::PowerOf(s) | Value::ToughnessOf(s) | Value::ManaValueOf(s) => {
+            matches!(**s, Sel::Var(vars::TESTED))
+        }
+        Value::Sum(vs) => vs.iter().all(own_stat_value),
         _ => false,
     }
 }

@@ -31,6 +31,12 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         // "each Equipment attached to it", "it" being each object the effect is about.
         "attached_to_affected" => rel("attached to it"),
         crate::battle::ATTACKED_A_BATTLE_THIS_TURN => rel("that attacked a battle this turn"),
+        crate::kw::blocked_this_turn::BLOCKED_BY_REFERENT => {
+            rel("{alt:that were blocked by {alt:it|that creature} this turn|that was blocked by {alt:it|that creature} this turn}")
+        }
+        crate::kw::blocked_this_turn::BLOCKED_OR_BLOCKED_BY_REFERENT => {
+            rel("that blocked or were blocked by {alt:it|that creature} this turn")
+        }
         crate::kw::dealt_damage_to_you::DEALT_DAMAGE_TO_YOU_THIS_TURN => {
             rel("that dealt damage to you this turn")
         }

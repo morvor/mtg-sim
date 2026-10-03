@@ -20,39 +20,6 @@ const RIOT: &str = "riot:counter or haste";
 
 pub struct Riot;
 
-/// Whether a +1/+1 counter can't be put on `obj` as it enters: an ability of its own or
-/// another object's stops counters from being put on it ("~ can't have counters put on
-/// it", CR 113.6i).
-fn counters_prevented(g: &Game, obj: ObjectId) -> bool {
-    let prevents = |r: &ReplacementDef| -> Option<Filter> {
-        match (&r.event, &r.action) {
-            (
-                ReplacementEvent::PutCounters {
-                    on_objects: Some(f),
-                    ..
-                },
-                ReplacementAction::Prevent,
-            ) => Some(f.clone()),
-            _ => None,
-        }
-    };
-    let own = g.obj(obj).chars.abilities.iter().any(|a| match &a.kind {
-        AbilityKind::Static(s) => match &s.effect {
-            StaticEffect::Replacement(r) => {
-                prevents(r).is_some_and(|f| matches!(f, Filter::Source))
-            }
-            _ => false,
-        },
-        _ => false,
-    });
-    own || g.statics.replacements.iter().any(|(src, ctl, _, _, r)| {
-        *src != obj
-            && prevents(r).is_some_and(|f| {
-                !matches!(f, Filter::Source) && g.matches(obj, &f, &Ctx::new(Some(*src), *ctl))
-            })
-    })
-}
-
 impl KeywordRules for Riot {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[KeywordKind::Riot]
@@ -79,7 +46,7 @@ impl KeywordRules for Riot {
             return true;
         };
         let p = ctx.controller;
-        let counter = !counters_prevented(g, this)
+        let counter = !crate::counter_rules::counters_prevented(g, this, counters::PLUS1)
             && g.ask_yes_no(
                 p,
                 Some(this),
