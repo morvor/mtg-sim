@@ -582,6 +582,11 @@ impl Game {
                 // "Remove a counter from it. If you do, …" (CR 608.2c).
                 ctx.prev_happened = total > 0;
             }
+            Effect::ForEachCounterKind { from, then } => {
+                for e in crate::counter_rules::for_each_counter_kind(self, from, then, ctx) {
+                    self.exec(&e, ctx);
+                }
+            }
             Effect::ChooseCounterKind { from, then } => {
                 if let Some(e) =
                     crate::counter_rules::with_chosen_counter_kind(self, from, then, ctx)
@@ -2035,6 +2040,7 @@ impl Game {
                 amount,
                 duration,
                 combat_only,
+                then,
             } => {
                 let targets = self.resolve_sel(to, ctx);
                 for t in targets {
@@ -2044,11 +2050,16 @@ impl Game {
                         Entity::Player(p) => (Some(player_filter_const(p)), None, None),
                         Entity::Object(o) => (None, Some(Filter::Any), Some(vec![o])),
                     };
-                    let action = match amount {
-                        Some(v) => ReplacementAction::PreventAmount(Value::Const(
+                    let action = match (amount, then) {
+                        (Some(v), None) => ReplacementAction::PreventAmount(Value::Const(
                             self.eval_value(v, ctx) as i32,
                         )),
-                        None => ReplacementAction::Prevent,
+                        (None, None) => ReplacementAction::Prevent,
+                        (v, Some(e)) => ReplacementAction::PreventAndThen(
+                            v.as_ref()
+                                .map(|v| Value::Const(self.eval_value(v, ctx) as i32)),
+                            e.clone(),
+                        ),
                     };
                     let remaining = match amount {
                         Some(v) => Some(self.eval_value(v, ctx).max(0) as u32),
@@ -2096,6 +2107,7 @@ impl Game {
                         amount: Some(Value::c(n as i32)),
                         duration: duration.clone(),
                         combat_only: false,
+                        then: None,
                     };
                     self.exec(&shield, ctx);
                 }

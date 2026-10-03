@@ -74,6 +74,21 @@ fn player_condition(c: &str, _b: &Builder) -> Option<PlayerFilter> {
     if let Some(f) = super::choice_grammar_players::compared_with_you(&format!("who {c}")) {
         return Some(f);
     }
+    // "Each opponent discards a card. For each opponent who can't, ...": a player who
+    // discarded nothing (the discard instruction records what each player discarded).
+    if c == "can't" {
+        let raw = crate::oracle::raw_text().to_lowercase();
+        let after_discard = ["each opponent discards a card. ", "each player discards a card. "]
+            .iter()
+            .any(|p| raw.contains(&format!("{p}for each opponent who can't")) || raw.contains(&format!("{p}for each player who can't")));
+        if !after_discard {
+            return None;
+        }
+        let discarded = PlayerFilter::Ref(Box::new(PlayerRef::OwnerOf(Box::new(Sel::All(
+            Filter::In(Box::new(Sel::Var(crate::discard_rules::DISCARDED))),
+        )))));
+        return Some(PlayerFilter::Not(Box::new(discarded)));
+    }
     let c = c.strip_suffix(" do").unwrap_or(c);
     match c {
         "has less life than you" => Some(PlayerFilter::Life(
@@ -314,6 +329,135 @@ fn starting_with_choose(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "iteration: starting with [player], each player chooses [objects]", priority: 100, parse: starting_with_choose } }
+
+/// "for each kind of counter on target permanent or player, give that permanent or player
+/// another counter of that kind" (Maulfist Revolutionary), "for each kind of counter on
+/// target permanent, put another counter of that kind on it or remove one from it"
+/// (Quarry Hauler), "for each kind of counter on permanents you control, you may put your
+/// choice of a +1/+1 counter or a counter of that kind on ~" (Bribe Taker).
+fn each_counter_kind(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for each kind of counter on ")?;
+    let k = CHOSEN_COUNTER_KIND;
+    for (x, y) in comma_splits(r) {
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let from = if let Some(sel) = super::counter_grammar::holder(x, b) {
+            sel
+        } else if let Some((f, true, tail)) = parse_object_phrase(x) {
+            if !tail.trim().is_empty() {
+                continue;
+            }
+            Sel::All(f)
+        } else {
+            b.targets.truncate(saved.0);
+            continue;
+        };
+        let mut t = y.to_string();
+        // "put another counter of that kind on it or remove one from it".
+        if let Some(head) = t.strip_suffix(" or remove one from it") {
+            let add = head.replace("another counter of that kind", &format!("another {k} counter"));
+            let add = crate::oracle::effects::parse_clause(&add, b)?;
+            let Effect::AddCounters { what, .. } = &add else {
+                return None;
+            };
+            let remove = Effect::RemoveCounters {
+                what: what.clone(),
+                kind: Some(k.into()),
+                n: Value::c(1),
+            };
+            return Some(Effect::ForEachCounterKind {
+                from,
+                then: Box::new(Effect::ChooseOne {
+                    who: PlayerRef::You,
+                    options: vec![
+                        ("put another counter of that kind".into(), add),
+                        ("remove one".into(), remove),
+                    ],
+                }),
+            });
+        }
+        for (a, c) in [
+            ("another counter of that kind", format!("another {k} counter")),
+            ("a counter of that kind", format!("a {k} counter")),
+        ] {
+            t = t.replace(a, &c);
+        }
+        if let Some(rest) = t.strip_prefix("give that permanent or player ") {
+            t = format!("put {rest} on it");
+        }
+        let then = crate::oracle::effects::parse_clause(&t, b);
+        let Some(then) = then.filter(|e| mentions_kind(e)) else {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            return None;
+        };
+        return Some(Effect::ForEachCounterKind {
+            from,
+            then: Box::new(then),
+        });
+    }
+    None
+}
+
+/// Whether the effect uses the kind of counter being iterated.
+fn mentions_kind(e: &Effect) -> bool {
+    serde_json::to_string(e).is_ok_and(|j| j.contains(CHOSEN_COUNTER_KIND))
+}
+
+inventory::submit! { EffectPattern { name: "iteration: for each kind of counter on [holder], [instruction with that kind]", priority: 100, parse: each_counter_kind } }
+
+/// "Prevent all damage that would be dealt to target multicolored creature this turn. For
+/// each 1 damage prevented this way, put a +1/+1 counter on that creature." (Brace for
+/// Impact), "... For each 1 damage prevented this way, create a 2/1 white and black
+/// Inkling creature token with flying." (Inkshield): the rest of the prevention effect,
+/// performed right after damage is prevented (CR 615.5), once for each 1 damage
+/// prevented.
+fn f_for_each_damage_prevented(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = l.strip_prefix("for each 1 damage prevented this way, ") else {
+        return false;
+    };
+    let Some(slot) = last_prevent_damage(prev) else {
+        return false;
+    };
+    // "that creature": the one the damage would have been dealt to (the event's object).
+    let saved = (b.targets.len(), b.it.clone(), b.in_trigger);
+    b.it = Sel::TriggerObject;
+    b.in_trigger = true;
+    let e = crate::oracle::effects::parse_clause(r, b);
+    let ok = b.targets.len() == saved.0;
+    b.targets.truncate(saved.0);
+    (b.it, b.in_trigger) = (saved.1, saved.2);
+    let Some(e) = e.filter(|_| ok) else {
+        return false;
+    };
+    let e = match e {
+        Effect::AddCounters {
+            what,
+            kind,
+            n: Value::Const(1),
+        } => Effect::AddCounters {
+            what,
+            kind,
+            n: Value::EventAmount,
+        },
+        e => Effect::Repeat {
+            times: Value::EventAmount,
+            effect: Box::new(e),
+        },
+    };
+    *slot = Some(Box::new(e));
+    true
+}
+
+/// The `then` of the last prevention shield an effect creates, if it has none yet.
+fn last_prevent_damage(e: &mut Effect) -> Option<&mut Option<Box<Effect>>> {
+    match e {
+        Effect::Seq(v) => v.iter_mut().rev().find_map(last_prevent_damage),
+        Effect::PreventDamage { then, .. } if then.is_none() => Some(then),
+        _ => None,
+    }
+}
+
+inventory::submit! { super::FollowupPattern { name: "iteration: for each 1 damage prevented this way, [instruction]", priority: 50, apply: f_for_each_damage_prevented } }
 
 /// Later sentences' names for the objects in [`CHOSEN`] ("the chosen creatures", "each
 /// permanent chosen this way", "creatures they control not chosen this way").

@@ -3780,6 +3780,14 @@ pub enum Effect {
         from: Sel,
         then: Box<Effect>,
     },
+    /// "For each kind of counter on target permanent or player, give that permanent or
+    /// player another counter of that kind": `then` is performed once for each kind of
+    /// counter on `from` (as the instruction begins, CR 608.2h), with
+    /// [`CHOSEN_COUNTER_KIND`] standing for that kind.
+    ForEachCounterKind {
+        from: Sel,
+        then: Box<Effect>,
+    },
     /// "Move [n / all] [kind] counters from [from] onto [to]" (CR 122.5). `kind: None`:
     /// counters of each kind; `n: None`: all of them.
     MoveCounters {
@@ -4320,6 +4328,11 @@ pub enum Effect {
         amount: Option<Value>,
         duration: Duration,
         combat_only: bool,
+        /// The rest of the effect, performed right after damage is prevented (CR 615.5):
+        /// "For each 1 damage prevented this way, put a +1/+1 counter on that creature."
+        /// The event amount is the damage prevented; the event object, the recipient.
+        #[serde(default)]
+        then: Option<Box<Effect>>,
     },
     /// "Prevent the next N damage that would be dealt this turn to any number of targets,
     /// divided as you choose": a prevention shield for each target of the slot, of the

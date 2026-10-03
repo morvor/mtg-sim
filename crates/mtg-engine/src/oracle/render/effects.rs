@@ -1279,6 +1279,30 @@ impl Renderer<'_> {
                     .replace(&format!("{k} counter"), "counter of that kind");
                 format!("choose a counter on {f}. {inner}")
             }
+            Effect::ForEachCounterKind { from, then } => {
+                let f = self.sel(from, Case::Obj);
+                // "put another counter of that kind on it or remove one from it".
+                if let Effect::ChooseOne { options, .. } = then.as_ref() {
+                    if let [(_, Effect::AddCounters { what: a, .. }), (_, Effect::RemoveCounters { what: r, .. })] =
+                        options.as_slice()
+                    {
+                        let (a, r) = (self.sel(a, Case::Obj), self.sel(r, Case::Obj));
+                        if a == r {
+                            return format!("for each kind of counter on {f}, put another counter of that kind on {a} or remove one from {a}");
+                        }
+                    }
+                }
+                let inner = self.effect(then);
+                let inner = inner.replace(
+                    &format!("put a {} counter on it", crate::ability::CHOSEN_COUNTER_KIND),
+                    "{alt:put another counter of that kind on it|give that permanent or player another counter of that kind}",
+                );
+                let k = crate::ability::CHOSEN_COUNTER_KIND;
+                let inner = inner
+                    .replace(&format!("{k} counters"), "counters of that kind")
+                    .replace(&format!("{k} counter"), "counter of that kind");
+                format!("for each kind of counter on {f}, {inner}")
+            }
             Effect::MoveCounters { from, to, kind, n } => {
                 let noun = match kind {
                     Some(k) => counter_name(k),
@@ -2296,7 +2320,48 @@ impl Renderer<'_> {
                 amount,
                 duration,
                 combat_only,
+                then,
             } => {
+                // "For each 1 damage prevented this way, [instruction]."
+                if let Some(e) = then {
+                    let each = match e.as_ref() {
+                        Effect::Repeat {
+                            times: Value::EventAmount,
+                            effect,
+                        } => Some((**effect).clone()),
+                        Effect::AddCounters {
+                            what,
+                            kind,
+                            n: Value::EventAmount,
+                        } => Some(Effect::AddCounters {
+                            what: what.clone(),
+                            kind: kind.clone(),
+                            n: Value::c(1),
+                        }),
+                        _ => None,
+                    };
+                    let saved = self.event_scope;
+                    self.event_scope = true;
+                    let inner = match &each {
+                        Some(x) => {
+                            let x = self.effect(x).replace(
+                                " on it",
+                                " on {alt:that creature|it}",
+                            );
+                            format!("for each 1 damage prevented this way, {x}")
+                        }
+                        None => self.effect(e),
+                    };
+                    self.event_scope = saved;
+                    let head = self.effect(&Effect::PreventDamage {
+                        to: to.clone(),
+                        amount: amount.clone(),
+                        duration: duration.clone(),
+                        combat_only: *combat_only,
+                        then: None,
+                    });
+                    return format!("{head}. {inner}");
+                }
                 let c = if *combat_only { "combat " } else { "" };
                 let t = match to {
                     Sel::None => String::new(),
