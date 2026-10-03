@@ -17,7 +17,9 @@ fn word_end(rest: &str) -> bool {
 pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     // An amount chosen for a cost ("cards exiled this way" by an exile cost, "counters
     // removed this way") is the cost grammar's.
-    if super::cost_parts::paid_this_way_prefix(r).is_some() {
+    if super::cost_parts::paid_this_way_prefix(r).is_some()
+        || super::cost_parts::paid_this_way(r).is_some()
+    {
         return None;
     }
     if let Some(v) = life_lost_this_way(r) {
@@ -1284,6 +1286,11 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
             rest.to_string(),
         ));
     }
+    // The cards an earlier sentence revealed (not read apart from the ability's text, as
+    // in a cost: the hand/graveyard grammar reads those).
+    if head.ends_with(" revealed") && b.sentences == 0 {
+        return None;
+    }
     let (noun, mut var, extra) = verbs
         .iter()
         .find_map(|(v, var, extra)| head.strip_suffix(v).map(|n| (n, *var, extra.clone())))?;
@@ -1326,9 +1333,14 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     let from = if [vars::IT, DISCARDED].contains(&var) {
         Sel::Before(Box::new(Sel::Var(var)))
     } else if head.ends_with(" revealed") {
-        // The cards a reveal instruction revealed: a whole hand, or the cards revealed
-        // until one was found (that one included).
-        Sel::Union(vec![Sel::Var(vars::REVEALED), Sel::Var(vars::DUG_FOUND)])
+        // The cards a reveal instruction revealed: a whole hand, the cards revealed
+        // until one was found (that one included), or
+        // the cards a player chose to reveal from their hand.
+        Sel::Union(vec![
+            Sel::Var(vars::REVEALED),
+            Sel::Var(vars::DUG_FOUND),
+            Sel::Var(crate::kw::reveal_from_hand::REVEALED),
+        ])
     } else {
         Sel::Var(var)
     };
