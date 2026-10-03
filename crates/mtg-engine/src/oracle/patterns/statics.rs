@@ -164,11 +164,11 @@ pub(crate) fn granted_abilities_to(
         power: None,
         toughness: None,
     };
-    let blocks = crate::oracle::split_abilities(orig.trim_end_matches(','));
-    if blocks.len() != 1 {
-        return None;
-    }
-    let v = crate::oracle::parse_ability(&blocks[0], &gctx)?;
+    // Quotes nested in it ('...', Urza's Saga) are its own.
+    let v = super::tokens_copies_create::parse_with_nested_quotes(
+        orig.trim_end_matches(','),
+        &gctx,
+    )?;
     if v.is_empty()
         || v.iter()
             .any(|a| matches!(a.kind, AbilityKind::Unsupported(_)))

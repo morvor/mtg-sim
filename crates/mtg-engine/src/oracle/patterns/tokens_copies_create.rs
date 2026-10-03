@@ -27,10 +27,81 @@ use crate::oracle::CompileContext;
 use crate::types::*;
 use smol_str::SmolStr;
 
+thread_local! {
+    /// Quotes nested in a quoted ability being compiled ("with "When this token dies,
+    /// create ... with 'When this token dies, ...'""), with their single quotes made
+    /// double: the quotes of the ability compiled for the token.
+    static NESTED_QUOTES: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A quoted ability's nested quotes ('...') as double quotes: an opening quote follows
+/// the start or a space and precedes a capital letter, "{" or "~"; a closing one follows
+/// a period, "}" or a letter and precedes the end, a space or punctuation (an apostrophe
+/// between letters, as in "can't" or "~'s", is neither).
+fn nested_quotes_doubled(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = String::with_capacity(s.len());
+    let mut open = false;
+    for (i, c) in chars.iter().enumerate() {
+        if *c != '\'' {
+            out.push(*c);
+            continue;
+        }
+        let prev = i.checked_sub(1).map(|k| chars[k]);
+        let next = chars.get(i + 1).copied();
+        if !open
+            && prev.is_none_or(|p| p == ' ')
+            && next.is_some_and(|n| n.is_uppercase() || n == '{' || n == '~')
+        {
+            open = true;
+            out.push('"');
+        } else if open
+            && prev.is_some_and(|p| p == '.' || p == '}' || p.is_alphanumeric())
+            && next.is_none_or(|n| !n.is_alphanumeric())
+        {
+            open = false;
+            out.push('"');
+        } else {
+            out.push(*c);
+        }
+    }
+    if open {
+        return s.to_string();
+    }
+    out
+}
+
+/// Parses a quoted ability (normalized, original case) that is a single ability block;
+/// quotes nested in it ('...') are its own quotes (see [`nested_quotes_doubled`]).
+pub(crate) fn parse_with_nested_quotes(orig: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let doubled = nested_quotes_doubled(orig);
+    let mut nested = Vec::new();
+    let mut rest = doubled.as_str();
+    while let Some(i) = rest.find('"') {
+        let after = &rest[i + 1..];
+        let Some(j) = after.find('"') else { break };
+        nested.push(after[..j].to_string());
+        rest = &after[j + 1..];
+    }
+    let blocks = crate::oracle::split_abilities(&doubled);
+    if blocks.len() != 1 {
+        return None;
+    }
+    let added = nested.len();
+    NESTED_QUOTES.with(|n| n.borrow_mut().extend(nested));
+    let v = crate::oracle::parse_ability(&blocks[0], ctx);
+    NESTED_QUOTES.with(|n| {
+        let mut n = n.borrow_mut();
+        let keep = n.len() - added;
+        n.truncate(keep);
+    });
+    v
+}
+
 /// The quoted texts of the face being compiled, normalized (original case).
 fn normalized_quotes(ctx: &CompileContext) -> Vec<String> {
     let raw = crate::oracle::raw_text();
-    let mut out = Vec::new();
+    let mut out: Vec<String> = NESTED_QUOTES.with(|n| n.borrow().clone());
     let mut rest = raw.as_str();
     while let Some(i) = rest.find(['"', '\u{201C}']) {
         let open_len = rest[i..].chars().next().map_or(1, char::len_utf8);
@@ -75,7 +146,9 @@ pub(crate) fn token_quote_abilities(
         .into_iter()
         .find(|q| q.to_lowercase().trim().trim_end_matches(',') == want)?;
     let mut orig = orig.trim().trim_end_matches(',').to_string();
-    if super::statics::quote_names_card(&orig, ctx) {
+    // A nested quote was checked as part of the quote it's in.
+    let nested = NESTED_QUOTES.with(|n| n.borrow().iter().any(|q| q.trim() == orig));
+    if !nested && super::statics::quote_names_card(&orig, ctx) {
         return None;
     }
     // The token's own name means the token (CR 201.5).
@@ -109,11 +182,7 @@ pub(crate) fn token_quote_abilities(
         power: None,
         toughness: None,
     };
-    let blocks = crate::oracle::split_abilities(&orig);
-    if blocks.len() != 1 {
-        return None;
-    }
-    let v = crate::oracle::parse_ability(&blocks[0], &tctx)?;
+    let v = parse_with_nested_quotes(&orig, &tctx)?;
     if v.is_empty()
         || v.iter()
             .any(|a| matches!(a.kind, AbilityKind::Unsupported(_)))
@@ -300,12 +369,13 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
     let mut tapped = false;
     let mut rest = rest.trim().to_string();
     // Tail parts, in any order.
-    const BOUNDS: [&str; 5] = [
+    const BOUNDS: [&str; 6] = [
         " with ",
         " named ",
         " that's ",
         " that are ",
         " and that's ",
+        " that is ",
     ];
     let next_bound = |s: &str| -> usize {
         BOUNDS
@@ -338,6 +408,21 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             }
             name = SmolStr::new(original_name(n, ctx)?);
             rest = r[i..].trim().to_string();
+        } else if let Some(r) = ["that is every basic land type", "that's every basic land type"]
+            .iter()
+            .find_map(|p| rest.strip_prefix(p))
+            .filter(|_| types.contains(&CardType::Land))
+        {
+            // "a tapped colorless land token named Everywhere that is every basic land
+            // type" (Overlord of the Hauntwoods): it has each basic land type, and so
+            // their mana abilities (CR 305.6).
+            for t in ["Plains", "Island", "Swamp", "Mountain", "Forest"] {
+                let st = SmolStr::new(t);
+                if !subtypes.contains(&st) {
+                    subtypes.push(st);
+                }
+            }
+            rest = r.trim().to_string();
         } else if let Some(r) = ["that's all colors", "that are all colors"]
             .iter()
             .find_map(|p| rest.strip_prefix(p))
@@ -440,7 +525,7 @@ fn create(spec: TokenSpec, count: Value, tapped: bool, attacking: bool) -> Effec
 /// Goblin creature token that's tapped and attacking", "create a number of Food tokens
 /// equal to the number of opponents you have", "create a 1/1 white Human creature token
 /// and a Food token".
-fn create_described(l: &str, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn create_described(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let r = l
         .strip_prefix("you create ")
@@ -500,7 +585,9 @@ inventory::submit! { EffectPattern { name: "tokens_copies: create described toke
 pub(crate) fn last_create(e: &mut Effect) -> Option<&mut Effect> {
     match e {
         Effect::Seq(v) => v.last_mut().and_then(last_create),
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => Some(e),
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. }
+            // Populate creates a token copy (CR 701.36a); "the token created this way".
+            | Effect::KeywordAction { action: KeywordAction::Populate, .. } => Some(e),
         Effect::If {
             then, otherwise, ..
         }
@@ -508,6 +595,11 @@ pub(crate) fn last_create(e: &mut Effect) -> Option<&mut Effect> {
             then, otherwise, ..
         } if matches!(**otherwise, Effect::Noop) => last_create(then),
         Effect::May { effect, .. } => last_create(effect),
+        // "Each player creates a green Elephant creature token. Those creatures have
+        // "..."" (Elephant Resurgence): the token each of them creates.
+        Effect::AsPlayer { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
+            last_create(effect)
+        }
         _ => None,
     }
 }
@@ -515,7 +607,9 @@ pub(crate) fn last_create(e: &mut Effect) -> Option<&mut Effect> {
 fn is_create(e: &Effect) -> bool {
     matches!(
         e,
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. }
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. }
+            // Populate creates a token copy (CR 701.36a); "the token created this way".
+            | Effect::KeywordAction { action: KeywordAction::Populate, .. }
     )
 }
 
@@ -537,7 +631,9 @@ fn several_kinds(e: &Effect) -> bool {
 /// Whether `e` creates tokens anywhere.
 fn has_create(e: &Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => true,
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. }
+            // Populate creates a token copy (CR 701.36a); "the token created this way".
+            | Effect::KeywordAction { action: KeywordAction::Populate, .. } => true,
         Effect::Seq(v) => v.iter().any(has_create),
         Effect::If { then, .. } | Effect::PayOptional { then, .. } => has_create(then),
         Effect::May { effect, .. } => has_create(effect),
@@ -549,7 +645,9 @@ fn has_create(e: &Effect) -> bool {
 /// "if you do" / "you may" branch.
 pub(crate) fn append_after_create(e: &mut Effect, new: Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => {
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. }
+            // Populate creates a token copy (CR 701.36a); "the token created this way".
+            | Effect::KeywordAction { action: KeywordAction::Populate, .. } => {
             let c = std::mem::take(e);
             *e = Effect::Seq(vec![c, new]);
             true
@@ -584,6 +682,7 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(r) = [
         "it has ",
         "they have ",
+        "those creatures have ",
         "the token has ",
         "the tokens have ",
         "that token has ",
@@ -597,8 +696,11 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if several_kinds(prev) {
         return false;
     }
-    let Some(Effect::CreateToken { spec, .. } | Effect::CreateTokenWithPT { spec, .. }) =
-        last_create(prev)
+    let Some(
+        Effect::CreateToken { spec, .. }
+        | Effect::CreateTokenWithPT { spec, .. }
+        | Effect::CreateTokenAttached { spec, .. },
+    ) = last_create(prev)
     else {
         return false;
     };
@@ -609,6 +711,14 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(abilities) = ability_list(&masked, &quotes, &types, b.ctx) else {
         return false;
     };
+    // A creature token described without a power and toughness gets them from the
+    // characteristic-defining ability this sentence gives it (`token_copy_grammar`).
+    if super::token_copy_grammar::is_pt_pending(spec) {
+        if !super::token_copy_grammar::completes_pending(spec, &abilities, sets_pt) {
+            return false;
+        }
+        spec.pt_values = None;
+    }
     spec.abilities.extend(abilities);
     b.it = Sel::Var(vars::CREATED);
     true

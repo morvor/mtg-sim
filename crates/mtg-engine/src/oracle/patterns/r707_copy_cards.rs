@@ -66,6 +66,15 @@ fn p_cast_the_copy(l: &str, _b: &mut Builder) -> Option<Effect> {
     let r = r
         .strip_prefix("cast the copy")
         .or_else(|| r.strip_prefix("cast the copies"))?;
+    // "Cast the copies if able without paying their mana costs." (Spelltwine): they
+    // must be cast if they can be.
+    let (r, if_able) = match r.trim().strip_prefix("if able") {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
+    if if_able && optional {
+        return None;
+    }
     let free = match r.trim() {
         "" => false,
         "without paying its mana cost" | "without paying their mana costs" => true,

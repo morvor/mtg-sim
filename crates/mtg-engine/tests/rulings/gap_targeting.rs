@@ -906,7 +906,7 @@ fn tokens_with(t: &TestGame, p: PlayerId, subtype: &str) -> usize {
 #[test]
 fn transmutation_font_sacrifices_tokens_with_different_names() {
     cr!("118.3", "201.2b", "602.2b");
-    // (Its first ability isn't supported; the second is its first activated ability.)
+    // (The sacrifice ability is its second activated ability.)
     // A Clue, a Food and a Blood token: they can be sacrificed.
     let mut t = TestGame::new(2);
     let font = t.battlefield(P0, "Transmutation Font");
@@ -915,7 +915,7 @@ fn transmutation_font_sacrifices_tokens_with_different_names() {
         crate::r_s02_common::create_token(&mut t, P0, name);
     }
     t.library_top(P0, "Ornithopter");
-    assert!(t.activate(P0, font, 0, &[]).is_ok());
+    assert!(t.activate(P0, font, 1, &[]).is_ok());
     t.resolve();
     assert_eq!(tokens_with(&t, P0, "Clue"), 0);
     assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
@@ -927,7 +927,7 @@ fn transmutation_font_sacrifices_tokens_with_different_names() {
     for name in ["Clue", "Clue", "Food"] {
         crate::r_s02_common::create_token(&mut t, P0, name);
     }
-    assert!(t.activate(P0, font, 0, &[]).is_err());
+    assert!(t.activate(P0, font, 1, &[]).is_err());
     assert_eq!(tokens_with(&t, P0, "Clue"), 2);
 
     // Two Clues, a Food and a Blood: choosing both Clues isn't legal; one Clue, the Food
@@ -943,7 +943,7 @@ fn transmutation_font_sacrifices_tokens_with_different_names() {
         P0,
         &[Entity::Object(c1), Entity::Object(c2), Entity::Object(food)],
     );
-    t.activate(P0, font, 0, &[]).unwrap();
+    t.activate(P0, font, 1, &[]).unwrap();
     assert_eq!(tokens_with(&t, P0, "Clue"), 1);
     assert_eq!(tokens_with(&t, P0, "Food"), 0);
     assert_eq!(tokens_with(&t, P0, "Blood"), 0);

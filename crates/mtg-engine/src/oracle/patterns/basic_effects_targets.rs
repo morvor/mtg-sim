@@ -90,7 +90,7 @@ fn starts_new_target(s: &str) -> bool {
 
 /// "target [alternatives]", "up to one target ...", "up to two target ... and/or ...",
 /// "another target ...", with "controlled by different players".
-fn target_alternatives(s: &str) -> Option<(TargetSpec, &str)> {
+pub(crate) fn target_alternatives(s: &str) -> Option<(TargetSpec, &str)> {
     let s = s.trim_start();
     let (min, max, r) = if let Some(r) = strip(s, "up to ") {
         let (n, r) = parse_number(r)?;
