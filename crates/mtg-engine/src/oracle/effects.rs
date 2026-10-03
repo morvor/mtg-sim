@@ -1164,6 +1164,8 @@ pub fn parse_simple(l: &str, b: &mut Builder) -> Option<Effect> {
     let e = parse_simple_clause(l, b)?;
     let e = super::patterns::filters_relational::resolve_clause(e, &it);
     super::patterns::filters_relational::note_sacrificed(&e, b);
+    super::patterns::value_results::note_discarded(&e, b);
+    super::patterns::value_results::note_sacrificed(&e, b);
     Some(e)
 }
 

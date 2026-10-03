@@ -485,7 +485,12 @@ fn on_self(s: &str) -> Option<&str> {
 
 /// "for each [X]" amounts.
 fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
-    for_each_value_inner(s, ctx).or_else(|| super::value_grammar::whole_count_in(s, ctx, Sel::This))
+    // This turn's history (see `value_results`).
+    if let Some(v) = super::value_results::whole_history_count(s) {
+        return Some(v);
+    }
+    for_each_value_inner(s, ctx)
+        .or_else(|| super::value_grammar::whole_count_in(s, ctx, Sel::This))
 }
 
 fn for_each_value_inner(s: &str, ctx: &CompileContext) -> Option<Value> {

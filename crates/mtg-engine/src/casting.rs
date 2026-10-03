@@ -3503,6 +3503,7 @@ impl Game {
                 let pick = self.ask_objects(p, src, "Choose permanents to tap (cost)", cands, n, n);
                 for o in pick {
                     paid.objects.push(o);
+                    paid.tapped.push(o);
                     self.tap(o);
                 }
             }
@@ -3749,6 +3750,9 @@ pub struct PaidCost {
     /// The cards among `objects` that an exile cost exiled ("the exiled card",
     /// CR 400.7j).
     pub exiled: Vec<ObjectId>,
+    /// The permanents among `objects` that a "tap an untapped [permanent]" cost tapped
+    /// ("the creature tapped this way").
+    pub tapped: Vec<ObjectId>,
 }
 
 /// Adds one cost to another.

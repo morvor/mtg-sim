@@ -517,6 +517,10 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let x = patterns::value_grammar::cost_has_x(cost_s);
     let body = patterns::cost_parts::with_amount_x(amount_x.is_some(), || {
         patterns::value_grammar::with_x_defined(x, || {
+            // "Sacrifice another creature: Draw X cards, where X is that creature's
+            // power.": the sacrificed creature (see `patterns::value_results`).
+            let sac_text = patterns::value_results::cost_sacrificed_text(&cost, eff_text);
+            let eff_text = sac_text.as_deref().unwrap_or(eff_text);
             match crate::zones::cost_exiled_text(&cost, eff_text) {
                 Some(text) => {
                     effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_EXILED))

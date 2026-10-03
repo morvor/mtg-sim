@@ -606,7 +606,11 @@ pub fn bind_x_for_payment(g: &mut Game, cost: &Cost, ctx: &mut Ctx) -> Cost {
             .is_some_and(|si| si.x.is_some());
     if !defined {
         let p = ctx.controller;
-        let max = g.max_mana_available(p) as i64;
+        let mut max = g.max_mana_available(p) as i64;
+        // "X can't be greater than ..." (see `oracle::patterns::value_results`).
+        if let Some(cap) = ctx.nums.get(&crate::oracle::patterns::value_results::X_MAX) {
+            max = max.min((*cap).max(0));
+        }
         let src = ctx.source.or(ctx.stack_obj).unwrap_or(ObjectId(0));
         let choice = crate::decision::Decision::ChooseX {
             source: src,
@@ -614,7 +618,7 @@ pub fn bind_x_for_payment(g: &mut Game, cost: &Cost, ctx: &mut Ctx) -> Cost {
             max,
         };
         ctx.x = match g.ask(p, choice) {
-            crate::decision::Answer::Number(n) if n >= 0 => n as i32,
+            crate::decision::Answer::Number(n) if n >= 0 => n.min(max) as i32,
             _ => 0,
         };
     }

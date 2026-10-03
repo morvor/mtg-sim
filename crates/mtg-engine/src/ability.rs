@@ -1028,6 +1028,20 @@ pub enum Sel {
     /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
     /// has since changed zones is a new object the note doesn't find (CR 400.7).
     LinkedNoted,
+    /// The selected objects that match the filter, each judged as it is now or, if it has
+    /// left the zone it was in, as it last existed there (CR 608.2h): "the creatures you
+    /// controlled that were destroyed this way", "the creature cards sacrificed this
+    /// way".
+    Matching(Box<Sel>, Filter),
+    /// The selected objects as they last existed before the zone change that made them
+    /// new objects (CR 400.7, 608.2h): "the permanent exiled this way" is judged as the
+    /// permanent it was, "the spells countered this way" as the spells.
+    Before(Box<Sel>),
+    /// The objects this turn's events matching the trigger condition were about (each
+    /// once), as they were then: "spells you've cast this turn", "permanents you've
+    /// sacrificed this turn", "creatures you controlled that dealt combat damage to a
+    /// player this turn" (see `kw/value_results.rs`).
+    ThisTurn(Box<TriggerCond>),
 }
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
@@ -1646,8 +1660,28 @@ pub enum Value {
     /// the object in [`vars::TESTED`] ("the greatest power among creatures you control",
     /// "the lowest mana value among nonland permanents"); 0 if there are none.
     Extreme(Box<Value>, Box<Sel>, bool),
+    /// "the number of creatures that died under your control this turn", "the number of
+    /// cards your opponents have drawn this turn", "for each opponent who lost life this
+    /// turn", "for each 2 life your opponents have lost this turn": this turn's events a
+    /// triggered ability with this trigger condition (with the same source and
+    /// controller) would trigger on, whether or not anything triggered (CR 603.1b),
+    /// tallied (see `kw/value_results.rs`).
+    EventsThisTurn(Box<TriggerCond>, Tally),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
+}
+
+/// How [`Value::EventsThisTurn`] tallies the events it finds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Tally {
+    /// How many objects (or players) the events were about: one per creature that died,
+    /// card drawn, spell cast.
+    Events,
+    /// The total of their amounts (life lost, damage dealt, counters put).
+    Amount,
+    /// How many different players they were about ("for each opponent who lost life this
+    /// turn").
+    Players,
 }
 
 /// How [`Value::Aggregate`] and [`Value::OverPlayers`] combine their values.
