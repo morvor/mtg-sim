@@ -1007,6 +1007,12 @@ fn records_whether_done(e: &Effect) -> bool {
     match e {
         Effect::Seq(v) => v.last().is_some_and(records_whether_done),
         Effect::AsPlayer { effect, .. } => records_whether_done(effect),
+        // "may pay [cost] or [cost]": the next cost is offered if one wasn't paid.
+        Effect::If {
+            cond: Condition::Not(c),
+            then,
+            ..
+        } if matches!(**c, Condition::PrevHappened) => records_whether_done(then),
         Effect::May { .. }
         | Effect::PayOptional { .. }
         | Effect::Exile { .. }

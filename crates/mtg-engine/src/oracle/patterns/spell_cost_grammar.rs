@@ -1284,8 +1284,35 @@ fn that_many_paid(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             _ => false,
         }
     }
-    if !ends_with_pay(prev) || !(l.contains("that many") || l.contains("that much")) {
+    // "you may pay life equal to its power. If you do, put that many +1/+1 counters on
+    // it": the life paid.
+    fn life_paid(e: &Effect) -> Option<Value> {
+        match e {
+            Effect::PayOptional { cost, .. } if cost.mana.is_none() => match cost.parts.as_slice() {
+                [CostPart::PayLife(v)] if !matches!(v, Value::Const(_)) => Some(v.clone()),
+                _ => None,
+            },
+            Effect::Seq(v) => v.last().and_then(life_paid),
+            Effect::AsPlayer { effect, .. } => life_paid(effect),
+            _ => None,
+        }
+    }
+    let life = life_paid(prev);
+    if !(ends_with_pay(prev) || life.is_some())
+        || !(l.contains("that many") || l.contains("that much"))
+    {
         return false;
+    }
+    if let Some(v) = life {
+        let reworded = l.replace("that many", "x").replace("that much", "x");
+        let Some(e) = super::value_grammar::with_x_defined(true, || {
+            crate::oracle::effects::parse_sentence(&reworded, b)
+        }) else {
+            return false;
+        };
+        let p = std::mem::replace(prev, Effect::Noop);
+        *prev = Effect::seq(vec![p, Effect::SetX { value: v }, e]);
+        return true;
     }
     let reworded = l.replace("that many", "x").replace("that much", "x");
     // "When you do, it deals that much damage to any target": a reflexive triggered
@@ -1406,3 +1433,41 @@ fn unlock_costs_less(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<A
 }
 
 inventory::submit! { StaticPattern { name: "spell cost grammar: unlock costs you pay cost {N} less", priority: 100, parse: unlock_costs_less } }
+
+/// "you may pay {R}{R} or 2 life", "you may pay {G}, {W}, or {U}": the player may pay one
+/// of the costs (CR 118.12); each is offered in turn until one is paid, and "If you do"
+/// reads whether one was.
+fn may_pay_one_of(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you may pay ")?;
+    let list = r.replace(", or ", ", ").replace(" or ", ", ");
+    let options: Vec<&str> = list.split(", ").collect();
+    if options.len() < 2 {
+        return None;
+    }
+    let mut costs = Vec::new();
+    for o in options {
+        costs.push(payment_part(o.trim(), b)?);
+    }
+    let pay = |cost: Cost| Effect::PayOptional {
+        who: PlayerRef::You,
+        cost,
+        then: Box::new(Effect::Noop),
+        otherwise: Box::new(Effect::Noop),
+    };
+    let mut it = costs.into_iter().rev();
+    let mut e = pay(it.next()?);
+    for c in it {
+        e = Effect::seq(vec![
+            pay(c),
+            Effect::If {
+                cond: Condition::Not(Box::new(Condition::PrevHappened)),
+                then: Box::new(e),
+                // (Not `Noop`: when a cost was paid, the record that it was stays.)
+                otherwise: Box::new(Effect::Seq(vec![])),
+            },
+        ]);
+    }
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "spell cost grammar: you may pay [cost] or [cost]", priority: 99, parse: may_pay_one_of } }

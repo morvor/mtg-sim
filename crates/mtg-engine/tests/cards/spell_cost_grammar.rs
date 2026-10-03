@@ -855,3 +855,50 @@ fn inquisitive_glimmer_makes_unlock_costs_cheaper() {
     t.g.perform_action(P0, unlock).unwrap();
     assert_eq!(t.player(P0).mana_pool.total(), 0);
 }
+
+#[test]
+fn emberwilde_djinn_that_player_may_pay_mana_or_life() {
+    cr!("118.12", "119.4");
+    // "At the beginning of each player's upkeep, that player may pay {R}{R} or 2 life. If
+    // the player does, they gain control of ~."
+    assert_compiles(&["Emberwilde Djinn", "Isu the Abominable"]);
+    let mut t = TestGame::new(2);
+    let djinn = t.battlefield(P0, "Emberwilde Djinn");
+    // P1 can't pay {R}{R}; they pay 2 life instead.
+    t.answer_yes(P1, true);
+    t.advance_to(P1, Step::Draw);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.obj_now(djinn).controller, P1);
+}
+
+#[test]
+fn isu_offers_one_of_three_mana_costs() {
+    cr!("118.12");
+    // "Whenever another snow permanent you control enters, you may pay {G}, {W}, or {U}.
+    // If you do, put a +1/+1 counter on ~."
+    let mut t = TestGame::new(2);
+    let isu = t.battlefield(P0, "Isu the Abominable");
+    // The entering Snow-Covered Island can pay {U} only: {G} and {W} can't be paid, so
+    // only {U} is offered.
+    t.answer_yes(P0, true);
+    t.enter(P0, "Snow-Covered Island");
+    t.resolve_all();
+    assert_eq!(t.counters(isu, "+1/+1"), 1);
+    assert_eq!(tapped_lands(&t, P0), 1);
+    assert_eq!(t.asked().iter().filter(|(_, d)| format!("{d:?}").contains("Pay {")).count(), 1);
+}
+
+#[test]
+fn madame_null_puts_counters_equal_to_the_life_paid() {
+    cr!("118.12", "119.4");
+    // "Whenever another creature you control enters, you may pay life equal to its power.
+    // If you do, put that many +1/+1 counters on it."
+    assert_compiles(&["Madame Null, Power Broker"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Madame Null, Power Broker");
+    t.answer_yes(P0, true);
+    let giant = t.enter(P0, "Hill Giant");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(t.counters(giant, "+1/+1"), 3);
+}
