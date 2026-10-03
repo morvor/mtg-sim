@@ -405,7 +405,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               of them gets +1/+1\" is \"they get +1/+1\" (CR 611.2c: each affected object).",
     },
     Equivalence {
-        pattern: r"(^|[.:—•] |\n)it ([^.]*?) as long as (enchanted creature|enchanted permanent|equipped creature|enchanted land|enchanted artifact) is ",
+        pattern: r#"(^|[.:—•] |\n)it ((?:[^."]|"[^"]*")*?) as long as (enchanted creature|enchanted permanent|equipped creature|enchanted land|enchanted artifact) is "#,
         replacement: "${1}$3 $2 as long as $3 is ",
         why: "\"Enchanted permanent gets -1/-1 as long as it's a creature\" and \"As long as \
               enchanted permanent is a creature, it gets -1/-1\": the noun and the pronoun \
@@ -1108,7 +1108,7 @@ pub fn equivalence_regexes() -> &'static [Option<Regex>] {
 fn sentence_rewrites(s: &str) -> String {
     static LEAD: OnceLock<Option<Regex>> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
-        Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\."#)
+        Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."]|"[^"]*")*?"[^"]*\."|(?:[^."]|"[^"]*")+?\.)"#)
             .ok()
     });
     let mut s = s.to_string();
@@ -1233,7 +1233,9 @@ fn sentence_rewrites(s: &str) -> String {
         // a number in it.
         let n = lead
             .replace_all(&s, |c: &regex::Captures| {
-                let (start, clause, body) = (&c[1], &c[2], &c[3]);
+                let (start, clause) = (&c[1], &c[2]);
+                // The sentence ends with its last period, or with a quoted ability's.
+                let body = c[3].strip_suffix('.').unwrap_or(&c[3]);
                 let duration = clause == "until end of turn" || clause == "this turn";
                 match body.split_once(", where x is ") {
                     Some((head, x)) if duration && !body.contains('"') => {

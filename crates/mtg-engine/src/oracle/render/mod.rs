@@ -53,6 +53,8 @@ pub struct FaceInfo {
     /// cost reveals (Dragons of Tarkir), for "if you revealed a Dragon card or controlled
     /// a Dragon as you cast this spell".
     pub reveal_card: Option<crate::ability::Filter>,
+    /// The face has spree (CR 702.172): its modes are written "+ [cost] — [effect]".
+    pub spree: bool,
 }
 
 impl FaceInfo {
@@ -64,6 +66,10 @@ impl FaceInfo {
             enchant: None,
             meld: None,
             reveal_card: None,
+            spree: face.chars.abilities.iter().any(|a| {
+                matches!(&a.kind, AbilityKind::Keyword(k)
+                    if k.kind == crate::keywords::KeywordKind::Spree)
+            }),
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
         info.reveal_card = reveal_card(&face.chars.abilities);
@@ -746,6 +752,13 @@ pub struct Renderer<'a> {
     /// The quote depth of an ability granted to an Equipment: there, the object the
     /// ability's holder is attached to is "equipped creature".
     pub(crate) equipment_holder_depth: Option<u32>,
+    /// The numbers an enclosing condition compares ("if you have fewer than seven cards
+    /// in hand"): their difference is "the difference".
+    pub(crate) compared: Vec<(Value, Value)>,
+    /// The words of a vote earlier in the ability ("grace", "condemnation"), and what the
+    /// players voted for when they voted for objects ("permanent").
+    pub(crate) vote_words: Vec<String>,
+    pub(crate) vote_noun: Option<String>,
 }
 
 impl<'a> Renderer<'a> {
@@ -778,6 +791,9 @@ impl<'a> Renderer<'a> {
             quote_depth: 0,
             grants_to_equipment: false,
             equipment_holder_depth: None,
+            compared: Vec::new(),
+            vote_words: Vec::new(),
+            vote_noun: None,
             granted_keyword: false,
             self_before_target: false,
             last_actor_other: false,
@@ -933,6 +949,8 @@ impl<'a> Renderer<'a> {
         self.revealed_hand = false;
         self.x_for_each = None;
         self.sacrificed = None;
+        self.vote_words.clear();
+        self.vote_noun = None;
         self.last_group = None;
         self.trigger_names_opponent = false;
         let saved_scope = std::mem::replace(
@@ -1059,6 +1077,25 @@ impl<'a> Renderer<'a> {
     }
 
     fn modal(&mut self, m: &Modal) -> String {
+        // CR 702.172a: spree means "choose one or more modes; as an additional cost,
+        // pay the costs of each chosen mode", which its "+ [cost] — [effect]" lines say.
+        if self.info.spree
+            && m.per_mode_cost
+            && matches!(m.chooser, ModeChooser::Controller)
+            && m.min.as_const() == Some(1)
+            && m.max.as_const().is_none_or(|b| b as usize >= m.modes.len())
+            && !m.optional
+            && !m.allow_repeat
+            && m.modes.iter().all(|x| x.cost.is_some())
+        {
+            let mut lines = Vec::new();
+            for mode in &m.modes {
+                let cost = mode.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
+                let text = self.with_targets(&mode.targets, |r| r.effect_sentences(&mode.effect));
+                lines.push(format!("+ {cost} — {text}"));
+            }
+            return lines.join("\n");
+        }
         let mut head = match &m.chooser {
             ModeChooser::Controller => "choose".to_string(),
             ModeChooser::Opponent => "an opponent chooses".to_string(),
@@ -1169,6 +1206,16 @@ impl<'a> Renderer<'a> {
 }
 
 /// Cardinal number words as printed on cards ("two", "ten"; larger numbers as digits).
+/// The two numbers a condition compares ("if you have fewer than seven cards in hand").
+pub(crate) fn compared_values(c: &Condition) -> Option<(Value, Value)> {
+    match c {
+        Condition::Compare(a, Cmp::Lt | Cmp::Gt | Cmp::Le | Cmp::Ge, b) => {
+            Some((a.clone(), b.clone()))
+        }
+        _ => None,
+    }
+}
+
 pub fn number_word(n: i32) -> String {
     const W: [&str; 21] = [
         "zero",

@@ -480,6 +480,14 @@ impl Renderer<'_> {
                 self.target_vars[i].2 = true;
                 decline(self.target_vars[i].1.clone(), case)
             }
+            // "each permanent with the most votes or tied for most votes" (CR 701.38a).
+            Sel::Var(crate::kwa::vote::WINNERS) if self.vote_noun.is_some() => {
+                let n = self.vote_noun.clone().unwrap_or_default();
+                decline(
+                    format!("each {n} with the most votes or tied for most votes"),
+                    case,
+                )
+            }
             Sel::Var(v) if self.plural_vars.contains(v) => them(case),
             Sel::Var(v) => match *v {
                 vars::SACRIFICED if self.sacrificed.as_deref() == Some("~") => {

@@ -115,6 +115,21 @@ impl Renderer<'_> {
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
             Value::Var(vars::EXCESS) => "the excess damage".into(),
+            // "the number of grace votes" (CR 701.38a).
+            Value::Var(x)
+                if self
+                    .vote_words
+                    .iter()
+                    .any(|w| crate::kwa::vote::word_var(w) == *x) =>
+            {
+                let w = self
+                    .vote_words
+                    .iter()
+                    .find(|w| crate::kwa::vote::word_var(w) == *x)
+                    .cloned()
+                    .unwrap_or_default();
+                format!("the number of {w} votes")
+            }
             Value::Var(_) if self.stored_x(v).is_some() => "X".into(),
             Value::Var(_) => "that many".into(),
             Value::Devotion(cs) => {
@@ -335,9 +350,20 @@ impl Renderer<'_> {
                 parts.join(" plus ")
             }
             Value::Diff(a, b) => {
+                // "If you have fewer than seven cards in hand, draw cards equal to the
+                // difference": the difference of the numbers the condition compared.
+                let (ka, kb) = (format!("{a:?}"), format!("{b:?}"));
+                let named = self.compared.iter().any(|(x, y)| {
+                    let (kx, ky) = (format!("{x:?}"), format!("{y:?}"));
+                    (kx == ka && ky == kb) || (kx == kb && ky == ka)
+                });
                 let a = self.value(a);
                 let b = self.value(b);
-                format!("{a} minus {b}")
+                if named {
+                    format!("{{alt:the difference|{a} minus {b}}}")
+                } else {
+                    format!("{a} minus {b}")
+                }
             }
             Value::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
                 (Value::Const(1), x) | (x, Value::Const(1)) => self.value(x),
@@ -434,6 +460,20 @@ impl Renderer<'_> {
         if let Some(x) = self.stored_x(v) {
             return (format!("{x} {}", plural(noun)), None);
         }
+        // "for each grace vote" (CR 701.38a).
+        if let Value::Var(x) = v {
+            if self
+                .vote_words
+                .iter()
+                .any(|w| crate::kwa::vote::word_var(w) == *x)
+            {
+                let s = self.value(v);
+                return (
+                    format!("X {}", plural(noun)),
+                    Some(format!(", where X is {s}")),
+                );
+            }
+        }
         match v {
             Value::Const(1) => (with_article(noun), None),
             Value::Const(n) => (format!("{} {}", number_word(*n), plural(noun)), None),
@@ -490,8 +530,45 @@ impl Renderer<'_> {
     }
 
     /// A condition as a clause ("you control an artifact").
+    /// "If grace gets more votes", "if condemnation gets more votes or the vote is tied"
+    /// (CR 701.38a): the votes for a word compared with the most votes and the number of
+    /// choices that got them.
+    fn vote_condition(&mut self, c: &Condition) -> Option<String> {
+        use crate::kwa::vote::{word_var, CHOICES_WITH_MOST, MOST_VOTES};
+        let more = |c: &Condition, words: &[String]| -> Option<String> {
+            let Condition::And(v) = c else {
+                return None;
+            };
+            let [Condition::Compare(Value::Var(w), Cmp::Eq, Value::Var(MOST_VOTES)), Condition::Compare(Value::Var(CHOICES_WITH_MOST), Cmp::Eq, Value::Const(1))] =
+                v.as_slice()
+            else {
+                return None;
+            };
+            words.iter().find(|x| word_var(x) == *w).cloned()
+        };
+        if self.vote_words.is_empty() {
+            return None;
+        }
+        if let Some(w) = more(c, &self.vote_words) {
+            return Some(format!("{w} gets more votes"));
+        }
+        if let Condition::Or(v) = c {
+            if let [a, Condition::Compare(Value::Var(CHOICES_WITH_MOST), Cmp::Ge, Value::Const(2))] =
+                v.as_slice()
+            {
+                if let Some(w) = more(a, &self.vote_words) {
+                    return Some(format!("{w} gets more votes or the vote is tied"));
+                }
+            }
+        }
+        None
+    }
+
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
         self.new_clause();
+        if let Some(v) = self.vote_condition(c) {
+            return v;
+        }
         match c {
             Condition::Always => self.gap("Condition::Always"),
             Condition::Never => self.gap("Condition::Never"),

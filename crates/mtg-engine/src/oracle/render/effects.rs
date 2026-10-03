@@ -2215,6 +2215,15 @@ impl Renderer<'_> {
                     sub.as_deref(),
                     &spec.options,
                 );
+                // Secret council: "each player secretly votes for ..., then those votes are
+                // revealed" (no starting player).
+                if spec.secret && spec.action == KeywordAction::Vote {
+                    if let Some((_, w)) = s.split_once(" votes for ") {
+                        s = format!(
+                            "each player secretly votes for {w}, then those votes are revealed"
+                        );
+                    }
+                }
                 // "Each suspected creature is no longer suspected" (CR 701.60a).
                 if spec.undo && spec.action == KeywordAction::Suspect {
                     let w = self.sel(&spec.what, Case::Subj);
@@ -3243,6 +3252,17 @@ impl Renderer<'_> {
     }
 
     fn if_effect(&mut self, cond: &Condition, then: &Effect, otherwise: &Effect) -> String {
+        let pushed = super::compared_values(cond)
+            .map(|p| self.compared.push(p))
+            .is_some();
+        let s = self.if_effect_inner(cond, then, otherwise);
+        if pushed {
+            self.compared.pop();
+        }
+        s
+    }
+
+    fn if_effect_inner(&mut self, cond: &Condition, then: &Effect, otherwise: &Effect) -> String {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
         // "Exile that card from your graveyard": only if it's still there (CR 400.7).
@@ -4770,7 +4790,9 @@ impl Renderer<'_> {
                         .subtypes
                         .extend(subtypes.iter().map(|x| x.to_string()));
                 }
-                Modification::AllCreatureTypes => parts.push("{alt:is every creature type|gains all creature types}".into()),
+                Modification::AllCreatureTypes => parts.push(
+                    "{alt:is every creature type|gains all creature types|all creature types}".into(),
+                ),
                 // "becomes a 4/4 Dragon artifact creature": the new creature types replace
                 // the old ones (CR 205.1b), which the effect records as removing them.
                 Modification::RemoveAllCreatureTypes
@@ -5464,18 +5486,34 @@ impl Renderer<'_> {
                     }
                 }
             }
-            K::Vote | K::VillainousChoice => {
+            // CR 701.38a: each player votes, starting with a given player, for one of
+            // the words or objects.
+            K::Vote => {
                 let names: Vec<String> = options.iter().map(|(n, _)| n.clone()).collect();
-                let mut s = if action == K::Vote {
-                    format!("vote for {}", join_list(&names, "or"))
+                let what_s = if names.is_empty() {
+                    let f = match what {
+                        Sel::All(f) => f.clone(),
+                        _ => return self.gap("a vote for objects"),
+                    };
+                    let head = self.noun(&f, Num::One);
+                    self.vote_noun = Some(if format!("{f:?}").contains("Permanent") {
+                        "permanent".to_string()
+                    } else {
+                        head.rsplit(' ').next().unwrap_or("permanent").to_string()
+                    });
+                    self.noun_det(&f, Det::A)
                 } else {
-                    "face a villainous choice —".into()
+                    self.vote_words = names.clone();
+                    join_list(&names, "or")
                 };
-                if action == K::VillainousChoice {
-                    for (_, e) in options {
-                        let t = self.effect_sentences(e);
-                        s.push_str(&format!("\n• {t}"));
-                    }
+                let start = self.player(who, Case::Obj);
+                format!("starting with {start}, each player votes for {what_s}")
+            }
+            K::VillainousChoice => {
+                let mut s: String = "face a villainous choice —".into();
+                for (_, e) in options {
+                    let t = self.effect_sentences(e);
+                    s.push_str(&format!("\n• {t}"));
                 }
                 s
             }

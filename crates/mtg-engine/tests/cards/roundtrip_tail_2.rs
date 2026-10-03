@@ -6,6 +6,7 @@ use mtg_engine::ability::*;
 use mtg_engine::card::card;
 use mtg_engine::oracle::render::compare::{normalize_unit, tokens_match};
 use mtg_engine::oracle::render::{render_ability, FaceInfo};
+use mtg_engine::testing::*;
 use mtg_engine::*;
 
 #[allow(dead_code)]
@@ -60,4 +61,27 @@ fn a_choice_made_on_resolution_doesnt_render_as_a_modal_choice() {
     );
     // The resolution-time choice is still worded as one ("draw a card or gain 3 life").
     assert!(same("Draw a card or gain 3 life.", &r), "{r}");
+}
+
+#[test]
+fn a_wish_reveals_the_card_it_puts_into_your_hand() {
+    cr!("701.20a", "108.3b");
+    // Golden Wish: "You may reveal an artifact or enchantment card you own from outside
+    // the game and put it into your hand." The card was put into the hand without being
+    // revealed.
+    supported("Golden Wish");
+    let mut t = TestGame::new(2);
+    t.g.logging = true;
+    let side = t.g.add_to_sideboard(P0, vec![card("Ornithopter")]);
+    let wish = t.hand(P0, "Golden Wish");
+    t.lands(P0, "Plains", 5);
+    t.answer_choose(P0, &[Entity::Object(side[0])]);
+    t.cast(P0, wish).go();
+    t.resolve();
+    assert!(t.in_hand(P0, "Ornithopter"));
+    assert!(
+        t.g.log.iter().any(|e| e.text.contains("reveals") && e.text.contains("Ornithopter")),
+        "{:?}",
+        t.g.log.iter().map(|e| &e.text).collect::<Vec<_>>()
+    );
 }

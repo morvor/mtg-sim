@@ -52,7 +52,17 @@ impl Renderer<'_> {
             let (i, c) = self.two_ways(|r| r.triggered(&inner), |r| r.triggered_plain(t));
             return format!("{{alt:Max speed — {i}|{c}}}");
         }
-        self.triggered_plain(t)
+        let pushed = t
+            .intervening_if
+            .as_ref()
+            .and_then(super::compared_values)
+            .map(|p| self.compared.push(p))
+            .is_some();
+        let s = self.triggered_plain(t);
+        if pushed {
+            self.compared.pop();
+        }
+        s
     }
 
     fn triggered_plain(&mut self, t: &TriggeredAbility) -> String {
