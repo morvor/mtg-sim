@@ -5279,7 +5279,7 @@ impl Renderer<'_> {
             M::SpellOfChosenType => "to cast a creature spell of the chosen type".into(),
             M::SpellsOnly => "to cast spells".into(),
             M::AbilitiesOnly => "to activate {alt:abilities|an ability}".into(),
-            M::XCostsOnly => "on costs that include {X}".into(),
+            M::XCostsOnly => "on costs that {alt:include|contain} {X}".into(),
             M::ArtifactSpellOrAbility => {
                 "to cast artifact spells or activate abilities of artifacts".into()
             }
