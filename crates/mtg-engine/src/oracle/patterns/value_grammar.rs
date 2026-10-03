@@ -285,6 +285,15 @@ fn of_referent(stat: Stat, sel: Sel) -> Value {
 /// control", "the card" (what "it" names), "that creature card".
 fn referent(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim_start();
+    // A phrase the text gave a meaning of its own ("that card" for the card drawn and
+    // revealed, `dig_grammar::draw_and_reveal`).
+    for (p, sel) in &b.named {
+        if let Some(rest) = s.strip_prefix(p.as_str()) {
+            if p == "that card" && (word_end(rest) || rest.starts_with('\'')) {
+                return Some((sel.clone(), rest.to_string()));
+            }
+        }
+    }
     for p in [
         "the card",
         "that creature card",
@@ -699,6 +708,10 @@ fn relative_list<'a>(r: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
 /// An object phrase with the qualifiers above, in any order. Returns the filter and the
 /// rest.
 pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
+    // "the milled cards" after milling (`dig_grammar`).
+    if let Some(x) = super::dig_grammar::dug_objects(s, b) {
+        return Some(x);
+    }
     // CR 702.62b: a "suspended" card is in exile with suspend and a time counter on it.
     if let Some(r) = s.strip_prefix("suspended ") {
         let (f, rest) = objects(r, b)?;
@@ -1008,6 +1021,17 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     // "Mountains returned this way".
     if let Some(v) = super::zone_move_grammar::returned_this_way(r, b) {
         return Some(v);
+    }
+    // "creatures that convoked ~" (CR 702.51c).
+    for p in ["creatures that convoked ~", "creatures that convoked it"] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if word_end(rest) {
+                return Some((
+                    Value::Custom(crate::kw::convoke::CONVOKED_COUNT.into()),
+                    rest.to_string(),
+                ));
+            }
+        }
     }
     // "times ~ was kicked", "time it was kicked" (CR 702.33): the source's kicker count.
     for p in [

@@ -163,6 +163,24 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
             otherwise: Box::new(Effect::Noop),
         });
     }
+    // "You may cast the exiled card without paying its mana cost if it's an instant spell
+    // with mana value 2 or less", "you may cast it if it's a creature spell": the card,
+    // which isn't a spell yet, is checked for the qualities the spell would have (a spell
+    // is a card on the stack, CR 112.1).
+    let as_card;
+    let c = if x.contains("cast ")
+        && c.starts_with("it's ")
+        && (c.ends_with(" spell") || c.contains(" spell with "))
+    {
+        // Not of a card exiled face down (it has no characteristics there).
+        if super::dig_grammar::exiled_face_down(b) {
+            return None;
+        }
+        as_card = c.replacen(" spell", " card", 1);
+        as_card.as_str()
+    } else {
+        c
+    };
     let original = c;
     // Where "it" is the ability's source ("Whenever ~ attacks, you win the game if there
     // are twenty or more counters on it"), so is the condition's "it".

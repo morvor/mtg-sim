@@ -307,6 +307,8 @@ fn referent(s: &str) -> Option<(Option<u32>, &str)> {
     };
     for w in [
         "those cards",
+        // "one of those two cards" (Invasion of Alara: the two cards found).
+        "those two cards",
         "them",
         "the exiled cards",
         "those exiled cards",

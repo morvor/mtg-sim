@@ -1394,6 +1394,23 @@ fn dest_zone(s: &str) -> Option<(Destination, &str)> {
     }
     let r = s.strip_prefix("to ").or_else(|| s.strip_prefix("into "))?;
     let (_, r) = owners(r)?;
+    // "into your library third from the top" (CR 401.7: the bottom of a library with
+    // fewer cards).
+    if let Some(x) = strip_word(r, "library") {
+        let (w, x) = split_word(x);
+        let n = match w {
+            "second" => 2,
+            "third" => 3,
+            "fourth" => 4,
+            "fifth" => 5,
+            _ => 0,
+        };
+        if let Some(x) = x.strip_prefix("from the top").filter(|_| n > 0) {
+            let mut d = Destination::library_top();
+            d.position = LibraryPosition::FromTop(n - 1);
+            return Some((d, x));
+        }
+    }
     for (p, z) in [
         ("hands", ZoneKind::Hand),
         ("hand", ZoneKind::Hand),

@@ -37,6 +37,9 @@ fn is_in_place(d: &Destination) -> bool {
 fn reveal_until(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("reveal cards from the top of your library until you reveal ")?;
     let desc = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    if implicit_comparison_with_source(desc, b) {
+        return None;
+    }
     let filter = card_filter(desc, b)?;
     // "that card" is the card revealed last.
     b.it = Sel::Var(vars::IT);
@@ -46,6 +49,19 @@ fn reveal_until(l: &str, b: &mut Builder) -> Option<Effect> {
         found_to: in_place(),
         rest_to: in_place(),
     })
+}
+
+/// "a nonlegendary creature card with lesser mana value" where "it" is the source: the
+/// comparison is with an object an earlier instruction named that the parser doesn't
+/// track ("you may sacrifice another creature. If you do, reveal cards ... until you
+/// reveal a nonlegendary creature card with lesser mana value", Kethek, Crucible Goliath:
+/// the sacrificed creature), not the source.
+pub fn implicit_comparison_with_source(desc: &str, b: &Builder) -> bool {
+    matches!(b.it, Sel::This)
+        && [" with lesser ", " with greater "]
+            .iter()
+            .any(|p| desc.contains(p))
+        && !desc.contains(" than ")
 }
 
 /// Where "that card" goes.
