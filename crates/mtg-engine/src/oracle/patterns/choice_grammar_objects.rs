@@ -137,11 +137,12 @@ fn chosen_kind(
     b: &mut Builder,
 ) -> Option<(Filter, &'static str, String)> {
     let subject = c.each.clone().unwrap_or_else(|| c.chooser.clone());
-    // "one of them", "two of those cards", "one of the exiled cards".
+    // "one of them", "two of those cards".
     for p in [
         "of them",
         "of those cards",
-        "of the exiled cards",
+        // ("one of the exiled cards" isn't read: after "exile up to two creature cards
+        // from among them", "them" still means the cards looked at.)
         "of those creatures",
         "of the revealed cards",
     ] {

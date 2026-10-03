@@ -36,3 +36,12 @@ fn aether_gust_a_permanent_goes_on_top_or_bottom_of_its_owners_library() {
     assert_eq!(t.zone(now), Zone::Library(P1), "{}", t.dump_log());
     assert_eq!(t.g.player(P1).library[0], now, "the owner chose the bottom");
 }
+
+#[test]
+fn dubious_challenge_the_exiled_cards_are_not_the_cards_looked_at() {
+    // "exile up to two creature cards from among them, then shuffle. Target opponent may
+    // choose one of the exiled cards ... Put the rest onto the battlefield under your
+    // control.": read as choosing among (and putting onto the battlefield) the cards
+    // looked at, which were shuffled away. Not read until "the exiled cards" is.
+    assert!(!card("Dubious Challenge").unsupported_text().is_empty());
+}
