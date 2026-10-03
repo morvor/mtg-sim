@@ -199,6 +199,17 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               a Berserker\".",
     },
     Equivalence {
+        pattern: r"\byour life total is less than (\d+|[a-z]+)\b",
+        replacement: "you have less than $1 life",
+        why: "A player's life total is the amount of life they have (CR 119.1).",
+    },
+    Equivalence {
+        pattern: r"(^|[.:—•] |\n)for each (opponent|player), ([^.]+)\.",
+        replacement: "$1$3 for each $2.",
+        why: "\"For each opponent, create a token\" and \"create a token for each \
+              opponent\" do the same thing once per opponent.",
+    },
+    Equivalence {
         pattern: r"\bnontoken (white|blue|black|red|green)\b",
         replacement: "$1 nontoken",
         why: "The same for a color and \"nontoken\": a \"nontoken blue creature\" is a \
@@ -1185,6 +1196,27 @@ fn sentence_rewrites(s: &str) -> String {
                     return c[0].to_string();
                 }
                 format!("{}{}{}", &c[1], lead, &c[2])
+            })
+            .to_string();
+    }
+    // "Choose target creature. Reveal cards ... That creature gets +X/-X ...": the same,
+    // with the target named where it's first used (as above); only "that [noun]", which
+    // refers back to what was chosen, is taken for the target.
+    static CHOOSE_THAT: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = CHOOSE_THAT.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )choose ((?:up to (?:one|1) )?(?:another |other )?target [^.,]+?)\. ([^\n]*?)\bthat (creature|player|opponent|permanent|spell|card|artifact|land|planeswalker)\b").ok()
+    }) {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                // The noun must be the target's ("target opponent ... that player").
+                let head = c[2].split_whitespace().last().unwrap_or("").to_string();
+                let noun = &c[4];
+                let fits = c[2].contains(noun)
+                    || (noun == "player" && (head == "opponent" || head == "player"));
+                if !fits || c[3].contains("choose ") {
+                    return c[0].to_string();
+                }
+                format!("{}{}{}", &c[1], &c[3], &c[2])
             })
             .to_string();
     }

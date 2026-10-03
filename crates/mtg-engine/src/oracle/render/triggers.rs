@@ -603,6 +603,10 @@ impl Renderer<'_> {
                     (TriggerStep::Turn, PlayerRel::You) => "the beginning of your turn".into(),
                     (TriggerStep::Turn, PlayerRel::Any) => "the beginning of each turn".into(),
                     (_, PlayerRel::You) => format!("the beginning of your {s}"),
+                    // "At the beginning of each player's first main phase".
+                    (_, PlayerRel::Any) if s.contains("main phase") => {
+                        format!("the beginning of each player's {s}")
+                    }
                     (_, PlayerRel::Any) => format!("the beginning of each {s}"),
                     (_, PlayerRel::Opponent) => format!("the beginning of each opponent's {s}"),
                     (_, r) => {
@@ -958,7 +962,12 @@ impl Renderer<'_> {
                     return Ev::new("", self.gap("main phase trigger"));
                 };
                 let k: u32 = n["main_phase:".len()..].parse().unwrap_or(1);
-                let p = self.rel_possessive(*whose, Num::One);
+                // "At the beginning of each player's first main phase".
+                let p = if matches!(whose, PlayerRel::Any) {
+                    "each player's".to_string()
+                } else {
+                    self.rel_possessive(*whose, Num::One)
+                };
                 Ev::new(
                     "",
                     format!("the beginning of {p} {} main phase", ordinal_word(k)),

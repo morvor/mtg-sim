@@ -199,9 +199,20 @@ impl Renderer<'_> {
                 let s = if let Some(sym) = symbol {
                     match n {
                         Value::Const(k) if *k > 0 => sym.repeat(*k as usize),
-                        other => {
+                        Value::X => format!("X {sym}"),
+                        other
+                            if Self::is_simple(other)
+                                || matches!(other, Value::EventAmount | Value::Prev) =>
+                        {
                             let v = self.value(other);
                             format!("{v} {sym}")
+                        }
+                        // "you get an amount of {E} equal to its mana value".
+                        other => {
+                            let v = self.value(other);
+                            format!(
+                                "{{alt:an amount of {sym} equal to {v}|X {sym}, where X is {v}}}"
+                            )
                         }
                     }
                 } else {
@@ -4890,13 +4901,20 @@ impl Renderer<'_> {
                         }
                     }
                 }
+                let base_with = b.contains(" with base power and toughness ");
                 if let Some(i) = ps.iter().position(|p| p == BECOMES) {
                     ps[i] = b;
                 }
                 let mut grants = keywords.clone();
                 grants.extend(abilities.iter().cloned());
                 if !grants.is_empty() {
-                    let g = format!("{has} {}", join_list(&grants, "and"));
+                    // "becomes a Bird with base power and toughness 1/1 and flying": the
+                    // abilities may join the "with" list.
+                    let g = if base_with {
+                        format!("{{opt:{has}}} {}", join_list(&grants, "and"))
+                    } else {
+                        format!("{has} {}", join_list(&grants, "and"))
+                    };
                     match ps.iter().position(|p| p == GRANTS) {
                         Some(i) => ps[i] = g,
                         None => ps.push(g),

@@ -76,6 +76,19 @@ impl Renderer<'_> {
             }
         }
         flush(&mut run, &mut merged);
+        // Costs are paid in any order (CR 601.2h, 602.2b): cards list an energy payment
+        // before the other instructions ("Pay {E}{E}, Sacrifice ~").
+        let is_energy = |p: &String| p.starts_with("Pay ") && p.contains("{E}");
+        let symbols = |p: &String| p.starts_with('{') || p.starts_with('+') || p.starts_with('−');
+        if let Some(i) = merged.iter().position(is_energy) {
+            let first_other = merged.iter().position(|p| !symbols(p) && !is_energy(p));
+            if let Some(j) = first_other.filter(|j| *j < i) {
+                let mut alt = merged.clone();
+                let e = alt.remove(i);
+                alt.insert(j, e);
+                return format!("{{alt:{}|{}}}", merged.join(", "), alt.join(", "));
+            }
+        }
         merged.join(", ")
     }
 
