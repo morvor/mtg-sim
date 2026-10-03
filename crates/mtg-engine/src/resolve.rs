@@ -1529,12 +1529,13 @@ impl Game {
                 spell_filter,
                 body,
                 abilities,
+                additional,
             } => {
                 crate::mana_abilities::resolve_add_mana_with_rider(
                     self,
                     add,
                     spell_filter,
-                    *abilities,
+                    (*abilities, *additional),
                     body,
                     ctx,
                 );

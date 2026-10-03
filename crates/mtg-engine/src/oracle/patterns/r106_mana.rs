@@ -565,6 +565,7 @@ fn mana_spent_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
             spell_filter: spell_filter.clone(),
             body: Box::new(body.clone()),
             abilities: on_abilities,
+            additional: false,
         };
         act.is_mana_ability = act.body.targets.is_empty();
         out.push(AbilityDef::new(AbilityKind::Activated(act), block));

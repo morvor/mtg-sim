@@ -147,15 +147,11 @@ fn phylactery_lich_puts_a_counter_on_an_artifact_as_it_enters() {
 }
 
 #[test]
-fn gond_gate_lets_gates_enter_untapped_but_not_ones_put_onto_the_battlefield_tapped() {
+fn gond_gate_lets_gates_enter_untapped_in_the_order_their_controller_chooses() {
     cr!("614.1c", "616.1");
-    ruling!(
-        "Spelunking",
-        "If a land has an ability that says it enters the battlefield tapped, you choose the order"
-    );
     compiles(&["Gond Gate", "Uphill Battle", "Archelos, Lagoon Mystic"]);
-    // The controller of the entering Gate chooses the order: one order leaves it untapped,
-    // the other tapped.
+    // The controller of the entering Gate chooses the order of its own "enters tapped" and
+    // Gond Gate's effect: one order leaves it untapped, the other tapped.
     let mut results = Vec::new();
     for pick in 0..2 {
         let mut t = TestGame::new(2);
@@ -171,20 +167,42 @@ fn gond_gate_lets_gates_enter_untapped_but_not_ones_put_onto_the_battlefield_tap
     }
     results.sort();
     assert_eq!(results, vec![false, true]);
-    // Put onto the battlefield tapped by an instruction: it stays tapped.
+    // A land that isn't a Gate isn't affected.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Gond Gate");
-    let card = t.graveyard(P0, "Plains");
     let mut d = mtg_engine::ability::Destination::battlefield();
     d.tapped = true;
+    let plains = t.graveyard(P0, "Plains");
     let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
-    let moved = t.g.move_to_destination(vec![card], &d, &mut ctx);
+    let moved = t.g.move_to_destination(vec![plains], &d, &mut ctx);
     assert!(t.g.obj(moved[0]).tapped);
 }
 
 #[test]
-fn uphill_battle_taps_creatures_opponents_cast_only() {
-    cr!("614.1c", "601.1");
+fn horizon_explorer_lands_put_onto_the_battlefield_tapped_enter_untapped() {
+    cr!("614.1c");
+    ruling!(
+        "Horizon Explorer",
+        "If a land you control is simply put onto the battlefield tapped without a replacement effect being applied, it always enters untapped"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Horizon Explorer");
+    let mut d = mtg_engine::ability::Destination::battlefield();
+    d.tapped = true;
+    let card = t.graveyard(P0, "Plains");
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    let moved = t.g.move_to_destination(vec![card], &d, &mut ctx);
+    assert!(!t.g.obj(moved[0]).tapped);
+    // An opponent's land isn't affected.
+    let theirs = t.graveyard(P1, "Plains");
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P1);
+    let moved = t.g.move_to_destination(vec![theirs], &d, &mut ctx);
+    assert!(t.g.obj(moved[0]).tapped);
+}
+
+#[test]
+fn uphill_battle_taps_creatures_opponents_play() {
+    cr!("614.1c", "601.1", "305.1");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Uphill Battle");
     t.g.turn.active = P1;
@@ -202,6 +220,11 @@ fn uphill_battle_taps_creatures_opponents_cast_only() {
     let mine = t.enter(P0, "Grizzly Bears");
     t.resolve_all();
     assert!(!t.g.obj(t.g.current(mine)).tapped);
+    // A creature land an opponent plays was played too (CR 305.1).
+    let arbor = t.hand(P1, "Dryad Arbor");
+    t.play_land(P1, arbor).unwrap();
+    let a = t.named_on_battlefield("Dryad Arbor")[0];
+    assert!(t.g.obj(a).tapped);
 }
 
 #[test]
@@ -365,6 +388,9 @@ fn animal_attendant_mana_makes_a_non_human_creature_enter_with_a_counter() {
     t.activate(P0, att, 0, &[]).unwrap();
     let bears = t.hand(P0, "Grizzly Bears");
     t.cast(P0, bears).go();
+    // The mana's additional effect applies as it's spent: no triggered ability (CR 106.6).
+    t.settle();
+    assert_eq!(t.g.stack.len(), 1, "{}", t.dump_log());
     t.resolve_all();
     let b = t.named_on_battlefield("Grizzly Bears");
     assert_eq!(b.len(), 1, "{}", t.dump_log());

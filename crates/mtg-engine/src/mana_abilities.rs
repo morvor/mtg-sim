@@ -728,7 +728,7 @@ pub fn resolve_add_mana_with_rider(
     g: &mut Game,
     add: &Effect,
     spell_filter: &Filter,
-    abilities: bool,
+    (abilities, additional): (bool, bool),
     body: &Body,
     ctx: &mut Ctx,
 ) {
@@ -742,6 +742,7 @@ pub fn resolve_add_mana_with_rider(
                 id: 0,
                 spell_filter: spell_filter.clone(),
                 abilities,
+                additional,
                 body: body.clone(),
                 controller: ctx.controller,
                 source: ctx.source,
@@ -2137,6 +2138,18 @@ pub fn pay_mana(
                 r.abilities
             };
             if !triggers {
+                continue;
+            }
+            // An additional effect of the mana applies to the spell now (CR 106.6).
+            if r.additional {
+                let mut c = rctx.clone();
+                c.event = Some(crate::object::EventInfo {
+                    object: Some(spell),
+                    spell: Some(spell),
+                    player: Some(p),
+                    ..Default::default()
+                });
+                g.exec(&r.body.effect, &mut c);
                 continue;
             }
             g.trigger_order += 1;

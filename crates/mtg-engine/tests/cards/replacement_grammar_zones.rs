@@ -287,3 +287,29 @@ fn anafenza_exiles_opponents_creature_cards_from_anywhere() {
     t.settle();
     assert!(t.in_graveyard(P1, "Forest"));
 }
+
+#[test]
+fn hallowed_moonlight_exiles_the_token_a_copied_creature_spell_becomes() {
+    cr!("614.1c", "601.1", "707.10");
+    ruling!(
+        "Hallowed Moonlight",
+        "won’t affect any creature that was cast, no matter which zone it was cast from"
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Island", 3);
+    let hm = t.hand(P0, "Hallowed Moonlight");
+    t.cast(P0, hm).go();
+    t.resolve();
+    // The cast creature spell enters; the copy of it was never cast, so the token it
+    // would become is exiled instead.
+    let bears = t.hand(P0, "Grizzly Bears");
+    let spell = t.cast(P0, bears).go();
+    let dm = t.hand(P0, "Double Major");
+    t.cast(P0, dm).target(spell).go();
+    t.resolve_all();
+    let on_bf = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(on_bf.len(), 1, "{}", t.dump_log());
+    assert!(!t.obj_now(on_bf[0]).is_token());
+}

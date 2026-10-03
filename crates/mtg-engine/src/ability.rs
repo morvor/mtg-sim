@@ -2382,8 +2382,8 @@ pub enum ReplacementAction {
     /// Enters tapped (CR 614.1c).
     EnterTapped,
     /// "[Permanents] enter untapped": undoes "enters tapped" replacement effects applied
-    /// before it (the affected player chooses the order, CR 616.1); a permanent an
-    /// instruction puts onto the battlefield tapped still enters tapped.
+    /// before it (the affected player chooses the order, CR 616.1), and an instruction
+    /// putting it onto the battlefield tapped (Spelunking's rulings).
     EnterUntapped,
     /// Enters with counters.
     EnterWithCounters(CounterKind, Value),
@@ -4127,6 +4127,11 @@ pub enum Effect {
         body: Box<Body>,
         #[serde(default)]
         abilities: bool,
+        /// "If that mana is spent to cast [a spell], [effect]": an additional effect that
+        /// affects the spell the mana is spent on (CR 106.6), applied as the mana is spent
+        /// rather than by a delayed triggered ability.
+        #[serde(default)]
+        additional: bool,
     },
     /// "[Add mana]. Until end of turn, you don't lose this mana as steps and phases end."
     /// (CR 500.4): the mana the inner effect adds stays in its pool until the turn's cleanup

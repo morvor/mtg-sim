@@ -393,7 +393,7 @@ fn s_enter_untapped(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
 inventory::submit! { StaticPattern { name: "etb replacement grammar: permanents enter untapped", priority: 150, parse: s_enter_untapped } }
 
 /// "Creatures played by your opponents enter tapped." (Uphill Battle): creature spells
-/// they cast (CR 601.1) — permanents that come from the stack under their control.
+/// they cast (CR 601.1) and creature lands they play (CR 305.1).
 fn s_played_enter_tapped(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let r = end(l.trim()).strip_suffix(" enter tapped")?;
     let (subj, who) = r.split_once(" played by ")?;
@@ -413,7 +413,16 @@ fn s_played_enter_tapped(l: &str, text: &str, _ctx: &CompileContext) -> Option<V
                     f,
                     Filter::ControlledBy(rel),
                 ]))),
-                cond: Condition::SelMatches(Sel::TriggerObject, Filter::InZone(ZoneKind::Stack)),
+                // Played: cast as a spell (CR 601.1) or played as a land (CR 305.1).
+                cond: Condition::Or(vec![
+                    Condition::SelMatches(
+                        Sel::TriggerObject,
+                        super::replacement_grammar_zones::cast_spell(),
+                    ),
+                    Condition::Not(Box::new(Condition::Custom(
+                        crate::kw::trigger_event_causes::NOT_PLAYED.into(),
+                    ))),
+                ]),
             },
             action: ReplacementAction::EnterTapped,
             self_replacement: false,
@@ -610,8 +619,8 @@ fn joint_subject(subj: &str) -> Option<Filter> {
 /// spell, that creature enters with an additional +1/+1 counter on it." (Animal
 /// Attendant, Biophagus, Guildmages' Forum; CR 106.6): each unit of mana carries the
 /// effect, which applies to the spell it's spent on as that spell's permanent enters
-/// (CR 614.1c). It's modeled with the mana's delayed ability, resolving before the spell
-/// does.
+/// (CR 614.1c). The mana's additional effect creates the replacement effect as the mana
+/// is spent (no delayed triggered ability).
 fn a_mana_spent_enters_with(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let lower = block.to_lowercase();
     let (idx, marker) = [
@@ -659,6 +668,7 @@ fn a_mana_spent_enters_with(block: &str, ctx: &CompileContext) -> Option<Vec<Abi
             spell_filter: Filter::and(vec![f.clone(), Filter::Spell]),
             body: Box::new(body.clone()),
             abilities: false,
+            additional: true,
         };
         act.is_mana_ability = act.body.targets.is_empty();
         out.push(AbilityDef::new(AbilityKind::Activated(act), block));

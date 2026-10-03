@@ -394,9 +394,21 @@ fn p_if_zone(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "replacement grammar: [this turn] if [zone change], [replacement]", priority: 150, parse: p_if_zone } }
 
+/// A spell on the stack that a player cast (CR 601.1): not a copy of a spell or a card
+/// put onto the stack without being cast (CR 707.10).
+pub(crate) fn cast_spell() -> Filter {
+    Filter::and(vec![
+        Filter::InZone(ZoneKind::Stack),
+        Filter::Not(Box::new(Filter::Custom(
+            crate::kw::spell_not_cast::NOT_CAST.into(),
+        ))),
+    ])
+}
+
 /// "If [a nontoken creature | ~] would enter and it wasn't cast, exile it instead."
 /// (Containment Priest, Hallowed Moonlight): a permanent that enters other than by
-/// resolving as a spell (CR 601.1, 608.3) — one that isn't coming from the stack.
+/// resolving as a spell that was cast (CR 601.1, 608.3): one that isn't coming from the
+/// stack, or a copy of a permanent spell (CR 707.10).
 fn not_cast_entry(l: &str, b: &mut OneShot) -> Option<(ReplacementDef, bool)> {
     let r = end(l.trim()).strip_prefix("if ")?;
     let (subj, act) = r.split_once(" would enter and it wasn't cast, ")?;
@@ -411,7 +423,7 @@ fn not_cast_entry(l: &str, b: &mut OneShot) -> Option<(ReplacementDef, bool)> {
                 event: Box::new(ReplacementEvent::EntersBattlefield(f)),
                 cond: Condition::Not(Box::new(Condition::SelMatches(
                     Sel::TriggerObject,
-                    Filter::InZone(ZoneKind::Stack),
+                    cast_spell(),
                 ))),
             },
             action: ReplacementAction::MoveInstead(d),
