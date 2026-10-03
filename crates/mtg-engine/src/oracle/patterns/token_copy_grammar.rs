@@ -688,3 +688,64 @@ fn create_x_plus_minus(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "token grammar: create X minus N tokens", priority: 97, parse: create_x_plus_minus } }
+
+// ---------------------------------------------------------------------------
+// "tokens created with ~"
+// ---------------------------------------------------------------------------
+
+/// "[tokens] created with ~" (Tombstone Stairwell, Dual Nature): the tokens the source's
+/// abilities created, while they remain on the battlefield (CR 607.1d; the objects a
+/// resolving ability creates are linked to its source, `Game::link_to_creator`).
+fn created_with_this<'a>(t: &'a str, f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("created with ~")?;
+    if !(r.is_empty() || r.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    // Only tokens are created.
+    if !serde_json::to_string(f).is_ok_and(|s| s.contains("\"Token\"")) {
+        return None;
+    }
+    Some((Filter::In(Box::new(Sel::Linked)), r))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "token grammar: created with ~", priority: 100, parse: created_with_this } }
+
+/// "Then exile all other tokens created with ~." (Faerie Artisans): other than the tokens
+/// the previous instruction just created.
+fn f_other_tokens_created_with(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (verb, r) = match l.split_once(' ') {
+        Some(x) => x,
+        None => return false,
+    };
+    if r != "all other tokens created with ~" || !matches!(verb, "exile" | "destroy" | "sacrifice") {
+        return false;
+    }
+    if super::tokens_copies_create::last_create(prev).is_none() {
+        return false;
+    }
+    let f = Filter::and(vec![
+        Filter::Token,
+        Filter::In(Box::new(Sel::Linked)),
+        Filter::not(Filter::In(Box::new(Sel::Var(vars::CREATED)))),
+    ]);
+    let what = Sel::All(f);
+    let e = match verb {
+        "exile" => Effect::Exile {
+            what,
+            face_down: false,
+            link: false,
+        },
+        "destroy" => Effect::Destroy {
+            what,
+            no_regen: false,
+        },
+        _ => Effect::SacrificeObjects { what },
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "token grammar: all other tokens created with ~", priority: 50, apply: f_other_tokens_created_with } }

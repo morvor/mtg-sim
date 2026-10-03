@@ -1019,6 +1019,8 @@ impl Game {
                             .extend(self.create_tokens_maybe_attacking(p, tc, n, *attacking, ctx));
                     }
                 }
+                // "tokens created with ~" (CR 607.1d), as for other created tokens.
+                self.link_to_creator(ctx, &created);
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),
