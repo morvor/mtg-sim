@@ -408,6 +408,29 @@ fn oath_of_mages_the_upkeep_player_chooses_an_opponent_with_more_life() {
 }
 
 #[test]
+fn oath_of_mages_the_upkeep_player_chooses_among_their_opponents() {
+    cr!("601.2c", "603.3d");
+    // Three players: in P1's upkeep, P1 (not the Oath's controller) chooses between P0
+    // and P2.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Oath of Mages");
+    t.g.player_mut(P1).life = 15;
+    t.answer_targets(P1, &[Entity::Player(P2)]);
+    t.answer_yes(P1, true);
+    t.set_step(P0, Step::End);
+    let from = t.asked().len();
+    t.advance_to(P1, Step::Draw);
+    let asked: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseTargets { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(asked, vec![P1], "the upkeep's player chooses the target");
+    assert_eq!(t.life(P2), 19, "{}", t.dump_log());
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
 fn oath_of_lieges_the_land_enters_under_the_current_players_control() {
     cr!("601.2c", "701.23a");
     ruling!(

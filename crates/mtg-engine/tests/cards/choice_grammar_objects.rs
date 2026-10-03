@@ -163,16 +163,22 @@ fn thran_tome_target_opponent_chooses_one_of_those_cards() {
     let mut t = TestGame::new(2);
     let tome = t.battlefield(P0, "Thran Tome");
     t.lands(P0, "Plains", 5);
+    // Only two cards in the library: both are revealed, one goes to the graveyard, and
+    // you still draw two cards (the second draw is from an empty library).
+    for c in t.g.player(P0).library.clone() {
+        t.g.players[P0.idx()].library.retain(|x| *x != c);
+        t.g.objects[c.0 as usize].zone = mtg_engine::object::Zone::Nowhere;
+    }
     let a = t.library_top(P0, "Grizzly Bears");
     let b = t.library_top(P0, "Forest");
-    let c = t.library_top(P0, "Ornithopter");
     t.answer_choose(P1, &[Entity::Object(b)]);
     let hand = t.hand_size(P0);
     t.activate(P0, tome, 0, &[Entity::Player(P1)]).expect("activates");
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Forest"));
-    assert_eq!(t.hand_size(P0), hand + 2);
-    let _ = (a, c);
+    assert_eq!(t.zone(t.g.current(a)), mtg_engine::object::Zone::Hand(P0));
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert!(t.has_lost(P0), "drew from an empty library: {}", t.dump_log());
 }
 
 #[test]

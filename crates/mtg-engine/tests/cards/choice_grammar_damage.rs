@@ -40,14 +40,16 @@ fn orca_siege_demon_divides_damage_equal_to_its_last_known_power() {
     compiles("Orca, Siege Demon");
     let mut t = TestGame::new(2);
     let orca = t.battlefield(P0, "Orca, Siege Demon");
+    // A +1/+1 counter: its last known power is 6.
+    t.g.objects[orca.0 as usize].counters.insert("+1/+1".into(), 1);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.answer_targets(P0, &[Entity::Object(bears), Entity::Player(P1)]);
-    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![2, 3]));
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![2, 4]));
     t.g.destroy(orca, None);
     t.settle();
     t.resolve();
     assert!(!t.on_battlefield(bears));
-    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P1), 16, "{}", t.dump_log());
 }
 
 #[test]

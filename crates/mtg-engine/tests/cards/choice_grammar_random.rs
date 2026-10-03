@@ -34,7 +34,8 @@ fn asked_for_targets(t: &TestGame, from: usize, p: PlayerId) -> bool {
 fn raving_dead_attacks_the_opponent_chosen_at_random() {
     cr!("508.1d");
     compiles("Raving Dead");
-    for seed in 0..4 {
+    let mut attacked = std::collections::BTreeSet::new();
+    for seed in 0..12 {
         let mut t = TestGame::with_config(
             3,
             GameConfig {
@@ -48,7 +49,9 @@ fn raving_dead_attacks_the_opponent_chosen_at_random() {
         let hit: Vec<PlayerId> = [P1, P2].into_iter().filter(|p| t.life(*p) < 20).collect();
         assert_eq!(hit.len(), 1, "seed {seed}: it attacks exactly one opponent");
         assert!(t.obj_now(dead).tapped);
+        attacked.insert(hit[0]);
     }
+    assert_eq!(attacked.len(), 2, "either opponent may be chosen");
 }
 
 #[test]
@@ -116,7 +119,10 @@ fn wild_swing_destroys_one_of_them_at_random() {
     t.cast(P0, spell)
         .targets(&[Entity::Object(a), Entity::Object(b), Entity::Object(c)])
         .go();
+    let from = t.asked().len();
     t.resolve();
+    assert!(!asked_to_choose(&t, from, P0), "nobody chooses which one");
+    assert!(!asked_to_choose(&t, from, P1));
     let left = [a, b, c].iter().filter(|o| t.on_battlefield(**o)).count();
     assert_eq!(left, 2);
 }

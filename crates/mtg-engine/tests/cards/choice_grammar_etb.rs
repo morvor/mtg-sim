@@ -88,4 +88,26 @@ fn dauntless_bodyguard_gives_the_chosen_creature_indestructible() {
     assert!(dbg.contains("Indestructible"), "{dbg}");
     let dbg = format!("{:?}", t.obj_now(other).chars.abilities);
     assert!(!dbg.contains("Indestructible"));
+    // The chosen creature left the battlefield: no new creature is chosen, and no
+    // creature gains indestructible.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let other = t.battlefield(P0, "Hill Giant");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let guard = t.enter(P0, "Dauntless Bodyguard");
+    t.resolve_all();
+    t.g.destroy(bears, None);
+    t.settle();
+    let back = t.enter(P0, "Grizzly Bears");
+    let from = t.asked().len();
+    t.activate(P0, guard, 0, &[]).expect("activates");
+    t.resolve_all();
+    assert!(t.asked()[from..]
+        .iter()
+        .all(|(_, d)| !matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. })));
+    for id in [other, back] {
+        let dbg = format!("{:?}", t.obj_now(id).chars.abilities);
+        assert!(!dbg.contains("Indestructible"), "{dbg}");
+    }
 }

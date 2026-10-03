@@ -152,7 +152,7 @@ fn temporal_firestorm_the_chosen_permanents_phase_out() {
     t.cast(P0, spell).go();
     t.resolve_all();
     assert!(t.obj_now(kept).phased_out, "{}", t.dump_log());
-    assert!(!t.on_battlefield(other) || t.obj_now(other).damage >= 4);
+    assert!(!t.on_battlefield(other));
     assert!(!t.on_battlefield(theirs));
 }
 

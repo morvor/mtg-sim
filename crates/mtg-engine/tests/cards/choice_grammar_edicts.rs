@@ -107,6 +107,15 @@ fn release_each_player_sacrifices_one_of_each_kind() {
     );
     // P0 sacrificed a land too.
     assert_eq!(t.g.permanents_controlled_by(P0).len(), 5);
+    // The active player chooses first, then each other player in turn order.
+    let order: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseEntities { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    let first_p1 = order.iter().position(|p| *p == P1).expect("P1 chose");
+    assert!(order[..first_p1].contains(&P0), "{order:?}");
+    assert!(order[first_p1..].iter().all(|p| *p == P1), "{order:?}");
 }
 
 #[test]
