@@ -537,6 +537,15 @@ impl ManaRestriction {
             ManaRestriction::CastSpell(f) => ctx.is_spell && matches(f),
             ManaRestriction::ActivateAbilityOf(f) => ctx.is_ability && matches(f),
             ManaRestriction::NotCastSpell(f) => !(ctx.is_spell && matches(f)),
+            // "Abilities of artifacts": of artifact permanents, not of artifact cards in
+            // other zones (Renowned Weaponsmith's and Dalakos's rulings).
+            ManaRestriction::ArtifactSpellOrAbility if ctx.is_ability => {
+                self.allows(ctx)
+                    && ctx.source.is_some_and(|s| {
+                        g.try_obj(s)
+                            .is_some_and(|o| o.zone == crate::object::Zone::Battlefield)
+                    })
+            }
             ManaRestriction::AnyOf(v) => v.iter().any(|r| r.allows_in(g, payer, mana_source, ctx)),
             other => other.allows(ctx),
         }

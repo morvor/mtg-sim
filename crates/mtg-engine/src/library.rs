@@ -222,11 +222,21 @@ pub fn dig(
     );
     // "From among them", "the rest" (`dig_steps.rs`).
     crate::dig_steps::set_dug(ctx, cards.iter().map(|o| Entity::Object(*o)).collect());
-    let cands: Vec<ObjectId> = cards
+    let mut cands: Vec<ObjectId> = cards
         .iter()
         .copied()
         .filter(|c| g.matches(*c, filter, ctx))
         .collect();
+    if take_to.zone == ZoneKind::Battlefield && take_to.attached_to.is_none() {
+        // CR 303.4g: an Aura with nothing to enchant can't be chosen to be put onto the
+        // battlefield.
+        let controller = take_to
+            .controller
+            .as_ref()
+            .and_then(|pr| g.eval_player(pr, ctx))
+            .unwrap_or(ctx.controller);
+        cands.retain(|c| crate::attach::could_enter_unspecified(g, *c, controller));
+    }
     let k = take.min(cands.len() as u32);
     let min = if up_to { 0 } else { k };
     // ("For each card type, ... a card of that type": the cards taken must be chosen
