@@ -1537,8 +1537,12 @@ impl Renderer<'_> {
             Duration::EndOfCombat => "until end of combat".into(),
             Duration::UntilYourNextTurn => "until your next turn".into(),
             Duration::UntilEndOfYourNextTurn => "until the end of your next turn".into(),
+            // CR 611.2b: "until ~ leaves the battlefield" is the same duration.
             Duration::WhileSourceOnBattlefield => {
-                format!("for as long as {} remains on the battlefield", self.me())
+                let me = self.me();
+                format!(
+                    "{{alt:for as long as {me} remains on the battlefield|until {me} leaves the battlefield}}"
+                )
             }
             Duration::WhileYouControlSource => format!("for as long as you control {}", self.me()),
             Duration::WhileCondition(c) => {

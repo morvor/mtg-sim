@@ -214,6 +214,10 @@ impl Game {
             }
             PlayerRel::Iterated => ctx.iter_player == Some(p),
             PlayerRel::Chosen => self.chosen_player_of_source(ctx) == Some(p),
+            PlayerRel::Var(v) => ctx
+                .vars
+                .get(&v)
+                .is_some_and(|e| e.contains(&Entity::Player(p))),
         }
     }
 
