@@ -843,7 +843,7 @@ impl Game {
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, opt) {
             return false;
         }
-        if opt.any_time && !crate::combat::spell_cast_restrictions_ok(self, p, card, &chars) {
+        if opt.any_time && !self.resolution_cast_allowed(p, card, &chars) {
             return false;
         }
         if self.legendary_spell_prohibited(p, &chars) {
@@ -892,6 +892,20 @@ impl Game {
         crate::permissions::spend_terms(opt.permission.as_ref(), &mut cost);
         crate::kw::payable_otherwise(self, p, card, &chars, &opt.method, &mut cost);
         self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
+    }
+
+    /// Whether `p` may cast `card` while a spell or ability resolves (CR 608.2g): the
+    /// spell's own "cast this spell only ..." restrictions apply, and a player who "can
+    /// cast spells only any time they could cast a sorcery" can't, as nobody has priority
+    /// and the resolving object is on the stack (CR 307.5; Teferi, Mage of Zhalfir).
+    fn resolution_cast_allowed(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
+        crate::combat::spell_cast_restrictions_ok(self, p, card, chars)
+            && !self.player_restricted(p, |r| matches!(r, Restriction::SorcerySpeedOnly(_)))
     }
 
     pub(crate) fn timing_allows_cast(
@@ -1344,7 +1358,7 @@ impl Game {
         // ..." restrictions still apply (CR 601.3).
         if opt.any_time {
             let chars = self.option_characteristics(card, &opt);
-            if !crate::combat::spell_cast_restrictions_ok(self, p, card, &chars) {
+            if !self.resolution_cast_allowed(p, card, &chars) {
                 return Err(Illegal("restriction".into()));
             }
         }
