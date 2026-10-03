@@ -338,3 +338,17 @@ fn teferis_time_twist_returns_a_creature_with_an_additional_counter() {
     assert_eq!(back.len(), 1, "{}", t.dump_log());
     assert_eq!(t.counters(back[0], "+1/+1"), 1);
 }
+
+#[test]
+fn thunderous_velocipede_gives_one_or_three_counters_by_mana_value() {
+    cr!("614.1c", "614.12");
+    compiles(&["Thunderous Velocipede"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thunderous Velocipede");
+    let small = t.enter(P0, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.counters(t.g.current(small), "+1/+1"), 1);
+    let big = t.enter(P0, "Colossal Dreadmaw");
+    t.resolve_all();
+    assert_eq!(t.counters(t.g.current(big), "+1/+1"), 3);
+}

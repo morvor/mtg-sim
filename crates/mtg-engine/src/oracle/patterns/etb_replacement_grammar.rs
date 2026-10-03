@@ -235,6 +235,21 @@ fn entering_filter(c: &str) -> Option<Filter> {
             return (!plural && tail.trim().is_empty()).then_some(f);
         }
     }
+    // "its mana value is 2 or less"
+    if let Some(r) = c.strip_prefix("its mana value is ") {
+        let phrase = format!("permanent with mana value {r}");
+        let (f, plural, tail) = parse_object_phrase(&phrase)?;
+        // Only the quality: the object isn't on the battlefield yet as it's checked.
+        let f = match f {
+            Filter::And(v) => Filter::and(
+                v.into_iter()
+                    .filter(|x| !matches!(x, Filter::Permanent))
+                    .collect(),
+            ),
+            other => other,
+        };
+        return (!plural && tail.trim().is_empty()).then_some(f);
+    }
     for p in ["that card has ", "it has "] {
         if let Some(r) = c.strip_prefix(p) {
             let phrase = format!("permanent with {r}");
@@ -528,3 +543,65 @@ fn s_others_enter_as_copy(l: &str, text: &str, _ctx: &CompileContext) -> Option<
 }
 
 inventory::submit! { StaticPattern { name: "etb replacement grammar: creatures enter as a copy of enchanted creature", priority: 150, parse: s_others_enter_as_copy } }
+
+/// "Each other Vehicle and creature you control enters with an additional +1/+1 counter
+/// on it if its mana value is 2 or less. Otherwise, it enters with three additional +1/+1
+/// counters on it." (Thunderous Velocipede): checked for each permanent as it would
+/// exist on the battlefield (CR 614.12).
+fn s_each_enters_with_if(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l.trim());
+    let (first, otherwise) = l.split_once(". otherwise, it enters with ")?;
+    let r = first.strip_prefix("each ")?;
+    let (subj, rest) = r.split_once(" enters with ")?;
+    let (counts, cond) = rest.split_once(" if ")?;
+    let f = joint_subject(subj)?;
+    let (k1, n1) = counters_on(counts)?;
+    let (k2, n2) = counters_on(otherwise)?;
+    let q = entering_filter(cond)?;
+    Some(vec![static_ability(
+        StaticEffect::Replacement(ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(f),
+            action: ReplacementAction::AsEnters(Box::new(Effect::If {
+                cond: Condition::SelMatches(Sel::This, q),
+                then: Box::new(Effect::EnterWithCounters { kind: k1, n: n1 }),
+                otherwise: Box::new(Effect::EnterWithCounters { kind: k2, n: n2 }),
+            })),
+            self_replacement: false,
+            optional: false,
+        }),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "etb replacement grammar: each enters with counters if ..., otherwise ...", priority: 150, parse: s_each_enters_with_if } }
+
+/// "other Vehicle and creature you control": each object of either kind, with the
+/// qualifiers before and after the nouns applying to both; or a single object phrase.
+fn joint_subject(subj: &str) -> Option<Filter> {
+    if let Some((f, false, tail)) = parse_object_phrase(subj) {
+        if tail.trim().is_empty() {
+            return Some(f);
+        }
+    }
+    let (other, r) = match subj.strip_prefix("other ") {
+        Some(r) => (true, r),
+        None => (false, subj),
+    };
+    let (r, you) = match r.strip_suffix(" you control") {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
+    let (a, b) = r.split_once(" and ")?;
+    let mut heads = Vec::new();
+    for w in [a, b] {
+        heads.push(head_noun(w.trim())?);
+    }
+    let mut parts = vec![Filter::Or(heads)];
+    if other {
+        parts.push(Filter::Other);
+    }
+    if you {
+        parts.push(Filter::ControlledBy(PlayerRel::You));
+    }
+    Some(Filter::and(parts))
+}
