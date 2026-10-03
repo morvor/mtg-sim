@@ -4,6 +4,7 @@
 
 use crate::r_s01_common::*;
 use crate::r_s02_common::destroy;
+use crate::r_s04_common::graveyard_names;
 use crate::r_s05_common::run_from;
 use mtg_engine::ability::{Destination, Effect, Sel};
 use mtg_engine::decision::{Answer, Decision};
@@ -352,4 +353,39 @@ fn goldbug_converting_before_combat_damage_stops_preventing_it() {
         t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
         assert_eq!(t.on_battlefield(human), !second_spell, "{second_spell}");
     }
+}
+
+#[test]
+fn lethal_scheme_can_be_convoked_by_at_most_four_creatures_which_connive() {
+    cr!("702.51a", "702.51c", "701.50a");
+    ruling!(
+        "Lethal Scheme",
+        "You can't tap more creatures to convoke Lethal Scheme than it takes to pay for its total cost. This means that normally no more than four creatures can convoke it."
+    );
+    supported("Lethal Scheme");
+    // Lethal Scheme {2}{B}{B}: "Convoke. Destroy target creature or planeswalker. Each
+    // creature that convoked Lethal Scheme connives." Six creatures: four at most.
+    let mut t = TestGame::new(2);
+    let target = t.battlefield(P1, "Hill Giant");
+    let mut c = n_creatures(&mut t, P0, "Vampire Interloper", 2);
+    c.extend(n_creatures(&mut t, P0, "Grizzly Bears", 4));
+    for _ in 0..6 {
+        t.library_top(P0, "Island");
+    }
+    let card = t.hand(P0, "Lethal Scheme");
+    let from = t.asked().len();
+    convoke_with(&mut t, P0, &c[..4]);
+    t.cast(P0, card).target(target).go();
+    assert_eq!(convoke_offer(&t, from), (6, 4));
+    assert_eq!(c.iter().filter(|x| tapped(&t, **x)).count(), 4);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    // The four convokers connived: four cards drawn and four discarded (Islands, lands:
+    // no counters), the others didn't.
+    assert_eq!(t.hand_size(P0), hand);
+    assert_eq!(
+        graveyard_names(&t, P0).iter().filter(|n| *n == "Island").count(),
+        4
+    );
 }
