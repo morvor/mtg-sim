@@ -144,6 +144,14 @@ pub enum ReplEvent {
     LoseGame {
         player: PlayerId,
     },
+    /// A player would perform a keyword action (CR 701; see
+    /// [`ReplacementEvent::Action`]).
+    Action {
+        kind: ReplaceableAction,
+        player: PlayerId,
+        object: Option<ObjectId>,
+        amount: u32,
+    },
 }
 
 /// Identifies a replacement effect for the "only once per event" rule (CR 614.5).
@@ -388,6 +396,7 @@ impl Game {
             },
             ReplEvent::CreateTokens { controller, .. } => *controller,
             ReplEvent::Destroy { obj, .. } => self.obj(*obj).controller,
+            ReplEvent::Action { player, .. } => *player,
         }
     }
 
@@ -1097,6 +1106,23 @@ impl Game {
             (ReplacementEvent::LoseGame(pf), ReplEvent::LoseGame { player }) => {
                 self.player_filter_matches(pf, *player, ctx)
             }
+            (
+                ReplacementEvent::Action { kind, who, objects },
+                ReplEvent::Action {
+                    kind: k,
+                    player,
+                    object,
+                    ..
+                },
+            ) => {
+                kind == k
+                    && self.player_filter_matches(who, *player, ctx)
+                    && match (objects, object) {
+                        (None, _) => true,
+                        (Some(f), Some(o)) => self.matches(*o, f, ctx),
+                        (Some(_), None) => false,
+                    }
+            }
             // CR 614.1a: an event pattern with a condition on the event ("3 or more
             // damage", "during your turn").
             (ReplacementEvent::Where { event, cond }, ev) => {
@@ -1766,6 +1792,17 @@ fn scale_event(ev: ReplEvent, f: impl Fn(u32) -> u32) -> ReplEvent {
             count: f(count),
             source,
         },
+        ReplEvent::Action {
+            kind,
+            player,
+            object,
+            amount,
+        } => ReplEvent::Action {
+            kind,
+            player,
+            object,
+            amount: f(amount),
+        },
         other => other,
     }
 }
@@ -1777,6 +1814,7 @@ fn event_amount(ev: &ReplEvent) -> Option<u32> {
         | ReplEvent::LoseLife { amount, .. } => Some(*amount),
         ReplEvent::AddCounters { n, .. } => Some(*n),
         ReplEvent::CreateTokens { count, .. } => Some(*count),
+        ReplEvent::Action { amount, .. } => Some(*amount),
         _ => None,
     }
 }
@@ -1819,6 +1857,68 @@ pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
             e.amount = *count as i32;
         }
         ReplEvent::Destroy { obj, .. } => e.object = Some(*obj),
+        ReplEvent::Action {
+            player,
+            object,
+            amount,
+            ..
+        } => {
+            e.player = Some(*player);
+            e.object = *object;
+            e.amount = *amount as i32;
+        }
     }
     e
+}
+
+impl Game {
+    /// Proposes a keyword action to replacement effects (CR 614.1a, 701): returns the
+    /// amount to perform it with ("that many cards plus four"), or `None` if it was
+    /// replaced by something else ("proliferate twice instead" performs its own
+    /// instructions, during which this effect doesn't apply again, CR 614.5).
+    pub fn replace_action(
+        &mut self,
+        kind: ReplaceableAction,
+        player: PlayerId,
+        object: Option<ObjectId>,
+        amount: u32,
+    ) -> Option<u32> {
+        let applicable = self.statics_or_instances_have_action(kind);
+        if !applicable {
+            return Some(amount);
+        }
+        let evs = self.replace(ReplEvent::Action {
+            kind,
+            player,
+            object,
+            amount,
+        });
+        self.run_post_replacement_effects();
+        match evs.into_iter().next() {
+            Some(ReplEvent::Action { amount, .. }) => Some(amount),
+            _ => None,
+        }
+    }
+
+    /// Whether any replacement effect watches that keyword action (a fast path).
+    fn statics_or_instances_have_action(&mut self, kind: ReplaceableAction) -> bool {
+        if self.dirty {
+            self.recompute();
+        }
+        fn watches(e: &ReplacementEvent, kind: ReplaceableAction) -> bool {
+            match e {
+                ReplacementEvent::Action { kind: k, .. } => *k == kind,
+                ReplacementEvent::Where { event, .. } => watches(event, kind),
+                _ => false,
+            }
+        }
+        self.statics
+            .replacements
+            .iter()
+            .any(|(_, _, _, _, d)| watches(&d.event, kind))
+            || self
+                .replacements
+                .iter()
+                .any(|r| watches(&r.def.event, kind))
+    }
 }

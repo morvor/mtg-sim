@@ -27,6 +27,13 @@ pub const REVEALED_NOTHING: i32 = -1;
 /// Has `obj` explore once (CR 701.44a–c).
 pub fn explore(g: &mut Game, obj: ObjectId, source: Option<ObjectId>) {
     let p = controller_or_last(g, obj);
+    // "If a creature you control would explore, instead ..." (CR 614.1a)
+    if g
+        .replace_action(crate::ability::ReplaceableAction::Explore, p, Some(obj), 1)
+        .is_none()
+    {
+        return;
+    }
     let result = match g.library_top(p) {
         // "Otherwise" includes revealing no card at all (an empty library).
         None => {

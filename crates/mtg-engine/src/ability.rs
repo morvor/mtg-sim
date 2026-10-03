@@ -2298,6 +2298,28 @@ pub enum ReplacementEvent {
         event: Box<ReplacementEvent>,
         cond: Condition,
     },
+    /// A player matching `who` would perform a keyword action (CR 701), with the object
+    /// matching `objects` for an action an object performs ("if a creature you control
+    /// would explore"): "If you would proliferate, proliferate twice instead.", "If an
+    /// opponent would mill one or more cards, they mill that many cards plus four
+    /// instead." (CR 614.1a, 701.17d).
+    Action {
+        kind: ReplaceableAction,
+        who: PlayerFilter,
+        objects: Option<Filter>,
+    },
+}
+
+/// Keyword actions that replacement effects can modify (see
+/// [`ReplacementEvent::Action`]). The amount of the event is the number of cards milled
+/// or scried, or the N of "connives N"; 1 for the others.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReplaceableAction {
+    Mill,
+    Scry,
+    Proliferate,
+    Explore,
+    Connive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

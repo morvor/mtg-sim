@@ -1,0 +1,175 @@
+//! Player-event replacement effects compiled by the replacement grammar
+//! (`src/oracle/patterns/replacement_grammar_events.rs`): draws, life loss, and keyword
+//! actions (mill, scry, proliferate, explore, connive), with "[instructions] instead",
+//! "you may ... instead", and amount changes (CR 614.1a, 614.11, 121.6, 701).
+
+use mtg_engine::testing::*;
+use mtg_engine::*;
+
+fn compiles(names: &[&str]) {
+    for n in names {
+        let u = card(n).unsupported_text().join(" | ");
+        assert!(u.is_empty(), "{n} has unsupported text: {u}");
+    }
+}
+
+#[test]
+fn event_grammar_cards_compile() {
+    compiles(&[
+        "Bloodletter of Aclazotz",
+        "Blood Scrivener",
+        "Out of the Tombs",
+        "Living Conundrum",
+        "Eruth, Tormented Prophet",
+        "Sages of the Anima",
+        "Tomorrow, Azami's Familiar",
+        "Forbidden Crypt",
+        "Pursuit of Knowledge",
+        "Obstinate Familiar",
+        "The Water Crystal",
+        "Tekuthal, Inquiry Dominus",
+        "Eligeth, Crossroads Augur",
+        "Kenessos, Priest of Thassa",
+        "Leader, Super-Genius",
+        "Topography Tracker",
+        "Twists and Turns // Mycoid Maze",
+    ]);
+}
+
+#[test]
+fn blood_scrivener_draws_two_and_loses_life_with_an_empty_hand() {
+    cr!("614.11", "121.6");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Blood Scrivener");
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    assert_eq!(t.hand_size(P0), 0);
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(t.life(P0), 19);
+    // With cards in hand, a normal draw.
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert_eq!(t.hand_size(P0), 3);
+    assert_eq!(t.life(P0), 19);
+}
+
+#[test]
+fn living_conundrum_skips_draws_from_an_empty_library() {
+    cr!("614.11", "121.4");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Living Conundrum");
+    let n = t.library_size(P0) as u32;
+    t.g.mill(P0, n);
+    assert_eq!(t.library_size(P0), 0);
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert!(!t.has_lost(P0), "{}", t.dump_log());
+}
+
+#[test]
+fn obstinate_familiar_may_skip_the_draw() {
+    cr!("614.11", "121.6");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Obstinate Familiar");
+    t.library_top(P0, "Island");
+    let lib = t.library_size(P0);
+    t.answer_yes(P0, true);
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert_eq!(t.hand_size(P0), 0);
+    assert_eq!(t.library_size(P0), lib);
+}
+
+#[test]
+fn eruth_exiles_the_top_two_cards_instead_of_drawing() {
+    cr!("614.11");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Eruth, Tormented Prophet");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Forest");
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert_eq!(t.hand_size(P0), 0);
+    assert!(t.in_exile("Island") && t.in_exile("Forest"));
+}
+
+#[test]
+fn bloodletter_doubles_opponents_life_loss_during_your_turn() {
+    cr!("614.1a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bloodletter of Aclazotz");
+    t.g.lose_life(P1, 3);
+    t.settle();
+    assert_eq!(t.life(P1), 14);
+    t.g.lose_life(P0, 3);
+    t.settle();
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
+fn the_water_crystal_adds_four_to_opponents_mills() {
+    cr!("614.1a", "701.17d");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Water Crystal");
+    for _ in 0..10 {
+        t.library_top(P1, "Island");
+        t.library_top(P0, "Island");
+    }
+    t.g.mill(P1, 2);
+    t.settle();
+    assert_eq!(t.graveyard_size(P1), 6);
+    t.g.mill(P0, 2);
+    t.settle();
+    assert_eq!(t.graveyard_size(P0), 2);
+}
+
+#[test]
+fn tekuthal_proliferates_twice() {
+    cr!("614.1a", "701.34a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tekuthal, Inquiry Dominus");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.objects[bears.0 as usize]
+        .counters
+        .insert("+1/+1".into(), 1);
+    t.lands(P0, "Island", 3);
+    let sp = t.hand(P0, "Steady Progress");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.cast(P0, sp).go();
+    t.resolve();
+    assert_eq!(t.counters(bears, "+1/+1"), 3);
+}
+
+#[test]
+fn eligeth_draws_instead_of_scrying_and_kenessos_scries_one_more() {
+    cr!("614.1a", "701.22a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Eligeth, Crossroads Augur");
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    t.lands(P0, "Island", 1);
+    let opt = t.hand(P0, "Opt");
+    t.cast(P0, opt).go();
+    t.resolve();
+    // Scry 1 became draw 1, then Opt draws a card.
+    assert_eq!(t.hand_size(P0), 2);
+}
+
+#[test]
+fn topography_tracker_makes_creatures_explore_twice() {
+    cr!("614.1a", "701.44a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Topography Tracker");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Forest");
+    let b = t.enter(P0, "Merfolk Branchwalker");
+    t.resolve_all();
+    // Two lands revealed: both put into hand.
+    assert_eq!(t.hand_size(P0), 2, "{}", t.dump_log());
+    assert_eq!(t.counters(b, "+1/+1"), 0);
+}
