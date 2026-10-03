@@ -488,8 +488,7 @@ fn on_self(s: &str) -> Option<&str> {
 
 /// "for each [X]" amounts.
 fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
-    for_each_value_inner(s, ctx)
-        .or_else(|| super::value_grammar::whole_count_in(s, ctx, Sel::This))
+    for_each_value_inner(s, ctx).or_else(|| super::value_grammar::whole_count_in(s, ctx, Sel::This))
 }
 
 fn for_each_value_inner(s: &str, ctx: &CompileContext) -> Option<Value> {
@@ -878,6 +877,21 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
             });
         }
         return entry(r, ctx);
+    }
+    // "put a phylactery counter on an artifact you control" (Phylactery Lich): a permanent
+    // already on the battlefield is chosen (not targeted) as this enters and gets the
+    // counter (CR 614.12).
+    if l.starts_with("put ") && l.contains(" counter") {
+        let mut b = Builder::new(ctx);
+        let e = crate::oracle::effects::parse_clause(l, &mut b)?;
+        let chosen = matches!(
+            &e,
+            Effect::AddCounters {
+                what: Sel::Choose { .. },
+                ..
+            }
+        );
+        return (chosen && b.targets.is_empty()).then_some(e);
     }
     as_enters_instruction(l, ctx)
 }
