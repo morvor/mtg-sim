@@ -826,11 +826,18 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 let it = super::patterns::pronoun_groups::singular_it(b);
                 // "Whenever ~ becomes blocked by a creature, it deals 2 damage to that
                 // creature": "that creature" is the other object, so "it" in the same
-                // sentence isn't; in a triggered ability that's the source.
+                // sentence isn't; in a triggered ability that's the source. Only when
+                // "that creature" is another participant of the action, not a possessive
+                // that may well name the same object ("Whenever a creature you control is
+                // turned face up, it endures X, where X is that creature's toughness").
+                let other_participant = rest.match_indices(" that creature").any(|(i, m)| {
+                    let after = &rest[i + m.len()..];
+                    !after.starts_with('\'') && !after.starts_with('s')
+                });
                 if p == "it"
                     && b.in_trigger
                     && matches!(it, Sel::TriggerObject | Sel::TriggerLki)
-                    && rest.contains(" that creature")
+                    && other_participant
                 {
                     return Some((Sel::This, rest.to_string()));
                 }

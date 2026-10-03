@@ -1642,19 +1642,28 @@ fn shared_subject_match(oracle: &[String], starts: &[usize], units: &[Vec<String
         }
         v
     };
-    let mut positions = std::collections::BTreeSet::from([0usize]);
+    // Positions reached, and where the unit ending there began if it left out a
+    // condition: then the next unit continues the same sentence, either sharing its
+    // subject ("~ gets +2/+2 and can't block as long as ...") or naming another one ("~
+    // gets +2/+2 and creatures you control have vigilance"), not repeating the subject as
+    // a new sentence would ("~ gets +2/+2. ~ can't block as long as ...", whose condition
+    // doesn't apply to the first sentence; the comparison doesn't see the period).
+    let mut positions = std::collections::BTreeSet::from([(0usize, None::<usize>)]);
     for i in 0..units.len() {
         let mut next = std::collections::BTreeSet::new();
         for (u, dropped) in variants(i) {
             // A dropped condition is said by the next unit, in the same Oracle line.
-            let ends = |t: &[String], pos: usize| -> Vec<usize> {
+            let ends = |t: &[String], pos: usize, from: usize| -> Vec<(usize, Option<usize>)> {
                 ends(t, pos)
                     .into_iter()
                     .filter(|e| !dropped || (*e < oracle.len() && !starts.contains(e)))
+                    .map(|e| (e, dropped.then_some(from)))
                     .collect()
             };
-            for &pos in &positions {
-                next.extend(ends(u, pos));
+            for &(pos, dropped_from) in &positions {
+                if dropped_from.is_none_or(|f| oracle[f] != oracle[pos]) {
+                    next.extend(ends(u, pos, pos));
+                }
                 if i == 0 || starts.contains(&pos) {
                     continue;
                 }
@@ -1674,7 +1683,7 @@ fn shared_subject_match(oracle: &[String], starts: &[usize], units: &[Vec<String
                     {
                         continue;
                     }
-                    next.extend(ends(&u[k..], pos));
+                    next.extend(ends(&u[k..], pos, pos));
                 }
             }
         }
@@ -1683,7 +1692,7 @@ fn shared_subject_match(oracle: &[String], starts: &[usize], units: &[Vec<String
         }
         positions = next;
     }
-    positions.contains(&oracle.len())
+    positions.contains(&(oracle.len(), None))
 }
 
 /// Whether normalized tokens begin with a verb (the predicate after a subject).
@@ -1775,4 +1784,37 @@ fn diff_units(oracle: &[String], mine: &[String]) -> (Vec<String>, Vec<String>) 
     }
     let ur = mine_left.into_iter().map(|(_, m)| m.clone()).collect();
     (uo, ur)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn units(texts: &[&str]) -> Vec<Vec<String>> {
+        texts.iter().map(|t| normalize_unit(t)).collect()
+    }
+
+    /// A condition stated once for "A and B" applies to both; for "A. As long as X, B"
+    /// it applies only to B, so rendering the condition on A too must not match.
+    #[test]
+    fn a_shared_condition_covers_only_its_own_sentence() {
+        let m = units(&[
+            "~ gets +2/+2 as long as you control an Island.",
+            "~ has flying as long as you control an Island.",
+        ]);
+        let same_sentence =
+            normalize_unit("As long as you control an Island, ~ gets +2/+2 and has flying.");
+        assert!(shared_subject_match(&same_sentence, &[0], &m));
+        let other_subject = normalize_unit(
+            "As long as you control an Island, ~ gets +2/+2 and creatures you control have flying.",
+        );
+        let m2 = units(&[
+            "~ gets +2/+2 as long as you control an Island.",
+            "Creatures you control have flying as long as you control an Island.",
+        ]);
+        assert!(shared_subject_match(&other_subject, &[0], &m2));
+        let two_sentences =
+            normalize_unit("~ gets +2/+2. As long as you control an Island, ~ has flying.");
+        assert!(!shared_subject_match(&two_sentences, &[0], &m));
+    }
 }
