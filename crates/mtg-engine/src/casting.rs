@@ -2776,7 +2776,11 @@ impl Game {
                     && crate::payment_rules::no_mana(&crate::payment_rules::spell_rules(chars)),
                 ..Default::default()
             };
-            let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, src);
+            // As when paying: only a cost that uses the source itself keeps the source's own
+            // mana abilities from paying the mana (Midnight Clock's "{T}: Add {U}" pays for
+            // its "{2}{U}: Put an hour counter on this artifact").
+            let reserve = if reserves_source(cost) { src } else { None };
+            let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, reserve);
             return plan.is_some();
         }
         true
@@ -3169,14 +3173,15 @@ impl Game {
             }
         }
         // Mana first (mana abilities must be activated before costs are paid, 601.2g),
-        // but tapping the source for {T} must not be used for mana: reserve it.
+        // but a source the cost taps, untaps, sacrifices, exiles or returns must not be
+        // used for mana: reserve it.
         if let Some(m) = &cost.mana {
             if m.symbols.contains(&crate::mana::ManaSymbol::Infinity) {
                 return Err(Illegal(
                     "unpayable cost: an object with no mana cost (CR 118.6)".into(),
                 ));
             }
-            let reserve = if cost.has_tap() { src } else { None };
+            let reserve = if reserves_source(cost) { src } else { None };
             // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
             let m = &crate::as_though::payment_cost(self, p, m);
             let spent = crate::mana_abilities::pay_mana(self, p, m, spend, reserve)
@@ -3820,3 +3825,19 @@ pub(crate) fn filter_mentions_x(f: &Filter) -> bool {
 
 #[allow(dead_code)]
 fn _unused(_: SpecialAction) {}
+
+/// Whether a cost uses its source itself ({T}, {Q}, "sacrifice/exile/return ~"), so the
+/// source's own mana abilities can't help pay its mana (CR 601.2g, 602.2b): the mana
+/// abilities of a source whose cost doesn't use it may pay for it.
+fn reserves_source(cost: &Cost) -> bool {
+    cost.parts.iter().any(|p| {
+        matches!(
+            p,
+            CostPart::Tap
+                | CostPart::Untap
+                | CostPart::SacrificeSelf
+                | CostPart::ExileSelf
+                | CostPart::ReturnSelfToHand
+        )
+    })
+}
