@@ -244,3 +244,105 @@ fn s_skip_step_instead(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<
 }
 
 inventory::submit! { StaticPattern { name: "replacement grammar: if you would begin your draw step, you may skip it", priority: 150, parse: s_skip_step_instead } }
+
+/// The spell's own damage can't be prevented this turn (see
+/// `damage_removal_prevention::f_the_damage_cant_be_prevented`).
+fn unpreventable() -> Effect {
+    Effect::AddRestriction {
+        restriction: Restriction::SourceDamageCantBePrevented(Filter::In(Box::new(Sel::This))),
+        duration: Duration::EndOfTurn,
+    }
+}
+
+/// "~ deals 4 damage to any target. If [condition], instead ~ deals 6 damage to that
+/// permanent or player and the damage can't be prevented." (Lightning Surge, Urza's Rage):
+/// the amount changes and the damage can't be prevented if the condition holds as the
+/// spell resolves (CR 608.2c).
+fn f_instead_unpreventable(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !b.ctx.is_spell() {
+        return false;
+    }
+    let Some((c, r)) = l.strip_prefix("if ").and_then(|r| r.split_once(", instead ")) else {
+        return false;
+    };
+    let Some(r) = r
+        .strip_prefix("~ deals ")
+        .or_else(|| r.strip_prefix("it deals "))
+        .and_then(|r| r.strip_suffix(" and the damage can't be prevented"))
+    else {
+        return false;
+    };
+    let Some((n, tail)) = parse_number(r) else {
+        return false;
+    };
+    if !matches!(
+        tail.trim(),
+        "damage to that permanent or player" | "damage to that creature" | "damage to that player"
+    ) {
+        return false;
+    }
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+        return false;
+    };
+    let Effect::DealDamage {
+        source: Sel::This,
+        to,
+        ..
+    } = &*prev
+    else {
+        return false;
+    };
+    let to = to.clone();
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::If {
+        cond,
+        then: Box::new(Effect::seq(vec![
+            unpreventable(),
+            Effect::DealDamage {
+                source: Sel::This,
+                amount: n,
+                to,
+            },
+        ])),
+        otherwise: Box::new(old),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "replacement grammar: if [condition], instead ~ deals N damage and the damage can't be prevented", priority: 150, apply: f_instead_unpreventable } }
+
+/// "If [condition], ~ can't be countered and the damage can't be prevented." on an
+/// instant or sorcery (Demonfire, Banefire): static abilities that function while the
+/// spell is on the stack, as long as the condition holds (CR 113.6).
+fn a_cant_be_countered_or_prevented(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_spell() {
+        return None;
+    }
+    let text = block.trim();
+    let lower = text.to_lowercase();
+    let c = end(&lower)
+        .strip_prefix("if ")?
+        .strip_suffix(", ~ can't be countered and the damage can't be prevented")?;
+    // "If X is 5 or more": the X of the spell on the stack (CR 107.3).
+    let cond = match c
+        .strip_prefix("x is ")
+        .and_then(|r| r.strip_suffix(" or more"))
+        .and_then(|n| n.parse::<i32>().ok())
+    {
+        Some(n) => Condition::Compare(Value::XOf(Box::new(Sel::This)), Cmp::Ge, Value::c(n)),
+        None => crate::oracle::statics::parse_condition(c, ctx)?,
+    };
+    let mut out = Vec::new();
+    for r in [
+        Restriction::CantBeCountered(Filter::Source),
+        Restriction::SourceDamageCantBePrevented(Filter::Source),
+    ] {
+        let mut s = StaticAbility::new(StaticEffect::Restriction(r));
+        s.zone = FunctionZone::Stack;
+        s.condition = Some(cond.clone());
+        out.push(AbilityDef::new(AbilityKind::Static(s), text));
+    }
+    Some(out)
+}
+
+inventory::submit! { super::AbilityPattern { name: "replacement grammar: if [condition], ~ can't be countered and the damage can't be prevented", priority: 150, parse: a_cant_be_countered_or_prevented } }

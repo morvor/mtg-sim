@@ -1651,6 +1651,15 @@ fn p_prevent_all(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "replacement grammar: [until ...] prevent all damage", priority: 150, parse: p_prevent_all } }
 
 fn s_prevent_all(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    // "prevent all combat damage it would deal and it has defender" (Woolly Razorback,
+    // after the core "as long as" prefix): a prevention effect and a keyword.
+    if let Some((a, kw)) = end(l.trim()).split_once(" and it has ") {
+        let a = a.replace(" it would deal", " ~ would deal");
+        let mut v = s_prevent_all(&a, text, ctx)?;
+        let more = crate::oracle::statics::parse_static(&format!("~ has {kw}."), ctx)?;
+        v.extend(more);
+        return Some(v);
+    }
     let mut none: OneShot = None;
     let (dev, dur) = prevent_all(l, &mut none, ctx)?;
     if dur.is_some() || !dev.src.pre.is_empty() {

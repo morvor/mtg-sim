@@ -382,3 +382,94 @@ fn s_played_enter_tapped(l: &str, text: &str, _ctx: &CompileContext) -> Option<V
 }
 
 inventory::submit! { StaticPattern { name: "etb replacement grammar: creatures played by your opponents enter tapped", priority: 150, parse: s_played_enter_tapped } }
+
+/// "You may cast ~ from your graveyard. If you do, it enters with a finality counter on
+/// it." (Hundred-Battle Veteran): the permission, and an "as enters" replacement effect
+/// for the permanent the spell cast that way becomes (CR 614.1c, 601.2).
+fn a_cast_from_zone_enters_with(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let (first, second) = t.split_once(". ")?;
+    let lower = first.to_lowercase();
+    let zone = match lower.as_str() {
+        "you may cast ~ from your graveyard" => ZoneKind::Graveyard,
+        "you may cast ~ from exile" => ZoneKind::Exile,
+        _ => return None,
+    };
+    let s2 = second.to_lowercase();
+    let r = end(&s2).strip_prefix("if you do, it enters with ")?;
+    let (kind, n) = counters_on(r)?;
+    let mut out = crate::oracle::statics::parse_static(&format!("{first}."), ctx)?;
+    out.push(static_ability(
+        StaticEffect::Replacement(ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(Filter::Source),
+            action: ReplacementAction::AsEnters(Box::new(Effect::If {
+                cond: Condition::CastFrom(zone),
+                then: Box::new(Effect::EnterWithCounters { kind, n }),
+                otherwise: Box::new(Effect::Noop),
+            })),
+            self_replacement: false,
+            optional: false,
+        }),
+        t,
+    ));
+    Some(out)
+}
+
+inventory::submit! { super::AbilityPattern { name: "etb replacement grammar: you may cast ~ from your graveyard. if you do, it enters with counters", priority: 150, parse: a_cast_from_zone_enters_with } }
+
+/// "You may have ~ enter tapped. [If you do, ...]" (Mariposa Military Base): an optional
+/// "as enters" replacement (CR 614.1c, 614.12a).
+fn a_may_enter_tapped(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let l = end(&lower);
+    let rest = l.strip_prefix("you may have ~ enter tapped")?;
+    let then = match rest.strip_prefix(". if you do, ") {
+        Some(r) => {
+            let mut b = Builder::new(ctx);
+            let e = crate::oracle::effects::parse_effect_text(&format!("{r}."), &mut b)?;
+            if !b.targets.is_empty() {
+                return None;
+            }
+            Effect::seq(vec![Effect::EnterTapped, e])
+        }
+        None if rest.is_empty() => Effect::EnterTapped,
+        None => return None,
+    };
+    Some(vec![static_ability(
+        StaticEffect::Replacement(ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(Filter::Source),
+            action: ReplacementAction::AsEnters(Box::new(Effect::May {
+                who: PlayerRef::You,
+                effect: Box::new(then),
+            })),
+            self_replacement: false,
+            optional: false,
+        }),
+        t,
+    )])
+}
+
+inventory::submit! { super::AbilityPattern { name: "etb replacement grammar: you may have ~ enter tapped", priority: 150, parse: a_may_enter_tapped } }
+
+/// "[Until your next turn, ] [instruction], and each creature you control enters with an
+/// additional +1/+1 counter on it." (Arlinn, the Pack's Hope): both for the duration.
+fn p_and_each_enters_with(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (dur, r) = duration_prefix(l);
+    dur.as_ref()?;
+    let prefix = &l[..l.len() - r.len()];
+    let (a, each) = r.split_once(", and each ")?;
+    if !each.contains(" enters with ") {
+        return None;
+    }
+    let saved = b.targets.len();
+    let e2 = p_each_enters_with(&format!("{prefix}each {each}"), b)?;
+    let Some(e1) = crate::oracle::effects::parse_clause(&format!("{prefix}{a}"), b) else {
+        b.targets.truncate(saved);
+        return None;
+    };
+    Some(Effect::seq(vec![e1, e2]))
+}
+
+inventory::submit! { EffectPattern { name: "etb replacement grammar: [instruction], and each creature you control enters with counters", priority: 150, parse: p_and_each_enters_with } }

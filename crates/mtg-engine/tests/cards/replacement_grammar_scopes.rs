@@ -109,3 +109,90 @@ fn fasting_may_skip_your_draw_step_to_gain_life() {
     assert_eq!(t.hand_size(P0), hand, "{}", t.dump_log());
     assert_eq!(t.life(P0), 22);
 }
+
+/// P1 is protected from all damage this turn.
+fn shield_p1(t: &mut TestGame) {
+    t.lands(P1, "Plains", 3);
+    let sp = t.hand(P1, "Safe Passage");
+    t.cast(P1, sp).go();
+    t.resolve();
+}
+
+#[test]
+fn urzas_rage_kicked_deals_ten_unpreventable_damage() {
+    cr!("615.12", "608.2c");
+    compiles(&["Urza's Rage", "Lightning Surge", "Arrow Storm", "Demonfire", "Banefire"]);
+    let mut t = TestGame::new(2);
+    shield_p1(&mut t);
+    t.lands(P0, "Mountain", 12);
+    let rage = t.hand(P0, "Urza's Rage");
+    t.cast(P0, rage).kicked(true).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 10);
+    let rage2 = t.hand(P0, "Urza's Rage");
+    t.lands(P0, "Mountain", 3);
+    t.cast(P0, rage2).kicked(false).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 10);
+}
+
+#[test]
+fn banefire_damage_cant_be_prevented_if_x_is_5_or_more() {
+    cr!("615.12", "107.3");
+    let mut t = TestGame::new(2);
+    shield_p1(&mut t);
+    t.lands(P0, "Mountain", 10);
+    let small = t.hand(P0, "Banefire");
+    t.cast(P0, small).x(4).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 20);
+    let big = t.hand(P0, "Banefire");
+    t.lands(P0, "Mountain", 6);
+    t.cast(P0, big).x(5).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 15);
+}
+
+#[test]
+fn woolly_razorback_prevents_its_combat_damage_while_it_has_an_ice_counter() {
+    cr!("615.1a", "611.3a");
+    compiles(&["Woolly Razorback"]);
+    let mut t = TestGame::new(2);
+    let boar = t.battlefield(P0, "Woolly Razorback");
+    t.g.objects[boar.0 as usize].counters.insert("ice".into(), 1);
+    t.g.dirty = true;
+    t.g.recompute();
+    assert!(t.g.obj(boar).has_keyword(mtg_engine::keywords::KeywordKind::Defender));
+    t.g.deal_damage(boar, Entity::Player(P1), 7, true);
+    t.settle();
+    assert_eq!(t.life(P1), 20);
+    t.g.objects[boar.0 as usize].counters.clear();
+    t.g.dirty = true;
+    t.g.deal_damage(boar, Entity::Player(P1), 7, true);
+    t.settle();
+    assert_eq!(t.life(P1), 13);
+}
+
+#[test]
+fn hundred_battle_veteran_cast_from_the_graveyard_gets_a_finality_counter() {
+    cr!("614.1c", "601.2");
+    compiles(&["Hundred-Battle Veteran", "Mariposa Military Base"]);
+    let mut t = TestGame::new(2);
+    let v = t.graveyard(P0, "Hundred-Battle Veteran");
+    t.lands(P0, "Swamp", 4);
+    t.cast(P0, v).go();
+    t.resolve();
+    let v = t.named_on_battlefield("Hundred-Battle Veteran")[0];
+    assert_eq!(t.counters(v, "finality"), 1);
+}
+
+#[test]
+fn mariposa_military_base_may_enter_tapped_for_rad_counters() {
+    cr!("614.1c", "614.12a");
+    let mut t = TestGame::new(2);
+    t.answer_yes(P0, true);
+    let base = t.enter(P0, "Mariposa Military Base");
+    t.resolve_all();
+    assert!(t.g.obj(t.g.current(base)).tapped);
+    assert_eq!(t.g.player(P0).counters.get("rad").copied().unwrap_or(0), 2);
+}
