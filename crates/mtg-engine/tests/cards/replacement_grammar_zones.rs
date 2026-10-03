@@ -234,3 +234,56 @@ fn obstinate_baloth_goes_to_the_graveyard_when_you_discard_it_yourself() {
     t.settle();
     assert!(t.in_graveyard(P0, "Obstinate Baloth"));
 }
+
+#[test]
+fn wheel_of_sun_and_moon_puts_cards_on_the_bottom_of_the_library() {
+    cr!("614.1a", "614.6", "303.4");
+    compiles(&[
+        "Wheel of Sun and Moon",
+        "Sanctifier en-Vec",
+        "Anafenza, the Foremost",
+    ]);
+    let mut t = TestGame::new(2);
+    let wheel = t.battlefield(P0, "Wheel of Sun and Moon");
+    t.g.obj_mut(wheel).attached_to = Some(Entity::Player(P1));
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let lib = t.library_size(P1);
+    t.g.destroy(bears, None);
+    t.settle();
+    assert!(!t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.library_size(P1), lib + 1);
+    // Not your cards.
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.g.destroy(mine, None);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
+
+#[test]
+fn sanctifier_en_vec_exiles_black_and_red_cards_going_to_graveyards() {
+    cr!("614.1a", "614.6");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sanctifier en-Vec");
+    let red = t.battlefield(P1, "Goblin Piker");
+    let green = t.battlefield(P1, "Grizzly Bears");
+    t.g.destroy(red, None);
+    t.g.destroy(green, None);
+    t.settle();
+    assert!(t.in_exile("Goblin Piker"));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn anafenza_exiles_opponents_creature_cards_from_anywhere() {
+    cr!("614.1a", "614.6");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Anafenza, the Foremost");
+    let c = t.hand(P1, "Grizzly Bears");
+    t.g.discard(P1, c, None);
+    t.settle();
+    assert!(t.in_exile("Grizzly Bears"));
+    let land = t.hand(P1, "Forest");
+    t.g.discard(P1, land, None);
+    t.settle();
+    assert!(t.in_graveyard(P1, "Forest"));
+}

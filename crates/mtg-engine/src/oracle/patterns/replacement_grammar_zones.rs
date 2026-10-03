@@ -59,6 +59,44 @@ fn subject(s: &str, b: &mut OneShot) -> Option<(Filter, Sel)> {
             return Some((Filter::and(vec![f, by]), Sel::TriggerObject));
         }
     }
+    // "a black or red permanent, spell, or card not on the battlefield": an object of
+    // those colors wherever it is (Sanctifier en-Vec).
+    for tail in [
+        " permanent, spell, or card not on the battlefield",
+        " permanent, spell, or card",
+    ] {
+        if let Some(q) = s
+            .strip_prefix("a ")
+            .and_then(|x| x.strip_suffix(tail))
+        {
+            let mut alts = Vec::new();
+            for w in q.split(" or ") {
+                match adjective(w.trim())? {
+                    f @ (Filter::Color(_) | Filter::Colorless | Filter::Multicolored) => {
+                        alts.push(f)
+                    }
+                    _ => return None,
+                }
+            }
+            return Some((Filter::Or(alts), Sel::TriggerObject));
+        }
+    }
+    // "a card you didn't control" (Valgavoth): not one you controlled as it would move.
+    if let Some(x) = s.strip_suffix(" you didn't control") {
+        let (f, it) = subject(x, b)?;
+        return Some((
+            Filter::and(vec![f, Filter::not(Filter::ControlledBy(PlayerRel::You))]),
+            it,
+        ));
+    }
+    // "a creature card not on the battlefield"
+    if let Some(x) = s.strip_suffix(" not on the battlefield") {
+        let (f, it) = subject(x, b)?;
+        return Some((
+            Filter::and(vec![f, Filter::not(Filter::InZone(ZoneKind::Battlefield))]),
+            it,
+        ));
+    }
     let (other, r) = if let Some(r) = word(s, "another") {
         (true, r.trim_start())
     } else {
@@ -94,6 +132,12 @@ fn graveyard(s: &str) -> Option<(Option<Filter>, &str)> {
         (
             "an opponent's graveyard",
             Some(Filter::OwnedBy(PlayerRel::Opponent)),
+        ),
+        (
+            "enchanted player's graveyard",
+            Some(Filter::OwnedByPlayer(Box::new(PlayerRef::ControllerOf(
+                Box::new(Sel::AttachedTo),
+            )))),
         ),
     ] {
         if let Some(r) = word(s, p) {
@@ -169,6 +213,13 @@ fn move_instead(s: &str) -> Option<Destination> {
         .strip_prefix("reveal ~ and ")
         .or_else(|| s.strip_prefix("reveal it and "))
         .unwrap_or(s);
+    if matches!(
+        s,
+        "that card is revealed and put on the bottom of that player's library"
+            | "that card is revealed and put on the bottom of its owner's library"
+    ) {
+        return Some(Destination::library_bottom());
+    }
     for it in ["it", "that card", "~", "him", "her"] {
         if s == format!("exile {it}") {
             return Some(Destination::zone(ZoneKind::Exile));
@@ -242,6 +293,45 @@ fn splits(s: &str) -> Vec<(&str, &str)> {
 fn s_if_zone(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l.trim());
     let r = l.strip_prefix("if ")?;
+    // "If [a nontoken creature an opponent owns would die] or [a creature card not on the
+    // battlefield would be put into an opponent's graveyard], exile that card instead."
+    // (Anafenza): one replacement effect for either event.
+    for (ev, act) in splits(r) {
+        for (i, _) in ev.match_indices(" or a ") {
+            let (e1, e2) = (&ev[..i], &ev[i + " or ".len()..]);
+            let mut none: OneShot = None;
+            let (Some(z1), Some(z2)) = (zone_event(e1, &mut none), zone_event(e2, &mut None))
+            else {
+                continue;
+            };
+            if z1.this_turn || z2.this_turn {
+                continue;
+            }
+            let (Some((a1, o1)), Some((a2, o2))) =
+                (zone_action(act, &z1, ctx), zone_action(act, &z2, ctx))
+            else {
+                continue;
+            };
+            return Some(
+                [(z1.event, a1, o1), (z2.event, a2, o2)]
+                    .into_iter()
+                    .map(|(event, action, optional)| {
+                        AbilityDef::new(
+                            AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+                                ReplacementDef {
+                                    event,
+                                    action,
+                                    self_replacement: false,
+                                    optional,
+                                },
+                            ))),
+                            text,
+                        )
+                    })
+                    .collect(),
+            );
+        }
+    }
     for (ev, act) in splits(r) {
         let mut none: OneShot = None;
         let Some(zev) = zone_event(ev, &mut none) else {
