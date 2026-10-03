@@ -15,6 +15,12 @@ fn word_end(rest: &str) -> bool {
 /// After "the number of" / "for each": what's counted. Tried before the value grammar's
 /// own readings.
 pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(v) = life_lost_this_way(r) {
+        return Some(v);
+    }
+    if let Some(v) = trigger_spell_value(&format!("the number of {r}"), b) {
+        return Some(v);
+    }
     if let Some(v) = event_amount_groups(r, b) {
         return Some(v);
     }
@@ -27,6 +33,9 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// A whole value phrase ("the amount of damage dealt to you this turn"). Tried before the
 /// value grammar's own readings.
 pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(v) = trigger_spell_value(s, b) {
+        return Some(v);
+    }
     if let Some(v) = event_amount(s, b) {
         return Some(v);
     }
@@ -57,7 +66,9 @@ fn player_subject<'a>(s: &'a str, b: &Builder) -> Option<(PlayerRel, &'a str)> {
     let s = s.trim_start();
     let about = || -> Option<PlayerRel> {
         match &b.it_player {
-            PlayerRef::TriggerPlayer => Some(PlayerRel::TriggerPlayer),
+            // Only a trigger about a player ("whenever a player casts a spell", "at the
+            // beginning of each player's upkeep") has a player "they" can mean.
+            PlayerRef::TriggerPlayer if trigger_names_player(b) => Some(PlayerRel::TriggerPlayer),
             PlayerRef::Target(t) => Some(PlayerRel::Target(*t)),
             PlayerRef::Iterated => Some(PlayerRel::Iterated),
             _ => None,
@@ -79,6 +90,37 @@ fn player_subject<'a>(s: &'a str, b: &Builder) -> Option<(PlayerRel, &'a str)> {
     }
     None
 }
+
+/// Whether the trigger condition of the ability being compiled names a player ("whenever a
+/// player casts a spell", "at the beginning of each opponent's upkeep").
+fn trigger_names_player(b: &Builder) -> bool {
+    if !b.in_trigger {
+        return false;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    raw.split(['"', '\n']).any(|part| {
+        let Some(i) = part.find("whenever ").or_else(|| part.find("when ")).or_else(|| part.find("at the beginning of ")) else {
+            return false;
+        };
+        let cond = part[i..].split(',').next().unwrap_or("");
+        cond.contains("player") || cond.contains("opponent")
+    })
+}
+
+/// "Each opponent loses life equal to the life that player lost this turn." (Archfiend of
+/// Despair): "that player" is each opponent in turn, as "they" would be.
+fn each_player_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !(l.starts_with("each opponent ") || l.starts_with("each player ")) {
+        return None;
+    }
+    if !l.contains(" that player ") || !l.ends_with(" this turn") || l.contains("target") {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&l.replace(" that player ", " they "), b)
+}
+
+inventory::submit! { super::EffectPattern { name: "value results: each opponent ... that player ... this turn", priority: 5, parse: each_player_that_player } }
 
 /// "[player] [have|has|'ve] [verb]" (or the simple past "[player] [verb]"): the player
 /// and the rest after the auxiliary.
@@ -461,6 +503,42 @@ fn event_amount_groups(r: &str, b: &Builder) -> Option<(Value, String)> {
     Some((v, x.to_string()))
 }
 
+/// In a "whenever you cast a spell" trigger, amounts about that spell: "the amount of mana
+/// spent to cast that spell", "the number of colors of mana spent to cast it" (also "for
+/// each color of mana spent to cast that spell"), "the number of times that spell was
+/// kicked" (from its last known information if it has left the stack).
+fn trigger_spell_value(s: &str, b: &Builder) -> Option<(Value, String)> {
+    use crate::kw::value_results::{COLORS_SPENT_ON_THAT_SPELL, TIMES_THAT_SPELL_WAS_KICKED};
+    if !triggers_on(b, &[" cast"]) {
+        return None;
+    }
+    let spell_ref = |r: &str| -> Option<String> {
+        let rest = r
+            .strip_prefix("that spell")
+            .or_else(|| r.strip_prefix("it").filter(|_| matches!(b.it, Sel::TriggerSpell | Sel::TriggerObject)))?;
+        word_end(rest).then(|| rest.to_string())
+    };
+    if let Some(r) = s.strip_prefix("the amount of mana spent to cast ") {
+        let rest = spell_ref(r)?;
+        return Some((Value::Custom(crate::kw::opus::MANA_SPENT_ON_THAT_SPELL.into()), rest));
+    }
+    if let Some(r) = s
+        .strip_prefix("the number of colors of mana spent to cast ")
+        .or_else(|| s.strip_prefix("the number of color of mana spent to cast "))
+    {
+        let rest = spell_ref(r)?;
+        return Some((Value::Custom(COLORS_SPENT_ON_THAT_SPELL.into()), rest));
+    }
+    for p in ["the number of times that spell was kicked", "the number of time that spell was kicked"] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if word_end(rest) {
+                return Some((Value::Custom(TIMES_THAT_SPELL_WAS_KICKED.into()), rest.to_string()));
+            }
+        }
+    }
+    None
+}
+
 /// "the excess damage dealt this way", "the amount of excess damage dealt to that
 /// creature this way" (CR 120.10: the excess damage the latest damage instruction dealt,
 /// to the one permanent it damaged), and in a "whenever [a permanent] is dealt excess
@@ -482,6 +560,31 @@ fn excess(s: &str, b: &Builder) -> Option<(Value, String)> {
     let rest = x.strip_prefix(" this way")?;
     word_end(rest).then(|| (Value::Var(vars::EXCESS), rest.to_string()))
 }
+
+/// "for each 1 life lost this way" after a life-loss instruction: the life it made players
+/// lose in total (CR 119.3), counted in groups.
+fn life_lost_this_way(r: &str) -> Option<(Value, String)> {
+    let (n, x) = parse_number(r)?;
+    let k = n.as_const().filter(|k| *k > 0)?;
+    let rest = x.trim_start().strip_prefix("life lost this way")?;
+    if !word_end(rest) {
+        return None;
+    }
+    let v = if k == 1 {
+        Value::Prev
+    } else {
+        Value::Div(Box::new(Value::Prev), k, false)
+    };
+    Some((v, rest.to_string()))
+}
+
+/// "If no life is lost this way, ..." after a life-loss instruction.
+fn no_life_lost_this_way(c: &str) -> Option<Condition> {
+    matches!(end(c), "no life is lost this way" | "no life was lost this way")
+        .then(|| Condition::Compare(Value::Prev, Cmp::Eq, Value::c(0)))
+}
+
+inventory::submit! { super::ConditionPattern { name: "value results: no life is lost this way", priority: 100, parse: no_life_lost_this_way } }
 
 // ---------------------------------------------------------------------------
 // Results of earlier instructions ("this way", "the sacrificed creature")
@@ -569,13 +672,25 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     parts.insert(0, f);
     parts.extend(extra);
     let f = Filter::and(parts);
-    Some((Sel::Matching(Box::new(Sel::Var(var)), f), rest.to_string()))
+    // The cards exiled, discarded, milled, returned or countered are new objects (CR
+    // 400.7); the noun says what they were ("the permanent exiled this way", "spells
+    // countered this way"), and their characteristics are those they last had (CR
+    // 608.2h). The destroyed, sacrificed or tapped permanents are kept as they were.
+    let from = if [vars::IT, DISCARDED].contains(&var) {
+        Sel::Before(Box::new(Sel::Var(var)))
+    } else {
+        Sel::Var(var)
+    };
+    Some((Sel::Matching(Box::new(from), f), rest.to_string()))
 }
 
 /// Whether "for each [s]" counts objects an earlier instruction acted on, read by
 /// [`this_way_sel`] as a whole.
 pub fn reads_this_way(s: &str, b: &Builder) -> bool {
     let s = end(s);
+    if life_lost_this_way(s).is_some_and(|(_, rest)| rest.trim().is_empty()) {
+        return true;
+    }
     let s = s
         .strip_prefix("card types among ")
         .or_else(|| s.strip_prefix("card type among "))
@@ -1008,6 +1123,13 @@ mod tests {
                 let def = crate::card::card(c);
                 for u in def.unsupported_text() {
                     println!("U {c}: {u}");
+                }
+            } else if let Some(c) = line.strip_prefix("D: ") {
+                let def = crate::card::card(c);
+                for f in &def.faces {
+                    for a in &f.chars.abilities {
+                        println!("D {c} | {}\n    {:?}", a.text, a.kind);
+                    }
                 }
             } else if let Some(c) = line.strip_prefix("C: ") {
                 let def = crate::card::card(c);

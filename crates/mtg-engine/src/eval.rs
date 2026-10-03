@@ -924,6 +924,14 @@ impl Game {
             Sel::Var(v) => {
                 crate::merge::with_components_of(self, ctx.vars.get(v).cloned().unwrap_or_default())
             }
+            Sel::Before(inner) => self
+                .eval_sel(inner, ctx)
+                .into_iter()
+                .map(|e| match e {
+                    Entity::Object(o) => Entity::Object(self.obj(o).prev.unwrap_or(o)),
+                    p => p,
+                })
+                .collect(),
             Sel::Matching(inner, f) => self
                 .eval_sel(inner, ctx)
                 .into_iter()

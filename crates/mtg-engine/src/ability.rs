@@ -1033,6 +1033,10 @@ pub enum Sel {
     /// controlled that were destroyed this way", "the creature cards sacrificed this
     /// way".
     Matching(Box<Sel>, Filter),
+    /// The selected objects as they last existed before the zone change that made them
+    /// new objects (CR 400.7, 608.2h): "the permanent exiled this way" is judged as the
+    /// permanent it was, "the spells countered this way" as the spells.
+    Before(Box<Sel>),
 }
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].

@@ -81,3 +81,50 @@ impl super::KeywordRules for NoncombatDamageValue {
 }
 
 inventory::submit! { super::KeywordRegistration(&NoncombatDamageValue) }
+
+/// `Value::Custom`: the number of colors of mana spent to cast the spell that caused the
+/// ability to trigger ("the number of colors of mana spent to cast that spell", CR
+/// 601.2h, 105.1), from its last known information if it has left the stack.
+pub const COLORS_SPENT_ON_THAT_SPELL: &str = "trigger spell:colors of mana spent";
+/// `Value::Custom`: how many times the spell that caused the ability to trigger was kicked
+/// (CR 702.33).
+pub const TIMES_THAT_SPELL_WAS_KICKED: &str = "trigger spell:times kicked";
+
+fn trigger_spell_cast(g: &Game, ctx: &Ctx) -> Option<crate::object::CastInfo> {
+    let spell = ctx.event.as_ref().and_then(|e| e.spell)?;
+    let o = g.obj(spell);
+    o.stack
+        .as_deref()
+        .map(|si| &si.cast)
+        .or(o.cast.as_deref())
+        .filter(|c| c.was_cast)
+        .cloned()
+}
+
+pub struct TriggerSpellValues;
+
+impl super::KeywordRules for TriggerSpellValues {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        match name {
+            COLORS_SPENT_ON_THAT_SPELL => Some(trigger_spell_cast(g, ctx).map_or(0, |c| {
+                let mut s = crate::types::ColorSet::NONE;
+                for m in &c.mana_spent {
+                    if let Some(col) = m.color() {
+                        s.insert(col);
+                    }
+                }
+                s.count() as i64
+            })),
+            TIMES_THAT_SPELL_WAS_KICKED => {
+                Some(trigger_spell_cast(g, ctx).map_or(0, |c| c.times_kicked as i64))
+            }
+            _ => None,
+        }
+    }
+}
+
+inventory::submit! { super::KeywordRegistration(&TriggerSpellValues) }
