@@ -14,11 +14,16 @@
 //! * "for each creature it targets": each time the spell targets a creature counts
 //!   (Battlefield Thaumaturge ruling).
 //! * A player effect that changes spells' costs for a while has its amount determined once,
-//!   as the effect begins (CR 611.2c: "where X is the amount of life you lost this turn"
+//!   as the effect begins (CR 608.2h: "where X is the amount of life you lost this turn"
 //!   is locked in, Rowan, Scion of War ruling) — see [`lock_player_effect`].
 //! * "The next spell you cast this turn costs {2} less to cast" gives that spell the
 //!   reduction as it's put on the stack (CR 601.2a, 611.2f); before then, a card that
 //!   would be that spell is judged with it, so whether it can be cast accounts for it.
+//! * Likewise, while checking whether a card could be cast, a reduction that depends on
+//!   choices made as it's cast ("for each creature sacrificed this way", "for each
+//!   creature it targets") is assumed to be as large as those choices could make it
+//!   ([`most_times_payable`], [`most_targets_of_type`]), so such a card isn't left out of
+//!   the legal actions (CR 601.2b–c, 601.2f).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
@@ -127,7 +132,7 @@ fn quality(g: &Game, src: ObjectId) -> Option<Filter> {
 }
 
 /// Locks in the amounts of a player effect's spell cost change as the effect begins
-/// (CR 611.2c).
+/// (CR 608.2h).
 pub fn lock_player_effect(g: &Game, effect: &mut PlayerModification, ctx: &Ctx) {
     let PlayerModification::CostModifier(cm) = effect else {
         return;
@@ -147,7 +152,7 @@ pub fn lock_player_effect(g: &Game, effect: &mut PlayerModification, ctx: &Ctx) 
 }
 
 /// Locks in the amounts of the cost changes granted to "the next spell you cast" (CR
-/// 611.2c): "costs {X} less to cast, where X is the number of cards looked at while
+/// 608.2h): "costs {X} less to cast, where X is the number of cards looked at while
 /// scrying this way".
 pub fn lock_granted_cost_changes(g: &Game, mods: &mut [Modification], ctx: &Ctx) {
     for m in mods.iter_mut() {
@@ -242,6 +247,100 @@ fn repeatable_costs(chars: &Characteristics) -> Vec<smol_str::SmolStr> {
         }
     }
     out
+}
+
+/// Whether `card` is a card being considered for casting (not yet a spell): while checking
+/// whether it could be cast, choices it would be cast with aren't made yet, and a
+/// reduction depending on them is assumed to be as large as those choices could make it
+/// (as `spell_costs::own_change_applies` assumes such reductions apply).
+fn being_considered(g: &Game, card: ObjectId) -> bool {
+    !matches!(g.obj(card).zone, Zone::Stack | Zone::Battlefield)
+}
+
+/// No practical limit (for a cost or a target count with none that's easily known).
+const MANY: i64 = 1000;
+
+/// The most times `p` could pay the repeatable additional cost `name` of `card` (CR
+/// 601.2b): each repetition uses objects that match its parts' filters.
+fn most_times_payable(g: &Game, card: ObjectId, p: PlayerId, name: &str) -> i64 {
+    let ctx = Ctx::new(Some(card), p);
+    let key = paid_times(name);
+    let mut most = 0;
+    for a in &g.obj(card).chars.abilities {
+        let AbilityKind::Static(StaticAbility {
+            effect:
+                StaticEffect::CostModifier(CostModifier {
+                    applies_to: CostTarget::ThisSpell,
+                    change: CostChange::AdditionalCost(c),
+                    ..
+                }),
+            ..
+        }) = &a.kind
+        else {
+            continue;
+        };
+        for part in &c.parts {
+            let CostPart::Repeated {
+                cost,
+                times: Value::Custom(n),
+            } = part
+            else {
+                continue;
+            };
+            if *n != key {
+                continue;
+            }
+            let mut times = MANY;
+            for sub in &cost.parts {
+                let filter = match sub {
+                    CostPart::Sacrifice { filter, .. }
+                    | CostPart::Discard { filter, .. }
+                    | CostPart::Exile { filter, .. }
+                    | CostPart::ReturnToHand { filter, .. }
+                    | CostPart::TapUntapped { filter, .. }
+                    | CostPart::UntapTapped { filter, .. }
+                    | CostPart::RevealFromHand { filter, .. }
+                    | CostPart::PutFromHandOnLibrary { filter, .. } => filter,
+                    _ => continue,
+                };
+                let n = g
+                    .live_objects()
+                    .into_iter()
+                    .filter(|o| *o != card && g.matches(*o, filter, &ctx))
+                    .count() as i64;
+                times = times.min(n);
+            }
+            most = most.max(times);
+        }
+    }
+    most
+}
+
+/// The most times `card`, cast now, could target an object of type `t` (CR 601.2c).
+fn most_targets_of_type(g: &Game, card: ObjectId, t: CardType) -> i64 {
+    let o = g.obj(card);
+    let ctx = Ctx::new(Some(card), o.owner);
+    let mut slots = 0;
+    for a in &o.chars.abilities {
+        let AbilityKind::Spell(sp) = &a.kind else {
+            continue;
+        };
+        if sp.body.modal.is_some() {
+            slots = MANY;
+            break;
+        }
+        for spec in &sp.body.targets {
+            // A count that depends on announced choices ("X target creatures").
+            let max = g.eval_value(&spec.max, &ctx);
+            slots += if max <= 0 { MANY } else { max };
+        }
+    }
+    let objects = g
+        .live_objects()
+        .into_iter()
+        .filter(|x| *x != card && g.obj(*x).chars.card_types.contains(t))
+        .count() as i64;
+    slots.min(objects)
 }
 
 pub struct SpellCostGrammar;
@@ -356,9 +455,16 @@ impl KeywordRules for SpellCostGrammar {
             return Some(chosen.iter().filter(|c| colors.contains(*c)).count() as i64);
         }
         if let Some(n) = name.strip_prefix(PAID_TIMES) {
-            let times = ctx
-                .source
-                .and_then(|s| g.obj(s).stack.as_deref())
+            let Some(src) = ctx.source else {
+                return Some(0);
+            };
+            if being_considered(g, src) {
+                return Some(most_times_payable(g, src, ctx.controller, n));
+            }
+            let times = g
+                .obj(src)
+                .stack
+                .as_deref()
                 .map_or(0, |si| si.cast.paid.iter().filter(|p| p.as_str() == n).count());
             return Some(times as i64);
         }
@@ -376,6 +482,9 @@ impl KeywordRules for SpellCostGrammar {
         }
         let t = CardType::from_word(name.strip_prefix(TARGETS_PREFIX)?)?;
         let (spell, _) = spell_and_caster(ctx);
+        if let Some(card) = spell.filter(|s| being_considered(g, *s)) {
+            return Some(most_targets_of_type(g, card, t));
+        }
         let Some(si) = spell.and_then(|s| g.obj(s).stack.as_deref()) else {
             return Some(0);
         };

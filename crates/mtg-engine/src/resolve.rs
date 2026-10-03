@@ -782,7 +782,7 @@ impl Game {
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 let mut effect = effect.clone();
-                // CR 611.2c: amounts are determined as the effect begins.
+                // CR 608.2h: amounts are determined as the effect begins.
                 crate::kw::spell_cost_grammar::lock_player_effect(self, &mut effect, ctx);
                 self.player_effects.push(PlayerEffect {
                     id,

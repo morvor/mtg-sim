@@ -1,6 +1,6 @@
 //! The spell cost grammar (`src/oracle/patterns/spell_cost_grammar.rs`, rules in
 //! `src/kw/spell_cost_grammar.rs`): SUBJECT + "cost(s) AMOUNT less / more to cast" +
-//! QUALIFIER, in static abilities and in effects (CR 601.2f, 118.7, 611.2c, 611.2f).
+//! QUALIFIER, in static abilities and in effects (CR 601.2f, 118.7, 608.2h, 611.2f).
 
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::CastMethod;
@@ -328,7 +328,7 @@ fn next_spell_reduction_counts_when_checking_whether_it_can_be_cast() {
 
 #[test]
 fn rowan_locks_in_the_life_lost_as_the_ability_resolves() {
-    cr!("611.2c", "601.2f");
+    cr!("608.2h", "601.2f");
     ruling!(
         "Rowan, Scion of War",
         "The value of X is determined only once"
@@ -343,9 +343,9 @@ fn rowan_locks_in_the_life_lost_as_the_ability_resolves() {
     // More life lost later doesn't change X.
     t.g.lose_life(P0, 3);
     t.lands(P0, "Swamp", 6);
-    // Hymn to Tourach ({B}{B}) can't be reduced; Mind Rot ({2}{B}) costs {B}.
-    let rot = t.hand(P0, "Mind Rot");
-    assert_eq!(paid(&mut t, P0, rot, &[Entity::Player(P1)]), 1);
+    // Gravedigger ({3}{B}) costs {1}{B} (X stays 2, not 5).
+    let gd = t.hand(P0, "Gravedigger");
+    assert_eq!(paid(&mut t, P0, gd, &[]), 2);
     t.resolve_all();
     // A blue spell isn't reduced.
     t.lands(P0, "Island", 3);
@@ -948,7 +948,7 @@ fn seal_of_the_guildpact_counts_the_chosen_colors_a_spell_is() {
 
 #[test]
 fn elminster_reduces_the_next_spell_by_the_cards_scried() {
-    cr!("611.2c", "611.2f", "701.22a");
+    cr!("608.2h", "611.2f", "701.22a");
     // "Whenever you scry, the next instant or sorcery spell you cast this turn costs {X}
     // less to cast, where X is the number of cards looked at while scrying this way."
     assert_compiles(&["Elminster"]);
@@ -964,4 +964,51 @@ fn elminster_reduces_the_next_spell_by_the_cards_scried() {
     t.resolve_all();
     let div = t.hand(P0, "Divination");
     assert_eq!(paid(&mut t, P0, div, &[]), 3);
+}
+
+/// Whether `p` could begin casting `card` normally now (the legal-action check).
+fn can_begin(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
+    t.g.recompute();
+    t.g.turn.priority = Some(p);
+    t.g.cast_options(p, card)
+        .into_iter()
+        .any(|o| o.method == CastMethod::Normal && t.g.can_begin_cast(p, card, &o))
+}
+
+#[test]
+fn reductions_from_announced_choices_count_when_checking_whether_it_can_be_cast() {
+    cr!("601.2b", "601.2f");
+    // Explosive Singularity ({8}{R}{R}): "you may tap any number of untapped creatures you
+    // control. This spell costs {1} less to cast for each creature tapped this way." Eight
+    // lands and two creatures to tap are enough.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 7);
+    let es = t.hand(P0, "Explosive Singularity");
+    assert!(!can_begin(&mut t, P0, es), "one creature and seven lands aren't enough");
+    t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 1);
+    assert!(can_begin(&mut t, P0, es));
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Number(2));
+    assert_eq!(paid(&mut t, P0, es, &[Entity::Player(P1)]), 8);
+}
+
+#[test]
+fn target_reductions_count_when_checking_whether_it_can_be_cast() {
+    cr!("601.2c", "601.2f");
+    // Battlefield Thaumaturge: "Each instant and sorcery spell you cast costs {1} less to
+    // cast for each creature it targets." Into the Roil ({1}{U}) with one Island.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Battlefield Thaumaturge");
+    t.lands(P0, "Island", 1);
+    let roil = t.hand(P0, "Into the Roil");
+    assert!(can_begin(&mut t, P0, roil));
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_yes(P0, false);
+    assert_eq!(paid(&mut t, P0, roil, &[Entity::Object(bears)]), 1);
+    // A two-generic spell with one target slot isn't reduced by two: Divination
+    // ({2}{U}, no targets) with one Island can't be cast.
+    let div = t.hand(P0, "Divination");
+    t.lands(P0, "Island", 1);
+    assert!(!can_begin(&mut t, P0, div));
 }

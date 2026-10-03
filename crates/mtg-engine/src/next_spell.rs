@@ -33,7 +33,7 @@ pub fn exec_next_spell(
     let id = g.new_effect_id();
     let mut mods = g.fix_mods(mods, ctx);
     // "The next spell you cast this turn costs {X} less to cast, where X is ...": X is
-    // determined now (CR 611.2c).
+    // determined now (CR 608.2h).
     crate::kw::spell_cost_grammar::lock_granted_cost_changes(g, &mut mods, ctx);
     g.next_spell_effects.push(NextSpellEffect {
         id,

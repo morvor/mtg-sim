@@ -25,7 +25,7 @@
 //! spell gains "This spell costs {2} less to cast" as it's put on the stack, CR 601.2a),
 //! and "[spells] cost {1} more to cast until your next turn" / "Spells you cast this turn
 //! that are black and/or red cost {X} less to cast, where X is ..." (player effects whose
-//! amounts are locked in as the effect begins, CR 611.2c).
+//! amounts are locked in as the effect begins, CR 608.2h).
 
 use super::{
     AbilityPattern, ConditionPattern, EffectPattern, FilterSuffixPattern, FollowupPattern,
@@ -591,7 +591,7 @@ fn next_spell_costs_less(l: &str, b: &mut Builder) -> Option<Effect> {
     if !amount.parts.is_empty() || !amount.conds.is_empty() || amount.duration.is_some() {
         return None;
     }
-    // The amount is determined as the effect begins (CR 611.2c; see
+    // The amount is determined as the effect begins (CR 608.2h; see
     // `kw/spell_cost_grammar.rs`).
     if !matches!(
         amount.change,
@@ -623,7 +623,7 @@ inventory::submit! { EffectPattern { name: "spell cost grammar: the next spell y
 
 /// "[spells] cost {N} more to cast until your next turn", "Spells you cast this turn that
 /// are black and/or red cost {X} less to cast, where X is ...": a player effect on the
-/// casters (CR 611.2a), its amount locked in now (CR 611.2c).
+/// casters (CR 611.2a), its amount locked in now (CR 608.2h).
 fn spells_cost_for_a_while(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (subject, rest) = split_verb(l)?;
