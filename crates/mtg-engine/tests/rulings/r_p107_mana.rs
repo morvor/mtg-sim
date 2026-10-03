@@ -281,3 +281,53 @@ fn spectral_searchlight_may_choose_its_controller() {
     assert_eq!(t.g.player(P1).mana_pool.count(ManaType::C), 1);
     assert_eq!(pool_total(&t, P0), 0);
 }
+
+#[test]
+fn boneyard_desecrator_checks_the_sacrificed_creatures_last_known_types() {
+    cr!("608.2h", "700.12");
+    ruling!(
+        "Boneyard Desecrator",
+        "Use the creature types of the sacrificed creature as it last existed on the battlefield to determine whether or not it was an outlaw."
+    );
+    supported("Boneyard Desecrator");
+    supported("Thallid Omnivore");
+    // A Rogue (outlaw) gives a Treasure; a Grizzly Bears doesn't.
+    for (fodder, treasure) in [("Grizzly Bears", 0), ("Kitesail Freebooter", 1)] {
+        let mut t = TestGame::new(2);
+        let desecrator = t.battlefield(P0, "Boneyard Desecrator");
+        let f = t.battlefield(P0, fodder);
+        mana(&mut t, P0, ManaType::B, 1);
+        mana(&mut t, P0, ManaType::C, 1);
+        t.answer_choose(P0, &[obj(f)]);
+        act(&mut t, P0, desecrator, "outlaw", &[]).unwrap();
+        t.resolve_all();
+        assert_eq!(t.counters(desecrator, counters::PLUS1), 1, "{fodder}");
+        assert_eq!(with_subtype(&t, P0, "Treasure").len(), treasure, "{fodder}");
+    }
+    // A creature that was a Rogue only on the battlefield (Xenograft: "As this enchantment
+    // enters, choose a creature type. Each creature you control is the chosen type in
+    // addition to its other types.") counts: its types as it last existed.
+    let mut t = TestGame::new(2);
+    let desecrator = t.battlefield(P0, "Boneyard Desecrator");
+    crate::r_p125_common::choose_creature_type(&mut t, P0, "Rogue");
+    t.enter(P0, "Xenograft");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    t.g.recompute();
+    assert!(t.obj_now(bear).chars.has_subtype("Rogue"));
+    mana(&mut t, P0, ManaType::B, 1);
+    mana(&mut t, P0, ManaType::C, 1);
+    t.answer_choose(P0, &[obj(bear)]);
+    act(&mut t, P0, desecrator, "outlaw", &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, P0, "Treasure").len(), 1);
+    // Thallid Omnivore: "If a Saproling was sacrificed this way, you gain 2 life."
+    let mut t = TestGame::new(2);
+    let omni = t.battlefield(P0, "Thallid Omnivore");
+    let sap = crate::r_s02_common::create_token(&mut t, P0, "Saproling");
+    mana(&mut t, P0, ManaType::C, 1);
+    t.answer_choose(P0, &[obj(sap)]);
+    act(&mut t, P0, omni, "Saproling", &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+    assert_eq!(t.pt(omni), (5, 5));
+}
