@@ -466,8 +466,6 @@ fn cryptic_trilobite_mana_pays_activated_abilities_including_two_different_ones(
     t.activate(P0, tri, 0, &[]).unwrap();
     assert_eq!(pool_total(&t, P0), 2);
     // Not a spell.
-    let bears = t.hand(P0, "Ornithopter");
-    let _ = bears;
     let walker = t.hand(P0, "Bonesplitter");
     assert!(t.cast(P0, walker).try_go().is_err());
     t.activate(P0, icy1, 0, &[obj(b1)]).unwrap();
@@ -559,8 +557,6 @@ fn intrepid_stablemaster_two_different_vehicle_spells() {
     color(&mut t, P0, "G");
     produce(&mut t, P0, stable, 1);
     assert_eq!(pool_total(&t, P0), 2);
-    let bears = t.hand(P0, "Ornithopter");
-    let _ = bears;
     for _ in 0..2 {
         let d = t.hand(P0, "Consulate Dreadnought");
         t.cast(P0, d).go();

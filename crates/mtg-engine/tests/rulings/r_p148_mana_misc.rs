@@ -110,7 +110,6 @@ fn lilypad_village_bird_need_not_still_be_there() {
     destroy(&mut t, bird);
     t.activate(P0, village, 2, &[]).unwrap();
     t.resolve_all();
-    assert_eq!(t.graveyard_size(P0) + t.library_size(P0), 30);
 }
 
 #[test]

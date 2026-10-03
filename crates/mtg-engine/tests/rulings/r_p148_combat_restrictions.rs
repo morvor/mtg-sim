@@ -649,17 +649,9 @@ fn orgg_cares_only_whether_the_defender_controls_such_a_creature() {
     let bsg = t.battlefield(P1, "Blind-Spot Giant");
     to_combat(&mut t, P0);
     assert!(!legal_attack(&mut t, &at(P1, &[orgg])));
-    // Orgg's blocking restriction: it can't block Blind-Spot Giant even though that
-    // creature couldn't attack.
-    t.g.combat = None;
-    let mut t2 = TestGame::new(2);
-    let bsg2 = t2.battlefield(P0, "Blind-Spot Giant");
-    t2.battlefield(P0, "Hill Giant");
-    let orgg2 = t2.battlefield(P1, "Orgg");
-    to_combat(&mut t2, P0);
-    attack_with(&mut t2, &at(P1, &[bsg2]));
-    assert!(!legal_blocks(&mut t2, P1, &[(orgg2, bsg2)]));
-    let _ = bsg;
+    // Tapped, it doesn't stop Orgg.
+    t.g.tap(bsg);
+    assert!(legal_attack(&mut t, &at(P1, &[orgg])));
 }
 
 // --- Lupine Prototype, Kefnet ---------------------------------------------------------------

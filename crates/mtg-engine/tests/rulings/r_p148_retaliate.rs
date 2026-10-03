@@ -176,11 +176,23 @@ fn retaliator_griffin_uses_last_known_information_and_owners_of_cards() {
     );
     let mut t = TestGame::new(2);
     let griffin = t.battlefield(P0, "Retaliator Griffin");
-    // The Pyromancer leaves the battlefield before its ability resolves.
-    let pyro = t.battlefield(P1, "Prodigal Pyromancer");
+    // P0 owns the Pyromancer but P1 controls it (Sower of Temptation); it leaves the
+    // battlefield (to P0's graveyard) before its ability resolves. Its last known
+    // controller, P1, is an opponent; its owner isn't.
+    let pyro = t.battlefield(P0, "Prodigal Pyromancer");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Island", 4);
+    let sower = t.hand(P1, "Sower of Temptation");
+    t.answer_targets(P1, &[obj(pyro)]);
+    t.cast(P1, sower).go();
+    t.resolve_all();
+    t.g.recompute();
+    assert_eq!(t.obj_now(pyro).controller, P1);
+    t.g.objects[pyro.0 as usize].summoning_sick = false;
     t.answer_yes(P0, true);
     t.activate(P1, pyro, 0, &[Entity::Player(P0)]).unwrap();
     destroy(&mut t, pyro);
+    assert!(t.in_graveyard(P0, "Prodigal Pyromancer"));
     t.resolve_all();
     assert_eq!(t.life(P0), 19);
     assert_eq!(t.counters(griffin, counters::PLUS1), 1);
