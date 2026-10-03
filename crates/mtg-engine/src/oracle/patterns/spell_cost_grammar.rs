@@ -320,7 +320,7 @@ pub(crate) struct Amount {
 
 /// What "for each [...]" counts as a spell's total cost is determined: "it" is the spell
 /// and "its controller" / "that player" its caster.
-fn for_each_spell(s: &str, ctx: &CompileContext) -> Option<Value> {
+fn for_each_spell(s: &str) -> Option<Value> {
     let s = end(s);
     let caster = || PlayerRef::TriggerPlayer;
     // "other spell that player has cast this turn": the spell being cast isn't cast yet
@@ -363,7 +363,6 @@ fn for_each_spell(s: &str, ctx: &CompileContext) -> Option<Value> {
     if s.contains(" this turn") || s.contains("target") {
         return None;
     }
-    let _ = ctx;
     super::statics::parse_for_each(s, Some(&Sel::TriggerObject))
 }
 
@@ -433,7 +432,7 @@ pub(crate) fn parse_amount(r: &str, ctx: &CompileContext, effect: bool) -> Optio
     } else if x {
         return None;
     } else if let Some(fe) = t.strip_prefix(" for each ") {
-        times = Some(for_each_spell(fe, ctx)?);
+        times = Some(for_each_spell(fe)?);
     } else if let Some(kw) = t.strip_prefix(" if it has ") {
         // "if it has mutate": a quality of the spell.
         let probe = format!("spell with {kw}");
@@ -687,7 +686,6 @@ mod tests {
         subject("the first spell you cast with {x} in its mana cost each turn");
         subject("spells you cast this turn that are black and/or red");
         assert!(parse_subject("creature cards you own").is_none());
-        assert!(parse_subject("the second spell you cast").is_none() || true);
     }
 
     #[test]
@@ -1236,7 +1234,7 @@ fn no_cards_in_hand(c: &str) -> Option<Condition> {
     ))
 }
 
-inventory::submit! { ConditionPattern { name: "spell cost grammar: you have no [cards] in hand", priority: 100, parse: no_cards_in_hand } }
+inventory::submit! { ConditionPattern { name: "spell cost grammar: you have no [cards] in hand", priority: 900, parse: no_cards_in_hand } }
 
 /// "you've discarded a card this turn", "you've sacrificed an artifact this turn": one or
 /// more such events this turn (read by the history grammar).
@@ -1250,7 +1248,7 @@ fn youve_done_this_turn(c: &str) -> Option<Condition> {
     Some(Condition::Compare(v, Cmp::Ge, Value::c(1)))
 }
 
-inventory::submit! { ConditionPattern { name: "spell cost grammar: you've [done something] this turn", priority: 100, parse: youve_done_this_turn } }
+inventory::submit! { ConditionPattern { name: "spell cost grammar: you've [done something] this turn", priority: 900, parse: youve_done_this_turn } }
 
 /// "you may pay any amount of life", "pay any amount of mana", "you may pay any amount of
 /// {R}": the player chooses an amount and pays it (CR 107.1b, 119.4); "that many" / "that
