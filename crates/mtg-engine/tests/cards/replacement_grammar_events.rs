@@ -295,3 +295,65 @@ fn bruvac_and_the_water_crystal_apply_in_the_order_the_milling_player_chooses() 
     results.sort();
     assert_eq!(results, vec![8, 12]);
 }
+
+#[test]
+fn kenessos_scries_one_more_card() {
+    cr!("614.1a", "701.22a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kenessos, Priest of Thassa");
+    let c = t.library_top(P0, "Mountain");
+    let b = t.library_top(P0, "Forest");
+    let a = t.library_top(P0, "Island");
+    // Scry 1 becomes scry 2: both looked-at cards go to the bottom, then Opt draws the
+    // third card.
+    t.answer(
+        P0,
+        DecisionKind::Scry,
+        mtg_engine::decision::Answer::Split(vec![], vec![a, b]),
+    );
+    t.lands(P0, "Island", 1);
+    let opt = t.hand(P0, "Opt");
+    t.cast(P0, opt).go();
+    t.resolve();
+    assert!(t.in_hand(P0, "Mountain"), "{}", t.dump_log());
+    let _ = c;
+    assert!(!t.in_hand(P0, "Island"));
+    assert!(!t.in_hand(P0, "Forest"));
+}
+
+#[test]
+fn leader_draws_a_card_then_the_creature_connives() {
+    cr!("614.1a", "614.5", "701.50a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Leader, Super-Genius");
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let (lib, hand, gy) = (t.library_size(P0), t.hand_size(P0), t.graveyard_size(P0));
+    t.enter(P0, "Raffine's Informant");
+    t.resolve_all();
+    // Leader's card, then the connive's draw and discard (Leader doesn't apply to the
+    // connive its own instructions perform).
+    assert_eq!(t.library_size(P0), lib - 2, "{}", t.dump_log());
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.graveyard_size(P0), gy + 1);
+}
+
+#[test]
+fn twists_and_turns_scries_before_the_creature_explores() {
+    cr!("614.1a", "701.44a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Twists and Turns // Mycoid Maze");
+    t.library_top(P0, "Grizzly Bears");
+    let island = t.library_top(P0, "Island");
+    // Scry the Island to the bottom: the creature then reveals Grizzly Bears.
+    t.answer(
+        P0,
+        DecisionKind::Scry,
+        mtg_engine::decision::Answer::Split(vec![], vec![island]),
+    );
+    let b = t.enter(P0, "Merfolk Branchwalker");
+    t.resolve_all();
+    assert_eq!(t.counters(b, "+1/+1"), 1, "{}", t.dump_log());
+    assert!(!t.in_hand(P0, "Island"));
+}

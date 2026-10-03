@@ -1698,8 +1698,12 @@ impl Game {
                     });
                 }
                 // CR 121.7: card draws resulting from a replacement or prevention effect
-                // happen after the parts of the original event that weren't replaced.
-                if !matches!(ev, ReplEvent::Draw { .. }) && crate::draw_rules::draws_cards(&effect)
+                // happen after the parts of the original event that weren't replaced. A
+                // keyword action replaced entirely leaves no such part, and its instructions
+                // must run while this effect is known to have applied (CR 614.5: "instead
+                // you draw a card, then that creature connives").
+                if !matches!(ev, ReplEvent::Draw { .. } | ReplEvent::Action { .. })
+                    && crate::draw_rules::draws_cards(&effect)
                 {
                     self.post_replacement_effects.push((c, *effect));
                     return vec![];
