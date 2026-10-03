@@ -778,3 +778,22 @@ fn setzer_s_coin_flip_has_no_winner() {
     assert_eq!(t.stack_len(), 0, "no win trigger");
     assert!(crate::r_s01_common::with_subtype(&t, P0, "Treasure").is_empty());
 }
+
+#[test]
+fn mutable_explorer_s_token_is_a_mutavault() {
+    cr!("111.1", "110.5b");
+    ruling!(
+        "Mutable Explorer",
+        "Mutable Explorer's last ability creates a token that's a copy of the card Mutavault in the Oracle card reference."
+    );
+    supported("Mutable Explorer");
+    let mut t = TestGame::new(2);
+    t.enter(P0, "Mutable Explorer");
+    t.resolve_all();
+    let mv = tokens_named(&t, P0, "Mutavault");
+    assert_eq!(mv.len(), 1);
+    let o = t.obj_now(mv[0]);
+    assert!(o.tapped && o.is(CardType::Land) && !o.is(CardType::Creature));
+    assert!(has_ability_text(&t, mv[0], "{C}"));
+    assert!(has_ability_text(&t, mv[0], "2/2"));
+}

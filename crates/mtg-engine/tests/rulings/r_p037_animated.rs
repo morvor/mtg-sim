@@ -658,3 +658,21 @@ fn destiny_spinner_can_be_countered_as_a_spell() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Destiny Spinner"));
 }
+
+#[test]
+fn unctus_s_retrofitter_leaving_first_means_no_animation() {
+    cr!("611.2b", "610.3c");
+    ruling!(
+        "Unctus's Retrofitter",
+        "If Unctus's Retrofitter leaves the battlefield before its enters-the-battlefield ability resolves, that ability will have no effect. The target artifact won't become an artifact creature at all."
+    );
+    let mut t = TestGame::new(2);
+    let stone = t.battlefield(P0, "Mind Stone");
+    t.answer_targets(P0, &[obj(stone)]);
+    let r = t.enter(P0, "Unctus's Retrofitter");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.g.destroy(r, None);
+    t.resolve_all();
+    assert!(!is_creature(&t, stone));
+}
