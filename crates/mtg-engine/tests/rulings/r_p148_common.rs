@@ -91,3 +91,10 @@ pub fn pool_total(t: &TestGame, p: PlayerId) -> usize {
 pub fn empty_pool(t: &mut TestGame, p: PlayerId) {
     t.g.players[p.idx()].mana_pool.mana.clear();
 }
+
+/// Untapped lands `p` controls.
+pub fn untapped_lands(t: &TestGame, p: PlayerId) -> usize {
+    t.g.permanents()
+        .filter(|o| o.controller == p && o.chars.is_land() && !o.tapped)
+        .count()
+}
