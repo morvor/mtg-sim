@@ -1684,7 +1684,15 @@ impl Renderer<'_> {
                 let o = self.sel(of, Case::Obj);
                 let d = self.duration(duration);
                 let ex = self.exceptions(exceptions);
-                join_words(&[format!("{w} becomes a copy of {o}"), d]) + &format!(", except {ex}")
+                // "becomes a copy of X until end of turn, except ..." / "Until end of
+                // turn, ~ becomes a copy of X, except ...".
+                if d.is_empty() {
+                    format!("{w} becomes a copy of {o}, except {ex}")
+                } else {
+                    format!(
+                        "{{alt:{w} becomes a copy of {o} {d}, except {ex}|{w} becomes a copy of {o}, except {ex} {d}}}"
+                    )
+                }
             }
             Effect::Transform { what } => {
                 let w = self.sel(what, Case::Obj);
@@ -5164,6 +5172,25 @@ impl Renderer<'_> {
 
     /// Copy exceptions ("it's 1/1", "it has haste", "it isn't legendary").
     pub(crate) fn exceptions(&mut self, mods: &[Modification]) -> String {
+        let old = self.exceptions_vp(mods);
+        // Cards list the exceptions one clause each ("it's 4/3, it's a Vehicle artifact
+        // ..., and it has flying"); the AST is the same.
+        match self.exception_list(mods) {
+            Some(list) => {
+                let mut alts = vec![old];
+                alts.extend(list);
+                alts.dedup();
+                if alts.len() == 1 {
+                    alts.remove(0)
+                } else {
+                    format!("{{alt:{}}}", alts.join("|"))
+                }
+            }
+            None => old,
+        }
+    }
+
+    fn exceptions_vp(&mut self, mods: &[Modification]) -> String {
         let vp = self.mods_vp(mods, false);
         // "except it isn't legendary, it's a 4/4 Hero": each exception has its subject.
         // A copy's "except it's a 4/4 black Zombie" keeps the copied types (the rulings

@@ -622,6 +622,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               and enchantments\" both mean objects that are either.",
     },
     Equivalence {
+        pattern: r"\b(they|you|we)'re\b",
+        replacement: "$1 are",
+        why: "Contraction.",
+    },
+    Equivalence {
         pattern: r"(^|[^~\w])(it|that|there|what|he|she)'s\b",
         replacement: "$1$2 is",
         why: "Contraction.",

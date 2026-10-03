@@ -11,6 +11,7 @@
 //! card a mismatch: nothing is silently dropped.
 
 pub mod compare;
+mod copy_exceptions;
 mod costs;
 mod counter_replacements;
 mod custom;
