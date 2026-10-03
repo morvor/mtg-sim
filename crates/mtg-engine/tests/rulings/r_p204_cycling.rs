@@ -382,3 +382,40 @@ fn restoration_magic_cura_with_an_illegal_target_does_nothing() {
         assert_eq!(untapped_lands(&t, P0), 0, "the Cura cost {{1}} was paid");
     }
 }
+
+#[test]
+fn shark_typhoon_cycled_for_x_0_makes_a_0_0_shark_that_dies() {
+    cr!("107.3e", "702.29c", "704.5f");
+    ruling!(
+        "Shark Typhoon",
+        "You can choose 0 as the value of X in Shark Typhoon's cycling cost. The last ability will trigger, and you'll create a 0/0 blue Shark creature token with flying."
+    );
+    supported("Shark Typhoon");
+    // "Cycling {X}{1}{U}. When you cycle this card, create an X/X blue Shark creature token
+    // with flying."
+    for x in [0i64, 3] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Soul Warden");
+        t.lands(P0, "Island", 5);
+        let card = t.hand(P0, "Shark Typhoon");
+        t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(x));
+        cycle(&mut t, P0, card, 0).unwrap();
+        t.settle();
+        assert_eq!(kinds_on_stack(&t), "AT");
+        assert_eq!(untapped_lands(&t, P0), 3 - x as usize);
+        t.resolve_all();
+        // Soul Warden: "Whenever another creature enters, you gain 1 life." The Shark was
+        // created either way.
+        assert_eq!(t.life(P0), 21, "{x}");
+        let sharks = with_subtype(&t, P0, "Shark");
+        if x == 0 {
+            assert!(sharks.is_empty());
+        } else {
+            assert_eq!(sharks.len(), 1);
+            assert_eq!(t.pt(sharks[0]), (3, 3));
+            assert!(t
+                .obj_now(sharks[0])
+                .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+        }
+    }
+}
