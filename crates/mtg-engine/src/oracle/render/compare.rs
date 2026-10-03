@@ -142,7 +142,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     },
     Equivalence {
         pattern: r"\ba spell that's ((?:(?:white|blue|black|red|green), )+)or (white|blue|black|red|green)\b",
-        replacement: "a $1or $2 spell",
+        replacement: "a ${1}or $2 spell",
         why: "A clause saying what a spell is describes it as the adjectives do: \"a spell \
               that's white, blue, black, or red\" is \"a white, blue, black, or red spell\".",
     },
@@ -288,6 +288,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               opponent\" does.",
     },
     Equivalence {
+        pattern: r"\bcreature that's one or more colors\b",
+        replacement: "colored creature",
+        why: "A colored object is one that's one or more colors (CR 105.2).",
+    },
+    Equivalence {
         pattern: r"\byour life total can't change\b",
         replacement: "you can't gain life and you can't lose life",
         why: "A life total changes only by gaining or losing life, also when an effect sets \
@@ -428,7 +433,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     },
     Equivalence {
         pattern: r"\bwith no ((?:[a-z+/0-9-]+ )?)counters on\b",
-        replacement: "without $1counters on",
+        replacement: "without ${1}counters on",
         why: "\"With no counters on it\" and \"without counters on it\" are the same.",
     },
     Equivalence {
@@ -1411,7 +1416,7 @@ fn sentence_rewrites(s: &str) -> String {
         // A rendering's `{alt:...}` / `{opt:...}` (braces nest three deep) is one piece of
         // the sentence, periods inside it included.
         let brace = r"\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}";
-        Regex::new(&format!(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."{{]|"[^"]*"|{brace})*?"[^"]*\.""?|(?:[^."{{]|"[^"]*"|{brace})+?\.)"#))
+        Regex::new(&format!(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+|at the beginning of the next end step|until the end of your next turn|until your next end step|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."{{]|"[^"]*"|{brace})*?"[^"]*\.""?|(?:[^."{{]|"[^"]*"|{brace})+?\.)"#))
             .ok()
     });
     let mut s = s.to_string();
