@@ -499,7 +499,12 @@ impl Renderer<'_> {
             }
             TriggerCond::PlayerAttacksPlayer { attacker, defender } => {
                 let a = self.rel_subject(*attacker);
-                let d = self.rel_object(*defender);
+                // Once for the whole attack: "attacks one or more of your opponents".
+                let d = if self.batch_once && matches!(defender, PlayerRel::Opponent) {
+                    "one or more of your opponents".to_string()
+                } else {
+                    self.rel_object(*defender)
+                };
                 Ev::new(a, format!("attack {d}"))
             }
             // Only creatures attack and block (CR 506.1): a filter with no type is a

@@ -791,6 +791,16 @@ impl Renderer<'_> {
             PlayerRef::EachPlayer => "each player".into(),
             PlayerRef::EachOtherPlayer => "each other player".into(),
             PlayerRef::Target(i) => return self.target_mention(*i, case),
+            // "Whenever a player attacks one of your opponents, that attacking player ...":
+            // the controller of the creatures attacking.
+            PlayerRef::ControllerOf(sel) if matches!(sel.as_ref(), Sel::TriggerObjects) => {
+                return match case {
+                    Case::Poss => {
+                        "{alt:their|that attacking player's|the attacking player's}".into()
+                    }
+                    _ => "{alt:that attacking player|the attacking player}".into(),
+                };
+            }
             // "Whenever a land enters under an opponent's control, that player loses 2
             // life": the opponent the trigger named.
             PlayerRef::ControllerOf(sel)

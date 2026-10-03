@@ -85,3 +85,61 @@ fn a_wish_reveals_the_card_it_puts_into_your_hand() {
         t.g.log.iter().map(|e| &e.text).collect::<Vec<_>>()
     );
 }
+
+fn count_subtype(t: &TestGame, p: PlayerId, sub: &str) -> usize {
+    t.g.battlefield
+        .iter()
+        .filter(|id| {
+            let o = t.g.obj(**id);
+            o.controller == p && o.chars.has_subtype(sub)
+        })
+        .count()
+}
+
+fn treasures(t: &TestGame, p: PlayerId) -> usize {
+    count_subtype(t, p, "Treasure")
+}
+
+#[test]
+fn the_attacking_player_creates_the_treasure_once_per_attack() {
+    cr!("508.3e", "603.2c");
+    // Jolene, the Plunder Queen: "Whenever a player attacks one or more of your
+    // opponents, that attacking player creates a Treasure token." "That attacking player"
+    // was the attacked player, and attacking two of your opponents made two Treasures.
+    supported("Jolene, the Plunder Queen");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Jolene, the Plunder Queen");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.attack(
+        &[(a, Entity::Player(P1)), (b, Entity::Player(P2))],
+        &[],
+    );
+    t.resolve_all();
+    // Jolene doubles nothing here: "one or more Treasure tokens ... plus an additional
+    // Treasure token" makes the one Treasure two.
+    assert_eq!(treasures(&t, P1), 0);
+    assert_eq!(treasures(&t, P2), 0);
+    assert_eq!(treasures(&t, P0), 2);
+}
+
+#[test]
+fn that_attacking_player_is_the_player_who_attacked() {
+    cr!("508.3e", "303.4a");
+    // Curse of Shallow Graves: "Whenever a player attacks enchanted player with one or
+    // more creatures, that attacking player may create a tapped 2/2 black Zombie creature
+    // token." "That attacking player" is now the controller of the attacking creatures
+    // for every such trigger (it was the trigger's player, the attacked one, for
+    // Jolene's); the attacked player gets nothing.
+    supported("Curse of Shallow Graves");
+    let mut t = TestGame::new(2);
+    let curse = t.battlefield(P0, "Curse of Shallow Graves");
+    assert!(t.g.attach(curse, Entity::Player(P1)));
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(count_subtype(&t, P1, "Zombie"), 0);
+    assert_eq!(count_subtype(&t, P0, "Zombie"), 1);
+}

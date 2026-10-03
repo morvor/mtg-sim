@@ -115,7 +115,9 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             return Some((PlayerRef::ChosenOpponent, r.to_string()));
         }
     }
-    // "Whenever a player attacks enchanted player ..., that attacking player ...".
+    // "Whenever a player attacks enchanted player ..., that attacking player ...": the
+    // player whose creatures attacked (the trigger's player is the attacked one, CR
+    // 508.3e; the trigger's objects are the creatures attacking them).
     if let Some(r) = s.strip_prefix("that attacking player") {
         let attacking = crate::oracle::raw_text().to_lowercase().contains("whenever a player attacks");
         if b.in_trigger
@@ -123,7 +125,10 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             && !super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
             && (r.is_empty() || r.starts_with(' '))
         {
-            return Some((b.it_player.clone(), r.to_string()));
+            return Some((
+                PlayerRef::ControllerOf(Box::new(Sel::TriggerObjects)),
+                r.to_string(),
+            ));
         }
         return None;
     }
