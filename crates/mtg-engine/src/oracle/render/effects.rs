@@ -478,7 +478,10 @@ impl Renderer<'_> {
                 // "If you do, it becomes plotted": done for the one object named "it".
                 if matches!(s.as_str(), "it" | "~it" | "~") {
                     self.var_defs.push((*var, sel.clone(), false));
-                    return self.effect(effect);
+                    let saved = self.for_each_subject.replace(s.clone());
+                    let t = self.effect(effect);
+                    self.for_each_subject = saved;
+                    return t;
                 }
                 let inner = self.effect(effect);
                 format!("for each {s}, {inner}")

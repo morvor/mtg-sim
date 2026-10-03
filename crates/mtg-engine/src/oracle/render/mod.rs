@@ -135,6 +135,16 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
             out.lines.push(format!("Backup {n}"));
             continue;
         }
+        // CR 702.139a: the companion keyword and its condition are one line ("Companion —
+        // Each permanent card in your starting deck has mana value 2 or less"), the
+        // condition compiled after the keyword.
+        if matches!(&a.kind, AbilityKind::Keyword(k) if k.kind == crate::keywords::KeywordKind::Companion)
+            && abilities.get(i + 1).is_some_and(|n| {
+                matches!(&n.kind, AbilityKind::Static(s) if matches!(s.effect, StaticEffect::Companion(_)))
+            })
+        {
+            continue;
+        }
         // CR 702.73a: a printed changeling's "is every creature type" CDA is the keyword's
         // meaning, compiled next to it; it isn't printed separately.
         if prev_changeling && is_changeling_cda(a) {
@@ -802,6 +812,9 @@ pub struct Renderer<'a> {
     /// players voted for when they voted for objects ("permanent").
     pub(crate) vote_words: Vec<String>,
     pub(crate) vote_noun: Option<String>,
+    /// The single object an instruction done "for each" of it is done to ("it"), for
+    /// instructions about the iterated object.
+    pub(crate) for_each_subject: Option<String>,
 }
 
 impl<'a> Renderer<'a> {
@@ -837,6 +850,7 @@ impl<'a> Renderer<'a> {
             compared: Vec::new(),
             vote_words: Vec::new(),
             vote_noun: None,
+            for_each_subject: None,
             granted_keyword: false,
             self_before_target: false,
             last_actor_other: false,

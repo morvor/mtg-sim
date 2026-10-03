@@ -199,6 +199,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               a Berserker\".",
     },
     Equivalence {
+        pattern: r"\b(exiles?) (?:all|each) (?:the )?cards (?:in|from) ((?:all|each) graveyards|(?:target player|target opponent|that player)'s (?:hand|graveyard|library))\b",
+        replacement: "$1 $2",
+        why: "As above, for all graveyards and another player's zones: exiling all cards \
+              from all graveyards is exiling all graveyards (CR 400.1).",
+    },
+    Equivalence {
         pattern: r"(^|\s)(~|it) attacks or blocks each combat if able\b",
         replacement: "$1$2 attacks each combat if able. $2 blocks each combat if able",
         why: "A requirement to attack each combat and one to block each combat (CR 508.1d, \
@@ -254,6 +260,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "$1$3 for each $2.",
         why: "\"For each opponent, create a token\" and \"create a token for each \
               opponent\" do the same thing once per opponent.",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?|permanents?)((?: you control| your opponents control| an opponent controls)?) that(?:'s| is| are) (?:an? )?((?:[a-z-]+, ){3,})(or|and/or) ([a-z-]+)\b",
+        replacement: "$3$4 $5 $1$2",
+        why: "The same with a longer list of kinds: \"each other creature you control that's \
+              a Cat, Elemental, Nightmare, Dinosaur, or Beast\".",
     },
     Equivalence {
         pattern: r"\bnontoken (white|blue|black|red|green)\b",

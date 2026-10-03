@@ -3081,17 +3081,40 @@ impl Renderer<'_> {
         use crate::start::DeckCondition as D;
         match dc {
             D::Each { each, must } => {
-                let e = self.noun(each, Num::One);
-                let m = self.is_predicate(must, false);
-                let m = m.strip_prefix("is ").map(|x| x.to_string()).unwrap_or(m);
-                format!("each {e} in your starting deck has {m}")
+                let e = self.card_noun(each);
+                // What the card must be beyond being one of `each`.
+                let parts = |f: &Filter| match f {
+                    Filter::And(v) => v.clone(),
+                    other => vec![other.clone()],
+                };
+                let have = parts(each);
+                let rest: Vec<Filter> = parts(must)
+                    .into_iter()
+                    .filter(|x| {
+                        !matches!(x, Filter::Card)
+                            && !have.iter().any(|h| format!("{h:?}") == format!("{x:?}"))
+                    })
+                    .collect();
+                let m = match rest.as_slice() {
+                    // "has mana value 2 or less".
+                    [Filter::ManaValue(c, v)] => {
+                        let v = self.value(v);
+                        format!("has mana value {}", super::nouns::cmp_phrase(*c, &v))
+                    }
+                    // "is a Cat, Elemental, Nightmare, Dinosaur, or Beast card".
+                    _ => {
+                        let n = self.card_noun(&Filter::and(rest.clone()));
+                        format!("is {}", with_article(&n))
+                    }
+                };
+                format!("each {e} in your starting deck {m}")
             }
             D::DifferentNames { each } => {
-                let e = self.noun(each, Num::One);
+                let e = self.card_noun(each);
                 format!("each {e} in your starting deck has a different name")
             }
             D::ShareACardType { each } => {
-                let e = self.noun(each, Num::One);
+                let e = self.card_noun(each);
                 format!("each {e} in your starting deck shares a card type")
             }
             D::MoreThanMinimumSize(n) => format!(

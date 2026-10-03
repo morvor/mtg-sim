@@ -1263,6 +1263,22 @@ impl Renderer<'_> {
                         format!("{{alt:a player attacks {d}{w}|{d} is attacked}}"),
                     );
                 }
+                // Only creatures attack (CR 508.1a): "whenever you attack a player" is
+                // with one or more creatures.
+                if w == " with one or more creatures" {
+                    return Ev::new(a, format!("attack {d} {{opt:with one or more creatures}}"));
+                }
+                // "Whenever two or more creatures you control attack a player".
+                if a == "you" && *min >= 2 && !w.contains('{') {
+                    let n = self.noun(with, Num::Many);
+                    return Ev::new(
+                        "",
+                        format!(
+                            "{{alt:you attack {d}{w}|{} or more {n} attack {d}}}",
+                            number_word(*min as i32)
+                        ),
+                    );
+                }
                 Ev::new(a, format!("attack {d}{w}"))
             }
             TriggerCond::AttachChanged {
