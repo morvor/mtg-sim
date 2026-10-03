@@ -117,6 +117,15 @@ fn parse_triggered_at(
                 if matches!(it, Sel::None) && c.starts_with("~ ") && body_it.is_none() {
                     body_it = Some(Sel::This);
                 }
+                // "if enchanted Equipment is attached to a creature, destroy that
+                // creature" (Artificer's Hex): "that creature" is the one it's attached to.
+                if let Condition::SelMatches(sel, Filter::Custom(f)) = &cond {
+                    if f == crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE
+                        && eff.contains("that creature")
+                    {
+                        body_it = Some(Sel::HostOf(Box::new(sel.clone())));
+                    }
+                }
                 intervening = Some(cond);
                 // "Whenever ~ attacks, if defending player controls no Walls, it deals 2
                 // damage to each creature without flying that player controls."
