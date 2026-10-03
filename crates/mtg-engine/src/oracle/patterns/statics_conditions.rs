@@ -154,7 +154,9 @@ pub(crate) fn state_filter(s: &str) -> Option<Filter> {
     // "enchanted or equipped"
     if let Some((a, b)) = s.split_once(" or ") {
         if let (Some(fa), Some(fb)) = (state_filter(a), state_filter(b)) {
-            if !a.starts_with("a ") && !a.starts_with("an ") {
+            let article = |x: &str| x.starts_with("a ") || x.starts_with("an ");
+            // "enchanted or equipped"; "a Human or an Angel" (each with its article).
+            if !article(a) || article(b) {
                 return Some(Filter::Or(vec![fa, fb]));
             }
         }

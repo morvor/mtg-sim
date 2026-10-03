@@ -276,28 +276,6 @@ fn predicates_if_its(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "becomes grammar: [predicate] if it's a [kind] and [predicate] if it's a [kind]", priority: 150, parse: predicates_if_its } }
 
-/// "equipped creature is a Human or an Angel" (a condition about one object's subtypes).
-fn is_a_or_a(c: &str) -> Option<Condition> {
-    let (subj, r) = c.split_once(" is ")?;
-    let sel = match subj {
-        "equipped creature" | "enchanted creature" => Sel::AttachedTo,
-        "~" => Sel::This,
-        _ => return None,
-    };
-    let mut fs = Vec::new();
-    for part in r.split(" or ") {
-        let w = part
-            .strip_prefix("a ")
-            .or_else(|| part.strip_prefix("an "))?;
-        fs.push(Filter::Subtype(crate::oracle::phrases::subtype_word(w)?));
-    }
-    if fs.len() < 2 {
-        return None;
-    }
-    Some(Condition::SelMatches(sel, Filter::Or(fs)))
-}
-
-inventory::submit! { super::ConditionPattern { name: "becomes grammar: [object] is a [type] or a [type]", priority: 150, parse: is_a_or_a } }
 
 fn split_predicates(s: &str) -> Vec<&str> {
     split_predicates_with(s, &[])
