@@ -48,7 +48,11 @@ fn exception_clauses(masked: &str) -> Vec<String> {
     // (Saheeli, Radiant Creator): the subject of the second clause is left out.
     let mut s = masked
         .replace(" other types and has ", " other types|it has ")
-        .replace(" other types and have ", " other types|they have ");
+        .replace(" other types and have ", " other types|they have ")
+        // "it isn't legendary and is a Mutant in addition to its other types" (The
+        // Cloning of Shredder).
+        .replace(" and is a ", "|it's a ")
+        .replace(" and is an ", "|it's an ");
     for subj in SUBJECTS {
         for sep in [", and ", " and ", ", "] {
             s = s.replace(&format!("{sep}{subj}"), &format!("|{subj}"));
@@ -71,6 +75,40 @@ fn only_colors(s: &str) -> Option<ColorSet> {
 fn only_card_types(s: &str) -> Option<Vec<CardType>> {
     let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
     Some(vec![CardType::from_word(s)?])
+}
+
+/// "white Spirit creature" → ("Spirit creature", white): the color words taken out.
+fn strip_colors(s: &str) -> (String, Option<ColorSet>) {
+    let mut colors = ColorSet::NONE;
+    let mut rest = Vec::new();
+    let mut prev_color = false;
+    for w in s.split_whitespace() {
+        match Color::from_word(w) {
+            Some(c) => {
+                colors.insert(c);
+                prev_color = true;
+                continue;
+            }
+            // "black and green".
+            None if w == "and" && prev_color => {}
+            None => rest.push(w),
+        }
+        prev_color = false;
+    }
+    let colors = (!colors.is_colorless()).then_some(colors);
+    (rest.join(" "), colors)
+}
+
+/// "flying", "flying and haste": abilities a copy has in addition (as keywords).
+fn with_abilities(s: &str, quotes: &[String], ctx: &CompileContext) -> Option<Vec<Modification>> {
+    let mut out = Vec::new();
+    for a in ability_list(s, quotes, &[CardType::Creature], ctx)? {
+        match &a.kind {
+            AbilityKind::Keyword(k) => out.push(Modification::AddKeyword(k.clone())),
+            _ => out.push(Modification::AddAbility(a)),
+        }
+    }
+    Some(out)
 }
 
 /// "4/4" → (4, 4).
@@ -159,9 +197,19 @@ fn replaced_characteristics(s: &str) -> Option<Vec<Modification>> {
     let mut out = vec![Modification::SetPT(Some(Value::c(p)), Some(Value::c(t)))];
     let mut colors = ColorSet::NONE;
     let mut subtypes = Vec::new();
+    let mut creature = false;
     for w in words {
         if w == "and" && subtypes.is_empty() {
             continue;
+        }
+        // "a 6/6 green Dinosaur creature" (Dino DNA): a creature with only that
+        // creature type (CR 205.1a).
+        if w == "creature" && !subtypes.is_empty() && !creature {
+            creature = true;
+            continue;
+        }
+        if creature {
+            return None;
         }
         if let Some(c) = Color::from_word(w) {
             if !subtypes.is_empty() {
@@ -179,7 +227,12 @@ fn replaced_characteristics(s: &str) -> Option<Vec<Modification>> {
     if !colors.is_colorless() {
         out.push(Modification::SetColors(colors));
     }
-    if !subtypes.is_empty() {
+    if creature {
+        out.push(Modification::SetTypes {
+            types: vec![CardType::Creature],
+            subtypes,
+        });
+    } else if !subtypes.is_empty() {
         out.push(Modification::RemoveAllCreatureTypes);
         out.push(Modification::AddSubtypes(subtypes));
     }
@@ -268,7 +321,22 @@ pub(crate) fn copy_exceptions(
                 .strip_suffix(" in addition to its other types")
                 .or_else(|| r.strip_suffix(" in addition to their other types"))
             {
-                out.extend(added_types(types)?);
+                // "it's a 1/1 white Spirit creature with flying in addition to its other
+                // types" (Kaya, Intangible Slayer): the abilities are added, and the
+                // colors replace its colors (only types are "in addition", Anikthea's
+                // ruling).
+                let (types, with) = match types.split_once(" with ") {
+                    Some((t, w)) => (t, Some(w)),
+                    None => (types, None),
+                };
+                let (types, colors) = strip_colors(types);
+                out.extend(added_types(&types)?);
+                if let Some(c) = colors {
+                    out.push(Modification::SetColors(c));
+                }
+                if let Some(w) = with {
+                    out.extend(with_abilities(w, quotes, ctx)?);
+                }
             } else if let Some(types) = r
                 .strip_suffix(" in addition to its other creature types")
                 .or_else(|| r.strip_suffix(" in addition to their other creature types"))
@@ -292,6 +360,15 @@ pub(crate) fn copy_exceptions(
                 out.extend(added_colors_and_types(x)?);
             } else if let Some((p, t)) = pt(r) {
                 out.push(Modification::SetPT(Some(Value::c(p)), Some(Value::c(t))));
+            } else if let Some(st) = Supertype::from_word(r) {
+                // "except it's legendary" (Adagia, Windswept Bastion).
+                out.push(Modification::AddSupertypes(vec![st]));
+            } else if let Some(types) = r
+                .strip_suffix(" and loses all other card types")
+                .and_then(only_card_types)
+            {
+                // "except it's an enchantment and loses all other card types" (Myrkul).
+                out.push(Modification::SetTypes { types, subtypes: vec![] });
             } else if let Some(types) = only_card_types(r) {
                 // "except it's an artifact" (Machine God's Effigy): its only card types
                 // are these (CR 205.1a).
@@ -300,12 +377,29 @@ pub(crate) fn copy_exceptions(
                 // "except the token is black" (Penumbra Umbra).
                 out.push(Modification::SetColors(colors));
             } else {
+                // "it's a 3/3 black Wraith with menace" (Sauron, the Necromancer).
+                let (r, with) = match r.split_once(" with ") {
+                    Some((t, w)) => (t, Some(w)),
+                    None => (r, None),
+                };
                 out.extend(replaced_characteristics(r)?);
+                if let Some(w) = with {
+                    out.extend(with_abilities(w, quotes, ctx)?);
+                }
             }
         } else if matches!(c, "its name is ~" | "her name is ~" | "his name is ~") {
             // The copy keeps this object's own name (Sunfrill Imitator, CR 707.9b).
             out.push(Modification::SetName(SmolStr::new(ctx.card_name)));
         } else if let Some(n) = c.strip_prefix("its name is ") {
+            // "its name is Mishra's Warform" (normalized to "~'s warform"): the card's
+            // short name as printed.
+            let short;
+            let n = if n.contains('~') {
+                short = n.replace('~', &ctx.card_name.split(", ").next()?.to_lowercase());
+                short.as_str()
+            } else {
+                n
+            };
             if n.is_empty() || n.contains('~') || n.contains('"') || n.split(' ').count() > 4 {
                 return None;
             }
@@ -407,6 +501,24 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
             }
         }
     }
+    // "Whenever another nontoken Wizard you control enters, ... create a token that's a
+    // copy of that Wizard" (Inalla): the object the trigger names, by its subtype.
+    if let Some(r2) = r.strip_prefix("that ") {
+        let (w, rest) = split_word(r2);
+        if subtype_word(w).is_some_and(|s| subtype_kind(s.as_str()) == Some(SubtypeKind::Creature))
+            && matches!(b.it, Sel::TriggerObject | Sel::TriggerLki)
+            && (rest.is_empty() || rest.starts_with(' ') || rest.starts_with(','))
+        {
+            return Some((b.it.clone(), rest.to_string()));
+        }
+    }
+    // "Sacrifice another Zombie: Create two tokens that are copies of the sacrificed
+    // creature." (Cleaver Skaab): as it last existed on the battlefield (CR 608.2h).
+    if let Some(rest) = r.strip_prefix("the sacrificed creature") {
+        if rest.is_empty() || rest.starts_with(' ') || rest.starts_with(',') {
+            return Some((Sel::Var(vars::SACRIFICED), rest.to_string()));
+        }
+    }
     // "the exiled card": the card(s) a linked ability of the permanent exiled (CR 607.2a,
     // 607.3: a token for each of them), or the card this ability just exiled (CR 608.2c).
     if !b.ctx.is_spell() {
@@ -472,7 +584,11 @@ pub(crate) fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Eff
         .strip_prefix("token that's a copy of ")
         .or_else(|| r.strip_prefix("tokens that are copies of "))?;
     let (masked, quotes) = super::statics::mask_quotes(r)?;
-    let (obj_part, exc_part) = match masked.split_once(", except ") {
+    // "a copy of that creature except it's an artifact ..." (Faerie Artisans).
+    let (obj_part, exc_part) = match masked
+        .split_once(", except ")
+        .or_else(|| masked.split_once(" except "))
+    {
         Some((a, e)) => (a.to_string(), Some(e.to_string())),
         None => (masked.clone(), None),
     };
