@@ -196,3 +196,35 @@ fn mariposa_military_base_may_enter_tapped_for_rad_counters() {
     assert!(t.g.obj(t.g.current(base)).tapped);
     assert_eq!(t.g.player(P0).counters.get("rad").copied().unwrap_or(0), 2);
 }
+
+#[test]
+fn reclaim_the_wastes_kicked_searches_for_two_lands() {
+    cr!("608.2c", "702.33d");
+    compiles(&["Reclaim the Wastes", "Nissa's Pilgrimage", "Gather the Pack"]);
+    let mut t = TestGame::new(2);
+    let a = t.library_top(P0, "Plains");
+    let b = t.library_top(P0, "Island");
+    t.lands(P0, "Forest", 7);
+    let r = t.hand(P0, "Reclaim the Wastes");
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.cast(P0, r).kicked(true).go();
+    t.resolve();
+    assert!(t.in_hand(P0, "Plains") && t.in_hand(P0, "Island"));
+}
+
+#[test]
+fn gather_the_pack_with_spell_mastery_takes_up_to_two_creatures() {
+    cr!("608.2c", "207.2c");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Shock");
+    t.graveyard(P0, "Divination");
+    let bears: Vec<ObjectId> = (0..5).map(|_| t.library_top(P0, "Grizzly Bears")).collect();
+    t.lands(P0, "Forest", 2);
+    let g = t.hand(P0, "Gather the Pack");
+    let before = t.hand_size(P0);
+    t.answer_choose(P0, &[Entity::Object(bears[4]), Entity::Object(bears[3])]);
+    t.cast(P0, g).go();
+    t.resolve();
+    // The spell left the hand; two creature cards came in.
+    assert_eq!(t.hand_size(P0), before - 1 + 2, "{}", t.dump_log());
+}

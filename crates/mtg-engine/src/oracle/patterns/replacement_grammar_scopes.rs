@@ -346,3 +346,104 @@ fn a_cant_be_countered_or_prevented(block: &str, ctx: &CompileContext) -> Option
 }
 
 inventory::submit! { super::AbilityPattern { name: "replacement grammar: if [condition], ~ can't be countered and the damage can't be prevented", priority: 150, parse: a_cant_be_countered_or_prevented } }
+
+/// "If [condition], search your library for two basic land cards instead of one." (Reclaim
+/// the Wastes), "... put up to two creature cards from among the revealed cards into your
+/// hand instead of one." (Gather the Pack): the previous instruction with a different
+/// number, if the condition holds as the spell resolves (CR 608.2c). The number replaced
+/// must be the only such count of that instruction.
+fn f_instead_of_number(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some((c, r)) = l.strip_prefix("if ").and_then(|r| r.split_once(", ")) else {
+        return false;
+    };
+    let Some((text, old_word)) = r.rsplit_once(" instead of ") else {
+        return false;
+    };
+    let Some((Value::Const(old), "")) = parse_number(old_word).map(|(v, r)| (v, r.trim())) else {
+        return false;
+    };
+    // The new number: after "up to" or "for" in the instruction.
+    let new = text.split(' ').collect::<Vec<_>>().windows(2).find_map(|w| {
+        if matches!(w[0], "to" | "for" | "cast" | "put") {
+            match parse_number(w[1]) {
+                Some((Value::Const(n), _)) if w[1] != "a" && w[1] != "an" => Some(n),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    });
+    let Some(new) = new else {
+        return false;
+    };
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+        return false;
+    };
+    use serde_json::Value as J;
+    fn walk(v: &mut J, old: i32, new: i32, hits: &mut u32) {
+        match v {
+            J::Object(m) => {
+                for (k, x) in m.iter_mut() {
+                    if matches!(k.as_str(), "count" | "take")
+                        && *x == serde_json::json!({ "Const": old })
+                    {
+                        *hits += 1;
+                        *x = serde_json::json!({ "Const": new });
+                    } else {
+                        walk(x, old, new, hits);
+                    }
+                }
+            }
+            J::Array(a) => a.iter_mut().for_each(|x| walk(x, old, new, hits)),
+            _ => {}
+        }
+    }
+    let Ok(mut json) = serde_json::to_value(&*prev) else {
+        return false;
+    };
+    let mut hits = 0;
+    walk(&mut json, old, new, &mut hits);
+    if hits != 1 {
+        return false;
+    }
+    let Ok(modified) = serde_json::from_value::<Effect>(json) else {
+        return false;
+    };
+    let original = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::If {
+        cond,
+        then: Box::new(modified),
+        otherwise: Box::new(original),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "replacement grammar: if [condition], [instruction] instead of [number]", priority: 150, apply: f_instead_of_number } }
+
+/// On an instant or sorcery, an ability-word paragraph "Spell mastery — If [condition],
+/// [instruction] instead of [number]." modifies the instruction of the paragraph before
+/// it (CR 207.2c: the ability word has no rules meaning): the two are parsed as one
+/// ability.
+fn group_instead_of_number(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String> {
+    if !ctx.is_spell() {
+        return blocks;
+    }
+    let mut out: Vec<String> = Vec::new();
+    for b in blocks {
+        let stripped = crate::oracle::strip_ability_word(&b);
+        let lower = stripped.to_lowercase();
+        let joins = stripped.len() < b.len()
+            && lower.starts_with("if ")
+            && lower.contains(" instead of ")
+            && !out.is_empty();
+        if joins {
+            let prev = out.pop().expect("checked");
+            out.push(format!("{} {}", prev.trim_end(), stripped.trim()));
+        } else {
+            out.push(b);
+        }
+    }
+    out
+}
+
+inventory::submit! { super::BlockGroupPattern { name: "replacement grammar: spell mastery instead of [number] joins the previous paragraph", priority: 150, group: group_instead_of_number } }
