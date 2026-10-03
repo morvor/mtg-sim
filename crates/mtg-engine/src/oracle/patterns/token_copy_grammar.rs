@@ -749,3 +749,79 @@ fn f_other_tokens_created_with(l: &str, prev: &mut Effect, _b: &mut Builder) -> 
 }
 
 inventory::submit! { FollowupPattern { name: "token grammar: all other tokens created with ~", priority: 50, apply: f_other_tokens_created_with } }
+
+// ---------------------------------------------------------------------------
+// Incubate repeatedly; transforming an Incubator token
+// ---------------------------------------------------------------------------
+
+/// "Incubate 2 twice", "incubate 3 X times", "Incubate X twice, where X is the number of
+/// lands you control" (CR 701.53a): the action that many times, each creating its own
+/// Incubator token.
+fn incubate_times(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (body, where_x) = match l.split_once(", where x is ") {
+        Some((c, v)) => (c, Some(v)),
+        None => (l, None),
+    };
+    let r = body.strip_prefix("incubate ")?;
+    let (n_s, times) = if let Some(x) = r.strip_suffix(" twice") {
+        (x, Value::c(2))
+    } else {
+        let x = r.strip_suffix(" times")?;
+        let (n_s, t) = x.rsplit_once(' ')?;
+        let (t, tail) = parse_number(t)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        (n_s, t)
+    };
+    let (n, tail) = parse_number(n_s)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let mut parts = Vec::new();
+    if let Some(v) = where_x {
+        let (v, tail) = super::r107_numbers::value_phrase(v, b)
+            .or_else(|| super::statics::parse_amount(v, None).map(|x| (x, String::new())))?;
+        if !end(&tail).is_empty() || !matches!(n, Value::X) {
+            return None;
+        }
+        parts.push(Effect::SetX { value: v });
+    }
+    parts.push(Effect::Repeat {
+        times,
+        effect: Box::new(super::a701_actions::keyword_action(
+            KeywordAction::Incubate,
+            PlayerRef::You,
+            Sel::None,
+            n,
+        )),
+    });
+    Some(Effect::seq(parts))
+}
+
+inventory::submit! { EffectPattern { name: "token grammar: incubate N times", priority: 95, parse: incubate_times } }
+
+/// "transform an Incubator token you control" (Sunder the Gateway): one chosen as the
+/// effect happens.
+fn transform_one_chosen(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l
+        .strip_prefix("transform an ")
+        .or_else(|| l.strip_prefix("transform a "))?;
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if plural || !end(tail).is_empty() || matches!(f, Filter::Any) {
+        return None;
+    }
+    Some(Effect::Transform {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+    })
+}
+
+inventory::submit! { EffectPattern { name: "token grammar: transform a chosen permanent", priority: 100, parse: transform_one_chosen } }
