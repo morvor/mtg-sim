@@ -244,3 +244,40 @@ fn parcel_myr_sacrificed_for_its_own_ability_is_one_clue_sacrificed() {
     assert_eq!(crate::r_s01_common::triggers_on_stack(&t, "venture"), 1);
 }
 
+
+#[test]
+fn spectral_searchlight_may_choose_its_controller() {
+    cr!("106.4", "605.1a");
+    ruling!("Spectral Searchlight", "You may choose yourself.");
+    supported("Spectral Searchlight");
+    supported("Victory Chimes");
+    // The chosen player chooses the color: P0 chooses P0 (then green), or P1 (who
+    // chooses red).
+    for (who, color) in [(P0, ManaType::G), (P1, ManaType::R)] {
+        let mut t = TestGame::new(2);
+        let light = t.battlefield(P0, "Spectral Searchlight");
+        t.answer_choose(P0, &[Entity::Player(who)]);
+        let ci = [ManaType::W, ManaType::U, ManaType::B, ManaType::R, ManaType::G]
+            .iter()
+            .position(|c| *c == color)
+            .unwrap();
+        t.answer(
+            who,
+            DecisionKind::Option,
+            mtg_engine::decision::Answer::Index(ci),
+        );
+        activate_containing(&mut t, P0, light, "Choose a player").unwrap();
+        t.resolve_all();
+        assert_eq!(t.g.player(who).mana_pool.count(color), 1, "{who:?}");
+        assert_eq!(pool_total(&t, P0) + pool_total(&t, P1), 1);
+        assert!(t.obj_now(light).tapped);
+    }
+    // Victory Chimes: "{T}: A player of your choice adds {C}."
+    let mut t = TestGame::new(2);
+    let chimes = t.battlefield(P0, "Victory Chimes");
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    activate_containing(&mut t, P0, chimes, "of your choice").unwrap();
+    t.resolve_all();
+    assert_eq!(t.g.player(P1).mana_pool.count(ManaType::C), 1);
+    assert_eq!(pool_total(&t, P0), 0);
+}
