@@ -958,6 +958,48 @@ impl Renderer<'_> {
                     format!("draw {p} {} card each turn", ordinal_word(*n as u32)),
                 )
             }
+            // "Whenever ~ and at least two Zombies attack": the others attacking with it
+            // (CR 508.3a).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::Count(Filter::And(g)), Cmp::Ge, Value::Const(n)),
+            } if matches!(trigger.as_ref(), TriggerCond::Attacks(f) if matches!(f, Filter::Source | Filter::AttachedToSource))
+                && g.iter().any(|x| matches!(x, Filter::Attacking))
+                && g.iter().any(|x| matches!(x, Filter::Not(y) if matches!(y.as_ref(), Filter::Source | Filter::AttachedToSource))) =>
+            {
+                let TriggerCond::Attacks(f) = trigger.as_ref() else {
+                    return Ev::new("", self.gap("attacks with others"));
+                };
+                let o = obj(self, f);
+                let rest: Vec<Filter> = g
+                    .iter()
+                    .filter(|x| {
+                        !matches!(x, Filter::Attacking)
+                            && !matches!(x, Filter::Not(y) if matches!(y.as_ref(), Filter::Source | Filter::AttachedToSource))
+                    })
+                    .cloned()
+                    .collect();
+                let num = if *n == 1 { Num::One } else { Num::Many };
+                let noun = self.noun(&Filter::and(rest), num);
+                Ev::new(
+                    format!("{o} and at least {} {{opt:other}} {noun}", number_word(*n)),
+                    "attack",
+                )
+            }
+            // "Whenever a creature you control explores", "... connives": the object that
+            // performed the keyword action (CR 701.44, 701.50).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(Sel::TriggerObject, f),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, who: PlayerRel::Any }
+                if matches!(name.as_str(), "explore" | "connive")) =>
+            {
+                let TriggerCond::PlayerAction { name, .. } = trigger.as_ref() else {
+                    return Ev::new("", self.gap("an object's keyword action"));
+                };
+                let o = self.noun_det(f, det.clone());
+                Ev::new(o, name.to_string())
+            }
             // "Whenever ~ becomes crewed", "When ~ becomes plotted": an event about the
             // object itself (`kw/crew.rs`, `kw/plot.rs`).
             TriggerCond::Where {
