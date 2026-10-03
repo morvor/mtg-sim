@@ -1081,7 +1081,6 @@ impl Game {
     /// Mills `n` cards (CR 701.17): puts the top N cards into the graveyard simultaneously.
     pub fn mill(&mut self, p: PlayerId, n: u32) -> Vec<ObjectId> {
         // CR 701.17d: replacement effects may change how many cards are milled.
-        let n = crate::mill_rules::replaced_count(self, p, n);
         let Some(n) = self.replace_action(crate::ability::ReplaceableAction::Mill, p, None, n)
         else {
             return vec![];

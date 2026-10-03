@@ -270,3 +270,28 @@ fn scion_of_halaster_the_draw_its_instructions_perform_isnt_the_first_one() {
     assert_eq!(t.graveyard_size(P0), gy + 1, "{}", t.dump_log());
     assert_eq!(t.hand_size(P0), 1);
 }
+
+#[test]
+fn bruvac_and_the_water_crystal_apply_in_the_order_the_milling_player_chooses() {
+    cr!("616.1", "616.1e", "701.17d");
+    // Bruvac first: 2 * 2 + 4 = 8 cards; The Water Crystal first: (2 + 4) * 2 = 12.
+    let mut results = Vec::new();
+    for pick in 0..2 {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Bruvac the Grandiloquent");
+        t.battlefield(P0, "The Water Crystal");
+        for _ in 0..20 {
+            t.library_top(P1, "Island");
+        }
+        t.answer(
+            P1,
+            DecisionKind::Replacement,
+            mtg_engine::decision::Answer::Index(pick),
+        );
+        t.g.mill(P1, 2);
+        t.settle();
+        results.push(t.graveyard_size(P1));
+    }
+    results.sort();
+    assert_eq!(results, vec![8, 12]);
+}

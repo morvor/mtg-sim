@@ -165,7 +165,8 @@ fn player_action(s: &str, ev: &PlayerEvent, ctx: &CompileContext) -> Option<(Rep
         }
     }
     // "they mill that many cards plus four instead", "scry that many cards plus one
-    // instead": the amount changes.
+    // instead", "they mill twice that many cards instead": the amount changes (the
+    // affected player orders several of them, CR 616.1).
     if let ReplacementEvent::Action {
         kind: ReplaceableAction::Mill | ReplaceableAction::Scry,
         ..
@@ -176,9 +177,20 @@ fn player_action(s: &str, ev: &PlayerEvent, ctx: &CompileContext) -> Option<(Rep
             .or_else(|| s.strip_prefix("you "))
             .or_else(|| s.strip_prefix("that player "))
             .unwrap_or(s);
-        if let Some(x) = ["mill ", "mills ", "scry ", "scries "]
+        let verb_rest = ["mill ", "mills ", "scry ", "scries "]
             .iter()
-            .find_map(|p| r.strip_prefix(p))
+            .find_map(|p| r.strip_prefix(p));
+        // "they mill twice that many cards instead" (Bruvac the Grandiloquent).
+        match verb_rest {
+            Some("twice that many cards instead") => {
+                return Some((ReplacementAction::Multiply(2), false))
+            }
+            Some("three times that many cards instead") => {
+                return Some((ReplacementAction::Multiply(3), false))
+            }
+            _ => {}
+        }
+        if let Some(x) = verb_rest
             .and_then(|x| x.strip_prefix("that many cards plus "))
             .and_then(|x| x.strip_suffix(" instead"))
         {
