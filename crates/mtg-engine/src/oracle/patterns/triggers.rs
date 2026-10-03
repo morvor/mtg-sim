@@ -968,16 +968,42 @@ pub fn parse_spell_phrase(x: &str) -> Option<(Filter, Option<Condition>)> {
         }
         None => x,
     };
-    let (f, _, mut rest) = parse_object_phrase(x)?;
+    let (mut f, _, mut rest) = parse_object_phrase(x)?;
+    // "a Human creature spell [with mana value 7 or greater]": the object phrase stops
+    // before "spell" after two nouns; the rest is a description of a spell.
     if !mentions_spell(&f) {
-        return None;
+        let t = rest.trim_start();
+        if !(t.starts_with("spell ") || t.starts_with("spells ") || matches!(t, "spell" | "spells"))
+        {
+            return None;
+        }
+        let (g, _, r) = parse_object_phrase(t)?;
+        if !mentions_spell(&g) {
+            return None;
+        }
+        f = Filter::and(vec![f, g]);
+        rest = r;
     }
     parts.push(cast_from_zone(f));
-    let mut cond = None;
+    let mut cond: Option<Condition> = None;
     loop {
         let t = rest.trim_start();
         if t.is_empty() {
             break;
+        }
+        // More qualifiers: see `trigger_grammar_combat_cast`.
+        if let Some((f, c, r)) =
+            super::trigger_grammar_combat_cast::spell_qualifier(t, &Filter::and(parts.clone()))
+        {
+            parts.extend(f);
+            if let Some(c) = c {
+                cond = Some(match cond {
+                    Some(prev) => Condition::And(vec![prev, c]),
+                    None => c,
+                });
+            }
+            rest = r;
+            continue;
         }
         if let Some(r) = t.strip_prefix("that targets ") {
             let (target, tail) = if let Some(r2) = r.strip_prefix('~') {

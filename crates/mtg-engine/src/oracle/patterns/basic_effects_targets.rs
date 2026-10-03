@@ -377,6 +377,11 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
         let slot = b.add_target(TargetSpec::one(TargetKind::Object(f), text.to_string()), text);
         return Some((Sel::Target(slot), r.to_string(), true));
     }
+    // "that source's controller", "that creature's controller": an object the trigger
+    // event names (see `Builder::named`).
+    if let Some((who, r)) = crate::oracle::effects::named_possessive_player(s, b) {
+        return Some((Sel::Players(who), r, true));
+    }
     // Players: "each other opponent" (other than the one the ability is about), "each
     // opponent", "that player", ...
     let players: [(&str, Option<PlayerRef>); 6] = [
@@ -879,8 +884,15 @@ fn both_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
     if matches!(other, Sel::This) {
         return None;
     }
+    // "Whenever equipped creature blocks or becomes blocked by a creature, destroy both
+    // creatures." (Dead-Iron Sledge): an Equipment's or Aura's creature, not itself.
+    let mine = if b.ctx.type_line.card_types.contains(crate::types::CardType::Creature) {
+        Sel::This
+    } else {
+        Sel::AttachedTo
+    };
     Some(Effect::Destroy {
-        what: Sel::Union(vec![Sel::This, other]),
+        what: Sel::Union(vec![mine, other]),
         no_regen: false,
     })
 }

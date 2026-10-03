@@ -76,7 +76,9 @@ pub fn check_that_many(e: &Effect, trigger: &TriggerCond) -> Option<()> {
             | TriggerCond::PlayerDealtDamage { .. }
             | TriggerCond::DealtExcessDamage { .. }
             | TriggerCond::Attacks(_)
-            | TriggerCond::PlayerAttacks(_) => true,
+            | TriggerCond::PlayerAttacks(_)
+            | TriggerCond::PlayerAttacksWith { .. }
+            | TriggerCond::PlayerAttacked { .. } => true,
             _ => false,
         }
     }

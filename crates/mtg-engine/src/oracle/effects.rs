@@ -199,6 +199,8 @@ pub fn parse_trigger_body(
     }
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
+    b.named
+        .extend(super::patterns::trigger_grammar_combat_cast::take_named());
     // "Whenever you cast a spell, earthbend 1. If that spell is a Lesson, ...": the spell
     // cast, even after "it" has come to mean something else.
     if matches!(it, Sel::TriggerSpell) {
@@ -928,6 +930,28 @@ pub fn bind_target_player(f: Filter, rest: &str, b: &mut Builder) -> (Filter, St
     }
 }
 
+/// "that source's controller", "that spell's controller": the controller (or owner) of an
+/// object the text named earlier (see `Builder::named`).
+pub(crate) fn named_possessive_player(s: &str, b: &Builder) -> Option<(PlayerRef, String)> {
+    for (p, sel) in &b.named {
+        for (suffix, owner) in [("'s controller", false), ("'s owner", true)] {
+            if let Some(r) = s
+                .strip_prefix(p.as_str())
+                .and_then(|r| r.strip_prefix(suffix))
+            {
+                let sel = Box::new(sel.clone());
+                let who = if owner {
+                    PlayerRef::OwnerOf(sel)
+                } else {
+                    PlayerRef::ControllerOf(sel)
+                };
+                return Some((who, r.to_string()));
+            }
+        }
+    }
+    None
+}
+
 pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     use super::patterns::oracle_hardening_referents::{is_no_player_referent, is_no_referent};
     let s = s.trim();
@@ -977,6 +1001,9 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             return None;
         }
         return Some((PlayerRef::OwnerOf(Box::new(b.it.clone())), r.to_string()));
+    }
+    if let Some(x) = named_possessive_player(s, b) {
+        return Some(x);
     }
     let with_space = format!("{s} ");
     if let Some((r, spec, rest)) = parse_player(&with_space) {
@@ -1377,6 +1404,9 @@ pub(crate) fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String
                 return Some((sel, rest.to_string()));
             }
         }
+    }
+    if let Some((who, rest)) = named_possessive_player(s, b) {
+        return Some((Sel::Players(who), rest));
     }
     // Players the text named earlier ("the chosen player"; see `choice_grammar`).
     if let Some((who, rest)) = super::patterns::choice_grammar::player_phrase(s, b) {

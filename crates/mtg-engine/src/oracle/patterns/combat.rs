@@ -88,6 +88,11 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     }
     // CR 509.3d: "[filter] becomes blocked by a [blocker filter]".
     if let Some((x, b)) = r.split_once(" becomes blocked by ") {
+        // "a creature with lesser power" compares the two creatures (see
+        // `trigger_grammar_combat_cast`).
+        if b.ends_with(" with lesser power") || b.ends_with(" with greater power") {
+            return None;
+        }
         let attacker = object_filter(x)?;
         let blocker = object_filter(b)?;
         return Some((
@@ -118,13 +123,14 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             }
             // The plural as written ("Elves"), else with its "s" dropped.
             let filter = object_filter(rest).or_else(|| object_filter(singular))?;
+            // "Them"/"those creatures": the attacking creatures with that quality.
             return Some((
                 TriggerCond::PlayerAttacksWith {
                     who,
                     filter,
                     min,
                 },
-                obj,
+                Sel::TriggerObjects,
                 PlayerRef::TriggerPlayer,
             ));
         }
