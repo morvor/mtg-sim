@@ -284,3 +284,115 @@ fn wolf_of_devils_breach_deals_the_discarded_cards_mana_value() {
     // Hill Giant (mana value 4) took 4 damage and died.
     assert!(!t.on_battlefield(giant));
 }
+
+#[test]
+fn maulfist_revolutionary_gives_one_counter_of_each_kind() {
+    cr!("122.1", "608.2h");
+    ruling!(
+        "Maulfist Revolutionary",
+        "gives only one counter of each kind. It doesn’t double the number"
+    );
+    compiles("Maulfist Revolutionary");
+    // "When this creature enters or dies, for each kind of counter on target permanent or
+    // player, give that permanent or player another counter of that kind."
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.add_counters(Entity::Object(giant), "+1/+1", 2, None);
+    t.g.add_counters(Entity::Object(giant), "charge", 1, None);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.enter(P0, "Maulfist Revolutionary");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(giant, "+1/+1"), 3);
+    assert_eq!(t.counters(giant, "charge"), 2);
+    // A player: one more poison counter.
+    let mut t = TestGame::new(2);
+    t.g.add_counters(Entity::Player(P1), "poison", 2, None);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Maulfist Revolutionary");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.g.player(P1).counters.get("poison").copied().unwrap_or(0), 3);
+}
+
+#[test]
+fn quarry_hauler_chooses_separately_for_each_kind() {
+    cr!("608.2h");
+    ruling!(
+        "Quarry Hauler",
+        "You don’t have to make the same choice for each kind of counter."
+    );
+    compiles("Quarry Hauler");
+    // "When this creature enters, for each kind of counter on target permanent, put another
+    // counter of that kind on it or remove one from it."
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.add_counters(Entity::Object(giant), "+1/+1", 2, None);
+    t.g.add_counters(Entity::Object(giant), "charge", 2, None);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    // Add for the first kind, remove for the second.
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.enter(P0, "Quarry Hauler");
+    t.g.flush_events();
+    t.resolve_all();
+    let (a, b) = (t.counters(giant, "+1/+1"), t.counters(giant, "charge"));
+    assert_eq!(a + b, 4);
+    assert!((a, b) == (3, 1) || (a, b) == (1, 3), "{a} {b}");
+}
+
+#[test]
+fn refurbished_familiar_draws_for_each_opponent_who_cant_discard() {
+    cr!("608.2c", "101.4");
+    compiles("Refurbished Familiar");
+    // "When this creature enters, each opponent discards a card. For each opponent who
+    // can't, you draw a card."
+    let mut t = TestGame::new(3);
+    t.hand(P1, "Grizzly Bears");
+    let hand = t.hand_size(P0);
+    t.enter(P0, "Refurbished Familiar");
+    t.g.flush_events();
+    t.resolve_all();
+    // P1 discarded; P2 had no card to discard.
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn brace_for_impact_counters_for_each_damage_prevented() {
+    cr!("615.5");
+    compiles("Brace for Impact");
+    // "Prevent all damage that would be dealt to target multicolored creature this turn.
+    // For each 1 damage prevented this way, put a +1/+1 counter on that creature."
+    let mut t = TestGame::new(2);
+    let c = t.battlefield(P0, "Boros Recruit");
+    t.lands(P0, "Plains", 5);
+    let spell = t.hand(P0, "Brace for Impact");
+    t.cast(P0, spell).target(c).go();
+    t.resolve();
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(c).go();
+    t.resolve();
+    assert!(t.on_battlefield(c));
+    assert_eq!(t.counters(c, "+1/+1"), 3);
+}
+
+#[test]
+fn inkshield_tokens_for_each_combat_damage_prevented() {
+    cr!("615.5");
+    compiles("Inkshield");
+    // "Prevent all combat damage that would be dealt to you this turn. For each 1 damage
+    // prevented this way, create a 2/1 white and black Inkling creature token with flying."
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Plains", 4);
+    t.lands(P0, "Swamp", 1);
+    t.set_step(P1, Step::BeginningOfCombat);
+    let spell = t.hand(P0, "Inkshield");
+    t.cast(P0, spell).go();
+    t.resolve();
+    t.attack(&[(giant, Entity::Player(P0))], &[]);
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(controlled(&t, P0, "Inkling Token"), 3);
+}
