@@ -1097,6 +1097,15 @@ impl Game {
             (ReplacementEvent::LoseGame(pf), ReplEvent::LoseGame { player }) => {
                 self.player_filter_matches(pf, *player, ctx)
             }
+            // CR 614.1a: an event pattern with a condition on the event ("3 or more
+            // damage", "during your turn").
+            (ReplacementEvent::Where { event, cond }, ev) => {
+                self.repl_event_matches(event, ctx, ev, locked) && {
+                    let mut c = ctx.clone();
+                    c.event = Some(event_info_of(ev));
+                    self.eval_cond(cond, &c)
+                }
+            }
             _ => false,
         }
     }
@@ -1139,9 +1148,9 @@ impl Game {
         // nothing (their other effects still happen), and a shield that prevents nothing
         // isn't used up (CR 609.7b).
         let unpreventable = match &ev {
-            ReplEvent::Damage { source, .. } => {
+            ReplEvent::Damage { source, combat, .. } => {
                 crate::prevention::is_prevention(&cand.def.action)
-                    && crate::prevention::damage_from_cant_be_prevented(self, *source)
+                    && crate::prevention::damage_event_cant_be_prevented(self, *source, *combat)
             }
             _ => false,
         };
@@ -1165,6 +1174,7 @@ impl Game {
             (
                 ReplacementAction::Prevent
                 | ReplacementAction::PreventAmount(_)
+                | ReplacementAction::PreventPortion(_)
                 | ReplacementAction::PreventAndThen(..),
                 ReplEvent::Damage {
                     source,
@@ -1190,8 +1200,24 @@ impl Game {
                         None => self.eval_value(v, &ctx).max(0) as u32,
                     }),
                 };
+                // "Prevent half that damage": part of each damage event, not a shield.
+                let portion = match &cand.def.action {
+                    ReplacementAction::PreventPortion(v) => {
+                        let mut c = ctx.clone();
+                        c.event = Some(event_info_of(&ReplEvent::Damage {
+                            source,
+                            target,
+                            amount,
+                            combat,
+                        }));
+                        Some(self.eval_value(v, &c).max(0) as u32)
+                    }
+                    _ => None,
+                };
                 let prevented = if unpreventable {
                     0
+                } else if let Some(p) = portion {
+                    p.min(amount)
                 } else {
                     shield.map_or(amount, |s| s.min(amount))
                 };
@@ -1511,7 +1537,16 @@ impl Game {
                     combat,
                 },
             ) => {
-                let new_target = self.eval_sel(&sel, &ctx).into_iter().next();
+                // The new recipient may be relative to the damage event ("that damage is
+                // dealt to that source's controller instead").
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                }));
+                let new_target = self.eval_sel(&sel, &c).into_iter().next();
                 match new_target {
                     // CR 614.9: redirection to something no longer valid does nothing.
                     Some(t) if self.valid_damage_recipient(t) => {

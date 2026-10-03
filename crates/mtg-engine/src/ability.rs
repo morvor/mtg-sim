@@ -2288,6 +2288,16 @@ pub enum ReplacementEvent {
     /// [`ReplacementAction::AsEnters`] while the permanent transforms into the face that
     /// has it, not afterward.
     Transforms,
+    /// The event matches `event` and the condition holds as it would happen, evaluated
+    /// with the event as the triggering event ("if a source would deal 3 or more damage
+    /// to ...", "if an opponent would lose life during your turn", "if damage would be
+    /// dealt to ~ while it has a +1/+1 counter on it"): `Value::EventAmount` is the
+    /// event's amount, `Sel::TriggerObject` / `PlayerRef::TriggerPlayer` what it would
+    /// happen to, `Sel::TriggerOtherObject` the source of damage (CR 614.1a).
+    Where {
+        event: Box<ReplacementEvent>,
+        cond: Condition,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -2361,6 +2371,12 @@ pub enum ReplacementAction {
     /// "[A permanent tapped for mana] produces [type] instead of any other type"
     /// (CR 106.12b): each mana it would produce is of that type; the amount is unchanged.
     ManaTypeInstead(crate::mana::ManaType),
+    /// Prevent part of each damage event (CR 615.1a), evaluated for that event
+    /// (`Value::EventAmount` is the damage): "prevent half that damage, rounded up",
+    /// "prevent all but 1 of that damage", "you may prevent X of that damage, where X is
+    /// ...". Unlike [`ReplacementAction::PreventAmount`] in a one-shot effect, it isn't a
+    /// shield that is used up.
+    PreventPortion(Value),
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.
@@ -2571,6 +2587,9 @@ pub enum Restriction {
     DamageCantBePrevented,
     /// "Damage [sources matching the filter] would deal can't be prevented" (CR 615.12).
     SourceDamageCantBePrevented(Filter),
+    /// "Combat damage [that would be dealt by sources matching the filter] can't be
+    /// prevented" (CR 615.12): only combat damage (CR 120.2a).
+    CombatDamageCantBePrevented(Filter),
     /// "can't transform".
     CantTransform(Filter),
     /// "[permanents] can't be turned face up" (CR 708.7): not by a special action

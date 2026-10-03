@@ -1966,6 +1966,14 @@ impl Renderer<'_> {
                 format!("{} can't be regenerated", subj(self, f))
             }
             Restriction::DamageCantBePrevented => "damage can't be prevented".into(),
+            Restriction::CombatDamageCantBePrevented(f) => {
+                if matches!(f, Filter::Any) {
+                    "combat damage can't be prevented".into()
+                } else {
+                    let n = self.noun(f, Num::Many);
+                    format!("combat damage that would be dealt by {n} can't be prevented")
+                }
+            }
             Restriction::SourceDamageCantBePrevented(f) => {
                 if matches!(f, Filter::Source) {
                     "damage that would be dealt by ~ can't be prevented".into()
@@ -2198,6 +2206,7 @@ impl Renderer<'_> {
                     }
                     A::Prevent => format!("{subj} can't enter the battlefield"),
                     other @ (A::PreventAmount(_)
+                    | A::PreventPortion(_)
                     | A::Multiply(_)
                     | A::Add(_)
                     | A::PlusTokens { .. }
@@ -2854,7 +2863,7 @@ impl Renderer<'_> {
                 format!("{e} as well")
             }
             A::Prevent => "prevent that event".into(),
-            A::PreventAmount(v) => {
+            A::PreventAmount(v) | A::PreventPortion(v) => {
                 let v = self.value(v);
                 format!("prevent {v} of that damage")
             }

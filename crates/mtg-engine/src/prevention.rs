@@ -61,6 +61,54 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
                 .collect();
             Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
         }
+        // "permanents that player controls" in a triggered ability: the player the
+        // trigger was about (CR 611.2c-like locking of the event's player).
+        Filter::ControlledBy(rel @ (PlayerRel::TriggerPlayer | PlayerRel::Var(_))) => {
+            let ps = g
+                .player_ids()
+                .into_iter()
+                .filter(|p| g.player_rel_matches(*rel, *p, ctx))
+                .map(PlayerFilter::Is)
+                .collect();
+            Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+        }
+        // "Sources of the color of your choice": the color chosen as the effect was
+        // created (CR 609.7b).
+        Filter::ChosenColor => match g.source_choices(ctx).and_then(|c| c.color) {
+            Some(c) => Filter::Color(c),
+            None => Filter::ChosenColor,
+        },
+        other => other.clone(),
+    }
+}
+
+/// Locks a player filter naming chosen players ("target player", "that player") onto those
+/// players (see [`lock_filter`]). Only players among the chosen entities count: "any
+/// target" that is a creature names no player.
+pub fn lock_players(g: &Game, f: &PlayerFilter, ctx: &Ctx) -> PlayerFilter {
+    match f {
+        PlayerFilter::Ref(r) => {
+            let ps: Vec<PlayerId> = match &**r {
+                PlayerRef::Target(k) => ctx
+                    .targets
+                    .get(*k as usize)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| match e {
+                        Entity::Player(p) => Some(*p),
+                        _ => None,
+                    })
+                    .collect(),
+                PlayerRef::TriggerPlayer | PlayerRef::Iterated => {
+                    g.eval_players(r, ctx).into_iter().collect()
+                }
+                _ => return f.clone(),
+            };
+            PlayerFilter::Or(ps.into_iter().map(PlayerFilter::Is).collect())
+        }
+        PlayerFilter::Or(v) => {
+            PlayerFilter::Or(v.iter().map(|x| lock_players(g, x, ctx)).collect())
+        }
         other => other.clone(),
     }
 }
@@ -83,7 +131,7 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             combat_only,
         } => ReplacementEvent::Damage {
             source: lf(source),
-            to_players: to_players.clone(),
+            to_players: to_players.as_ref().map(|p| lock_players(g, p, ctx)),
             to_objects: to_objects.as_ref().map(lf),
             combat_only: *combat_only,
         },
@@ -93,9 +141,19 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             to_objects,
         } => ReplacementEvent::NoncombatDamage {
             source: lf(source),
-            to_players: to_players.clone(),
+            to_players: to_players.as_ref().map(|p| lock_players(g, p, ctx)),
             to_objects: to_objects.as_ref().map(lf),
         },
+        ReplacementEvent::Where { event, cond } => {
+            let inner = ReplacementDef {
+                event: (**event).clone(),
+                ..d.clone()
+            };
+            ReplacementEvent::Where {
+                event: Box::new(lock_def(g, &inner, ctx).event),
+                cond: cond.clone(),
+            }
+        }
         ReplacementEvent::PutCounters {
             on_objects,
             on_players,
@@ -128,6 +186,11 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
     };
     // The object or player damage is redirected to is locked in too.
     let lock_to = |sel: &Sel| {
+        // A recipient relative to the damage event ("that source's controller") is
+        // determined as the damage would be dealt.
+        if serde_json::to_string(sel).is_ok_and(|s| s.contains("\"Trigger")) {
+            return sel.clone();
+        }
         let to = g.eval_sel(sel, ctx);
         match to.first() {
             Some(Entity::Player(p)) => Sel::Players(PlayerRef::Player(*p)),
@@ -254,12 +317,24 @@ pub fn damage_from_cant_be_prevented(g: &Game, source: ObjectId) -> bool {
         })
 }
 
+/// Whether a damage event from `source` can't be prevented (CR 615.12): all damage, damage
+/// from that source, or combat damage ("combat damage can't be prevented").
+pub fn damage_event_cant_be_prevented(g: &Game, source: ObjectId, combat: bool) -> bool {
+    damage_from_cant_be_prevented(g, source)
+        || (combat
+            && g.restricted_obj(source, |r| match r {
+                Restriction::CombatDamageCantBePrevented(f) => Some(f),
+                _ => None,
+            }))
+}
+
 /// Whether a replacement action is a prevention effect (CR 615.1a).
 pub fn is_prevention(a: &ReplacementAction) -> bool {
     matches!(
         a,
         ReplacementAction::Prevent
             | ReplacementAction::PreventAmount(_)
+            | ReplacementAction::PreventPortion(_)
             | ReplacementAction::PreventAndThen(..)
     )
 }
