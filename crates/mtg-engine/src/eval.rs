@@ -928,6 +928,28 @@ impl Game {
             Sel::Var(v) => {
                 crate::merge::with_components_of(self, ctx.vars.get(v).cloned().unwrap_or_default())
             }
+            Sel::ThisTurn(cond) => {
+                crate::kw::value_results::event_objects_this_turn(self, cond, ctx)
+                    .into_iter()
+                    .map(Entity::Object)
+                    .collect()
+            }
+            Sel::Before(inner) => self
+                .eval_sel(inner, ctx)
+                .into_iter()
+                .map(|e| match e {
+                    Entity::Object(o) => Entity::Object(self.obj(o).prev.unwrap_or(o)),
+                    p => p,
+                })
+                .collect(),
+            Sel::Matching(inner, f) => self
+                .eval_sel(inner, ctx)
+                .into_iter()
+                .filter(|e| match e {
+                    Entity::Object(o) => self.matches(*o, f, ctx),
+                    Entity::Player(_) => false,
+                })
+                .collect(),
             // CR 603.6: an ability can't find an object that went to a zone hidden from its
             // controller (a library, or another player's hand).
             Sel::TriggerObject => ctx
@@ -1397,6 +1419,9 @@ impl Game {
                 }
             }
             Value::Custom(name) => crate::custom::custom_value(self, name, ctx),
+            Value::EventsThisTurn(cond, tally) => {
+                crate::kw::value_results::events_this_turn(self, cond, *tally, ctx)
+            }
         }
     }
 

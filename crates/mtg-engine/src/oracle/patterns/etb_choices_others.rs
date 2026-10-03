@@ -233,6 +233,10 @@ fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Opti
     } else {
         let each = r.strip_prefix("for each ")?;
         let v = match each {
+            // This turn's history (see `value_results`).
+            _ if super::value_results::whole_history_count(each).is_some() => {
+                super::value_results::whole_history_count(each)?
+            }
             "creature that died under your control this turn" => {
                 Value::Custom("creatures_you_controlled_died_this_turn".into())
             }

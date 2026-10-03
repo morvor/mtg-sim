@@ -17,6 +17,43 @@ const SHIELD_DESTROY_UID: u64 = u64::MAX - 1;
 const SHIELD_DAMAGE_UID: u64 = u64::MAX - 2;
 const FINALITY_UID: u64 = u64::MAX - 3;
 
+/// Whether counters of `kind` can't be put on `obj`: an ability of its own or another
+/// object's stops them ("~ can't have counters put on it", "creatures your opponents
+/// control can't have +1/+1 counters put on them", CR 113.6i, 614.17). A cost that
+/// includes putting such counters can't be paid (CR 614.17b), and riot's choice of a
+/// counter isn't available.
+pub fn counters_prevented(g: &Game, obj: ObjectId, kind: &str) -> bool {
+    let prevents = |r: &ReplacementDef| -> Option<Filter> {
+        match (&r.event, &r.action) {
+            (
+                ReplacementEvent::PutCounters {
+                    on_objects: Some(f),
+                    kind: k,
+                    ..
+                },
+                ReplacementAction::Prevent,
+            ) if k.as_deref().is_none_or(|k| k == kind) => Some(f.clone()),
+            _ => None,
+        }
+    };
+    let own = g.obj(obj).chars.abilities.iter().any(|a| match &a.kind {
+        AbilityKind::Static(s) => match &s.effect {
+            StaticEffect::Replacement(r) => {
+                prevents(r).is_some_and(|f| matches!(f, Filter::Source))
+            }
+            _ => false,
+        },
+        _ => false,
+    });
+    own || g.statics.replacements.iter().any(|(src, ctl, _, _, r)| {
+        *src != obj
+            && prevents(r).is_some_and(|f| {
+                !matches!(f, Filter::Source)
+                    && g.matches(obj, &f, &crate::eval::Ctx::new(Some(*src), *ctl))
+            })
+    })
+}
+
 /// Whether a replacement key is the prevention effect shield counters create (CR 122.1c),
 /// a single effect for all the damage that would be dealt to the permanent at once.
 pub fn is_shield_prevention(key: &ReplKey) -> bool {

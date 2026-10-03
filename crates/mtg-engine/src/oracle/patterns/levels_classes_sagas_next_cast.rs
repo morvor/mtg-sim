@@ -134,7 +134,11 @@ fn p_spell_enters_with_counters(l: &str, b: &mut Builder) -> Option<Effect> {
         Some(x) => (Value::c(1), x),
         None => {
             let (n, x) = parse_number(r)?;
-            n.as_const()?;
+            // "X additional +1/+1 counters, where X is ..." (the value locked in as the
+            // ability resolves, see `prevention::lock_def`).
+            if n.as_const().is_none() && !(matches!(n, Value::X) && super::value_grammar::x_defined()) {
+                return None;
+            }
             (n, x.trim_start().strip_prefix("additional ")?)
         }
     };

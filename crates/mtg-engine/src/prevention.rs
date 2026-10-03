@@ -216,6 +216,15 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
         ReplacementAction::RedirectNext(sel, n) => {
             ReplacementAction::RedirectNext(lock_to(sel), n.clone())
         }
+        // "That creature enters with X additional +1/+1 counters on it, where X is the
+        // number of colors of mana spent to cast it": a number the resolving ability
+        // determines (CR 608.2h) is locked in.
+        ReplacementAction::EnterWithCounters(k, n) if resolution_dependent(n) => {
+            ReplacementAction::EnterWithCounters(
+                k.clone(),
+                Value::Const(g.eval_value(n, ctx) as i32),
+            )
+        }
         other => other.clone(),
     };
     ReplacementDef {
@@ -284,6 +293,22 @@ fn lock_targets(e: &Effect, ctx: &Ctx) -> Effect {
         .collect();
     seq.push(body);
     Effect::Seq(seq)
+}
+
+/// Whether a value can only be determined while the ability that creates an effect
+/// resolves: its variables, X, the triggering event or spell.
+fn resolution_dependent(v: &Value) -> bool {
+    let j = serde_json::to_string(v).unwrap_or_default();
+    [
+        "\"Var\"",
+        "\"X\"",
+        "EventAmount",
+        "TriggerSpell",
+        "trigger spell:",
+        "opus:",
+    ]
+    .iter()
+    .any(|w| j.contains(w))
 }
 
 /// The objects a player may choose as a source of damage (CR 609.7a): permanents,

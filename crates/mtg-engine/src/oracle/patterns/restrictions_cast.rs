@@ -13,7 +13,10 @@ use crate::oracle::phrases::end;
 /// "[players] can't cast [spells] [this turn / until your next turn]".
 fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim());
-    let (dur, main) = duration_suffix(l);
+    let (dur, main) = match l.strip_prefix("until end of turn, ") {
+        Some(m) => (Duration::EndOfTurn, m),
+        None => duration_suffix(l),
+    };
     // "until a player planeswalks" (CR 901.11, Eloren Wilds).
     if !matches!(
         dur,
@@ -40,6 +43,17 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
         (who, rest)
     };
     let what = rest.trim().strip_prefix("can't cast ")?;
+    // "..., and that player can't activate abilities that aren't mana abilities"
+    let (what, non_mana) = match [
+        ", and that player can't activate abilities that aren't mana abilities",
+        " or activate abilities that aren't mana abilities",
+    ]
+    .iter()
+    .find_map(|suffix| what.strip_suffix(suffix))
+    {
+        Some(w) => (w, true),
+        None => (what, false),
+    };
     let what = if what == "spells" {
         Filter::Any
     } else {
@@ -50,10 +64,27 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
         // The card being cast isn't a spell yet as the prohibition is checked.
         without_spell(f)?
     };
-    Some(Effect::AddRestriction {
-        restriction: Restriction::CantCast { who, what },
-        duration: dur,
-    })
+    let cast = Effect::AddRestriction {
+        restriction: Restriction::CantCast {
+            who: who.clone(),
+            what,
+        },
+        duration: dur.clone(),
+    };
+    if !non_mana {
+        return Some(cast);
+    }
+    Some(Effect::Seq(vec![
+        cast,
+        Effect::AddRestriction {
+            restriction: Restriction::CantActivate {
+                who,
+                sources: Filter::Any,
+                include_mana: false,
+            },
+            duration: dur,
+        },
+    ]))
 }
 
 inventory::submit! { EffectPattern { name: "restrictions: players can't cast spells this turn", priority: 100, parse: players_cant_cast } }
