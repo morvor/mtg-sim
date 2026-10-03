@@ -473,3 +473,31 @@ fn p_and_each_enters_with(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "etb replacement grammar: [instruction], and each creature you control enters with counters", priority: 150, parse: p_and_each_enters_with } }
+
+/// "Nontoken creatures you control enter as a copy of enchanted creature." (Infinite
+/// Reflection): CR 707.9, 614.1c.
+fn s_others_enter_as_copy(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let (subj, of) = end(l.trim()).split_once(" enter as a copy of ")?;
+    let (f, plural, rest) = parse_object_phrase(subj)?;
+    if !plural || !rest.trim().is_empty() {
+        return None;
+    }
+    let what = match of {
+        "enchanted creature" | "equipped creature" => Filter::AttachedToSource,
+        _ => return None,
+    };
+    Some(vec![static_ability(
+        StaticEffect::Replacement(ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(f),
+            action: ReplacementAction::EnterAsCopy {
+                filter: what,
+                optional: false,
+            },
+            self_replacement: false,
+            optional: false,
+        }),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "etb replacement grammar: creatures enter as a copy of enchanted creature", priority: 150, parse: s_others_enter_as_copy } }

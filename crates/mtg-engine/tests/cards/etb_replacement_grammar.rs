@@ -265,3 +265,19 @@ fn altered_ego_enters_with_x_additional_counters() {
         .expect("copy");
     assert_eq!(t.counters(copy, "+1/+1"), 3);
 }
+
+#[test]
+fn infinite_reflection_nontoken_creatures_enter_as_copies_of_the_enchanted_creature() {
+    cr!("707.9", "614.1c");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let aura = t.battlefield(P0, "Infinite Reflection");
+    t.g.obj_mut(aura).attached_to = Some(Entity::Object(giant));
+    let bears = t.enter(P0, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.g.obj(t.g.current(bears)).chars.name, "Hill Giant");
+    // Not an opponent's.
+    let theirs = t.enter(P1, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.g.obj(t.g.current(theirs)).chars.name, "Grizzly Bears");
+}
