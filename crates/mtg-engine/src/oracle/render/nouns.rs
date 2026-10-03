@@ -141,7 +141,12 @@ impl Renderer<'_> {
         if v.len() < 2 || !matches!(det.num(), Num::One) {
             return None;
         }
-        let is_q = |f: &Filter| matches!(f, Filter::ControlledBy(_) | Filter::OwnedBy(_));
+        let is_q = |f: &Filter| {
+            matches!(
+                f,
+                Filter::ControlledBy(_) | Filter::OwnedBy(_) | Filter::InZone(_)
+            )
+        };
         let mut shared: Option<String> = None;
         let mut rests = Vec::new();
         for x in v {
@@ -174,6 +179,13 @@ impl Renderer<'_> {
             .map(|(_, f)| self.noun_det(f, det.clone()))
             .collect();
         // Cards say it once or for each.
+        if let Some(m) = merged_alternatives(&full) {
+            return Some(format!(
+                "{{alt:{}{tail}|{}|{m}}}",
+                join_list(&parts, "or"),
+                join_list(&full, "or")
+            ));
+        }
         Some(format!(
             "{{alt:{}{tail}|{}}}",
             join_list(&parts, "or"),
@@ -1509,7 +1521,11 @@ impl Renderer<'_> {
                     Num::One => {
                         let parts: Vec<String> =
                             v.iter().map(|x| self.noun_det(x, det.clone())).collect();
-                        join_list(&parts, "or")
+                        let plain = join_list(&parts, "or");
+                        match merged_alternatives(&parts) {
+                            Some(m) => format!("{{alt:{m}|{plain}}}"),
+                            None => plain,
+                        }
                     }
                     Num::Many => {
                         let parts: Vec<String> =
@@ -1803,4 +1819,40 @@ fn other_kind(f: &Filter) -> Option<&'static str> {
         Filter::SharesCreatureType(_) => Some("a creature type"),
         _ => None,
     }
+}
+
+/// Alternatives that differ in one word, said once: "a creature card in your hand or a
+/// creature card in your graveyard" is "a creature card in your hand or graveyard", "a
+/// creature card with power 6 or greater or a creature card with toughness 6 or greater"
+/// is "a creature card with power or toughness 6 or greater".
+fn merged_alternatives(parts: &[String]) -> Option<String> {
+    if parts.len() < 2 {
+        return None;
+    }
+    let all: Vec<Vec<&str>> = parts.iter().map(|p| p.split(' ').collect()).collect();
+    // Aligned at the end: the first alternative may say more before ("target creature
+    // with power 4 or greater or creature with toughness 4 or greater").
+    let n = all.iter().map(|w| w.len()).min()?;
+    let words: Vec<&[&str]> = all.iter().map(|w| &w[w.len() - n..]).collect();
+    if all.iter().skip(1).any(|w| w.len() != n) {
+        return None;
+    }
+    let differ: Vec<usize> = (0..n)
+        .filter(|i| words.iter().any(|w| w[*i] != words[0][*i]))
+        .collect();
+    let [i] = differ.as_slice() else { return None };
+    let alts: Vec<String> = words.iter().map(|w| w[*i].to_string()).collect();
+    let ok = alts.iter().all(|a| {
+        matches!(
+            a.as_str(),
+            "hand" | "graveyard" | "library" | "power" | "toughness"
+        )
+    });
+    if !ok || all[0].iter().any(|w| w.contains('{')) {
+        return None;
+    }
+    let mut out: Vec<String> = all[0].iter().map(|w| w.to_string()).collect();
+    let k = all[0].len() - n + i;
+    out[k] = join_list(&alts, "or");
+    Some(out.join(" "))
 }

@@ -1223,12 +1223,17 @@ impl Renderer<'_> {
                     .targets
                     .get(*slot as usize)
                     .and_then(|t| t.divide.clone());
-                let a = match amount {
-                    Some(v) => self.value(&v),
-                    None => self.gap("divided damage without amount"),
+                // "deals X damage divided as you choose among any number of target
+                // creatures, where X is ..." (CR 107.3).
+                let (a, w) = match amount {
+                    Some(v) => self.amount(&v),
+                    None => (self.gap("divided damage without amount"), None),
                 };
                 let t = self.target_mention(*slot, Case::Obj);
-                format!("{s} deals {a} damage divided as you choose among {t}")
+                format!(
+                    "{s} deals {a} damage divided as you choose among {t}{}",
+                    w.unwrap_or_default()
+                )
             }
             Effect::Fight { a, b } => {
                 let a = self.sel(a, Case::Subj);
@@ -4702,10 +4707,17 @@ impl Renderer<'_> {
         }
         let mut kws = Vec::new();
         let mut others = Vec::new();
+        // An Equipment token's abilities are about the creature it's attached to:
+        // "equipped creature".
+        let equipment = spec.subtypes.iter().any(|s| s.as_str() == "Equipment");
         for a in &spec.abilities {
             match &a.kind {
                 AbilityKind::Keyword(k) => kws.push(self.keyword_lower(k)),
-                _ => others.push(self.nested_ability(a)),
+                _ => {
+                    let saved = std::mem::replace(&mut self.grants_to_equipment, equipment);
+                    others.push(self.nested_ability(a));
+                    self.grants_to_equipment = saved;
+                }
             }
         }
         super::merge_shared_as_though(&mut others);
@@ -4714,9 +4726,18 @@ impl Renderer<'_> {
         if !kws.is_empty() {
             with.push(join_list(&kws, "and"));
         }
-        with.extend(others);
+        with.extend(others.iter().cloned());
         if !with.is_empty() {
-            tail.push_str(&format!(" with {}", join_list(&with, "and")));
+            let list = join_list(&with, "and");
+            // Keywords and quoted abilities, listed in either order.
+            if !kws.is_empty() && !others.is_empty() {
+                let mut rev = others.clone();
+                rev.push(join_list(&kws, "and"));
+                let rev = join_list(&rev, "and");
+                tail.push_str(&format!(" with {{alt:{list}|{rev}}}"));
+            } else {
+                tail.push_str(&format!(" with {list}"));
+            }
         }
         tail.push_str(&where_x);
         (words.join(" "), tail)

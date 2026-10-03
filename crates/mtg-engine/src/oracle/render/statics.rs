@@ -2400,7 +2400,20 @@ impl Renderer<'_> {
                     "your opponents" if except => "an opponent".into(),
                     _ => w,
                 };
-                let then = self.replacement_then(action, "");
+                // The draw doesn't happen (CR 614.6): "that player skips that draw
+                // instead", "that player skips that draw and you draw a card instead".
+                let then = match action {
+                    ReplacementAction::Instead(e)
+                        if matches!(e.as_ref(), Effect::Noop) && w != "you" =>
+                    {
+                        "that player skips that draw instead".to_string()
+                    }
+                    ReplacementAction::Instead(_) if w != "you" => {
+                        let t = self.replacement_then(action, "");
+                        format!("{{opt:that player skips that draw and}} {t}")
+                    }
+                    _ => self.replacement_then(action, ""),
+                };
                 let except = if !except {
                     String::new()
                 } else if w == "you" {

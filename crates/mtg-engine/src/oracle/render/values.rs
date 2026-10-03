@@ -694,6 +694,24 @@ impl Renderer<'_> {
             {
                 "it's neither day nor night".into()
             }
+            // "If {W}{U} was spent to cast this spell": mana of each of those colors.
+            Condition::And(v)
+                if v.len() >= 2
+                    && v.iter().all(|x| matches!(x,
+                        Condition::Compare(Value::Custom(n), Cmp::Ge, Value::Const(1))
+                            if n.starts_with("mana_spent_of:"))) =>
+            {
+                let syms: String = v
+                    .iter()
+                    .filter_map(|x| match x {
+                        Condition::Compare(Value::Custom(n), ..) => {
+                            n.strip_prefix("mana_spent_of:").map(|l| format!("{{{l}}}"))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                format!("{syms} was spent to cast {}", self.me())
+            }
             Condition::And(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
                 merge_subject(&parts, "and")

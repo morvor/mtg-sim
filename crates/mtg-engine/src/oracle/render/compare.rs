@@ -221,10 +221,10 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               destroyed names the Equipment attached to it then.",
     },
     Equivalence {
-        pattern: r"\b(put that card [^.]*?) and the rest\b",
+        pattern: r"\b(put [^.]*?),? and the rest\b",
         replacement: "$1. put the rest",
         why: "\"Put that card into your hand and the rest on the bottom of your library\": \
-              the verb is said once for both objects.",
+              the verb is said once for both groups of cards.",
     },
     Equivalence {
         pattern: r"\b(?:all )?other cards revealed this way\b|\bthe rest of the revealed cards\b",
@@ -658,7 +658,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 514.2).",
     },
     Equivalence {
-        pattern: r#"\. (it has|thatit has|they have|it gains|thatit gains|they gain) ""#,
+        pattern: r#"\. (it has|thatit has|they have|it gains|thatit gains|they gain|it \{alt:gains\|has\}) ""#,
         replacement: " with \"",
         why: "A token created \"with\" an ability and one that \"has\" it (a following \
               sentence) are the same token (CR 111.1).",
@@ -1338,7 +1338,7 @@ fn sentence_rewrites(s: &str) -> String {
         // A rendering's `{alt:...}` / `{opt:...}` (braces nest three deep) is one piece of
         // the sentence, periods inside it included.
         let brace = r"\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}";
-        Regex::new(&format!(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+ remains? exiled|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."{{]|"[^"]*"|{brace})*?"[^"]*\.""?|(?:[^."{{]|"[^"]*"|{brace})+?\.)"#))
+        Regex::new(&format!(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."{{]|"[^"]*"|{brace})*?"[^"]*\.""?|(?:[^."{{]|"[^"]*"|{brace})+?\.)"#))
             .ok()
     });
     let mut s = s.to_string();
@@ -1717,11 +1717,16 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
     static R: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     R.get_or_init(|| {
         [
+            (r"\bdeals? damage equal to ([^.]+?) divided as you choose among ([^.]+?)(\.|$)", "deals x damage divided as you choose among $2, where x is $1$3"),
             (r"\bdeals? damage equal to ([^.]+?) to ([^.]+?)(\.|$)", "deals x damage to $2, where x is $1$3"),
             (r"\bdeals? damage to ([^.]+?) equal to ([^.]+?)(\.|$)", "deals x damage to $1, where x is $2$3"),
             (r"\b(gains?|loses?) life equal to ([^.]+?)(\.|$)", "$1 x life, where x is $2$3"),
             (r"\b(gains?|loses?) 1 life for each ([^.]+?)(\.|$)", "$1 x life, where x is the number of $2$3"),
             (r"\b(gains?|loses?) (\d+|two|three|four|five) life for each ([^.]+?)(\.|$)", "$1 x life, where x is $2 times the number of $3$4"),
+            (r"\b(gets? [+-]x/[+-][x0]), where x is ([^,.]+), and (has|have|is|are|gains?) ([^.]+?)(\.|$)", "$1 and $3 $4, where x is $2$5"),
+            (r"\b(gets?) ([+-])1/([+-])1 for each ([^.]+?) and (has|have|is|are|gains?) ([^.]+?)(\.|$)", "$1 ${2}x/${3}x and $5 $6, where x is the number of $4$7"),
+            (r"\b(gets?) ([+-])1/([+-])0 for each ([^.]+?) and (has|have|is|are|gains?) ([^.]+?)(\.|$)", "$1 ${2}x/${3}0 and $5 $6, where x is the number of $4$7"),
+            (r"\b(gets?) ([+-])2/([+-])2 for each ([^.]+?) and (has|have|is|are|gains?) ([^.]+?)(\.|$)", "$1 ${2}x/${3}x and $5 $6, where x is 2 times the number of $4$7"),
             (r"\b(gets?) ([+-])1/([+-])1 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}x $4, where x is the number of $5$6"),
             (r"\b(gets?) ([+-])1/([+-])0 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}0 $4, where x is the number of $5$6"),
             (r"\b(gets?) ([+-])0/([+-])1 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}0/${3}x $4, where x is the number of $5$6"),
