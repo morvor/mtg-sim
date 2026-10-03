@@ -602,6 +602,49 @@ fn f_tokens_of_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     true
 }
 
+/// "Whenever it deals combat damage to a player this turn, exile that many cards from the
+/// top of your library. Until the end of your next turn, you may play those cards." (Fire
+/// Giant's Fury): a sentence about the cards a delayed triggered ability exiles is part of
+/// that ability.
+fn f_exiled_by_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    // (Only all of them: "that card" may be one chosen among them.)
+    if !(l.contains("those cards") || l.contains("them")) || l.contains("target") {
+        return false;
+    }
+    let Some(Effect::DelayedTrigger { trigger, body, .. }) = last_delayed(prev) else {
+        return false;
+    };
+    if matches!(trigger, TriggerCond::BeginningOf { .. }) || body.modal.is_some() {
+        return false;
+    }
+    fn exiles(e: &Effect) -> bool {
+        match e {
+            Effect::Seq(v) => v.iter().any(exiles),
+            x => is_exile(x),
+        }
+    }
+    if !exiles(&body.effect) {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.it = Sel::Var(vars::IT);
+    sub.it_player = refs::no_player_referent();
+    sub.sentences = 1;
+    sub.named.push(("those cards".to_string(), Sel::Var(vars::IT)));
+    let Some(e) = parse_sentence(l, &mut sub) else {
+        return false;
+    };
+    if !sub.targets.is_empty() {
+        return false;
+    }
+    body.effect = Effect::seq(vec![std::mem::take(&mut body.effect), e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "delayed grammar: sentences about the cards a delayed ability exiles", priority: 45, apply: f_exiled_by_delayed } }
+
 inventory::submit! { FollowupPattern { name: "delayed grammar: sentences about the tokens a delayed ability creates", priority: 45, apply: f_tokens_of_delayed } }
 
 inventory::submit! { FollowupPattern { name: "delayed grammar: sentences about what the delayed instruction puts onto the battlefield", priority: 45, apply: f_delayed_continues } }
@@ -735,6 +778,27 @@ fn referent_subject(s: &str, b: &mut Builder) -> Option<(Sel, Filter)> {
         let f = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(REFERENT)))]);
         return Some((Sel::Var(vars::DAMAGED), f));
     }
+    // "a creature dealt damage by that creature": what the referent dealt damage to this
+    // turn.
+    if let Some((noun, by)) = s
+        .strip_prefix("a ")
+        .or_else(|| s.strip_prefix("an "))
+        .and_then(|r| r.split_once(" dealt damage by "))
+    {
+        let (f, plural, rest) = parse_object_phrase(noun)?;
+        if plural || !rest.trim().is_empty() {
+            return None;
+        }
+        let (sel, rest) = object_ref(by, b)?;
+        if !rest.trim().is_empty() || !matches!(sel, Sel::Target(_) | Sel::Var(_)) {
+            return None;
+        }
+        let f = Filter::and(vec![
+            f,
+            Filter::DealtDamageThisTurnBy(Box::new(Sel::Var(REFERENT))),
+        ]);
+        return Some((sel, f));
+    }
     if s.starts_with("a ") || s.starts_with("an ") || s.starts_with("each ") {
         return None;
     }
@@ -747,6 +811,20 @@ fn referent_subject(s: &str, b: &mut Builder) -> Option<(Sel, Filter)> {
             .collect();
         if let [slot] = slots[..] {
             return Some((Sel::Target(slot), Filter::In(Box::new(Sel::Var(REFERENT)))));
+        }
+        // "When the permanent you don't control dies this turn" after "target creature or
+        // planeswalker you don't control": the one target with that qualifier.
+        if let Some((_, qualifier)) = r.split_once(' ') {
+            let slots: Vec<u8> = (0..b.targets.len() as u8)
+                .filter(|i| {
+                    let t = &b.targets[*i as usize];
+                    t.text.ends_with(&format!(" {qualifier}"))
+                        && matches!(t.what, TargetKind::Object(_))
+                })
+                .collect();
+            if let [slot] = slots[..] {
+                return Some((Sel::Target(slot), Filter::In(Box::new(Sel::Var(REFERENT)))));
+            }
         }
     }
     let (sel, rest) = object_ref(s, b)?;
@@ -804,27 +882,51 @@ fn event_amount_text(eff: &str, t: &TriggerCond) -> Option<String> {
     if !deals_damage(t) && !matches!(t, TriggerCond::IsDealtDamage { .. } | TriggerCond::Batched { .. }) {
         return None;
     }
-    if eff.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") {
+    if eff.contains(AMOUNT_WORD) {
         return None;
     }
     Some(
-        eff.replace("that many", "x")
-            .replace("gain life equal to that damage", "gain x life"),
+        eff.replace(
+            "that many cards from the top of ",
+            &format!("the top {AMOUNT_WORD} cards of "),
+        )
+        .replace("that many", AMOUNT_WORD)
+            .replace("gain life equal to that damage", &format!("gain {AMOUNT_WORD} life")),
     )
 }
 
-/// Replaces X with the event's amount.
-fn x_is_event_amount(e: &Effect) -> Option<Effect> {
+/// A number no card prints, standing for "that many" while the text is parsed (an X would
+/// be read as the spell's X).
+const AMOUNT: i64 = 7919;
+const AMOUNT_WORD: &str = "7919";
+
+/// Replaces the stand-in number with `v`.
+fn amount_is(e: &Effect, v: &Value) -> Option<Effect> {
     use serde_json::Value as J;
-    fn walk(v: J) -> J {
-        match v {
-            J::String(s) if s == "X" => J::String("EventAmount".into()),
-            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v))).collect()),
-            J::Array(a) => J::Array(a.into_iter().map(walk).collect()),
+    let vj = serde_json::to_value(v).ok()?;
+    let marker = serde_json::to_value(Value::Const(AMOUNT as i32)).ok()?;
+    let mut n = 0;
+    fn walk(x: J, marker: &J, vj: &J, n: &mut usize) -> J {
+        if &x == marker {
+            *n += 1;
+            return vj.clone();
+        }
+        match x {
+            J::Object(m) => J::Object(m.into_iter().map(|(k, x)| (k, walk(x, marker, vj, n))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, marker, vj, n)).collect()),
             other => other,
         }
     }
-    serde_json::from_value(walk(serde_json::to_value(e).ok()?)).ok()
+    let out = walk(serde_json::to_value(e).ok()?, &marker, &vj, &mut n);
+    if n == 0 {
+        return None;
+    }
+    serde_json::from_value(out).ok()
+}
+
+/// Replaces the stand-in number with the event's amount.
+fn x_is_event_amount(e: &Effect) -> Option<Effect> {
+    amount_is(e, &Value::EventAmount)
 }
 
 fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -1237,9 +1339,9 @@ fn f_when_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         f,
     ]));
     // "that many": the number of them.
-    let eff_x = eff.replace("that many", "x");
+    let eff_x = eff.replace("that many", AMOUNT_WORD);
     let uses_x = eff_x != eff;
-    if uses_x && eff.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") {
+    if uses_x && eff.contains(AMOUNT_WORD) {
         return false;
     }
     let mut sub = Builder::new(b.ctx);
@@ -1256,25 +1358,9 @@ fn f_when_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     let effect = if uses_x {
-        let count = Value::CountSel(Box::new(found.clone()));
-        let Ok(json) = serde_json::to_value(&effect) else {
-            return false;
-        };
-        let Ok(cj) = serde_json::to_value(&count) else {
-            return false;
-        };
-        fn walk(v: serde_json::Value, c: &serde_json::Value) -> serde_json::Value {
-            use serde_json::Value as J;
-            match v {
-                J::String(s) if s == "X" => c.clone(),
-                J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v, c))).collect()),
-                J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, c)).collect()),
-                other => other,
-            }
-        }
-        match serde_json::from_value(walk(json, &cj)) {
-            Ok(e) => e,
-            Err(_) => return false,
+        match amount_is(&effect, &Value::CountSel(Box::new(found.clone()))) {
+            Some(e) => e,
+            None => return false,
         }
     } else {
         effect
