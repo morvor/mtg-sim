@@ -287,6 +287,18 @@ impl Renderer<'_> {
                 let c = self.condition(c);
                 format!("{} unless {c}", e.trim_end_matches('.'))
             }
+            // "If you would draw a card while you have no cards in hand, draw two cards
+            // instead": a replacement effect that applies while the condition is true.
+            Some(c) if matches!(s.effect, StaticEffect::Replacement(_)) && self.static_if => {
+                let c = self.condition(c);
+                let e = self.static_effect(&s.effect);
+                match e.split_once(", ") {
+                    Some((head, rest)) if head.starts_with("if ") || head.starts_with("If ") => {
+                        format!("{head} while {c}, {rest}")
+                    }
+                    _ => format!("as long as {c}, {}", lower_first(&e)),
+                }
+            }
             Some(c) => {
                 // "As long as ~ is enchanted, it has ..." / "~ has ... as long as it's
                 // enchanted": the condition comes first or last, so the object itself is

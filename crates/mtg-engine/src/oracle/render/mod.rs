@@ -1398,6 +1398,12 @@ pub fn with_article(phrase: &str) -> String {
 
 /// English plural of a noun (the last word of a phrase).
 pub fn plural(phrase: &str) -> String {
+    // "card with different names" → "cards with different names": the head noun.
+    if let Some((head, rest)) = phrase.split_once(" with ") {
+        if !head.is_empty() && !head.contains('{') {
+            return format!("{} with {rest}", plural(head));
+        }
+    }
     let (head, last) = match phrase.rsplit_once(' ') {
         Some((h, l)) => (format!("{h} "), l),
         None => (String::new(), phrase),

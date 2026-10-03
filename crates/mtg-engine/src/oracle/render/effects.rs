@@ -3720,7 +3720,9 @@ impl Renderer<'_> {
                 | Effect::PhaseOut { .. }
                 | Effect::AddRestriction { .. }
         ) || matches!(effect, Effect::KeywordAction { action, .. }
-            if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure));
+            if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure))
+            // "You may have that creature's controller create a token".
+            || matches!(effect, Effect::AsPlayer { who: w, .. } if !matches!(w, PlayerRef::You));
         if has_subject
             && !inner.starts_with("gain control")
             && !inner.starts_with("switch")

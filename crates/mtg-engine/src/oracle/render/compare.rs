@@ -123,7 +123,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               controller's after the next entry, isn't confused with it).",
     },
     Equivalence {
-        pattern: r"\b(?:each|all) ([a-z-]+?)s? (?:other than|except for) ~(?:it)?\b",
+        pattern: r"\b(?:each|all) ([a-z-]+?)s? (?:other than|except for) ~(?:it\b)?",
         replacement: "each other $1",
         why: "\"Other\" in an ability is other than the object it's on: \"all \
               creatures other than ~\" and \"all creatures except for ~\" are \"each other \
@@ -225,6 +225,23 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "$1 you cast a spell$2 or play a land$2,",
         why: "Playing a card is playing it as a land or casting it as a spell (CR 601.1a, \
               701.18b).",
+    },
+    Equivalence {
+        pattern: r"\ba graveyard has (\S+ or (?:more|fewer)) cards in it\b",
+        replacement: "a player has $1 cards in their graveyard",
+        why: "Each player has one graveyard (CR 404.1): a graveyard with twenty or more cards \
+              in it is a player's graveyard with twenty or more cards in it.",
+    },
+    Equivalence {
+        pattern: r"\bthe number of graveyards with (\S+ or (?:more|fewer)) cards in them\b",
+        replacement: "the number of players with $1 cards in their graveyard",
+        why: "As above (CR 404.1).",
+    },
+    Equivalence {
+        pattern: r"\bcontrol creatures named ([^,.]+?) and ([^,.]+?),",
+        replacement: "control a creature named $1 and a creature named $2,",
+        why: "Controlling creatures named A and B is controlling a creature named A and a \
+              creature named B.",
     },
     Equivalence {
         pattern: r"\byour life total can't change\b",
