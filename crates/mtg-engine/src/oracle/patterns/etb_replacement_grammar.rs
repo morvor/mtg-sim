@@ -316,3 +316,69 @@ fn f_enters_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "etb replacement grammar: it enters this way with counters / tapped and attacking", priority: 150, apply: f_enters_this_way } }
 
+
+/// "Lands you control enter untapped.", "Gates you control enter untapped.", "Other
+/// permanents enter untapped." (with "As long as ~ is untapped, " from the core "as long
+/// as" prefix): the controller of an entering permanent that an "enters tapped" effect
+/// would make enter tapped chooses the order of the two (CR 616.1); one an instruction
+/// puts onto the battlefield tapped still enters tapped.
+fn s_enter_untapped(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l.trim());
+    let (subj, action) = match l.strip_suffix(" enter untapped") {
+        Some(x) => (x, ReplacementAction::EnterUntapped),
+        // "Other permanents enter tapped." (the other half of Archelos)
+        None => (
+            l.strip_suffix(" enter tapped")
+                .filter(|x| x.starts_with("other "))?,
+            ReplacementAction::EnterTapped,
+        ),
+    };
+    let (f, plural, rest) = parse_object_phrase(subj)?;
+    if !plural || !rest.trim().is_empty() {
+        return None;
+    }
+    Some(vec![static_ability(
+        StaticEffect::Replacement(ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(f),
+            action,
+            self_replacement: false,
+            optional: false,
+        }),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "etb replacement grammar: permanents enter untapped", priority: 150, parse: s_enter_untapped } }
+
+/// "Creatures played by your opponents enter tapped." (Uphill Battle): creature spells
+/// they cast (CR 601.1) — permanents that come from the stack under their control.
+fn s_played_enter_tapped(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l.trim()).strip_suffix(" enter tapped")?;
+    let (subj, who) = r.split_once(" played by ")?;
+    let rel = match who {
+        "your opponents" => PlayerRel::Opponent,
+        "you" => PlayerRel::You,
+        _ => return None,
+    };
+    let (f, plural, rest) = parse_object_phrase(subj)?;
+    if !plural || !rest.trim().is_empty() {
+        return None;
+    }
+    Some(vec![static_ability(
+        StaticEffect::Replacement(ReplacementDef {
+            event: ReplacementEvent::Where {
+                event: Box::new(ReplacementEvent::EntersBattlefield(Filter::and(vec![
+                    f,
+                    Filter::ControlledBy(rel),
+                ]))),
+                cond: Condition::SelMatches(Sel::TriggerObject, Filter::InZone(ZoneKind::Stack)),
+            },
+            action: ReplacementAction::EnterTapped,
+            self_replacement: false,
+            optional: false,
+        }),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "etb replacement grammar: creatures played by your opponents enter tapped", priority: 150, parse: s_played_enter_tapped } }

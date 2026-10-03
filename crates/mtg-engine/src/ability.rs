@@ -2346,6 +2346,10 @@ pub enum StepKind {
 pub enum ReplacementAction {
     /// Enters tapped (CR 614.1c).
     EnterTapped,
+    /// "[Permanents] enter untapped": undoes "enters tapped" replacement effects applied
+    /// before it (the affected player chooses the order, CR 616.1); a permanent an
+    /// instruction puts onto the battlefield tapped still enters tapped.
+    EnterUntapped,
     /// Enters with counters.
     EnterWithCounters(CounterKind, Value),
     /// "As this enters, ..." — the effect is performed while the replacement applies,

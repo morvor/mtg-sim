@@ -187,6 +187,9 @@ struct Candidate {
 /// control, back-face, or face-down effect has changed what applies (CR 616.1b–d, 616.1f).
 struct EntrySnapshot {
     obj: ObjectId,
+    /// Whether the event as first proposed put it onto the battlefield tapped (not
+    /// because of a replacement effect; see [`ReplacementAction::EnterUntapped`]).
+    tapped: bool,
     copy_of: Option<ObjectId>,
     controller: Option<PlayerId>,
     face: Option<FaceState>,
@@ -271,6 +274,7 @@ impl Game {
                     _ => {
                         snap = Some(Rc::new(EntrySnapshot {
                             obj: m.obj,
+                            tapped: m.etb.tapped,
                             copy_of: m.etb.copy_of,
                             controller: m.etb.controller,
                             face: m.etb.face,
@@ -326,7 +330,17 @@ impl Game {
                 return self.replace_rec(ev, applied, depth + 1, self_only, snap);
             }
         }
+        let untapped = matches!(cand.def.action, ReplacementAction::EnterUntapped);
         let mut results = self.apply_replacement(&cand, ev, &applied);
+        // "Enters untapped" doesn't undo an instruction that put it onto the battlefield
+        // tapped.
+        if untapped && snap.as_ref().is_some_and(|s| s.tapped) {
+            for r in &mut results {
+                if let ReplEvent::Move(m) = r {
+                    m.etb.tapped = true;
+                }
+            }
+        }
         if let ReplKey::Static(src, uid) = cand.key {
             crate::structure::record_replacement(self, src, uid);
         }
@@ -1334,6 +1348,10 @@ impl Game {
             }
             (ReplacementAction::EnterTapped, ReplEvent::Move(mut m)) => {
                 m.etb.tapped = true;
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::EnterUntapped, ReplEvent::Move(mut m)) => {
+                m.etb.tapped = false;
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::EnterWithCounters(k, v), ReplEvent::Move(mut m)) => {

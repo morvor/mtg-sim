@@ -145,3 +145,76 @@ fn phylactery_lich_puts_a_counter_on_an_artifact_as_it_enters() {
     assert_eq!(t.counters(rock, "phylactery"), 1);
     assert_eq!(t.named_on_battlefield("Phylactery Lich").len(), 1);
 }
+
+#[test]
+fn gond_gate_lets_gates_enter_untapped_but_not_ones_put_onto_the_battlefield_tapped() {
+    cr!("614.1c", "616.1");
+    ruling!(
+        "Spelunking",
+        "If a land has an ability that says it enters the battlefield tapped, you choose the order"
+    );
+    compiles(&["Gond Gate", "Uphill Battle", "Archelos, Lagoon Mystic"]);
+    // The controller of the entering Gate chooses the order: one order leaves it untapped,
+    // the other tapped.
+    let mut results = Vec::new();
+    for pick in 0..2 {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Gond Gate");
+        t.answer(
+            P0,
+            DecisionKind::Replacement,
+            mtg_engine::decision::Answer::Index(pick),
+        );
+        let gate = t.enter(P0, "Azorius Guildgate");
+        t.resolve_all();
+        results.push(t.g.obj(t.g.current(gate)).tapped);
+    }
+    results.sort();
+    assert_eq!(results, vec![false, true]);
+    // Put onto the battlefield tapped by an instruction: it stays tapped.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Gond Gate");
+    let card = t.graveyard(P0, "Plains");
+    let mut d = mtg_engine::ability::Destination::battlefield();
+    d.tapped = true;
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    let moved = t.g.move_to_destination(vec![card], &d, &mut ctx);
+    assert!(t.g.obj(moved[0]).tapped);
+}
+
+#[test]
+fn uphill_battle_taps_creatures_opponents_cast_only() {
+    cr!("614.1c", "601.1");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Uphill Battle");
+    t.g.turn.active = P1;
+    t.lands(P1, "Forest", 2);
+    let bears = t.hand(P1, "Grizzly Bears");
+    t.cast(P1, bears).go();
+    t.resolve();
+    let b = t.named_on_battlefield("Grizzly Bears")[0];
+    assert!(t.g.obj(b).tapped);
+    // Put onto the battlefield without being played: untapped.
+    let other = t.enter(P1, "Hill Giant");
+    t.resolve_all();
+    assert!(!t.g.obj(t.g.current(other)).tapped);
+    // Your own creatures aren't affected.
+    let mine = t.enter(P0, "Grizzly Bears");
+    t.resolve_all();
+    assert!(!t.g.obj(t.g.current(mine)).tapped);
+}
+
+#[test]
+fn archelos_makes_other_permanents_enter_tapped_while_tapped() {
+    cr!("614.1c");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Archelos, Lagoon Mystic");
+    t.g.tap(a);
+    let bears = t.enter(P1, "Grizzly Bears");
+    t.resolve_all();
+    assert!(t.g.obj(t.g.current(bears)).tapped);
+    t.g.untap(a);
+    let giant = t.enter(P1, "Hill Giant");
+    t.resolve_all();
+    assert!(!t.g.obj(t.g.current(giant)).tapped);
+}

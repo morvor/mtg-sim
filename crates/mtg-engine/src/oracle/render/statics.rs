@@ -2154,6 +2154,10 @@ impl Renderer<'_> {
                         format!("{subj} enter tapped")
                     }
                     A::EnterTapped => format!("{subj} enters tapped"),
+                    A::EnterUntapped if subj != "~" && subj != "~it" => {
+                        format!("{subj} enter untapped")
+                    }
+                    A::EnterUntapped => format!("{subj} enters untapped"),
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
                         format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default())
@@ -2920,6 +2924,7 @@ impl Renderer<'_> {
             // Enters-the-battlefield replacements are worded with their event
             // (`as_enters`); here they have no event to go with.
             A::EnterTapped
+            | A::EnterUntapped
             | A::EnterWithCounters(..)
             | A::AsEnters(_)
             | A::EnterAsCopy { .. }
