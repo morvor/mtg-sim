@@ -2808,7 +2808,9 @@ impl Renderer<'_> {
                     let w = self.sel(what, Case::Subj);
                     let d = self.duration(duration);
                     let s = format!("{w} becomes the basic land type of your choice");
-                    parts.push(join_words(&[s, d]));
+                    let b = format!("choose a basic land type. {w} becomes that type");
+                    let both = either_form(join_words(&[s, d.clone()]), join_words(&[b, d]));
+                    parts.push(both);
                     i += 2;
                     continue;
                 }

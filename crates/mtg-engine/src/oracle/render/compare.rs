@@ -1231,9 +1231,18 @@ fn sentence_rewrites(s: &str) -> String {
                 || body.contains(" unless ")
                 || body.contains("\"");
             if keep {
-                c[0].to_string()
-            } else {
-                format!("{lead}if {cond}, {body}.")
+                return c[0].to_string();
+            }
+            // After a trigger condition: "When ~ enters, draw a card if a creature died
+            // this turn." is "When ~ enters, if a creature died this turn, draw a card."
+            let trigger = body.starts_with("when ")
+                || body.starts_with("whenever ")
+                || body.starts_with("at the beginning ");
+            match body.split_once(", ") {
+                Some((t, rest)) if trigger && !rest.is_empty() => {
+                    format!("{lead}{t}, if {cond}, {rest}.")
+                }
+                _ => format!("{lead}if {cond}, {body}."),
             }
         })
         .to_string();
