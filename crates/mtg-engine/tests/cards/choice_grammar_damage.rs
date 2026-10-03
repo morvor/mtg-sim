@@ -2,6 +2,8 @@
 //! (CR 601.2d, 603.3d), and damage dealt by each object of a group named before (CR 120.2).
 
 use mtg_engine::decision::Answer;
+use mtg_engine::object::Zone;
+use mtg_engine::turn::Step;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -86,4 +88,37 @@ fn shatterskull_smashing_divides_x_when_x_is_less_than_6() {
     assert!(t.on_battlefield(a));
     assert_eq!(t.obj_now(a).damage, 3);
     assert!(!t.on_battlefield(b));
+}
+
+#[test]
+fn avacyns_judgment_divides_x_when_its_madness_cost_was_paid() {
+    cr!("601.2d", "702.35a");
+    compiles("Avacyn's Judgment");
+    let mut t = TestGame::new(2);
+    for c in t.g.player(P0).hand.clone() {
+        t.g.players[P0.idx()].hand.retain(|x| *x != c);
+        t.g.players[P0.idx()].library.push(c);
+        t.g.objects[c.0 as usize].zone = Zone::Library(P0);
+    }
+    t.lands(P0, "Mountain", 4);
+    t.hand(P0, "Avacyn's Judgment");
+    t.hand(P0, "Grizzly Bears");
+    let a = t.battlefield(P1, "Hill Giant");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    // P1 makes P0 discard both cards; Avacyn's Judgment is cast for its madness cost
+    // with X = 3: 3 damage to divide instead of 2.
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Swamp", 3);
+    let rot = t.hand(P1, "Mind Rot");
+    t.cast(P1, rot).target(P0).go();
+    t.resolve();
+    t.settle();
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    t.answer_targets(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![1, 2]));
+    t.resolve();
+    t.resolve();
+    assert!(!t.on_battlefield(b));
+    assert_eq!(t.obj_now(a).damage, 1);
 }

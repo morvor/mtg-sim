@@ -93,3 +93,12 @@ fn divided_instead(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: if [condition], divided damage among them instead", priority: 60, parse: divided_instead } }
+
+/// The same sentence as a followup of the divided damage it changes (leading "If ...,
+/// ... instead" sentences reach the followup patterns first).
+fn divided_instead_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let divides = serde_json::to_string(prev).is_ok_and(|s| s.contains("DealDividedDamage"));
+    divides && divided_instead(l, b).is_some()
+}
+
+inventory::submit! { super::FollowupPattern { name: "choice grammar: if [condition], divided damage among them instead (followup)", priority: 60, apply: divided_instead_followup } }
