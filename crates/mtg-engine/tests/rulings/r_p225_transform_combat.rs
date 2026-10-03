@@ -104,8 +104,20 @@ fn transforming_doesnt_untap_a_permanent() {
         "Town Gossipmonger // Incited Rabble",
         "Note that transforming Town Gossipmonger won’t untap it."
     );
+    ruling!(
+        "Heirloom Mirror // Inherited Fiend",
+        "Heirloom Mirror will still be tapped after it transforms into Inherited Fiend unless some other effect has untapped it."
+    );
     supported(TANGLECLAW);
     supported(GOSSIP);
+    // (Heirloom Mirror's ability, which taps it and then may transform it, doesn't
+    // compile; a tapped Heirloom Mirror transformed by an effect stays tapped.)
+    let mut t = TestGame::new(2);
+    let mirror = t.battlefield(P0, "Heirloom Mirror // Inherited Fiend");
+    t.g.tap(mirror);
+    transform(&mut t, mirror);
+    assert_eq!(name_of(&t, mirror), "Inherited Fiend");
+    assert!(t.obj_now(mirror).tapped);
     let mut t = TestGame::new(2);
     let wolf = t.battlefield(P0, TANGLECLAW);
     attack_with(&mut t, &[(wolf, Entity::Player(P1))]);
