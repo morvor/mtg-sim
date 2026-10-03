@@ -727,6 +727,24 @@ impl Renderer<'_> {
                 let g = self.gap(format!("Sel::ThisTurn({c:?})"));
                 decline(g, case)
             }
+            // "the creatures destroyed this way": the objects an earlier instruction acted
+            // on.
+            Sel::Matching(inner, f)
+                if self
+                    .this_way_of(match inner.as_ref() {
+                        Sel::Before(x) => x.as_ref(),
+                        x => x,
+                    })
+                    .is_some() =>
+            {
+                let inner = match inner.as_ref() {
+                    Sel::Before(x) => x.as_ref(),
+                    x => x,
+                };
+                let (verb, _, _) = self.this_way_of(inner).unwrap_or(("affected", false, None));
+                let n = self.noun(f, Num::Many);
+                decline(format!("{n} {verb} this way"), case)
+            }
             Sel::Matching(inner, f) => {
                 let f = Filter::and(vec![f.clone(), Filter::In(inner.clone())]);
                 let n = self.noun(&f, Num::Many);
