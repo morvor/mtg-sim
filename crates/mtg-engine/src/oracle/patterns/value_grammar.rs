@@ -237,6 +237,15 @@ fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     {
         return count(r, b);
     }
+    // "the life total of an opponent with the most life" (Roiling Horror).
+    if let Some(r) = s.strip_prefix("the life total of an opponent with the most life") {
+        let v = Value::OverPlayers(
+            AggOp::Max,
+            PlayerFilter::Opponent,
+            Box::new(Value::LifeTotal(PlayerRef::Iterated)),
+        );
+        return Some((v, r.to_string()));
+    }
     for (p, op) in [
         ("the greatest ", AggOp::Max),
         ("the highest ", AggOp::Max),
@@ -1555,7 +1564,10 @@ fn extreme(op: AggOp, r: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some((Value::Aggregate(op, stat, Box::new(Sel::All(f))), rest));
     }
     if let Some(x) = r.strip_prefix("life total among ") {
-        let (pf, rest) = if let Some(t) = x.strip_prefix("all players") {
+        let (pf, rest) = if let Some(t) = x
+            .strip_prefix("all players")
+            .or_else(|| x.strip_prefix("players"))
+        {
             (PlayerFilter::Any, t)
         } else if let Some(t) = x.strip_prefix("your opponents") {
             (PlayerFilter::Opponent, t)

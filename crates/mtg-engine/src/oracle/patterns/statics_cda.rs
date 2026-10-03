@@ -26,6 +26,16 @@ fn is_star(v: Option<&str>) -> bool {
     v.is_some_and(|v| v.contains('*'))
 }
 
+/// An amount the value grammar reads ("20 minus the highest life total among players",
+/// "your life total minus the life total of an opponent with the most life"), with no
+/// targets and "it" meaning the source.
+fn grammar_amount(s: &str, ctx: &CompileContext) -> Option<Value> {
+    let mut b = crate::oracle::effects::Builder::new(ctx);
+    b.it = Sel::This;
+    let (v, rest) = crate::oracle::statics::parse_value_phrase(s, &mut b)?;
+    (rest.trim().is_empty() && b.targets.is_empty()).then_some(v)
+}
+
 fn parse_cda(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l);
     let it = Some(Sel::This);
@@ -33,7 +43,7 @@ fn parse_cda(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
         if !is_star(ctx.power) || !is_star(ctx.toughness) {
             return None;
         }
-        let v = parse_amount(r, it.as_ref())?;
+        let v = parse_amount(r, it.as_ref()).or_else(|| grammar_amount(r, ctx))?;
         return Some(vec![cda(Some(v.clone()), Some(v), text)]);
     }
     if let Some(r) = l.strip_prefix("~'s power is equal to ") {

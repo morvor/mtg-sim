@@ -2466,6 +2466,29 @@ impl Game {
                     ))));
                     Modification::AddKeyword(k)
                 }
+                // "Protection from each of that permanent's colors": the colors it has as
+                // the effect is created (CR 608.2h), one quality per color (CR 702.16g).
+                Modification::AddKeyword(k)
+                    if matches!(&k.filter, Some(Filter::SharesColor(sel))
+                        if !matches!(**sel, Sel::This)) =>
+                {
+                    let mut k = k.clone();
+                    if let Some(Filter::SharesColor(sel)) = &k.filter {
+                        let colors = self
+                            .eval_sel(sel, ctx)
+                            .iter()
+                            .filter_map(|e| e.object())
+                            .fold(ColorSet::NONE, |acc, o| acc.union(self.obj(o).chars.colors));
+                        k.filter = Some(Filter::Or(
+                            Color::ALL
+                                .iter()
+                                .filter(|c| colors.contains(**c))
+                                .map(|c| Filter::Color(*c))
+                                .collect(),
+                        ));
+                    }
+                    Modification::AddKeyword(k)
+                }
                 // Values chosen for the source are locked in as the effect is created
                 // (CR 608.2h, 607.2d).
                 Modification::AddKeyword(k)

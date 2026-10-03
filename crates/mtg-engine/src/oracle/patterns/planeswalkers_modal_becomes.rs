@@ -45,7 +45,7 @@ fn split_duration(l: &str) -> (Duration, &str) {
 
 /// "still a [type]" (CR 205.1b): the object keeps all its prior card types, subtypes and
 /// supertypes; the new ones are added. Returns None for modifications that can't keep them.
-fn retain_prior_types(mods: Vec<Modification>) -> Option<Vec<Modification>> {
+pub(crate) fn retain_prior_types(mods: Vec<Modification>) -> Option<Vec<Modification>> {
     let mut out = Vec::new();
     let mut changes_types = false;
     for m in mods {
@@ -70,7 +70,7 @@ fn retain_prior_types(mods: Vec<Modification>) -> Option<Vec<Modification>> {
 }
 
 /// Whether the modifications make the objects creatures (with a card type change).
-fn makes_creature(mods: &[Modification]) -> bool {
+pub(crate) fn makes_creature(mods: &[Modification]) -> bool {
     mods.iter().any(|m| match m {
         Modification::SetTypes { types, .. } | Modification::AddTypes(types) => {
             types.contains(&CardType::Creature)
@@ -80,7 +80,7 @@ fn makes_creature(mods: &[Modification]) -> bool {
 }
 
 /// What the subject text says the affected objects are (for the type predicate's checks).
-fn subject(text: &str, b: &Builder) -> Subject {
+pub(crate) fn subject(text: &str, b: &Builder) -> Subject {
     // A pronoun for a target: what the target's text says it is ("target Mountain").
     let referent = match (&b.it, text) {
         (Sel::Target(i), "it" | "them" | "they") => {

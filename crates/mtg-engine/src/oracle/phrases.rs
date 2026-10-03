@@ -1504,6 +1504,11 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         min = Value::Const(1);
         max = Value::Const(2);
         s = r;
+    } else if let Some(r) = strip(s, "one or more ").filter(|r| strip(r, "target ").is_some()) {
+        // "one or more target creatures": any number of them, at least one (CR 601.2c).
+        min = Value::Const(1);
+        max = Value::Const(99);
+        s = r;
     } else if let Some((n, r)) = parse_number(s) {
         if strip(r, "target").is_some() || strip(r, "other target").is_some() {
             // "X target creatures" means exactly X of them (CR 601.2c).

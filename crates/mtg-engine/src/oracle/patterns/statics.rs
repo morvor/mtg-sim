@@ -650,7 +650,7 @@ fn group_subject(filter: Filter) -> Subject {
 }
 
 /// Parses a subject. `referent` is the object a pronoun refers to.
-fn parse_subject(s: &str, referent: Option<&Sel>, ctx: &CompileContext) -> Option<Subject> {
+pub(crate) fn parse_subject(s: &str, referent: Option<&Sel>, ctx: &CompileContext) -> Option<Subject> {
     let s = s.trim();
     let this_hint = || {
         if ctx.type_line.card_types.contains(CardType::Creature) {
@@ -2551,7 +2551,7 @@ fn set_other_types_lost(outs: &mut Vec<Out>) {
 }
 
 /// "during your turn" / "during turns other than yours".
-fn turn_condition(s: &str) -> Option<Condition> {
+pub(crate) fn turn_condition(s: &str) -> Option<Condition> {
     match s {
         "during combat" => Some(Condition::Phase(PhaseCond::Combat)),
         "during your turn" | "during each of your turns" => Some(Condition::YourTurn),
