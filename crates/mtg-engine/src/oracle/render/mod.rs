@@ -614,6 +614,7 @@ pub enum Num {
 
 /// The renderer: holds the state of the ability being rendered (its targets, which of
 /// them have been mentioned) and the gaps found so far.
+#[derive(Clone)]
 pub struct Renderer<'a> {
     pub(crate) info: &'a FaceInfo,
     pub gaps: Vec<String>,
@@ -739,9 +740,35 @@ pub struct Renderer<'a> {
     /// Targets remembered in variables, first mentioned through them: (variable, target
     /// phrase, mentioned yet).
     pub(crate) target_vars: Vec<(Var, String, bool)>,
+    /// The static ability being rendered grants abilities to an Equipment ("As long as
+    /// enchanted permanent is an Equipment, it has \"Equipped creature has flying.\"").
+    pub(crate) grants_to_equipment: bool,
+    /// The quote depth of an ability granted to an Equipment: there, the object the
+    /// ability's holder is attached to is "equipped creature".
+    pub(crate) equipment_holder_depth: Option<u32>,
 }
 
 impl<'a> Renderer<'a> {
+    /// Renders two wordings of the same thing from the same state (each sees the state
+    /// as it was before either), keeping the state the second leaves and the gaps of both.
+    pub(crate) fn two_ways(
+        &mut self,
+        a: impl FnOnce(&mut Self) -> String,
+        b: impl FnOnce(&mut Self) -> String,
+    ) -> (String, String) {
+        let before = self.clone();
+        let x = a(self);
+        let gaps = std::mem::take(&mut self.gaps);
+        *self = before;
+        let y = b(self);
+        for g in gaps {
+            if !self.gaps.contains(&g) {
+                self.gaps.push(g);
+            }
+        }
+        (x, y)
+    }
+
     pub fn new(info: &'a FaceInfo) -> Renderer<'a> {
         Renderer {
             info,
@@ -749,6 +776,8 @@ impl<'a> Renderer<'a> {
             targets: Vec::new(),
             introduced: Vec::new(),
             quote_depth: 0,
+            grants_to_equipment: false,
+            equipment_holder_depth: None,
             granted_keyword: false,
             self_before_target: false,
             last_actor_other: false,
@@ -867,9 +896,16 @@ impl<'a> Renderer<'a> {
         let saved_v = std::mem::take(&mut self.var_defs);
         let saved_ov = std::mem::take(&mut self.outer_vars);
         let saved_p = std::mem::take(&mut self.plural_vars);
+        let saved_eq = self.equipment_holder_depth;
+        let saved_ge = std::mem::replace(&mut self.grants_to_equipment, false);
         self.quote_depth += 1;
+        if saved_ge {
+            self.equipment_holder_depth = Some(self.quote_depth);
+        }
         let s = self.ability(a);
         self.quote_depth -= 1;
+        self.equipment_holder_depth = saved_eq;
+        self.grants_to_equipment = saved_ge;
         self.var_defs = saved_v;
         self.outer_vars = saved_ov;
         self.plural_vars = saved_p;
@@ -926,7 +962,15 @@ impl<'a> Renderer<'a> {
                 }
             }
             AbilityKind::Triggered(t) => self.triggered(t),
-            AbilityKind::Static(s) => self.static_ability(s),
+            AbilityKind::Static(s) => {
+                let saved = std::mem::replace(
+                    &mut self.grants_to_equipment,
+                    statics::grants_to_equipment(s),
+                );
+                let t = self.static_ability(s);
+                self.grants_to_equipment = saved;
+                t
+            }
             AbilityKind::Keyword(k) => self.keyword(k),
             AbilityKind::Unsupported(_) => self.gap("unsupported ability"),
         }

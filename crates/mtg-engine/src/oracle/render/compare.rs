@@ -180,6 +180,31 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               \"nonartifact, nonblack creature\" is a \"nonblack nonartifact creature\".",
     },
     Equivalence {
+        pattern: r"\b(creatures?|creature tokens?)((?: you control)?) that(?:'s| is| are) (enchanted|equipped)( get\b| gets\b| have\b| has\b|[.,])",
+        replacement: "$3 $1$2$4",
+        why: "A clause saying what an object is describes it as the adjective does: \
+              \"creatures you control that are enchanted\" are \"enchanted creatures you \
+              control\".",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?|permanents?)((?: you control| your opponents control| an opponent controls)?) that(?:'s| is| are) (?:an? )?([a-z-]+),? (or|and/or) (?:an? )?([a-z-]+)\b",
+        replacement: "$3 $4 $5 $1$2",
+        why: "The same for kinds: \"each creature you control that's a Wolf or a \
+              Werewolf\" is \"each Wolf or Werewolf creature you control\".",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?|permanents?)((?: you control| your opponents control| an opponent controls)?) that(?:'s| is| are) (?:an? )?([a-z-]+), (?:an? )?([a-z-]+), (or|and/or) (?:an? )?([a-z-]+)\b",
+        replacement: "$3, $4, $5 $6 $1$2",
+        why: "The same with three kinds: \"each creature that's a Barbarian, a Warrior, or \
+              a Berserker\".",
+    },
+    Equivalence {
+        pattern: r"\bnontoken (white|blue|black|red|green)\b",
+        replacement: "$1 nontoken",
+        why: "The same for a color and \"nontoken\": a \"nontoken blue creature\" is a \
+              \"blue nontoken creature\".",
+    },
+    Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(~it|~|it) (gets|gains) ([^.;",{]*?)(,? and|,? then) (deals)\b"#,
         replacement: "$1$2 $3 $4$5 $2 $6",
         why: "As for players above: \"~ gets +1/+0 until end of turn and deals 1 damage to \

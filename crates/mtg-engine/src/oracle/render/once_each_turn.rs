@@ -53,8 +53,9 @@ impl Renderer<'_> {
             ZoneKind::Hand => "from your hand",
             _ => return None,
         };
+        let terms = self.static_permission_terms(pp);
         Some(format!(
-            "once during each of your turns, you may {thing} {zone}"
+            "once during each of your turns, you may {thing} {zone}{terms}"
         ))
     }
 }

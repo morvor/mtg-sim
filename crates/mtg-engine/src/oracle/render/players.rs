@@ -487,8 +487,13 @@ impl Renderer<'_> {
                 }
                 vars::SACRIFICED => {
                     // "Target player sacrifices a creature. ... that creature's toughness".
+                    // Whatever was sacrificed was a permanent (CR 701.21a): "the
+                    // sacrificed permanent" whatever its type.
                     let n = self.sacrificed.clone().unwrap_or_else(|| "creature".into());
-                    decline(format!("{{alt:the sacrificed {n}|that {n}}}"), case)
+                    decline(
+                        format!("{{alt:the sacrificed {n}|that {n}|the sacrificed permanent}}"),
+                        case,
+                    )
                 }
                 vars::CREATED => it(case),
                 // "a card for each card exiled from their hand this way".

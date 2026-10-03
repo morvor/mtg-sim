@@ -29,7 +29,33 @@ impl Ev {
 }
 
 impl Renderer<'_> {
+    /// The players of a trigger event that triggers once for a whole batch of events
+    /// ("one or more opponents"), or of one event ("an opponent").
+    fn batch_players(&mut self, who: PlayerRel) -> String {
+        match who {
+            PlayerRel::Any if self.batch_once => "one or more players".into(),
+            PlayerRel::Opponent if self.batch_once => "one or more opponents".into(),
+            other => self.rel_subject(other),
+        }
+    }
+
     pub(crate) fn triggered(&mut self, t: &TriggeredAbility) -> String {
+        // CR 702.178a: "Max speed — [triggered ability]": it triggers only while you have
+        // max speed (the object has the ability only then).
+        if let TriggerCond::Where {
+            trigger,
+            cond: Condition::MaxSpeed,
+        } = &t.trigger
+        {
+            let mut inner = t.clone();
+            inner.trigger = trigger.as_ref().clone();
+            let (i, c) = self.two_ways(|r| r.triggered(&inner), |r| r.triggered_plain(t));
+            return format!("{{alt:Max speed — {i}|{c}}}");
+        }
+        self.triggered_plain(t)
+    }
+
+    fn triggered_plain(&mut self, t: &TriggeredAbility) -> String {
         // Saga chapters (CR 714.2b): "I — effect".
         if let TriggerCond::Custom(name) = &t.trigger {
             if let Some(nums) = chapter_numbers(name) {
@@ -600,15 +626,18 @@ impl Renderer<'_> {
                     }
                 };
                 // "Whenever one or more players discard one or more cards" (once for all).
-                let w = if self.batch_once && matches!(who, PlayerRel::Any) {
-                    "one or more players".to_string()
-                } else {
-                    self.rel_subject(*who)
-                };
+                let w = self.batch_players(*who);
                 Ev::new(w, format!("discard {n}"))
             }
-            TriggerCond::GainsLife { who } => Ev::new(self.rel_subject(*who), "gain life"),
-            TriggerCond::LosesLife { who } => Ev::new(self.rel_subject(*who), "lose life"),
+            // "Whenever one or more opponents lose life" (once for all).
+            TriggerCond::GainsLife { who } => {
+                let w = self.batch_players(*who);
+                Ev::new(w, "gain life")
+            }
+            TriggerCond::LosesLife { who } => {
+                let w = self.batch_players(*who);
+                Ev::new(w, "lose life")
+            }
             TriggerCond::CountersPut { filter, kind, each } => {
                 let k = match kind {
                     Some(k) => counter_name(k),

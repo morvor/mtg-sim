@@ -304,7 +304,9 @@ impl Renderer<'_> {
         let actor_other = match e {
             Effect::May { who, .. }
             | Effect::PayOptional { who, .. }
-            | Effect::AsPlayer { who, .. } => Some(!matches!(who, PlayerRef::You)),
+            | Effect::AsPlayer { who, .. }
+            | Effect::Sacrifice { who, .. }
+            | Effect::Discard { who, .. } => Some(!matches!(who, PlayerRef::You)),
             Effect::Seq(_) | Effect::If { .. } | Effect::Noop => None,
             _ => Some(false),
         };
@@ -770,10 +772,13 @@ impl Renderer<'_> {
             }
             Effect::ChooseOne { who, options } => {
                 let w = self.player(who, Case::Subj);
+                // A choice made as the effect resolves (CR 608.2d), not a modal spell's or
+                // ability's choice of modes as it's put on the stack (CR 700.2a-b, which a
+                // printed "Choose one —" always is): written so the two can't be confused.
                 let head = if w == "you" {
-                    "choose one —".to_string()
+                    "as this resolves, choose one —".to_string()
                 } else {
-                    format!("{w} chooses one —")
+                    format!("as this resolves, {w} chooses one —")
                 };
                 let mut s = head;
                 let mut texts = Vec::new();
@@ -3714,7 +3719,8 @@ impl Renderer<'_> {
             // the player putting it there; cards still say "under your control" when the
             // object isn't theirs, and "under its owner's control" when it goes back.
             match &to.controller {
-                Some(PlayerRef::You) if yours => {}
+                // The player putting it there controls it (CR 110.2a): cards may say so.
+                Some(PlayerRef::You) if yours => s.push_str(" {opt:under your control}"),
                 // Its owner is you: a card from your graveyard enters under your control
                 // (CR 110.2a), said or not.
                 Some(PlayerRef::OwnerOf(_)) if yours => {
@@ -3926,7 +3932,22 @@ impl Renderer<'_> {
         }
         if spec.shuffle == SearchShuffle::Before {
             let order = if many { " {opt:in any order}" } else { "" };
-            s.push_str(&format!(", then shuffle and put {pron} on top{order}"));
+            // Where the cards go once the library is shuffled: on top, or "third from the
+            // top".
+            let pos = match spec.dests.as_slice() {
+                [d] if d.or.is_empty() && d.to.zone == ZoneKind::Library => match d.to.position {
+                    LibraryPosition::Top => "on top".to_string(),
+                    LibraryPosition::FromTop(n) => format!("{} from the top", ordinal_word(n + 1)),
+                    _ => self.gap("a search's destination after shuffling"),
+                },
+                _ => self.gap("a search's destination after shuffling"),
+            };
+            let what = if many {
+                "{alt:them|those cards}"
+            } else {
+                "{alt:it|that card}"
+            };
+            s.push_str(&format!(", then shuffle and put {what} {pos}{order}"));
             return s;
         }
         let own = same_player(&spec.who, &spec.whose);
@@ -4172,6 +4193,41 @@ impl Renderer<'_> {
     }
 
     fn create_token(
+        &mut self,
+        spec: &TokenSpec,
+        count: &Value,
+        tapped: bool,
+        attacking: bool,
+    ) -> String {
+        // "create a 1/1 white Soldier creature token that's tapped and attacking": the
+        // status said after the token, or before it ("a tapped and attacking token").
+        if attacking {
+            let saved = self.gaps.len();
+            let base = self.create_token(spec, count, false, false);
+            self.gaps.truncate(saved);
+            let prefix = self.create_token_status(spec, count, tapped, attacking);
+            let st = match (tapped, attacking) {
+                (true, true) => "tapped and attacking",
+                (true, false) => "tapped",
+                _ => "attacking",
+            };
+            let that = if matches!(count, Value::Const(1)) {
+                "that's"
+            } else {
+                "that are"
+            };
+            let suffix = match base.find(", where X is") {
+                Some(i) if !base.contains("{alt:") => {
+                    format!("{} {that} {st}{}", &base[..i], &base[i..])
+                }
+                _ => format!("{base} {that} {st}"),
+            };
+            return format!("{{alt:{prefix}|{suffix}}}");
+        }
+        self.create_token_status(spec, count, tapped, false)
+    }
+
+    fn create_token_status(
         &mut self,
         spec: &TokenSpec,
         count: &Value,

@@ -211,6 +211,9 @@ impl Renderer<'_> {
 
     /// The noun used for "enchanted [thing]" / "equipped creature" on this face.
     pub(crate) fn attached_noun(&mut self) -> String {
+        if self.equipment_holder_depth == Some(self.quote_depth) {
+            return "equipped creature".into();
+        }
         if self.info.has_subtype("Equipment") {
             return "equipped creature".into();
         }
@@ -959,11 +962,16 @@ impl Renderer<'_> {
         words.extend(np.subtypes.iter().cloned());
         let mut types = np.types.clone();
         types.sort_by_key(|t| type_order(*t));
+        // "each Frog, Rabbit, Raccoon, or Squirrel" / "Knights and Walls": the same kinds
+        // either way. With a card type, the alternatives come first: "a Wolf or Werewolf
+        // creature".
+        let conj = if self.alt_and { "{alt:and|or}" } else { "or" };
+        let alts_first = !np.alts.is_empty() && !types.is_empty() && np.subtypes.is_empty();
+        if alts_first {
+            words.push(join_list(&np.alts, conj));
+        }
         words.extend(types.iter().map(|t| t.word().to_string()));
-        if !np.alts.is_empty() {
-            // "each Frog, Rabbit, Raccoon, or Squirrel" / "Knights and Walls": the same
-            // kinds either way.
-            let conj = if self.alt_and { "{alt:and|or}" } else { "or" };
+        if !np.alts.is_empty() && !alts_first {
             words.push(join_list(&np.alts, conj));
         }
         if np.permanent_card {
@@ -1128,16 +1136,15 @@ impl Renderer<'_> {
         let mut words: Vec<String> = Vec::new();
         words.extend(np.status.iter().cloned());
         words.extend(np.supers.iter().cloned());
+        // Oracle order: "a nonland historic permanent".
+        let nons = np.nons.clone();
         words.extend(np.colors.iter().cloned());
-        words.extend(np.quality.iter().cloned());
-        if !np.nons.is_empty() {
-            let nons = np.nons.join(", ");
-            // "nonland permanent card": the non- word goes before "permanent".
-            match words.iter().position(|w| w == "permanent") {
-                Some(i) => words.insert(i, nons),
-                None => words.push(nons),
-            }
+        if !nons.is_empty() {
+            let nons = nons.join(", ");
+            words.push(nons);
         }
+        // "nonland permanent card": the non- word goes before "permanent".
+        words.extend(np.quality.iter().cloned());
         let head = match num {
             Num::One => self.head(&np),
             Num::Many => self.plural_head(&np),

@@ -39,6 +39,10 @@ impl Renderer<'_> {
                 if !matches!(c, PlayerRef::You) {
                     let p = self.player(c, super::players::Case::Poss);
                     d.push_str(&format!(" under {p} control"));
+                } else {
+                    // The player putting it there controls it (CR 110.2a): cards may say
+                    // so.
+                    d.push_str(" {opt:under your control}");
                 }
             }
             for (k, n) in &to.with_counters {
