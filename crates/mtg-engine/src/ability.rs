@@ -2195,6 +2195,9 @@ pub enum ManaProduction {
     Amount(ManaType, Value),
     /// Mana of any color among the colors of the selected objects (commander identity etc.).
     AnyColorAmong(Filter),
+    /// One mana of each color among the matching objects ("For each color among
+    /// permanents you control, add one mana of that color", CR 105.4, 106.1).
+    EachColorAmong(Filter),
     /// One mana of any type the permanent tapped for mana produced (from the triggering
     /// event, "one mana of any type that land produced").
     AnyTypeProduced,

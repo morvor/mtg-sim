@@ -473,7 +473,25 @@ impl Renderer<'_> {
             Effect::ForEach { sel, var, effect } => {
                 let s = match sel {
                     Sel::All(f) => self.for_each_noun(f),
-                    other => self.sel(other, Case::Obj),
+                    // "for each creature destroyed this way", "for each card exiled this
+                    // way".
+                    Sel::Matching(inner, f) if self.for_each_this_way(inner).is_some() => {
+                        let verb = self.for_each_this_way(inner).unwrap_or_default();
+                        let n = self.noun(f, Num::One);
+                        format!("{n} {verb} this way")
+                    }
+                    // "for each of them", "for each of those creatures", "for each of up to
+                    // three target creatures".
+                    other => {
+                        let s = self.sel(other, Case::Obj);
+                        if s == "them" {
+                            "of {alt:them|those creatures|those permanents|those cards|those tokens}".into()
+                        } else if matches!(other, Sel::Target(_)) {
+                            format!("of {s}")
+                        } else {
+                            s
+                        }
+                    }
                 };
                 // "If you do, it becomes plotted": done for the one object named "it".
                 if matches!(s.as_str(), "it" | "~it" | "~") {
@@ -1853,6 +1871,12 @@ impl Renderer<'_> {
                 mana,
                 restriction,
             } => {
+                if let (ManaProduction::EachColorAmong(f), PlayerRef::You, None) =
+                    (mana, who, restriction)
+                {
+                    let n = self.noun(f, Num::Many);
+                    return format!("for each color among {n}, add one mana of that color");
+                }
                 let m = self.mana_production(mana);
                 let mut s = self.with_subject(who, &format!("add {m}"), false);
                 if let Some(r) = restriction {
@@ -5199,6 +5223,16 @@ impl Renderer<'_> {
     }
 
     /// What mana an effect adds.
+    /// The verb of "[objects] [verb] this way" for the objects an earlier instruction
+    /// acted on, if `inner` holds them.
+    fn for_each_this_way(&self, inner: &Sel) -> Option<&'static str> {
+        let v = match inner {
+            Sel::Before(b) => b.as_ref(),
+            other => other,
+        };
+        self.this_way_of(v).map(|(verb, _, _)| verb)
+    }
+
     pub(crate) fn mana_production(&mut self, m: &ManaProduction) -> String {
         match m {
             ManaProduction::Fixed(v) => v.iter().map(|t| mana_symbol(*t)).collect(),
@@ -5311,6 +5345,10 @@ impl Renderer<'_> {
             ManaProduction::AnyColorAmong(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("one mana of any color among {n}")
+            }
+            ManaProduction::EachColorAmong(f) => {
+                let n = self.noun(f, Num::Many);
+                format!("one mana of each color among {n}")
             }
             ManaProduction::AnyTypeProduced => "one mana of any type that land produced".into(),
             ManaProduction::ManaCostOf(s) => {

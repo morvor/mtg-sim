@@ -421,6 +421,25 @@ fn they_as_its_controller(y: &str) -> String {
     s.trim().to_string()
 }
 
+/// "For each color among permanents you control, add one mana of that color." (Bloom
+/// Tender): one mana of each of those colors.
+fn each_color_mana(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for each color among ")?;
+    let noun = r.strip_suffix(", add one mana of that color")?;
+    let (f, true, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).trim().is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+        return None;
+    }
+    Some(Effect::AddMana {
+        who: PlayerRef::You,
+        mana: ManaProduction::EachColorAmong(f),
+        restriction: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "iteration: for each color among [objects], add one mana of that color", priority: 100, parse: each_color_mana } }
 inventory::submit! { EffectPattern { name: "iteration: for each [players], [instruction about that player]", priority: 980, parse: for_each_player } }
 inventory::submit! { EffectPattern { name: "iteration: for each [objects], [instruction about it]", priority: 980, parse: for_each_object } }
 

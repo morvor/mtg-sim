@@ -2962,6 +2962,13 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+            ManaProduction::EachColorAmong(f) => {
+                let mut cs = ColorSet::NONE;
+                for o in self.objects_matching(f, ctx) {
+                    cs = cs.union(self.obj(o).chars.colors);
+                }
+                cs.iter().map(ManaType::from_color).collect()
+            }
             ManaProduction::CommanderIdentity => {
                 // CR 903.4f: undefined without a commander; no mana.
                 let types = crate::mana_abilities::commander_identity_types(self, p);

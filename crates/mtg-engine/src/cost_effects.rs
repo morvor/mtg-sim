@@ -58,6 +58,14 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
                     }),
             )
         }
+        // "You may pay {1} and exile it": the object must still be there to be exiled.
+        Effect::Exile {
+            what: what @ (Sel::This | Sel::TriggerObject | Sel::TriggerLki | Sel::Target(_)),
+            ..
+        } => {
+            let objs = g.eval_sel_objects(what, ctx);
+            Some(!objs.is_empty() && objs.iter().all(|o| g.is_live(*o)))
+        }
         // "Return a basic land card from your graveyard to your hand", "exile a creature
         // card from your graveyard": as many objects as it names must be there.
         Effect::Move {

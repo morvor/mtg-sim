@@ -353,10 +353,18 @@ fn note_this_way(e: &Effect, out: &mut Vec<(Var, &'static str, Option<CardType>)
         }
     };
     match e {
-        Effect::Destroy { what, .. } => set(out, vars::IT, Some(("destroyed", ty(what)))),
+        Effect::Destroy { what, .. } => {
+            set(out, vars::IT, Some(("destroyed", ty(what))));
+            set(
+                out,
+                crate::kw::value_results::DESTROYED,
+                Some(("destroyed", ty(what))),
+            );
+        }
         Effect::Exile { what, .. } => set(out, vars::IT, Some(("exiled", ty(what)))),
         Effect::Sacrifice { .. } | Effect::SacrificeObjects { .. } => {
-            set(out, vars::IT, Some(("sacrificed", None)))
+            set(out, vars::IT, Some(("sacrificed", None)));
+            set(out, vars::SACRIFICED, Some(("sacrificed", None)));
         }
         Effect::Move { to, what } if to.zone == ZoneKind::Hand => {
             set(out, vars::IT, Some(("returned", ty(what))))
