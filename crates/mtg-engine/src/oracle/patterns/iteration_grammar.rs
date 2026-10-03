@@ -500,6 +500,112 @@ fn last_of(e: &Effect) -> &Effect {
 
 inventory::submit! { super::FollowupPattern { name: "iteration: then each player who searched this way shuffles", priority: 50, apply: f_searchers_shuffle } }
 
+/// "{u}{u} spent to cast it" → how many times that much mana of that color was spent to
+/// cast the object (CR 601.2h; a copy or a permanent that wasn't cast saw none spent).
+fn spent_symbols(x: &str) -> Option<Value> {
+    let body = [" spent to cast it", " spent to cast ~", " spent to cast this spell"]
+        .iter()
+        .find_map(|s| x.strip_suffix(s))?;
+    let inner = body.strip_prefix('{')?.strip_suffix('}')?;
+    let syms: Vec<&str> = inner.split("}{").collect();
+    let letter = syms.first()?.to_ascii_uppercase();
+    if letter.len() != 1 || !"WUBRGC".contains(letter.as_str()) || syms.iter().any(|s| s.to_ascii_uppercase() != letter) {
+        return None;
+    }
+    let spent = Value::Custom(format!("mana_spent_of:{letter}").into());
+    Some(match syms.len() {
+        1 => spent,
+        n => Value::Div(Box::new(spent), n as i32, false),
+    })
+}
+
+/// "When this creature enters, for each {U}{U} spent to cast it, draw a card." (Bladecoil
+/// Serpent): the instruction is performed that many times.
+fn for_each_spent(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for each ")?;
+    let (x, y) = r.split_once(", ")?;
+    let times = spent_symbols(x)?;
+    let effect = parse_clause(y, b)?;
+    Some(Effect::Repeat {
+        times,
+        effect: Box::new(effect),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "iteration: for each {C}{C} spent to cast it, [instruction]", priority: 100, parse: for_each_spent } }
+
+/// "For each color, return up to one target card of that color from your graveyard to your
+/// hand." (All Suns' Dawn), "for each color, put a +1/+1 counter on a Dragon you control
+/// of that color" (Call the Spirit Dragons), "For each permanent type, return up to one
+/// card of that type from your graveyard to the battlefield." (Revival Experiment): the
+/// instruction once for each color (CR 105.1) or permanent type (CR 110.4), each about an
+/// object of that quality; objects moved to the same place move together.
+fn for_each_quality(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for each ")?;
+    let (qualities, marker, y): (&[&str], &str, &str) =
+        if let Some(y) = r.strip_prefix("color, ") {
+            (&["white", "blue", "black", "red", "green"], " of that color", y)
+        } else if let Some(y) = r.strip_prefix("permanent type, ") {
+            (
+                &["artifact", "battle", "creature", "enchantment", "land", "planeswalker"],
+                " of that type",
+                y,
+            )
+        } else {
+            return None;
+        };
+    let i = y.find(marker)?;
+    if y[i + marker.len()..].contains(marker) {
+        return None;
+    }
+    let (pre, post) = (&y[..i], &y[i + marker.len()..]);
+    // Where the object phrase begins: after its determiner ("up to one target ", "a ").
+    let start = ["target ", " a ", " an ", "up to one "]
+        .iter()
+        .filter_map(|d| pre.rfind(d).map(|j| j + d.len()))
+        .max()?;
+    let saved = b.targets.len();
+    let mut effects = Vec::new();
+    for q in qualities {
+        let mut head = pre[..start].to_string();
+        // "a artifact card" → "an artifact card".
+        if head.ends_with(" a ") && q.starts_with(['a', 'e', 'i', 'o', 'u']) {
+            head.truncate(head.len() - 2);
+            head.push_str("an ");
+        }
+        let text = format!("{head}{q} {}{post}", &pre[start..]);
+        let Some(e) = parse_clause(&text, b) else {
+            b.targets.truncate(saved);
+            return None;
+        };
+        effects.push(e);
+    }
+    // One instruction moving them all at once.
+    let same_move = effects.windows(2).all(|w| {
+        matches!((&w[0], &w[1]), (Effect::Move { to: a, .. }, Effect::Move { to: c, .. })
+            if serde_json::to_string(a).ok() == serde_json::to_string(c).ok())
+    });
+    if same_move {
+        if let Some(Effect::Move { to, .. }) = effects.first() {
+            let to = to.clone();
+            let what = effects
+                .iter()
+                .filter_map(|e| match e {
+                    Effect::Move { what, .. } => Some(what.clone()),
+                    _ => None,
+                })
+                .collect();
+            return Some(Effect::Move {
+                what: Sel::Union(what),
+                to,
+            });
+        }
+    }
+    Some(Effect::Seq(effects))
+}
+
+inventory::submit! { EffectPattern { name: "iteration: for each color/permanent type, [instruction about one of that quality]", priority: 100, parse: for_each_quality } }
+
 /// Later sentences' names for the objects in [`CHOSEN`] ("the chosen creatures", "each
 /// permanent chosen this way", "creatures they control not chosen this way").
 fn name_chosen(b: &mut Builder, noun: &str) {
@@ -646,7 +752,7 @@ fn iterated_objects(x: &str, b: &mut Builder) -> Option<(Sel, Vec<String>)> {
     // creature your opponents control".
     let saved = b.targets.len();
     let (sel, rest) = object_ref(&format!("each {x}"), b)?;
-    if !end(&rest).trim().is_empty() || b.targets.len() != saved {
+    if !end(&rest).trim().is_empty() {
         b.targets.truncate(saved);
         return None;
     }

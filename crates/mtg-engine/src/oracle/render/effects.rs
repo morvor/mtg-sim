@@ -677,6 +677,19 @@ impl Renderer<'_> {
             Effect::RepeatThisProcess => "repeat this process".into(),
             Effect::Repeat { times, effect } => {
                 let inner = self.effect(effect);
+                // "for each {U}{U} spent to cast it, draw a card".
+                let spent = |v: &Value| match v {
+                    Value::Custom(c) => c.strip_prefix("mana_spent_of:").map(|l| (l.to_string(), 1)),
+                    _ => None,
+                };
+                let per = match times {
+                    Value::Div(v, n, false) => spent(v).map(|(l, _)| (l, *n)),
+                    v => spent(v),
+                };
+                if let Some((l, n)) = per {
+                    let syms = format!("{{{l}}}").repeat(n.max(1) as usize);
+                    return format!("for each {syms} spent to cast {{alt:it|~}}, {inner}");
+                }
                 let t = self.times(times);
                 format!("{inner} {t}")
             }
