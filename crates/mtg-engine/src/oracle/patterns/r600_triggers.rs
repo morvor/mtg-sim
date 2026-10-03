@@ -18,9 +18,12 @@ pub(crate) fn reflexive_body(text: &str, b: &Builder) -> Option<Body> {
 
 /// [`reflexive_body`] where "it" is `it`.
 pub(crate) fn reflexive_body_about(text: &str, b: &Builder, it: Sel) -> Option<Body> {
+    let original = text;
     let text = text
         .replace("that creature's power", "its power")
         .replace("that creature's toughness", "its toughness");
+    // The rewritten "its" still means "that creature" (see `Builder::its_is_it`).
+    let its_is_it = b.its_is_it || text != original;
     // "When you do, she deals 4 damage to target creature." (Elektra, Femme Fatale), "When
     // you do, if you control a red permanent other than ~, he deals damage ..." (Ajani,
     // Nacatl Avenger): a character's pronoun is the card itself.
@@ -32,6 +35,7 @@ pub(crate) fn reflexive_body_about(text: &str, b: &Builder, it: Sel) -> Option<B
     sub.in_trigger = true;
     sub.it = it;
     sub.it_player = b.it_player.clone();
+    sub.its_is_it = its_is_it;
     let effect = parse_effect_text(&text, &mut sub)?;
     Some(Body {
         targets: sub.targets,

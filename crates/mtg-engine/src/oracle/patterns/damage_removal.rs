@@ -485,18 +485,12 @@ fn recipients(s: &str, src: &Sel, b: &mut Builder) -> Option<(Sel, String)> {
 /// is chosen as the spell is cast (or the ability put on the stack); each target gets at
 /// least 1. "Any number of targets" may be zero targets (CR 107.1c), and never more than
 /// the amount.
-fn divided_damage(
-    src: &Sel,
-    amount: Value,
-    r2: &str,
-    b: &mut Builder,
-) -> Option<(Effect, String)> {
+fn divided_damage(src: &Sel, amount: Value, r2: &str, b: &mut Builder) -> Option<(Effect, String)> {
     let (mut spec, any_number, tail) = counted_targets(r2)?;
+    // "Up to N targets" may also be zero targets (Ravenous Gigantotherium's ruling).
     if any_number {
         spec.min = Value::c(0);
         spec.max = amount.clone();
-    } else if spec.fixed_min().is_some_and(|m| m < 1) {
-        spec.min = Value::c(1);
     }
     spec.divide = Some(amount);
     let slot = b.add_target(spec, "targets (divided)");
@@ -1074,14 +1068,14 @@ pub(crate) fn delayed_removal(
         // "Return it to your hand": a card goes to its owner's hand (CR 400.3).
         (
             "return",
-            "to its owner's hand" | "to their owners' hands" | "to their owner's hand"
+            "to its owner's hand"
+            | "to their owners' hands"
+            | "to their owner's hand"
             | "to your hand",
-        ) => {
-            Effect::Move {
-                what: delayed,
-                to: Destination::zone(ZoneKind::Hand),
-            }
-        }
+        ) => Effect::Move {
+            what: delayed,
+            to: Destination::zone(ZoneKind::Hand),
+        },
         _ => return None,
     };
     Some(Effect::seq(vec![

@@ -37,16 +37,33 @@ fn wish(l: &str, _b: &mut Builder) -> Option<Effect> {
         Filter::InZone(ZoneKind::Outside),
         Filter::OwnedBy(PlayerRel::You),
     ]);
-    Some(Effect::Move {
-        what: Sel::Choose {
-            chooser: PlayerRef::You,
-            filter,
-            count: Value::c(1),
-            up_to: false,
-            store: None,
+    let chosen = Sel::Choose {
+        chooser: PlayerRef::You,
+        filter,
+        count: Value::c(1),
+        up_to: false,
+        store: None,
+    };
+    if verb != "reveal" {
+        return Some(Effect::Move {
+            what: chosen,
+            to: Destination::zone(ZoneKind::Hand),
+        });
+    }
+    // "Reveal ... and put it into your hand": the chosen card is revealed (CR 701.20a)
+    // before it's put into the hand.
+    use crate::kw::reveal_from_hand::{REVEALED, REVEAL_CHOSEN};
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: REVEALED,
+            sel: chosen,
         },
-        to: Destination::zone(ZoneKind::Hand),
-    })
+        Effect::Custom(smol_str::SmolStr::new(REVEAL_CHOSEN)),
+        Effect::Move {
+            what: Sel::Var(REVEALED),
+            to: Destination::zone(ZoneKind::Hand),
+        },
+    ]))
 }
 
 inventory::submit! { EffectPattern { name: "r108 wish from outside the game", priority: 100, parse: wish } }

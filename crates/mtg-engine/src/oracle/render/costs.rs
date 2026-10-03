@@ -76,6 +76,19 @@ impl Renderer<'_> {
             }
         }
         flush(&mut run, &mut merged);
+        // Costs are paid in any order (CR 601.2h, 602.2b): cards list an energy payment
+        // before the other instructions ("Pay {E}{E}, Sacrifice ~").
+        let is_energy = |p: &String| p.starts_with("Pay ") && p.contains("{E}");
+        let symbols = |p: &String| p.starts_with('{') || p.starts_with('+') || p.starts_with('−');
+        if let Some(i) = merged.iter().position(is_energy) {
+            let first_other = merged.iter().position(|p| !symbols(p) && !is_energy(p));
+            if let Some(j) = first_other.filter(|j| *j < i) {
+                let mut alt = merged.clone();
+                let e = alt.remove(i);
+                alt.insert(j, e);
+                return format!("{{alt:{}|{}}}", merged.join(", "), alt.join(", "));
+            }
+        }
         merged.join(", ")
     }
 
@@ -91,6 +104,12 @@ impl Renderer<'_> {
             CostPart::Loyalty(n) => format!("{n}"),
             CostPart::SacrificeSelf => "sacrifice ~".into(),
             CostPart::Sacrifice { filter, count } => {
+                // "Sacrifice all permanents you control": as many as there are.
+                if matches!(count, Value::Count(g) if format!("{g:?}") == format!("{filter:?}")) {
+                    let f = super::effects::strip_controller(filter);
+                    let n = self.noun(&f, Num::Many);
+                    return format!("sacrifice all {n} you control");
+                }
                 let det = self.det_for(count);
                 let f = super::effects::strip_controller(filter);
                 // "Sacrifice Blazing Torch" in an ability it grants: the object itself.
@@ -255,7 +274,9 @@ impl Renderer<'_> {
             CostPart::PutFromHandOnLibrary { filter, count, top } => {
                 let noun = {
                     let n = self.noun(&filter.clone().in_zone(ZoneKind::Hand), Num::One);
-                    n.trim_end_matches(" in a hand").to_string()
+                    n.trim_end_matches(" in a hand")
+                        .trim_end_matches(" in your hand")
+                        .to_string()
                 };
                 let (c, w) = self.counted(count, &noun);
                 let pos = if *top {

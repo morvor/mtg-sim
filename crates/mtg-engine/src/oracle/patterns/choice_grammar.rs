@@ -115,7 +115,8 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             return Some((PlayerRef::ChosenOpponent, r.to_string()));
         }
     }
-    // "Whenever a player attacks enchanted player ..., that attacking player ...".
+    // "Whenever a player attacks enchanted player ..., that attacking player ...": not the
+    // trigger's player, who is the attacked one (CR 508.3e).
     if let Some(r) = s.strip_prefix("that attacking player") {
         let attacking = crate::oracle::raw_text().to_lowercase().contains("whenever a player attacks");
         if b.in_trigger

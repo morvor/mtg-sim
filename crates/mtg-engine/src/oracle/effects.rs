@@ -38,6 +38,10 @@ pub struct Builder<'c> {
     /// target creature you control and target creature you don't control. Put a +1/+1
     /// counter on the creature you control."; see `patterns::choose_two_targets`).
     pub named: Vec<(String, Sel)>,
+    /// Set while parsing a clause whose "its" was rewritten from "that creature's" (see
+    /// `patterns::triggers_referents::that_creatures`): "its" then means what "it" refers
+    /// to even where a plain "its" would mean the clause's subject.
+    pub its_is_it: bool,
     pub ctx: &'c CompileContext<'c>,
 }
 
@@ -61,6 +65,7 @@ impl<'c> Builder<'c> {
             chosen_creature: None,
             group: None,
             named: vec![],
+            its_is_it: false,
             ctx,
         }
     }
@@ -1223,7 +1228,18 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         // "Each creature you control deals damage equal to its power": "its" is each of
         // the sources in turn (the executor binds `vars::AFFECTED` to each).
         let multi = matches!(src, Sel::All(_) | Sel::Union(_));
-        let saved_it = multi.then(|| std::mem::replace(&mut b.it, Sel::Var(vars::AFFECTED)));
+        // "Whenever an opponent casts a spell, ~ deals damage equal to its power" (Gleeful
+        // Arsonist), "Whenever a creature with flying attacks you, ~ deals damage equal to
+        // its power to that creature" (Palazzo Archers): "its" is the source's, not the
+        // object the trigger refers to. ("That creature's" rewritten to "its" by
+        // `triggers_referents::that_creatures` keeps meaning that object.)
+        let saved_it = if multi {
+            Some(std::mem::replace(&mut b.it, Sel::Var(vars::AFFECTED)))
+        } else if r.starts_with("its ") && !b.its_is_it {
+            Some(std::mem::replace(&mut b.it, src.clone()))
+        } else {
+            None
+        };
         let parsed = super::statics::parse_value_phrase(r, b);
         if let Some(it) = saved_it {
             b.it = it;

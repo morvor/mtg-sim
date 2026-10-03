@@ -65,6 +65,26 @@ impl Renderer<'_> {
     /// The first mention of target slot `i` ("target creature", "up to two target
     /// creatures"); later mentions are pronouns.
     pub(crate) fn target_phrase(&mut self, i: u8) -> String {
+        let mut s = self.target_phrase_core(i);
+        let Some(t) = self.targets.get(i as usize).cloned() else {
+            return s;
+        };
+        if t.chosen_by_opponent {
+            s.push_str(" of an opponent's choice");
+        }
+        // "target creature of their choice": another player chooses it (CR 601.2c).
+        if let Some(p) = &t.chosen_by {
+            let poss = self.player(p, Case::Poss);
+            s.push_str(&format!(" of {poss} choice"));
+        }
+        // "any target chosen at random".
+        if t.random {
+            s.push_str(" chosen at random");
+        }
+        s
+    }
+
+    fn target_phrase_core(&mut self, i: u8) -> String {
         let Some(t) = self.targets.get(i as usize).cloned() else {
             return self.gap(format!("target slot {i} out of range"));
         };
@@ -221,9 +241,7 @@ impl Renderer<'_> {
             Some(c) if other => format!("{c} other target {core}"),
             Some(c) => format!("{c} target {core}"),
         };
-        if t.chosen_by_opponent {
-            s.push_str(" of an opponent's choice");
-        }
+
         // A requirement on the targets taken together (CR 115.3).
         let one = matches!(t.max, Value::Const(1));
         match &t.together {
@@ -333,8 +351,13 @@ impl Renderer<'_> {
         let flat: Vec<&Filter> = flat
             .into_iter()
             .filter(|x| {
-                !matches!(x, Filter::Custom(n)
+                let kind = |f: &Filter| {
+                    matches!(f, Filter::Custom(n)
                     if n == "stack:activated ability" || n == "stack:triggered ability")
+                };
+                // "activated or triggered ability": both kinds, what an ability on the
+                // stack is (CR 113.1).
+                !kind(x) && !matches!(x, Filter::Or(v) if v.iter().all(kind))
             })
             .collect();
         for x in flat {
@@ -480,6 +503,14 @@ impl Renderer<'_> {
                 self.target_vars[i].2 = true;
                 decline(self.target_vars[i].1.clone(), case)
             }
+            // "each permanent with the most votes or tied for most votes" (CR 701.38a).
+            Sel::Var(crate::kwa::vote::WINNERS) if self.vote_noun.is_some() => {
+                let n = self.vote_noun.clone().unwrap_or_default();
+                decline(
+                    format!("each {n} with the most votes or tied for most votes"),
+                    case,
+                )
+            }
             Sel::Var(v) if self.plural_vars.contains(v) => them(case),
             Sel::Var(v) => match *v {
                 vars::SACRIFICED if self.sacrificed.as_deref() == Some("~") => {
@@ -487,8 +518,13 @@ impl Renderer<'_> {
                 }
                 vars::SACRIFICED => {
                     // "Target player sacrifices a creature. ... that creature's toughness".
+                    // Whatever was sacrificed was a permanent (CR 701.21a): "the
+                    // sacrificed permanent" whatever its type.
                     let n = self.sacrificed.clone().unwrap_or_else(|| "creature".into());
-                    decline(format!("{{alt:the sacrificed {n}|that {n}}}"), case)
+                    decline(
+                        format!("{{alt:the sacrificed {n}|that {n}|the sacrificed permanent}}"),
+                        case,
+                    )
                 }
                 vars::CREATED => it(case),
                 // "a card for each card exiled from their hand this way".
@@ -770,6 +806,18 @@ impl Renderer<'_> {
             PlayerRef::EachPlayer => "each player".into(),
             PlayerRef::EachOtherPlayer => "each other player".into(),
             PlayerRef::Target(i) => return self.target_mention(*i, case),
+            // "Whenever a player attacks one of your opponents, that attacking player ...":
+            // the controller of the creatures attacking.
+            PlayerRef::ControllerOf(sel)
+                if self.attack_trigger && matches!(sel.as_ref(), Sel::TriggerObjects) =>
+            {
+                return match case {
+                    Case::Poss => {
+                        "{alt:their|that attacking player's|the attacking player's}".into()
+                    }
+                    _ => "{alt:that attacking player|the attacking player}".into(),
+                };
+            }
             // "Whenever a land enters under an opponent's control, that player loses 2
             // life": the opponent the trigger named.
             PlayerRef::ControllerOf(sel)
@@ -868,6 +916,10 @@ impl Renderer<'_> {
                 self.target_vars[i].1.clone()
             }
             PlayerRef::Var(_) => "that player".into(),
+            // The active player: in an attack trigger, the attacking player (CR 506.2).
+            PlayerRef::ActivePlayer if self.attack_trigger => {
+                "{alt:that player|that attacking player|the attacking player}".into()
+            }
             PlayerRef::ActivePlayer => "that player".into(),
             PlayerRef::DefendingPlayer => "defending player".into(),
             PlayerRef::ChosenPlayer(_) => "the chosen player".into(),

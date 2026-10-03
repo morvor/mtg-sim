@@ -60,7 +60,7 @@ impl Renderer<'_> {
         let what = if kind.is_none() && matches!(action, ReplacementAction::Add(_)) {
             "of each of those kinds of counters".to_string()
         } else if kind.is_none() {
-            "of those counters".to_string()
+            "{alt:of those counters|of each of those kinds of counters}".to_string()
         } else {
             those
         };
