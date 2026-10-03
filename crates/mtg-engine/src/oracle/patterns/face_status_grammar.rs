@@ -75,8 +75,10 @@ fn p_exile_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     // "Look at the top card of that player's library and exile it face down": having
-    // looked at it, the player may go on looking at it (`r406_exile.rs`).
-    if l.contains("look at ") {
+    // looked at it, the player may go on looking at it (`r406_exile.rs`). A step on cards
+    // dug ("Exile one face down and put the rest ...") is the dig grammar's, which also
+    // knows the card can't be checked for qualities there (CR 406.3a).
+    if l.contains("look at ") || super::dig_grammar::dug(b) {
         return None;
     }
     let (head, tail) = l.split_once(" face down")?;
@@ -248,7 +250,21 @@ fn f_exile_some(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     true
 }
 
-inventory::submit! { FollowupPattern { name: "face grammar: exile N of them [face down] [and put the rest ...]", priority: 95, apply: f_exile_some } }
+/// [`f_exile_some`] for a look at the controller's own library, after the dig grammar
+/// (`dig_grammar.rs`): once a sentence has dug cards, the steps on them are its own (it
+/// also knows a card exiled face down can't be checked for qualities, CR 406.3a).
+fn f_exile_some_own_library(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    !super::dig_grammar::dug(b) && f_exile_some(l, prev, b)
+}
+
+inventory::submit! { FollowupPattern { name: "face grammar: exile N of them [face down] [and put the rest ...]", priority: 250, apply: f_exile_some_own_library } }
+
+/// [`f_exile_some`] for a look at another player's library.
+fn f_exile_some_other_library(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    looked_at(prev).is_some_and(|e| !own_library(e)) && f_exile_some(l, prev, b)
+}
+
+inventory::submit! { FollowupPattern { name: "face grammar: exile N of them [face down] [and put the rest ...] (another player's library)", priority: 95, apply: f_exile_some_other_library } }
 
 /// "put the rest on the bottom of that library in a random order", "put the rest into
 /// their graveyard" after exiling some of the cards looked at in another player's
@@ -286,6 +302,16 @@ inventory::submit! { FollowupPattern { name: "face grammar: put the rest (anothe
 /// "look at the top N cards of [library], [instruction][, then instruction]": the look,
 /// then what's done with the cards, read as the sentences that would follow it.
 fn p_look_then(l: &str, b: &mut Builder) -> Option<Effect> {
+    look_then(l, b, true)
+}
+
+/// [`p_look_then`] at another player's library only: read before the dig grammar
+/// (`dig_grammar.rs`), which reads a look at the controller's own library first.
+fn p_look_then_other_library(l: &str, b: &mut Builder) -> Option<Effect> {
+    look_then(l, b, false)
+}
+
+fn look_then(l: &str, b: &mut Builder, own_ok: bool) -> Option<Effect> {
     let l = end(l);
     if !l.starts_with("look at the top ") {
         return None;
@@ -294,7 +320,11 @@ fn p_look_then(l: &str, b: &mut Builder) -> Option<Effect> {
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let parsed = (|| {
         let mut e = crate::oracle::effects::parse_simple(look, b)?;
-        looked_at(&mut e)?;
+        // "Look at the top three cards of your library, then put one of them into your
+        // hand and the rest ...": two instructions, read as such (`card_flow_dig.rs`).
+        if own_library(looked_at(&mut e)?) && (!own_ok || rest.starts_with("then ")) {
+            return None;
+        }
         let parts: Vec<&str> = match rest.split_once(", then ") {
             Some((a, c)) => vec![a, c],
             None => vec![rest],
@@ -314,7 +344,8 @@ fn p_look_then(l: &str, b: &mut Builder) -> Option<Effect> {
     parsed
 }
 
-inventory::submit! { EffectPattern { name: "face grammar: look at the top N cards, [instruction], then [instruction]", priority: 110, parse: p_look_then } }
+inventory::submit! { EffectPattern { name: "face grammar: look at the top N cards, [instruction], then [instruction]", priority: 250, parse: p_look_then } }
+inventory::submit! { EffectPattern { name: "face grammar: look at the top N cards of another player's library, [instruction], then [instruction]", priority: 110, parse: p_look_then_other_library } }
 
 /// "look at the top N cards of that player's library" (the player the text refers to).
 fn p_look_at_that_players_library(l: &str, b: &mut Builder) -> Option<Effect> {

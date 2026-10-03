@@ -764,6 +764,25 @@ fn moved_onto_battlefield(e: &Effect) -> Option<Sel> {
     }
 }
 
+/// Whether `to` is what an instruction in `e` moves (its "what" or "from").
+fn names_entering(e: &Effect, to: &Sel) -> bool {
+    use serde_json::Value as J;
+    fn walk(v: &J, to: &J) -> bool {
+        match v {
+            J::Object(m) => {
+                ["what", "from"].iter().any(|k| m.get(*k) == Some(to))
+                    || m.values().any(|x| walk(x, to))
+            }
+            J::Array(a) => a.iter().any(|x| walk(x, to)),
+            _ => false,
+        }
+    }
+    match (serde_json::to_value(e), serde_json::to_value(to)) {
+        (Ok(e), Ok(to)) => walk(&e, &to),
+        _ => true,
+    }
+}
+
 /// "[put/return objects onto/to the battlefield] attached to [recipient][, then ...]": the
 /// objects enter attached to it — an Aura that can't legally enchant it, or one attached
 /// to something undefined, stays where it is; an Equipment that can't equip it enters
@@ -808,6 +827,12 @@ fn p_enter_attached(l: &str, b: &mut Builder) -> Option<Effect> {
                 to
             }
         };
+        // A permanent can't be attached to itself (CR 301.5c, 303.4d): a recipient that
+        // names what enters ("Put that card onto the battlefield attached to that
+        // creature" where "that creature" would be the card) isn't understood.
+        if names_entering(&e, &to) {
+            return None;
+        }
         // "attached to a creature you control": one it can legally be attached to
         // (Nomad Mythmaker's ruling).
         if let Sel::Choose { filter, .. } = &mut to {

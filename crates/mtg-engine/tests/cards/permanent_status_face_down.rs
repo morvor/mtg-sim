@@ -38,7 +38,6 @@ fn face_down_exile_cards_compile() {
         "Vivien, Champion of the Wilds",
         "Clone Shell",
         "Extract Power",
-        "Discover the Impossible",
         "Siphon Insight",
         "Outrageous Robbery",
         "Inverter of Truth",
@@ -49,6 +48,10 @@ fn face_down_exile_cards_compile() {
         "Petty Larceny",
         "Gandalf, Goblins' Bane // Flameshape",
     ]);
+    // "You may cast the exiled card ... if it's an instant spell with mana value 2 or
+    // less": a card exiled face down has no characteristics to check (CR 406.3a), so the
+    // condition isn't one the engine can evaluate there (see `dig_grammar_review.rs`).
+    assert!(!card("Discover the Impossible").unsupported_text().is_empty());
 }
 
 #[test]
