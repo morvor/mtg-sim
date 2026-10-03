@@ -58,3 +58,24 @@ fn for_each_card_drawn_a_choice_is_offered_for_each() {
     let permanents = t.g.battlefield.len();
     assert_eq!(permanents, 3);
 }
+
+#[test]
+fn damage_divided_among_x_targets_needs_exactly_x_targets() {
+    cr!("601.2c", "601.2d");
+    // Meteor Swarm: "deals 8 damage divided as you choose among X target creatures
+    // and/or planeswalkers". The count was read as one to eight targets whatever X was,
+    // so X = 1 could still split the damage among two creatures.
+    supported("Meteor Swarm");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let spell = t.hand(P0, "Meteor Swarm");
+    t.lands(P0, "Mountain", 3);
+    t.lands(P0, "Forest", 2);
+    let two = [Entity::Object(a), Entity::Object(b)];
+    // X = 1: asking for two targets isn't a legal choice; one target gets all 8.
+    t.cast(P0, spell).x(1).targets(&two).go();
+    t.resolve();
+    let dead = [a, b].iter().filter(|o| !t.on_battlefield(**o)).count();
+    assert_eq!(dead, 1, "exactly one creature was a target");
+}
