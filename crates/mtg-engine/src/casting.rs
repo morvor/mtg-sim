@@ -1970,7 +1970,14 @@ impl Game {
         }
         // Static cost modifiers from other permanents: increases first, then reductions.
         for (src, ctl, cm) in &self.statics.cost_modifiers {
-            let ctx = Ctx::new(Some(*src), *ctl);
+            let mut ctx = Ctx::new(Some(*src), *ctl);
+            // "it" is the spell and "that player" its caster (see `kw/spell_cost_grammar`).
+            ctx.event = Some(crate::object::EventInfo {
+                object: Some(card),
+                spell: Some(card),
+                player: Some(p),
+                ..Default::default()
+            });
             // (A card being considered for casting is judged as the spell it would be.)
             let applies = match &cm.applies_to {
                 CostTarget::Spells(f) => {
@@ -2776,7 +2783,15 @@ impl Game {
                     && crate::payment_rules::no_mana(&crate::payment_rules::spell_rules(chars)),
                 ..Default::default()
             };
-            let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, src);
+            // As when paying: only a cost that uses the source itself keeps the source's own
+            // mana abilities from paying the mana (Midnight Clock's "{T}: Add {U}" pays for
+            // its "{2}{U}: Put an hour counter on this artifact").
+            let reserve = if reserves_source(cost) { src } else { None };
+            let spend = SpendContext {
+                reserve_may_tap: !cost.has_tap(),
+                ..spend
+            };
+            let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, reserve);
             return plan.is_some();
         }
         true
@@ -2785,7 +2800,15 @@ impl Game {
     pub fn can_pay_cost(&self, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
         let chars = src.map(|s| self.obj(s).chars.clone()).unwrap_or_default();
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
-        self.can_pay_cost_optimistic_in(p, cost, src, &chars, &Ctx::new(src, p))
+        // What the cost's parts name ("you may pay {1} and exile it": the object the
+        // trigger is about, a target, an object an earlier instruction stored).
+        let mut c = Ctx::new(src, p);
+        c.stack_obj = ctx.stack_obj;
+        c.targets = ctx.targets.clone();
+        c.vars = ctx.vars.clone();
+        c.event = ctx.event.clone();
+        c.iter_player = ctx.iter_player;
+        self.can_pay_cost_optimistic_in(p, cost, src, &chars, &c)
     }
 
     /// Pays a cost during resolution ("you may pay ..."). Returns true if paid.
@@ -2818,7 +2841,10 @@ impl Game {
             ..Default::default()
         };
         match self.pay_total_cost(p, cost, src, &spend, ctx) {
-            Ok(_) => true,
+            Ok(paid) => {
+                self.last_paid = Some(paid);
+                true
+            }
             Err(_) => {
                 self.roll_back(snapshot);
                 false
@@ -3169,14 +3195,19 @@ impl Game {
             }
         }
         // Mana first (mana abilities must be activated before costs are paid, 601.2g),
-        // but tapping the source for {T} must not be used for mana: reserve it.
+        // but a source the cost taps can't also be tapped for mana, and one the cost
+        // untaps, sacrifices, exiles or returns can't be sacrificed for mana: reserve it.
         if let Some(m) = &cost.mana {
             if m.symbols.contains(&crate::mana::ManaSymbol::Infinity) {
                 return Err(Illegal(
                     "unpayable cost: an object with no mana cost (CR 118.6)".into(),
                 ));
             }
-            let reserve = if cost.has_tap() { src } else { None };
+            let reserve = if reserves_source(cost) { src } else { None };
+            let spend = &SpendContext {
+                reserve_may_tap: !cost.has_tap(),
+                ..spend.clone()
+            };
             // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
             let m = &crate::as_though::payment_cost(self, p, m);
             let spent = crate::mana_abilities::pay_mana(self, p, m, spend, reserve)
@@ -3820,3 +3851,21 @@ pub(crate) fn filter_mentions_x(f: &Filter) -> bool {
 
 #[allow(dead_code)]
 fn _unused(_: SpecialAction) {}
+
+/// Whether a cost uses its source itself ({T}, {Q}, "sacrifice/exile/return ~"), so the
+/// payment must keep the source available: a {T} cost keeps all its own mana abilities
+/// from paying, the others only those that sacrifice it (and no mana ability may
+/// sacrifice it). Mana abilities are activated before costs are paid (CR 601.2g-h,
+/// 602.2b), so a source whose cost doesn't use it may pay for it freely.
+fn reserves_source(cost: &Cost) -> bool {
+    cost.parts.iter().any(|p| {
+        matches!(
+            p,
+            CostPart::Tap
+                | CostPart::Untap
+                | CostPart::SacrificeSelf
+                | CostPart::ExileSelf
+                | CostPart::ReturnSelfToHand
+        )
+    })
+}

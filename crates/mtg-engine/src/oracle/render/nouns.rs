@@ -985,6 +985,16 @@ impl Renderer<'_> {
                 };
                 self.collect(&Filter::Power(neg, v.clone()), np);
             }
+            // "all creatures they control not chosen this way", "a creature card that hasn't
+            // been chosen" (see `patterns::iteration_grammar`).
+            Filter::In(s)
+                if matches!(s.as_ref(), Sel::Var(v) if *v == crate::oracle::patterns::iteration_grammar::CHOSEN) =>
+            {
+                np.rel.push(
+                    "{alt:not chosen this way|that {alt:weren't|wasn't} chosen this way|that hasn't been chosen|different}"
+                        .into(),
+                )
+            }
             // "each creature that isn't of the chosen type".
             Filter::ChosenType => np
                 .rel

@@ -706,6 +706,7 @@ fn p_prevent(l: &str, b: &mut Builder) -> Option<Effect> {
         amount,
         duration: Duration::EndOfTurn,
         combat_only,
+        then: None,
     })
 }
 

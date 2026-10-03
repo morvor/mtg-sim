@@ -1160,6 +1160,16 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             return None;
         }
     }
+    // "of the chosen colors it is" (Tablet of the Guilds): how many of the source's chosen
+    // colors the spell or triggering object is.
+    if let Some(rest) = r.strip_prefix("of the chosen colors it is") {
+        if word_end(rest) {
+            return Some((
+                Value::Custom(crate::kw::spell_cost_grammar::CHOSEN_COLORS_IT_IS.into()),
+                rest.to_string(),
+            ));
+        }
+    }
     // "the number of cards looked at while scrying this way" in a "whenever you scry"
     // trigger: how many cards the player looked at (CR 701.22a, 701.22d).
     if b.in_trigger {

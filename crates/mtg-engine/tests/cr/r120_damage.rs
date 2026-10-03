@@ -299,6 +299,7 @@ fn damage_is_modified_then_processed_into_results_then_the_event_occurs() {
                 amount: Some(Value::c(2)),
                 duration: Duration::EndOfTurn,
                 combat_only: false,
+                then: None,
             },
         ))
         .build();
@@ -343,6 +344,7 @@ fn excess_damage_is_split_off_before_prevention_and_other_replacements() {
                 amount: Some(Value::c(2)),
                 duration: Duration::EndOfTurn,
                 combat_only: false,
+                then: None,
             },
         ))
         .build();

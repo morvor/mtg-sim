@@ -1263,6 +1263,11 @@ impl<'a> Renderer<'a> {
                         format!("{no_s}. If {c}, choose {yes_s} instead")
                     }
                 }
+                // "choose up to X, where X is the number of Lesson cards in your graveyard".
+                _ if !matches!(m.max, Value::X) && m.min.as_const() == Some(0) => {
+                    let v = self.value(&m.max);
+                    format!("up to X, where X is {v}")
+                }
                 _ => {
                     let v = self.value(&m.max);
                     format!("up to {v}")

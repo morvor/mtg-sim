@@ -133,8 +133,10 @@ impl Game {
                         &format!("Pay {}?", describe_cost(cost)),
                         false,
                     );
+                    self.last_paid = None;
                     if pays && crate::entry_costs::pay(self, p, cost, ctx) {
                         paid = true;
+                        crate::cost_effects::note_paid(self, cost, ctx);
                         break;
                     }
                     if !pays && matches!(**then, Effect::Noop) {
@@ -159,6 +161,9 @@ impl Game {
                 let players = self.eval_players(who, ctx);
                 // CR 101.4, 608.2e–f: what several players do at the same time.
                 crate::simultaneous::for_each_player(self, players, effect, ctx);
+            }
+            Effect::InTurnOrder { first, who, effect } => {
+                crate::turn_order_choices::run(self, *first, who, effect, ctx)
             }
             Effect::AsPlayer { who, effect } => {
                 if let Some(p) = self.eval_player(who, ctx) {
@@ -577,6 +582,11 @@ impl Game {
                 // "Remove a counter from it. If you do, …" (CR 608.2c).
                 ctx.prev_happened = total > 0;
             }
+            Effect::ForEachCounterKind { from, then } => {
+                for e in crate::counter_rules::for_each_counter_kind(self, from, then, ctx) {
+                    self.exec(&e, ctx);
+                }
+            }
             Effect::ChooseCounterKind { from, then } => {
                 if let Some(e) =
                     crate::counter_rules::with_chosen_counter_kind(self, from, then, ctx)
@@ -771,6 +781,9 @@ impl Game {
                 let players = self.eval_players(who, ctx);
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
+                let mut effect = effect.clone();
+                // CR 608.2h: amounts are determined as the effect begins.
+                crate::kw::spell_cost_grammar::lock_player_effect(self, &mut effect, ctx);
                 self.player_effects.push(PlayerEffect {
                     id,
                     players,
@@ -778,7 +791,7 @@ impl Game {
                     timestamp: ts,
                     duration: duration.clone(),
                     source: ctx.source,
-                    effect: effect.clone(),
+                    effect,
                 });
                 self.dirty = true;
             }
@@ -2031,6 +2044,7 @@ impl Game {
                 amount,
                 duration,
                 combat_only,
+                then,
             } => {
                 let targets = self.resolve_sel(to, ctx);
                 for t in targets {
@@ -2040,11 +2054,16 @@ impl Game {
                         Entity::Player(p) => (Some(player_filter_const(p)), None, None),
                         Entity::Object(o) => (None, Some(Filter::Any), Some(vec![o])),
                     };
-                    let action = match amount {
-                        Some(v) => ReplacementAction::PreventAmount(Value::Const(
+                    let action = match (amount, then) {
+                        (Some(v), None) => ReplacementAction::PreventAmount(Value::Const(
                             self.eval_value(v, ctx) as i32,
                         )),
-                        None => ReplacementAction::Prevent,
+                        (None, None) => ReplacementAction::Prevent,
+                        (v, Some(e)) => ReplacementAction::PreventAndThen(
+                            v.as_ref()
+                                .map(|v| Value::Const(self.eval_value(v, ctx) as i32)),
+                            e.clone(),
+                        ),
                     };
                     let remaining = match amount {
                         Some(v) => Some(self.eval_value(v, ctx).max(0) as u32),
@@ -2092,6 +2111,7 @@ impl Game {
                         amount: Some(Value::c(n as i32)),
                         duration: duration.clone(),
                         combat_only: false,
+                        then: None,
                     };
                     self.exec(&shield, ctx);
                 }
@@ -2321,7 +2341,7 @@ impl Game {
     /// can find the new object it became in the zone it moved to, if that zone is public
     /// ("When ~ dies, return it to its owner's hand"). Information about the object (its
     /// power, etc.) still uses last known information, via `eval_sel`.
-    fn follow_zone_change_trigger_object(&self, e: Entity, ctx: &Ctx) -> Entity {
+    pub(crate) fn follow_zone_change_trigger_object(&self, e: Entity, ctx: &Ctx) -> Entity {
         let Entity::Object(id) = e else {
             return e;
         };
@@ -2969,6 +2989,13 @@ impl Game {
                 } else {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
+            }
+            ManaProduction::EachColorAmong(f) => {
+                let mut cs = ColorSet::NONE;
+                for o in self.objects_matching(f, ctx) {
+                    cs = cs.union(self.obj(o).chars.colors);
+                }
+                cs.iter().map(ManaType::from_color).collect()
             }
             ManaProduction::CommanderIdentity => {
                 // CR 903.4f: undefined without a commander; no mana.

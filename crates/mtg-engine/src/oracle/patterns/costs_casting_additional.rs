@@ -28,11 +28,22 @@ fn option_cost(s: &str) -> Option<Cost> {
     let (c, false) = parse_cost(s)? else {
         return None;
     };
+    // "blight 1" (CR 701.68): put a -1/-1 counter on a creature you control.
+    let blight = |e: &Effect| {
+        matches!(
+            e,
+            Effect::KeywordAction {
+                action: KeywordAction::Blight,
+                ..
+            }
+        )
+    };
     let ok = c.mana.is_none()
-        && matches!(
-            c.parts.as_slice(),
-            [CostPart::Forage] | [CostPart::RevealFromHand { .. }]
-        );
+        && match c.parts.as_slice() {
+            [CostPart::Forage] | [CostPart::RevealFromHand { .. }] => true,
+            [CostPart::Effect(e)] => blight(e),
+            _ => false,
+        };
     ok.then_some(c)
 }
 

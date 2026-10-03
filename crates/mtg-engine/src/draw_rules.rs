@@ -65,9 +65,9 @@ pub fn draws_cards(e: &Effect) -> bool {
         Effect::May { effect, .. }
         | Effect::Repeat { effect, .. }
         | Effect::AsPlayer { effect, .. } => draws_cards(effect),
-        Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
-            draws_cards(effect)
-        }
+        Effect::ForEach { effect, .. }
+        | Effect::ForEachPlayer { effect, .. }
+        | Effect::InTurnOrder { effect, .. } => draws_cards(effect),
         _ => false,
     }
 }

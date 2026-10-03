@@ -120,6 +120,9 @@ impl Renderer<'_> {
             Value::Var(crate::dice::LOSSES) => "the number of flips you lost".into(),
             Value::Var(crate::dice::HEADS) => "the number of coins that come up heads".into(),
             Value::Var(crate::dice::TAILS) => "the number of coins that come up tails".into(),
+            Value::Var(crate::oracle::patterns::iteration_grammar::MANA_PAID) => {
+                "the total amount of mana paid this way".into()
+            }
             // "the number of grace votes" (CR 701.38a).
             Value::Var(x)
                 if self

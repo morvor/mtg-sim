@@ -1028,6 +1028,13 @@ fn parse_for_each_inner(s: &str, it: Option<&Sel>) -> Option<Value> {
             return Some(Value::Sum(vec![va, vb]));
         }
     }
+    // "of the chosen colors it is" (Seal of the Guildpact): how many of the source's chosen
+    // colors the spell (or triggering object) is.
+    if s == "of the chosen colors it is" {
+        return Some(Value::Custom(
+            crate::kw::spell_cost_grammar::CHOSEN_COLORS_IT_IS.into(),
+        ));
+    }
     // "of its colors": how many colors it has.
     if s == "of its colors" {
         let which = match it? {
@@ -2551,7 +2558,7 @@ fn set_other_types_lost(outs: &mut Vec<Out>) {
 }
 
 /// "during your turn" / "during turns other than yours".
-fn turn_condition(s: &str) -> Option<Condition> {
+pub(crate) fn turn_condition(s: &str) -> Option<Condition> {
     match s {
         "during combat" => Some(Condition::Phase(PhaseCond::Combat)),
         "during your turn" | "during each of your turns" => Some(Condition::YourTurn),

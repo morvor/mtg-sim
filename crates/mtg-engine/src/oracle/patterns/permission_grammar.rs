@@ -574,6 +574,8 @@ fn strip_tails(mut s: &str, p: &mut Perm) -> Option<()> {
         for tail in [
             " in addition to paying its other costs",
             " in addition to paying their other costs",
+            " in addition to its other costs",
+            " in addition to their other costs",
         ] {
             if let Some(r) = t.strip_suffix(tail) {
                 let (head, cost) = r.rsplit_once(" by ")?;

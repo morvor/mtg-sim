@@ -18,9 +18,12 @@ use crate::ability::*;
 use crate::oracle::effects::{parse_clause, Builder};
 use crate::oracle::phrases::end;
 
-const THAT_PLAYER: [(&str, &str); 4] = [
+const THAT_PLAYER: [(&str, &str); 5] = [
     ("that player controls", "the iterated player controls"),
     ("that opponent controls", "the iterated player controls"),
+    // "for each opponent, choose up to one target creature they control with a rejection
+    // counter on it" (Tolarian Contempt).
+    (" they control", " the iterated player controls"),
     (
         "from that player's graveyard",
         "from the iterated player's graveyard",
@@ -34,6 +37,8 @@ fn for_each_player_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         (PlayerFilter::Opponent, r)
     } else if let Some(r) = l.strip_prefix("for each player, ") {
         (PlayerFilter::Any, r)
+    } else if let Some(r) = l.strip_prefix("for each other player, ") {
+        (PlayerFilter::NotYou, r)
     } else {
         return None;
     };
@@ -71,6 +76,14 @@ fn for_each_player_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     spec.per_player = Some(players);
     spec.text = spec.text.replace("the iterated player", "that player");
+    // "Goad those creatures.": all the targets chosen for the players.
+    let slot = Sel::Target(before as u8);
+    for noun in ["creatures", "permanents", "artifacts", "cards"] {
+        if spec.text.contains(&noun[..noun.len() - 1]) {
+            b.named.push((format!("those {noun}"), slot.clone()));
+            b.named.push((format!("the chosen {noun}"), slot.clone()));
+        }
+    }
     Some(e)
 }
 
