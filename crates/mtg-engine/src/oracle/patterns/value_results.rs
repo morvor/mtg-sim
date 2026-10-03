@@ -304,7 +304,26 @@ fn player_action(x: &str, f: Filter, card: bool, b: &Builder) -> Option<(Value, 
         } else {
             f
         };
-        (TriggerCond::CastSpell { who, filter }, r)
+        // Paradox: "... this turn from anywhere other than your hand" (either order).
+        const ELSEWHERE: &str = " from anywhere other than your hand";
+        let (r, elsewhere) = match r.strip_prefix(ELSEWHERE) {
+            Some(x) => (x, true),
+            None => (r, false),
+        };
+        let rest = this_turn(r)?;
+        let (rest, elsewhere) = match rest.strip_prefix(ELSEWHERE) {
+            Some(x) => (x, true),
+            None => (rest, elsewhere),
+        };
+        let filter = if elsewhere {
+            Filter::and(vec![filter, Filter::not(Filter::CastFrom(ZoneKind::Hand))])
+        } else {
+            filter
+        };
+        return Some((
+            events(TriggerCond::CastSpell { who, filter }, Tally::Events),
+            rest.to_string(),
+        ));
     };
     let rest = this_turn(r)?;
     Some((events(cond, Tally::Events), rest.to_string()))
