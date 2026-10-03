@@ -178,19 +178,31 @@ fn p_enters_under_your_control(l: &str, _b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "replacement grammar: this turn, enters under your control instead", priority: 150, parse: p_enters_under_your_control } }
 
 /// "Skip your next turn." (an instruction to you), "you skip your draw step this turn"
-/// (the draw step of this turn, which hasn't begun).
+/// (a replacement effect that skips the draw step of this turn if it hasn't begun yet;
+/// several of them don't skip more than that step: Elfhame Sanctuary's rulings).
 fn p_skip(l: &str, _b: &mut Builder) -> Option<Effect> {
-    let step = match end(l.trim()) {
-        "skip your next turn" => StepKind::Turn,
+    match end(l.trim()) {
+        "skip your next turn" => Some(Effect::Skip {
+            who: PlayerRef::You,
+            step: StepKind::Turn,
+        }),
         "you skip your draw step this turn" | "skip your draw step this turn" => {
-            StepKind::Draw
+            Some(Effect::AddReplacement {
+                def: ReplacementDef {
+                    event: ReplacementEvent::SkipStep {
+                        step: StepKind::Draw,
+                        whose: PlayerRel::You,
+                    },
+                    action: ReplacementAction::Prevent,
+                    self_replacement: false,
+                    optional: false,
+                },
+                duration: Duration::EndOfTurn,
+                uses: None,
+            })
         }
-        _ => return None,
-    };
-    Some(Effect::Skip {
-        who: PlayerRef::You,
-        step,
-    })
+        _ => None,
+    }
 }
 
 inventory::submit! { EffectPattern { name: "replacement grammar: skip your next turn", priority: 150, parse: p_skip } }

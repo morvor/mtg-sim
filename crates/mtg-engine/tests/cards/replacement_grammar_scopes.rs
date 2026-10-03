@@ -228,3 +228,40 @@ fn gather_the_pack_with_spell_mastery_takes_up_to_two_creatures() {
     // The spell left the hand; two creature cards came in.
     assert_eq!(t.hand_size(P0), before - 1 + 2, "{}", t.dump_log());
 }
+
+#[test]
+fn two_elfhame_sanctuaries_skip_only_this_turns_draw_step() {
+    cr!("614.10", "614.1b");
+    ruling!(
+        "Elfhame Sanctuary",
+        "you don’t skip multiple draw steps"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Elfhame Sanctuary");
+    t.battlefield(P0, "Elfhame Sanctuary");
+    for _ in 0..4 {
+        t.library_top(P0, "Forest");
+    }
+    let drawn = |t: &mut TestGame| {
+        t.g.eval_value(
+            &mtg_engine::ability::Value::CardsDrawnThisTurn(mtg_engine::ability::PlayerRef::You),
+            &mtg_engine::eval::Ctx::new(None, P0),
+        )
+    };
+    // Both search: this turn's draw step is skipped (once).
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(drawn(&mut t), 0, "{}", t.dump_log());
+    // The next turn's draw step isn't skipped.
+    t.clear_answers();
+    t.answer_yes(P0, false);
+    t.answer_yes(P0, false);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(drawn(&mut t), 1, "{}", t.dump_log());
+}

@@ -207,18 +207,15 @@ fn player_action(s: &str, ev: &PlayerEvent, ctx: &CompileContext) -> Option<(Rep
 
 fn s_if_player(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = l.trim();
-    // "The first time you would draw a card each turn, ...": while no card has been drawn
-    // this turn.
+    // "The first time you would draw a card each turn, ...": the first draw event this
+    // turn, even one another replacement effect replaced (see
+    // `kw::first_draw_each_turn`).
     if let Some(r) = l.strip_prefix("the first time you would draw a card each turn, ") {
         let mut pev = player_event("you would draw a card", ctx)?;
         let (action, optional) = player_action(r, &pev, ctx)?;
         pev.event = ReplacementEvent::Where {
             event: Box::new(pev.event),
-            cond: Condition::Compare(
-                Value::CardsDrawnThisTurn(PlayerRef::You),
-                Cmp::Eq,
-                Value::c(0),
-            ),
+            cond: Condition::Custom(crate::kw::first_draw_each_turn::FIRST_DRAW.into()),
         };
         let st = StaticAbility::new(StaticEffect::Replacement(ReplacementDef {
             event: pev.event,

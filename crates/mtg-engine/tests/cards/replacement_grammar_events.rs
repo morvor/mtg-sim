@@ -247,3 +247,26 @@ fn quantum_riddler_draws_one_more_with_one_or_fewer_cards_in_hand() {
     t.settle();
     assert_eq!(t.hand_size(P0), 5);
 }
+
+#[test]
+fn scion_of_halaster_the_draw_its_instructions_perform_isnt_the_first_one() {
+    cr!("614.1a", "614.5");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Scion of Halaster");
+    // Two commanders, each with the granted ability.
+    for name in ["Grizzly Bears", "Hill Giant"] {
+        let c = t.battlefield(P0, name);
+        t.g.objects[c.0 as usize].is_commander = true;
+    }
+    t.g.dirty = true;
+    for name in ["Island", "Forest", "Swamp", "Mountain"] {
+        t.library_top(P0, name);
+    }
+    let gy = t.graveyard_size(P0);
+    // One ability replaces the first draw; the draw its instructions perform is a second
+    // draw event this turn, so the other commander's ability doesn't apply to it.
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert_eq!(t.graveyard_size(P0), gy + 1, "{}", t.dump_log());
+    assert_eq!(t.hand_size(P0), 1);
+}

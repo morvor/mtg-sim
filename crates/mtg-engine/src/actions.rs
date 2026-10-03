@@ -981,6 +981,7 @@ impl Game {
             if self.draw_restricted(p) {
                 break;
             }
+            *self.history.draws_proposed.entry(p).or_insert(0) += 1;
             // CR 614.11b: cards drawn because a replacement effect replaced the draw aren't
             // the card this draw drew.
             for e in self.replace(ReplEvent::Draw { player: p }) {
