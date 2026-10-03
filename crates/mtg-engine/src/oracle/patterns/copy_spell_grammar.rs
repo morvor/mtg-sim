@@ -216,3 +216,29 @@ fn copy_spell_inner(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "copy spell grammar: copy it [count] [except] [if]", priority: 101, parse: copy_spell } }
+
+/// "copy each exiled card you own with a kick counter on it" (Zethi, Arcane
+/// Blademaster): a copy of each of those cards, in the zone it's in (CR 707.12).
+fn copy_each_card(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("copy each ")?;
+    // "exiled card you own ...": a card in exile.
+    let (r, exiled) = match r.strip_prefix("exiled ") {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
+    let (f, _, tail) = parse_object_phrase(r)?;
+    let f = if exiled {
+        Filter::and(vec![f, Filter::InZone(ZoneKind::Exile)])
+    } else {
+        f
+    };
+    if !end(tail).is_empty() || f.zone().is_none_or(|z| z == ZoneKind::Battlefield) {
+        return None;
+    }
+    Some(Effect::CopyCard {
+        what: Sel::All(f),
+        named: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "copy spell grammar: copy each [card]", priority: 101, parse: copy_each_card } }
