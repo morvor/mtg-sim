@@ -1970,7 +1970,14 @@ impl Game {
         }
         // Static cost modifiers from other permanents: increases first, then reductions.
         for (src, ctl, cm) in &self.statics.cost_modifiers {
-            let ctx = Ctx::new(Some(*src), *ctl);
+            let mut ctx = Ctx::new(Some(*src), *ctl);
+            // "it" is the spell and "that player" its caster (see `kw/spell_cost_grammar`).
+            ctx.event = Some(crate::object::EventInfo {
+                object: Some(card),
+                spell: Some(card),
+                player: Some(p),
+                ..Default::default()
+            });
             // (A card being considered for casting is judged as the spell it would be.)
             let applies = match &cm.applies_to {
                 CostTarget::Spells(f) => {

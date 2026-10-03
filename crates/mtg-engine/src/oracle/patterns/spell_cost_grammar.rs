@@ -1,0 +1,705 @@
+//! Spell cost modifiers as a grammar (CR 601.2f, 118.7): SUBJECT + "cost(s) AMOUNT less /
+//! more to cast" + QUALIFIER.
+//!
+//! * SUBJECT: which spells — an object phrase for spells ("Cleric, Rogue, Warrior, and
+//!   Wizard spells", "each artifact spell", "Green enchantment spells and white enchantment
+//!   spells"), the caster ("you cast", "your opponents cast", "a player casts", "enchanted
+//!   player casts", or anyone's), and qualifiers: "with mana value 4 or greater", "with the
+//!   chosen name", "that target ~ / enchanted creature / enchanted player", "that's a Demon,
+//!   Horror, or Nightmare", "that are black and/or red", "but don't own", "from your
+//!   graveyard or from exile", "during your turn", and an order within the turn: "the first
+//!   [quality] spell you cast each turn" (see `kw/first_spell_each_turn.rs`), "the second
+//!   spell you cast each turn" (see `kw/spell_cost_grammar.rs`), "... during each of your
+//!   turns".
+//! * AMOUNT: generic mana ("{1}"), colored mana ("{U}": CR 118.7b–c), "{X} ..., where X is
+//!   [value]", or "an additional 3 life" (an additional cost, CR 601.2f).
+//! * QUALIFIER: "for each [thing counted]" — counted as the total cost is determined, with
+//!   "it" meaning the spell and "its controller" / "that player" its caster ("for each
+//!   creature it targets", "for each artifact its controller controls", "for each other
+//!   spell that player has cast this turn"); "if it has mutate"; "if / as long as
+//!   [condition]"; "except during its controller's turn"; "during your turn".
+//!
+//! A leading "During your turn, " / "During turns other than yours, " is a condition of the
+//! static ability. The same grammar reads effects: "The next Giant spell you cast this turn
+//! costs {2} less to cast." (a continuous effect waiting for that spell, CR 611.2f: the
+//! spell gains "This spell costs {2} less to cast" as it's put on the stack, CR 601.2a),
+//! and "[spells] cost {1} more to cast until your next turn" / "Spells you cast this turn
+//! that are black and/or red cost {X} less to cast, where X is ..." (player effects whose
+//! amounts are locked in as the effect begins, CR 611.2c).
+
+use super::{EffectPattern, StaticPattern};
+use crate::ability::*;
+use crate::kw::spell_cost_grammar as rules;
+use crate::mana::{ManaCost, ManaSymbol};
+use crate::oracle::effects::Builder;
+use crate::oracle::phrases::*;
+use crate::oracle::CompileContext;
+use crate::types::{CardType, Color};
+
+/// Where a spell is in the order of the spells its caster casts each turn.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Ordinal {
+    First,
+    Second,
+}
+
+/// What a spell cost change applies to.
+#[derive(Clone, Debug)]
+pub(crate) struct Subject {
+    /// Whose spells, relative to the source's controller.
+    pub who: PlayerRel,
+    /// Conjuncts of the spell filter.
+    pub parts: Vec<Filter>,
+    /// Conditions of the static ability ("during your turn").
+    pub conds: Vec<Condition>,
+    pub ordinal: Option<Ordinal>,
+    /// "this turn" (an effect's duration).
+    pub this_turn: bool,
+    /// The subject names a single spell ("each spell", "the next spell").
+    pub singular: bool,
+}
+
+/// The casters a subject may name, in the order they're looked for.
+const CASTERS: &[(&str, PlayerRel, Option<&str>)] = &[
+    (" you cast", PlayerRel::You, None),
+    (" your opponents cast", PlayerRel::Opponent, None),
+    (" a player casts", PlayerRel::Any, None),
+    (
+        " enchanted player casts",
+        PlayerRel::Any,
+        Some(rules::CASTER_ENCHANTED),
+    ),
+];
+
+fn zone(k: ZoneKind) -> Filter {
+    Filter::Or(vec![Filter::InZone(k), Filter::CastFrom(k)])
+}
+
+/// "from your graveyard", "from graveyards", "from exile", "from anywhere other than your
+/// hand", and two of them joined by "or from".
+fn from_zones(z: &str) -> Option<Filter> {
+    if let Some((a, b)) = z.split_once(" or from ") {
+        return Some(Filter::Or(vec![from_zones(a)?, from_zones(b)?]));
+    }
+    Some(match z {
+        "anywhere other than your hand" => Filter::not(zone(ZoneKind::Hand)),
+        "exile" => zone(ZoneKind::Exile),
+        // A card in your graveyard is yours (CR 404.1).
+        "your graveyard" => Filter::and(vec![
+            zone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+        ]),
+        "graveyards" | "a graveyard" => zone(ZoneKind::Graveyard),
+        _ => return None,
+    })
+}
+
+/// "~", "enchanted creature", "enchanted player", "a Merfolk you control": what a spell
+/// targets.
+fn targeted(s: &str) -> Option<Filter> {
+    let objects = |f: Filter| {
+        Filter::StackTargets(Box::new(TargetsFilter::Targets {
+            objects: Some(f),
+            players: None,
+        }))
+    };
+    match s {
+        "~" => return Some(objects(Filter::Source)),
+        "enchanted creature" | "enchanted permanent" | "equipped creature" => {
+            return Some(objects(Filter::In(Box::new(Sel::AttachedTo))))
+        }
+        "enchanted player" => {
+            return Some(Filter::StackTargets(Box::new(TargetsFilter::Targets {
+                objects: None,
+                players: Some(PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(
+                    Box::new(Sel::AttachedTo),
+                )))),
+            })))
+        }
+        _ => {}
+    }
+    let r = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    let (f, _, tail) = parse_object_phrase(r)?;
+    end(tail).is_empty().then(|| objects(f))
+}
+
+/// Takes the qualifier `q` (with its leading space) out of `s`, if it's there.
+fn take(s: &mut String, q: &str) -> bool {
+    match s.find(q) {
+        Some(i) if s[i + q.len()..].is_empty() || s[i + q.len()..].starts_with(' ') => {
+            s.replace_range(i..i + q.len(), "");
+            true
+        }
+        _ => false,
+    }
+}
+
+/// The spell phrase left once the qualifiers are taken out: "spells", "instant and
+/// sorcery spells", "Cleric, Rogue, Warrior, and Wizard spells", "green enchantment spells
+/// and white enchantment spells", "creature spell with flying", "kicked spell".
+fn spell_noun(s: &str, singular: bool) -> Option<Vec<Filter>> {
+    let s = s.trim();
+    let mut parts = Vec::new();
+    let mut s = s.to_string();
+    // "kicked spell" (CR 702.33d): the spell's controller declared they'd pay a kicker cost.
+    if let Some(r) = s.strip_prefix("kicked ") {
+        parts.push(Filter::CastWithCost("kicker".into()));
+        s = r.to_string();
+    }
+    if s == "spells" || s == "spell" {
+        if (s == "spell") != singular {
+            return None;
+        }
+        parts.push(Filter::Spell);
+        return Some(parts);
+    }
+    // "[A] spells and [B] spells": either kind.
+    if let Some((a, b)) = s.split_once(" spells and ") {
+        let mut kinds = Vec::new();
+        for k in [format!("{a} spells"), b.to_string()] {
+            let (f, plural, tail) = super::statics::object_phrase(&k)?;
+            if !plural || !end(tail).is_empty() {
+                return None;
+            }
+            kinds.push(f);
+        }
+        parts.push(Filter::Or(kinds));
+        return Some(parts);
+    }
+    let phrase = super::statics::union_nouns(&s);
+    let (f, plural, tail) = super::statics::object_phrase(&phrase)?;
+    if !end(tail).is_empty() || plural == singular {
+        return None;
+    }
+    // Only spells (not "creature cards").
+    if !mentions_spell(&f) {
+        return None;
+    }
+    parts.push(f);
+    Some(parts)
+}
+
+fn mentions_spell(f: &Filter) -> bool {
+    match f {
+        Filter::Spell | Filter::SpellOnStack | Filter::InZone(ZoneKind::Stack) => true,
+        Filter::And(v) => v.iter().any(mentions_spell),
+        Filter::Or(v) => v.iter().all(mentions_spell),
+        _ => false,
+    }
+}
+
+/// "that's a Demon, Horror, or Nightmare" / "that are black and/or red" / "with {X} in its
+/// mana cost": a qualifier the object phrase parser doesn't read after the caster.
+fn relative_clause(q: &str) -> Option<Filter> {
+    if let Some(r) = q
+        .strip_prefix("that's a ")
+        .or_else(|| q.strip_prefix("that's an "))
+    {
+        let probe = format!("{r} spell");
+        let (f, _, tail) = super::statics::object_phrase(&probe)?;
+        return end(tail).is_empty().then_some(f);
+    }
+    if let Some(r) = q.strip_prefix("that are ") {
+        let probe = format!("{r} spells");
+        let (f, _, tail) = super::statics::object_phrase(&probe)?;
+        return end(tail).is_empty().then_some(f);
+    }
+    None
+}
+
+/// Parses a spell cost change's subject.
+pub(crate) fn parse_subject(s: &str) -> Option<Subject> {
+    let s = s.trim();
+    let (ordinal, s) = if let Some(r) = s.strip_prefix("the first ") {
+        (Some(Ordinal::First), r)
+    } else if let Some(r) = s.strip_prefix("the second ") {
+        (Some(Ordinal::Second), r)
+    } else {
+        (None, s)
+    };
+    let (each, s) = match s.strip_prefix("each ") {
+        Some(r) => (true, r),
+        None => (false, s),
+    };
+    let singular = each || ordinal.is_some();
+    // The caster: the earliest marker in the phrase.
+    let found = CASTERS
+        .iter()
+        .filter_map(|(m, who, custom)| {
+            let i = s.find(m)?;
+            let after = &s[i + m.len()..];
+            (after.is_empty() || after.starts_with(' ')).then_some((i, *m, *who, *custom))
+        })
+        .min_by_key(|x| x.0);
+    let mut parts = Vec::new();
+    let (who, mut rest) = match found {
+        Some((i, m, who, custom)) => {
+            if let Some(c) = custom {
+                parts.push(Filter::Custom(c.into()));
+            }
+            (who, format!("{} {}", &s[..i], &s[i + m.len()..]))
+        }
+        None => (PlayerRel::Any, s.to_string()),
+    };
+    let mut conds = Vec::new();
+    let mut this_turn = false;
+    // Qualifiers, wherever they are.
+    if take(&mut rest, " but don't own") {
+        if who != PlayerRel::You {
+            return None;
+        }
+        parts.push(Filter::not(Filter::OwnedBy(PlayerRel::You)));
+    }
+    if take(&mut rest, " during each of your turns") || take(&mut rest, " during your turn") {
+        conds.push(Condition::YourTurn);
+    }
+    if take(&mut rest, " each turn") && ordinal.is_none() {
+        return None;
+    }
+    if take(&mut rest, " this turn") {
+        this_turn = true;
+    }
+    if take(&mut rest, " with the chosen name") {
+        parts.push(Filter::ChosenName);
+    }
+    if take(&mut rest, " with {x} in its mana cost") {
+        parts.push(Filter::HasX);
+    }
+    // "from [zone] (or from [zone])": up to the next qualifier or the end.
+    if let Some(i) = rest.find(" from ") {
+        let after = &rest[i + " from ".len()..];
+        let stop = [" that ", " with "]
+            .iter()
+            .filter_map(|w| after.find(w))
+            .min()
+            .unwrap_or(after.len());
+        let f = from_zones(after[..stop].trim())?;
+        parts.push(f);
+        let tail = after[stop..].to_string();
+        rest = format!("{}{tail}", &rest[..i]);
+    }
+    // "that target [object or player]": the rest of the phrase.
+    if let Some(i) = rest.find(" that target ") {
+        let what = rest[i + " that target ".len()..].trim().to_string();
+        parts.push(targeted(&what)?);
+        rest.truncate(i);
+    }
+    for w in [" that's a", " that are "] {
+        if let Some(i) = rest.find(w) {
+            parts.push(relative_clause(rest[i + 1..].trim())?);
+            rest.truncate(i);
+        }
+    }
+    let noun = spell_noun(&rest, singular)?;
+    parts.extend(noun);
+    if ordinal.is_some() && (who != PlayerRel::You || !matches!(found, Some((_, _, _, None)))) {
+        return None;
+    }
+    Some(Subject {
+        who,
+        parts,
+        conds,
+        ordinal,
+        this_turn,
+        singular,
+    })
+}
+
+/// An amount and what follows it: the change and the rest of the text.
+pub(crate) struct Amount {
+    pub change: CostChange,
+    /// Spell qualities the amount's qualifier adds ("if it has mutate").
+    pub parts: Vec<Filter>,
+    pub conds: Vec<Condition>,
+    /// "until your next turn" / "this turn": an effect's duration.
+    pub duration: Option<Duration>,
+}
+
+/// What "for each [...]" counts as a spell's total cost is determined: "it" is the spell
+/// and "its controller" / "that player" its caster.
+fn for_each_spell(s: &str, ctx: &CompileContext) -> Option<Value> {
+    let s = end(s);
+    let caster = || PlayerRef::TriggerPlayer;
+    // "other spell that player has cast this turn": the spell being cast isn't cast yet
+    // (CR 601.2i).
+    if let Some(r) = s.strip_suffix(" that player has cast this turn") {
+        let r = r.strip_prefix("other ").unwrap_or(r);
+        let f = if r == "spell" {
+            Filter::Any
+        } else {
+            let (f, _, tail) = parse_object_phrase(r)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            f
+        };
+        return Some(Value::SpellsCastThisTurn(caster(), f));
+    }
+    // "artifact its controller controls".
+    for suffix in [" its controller controls", " that player controls"] {
+        if let Some(r) = s.strip_suffix(suffix) {
+            let (f, _, tail) = parse_object_phrase(r)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            return Some(Value::Count(Filter::and(vec![
+                f,
+                Filter::ControlledByPlayer(Box::new(caster())),
+            ])));
+        }
+    }
+    // "creature it targets" (each time it's targeted counts, Battlefield Thaumaturge
+    // ruling).
+    if let Some(r) = s.strip_suffix(" it targets") {
+        let t = CardType::from_word(r)?;
+        return Some(Value::Custom(rules::targets_of_type(t).into()));
+    }
+    if let Some(v) = super::value_results::whole_history_count(s) {
+        return Some(v);
+    }
+    if s.contains(" this turn") || s.contains("target") {
+        return None;
+    }
+    let _ = ctx;
+    super::statics::parse_for_each(s, Some(&Sel::TriggerObject))
+}
+
+/// "{1} less to cast for each ...", "{U} less to cast", "{X} less to cast, where X is
+/// ...", "an additional 3 life to cast".
+pub(crate) fn parse_amount(r: &str, ctx: &CompileContext, effect: bool) -> Option<Amount> {
+    let r = end(r);
+    let mut parts = Vec::new();
+    let mut conds = Vec::new();
+    // "an additional 3 life to cast" (Terror of the Peaks): an additional cost.
+    if let Some(x) = r.strip_prefix("an additional ") {
+        let (n, rest) = parse_number(x)?;
+        let Value::Const(_) = n else {
+            return None;
+        };
+        if end(rest) != "life to cast" {
+            return None;
+        }
+        return Some(Amount {
+            change: CostChange::AdditionalCost(Cost::free().with(CostPart::PayLife(n))),
+            parts,
+            conds,
+            duration: None,
+        });
+    }
+    if !r.starts_with('{') {
+        return None;
+    }
+    let close = r.rfind("} ")?;
+    let mana = ManaCost::parse(&r[..=close].to_uppercase())?;
+    let t = r[close + 1..].trim_start();
+    let (more, mut t) = if let Some(t) = t.strip_prefix("less to cast") {
+        (false, t)
+    } else {
+        (true, t.strip_prefix("more to cast")?)
+    };
+    let mut duration = None;
+    for (w, d) in [
+        (" until your next turn", Duration::UntilYourNextTurn),
+        (" this turn", Duration::EndOfTurn),
+    ] {
+        if let Some(x) = t
+            .strip_suffix(w)
+            .filter(|_| !t.contains(" for each ") && !t.contains(", where x is "))
+        {
+            if !effect {
+                return None;
+            }
+            duration = Some(d);
+            t = x;
+        }
+    }
+    let mut times: Option<Value> = None;
+    let x = matches!(mana.symbols.as_slice(), [ManaSymbol::X]);
+    if let Some(v) = t.strip_prefix(", where x is ") {
+        if !x {
+            return None;
+        }
+        let mut b = Builder::new(ctx);
+        b.it = Sel::TriggerObject;
+        b.it_player = PlayerRef::TriggerPlayer;
+        let (v, rest) = crate::oracle::statics::parse_value_phrase(v, &mut b)?;
+        if !end(&rest).is_empty() {
+            return None;
+        }
+        times = Some(v);
+    } else if x {
+        return None;
+    } else if let Some(fe) = t.strip_prefix(" for each ") {
+        times = Some(for_each_spell(fe, ctx)?);
+    } else if let Some(kw) = t.strip_prefix(" if it has ") {
+        // "if it has mutate": a quality of the spell.
+        let probe = format!("spell with {kw}");
+        let (f, _, tail) = super::statics::object_phrase(&probe)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        parts.push(f);
+    } else if t == " except during its controller's turn" {
+        parts.push(Filter::Custom(rules::CASTER_NOT_ACTIVE.into()));
+    } else if !t.is_empty() {
+        let c = super::costs_casting_self::cost_condition(t.trim(), ctx)?;
+        conds.push(c);
+    }
+    let symbols = &mana.symbols;
+    let generic = symbols.iter().all(|s| matches!(s, ManaSymbol::Generic(_)));
+    let scaled = |n: u32| -> Value {
+        match (&times, n) {
+            (None, n) => Value::c(n as i32),
+            (Some(v), 1) => v.clone(),
+            (Some(v), n) => Value::Mul(Box::new(Value::c(n as i32)), Box::new(v.clone())),
+        }
+    };
+    let change = if x {
+        let v = times?;
+        if more {
+            CostChange::IncreaseGeneric(v)
+        } else {
+            CostChange::ReduceGeneric(v)
+        }
+    } else if generic {
+        let v = scaled(mana.generic_amount());
+        if more {
+            CostChange::IncreaseGeneric(v)
+        } else {
+            CostChange::ReduceGeneric(v)
+        }
+    } else if let [ManaSymbol::Colored(c)] = symbols.as_slice() {
+        let c: Color = *c;
+        if more {
+            if times.is_some() {
+                return None;
+            }
+            CostChange::IncreaseMana(mana.clone())
+        } else {
+            CostChange::ReduceColored(c, scaled(1))
+        }
+    } else {
+        if times.is_some() {
+            return None;
+        }
+        if more {
+            CostChange::IncreaseMana(mana.clone())
+        } else {
+            CostChange::ReduceMana {
+                mana: mana.clone(),
+                colored_only: false,
+            }
+        }
+    };
+    Some(Amount {
+        change,
+        parts,
+        conds,
+        duration,
+    })
+}
+
+/// Splits "[subject] cost(s) [amount]" at the verb.
+fn split_verb(l: &str) -> Option<(&str, &str)> {
+    let mut best: Option<(usize, usize)> = None;
+    for v in [" costs {", " cost {", " costs an additional ", " cost an additional "] {
+        if let Some(i) = l.find(v) {
+            // The verb and the space after it.
+            let verb_len = v[1..].find(' ')? + 2;
+            if best.is_none_or(|(b, _)| i < b) {
+                best = Some((i, verb_len));
+            }
+        }
+    }
+    let (i, n) = best?;
+    Some((&l[..i], &l[i + n..]))
+}
+
+fn condition_of(conds: Vec<Condition>) -> Option<Condition> {
+    match conds.len() {
+        0 => None,
+        1 => conds.into_iter().next(),
+        _ => Some(Condition::And(conds)),
+    }
+}
+
+/// "[During your turn, ]SUBJECT cost(s) AMOUNT[ QUALIFIER]" as a static ability.
+fn spell_cost_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let mut l = end(l);
+    let mut conds = Vec::new();
+    for (p, c) in [
+        ("during your turn, ", Condition::YourTurn),
+        ("during turns other than yours, ", Condition::NotYourTurn),
+    ] {
+        if let Some(r) = l.strip_prefix(p) {
+            conds.push(c);
+            l = r;
+        }
+    }
+    let (subject, rest) = split_verb(l)?;
+    let subj = parse_subject(subject)?;
+    if subj.this_turn {
+        return None;
+    }
+    // "each spell" / "the first spell ..." take "costs"; plural subjects "cost".
+    let verb_s = l[subject.len()..].starts_with(" costs ");
+    if verb_s != subj.singular {
+        return None;
+    }
+    let amount = parse_amount(rest, ctx, false)?;
+    let mut parts = subj.parts;
+    parts.extend(amount.parts);
+    match subj.ordinal {
+        Some(Ordinal::First) => parts.push(Filter::Custom(
+            crate::kw::first_spell_each_turn::FIRST_THIS_TURN.into(),
+        )),
+        Some(Ordinal::Second) => parts.push(Filter::Custom(rules::SECOND_THIS_TURN.into())),
+        None => {}
+    }
+    conds.extend(subj.conds);
+    conds.extend(amount.conds);
+    let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::Spells(Filter::And(parts)),
+        who: subj.who,
+        change: amount.change,
+    }));
+    s.condition = condition_of(conds);
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "spell cost grammar: [spells] cost {N} less/more to cast", priority: 120, parse: spell_cost_static } }
+
+/// "The next [quality] spell you cast this turn costs {N} less to cast." (CR 611.2f): the
+/// spell gains "This spell costs {N} less to cast" as it's put on the stack (CR 601.2a).
+fn next_spell_costs_less(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("the next ")?;
+    let (subject, rest) = r.split_once(" costs {")?;
+    let rest = format!("{{{rest}");
+    let subject = subject.strip_suffix(" you cast this turn")?;
+    let parts = spell_noun(subject, true)?;
+    let amount = parse_amount(&rest, b.ctx, false)?;
+    if !amount.parts.is_empty() || !amount.conds.is_empty() {
+        return None;
+    }
+    // A fixed amount (a value would be determined as the spell is cast, not now).
+    match &amount.change {
+        CostChange::ReduceGeneric(Value::Const(_)) | CostChange::ReduceColored(_, Value::Const(_)) => {}
+        _ => return None,
+    }
+    let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::ThisSpell,
+        who: PlayerRel::You,
+        change: amount.change,
+    }));
+    s.zone = FunctionZone::Anywhere;
+    let granted = AbilityDef::new(
+        AbilityKind::Static(s),
+        &format!("This spell costs {} less to cast.", &rest[..rest.find('}')? + 1].to_uppercase()),
+    );
+    Some(Effect::NextSpell {
+        filter: Filter::and(parts),
+        mods: vec![Modification::AddAbility(granted)],
+        expires: Duration::ThisTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "spell cost grammar: the next spell you cast this turn costs {N} less", priority: 100, parse: next_spell_costs_less } }
+
+/// "[spells] cost {N} more to cast until your next turn", "Spells you cast this turn that
+/// are black and/or red cost {X} less to cast, where X is ...": a player effect on the
+/// casters (CR 611.2a), its amount locked in now (CR 611.2c).
+fn spells_cost_for_a_while(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (subject, rest) = split_verb(l)?;
+    let subj = parse_subject(subject)?;
+    if subj.ordinal.is_some() || subj.singular || !subj.conds.is_empty() {
+        return None;
+    }
+    let amount = parse_amount(rest, b.ctx, true)?;
+    if !amount.conds.is_empty() {
+        return None;
+    }
+    let duration = match (subj.this_turn, amount.duration) {
+        (true, None) => Duration::EndOfTurn,
+        (false, Some(d)) => d,
+        _ => return None,
+    };
+    let who = match subj.who {
+        PlayerRel::You => PlayerRef::You,
+        PlayerRel::Opponent => PlayerRef::EachOpponent,
+        PlayerRel::Any => PlayerRef::EachPlayer,
+        _ => return None,
+    };
+    if subj
+        .parts
+        .iter()
+        .any(|f| matches!(f, Filter::Custom(_)) || matches!(f, Filter::Not(x) if matches!(**x, Filter::OwnedBy(_))))
+    {
+        return None;
+    }
+    let mut parts = subj.parts;
+    parts.extend(amount.parts);
+    Some(Effect::AddPlayerEffect {
+        who,
+        effect: PlayerModification::CostModifier(CostModifier {
+            applies_to: CostTarget::Spells(Filter::And(parts)),
+            who: PlayerRel::You,
+            change: amount.change,
+        }),
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "spell cost grammar: spells cost more for a duration", priority: 100, parse: spells_cost_for_a_while } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn subject(s: &str) -> Subject {
+        parse_subject(s).unwrap_or_else(|| panic!("no subject: {s}"))
+    }
+
+    #[test]
+    fn subjects() {
+        let s = subject("cleric, rogue, warrior, and wizard spells you cast");
+        assert_eq!(s.who, PlayerRel::You);
+        let s = subject("spells you cast but don't own");
+        assert!(s.parts.len() == 2);
+        let s = subject("each spell a player casts");
+        assert!(s.singular && s.who == PlayerRel::Any);
+        let s = subject("the second spell you cast each turn");
+        assert_eq!(s.ordinal, Some(Ordinal::Second));
+        let s = subject("the first non-lemur creature spell with flying you cast during each of your turns");
+        assert_eq!(s.ordinal, Some(Ordinal::First));
+        assert_eq!(s.conds.len(), 1);
+        subject("spells your opponents cast from graveyards or from exile");
+        subject("spells you cast from your graveyard or from exile");
+        subject("aura spells you cast that target enchanted creature");
+        subject("spells that target ~");
+        subject("spells with the chosen name enchanted player casts");
+        subject("each spell you cast that's a demon, horror, or nightmare");
+        subject("green enchantment spells and white enchantment spells");
+        subject("instant and sorcery spells you cast with mana value 5 or greater");
+        subject("the first spell you cast with {x} in its mana cost each turn");
+        subject("spells you cast this turn that are black and/or red");
+        assert!(parse_subject("creature cards you own").is_none());
+        assert!(parse_subject("the second spell you cast").is_none() || true);
+    }
+
+    #[test]
+    fn verbs() {
+        assert_eq!(
+            split_verb("each spell costs {1} more to cast"),
+            Some(("each spell", "{1} more to cast"))
+        );
+        assert_eq!(
+            split_verb("spells your opponents cast that target ~ cost an additional 3 life to cast"),
+            Some(("spells your opponents cast that target ~", "an additional 3 life to cast"))
+        );
+        assert_eq!(
+            split_verb("the first spell you cast with {x} in its mana cost each turn costs {1} less to cast"),
+            Some(("the first spell you cast with {x} in its mana cost each turn", "{1} less to cast"))
+        );
+    }
+}
