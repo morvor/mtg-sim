@@ -3,10 +3,12 @@
 //! (CR 603.8), and counters that are only memory aids.
 
 use crate::r_p076_common::mana;
-use crate::r_s01_common::{attack_with, supported, tokens};
+use crate::r_p190_mana_costs::only_unsupported;
+use crate::r_s01_common::{attack_with, supported};
 use crate::r_s05_common::{enter, move_to};
 use crate::r_s06_common::attach_new;
 use mtg_engine::decision::Answer;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -184,7 +186,7 @@ fn gemstone_mine_isnt_sacrificed_if_its_last_counter_is_removed_otherwise() {
 
 #[test]
 fn a_non_dfc_copy_of_edgar_doesnt_return() {
-    cr!("712.14", "707.2");
+    cr!("712.14a", "707.2");
     ruling!(
         "Edgar, Charmed Groom // Edgar Markov's Coffin",
         "If a card that isn't a double-faced card is a copy of Edgar, Charmed Groom, it won't return to the battlefield when it dies."
@@ -291,15 +293,76 @@ fn arixmethes_as_a_land_and_attacking_after_waking() {
 
 #[test]
 fn phylactery_lich_with_no_artifacts_is_sacrificed() {
-    cr!("603.8");
+    cr!("614.12", "603.8");
     ruling!(
         "Phylactery Lich",
         "If you control no artifacts as Phylactery Lich enters the battlefield, its first ability won’t do anything. As soon as it enters the battlefield, its last ability will trigger"
     );
+    supported("Phylactery Lich");
     let mut t = TestGame::new(2);
     let lich = enter(&mut t, P0, "Phylactery Lich");
     t.resolve_all();
     assert_eq!(t.zone(lich), Zone::Graveyard(P0));
+    // With an artifact, it gets the counter as the Lich enters: nothing triggers.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Ornithopter");
+    let lich = enter(&mut t, P0, "Phylactery Lich");
+    assert_eq!(t.counters(a, "phylactery"), 1);
+    assert_eq!(t.stack_len(), 0);
+    t.resolve_all();
+    assert!(t.on_battlefield(lich));
+}
+
+#[test]
+fn phylactery_lich_chooses_an_artifact_already_on_the_battlefield_without_targeting() {
+    cr!("614.12a", "115.1", "702.18a");
+    ruling!(
+        "Phylactery Lich",
+        "If Phylactery Lich and an artifact are entering the battlefield under your control at the same time, you can’t put a phylactery counter on that artifact."
+    );
+    ruling!(
+        "Phylactery Lich",
+        "Phylactery Lich’s first ability doesn’t target the artifact."
+    );
+    supported("Eerie Ultimatum");
+    // Returned together with Ornithopter by Eerie Ultimatum: the Ornithopter can't get
+    // the counter, so with no other artifact the Lich is sacrificed.
+    let return_both = |t: &mut TestGame| {
+        let lich = t.graveyard(P0, "Phylactery Lich");
+        let thopter = t.graveyard(P0, "Ornithopter");
+        mana(t, P0, ManaType::W, 2);
+        mana(t, P0, ManaType::B, 3);
+        mana(t, P0, ManaType::G, 2);
+        let c = t.hand(P0, "Eerie Ultimatum");
+        t.answer_choose(P0, &[obj(lich), obj(thopter)]);
+        t.cast(P0, c).go();
+        t.resolve_all();
+        (lich, thopter)
+    };
+    let mut t = TestGame::new(2);
+    let (lich, thopter) = return_both(&mut t);
+    assert!(t.on_battlefield(thopter));
+    assert_eq!(t.counters(thopter, "phylactery"), 0);
+    assert_eq!(t.zone(lich), Zone::Graveyard(P0));
+    // An artifact already on the battlefield gets it.
+    let mut t = TestGame::new(2);
+    let memnite = t.battlefield(P0, "Memnite");
+    let (lich, thopter) = return_both(&mut t);
+    assert_eq!(t.counters(thopter, "phylactery"), 0);
+    assert_eq!(t.counters(memnite, "phylactery"), 1);
+    assert!(t.on_battlefield(lich));
+    // Not targeted: an artifact with shroud can be chosen.
+    let mut t = TestGame::new(2);
+    let thopter = t.battlefield(P0, "Ornithopter");
+    attach_new(&mut t, P0, "Lightning Greaves", thopter);
+    let greaves_too = t.g.find_in_zone(Zone::Battlefield, "Lightning Greaves")[0];
+    assert!(t.obj(thopter).has_keyword(KeywordKind::Shroud));
+    t.answer_choose(P0, &[obj(thopter)]);
+    let lich = enter(&mut t, P0, "Phylactery Lich");
+    assert_eq!(t.counters(thopter, "phylactery"), 1);
+    assert_eq!(t.counters(greaves_too, "phylactery"), 0);
+    t.resolve_all();
+    assert!(t.on_battlefield(lich));
 }
 
 #[test]
@@ -358,6 +421,7 @@ fn tetzimoc_destroys_creatures_with_any_prey_counter() {
         "Tetzimoc, Primal Death",
         "Tetzimoc's triggered ability doesn't care how a prey counter got onto a creature an opponent controls or whose Tetzimoc put that counter on the creature."
     );
+    only_unsupported("Tetzimoc, Primal Death", "Reveal ~ from your hand");
     let mut t = TestGame::new(2);
     let theirs = t.battlefield(P1, "Grizzly Bears");
     let clean = t.battlefield(P1, "Raging Goblin");
@@ -413,6 +477,7 @@ fn fasting_puts_a_counter_then_checks() {
         "Fasting",
         "When you resolve the beginning-of-upkeep triggered ability, you first put a hunger counter on Fasting, then you check how many hunger counters it has. If there are five or more, Fasting is destroyed."
     );
+    only_unsupported("Fasting", "skip that step");
     let mut t = TestGame::new(2);
     let f = t.battlefield(P0, "Fasting");
     put(&mut t, f, "hunger", 3);
@@ -512,5 +577,4 @@ fn arbiter_of_the_ideal_permanent_enters_as_an_enchantment() {
     assert_eq!(t.counters(bears, "manifestation"), 1);
     // Eidolon of Blossoms' constellation ability drew a card.
     assert_eq!(t.hand_size(P0), hand + 1);
-    let _ = tokens(&t, P0);
 }

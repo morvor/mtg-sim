@@ -5,7 +5,8 @@
 //! 303.4f), characteristic-defining layers (CR 613), and the timing of gift triggers.
 
 use crate::r_p076_common::{is_blocked, mana};
-use crate::r_s01_common::{supported, tokens, with_subtype};
+use crate::r_p190_mana_costs::only_unsupported;
+use crate::r_s01_common::{supported, tokens};
 use crate::r_s03_common::to_blockers;
 use crate::r_s05_common::{enter, move_to};
 use crate::r_s06_common::{attach_new, damage};
@@ -42,7 +43,9 @@ fn p1_cancels(t: &mut TestGame, spell: ObjectId) {
 fn asked_option(t: &TestGame, from: usize, prompt: &str) -> usize {
     t.asked()[from..]
         .iter()
-        .filter(|(_, d)| matches!(d, Decision::ChooseOption { prompt: p, .. } if p.contains(prompt)))
+        .filter(
+            |(_, d)| matches!(d, Decision::ChooseOption { prompt: p, .. } if p.contains(prompt)),
+        )
         .count()
 }
 
@@ -101,7 +104,11 @@ fn departed_deckhands_ability_doesnt_unblock_a_blocked_creature() {
     let deck = t.battlefield(P0, "Departed Deckhand");
     let attacker = t.battlefield(P0, "Hill Giant");
     let blocker = t.battlefield(P1, "Grizzly Bears");
-    to_blockers(&mut t, &[(attacker, Entity::Player(P1))], &[(blocker, attacker)]);
+    to_blockers(
+        &mut t,
+        &[(attacker, Entity::Player(P1))],
+        &[(blocker, attacker)],
+    );
     assert!(is_blocked(&t, attacker));
     mana(&mut t, P0, ManaType::U, 1);
     mana(&mut t, P0, ManaType::C, 3);
@@ -188,7 +195,7 @@ fn echoes_of_eternity_doesnt_affect_as_enters_abilities() {
 
 #[test]
 fn echoes_of_eternity_turned_face_up_triggers_only_if_colorless_face_up() {
-    cr!("603.2d", "708.8", "702.37e");
+    cr!("603.2d", "708.8", "701.40b");
     ruling!(
         "Echoes of Eternity",
         "Abilities that apply \"when [this permanent] is turned face up\" will trigger an additional time only if that permanent is colorless once it has been turned face up."
@@ -461,6 +468,7 @@ fn leyline_of_the_guildpact_lands_get_every_basic_type() {
         "Leyline of the Guildpact",
         "Giving a land additional basic land types doesn't change its name or whether it's legendary or basic."
     );
+    only_unsupported("Leyline of the Guildpact", "is all colors");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Leyline of the Guildpact");
     let mine = t.battlefield(P0, "Urza's Mine");
@@ -476,19 +484,27 @@ fn leyline_of_the_guildpact_lands_get_every_basic_type() {
     assert!(t.obj(mine).chars.has_subtype("Urza's"));
     assert_eq!(t.obj(mine).chars.name, "Urza's Mine");
     assert!(!t.obj(mine).chars.supertypes.contains(Supertype::Basic));
-    assert!(t.obj(cradle).chars.supertypes.contains(Supertype::Legendary));
+    assert!(t
+        .obj(cradle)
+        .chars
+        .supertypes
+        .contains(Supertype::Legendary));
     assert!(t.obj(forest).chars.supertypes.contains(Supertype::Basic));
     assert_eq!(t.obj(forest).chars.name, "Forest");
     assert!(!t.obj(theirs).chars.has_subtype("Plains"));
-    // Urza's Mine taps for white (its Plains ability).
-    let n = t
+    // Urza's Mine has its own mana ability and one of each basic land type's.
+    let texts: Vec<String> = t
         .obj(mine)
         .chars
         .abilities
         .iter()
         .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
-        .count();
-    assert!(n >= 6, "{n} mana abilities");
+        .map(|a| a.text.to_string())
+        .collect();
+    assert_eq!(texts.len(), 6, "{texts:?}");
+    for m in ["{W}", "{U}", "{B}", "{R}", "{G}"] {
+        assert!(texts.iter().any(|x| x.contains(m)), "{m}: {texts:?}");
+    }
 }
 
 #[test]
@@ -707,5 +723,4 @@ fn rona_countered_after_being_cast_from_the_graveyard_can_be_cast_again() {
     t.resolve_all();
     assert!(t.on_battlefield(rona));
     assert_eq!(t.hand_size(P0), 0);
-    let _ = with_subtype(&t, P0, "Wizard");
 }

@@ -16,6 +16,15 @@ fn pay_way(t: &mut TestGame, p: PlayerId, how: usize) {
     t.answer(p, DecisionKind::Option, Answer::Index(how));
 }
 
+/// Asserts that `name`'s only unsupported text is the one block containing `needle` (an
+/// ability the rulings tested with it don't concern).
+pub fn only_unsupported(name: &str, needle: &str) {
+    let c = card(name);
+    let u = c.unsupported_text();
+    assert_eq!(u.len(), 1, "{name}: {u:?}");
+    assert!(u[0].contains(needle), "{name}: {u:?}");
+}
+
 #[test]
 fn phyrexian_symbols_count_one_toward_mana_value_even_paid_with_life() {
     cr!("107.4f", "202.3", "702.150a");
@@ -28,6 +37,7 @@ fn phyrexian_symbols_count_one_toward_mana_value_even_paid_with_life() {
         "A Phyrexian mana symbol contributes 1 toward the mana value of a card, even if life is paid for it. Specifically, Nissa's mana value is always 7."
     );
     supported("Jace, the Perfected Mind");
+    only_unsupported("Nissa, Ascended Animist", "Phyrexian Horror creature token");
     // Jace {2}{U}{U/P}: {U/P} paid with 2 life.
     let mut t = TestGame::new(2);
     let jace = t.hand(P0, "Jace, the Perfected Mind");
@@ -41,6 +51,8 @@ fn phyrexian_symbols_count_one_toward_mana_value_even_paid_with_life() {
     t.resolve_all();
     assert!(t.on_battlefield(jace));
     assert_eq!(t.g.mana_value_of(t.g.current(jace)), 4);
+    // Compleated: two fewer loyalty counters for the symbol paid with life.
+    assert_eq!(t.counters(jace, "loyalty"), 3);
     // Nissa {3}{G}{G}{G/P}{G/P}: both Phyrexian symbols paid with life.
     let mut t = TestGame::new(2);
     let nissa = t.hand(P0, "Nissa, Ascended Animist");
@@ -55,6 +67,7 @@ fn phyrexian_symbols_count_one_toward_mana_value_even_paid_with_life() {
     t.resolve_all();
     assert!(t.on_battlefield(nissa));
     assert_eq!(t.g.mana_value_of(t.g.current(nissa)), 7);
+    assert_eq!(t.counters(nissa, "loyalty"), 3);
 }
 
 #[test]
@@ -86,6 +99,7 @@ fn monocolored_hybrid_cards_keep_their_color_and_mana_value_however_paid() {
     );
     supported("Beseech the Queen");
     supported("Tower Above");
+    only_unsupported("Advice from the Fae", "Look at the top five cards");
     // (card, its color, its color's mana, another color's mana)
     let cases = [
         ("Advice from the Fae", Color::Blue, ManaType::U, ManaType::B),
@@ -150,6 +164,7 @@ fn wildgrowth_archaic_two_hybrid_paid_with_two_green() {
         "Wildgrowth Archaic",
         "For each of the hybrid mana symbols in Wildgrowth Archaic's mana cost, you can choose to pay either {2} or {G}. If you choose to pay {2}, you can still use green mana to pay for one or both of the generic mana in that cost."
     );
+    only_unsupported("Wildgrowth Archaic", "Whenever you cast a creature spell");
     // {2/G}{2/G}: both paid as {2}, with four green mana.
     let mut t = TestGame::new(2);
     let w = t.hand(P0, "Wildgrowth Archaic");
