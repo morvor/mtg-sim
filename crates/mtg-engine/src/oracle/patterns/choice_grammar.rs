@@ -150,6 +150,13 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
                 // "..., then that player loses 1 life."
                 let who = PlayerRef::ControllerOf(Box::new(Sel::AttachedTo));
                 b.it_player = who.clone();
+                // "enchanted creature's controller sacrifices it" (Parasitic Implant,
+                // Reality Acid): "it" is the enchanted permanent, not the Aura.
+                if super::oracle_hardening_referents::is_no_referent(&b.it)
+                    || matches!(b.it, Sel::This)
+                {
+                    b.it = Sel::AttachedTo;
+                }
                 return Some((who, r.to_string()));
             }
         }
