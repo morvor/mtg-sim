@@ -1331,3 +1331,63 @@ fn that_many_paid(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "spell cost grammar: that many (the amount paid)", priority: 100, apply: that_many_paid } }
+
+// ---------------------------------------------------------------------------
+// Alternative costs for activated abilities
+// ---------------------------------------------------------------------------
+
+/// "You may pay {0} rather than pay the cycling cost of the first card you cycle each
+/// turn." (Gavi), "You may remove a loyalty counter from a planeswalker you control rather
+/// than pay ~'s crew cost." (Heart of Kiran): an alternative cost for a keyword ability's
+/// cost (CR 118.9, 601.2b via 602.2b), announced as the ability is activated; the rest of
+/// the keyword ability's cost is still paid (see `activation_costs.rs`).
+fn keyword_cost_alternative(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("you may ")?;
+    let (pay, r) = r.split_once(" rather than pay ")?;
+    let cost = match super::costs_casting_alt::plain_cost(pay) {
+        Some(c) => c,
+        None => {
+            // "remove a loyalty counter from a planeswalker you control".
+            let (c, false) = crate::oracle::costs::parse_cost(pay)? else {
+                return None;
+            };
+            let ok = c.mana.is_none()
+                && matches!(
+                    c.parts.as_slice(),
+                    [CostPart::RemoveCountersFromAmong {
+                        kind: Some(_),
+                        count: Value::Const(1),
+                        ..
+                    }]
+                );
+            if !ok {
+                return None;
+            }
+            c
+        }
+    };
+    let (kind, sources, first) = if let Some(k) = r
+        .strip_prefix("the ")
+        .and_then(|x| x.strip_suffix(" cost of the first card you cycle each turn"))
+    {
+        // Cycling a card is activating its cycling ability (CR 702.29a).
+        if k != "cycling" {
+            return None;
+        }
+        (k, Filter::Any, true)
+    } else {
+        let k = r.strip_prefix("~'s ")?.strip_suffix(" cost")?;
+        (k, Filter::Source, false)
+    };
+    let kind = crate::keywords::KeywordKind::from_name(kind)?;
+    let mut scope = AbilityScope::new(sources, AbilityClass::Keyword(kind));
+    scope.first_each_turn = first;
+    let s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::ActivatedAbilities(Box::new(scope)),
+        who: PlayerRel::You,
+        change: CostChange::AlternativeCost(cost),
+    }));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "spell cost grammar: pay rather than pay a keyword ability's cost", priority: 100, parse: keyword_cost_alternative } }

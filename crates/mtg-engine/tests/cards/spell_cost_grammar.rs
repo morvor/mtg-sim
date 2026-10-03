@@ -793,3 +793,35 @@ fn leyline_tyrant_deals_as_much_damage_as_red_mana_paid() {
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn heart_of_kiran_crews_by_removing_a_loyalty_counter() {
+    cr!("118.9", "702.122a");
+    // "You may remove a loyalty counter from a planeswalker you control rather than pay
+    // ~'s crew cost."
+    assert_compiles(&["Heart of Kiran", "Gavi, Nest Warden", "Festival of Embers"]);
+    let mut t = TestGame::new(2);
+    let heart = t.battlefield(P0, "Heart of Kiran");
+    let jace = t.battlefield(P0, "Jace Beleren");
+    let loyalty = t.counters(jace, "loyalty");
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.activate(P0, heart, 0, &[]).expect("crew");
+    t.resolve_all();
+    assert_eq!(t.counters(jace, "loyalty"), loyalty - 1);
+    assert!(t.obj_now(heart).is_creature());
+}
+
+#[test]
+fn gavi_cycles_the_first_card_each_turn_for_free() {
+    cr!("118.9", "702.29a");
+    // "You may pay {0} rather than pay the cycling cost of the first card you cycle each
+    // turn."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Gavi, Nest Warden");
+    let a = t.hand(P0, "Shefet Monitor");
+    let hand = t.hand_size(P0);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.activate(P0, a, 0, &[]).expect("cycling for {0}");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+}
