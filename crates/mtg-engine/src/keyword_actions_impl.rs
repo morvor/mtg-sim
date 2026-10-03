@@ -10,6 +10,12 @@ use crate::types::*;
 /// CR 701.34a: choose any number of permanents and/or players, then give each another
 /// counter of each kind already there.
 pub fn proliferate(g: &mut Game, p: PlayerId, ctx: &Ctx) {
+    // "If you would proliferate, proliferate twice instead." (CR 614.1a)
+    if g.replace_action(crate::ability::ReplaceableAction::Proliferate, p, None, 1)
+        .is_none()
+    {
+        return;
+    }
     let mut cands: Vec<Entity> = Vec::new();
     for o in g.permanents() {
         if o.counters.values().any(|n| *n > 0) {

@@ -25,6 +25,11 @@ pub fn connive(g: &mut Game, obj: ObjectId, n: u32, source: Option<ObjectId>) {
         return;
     }
     let p = controller_or_last(g, obj);
+    // "If a creature you control would connive, instead ..." (CR 614.1a)
+    let Some(n) = g.replace_action(crate::ability::ReplaceableAction::Connive, p, Some(obj), n)
+    else {
+        return;
+    };
     g.draw_cards(p, n);
     let hand = g.player(p).hand.clone();
     let k = n.min(hand.len() as u32);

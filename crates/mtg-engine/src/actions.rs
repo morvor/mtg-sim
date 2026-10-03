@@ -881,6 +881,8 @@ impl Game {
     /// Executes a final (post-replacement) event of any kind.
     pub fn execute_repl_event(&mut self, e: ReplEvent) {
         match e {
+            // Performed by the keyword action itself (see `Game::replace_action`).
+            ReplEvent::Action { .. } => {}
             ReplEvent::Move(m) => {
                 self.perform_move(m, None);
             }
@@ -979,6 +981,7 @@ impl Game {
             if self.draw_restricted(p) {
                 break;
             }
+            *self.history.draws_proposed.entry(p).or_insert(0) += 1;
             // CR 614.11b: cards drawn because a replacement effect replaced the draw aren't
             // the card this draw drew.
             for e in self.replace(ReplEvent::Draw { player: p }) {
@@ -1078,7 +1081,10 @@ impl Game {
     /// Mills `n` cards (CR 701.17): puts the top N cards into the graveyard simultaneously.
     pub fn mill(&mut self, p: PlayerId, n: u32) -> Vec<ObjectId> {
         // CR 701.17d: replacement effects may change how many cards are milled.
-        let n = crate::mill_rules::replaced_count(self, p, n);
+        let Some(n) = self.replace_action(crate::ability::ReplaceableAction::Mill, p, None, n)
+        else {
+            return vec![];
+        };
         // CR 614.13c: cards entering the battlefield from the library aren't milled.
         let lib: Vec<ObjectId> = self.players[p.idx()]
             .library

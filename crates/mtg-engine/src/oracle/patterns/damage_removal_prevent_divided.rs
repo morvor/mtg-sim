@@ -11,16 +11,24 @@ use crate::oracle::phrases::{end, parse_any_target, parse_number};
 fn prevent_divided(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("prevent the next ")?;
     let (n, r) = parse_number(r)?;
-    if !matches!(n, Value::Const(_)) {
-        return None;
-    }
     let r = r
         .trim_start()
         .strip_prefix("damage that would be dealt this turn to ")?;
     let (who, rest) = r.split_once(", divided as you choose")?;
-    if !end(rest).is_empty() {
-        return None;
-    }
+    // "..., where X is the number of verse counters on ~" (Serra's Hymn): determined as
+    // the division is chosen (CR 601.2d).
+    let n = match (n, end(rest)) {
+        (n @ Value::Const(_), "") => n,
+        (Value::X, w) => {
+            let v = w.strip_prefix(", where x is ")?;
+            let (v, tail) = super::value_grammar::parse_value(v, b)?;
+            if !tail.trim().is_empty() {
+                return None;
+            }
+            v
+        }
+        _ => return None,
+    };
     let (any_number, who) = match who.strip_prefix("any number of ") {
         Some(w) => (true, w.replace("targets", "target")),
         None => (false, who.to_string()),
@@ -48,3 +56,39 @@ fn prevent_divided(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "damage_removal: prevent the next N damage divided among targets", priority: 45, parse: prevent_divided } }
+
+/// "If ~ was kicked, prevent the next 6 damage this way instead." (Pollen Remedy): the
+/// total divided depends on the condition, known as the division is chosen (CR 601.2b,
+/// 601.2d).
+fn f_divided_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some((c, r)) = l.strip_prefix("if ").and_then(|r| r.split_once(", prevent the next "))
+    else {
+        return false;
+    };
+    let Some((n, tail)) = parse_number(r) else {
+        return false;
+    };
+    if tail.trim() != "damage this way instead" || !matches!(n, Value::Const(_)) {
+        return false;
+    }
+    let Effect::PreventDividedDamage { slot, .. } = &*prev else {
+        return false;
+    };
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+        return false;
+    };
+    let Some(spec) = b.targets.get_mut(*slot as usize) else {
+        return false;
+    };
+    let Some(old) = spec.divide.clone() else {
+        return false;
+    };
+    let total = Value::If(Box::new(cond), Box::new(n), Box::new(old.clone()));
+    if matches!(spec.min, Value::Const(0)) {
+        spec.max = total.clone();
+    }
+    spec.divide = Some(total);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "damage_removal: if [condition], prevent the next N damage this way instead", priority: 45, apply: f_divided_instead } }

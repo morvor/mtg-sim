@@ -477,7 +477,7 @@ fn fasting_puts_a_counter_then_checks() {
         "Fasting",
         "When you resolve the beginning-of-upkeep triggered ability, you first put a hunger counter on Fasting, then you check how many hunger counters it has. If there are five or more, Fasting is destroyed."
     );
-    only_unsupported("Fasting", "skip that step");
+    supported("Fasting");
     let mut t = TestGame::new(2);
     let f = t.battlefield(P0, "Fasting");
     put(&mut t, f, "hunger", 3);
