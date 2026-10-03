@@ -308,3 +308,144 @@ fn blackstaff_animates_an_artifact_for_as_long_as_it_remains_tapped() {
     t.settle();
     assert!(!t.obj_now(ring).is(CardType::Creature));
 }
+
+#[test]
+fn ray_of_command_taps_the_creature_when_you_lose_control_of_it() {
+    cr!("603.7c", "514.3a");
+    assert_supported("Ray of Command");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Island", 4);
+    t.set_step(P1, Step::BeginningOfCombat);
+    let ray = t.hand(P0, "Ray of Command");
+    t.cast(P0, ray).target(bears).go();
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).controller, P0);
+    // Control returns in the cleanup step; the delayed ability taps it then, and P0's
+    // untap step doesn't untap P1's creature.
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(t.obj_now(bears).controller, P1);
+    assert!(t.obj_now(bears).tapped);
+}
+
+#[test]
+fn merieke_destroys_the_creature_when_it_leaves() {
+    cr!("603.7c", "701.19c");
+    assert_supported("Merieke Ri Berit");
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Merieke Ri Berit");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.activate(P0, m, 0, &objs(&[bears])).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).controller, P0);
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(m).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn overpowering_attack_adds_a_combat_and_a_main_phase_in_your_main_phase() {
+    cr!("500.8", "505.1a");
+    assert_supported("Overpowering Attack");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 5);
+    let oa = t.hand(P0, "Overpowering Attack");
+    t.cast(P0, oa).go();
+    t.resolve_all();
+    t.advance_to(P0, Step::End);
+    let combats = t
+        .g
+        .turn
+        .step_log
+        .iter()
+        .filter(|s| **s == Step::BeginningOfCombat)
+        .count();
+    assert_eq!(combats, 2);
+}
+
+#[test]
+fn cait_sith_pumps_by_the_exiled_cards_mana_value() {
+    cr!("603.12");
+    assert_supported("Cait Sith, Fortune Teller");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Cait Sith, Fortune Teller");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.library_top(P0, "Hill Giant");
+    t.answer_targets(P0, &objs(&[bears]));
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    assert_eq!(t.pt(bears), (6, 2));
+}
+
+#[test]
+fn psychic_pickpocket_returns_a_permanent_when_it_connives() {
+    cr!("603.12", "701.50a");
+    assert_supported("Psychic Pickpocket");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &objs(&[bears]));
+    t.enter(P0, "Psychic Pickpocket");
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn graceful_antelope_land_is_a_plains_until_it_leaves() {
+    cr!("611.2b", "305.7");
+    assert_supported("Graceful Antelope");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Graceful Antelope");
+    let forest = t.battlefield(P1, "Forest");
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &objs(&[forest]));
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(a, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.obj_now(forest).chars.subtypes.iter().any(|s| s == "Plains"));
+    t.lands(P0, "Swamp", 3);
+    let murder = t.hand(P0, "Murder");
+    t.cast(P0, murder).target(a).go();
+    t.resolve_all();
+    assert!(!t.obj_now(forest).chars.subtypes.iter().any(|s| s == "Plains"));
+}
+
+#[test]
+fn legions_initiative_returns_the_creatures_at_the_next_combat_with_haste() {
+    cr!("603.7c", "610.3");
+    assert_supported("Legion's Initiative");
+    let mut t = TestGame::new(2);
+    let li = t.battlefield(P0, "Legion's Initiative");
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Plains", 1);
+    t.activate(P0, li, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    let bears = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(bears.len(), 1);
+    assert!(t.obj_now(bears[0]).has_keyword(KeywordKind::Haste));
+}
+
+#[test]
+fn dalkovan_encampment_sacrifices_each_attacks_tokens_at_the_end_step() {
+    cr!("603.7b", "603.7c");
+    assert_supported("Dalkovan Encampment");
+    let mut t = TestGame::new(2);
+    let camp = t.battlefield(P0, "Dalkovan Encampment");
+    t.lands(P0, "Plains", 3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.activate(P0, camp, 1, &[]).unwrap();
+    t.resolve_all();
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Warrior Token").len(), 2);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Warrior Token").is_empty());
+}

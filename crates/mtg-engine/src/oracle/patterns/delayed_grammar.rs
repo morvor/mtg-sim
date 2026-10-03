@@ -344,6 +344,12 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
     if inner.is_empty() || inner.contains(" at the beginning of ") || inner.starts_with("at ") {
         return None;
     }
+    // "At the beginning of the next end step, you may pay {3}{B}. If you don't, ...": what
+    // the payment decides is in the next sentence, which the delayed ability must include
+    // (the payment patterns read the pair).
+    if inner.starts_with("you may pay ") || inner.starts_with("pay ") {
+        return None;
+    }
     let whose = match delay.whose {
         Whose::ThatPlayer => Some(that_player(inner, b)?),
         _ => None,
@@ -369,11 +375,37 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
             b.named.push((p.to_string(), referent.clone()));
         }
     }
-    let parsed = parse_sentence(inner, b);
+    let mut parsed = parse_sentence(inner, b);
+    // "return those cards to the battlefield ... and those creatures gain haste until end
+    // of turn": the second instruction is about what the first returned.
+    if parsed.is_none() {
+        if let Some((first, second)) = inner.split_once(" and ") {
+            if super::pronoun_groups::plural_pronoun(second).is_some() {
+                b.targets.truncate(n0);
+                parsed = parse_sentence(first, b)
+                    .and_then(|a| Some(Effect::seq(vec![a, parse_sentence(second, b)?])));
+            }
+        }
+    }
     let result_it = b.it.clone();
     let targets = own_targets(b, n0);
     restore(b, saved);
     let (effect, targets) = (parsed?, targets?);
+    // "... you may return it. If you do, ...": the next sentence is about whether the
+    // delayed instruction happened, which only the delayed ability knows (see
+    // `f_delayed_continues` for those it includes).
+    if let Some(next) = next_sentence_start(l) {
+        if next.starts_with("if you don't") || (next.starts_with("if you do") && !enters_battlefield(&effect)) {
+            return None;
+        }
+        // "... you may cast that card without paying its mana cost. If that spell would be
+        // put into a graveyard, exile it instead.": about the spell the delayed ability
+        // casts.
+        let casts = serde_json::to_string(&effect).is_ok_and(|j| j.contains("CastCard"));
+        if casts && next.starts_with("if ") {
+            return None;
+        }
+    }
     // "Return it to the battlefield ... at the beginning of your next upkeep. It gains
     // haste.": a permanent the delayed instruction puts onto the battlefield is what the
     // next sentences talk about (see `f_delayed_continues`).
@@ -400,6 +432,19 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar: [instruction] at the beginning of the next [step]", priority: 990, parse: delayed_instruction } }
+
+/// How the sentence after `l` in the card's text begins (lowercase), if it can be found.
+fn next_sentence_start(l: &str) -> Option<String> {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    // The end of the sentence, without the card's name (`~` in `l`).
+    let tail: String = l.chars().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect();
+    if tail.contains('~') {
+        return None;
+    }
+    let i = raw.find(&tail)?;
+    let after = raw[i + tail.len()..].trim_start_matches('.').trim_start();
+    Some(after.chars().take(20).collect())
+}
 
 /// A [`Builder::named`] key (never a phrase of Oracle text) recording what "it" is after a
 /// delayed instruction that puts a permanent onto the battlefield.
@@ -514,6 +559,51 @@ fn f_delayed_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 
+/// "Whenever you attack this turn, create two 1/1 red Warrior creature tokens that are
+/// tapped and attacking. Sacrifice them at the beginning of the next end step." (Dalkovan
+/// Encampment): a sentence about the tokens a delayed triggered ability creates is part
+/// of that ability (it happens each time it resolves, to those tokens).
+fn f_tokens_of_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !mentions_object(l) || l.contains("target") {
+        return false;
+    }
+    let Some(Effect::DelayedTrigger { trigger, body, .. }) = last_delayed(prev) else {
+        return false;
+    };
+    if !matches!(trigger, TriggerCond::ThisTurn(_) | TriggerCond::UntilYourNextTurn(_))
+        || body.modal.is_some()
+    {
+        return false;
+    }
+    fn creates(e: &Effect) -> bool {
+        match e {
+            Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } => true,
+            Effect::Seq(v) => v.last().is_some_and(creates),
+            _ => false,
+        }
+    }
+    if !creates(&body.effect) {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.it = Sel::Var(vars::CREATED);
+    sub.it_player = refs::no_player_referent();
+    sub.sentences = 1;
+    sub.targets = body.targets.clone();
+    let Some(e) = parse_sentence(l, &mut sub) else {
+        return false;
+    };
+    if sub.targets.len() != body.targets.len() {
+        return false;
+    }
+    body.effect = Effect::seq(vec![std::mem::take(&mut body.effect), e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "delayed grammar: sentences about the tokens a delayed ability creates", priority: 45, apply: f_tokens_of_delayed } }
+
 inventory::submit! { FollowupPattern { name: "delayed grammar: sentences about what the delayed instruction puts onto the battlefield", priority: 45, apply: f_delayed_continues } }
 
 /// The last instruction of an effect, through sequences and optional parts.
@@ -534,19 +624,38 @@ fn f_delayed_after_move(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Some(r) => (true, r),
         None => (false, l),
     };
-    if split_delay(r).is_none() || !matches!(b.it, Sel::This) {
+    if split_delay(r).is_none() {
         return false;
     }
-    let moved_source = match last_instruction(prev) {
-        Effect::Exile { what, .. } | Effect::Move { what, .. } => matches!(what, Sel::This),
+    // The source moved ("you may exile ~"), or cards exiled ("Exile all creatures you
+    // control. At the beginning of the next combat, return those cards ...").
+    let moved = match last_instruction(prev) {
+        Effect::Exile { what, .. } => matches!(what, Sel::This) || !if_you_do,
+        Effect::Move { what, to } => {
+            matches!(what, Sel::This) || (to.zone == ZoneKind::Exile && !if_you_do)
+        }
         _ => false,
     };
-    if !moved_source {
+    if !moved {
         return false;
     }
+    let saved = (b.it.clone(), b.named.len());
     b.it = Sel::Var(vars::IT);
-    let Some(e) = delayed_instruction(r, b) else {
-        b.it = Sel::This;
+    for p in ["those cards", "the exiled cards", "the exiled card", "that card"] {
+        b.named.push((p.to_string(), Sel::Var(vars::IT)));
+    }
+    let parsed = delayed_instruction(r, b);
+    // (Keeping what the delayed instruction recorded for the sentences after it.)
+    let mut i = saved.1;
+    while i < b.named.len() {
+        if b.named[i].0 == DELAYED_RESULT {
+            i += 1;
+        } else {
+            b.named.remove(i);
+        }
+    }
+    let Some(e) = parsed else {
+        b.it = saved.0;
         return false;
     };
     let e = if if_you_do {
@@ -601,7 +710,8 @@ fn with_subject(t: &TriggerCond, subject: &Filter) -> Option<TriggerCond> {
         }
     }
     let json = walk(serde_json::to_value(t).ok()?, &subject, &mut n);
-    if n != 1 || json.to_string().contains("\"This\"") {
+    // "When ~ leaves the battlefield or becomes untapped": the same subject each time.
+    if n == 0 || json.to_string().contains("\"This\"") {
         return None;
     }
     serde_json::from_value(json).ok()
@@ -740,6 +850,10 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let cond = cond.replacen("it's put into ", "it is put into ", 1);
+    // "When you lose control of the creature, tap it." (the referent is the object).
+    if let Some(r) = cond.strip_prefix("you lose control of ") {
+        return lose_control_trigger(r, eff, this_turn, when, b);
+    }
     let words: Vec<(usize, &str)> = cond.match_indices(' ').collect();
     for (i, _) in words {
         let (subject_s, rest) = (&cond[..i], &cond[i..]);
@@ -831,6 +945,48 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
         return Some(Effect::seq(stores));
     }
     None
+}
+
+/// "When you lose control of the creature, tap it." (Ray of Command): the creature the
+/// creating ability gained control of (CR 603.7c).
+fn lose_control_trigger(
+    subject: &str,
+    eff: &str,
+    this_turn: bool,
+    when: bool,
+    b: &mut Builder,
+) -> Option<Effect> {
+    if !matches!(subject, "the creature" | "that creature" | "it") || !when || this_turn {
+        return None;
+    }
+    let it = super::pronoun_groups::singular_it(b);
+    if !matches!(it, Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject) {
+        return None;
+    }
+    let saved = save(b);
+    let n0 = b.targets.len();
+    b.it = Sel::TriggerObject;
+    b.it_player = refs::no_player_referent();
+    b.named.clear();
+    b.chosen_creature = None;
+    b.group = None;
+    b.in_trigger = true;
+    let effect = parse_effect_text(eff, b);
+    let targets = own_targets(b, n0);
+    restore(b, saved);
+    let (effect, targets) = (effect?, targets?);
+    let (mut stores, effect) = capture_refs(&effect, n0 as u8, Capture::SourceAndTargets)?;
+    stores.insert(0, Effect::Store { var: REFERENT, sel: it });
+    stores.push(Effect::DelayedTrigger {
+        trigger: TriggerCond::LoseControl(Filter::In(Box::new(Sel::Var(REFERENT)))),
+        body: Box::new(Body {
+            targets,
+            effect,
+            modal: None,
+        }),
+        once: true,
+    });
+    Some(Effect::seq(stores))
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar: when that creature [event] this turn, [effect]", priority: 990, parse: referent_trigger } }
@@ -987,6 +1143,245 @@ fn exile_until_leaves(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar: exile [objects] until ~ leaves the battlefield", priority: 995, parse: exile_until_leaves } }
+
+// ---------------------------------------------------------------------------------------
+// Reflexive triggers about what an instruction did "this way" (CR 603.12)
+// ---------------------------------------------------------------------------------------
+
+/// The cards the latest exile instruction of the ability exiled ("when you exile a card
+/// this way"), recorded right after it (each time, for an instruction each player
+/// performs).
+const EXILED_THIS_WAY: Var = vars::USER + 6403;
+
+/// Puts `store` right after the last instruction of `e` that `is`, through sequences,
+/// optional and conditional parts and per-player repetitions. Returns whether it found
+/// one.
+fn store_after_last(e: &mut Effect, is: &dyn Fn(&Effect) -> bool, store: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => {
+            for i in (0..v.len()).rev() {
+                if is(&v[i]) {
+                    v.insert(i + 1, store.clone());
+                    return true;
+                }
+                if store_after_last(&mut v[i], is, store) {
+                    return true;
+                }
+            }
+            false
+        }
+        Effect::May { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
+            store_after_last(effect, is, store)
+        }
+        Effect::If { then, .. } => store_after_last(then, is, store),
+        x if is(x) => {
+            let old = std::mem::take(x);
+            *x = Effect::Seq(vec![old, store.clone()]);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn is_exile(e: &Effect) -> bool {
+    match e {
+        Effect::Exile { .. } | Effect::ExileUntil { .. } => true,
+        Effect::Move { to, .. } => to.zone == ZoneKind::Exile,
+        _ => false,
+    }
+}
+
+/// "When you exile a card this way, ...", "When you exile a nonland card this way, ...",
+/// "When one or more nonland cards are exiled this way, put that many +1/+1 counters on
+/// target attacking creature.": a reflexive triggered ability that triggers if the
+/// ability's exile instruction exiled such a card (CR 603.12); "that card" / "the exiled
+/// card" is it, "that many" how many.
+fn f_when_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some((cond, eff)) = l.strip_prefix("when ").and_then(split_at_comma) else {
+        return false;
+    };
+    let Some(cond) = cond.strip_suffix(" this way") else {
+        return false;
+    };
+    let (noun, many) = if let Some(r) = cond.strip_prefix("you exile ") {
+        match r.strip_prefix("one or more ") {
+            Some(n) => (n, true),
+            None => match r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")) {
+                Some(n) => (n, false),
+                None => return false,
+            },
+        }
+    } else if let Some(r) = cond
+        .strip_prefix("one or more ")
+        .and_then(|r| r.strip_suffix(" are exiled"))
+    {
+        (r, true)
+    } else if let Some(r) = cond
+        .strip_prefix("a ")
+        .or_else(|| cond.strip_prefix("an "))
+        .and_then(|r| r.strip_suffix(" is exiled"))
+    {
+        (r, false)
+    } else {
+        return false;
+    };
+    let Some((f, _, rest)) = parse_object_phrase(noun) else {
+        return false;
+    };
+    if !rest.trim().is_empty() {
+        return false;
+    }
+    let found = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(Sel::Var(EXILED_THIS_WAY))),
+        f,
+    ]));
+    // "that many": the number of them.
+    let eff_x = eff.replace("that many", "x");
+    let uses_x = eff_x != eff;
+    if uses_x && eff.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.it = if many { found.clone() } else { Sel::Var(EXILED_THIS_WAY) };
+    sub.it_player = b.it_player.clone();
+    sub.sentences = 1;
+    for p in ["that card", "the exiled card"] {
+        if !many {
+            sub.named.push((p.to_string(), Sel::Var(EXILED_THIS_WAY)));
+        }
+    }
+    let Some(effect) = parse_effect_text(&eff_x, &mut sub) else {
+        return false;
+    };
+    let effect = if uses_x {
+        let count = Value::CountSel(Box::new(found.clone()));
+        let Ok(json) = serde_json::to_value(&effect) else {
+            return false;
+        };
+        let Ok(cj) = serde_json::to_value(&count) else {
+            return false;
+        };
+        fn walk(v: serde_json::Value, c: &serde_json::Value) -> serde_json::Value {
+            use serde_json::Value as J;
+            match v {
+                J::String(s) if s == "X" => c.clone(),
+                J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v, c))).collect()),
+                J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, c)).collect()),
+                other => other,
+            }
+        }
+        match serde_json::from_value(walk(json, &cj)) {
+            Ok(e) => e,
+            Err(_) => return false,
+        }
+    } else {
+        effect
+    };
+    // Record each exile's cards (accumulated over the players of "each player exiles").
+    let store = Effect::Store {
+        var: EXILED_THIS_WAY,
+        sel: Sel::Union(vec![Sel::Var(EXILED_THIS_WAY), Sel::Var(vars::IT)]),
+    };
+    let mut new_prev = prev.clone();
+    if !store_after_last(&mut new_prev, &is_exile, &store) {
+        return false;
+    }
+    let reflexive = Effect::If {
+        cond: Condition::SelNonEmpty(found),
+        then: Box::new(Effect::Reflexive {
+            body: Box::new(Body {
+                targets: sub.targets,
+                effect,
+                modal: None,
+            }),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    *prev = Effect::seq(vec![new_prev, reflexive]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "delayed grammar: when you exile a card this way (reflexive)", priority: 46, apply: f_when_exiled_this_way } }
+
+/// "When it connives this way, ...", "When you search your library this way, ...": the
+/// action always happens once the instruction is performed (a creature connives even if
+/// it has left the battlefield, CR 701.50c; a search happens even if nothing is found,
+/// CR 701.23), so the reflexive ability triggers then (CR 603.12).
+fn f_when_done_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some((cond, eff)) = l.strip_prefix("when ").and_then(split_at_comma) else {
+        return false;
+    };
+    let did: fn(&Effect) -> bool = match cond {
+        "it connives this way" | "~ connives this way" => |e| {
+            matches!(
+                e,
+                Effect::KeywordAction {
+                    action: KeywordAction::Connive,
+                    ..
+                }
+            )
+        },
+        "you search your library this way" => |e| matches!(e, Effect::Search { .. }),
+        _ => return false,
+    };
+    fn contains(e: &Effect, did: fn(&Effect) -> bool) -> bool {
+        match e {
+            Effect::Seq(v) => v.iter().any(|x| contains(x, did)),
+            x => did(x),
+        }
+    }
+    // Only an instruction performed unconditionally.
+    if !contains(prev, did) {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.it = b.it.clone();
+    sub.it_player = b.it_player.clone();
+    sub.sentences = 1;
+    let Some(effect) = parse_effect_text(eff, &mut sub) else {
+        return false;
+    };
+    let reflexive = Effect::Reflexive {
+        body: Box::new(Body {
+            targets: sub.targets,
+            effect,
+            modal: None,
+        }),
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, reflexive]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "delayed grammar: when it connives / you search this way (reflexive)", priority: 46, apply: f_when_done_this_way } }
+
+// ---------------------------------------------------------------------------------------
+// Extra phases
+// ---------------------------------------------------------------------------------------
+
+/// "There is an additional combat phase after this phase, followed by an additional main
+/// phase." (CR 500.8): the order of "After this phase, there is an additional combat phase
+/// followed by an additional main phase."
+fn additional_phase_after(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("there is ")?;
+    let (first, then) = r.split_once(" after this phase, followed by ")?;
+    parse_sentence(&format!("after this phase, there is {first} followed by {then}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar: there is an additional combat phase after this phase, followed by ...", priority: 100, parse: additional_phase_after } }
+
+/// "it's your main phase" (CR 505.1).
+fn your_main_phase(c: &str) -> Option<Condition> {
+    (end(c) == "it's your main phase").then(|| {
+        Condition::And(vec![Condition::YourTurn, Condition::Phase(PhaseCond::MainPhase)])
+    })
+}
+
+inventory::submit! { super::ConditionPattern { name: "delayed grammar: it's your main phase", priority: 100, parse: your_main_phase } }
 
 #[cfg(test)]
 mod tests {
