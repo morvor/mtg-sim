@@ -1042,6 +1042,12 @@ impl Game {
                 e.duration = Duration::EndOfTurn;
             }
         }
+        // ("Prevent all damage ... until the end of your next turn.")
+        for e in self.replacements.iter_mut() {
+            if matches!(e.duration, Duration::UntilEndOfYourNextTurn) && e.controller == active {
+                e.duration = Duration::EndOfTurn;
+            }
+        }
         // "Until the end of your next turn, you may cast instant and sorcery spells from
         // among those exiled cards."
         for e in self.player_effects.iter_mut() {

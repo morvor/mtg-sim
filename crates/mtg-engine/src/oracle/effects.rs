@@ -1054,6 +1054,16 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         ),
         (" until end of combat", Duration::EndOfCombat),
         (
+            " until the end of your next turn",
+            Duration::UntilEndOfYourNextTurn,
+        ),
+        // CR 611.2b: a continuous effect "until ~ leaves the battlefield" lasts for as
+        // long as it remains there.
+        (
+            " until ~ leaves the battlefield",
+            Duration::WhileSourceOnBattlefield,
+        ),
+        (
             " for as long as ~ remains on the battlefield",
             Duration::WhileSourceOnBattlefield,
         ),

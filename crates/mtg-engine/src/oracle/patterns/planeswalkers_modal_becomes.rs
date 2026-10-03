@@ -34,7 +34,13 @@ fn split_duration(l: &str) -> (Duration, &str) {
             return (d, r);
         }
     }
-    (Duration::Permanent, l)
+    // The other durations of one-shot effects ("until ~ leaves the battlefield", "for as
+    // long as ~ remains tapped", CR 611.2b).
+    match crate::oracle::effects::duration_suffix(l) {
+        (Duration::Permanent, _) => (Duration::Permanent, l),
+        (Duration::EndOfTurn, _) => (Duration::Permanent, l),
+        other => other,
+    }
 }
 
 /// "still a [type]" (CR 205.1b): the object keeps all its prior card types, subtypes and

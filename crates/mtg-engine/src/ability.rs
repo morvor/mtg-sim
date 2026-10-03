@@ -1188,6 +1188,9 @@ pub enum PlayerRel {
     Iterated,
     /// The player or opponent chosen for the source ("the chosen player", CR 607.2d).
     Chosen,
+    /// The players stored in a variable: "that player" captured when a delayed triggered
+    /// ability was created ("at the beginning of that player's next end step", CR 603.7c).
+    Var(Var),
 }
 
 /// The four kinds of stickers (CR 123.1).
