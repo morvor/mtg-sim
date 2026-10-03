@@ -33,6 +33,10 @@ const WHOSE: Var = vars::USER + 6401;
 /// The object a referent delayed trigger is about ("that creature"), captured as it's
 /// created.
 pub(crate) const REFERENT: Var = vars::USER + 6402;
+/// Stands for the object of a referent delayed ability's own event while its effect is
+/// parsed and the creating ability's references are captured (replaced by
+/// [`Sel::TriggerLki`] afterwards).
+const SOURCE_EVENT_OBJECT: Var = vars::USER + 6404;
 /// First variable used to capture the creating ability's references.
 const CAPTURE_BASE: Var = vars::USER + 6410;
 
@@ -217,10 +221,9 @@ fn capture_refs(e: &Effect, outer_targets: u8, what: Capture) -> Option<(Vec<Eff
                         "TriggerSpell" if all => {
                             self.store(CAPTURE_BASE + 4, sel(Sel::TriggerSpell, CAPTURE_BASE + 4))
                         }
-                        "TriggerPlayer" if all => self.store(
-                            CAPTURE_BASE + 5,
-                            sel(Sel::TriggerPlayer, CAPTURE_BASE + 5),
-                        ),
+                        "TriggerPlayer" if all => {
+                            self.store(CAPTURE_BASE + 5, sel(Sel::TriggerPlayer, CAPTURE_BASE + 5))
+                        }
                         "EventAmount" if all => self.store(
                             CAPTURE_BASE + 6,
                             Effect::StoreValue {
@@ -268,7 +271,39 @@ fn capture_refs(e: &Effect, outer_targets: u8, what: Capture) -> Option<(Vec<Eff
     // A reference that can't be a variable there fails to deserialize: the text stays
     // unsupported.
     let effect: Effect = serde_json::from_value(rewritten).ok()?;
+    // X ("..., where X is that spell's mana value", bound to the creating ability's
+    // objects after this instruction is parsed) is a number the creating ability knows:
+    // it's captured as the delayed ability is created, like its other references
+    // (CR 603.7c).
+    if super::r107_numbers::uses_x(&effect) {
+        let var = CAPTURE_BASE + 7;
+        if let Some(e) = super::r107_numbers::substitute_x(&effect, &Value::Var(var)) {
+            w.stores.push(Effect::StoreValue {
+                var,
+                value: Value::X,
+            });
+            return Some((w.stores, e));
+        }
+    }
     Some((w.stores, effect))
+}
+
+/// Replaces every `from` selection in `e` with `to`.
+fn replace_sel(e: &Effect, from: &Sel, to: &Sel) -> Option<Effect> {
+    use serde_json::Value as J;
+    fn walk(v: J, from: &J, to: &J) -> J {
+        if &v == from {
+            return to.clone();
+        }
+        match v {
+            J::Object(m) => J::Object(m.into_iter().map(|(k, x)| (k, walk(x, from, to))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, from, to)).collect()),
+            other => other,
+        }
+    }
+    let from = serde_json::to_value(from).ok()?;
+    let to = serde_json::to_value(to).ok()?;
+    serde_json::from_value(walk(serde_json::to_value(e).ok()?, &from, &to)).ok()
 }
 
 /// The Builder state an inner parse may change.
@@ -365,7 +400,11 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
     // creature.": "that creature" is still what the text named before, even though the
     // instruction names a new target.
     let referent = match &b.chosen_creature {
-        Some((slot, text)) if b.targets.get(*slot as usize).is_some_and(|t| &t.text == text) => {
+        Some((slot, text))
+            if b.targets
+                .get(*slot as usize)
+                .is_some_and(|t| &t.text == text) =>
+        {
             Sel::Target(*slot)
         }
         _ => b.it.clone(),
@@ -380,7 +419,10 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
     let mut blocks_of_referent = false;
     let mut rewritten = inner.to_string();
     for (who, marker) in [
-        ("that blocked or were blocked by", BLOCKED_OR_BLOCKED_BY_MARK),
+        (
+            "that blocked or were blocked by",
+            BLOCKED_OR_BLOCKED_BY_MARK,
+        ),
         ("that were blocked by", BLOCKED_BY_MARK),
         ("that was blocked by", BLOCKED_BY_MARK),
     ] {
@@ -417,7 +459,9 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
     // delayed instruction happened, which only the delayed ability knows (see
     // `f_delayed_continues` for those it includes).
     if let Some(next) = next_sentence_start(l) {
-        if next.starts_with("if you don't") || (next.starts_with("if you do") && !enters_battlefield(&effect)) {
+        if next.starts_with("if you don't")
+            || (next.starts_with("if you do") && !enters_battlefield(&effect))
+        {
             return None;
         }
         // "... you may cast that card without paying its mana cost. If that spell would be
@@ -468,7 +512,14 @@ inventory::submit! { EffectPattern { name: "delayed grammar: [instruction] at th
 fn next_sentence_start(l: &str) -> Option<String> {
     let raw = crate::oracle::raw_text().to_lowercase();
     // The end of the sentence, without the card's name (`~` in `l`).
-    let tail: String = l.chars().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect();
+    let tail: String = l
+        .chars()
+        .rev()
+        .take(30)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     if tail.contains('~') {
         return None;
     }
@@ -485,7 +536,9 @@ const DELAYED_RESULT: &str = "\u{1}delayed result";
 fn enters_battlefield(e: &Effect) -> bool {
     match e {
         Effect::Move { to, .. } => to.zone == ZoneKind::Battlefield,
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => true,
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenWithPT { .. }
+        | Effect::CreateTokenCopy { .. } => true,
         Effect::Seq(v) => v.last().is_some_and(enters_battlefield),
         Effect::May { effect, .. } => enters_battlefield(effect),
         Effect::If { then, .. } => enters_battlefield(then),
@@ -525,9 +578,9 @@ fn delayed_seq(e: &mut Effect) -> Option<&mut Vec<Effect>> {
 /// Whether a sentence refers back to an object ("It gains haste.", "If it entered under
 /// your control, ...", "It can't be blocked that combat.").
 fn mentions_object(l: &str) -> bool {
-    l.split(|c: char| !c.is_alphanumeric() && c != '\'').any(|w| {
-        matches!(w, "it" | "its" | "they" | "them" | "their")
-    }) || l.contains("that creature")
+    l.split(|c: char| !c.is_alphanumeric() && c != '\'')
+        .any(|w| matches!(w, "it" | "its" | "they" | "them" | "their"))
+        || l.contains("that creature")
         || l.contains("that card")
         || l.contains("that permanent")
 }
@@ -582,13 +635,15 @@ fn f_delayed_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             Effect::Store { var, .. } | Effect::StoreValue { var, .. } => Some(*var),
             _ => None,
         };
-        if !seq.iter().any(|x| var_of(x).is_some() && var_of(x) == var_of(&st)) {
+        if !seq
+            .iter()
+            .any(|x| var_of(x).is_some() && var_of(x) == var_of(&st))
+        {
             seq.insert(at, st);
         }
     }
     true
 }
-
 
 /// "Whenever you attack this turn, create two 1/1 red Warrior creature tokens that are
 /// tapped and attacking. Sacrifice them at the beginning of the next end step." (Dalkovan
@@ -602,8 +657,10 @@ fn f_tokens_of_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(Effect::DelayedTrigger { trigger, body, .. }) = last_delayed(prev) else {
         return false;
     };
-    if !matches!(trigger, TriggerCond::ThisTurn(_) | TriggerCond::UntilYourNextTurn(_))
-        || body.modal.is_some()
+    if !matches!(
+        trigger,
+        TriggerCond::ThisTurn(_) | TriggerCond::UntilYourNextTurn(_)
+    ) || body.modal.is_some()
     {
         return false;
     }
@@ -663,7 +720,8 @@ fn f_exiled_by_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     sub.it = Sel::Var(vars::IT);
     sub.it_player = refs::no_player_referent();
     sub.sentences = 1;
-    sub.named.push(("those cards".to_string(), Sel::Var(vars::IT)));
+    sub.named
+        .push(("those cards".to_string(), Sel::Var(vars::IT)));
     let Some(e) = parse_sentence(l, &mut sub) else {
         return false;
     };
@@ -715,7 +773,12 @@ fn f_delayed_after_move(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     }
     let saved = (b.it.clone(), b.named.len());
     b.it = Sel::Var(vars::IT);
-    for p in ["those cards", "the exiled cards", "the exiled card", "that card"] {
+    for p in [
+        "those cards",
+        "the exiled cards",
+        "the exiled card",
+        "that card",
+    ] {
         b.named.push((p.to_string(), Sel::Var(vars::IT)));
     }
     let parsed = delayed_instruction(r, b);
@@ -795,7 +858,11 @@ fn with_subject(t: &TriggerCond, subject: &Filter) -> Option<TriggerCond> {
                 *n += 1;
                 subject.clone()
             }
-            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v, subject, n))).collect()),
+            J::Object(m) => J::Object(
+                m.into_iter()
+                    .map(|(k, v)| (k, walk(v, subject, n)))
+                    .collect(),
+            ),
             J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, subject, n)).collect()),
             other => other,
         }
@@ -927,7 +994,12 @@ fn event_amount_text(eff: &str, t: &TriggerCond) -> Option<String> {
     if !uses {
         return Some(eff.to_string());
     }
-    if !deals_damage(t) && !matches!(t, TriggerCond::IsDealtDamage { .. } | TriggerCond::Batched { .. }) {
+    if !deals_damage(t)
+        && !matches!(
+            t,
+            TriggerCond::IsDealtDamage { .. } | TriggerCond::Batched { .. }
+        )
+    {
         return None;
     }
     if eff.contains(AMOUNT_WORD) {
@@ -939,7 +1011,10 @@ fn event_amount_text(eff: &str, t: &TriggerCond) -> Option<String> {
             &format!("the top {AMOUNT_WORD} cards of "),
         )
         .replace("that many", AMOUNT_WORD)
-            .replace("gain life equal to that damage", &format!("gain {AMOUNT_WORD} life")),
+        .replace(
+            "gain life equal to that damage",
+            &format!("gain {AMOUNT_WORD} life"),
+        ),
     )
 }
 
@@ -960,7 +1035,11 @@ fn amount_is(e: &Effect, v: &Value) -> Option<Effect> {
             return vj.clone();
         }
         match x {
-            J::Object(m) => J::Object(m.into_iter().map(|(k, x)| (k, walk(x, marker, vj, n))).collect()),
+            J::Object(m) => J::Object(
+                m.into_iter()
+                    .map(|(k, x)| (k, walk(x, marker, vj, n)))
+                    .collect(),
+            ),
             J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, marker, vj, n)).collect()),
             other => other,
         }
@@ -1060,6 +1139,27 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
             b.group = None;
             b.in_trigger = true;
         }
+        // "~ fights another target creature you control. When ~ dies this turn, return it
+        // to the battlefield transformed": "it" is ~ (the trigger's subject, not the
+        // object the text named before), and the card it became (CR 400.7), found
+        // through the delayed ability's own event, not the source the creating ability
+        // had.
+        let source_left = source_subject
+            && matches!(
+                trigger,
+                TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_)
+            );
+        if source_left {
+            // ("When ~ leaves the battlefield this turn, destroy that creature.": "that
+            // creature" is still the object the text named before.)
+            let before = b.it.clone();
+            if !matches!(before, Sel::This) && !refs::is_no_referent(&before) {
+                for p in ["that creature", "that permanent", "that card"] {
+                    b.named.push((p.to_string(), before.clone()));
+                }
+            }
+            b.it = Sel::Var(SOURCE_EVENT_OBJECT);
+        }
         let effect = parse_effect_text(&eff, b);
         let targets = own_targets(b, n1);
         restore(b, saved);
@@ -1077,6 +1177,11 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
             Capture::SourceAndTargets
         };
         let (mut stores, effect) = capture_refs(&effect, n1 as u8, what)?;
+        let effect = if source_left {
+            replace_sel(&effect, &Sel::Var(SOURCE_EVENT_OBJECT), &Sel::TriggerLki)?
+        } else {
+            effect
+        };
         stores.insert(0, Effect::Store { var: REFERENT, sel });
         let trigger = if this_turn {
             TriggerCond::ThisTurn(Box::new(trigger))
@@ -1126,7 +1231,13 @@ fn lose_control_trigger(
     restore(b, saved);
     let (effect, targets) = (effect?, targets?);
     let (mut stores, effect) = capture_refs(&effect, n0 as u8, Capture::SourceAndTargets)?;
-    stores.insert(0, Effect::Store { var: REFERENT, sel: it });
+    stores.insert(
+        0,
+        Effect::Store {
+            var: REFERENT,
+            sel: it,
+        },
+    );
     stores.push(Effect::DelayedTrigger {
         trigger: TriggerCond::LoseControl(Filter::In(Box::new(Sel::Var(REFERENT)))),
         body: Box::new(Body {
@@ -1284,7 +1395,9 @@ fn exile_until_leaves(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let mut n = 0;
     let json = walk(serde_json::to_value(&e).ok()?, &mut n);
-    let converted = (n == 1).then(|| serde_json::from_value::<Effect>(json).ok()).flatten();
+    let converted = (n == 1)
+        .then(|| serde_json::from_value::<Effect>(json).ok())
+        .flatten();
     if converted.is_none() {
         b.targets.truncate(n0);
         restore(b, saved);
@@ -1394,7 +1507,11 @@ fn f_when_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     }
     let mut sub = Builder::new(b.ctx);
     sub.in_trigger = true;
-    sub.it = if many { found.clone() } else { Sel::Var(EXILED_THIS_WAY) };
+    sub.it = if many {
+        found.clone()
+    } else {
+        Sel::Var(EXILED_THIS_WAY)
+    };
     sub.it_player = b.it_player.clone();
     sub.sentences = 1;
     for p in ["that card", "the exiled card"] {
@@ -1503,7 +1620,10 @@ inventory::submit! { FollowupPattern { name: "delayed grammar: when it connives 
 fn additional_phase_after(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("there is ")?;
     let (first, then) = r.split_once(" after this phase, followed by ")?;
-    parse_sentence(&format!("after this phase, there is {first} followed by {then}"), b)
+    parse_sentence(
+        &format!("after this phase, there is {first} followed by {then}"),
+        b,
+    )
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar: there is an additional combat phase after this phase, followed by ...", priority: 100, parse: additional_phase_after } }
@@ -1511,7 +1631,10 @@ inventory::submit! { EffectPattern { name: "delayed grammar: there is an additio
 /// "it's your main phase" (CR 505.1).
 fn your_main_phase(c: &str) -> Option<Condition> {
     (end(c) == "it's your main phase").then(|| {
-        Condition::And(vec![Condition::YourTurn, Condition::Phase(PhaseCond::MainPhase)])
+        Condition::And(vec![
+            Condition::YourTurn,
+            Condition::Phase(PhaseCond::MainPhase),
+        ])
     })
 }
 
@@ -1526,17 +1649,56 @@ mod tests {
         for (s, steps, whose, this_turn) in [
             ("the beginning of the next end step", 1, Whose::Any, false),
             ("the beginning of your next upkeep", 1, Whose::You, false),
-            ("the beginning of that player's next end step", 1, Whose::ThatPlayer, false),
-            ("the beginning of their next upkeep", 1, Whose::ThatPlayer, false),
-            ("the beginning of the next turn's upkeep", 1, Whose::Any, false),
-            ("the beginning of your next main phase", 2, Whose::You, false),
-            ("the beginning of your next main phase this turn", 2, Whose::You, true),
-            ("the beginning of the next cleanup step", 1, Whose::Any, false),
+            (
+                "the beginning of that player's next end step",
+                1,
+                Whose::ThatPlayer,
+                false,
+            ),
+            (
+                "the beginning of their next upkeep",
+                1,
+                Whose::ThatPlayer,
+                false,
+            ),
+            (
+                "the beginning of the next turn's upkeep",
+                1,
+                Whose::Any,
+                false,
+            ),
+            (
+                "the beginning of your next main phase",
+                2,
+                Whose::You,
+                false,
+            ),
+            (
+                "the beginning of your next main phase this turn",
+                2,
+                Whose::You,
+                true,
+            ),
+            (
+                "the beginning of the next cleanup step",
+                1,
+                Whose::Any,
+                false,
+            ),
             ("this turn's next end of combat", 1, Whose::Any, true),
-            ("the beginning of your next upkeep step", 1, Whose::You, false),
+            (
+                "the beginning of your next upkeep step",
+                1,
+                Whose::You,
+                false,
+            ),
         ] {
             let d = delay_phrase(s).unwrap_or_else(|| panic!("{s}"));
-            assert_eq!((d.steps.len(), d.whose, d.this_turn), (steps, whose, this_turn), "{s}");
+            assert_eq!(
+                (d.steps.len(), d.whose, d.this_turn),
+                (steps, whose, this_turn),
+                "{s}"
+            );
         }
         assert!(delay_phrase("the beginning of the next turn's end step").is_none());
         assert!(delay_phrase("the beginning of each end step").is_none());
@@ -1550,7 +1712,10 @@ mod tests {
             "at the beginning of the next end step, return that card to the battlefield under its owner's control",
         )
         .unwrap();
-        assert_eq!(i, "return that card to the battlefield under its owner's control");
+        assert_eq!(
+            i,
+            "return that card to the battlefield under its owner's control"
+        );
         assert!(split_delay("look at the top card of your library").is_none());
     }
 
