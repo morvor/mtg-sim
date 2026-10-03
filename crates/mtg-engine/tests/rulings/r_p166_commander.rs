@@ -350,6 +350,7 @@ fn vega_draws_before_the_spell_resolves_even_if_its_countered() {
     assert_eq!(triggers_on_stack(&t, "draw a card"), 1);
     // The trigger is on top of the spell.
     let spell = t.g.stack[0];
+    assert_ne!(t.g.stack.last().copied(), Some(spell));
     counter(&mut t, spell);
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);

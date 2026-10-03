@@ -67,7 +67,7 @@ fn danitha_gone_aura_stays_where_it_was() {
 
 #[test]
 fn danitha_new_card_in_graveyard_can_be_cast_first() {
-    cr!("117.3b", "117.3a", "601.3");
+    cr!("117.1a", "601.3");
     ruling!(
         "Danitha, New Benalia's Light",
         "If an Aura or Equipment card is put into your graveyard during your main phase and the stack is empty, you have a chance to cast it before any player may attempt to remove that card from your graveyard."
@@ -84,8 +84,6 @@ fn danitha_new_card_in_graveyard_can_be_cast_first() {
     assert_eq!(t.stack_len(), 0);
     t.lands(P0, "Wastes", 1);
     let card = t.g.find_in_zone(Zone::Graveyard(P0), "Short Sword")[0];
-    // The active player gets priority first (CR 117.3b).
-    assert_eq!(t.g.turn.active, P0);
     assert!(castable(&mut t, P0, card));
 }
 

@@ -96,7 +96,7 @@ fn alela_resolves_first_even_if_the_spell_is_countered() {
         "Alela's last ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
     );
     let (mut t, spell) = alela_bow();
-    assert_eq!(top_of_stack(&t) != spell, true);
+    assert_ne!(top_of_stack(&t), spell);
     t.resolve();
     assert_eq!(faeries(&t), 1);
     assert!(t.g.stack.contains(&spell));
@@ -271,8 +271,7 @@ fn ghen_returns_an_aura_without_targeting() {
     let p = t.g.current(pacifism);
     assert!(t.on_battlefield(p));
     assert_eq!(attached_to(&t, p), Some(Entity::Object(scout)));
-    // With no creature, Pacifism stays in the graveyard. (Ghen sacrifices itself? No:
-    // Ghen is a creature, so make it leave first.)
+    // With no creature (Ghen leaves in response), Pacifism stays in the graveyard.
     let mut t = TestGame::new(2);
     let pacifism = t.graveyard(P0, "Pacifism");
     let ghen = ghen_setup(&mut t);
