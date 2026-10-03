@@ -81,6 +81,38 @@ fn parse_cda(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
     None
 }
 
+/// "As long as ~ isn't attacking, its power and toughness are each equal to the number of
+/// Forests you control. As long as ~ is attacking, its power and toughness are each equal
+/// to the number of Forests defending player controls." (Gaea's Liege): a
+/// characteristic-defining ability whose value depends on the object's state.
+fn conditional_cda(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !is_star(ctx.power) || !is_star(ctx.toughness) {
+        return None;
+    }
+    let l = end(l);
+    let mut out = Vec::new();
+    for part in l.split(". ") {
+        let r = part.strip_prefix("as long as ")?;
+        let (c, amount) = r.split_once(", its power and toughness are each equal to ")?;
+        let cond = crate::oracle::statics::parse_condition(c, ctx)?;
+        let v = parse_amount(amount, Some(&Sel::This)).or_else(|| grammar_amount(amount, ctx))?;
+        let mut a = cda(Some(v.clone()), Some(v), text);
+        if let AbilityKind::Static(st) = &mut std::sync::Arc::make_mut(&mut a).kind {
+            st.condition = Some(cond);
+        }
+        out.push(a);
+    }
+    (out.len() >= 2).then_some(out)
+}
+
+inventory::submit! {
+    StaticPattern {
+        name: "statics: conditional power/toughness CDAs",
+        priority: 50,
+        parse: conditional_cda,
+    }
+}
+
 inventory::submit! {
     StaticPattern {
         name: "statics: power/toughness CDAs",

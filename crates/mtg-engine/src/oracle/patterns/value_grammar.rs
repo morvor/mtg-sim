@@ -237,6 +237,17 @@ fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     {
         return count(r, b);
     }
+    // "the life paid as it entered" (Nameless Race; see `kw/pay_any_amount_of_life.rs`).
+    for p in [
+        "the life paid as it entered",
+        "the life paid as ~ entered",
+        // Soulgorger Orgg: noted by "you lose all but 1 life".
+        "the life you lost when it entered",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            return Some((Value::Chosen, r.to_string()));
+        }
+    }
     // "the life total of an opponent with the most life" (Roiling Horror).
     if let Some(r) = s.strip_prefix("the life total of an opponent with the most life") {
         let v = Value::OverPlayers(

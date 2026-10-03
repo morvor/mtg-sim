@@ -556,10 +556,28 @@ pub(crate) fn predicate_mods(
     let p = p.trim();
     if let Some(r) = p.strip_prefix("gets ").or_else(|| p.strip_prefix("get ")) {
         let (pw, t, rest) = parse_pt_mod(r)?;
-        if !rest.trim().is_empty() {
-            return None;
+        if rest.trim().is_empty() {
+            return Some(vec![Modification::ModifyPT(pw, t)]);
         }
-        return Some(vec![Modification::ModifyPT(pw, t)]);
+        // "+1/+1 for each of its creature types, to a maximum of 10", "+1/+1 for each
+        // supertype, card type, and subtype it has" (see `kw::type_counts`).
+        let (each, cap) = match rest.trim().rsplit_once(", to a maximum of ") {
+            Some((e, n)) => (e, Some(n.parse::<i32>().ok()?)),
+            None => (rest.trim(), None),
+        };
+        let count = match each {
+            "for each of its creature types" => crate::kw::type_counts::CREATURE_TYPES,
+            "for each supertype, card type, and subtype it has" => {
+                crate::kw::type_counts::ALL_TYPES
+            }
+            _ => return None,
+        };
+        let mut n = Value::Custom(count.into());
+        if let Some(cap) = cap {
+            n = Value::Min(Box::new(n), Box::new(Value::c(cap)));
+        }
+        let times = |v: Value| Value::Mul(Box::new(v), Box::new(n.clone()));
+        return Some(vec![Modification::ModifyPT(times(pw), times(t))]);
     }
     if let Some(r) = p.strip_prefix("has ").or_else(|| p.strip_prefix("have ")) {
         if let Some(m) = base_pt_mods(r) {
@@ -695,7 +713,9 @@ fn changes_characteristics(mods: &[Modification]) -> bool {
             k.filter,
             Some(Filter::SharesColor(_) | Filter::SharesCardType(_) | Filter::ChosenColor)
         ),
-        Modification::ModifyPT(..) | Modification::AddAbility(_) => false,
+        // "+1/+1 for each supertype, card type, and subtype it has".
+        Modification::ModifyPT(p, _) => format!("{p:?}").contains("types: "),
+        Modification::AddAbility(_) => false,
         _ => true,
     })
 }
@@ -1347,7 +1367,24 @@ fn base_pt_of_become(l: &str, b: &mut Builder) -> Option<Effect> {
     let (subj, value) = r.rsplit_once(" become ")?;
     let saved = (b.targets.len(), b.it.clone());
     let result = (|| {
-        let (what, rest) = object_ref(subj, b)?;
+        let (what, rest) = match subj {
+            // "each creature that dealt damage to it this turn", in the source's own
+            // ability (see `kw::dealt_damage_to_source`).
+            "each creature that dealt damage to it this turn"
+            | "each creature that dealt damage to ~ this turn"
+                if subj.ends_with("~ this turn")
+                    || matches!(b.it, Sel::This | Sel::TriggerObject | Sel::TriggerLki) =>
+            {
+                let f = Filter::and(vec![
+                    Filter::creature(),
+                    Filter::Custom(
+                        crate::kw::dealt_damage_to_source::DEALT_DAMAGE_TO_SOURCE.into(),
+                    ),
+                ]);
+                (Sel::All(f), String::new())
+            }
+            _ => object_ref(subj, b)?,
+        };
         if !rest.trim().is_empty() || matches!(what, Sel::None) {
             return None;
         }
@@ -1586,6 +1623,33 @@ fn pay_to_end_this_effect(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool 
 }
 
 inventory::submit! { FollowupPattern { name: "becomes grammar: you may pay [cost] to end this effect", priority: 1100, apply: pay_to_end_this_effect } }
+
+/// "you lose all but 1 life" (Soulgorger Orgg): you lose life equal to your life total
+/// minus 1 (none if it's 1 or less, CR 119.3), noted for "the life you lost when it
+/// entered" (CR 607.2e).
+fn lose_all_but(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let n = end(l)
+        .strip_prefix("you lose all but ")?
+        .strip_suffix(" life")?
+        .parse::<i32>()
+        .ok()?;
+    let v = Value::Max(
+        Box::new(Value::Diff(
+            Box::new(Value::LifeTotal(PlayerRef::You)),
+            Box::new(Value::c(n)),
+        )),
+        Box::new(Value::c(0)),
+    );
+    Some(Effect::seq(vec![
+        Effect::Note { value: v.clone() },
+        Effect::LoseLife {
+            who: PlayerRef::You,
+            n: Value::Chosen,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "becomes grammar: you lose all but N life", priority: 1100, parse: lose_all_but } }
 
 #[cfg(test)]
 mod tests {
