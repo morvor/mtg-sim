@@ -474,6 +474,15 @@ impl Renderer<'_> {
                     them(case)
                 }
             }
+            // The source remembered for a delayed trigger: "~" or "it".
+            Sel::Var(v)
+                if self
+                    .var_defs
+                    .iter()
+                    .any(|(x, s, _)| x == v && matches!(s, Sel::This)) =>
+            {
+                decline("~it".into(), case)
+            }
             Sel::Var(v) if self.var_defs.iter().any(|(x, _, used)| x == v && !used) => {
                 let i = self
                     .var_defs

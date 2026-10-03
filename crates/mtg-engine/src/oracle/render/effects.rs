@@ -863,7 +863,19 @@ impl Renderer<'_> {
                 self.target_vars.push((*var, t, false));
                 String::new()
             }
+            // The source remembered for a delayed trigger ("Sacrifice ~ at the beginning of
+            // the next cleanup step"): its first mention there is the source.
+            Effect::Store {
+                sel: Sel::This,
+                var,
+            } => {
+                self.var_defs.push((*var, Sel::This, false));
+                String::new()
+            }
             Effect::Store { sel, .. } => match sel {
+                // The player a delayed trigger waits for ("at the beginning of that
+                // player's next end step"): named there.
+                Sel::Players(_) => String::new(),
                 Sel::Choose { chooser, .. } => {
                     let c = self.player(chooser, Case::Subj);
                     let mut s = self.sel(&strip_chooser(sel), Case::Obj);
@@ -2128,20 +2140,9 @@ impl Renderer<'_> {
             } => {
                 // A one-shot delayed trigger at a step: "at the beginning of the next end
                 // step" (CR 603.7).
+                let delay = if *once { self.delay_text(trigger) } else { None };
                 let t = match trigger {
-                    TriggerCond::BeginningOf { step, whose } if *once => match (step, whose) {
-                        (TriggerStep::EndOfCombat, _) => "at end of combat".to_string(),
-                        (TriggerStep::Upkeep, PlayerRel::You) => {
-                            "at the beginning of your next upkeep".to_string()
-                        }
-                        (TriggerStep::Upkeep, _) => {
-                            "at the beginning of the next turn's upkeep".to_string()
-                        }
-                        (s, PlayerRel::You) if *s != TriggerStep::End => {
-                            format!("at the beginning of your next {}", self.step_name(*s))
-                        }
-                        (s, _) => format!("at the beginning of the next {}", self.step_name(*s)),
-                    },
+                    _ if delay.is_some() => delay.clone().unwrap_or_default(),
                     // "When you next cast an instant spell this turn, ..."
                     other if *once => {
                         let t = self.trigger_text(other);
@@ -2161,12 +2162,18 @@ impl Renderer<'_> {
                 let b = self.in_event_scope(|r| r.body(body));
                 (self.self_salient, self.other_salient, self.trigger_is_self) = saved;
                 // "Sacrifice it at end of combat": a time for one instruction may follow it.
-                let at_step = *once && matches!(trigger, TriggerCond::BeginningOf { .. });
+                let at_step = delay.is_some();
                 let b = lower_first(&b);
                 let one = b.trim_end_matches('.');
                 if at_step && !one.contains(['.', '"']) {
                     let b = one;
                     format!("{{alt:{t}, {b}|{b} {t}}}")
+                } else if let Some((first, rest)) =
+                    one.split_once(". ").filter(|(f, _)| at_step && !f.contains(['"', '{']))
+                {
+                    // "Return it to the battlefield at the beginning of your next upkeep.
+                    // It gains haste.": the time may follow the first instruction.
+                    format!("{{alt:{t}, {one}|{first} {t}. {rest}}}")
                 } else {
                     format!("{t}, {b}")
                 }
@@ -4730,7 +4737,9 @@ impl Renderer<'_> {
                 .iter()
                 .rev()
                 .find(|(w, _, _)| w == var)
-                .is_some_and(|(_, d, _)| !matches!(d, Sel::Var(_)) && self.sel_is_yours(d)),
+                .is_some_and(|(_, d, _)| {
+                    !matches!(d, Sel::Var(_) | Sel::This) && self.sel_is_yours(d)
+                }),
             _ => false,
         }
     }
@@ -6219,4 +6228,53 @@ fn singular_head(phrase: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+impl Renderer<'_> {
+    /// The time of a one-shot delayed trigger (CR 603.7): "at the beginning of the next
+    /// end step", "at the beginning of your next main phase", "at the beginning of that
+    /// player's next end step", "at this turn's next end of combat".
+    pub(crate) fn delay_text(&self, t: &TriggerCond) -> Option<String> {
+        let (inner, this_turn) = match t {
+            TriggerCond::ThisTurn(i) => (&**i, true),
+            other => (other, false),
+        };
+        let parts: Vec<(TriggerStep, PlayerRel)> = match inner {
+            TriggerCond::BeginningOf { step, whose } => vec![(*step, *whose)],
+            TriggerCond::AnyOf(v) => v
+                .iter()
+                .map(|c| match c {
+                    TriggerCond::BeginningOf { step, whose } => Some((*step, *whose)),
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()?,
+            _ => return None,
+        };
+        let whose = parts.first()?.1;
+        if parts.iter().any(|(_, w)| *w != whose) {
+            return None;
+        }
+        let steps: Vec<TriggerStep> = parts.iter().map(|(s, _)| *s).collect();
+        let step = match steps[..] {
+            [TriggerStep::PrecombatMain, TriggerStep::PostcombatMain] => "main phase",
+            [s] => self.step_name(s),
+            _ => return None,
+        };
+        let turn = if this_turn { " this turn" } else { "" };
+        Some(match (steps[..].first()?, whose) {
+            (TriggerStep::EndOfCombat, PlayerRel::Any) if this_turn => {
+                "at this turn's next end of combat".to_string()
+            }
+            (TriggerStep::EndOfCombat, PlayerRel::Any) => "at end of combat".to_string(),
+            (TriggerStep::Upkeep, PlayerRel::Any) if !this_turn => {
+                "at the beginning of the next turn's upkeep".to_string()
+            }
+            (_, PlayerRel::Any) => format!("at the beginning of the next {step}{turn}"),
+            (_, PlayerRel::You) => format!("at the beginning of your next {step}{turn}"),
+            (_, PlayerRel::Var(_)) => {
+                format!("at the beginning of {{alt:that player's|their}} next {step}{turn}")
+            }
+            _ => return None,
+        })
+    }
 }

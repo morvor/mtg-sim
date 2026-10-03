@@ -1355,6 +1355,7 @@ impl Renderer<'_> {
             PlayerRel::Active => "the active player's".into(),
             PlayerRel::Teammate => "a teammate's".into(),
             PlayerRel::Chosen => "the chosen player's".into(),
+            PlayerRel::Var(_) => "{alt:that player's|their}".into(),
         }
     }
 
@@ -1374,6 +1375,7 @@ impl Renderer<'_> {
             PlayerRel::Active => "the active player".into(),
             PlayerRel::Teammate => "a teammate".into(),
             PlayerRel::Chosen => "the chosen player".into(),
+            PlayerRel::Var(_) => "{alt:that player|them}".into(),
         }
     }
 
