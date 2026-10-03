@@ -185,7 +185,7 @@ fn trample_into_bears(t: &mut TestGame, attacker: ObjectId) -> (i32, u32, u32) {
 
 #[test]
 fn trample_damage_is_assigned_before_it_is_doubled() {
-    cr!("701.10g", "702.19c", "510.1c", "614.1a");
+    cr!("701.10g", "702.19b", "510.1c", "614.1a");
     ruling!(
         "Calamity Bearer",
         "If damage dealt by a Giant source you control is being divided or assigned among multiple permanents and/or players, that damage is divided or assigned before doubling. For example, if you attack with a 5/5 Giant with trample and it’s blocked by a 2/2 creature, you can assign 2 damage to the blocker and 3 damage to the defending player. Those amounts are then doubled to 4 and 6, respectively."
