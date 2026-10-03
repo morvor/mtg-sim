@@ -674,3 +674,60 @@ fn mercadias_downfall_attackers_fixed_on_resolution() {
     assert_eq!(t.pt(bears), (4, 2));
     assert_eq!(t.life(P1), 16);
 }
+
+// ---------------------------------------------------------------------------------------
+// Abeyance
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn abeyance_stops_spells_and_non_mana_abilities() {
+    cr!("602.5", "605.3a", "601.3");
+    ruling!(
+        "Abeyance",
+        "Abeyance does not affect abilities which are not activated, such as static abilities and triggered abilities."
+    );
+    ruling!(
+        "Abeyance",
+        "Abeyance never prevents mana abilities from being activated."
+    );
+    ruling!(
+        "Abeyance",
+        "Abeyance prohibits activated abilities of cards which are not on the battlefield."
+    );
+    supported("Abeyance");
+    let mut t = TestGame::new(2);
+    let pyro = t.battlefield(P1, "Prodigal Pyromancer");
+    let forest = t.battlefield(P1, "Forest");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Soul Warden");
+    let decay = t.hand(P1, "Rapid Decay");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let wolf = t.hand(P1, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    let abeyance = t.hand(P0, "Abeyance");
+    pool(&mut t, P0, &[(ManaType::W, 2)]);
+    let hand = t.hand_size(P0);
+    t.cast(P0, abeyance).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+    // No instants; no non-mana abilities, on the battlefield or in hand (cycling).
+    pool(&mut t, P1, &[(ManaType::R, 3)]);
+    assert!(t.cast(P1, bolt).target(P0).try_go().is_err());
+    assert!(t.activate(P1, pyro, 0, &[Entity::Player(P0)]).is_err());
+    assert!(t.activate(P1, decay, 0, &[]).is_err());
+    assert!(t.in_hand(P1, "Rapid Decay"));
+    // Mana abilities work; a creature spell can be cast with that mana.
+    t.g.players[P1.idx()].mana_pool = Default::default();
+    t.activate(P1, forest, 0, &[]).unwrap();
+    pool(&mut t, P1, &[(ManaType::G, 1)]);
+    t.cast(P1, wolf).go();
+    t.resolve_all();
+    // Triggered abilities still trigger (Soul Warden), and P1 can still attack.
+    assert_eq!(t.life(P1), 21);
+    t.attack(&[(bears, Entity::Player(P0))], &[]);
+    assert_eq!(t.life(P0), 18);
+    // P0 isn't affected.
+    let b0 = t.hand(P0, "Lightning Bolt");
+    pool(&mut t, P0, &[(ManaType::R, 1)]);
+    t.cast(P0, b0).target(P1).go();
+}
