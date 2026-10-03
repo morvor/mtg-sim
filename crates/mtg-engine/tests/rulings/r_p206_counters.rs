@@ -266,17 +266,21 @@ fn elvish_vatkeeper_transforms_the_incubator_before_doubling() {
     let mut t = TestGame::new(2);
     let keeper = t.enter(P0, "Elvish Vatkeeper");
     t.resolve_all();
-    let incubator = t
-        .g
-        .permanents()
-        .find(|o| o.is_token() && o.chars.name.contains("Incubator"))
-        .map(|o| o.id)
-        .expect("an Incubator token");
+    let incubator =
+        t.g.permanents()
+            .find(|o| o.is_token() && o.chars.name.contains("Incubator"))
+            .map(|o| o.id)
+            .expect("an Incubator token");
     assert_eq!(plus1(&t, incubator), 2);
     // Corpsejack Menace only affects creatures: it sees the counters put on the
     // transformed Phyrexian artifact creature.
     t.battlefield(P0, "Corpsejack Menace");
-    activate(&mut t, keeper, "Transform target Incubator", Some(incubator));
+    activate(
+        &mut t,
+        keeper,
+        "Transform target Incubator",
+        Some(incubator),
+    );
     assert!(t.obj_now(incubator).is(CardType::Creature));
     assert_eq!(plus1(&t, incubator), 2 + 4);
 }
