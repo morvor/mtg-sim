@@ -1043,6 +1043,15 @@ fn if_they_do(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     {
         return false;
     }
+    // "If the player does, they may copy ~": "they" is that player.
+    let that_player;
+    let r = match r.strip_prefix("they may ") {
+        Some(x) => {
+            that_player = format!("that player may {x}");
+            that_player.as_str()
+        }
+        None => r,
+    };
     let Some(e) = parse_sentence(r, b) else {
         return false;
     };

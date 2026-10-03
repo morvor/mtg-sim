@@ -588,3 +588,55 @@ fn molten_exhale_can_be_cast_with_flash_by_beholding_a_dragon() {
     let opts = t.g.cast_options(P0, exhale);
     assert!(opts.iter().any(|o| t.g.can_begin_cast(P0, exhale, o)));
 }
+
+#[test]
+fn chain_lightning_lets_the_damaged_player_pay_to_copy_it() {
+    cr!("707.10", "118.12");
+    // "~ deals 3 damage to any target. Then that player or that permanent's controller may
+    // pay {R}{R}. If the player does, they may copy this spell and may choose a new target
+    // for that copy."
+    assert_compiles(&[
+        "Chain Lightning",
+        "Chain Stasis",
+        "String of Disappearances",
+        "Chain of Vapor",
+        "Chain of Plasma",
+        "Chain of Silence",
+    ]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P1, "Mountain", 2);
+    let bolt = t.hand(P0, "Chain Lightning");
+    // P1 pays {R}{R}, copies it, and targets P0 with the copy; P0 declines to pay.
+    // (Pay {R}{R}? Copy it? Choose new targets for the copy?)
+    for _ in 0..3 {
+        t.answer_yes(P1, true);
+    }
+    t.answer_targets(P1, &[Entity::Player(P0)]);
+    t.cast_with(P0, bolt, &[Entity::Player(P1)]).expect("cast");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
+fn string_of_disappearances_asks_the_returned_creatures_controller() {
+    cr!("707.10", "608.2h");
+    // "Return target creature to its owner's hand. Then that creature's controller may
+    // pay {U}{U}. If the player does, they may copy this spell and may choose a new
+    // target for that copy."
+    let mut t = TestGame::new(2);
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let mine = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Island", 1);
+    t.lands(P1, "Island", 2);
+    let s = t.hand(P0, "String of Disappearances");
+    for _ in 0..3 {
+        t.answer_yes(P1, true);
+    }
+    t.answer_targets(P1, &[Entity::Object(mine)]);
+    t.cast_with(P0, s, &[Entity::Object(theirs)]).expect("cast");
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.in_hand(P0, "Hill Giant"));
+}
