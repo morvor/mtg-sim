@@ -560,7 +560,7 @@ fn druid_on(t: &mut TestGame, forest: ObjectId) -> ObjectId {
 
 #[test]
 fn awakener_druid_leaving_ends_or_prevents_the_animation() {
-    cr!("611.2b", "610.3c", "704.5g");
+    cr!("611.2b", "704.5g");
     ruling!(
         "Awakener Druid",
         "If Awakener Druid leaves the battlefield before its \"enters\" ability resolves, nothing happens to the targeted Forest when that ability resolves. It won't become a creature."
@@ -661,7 +661,7 @@ fn destiny_spinner_can_be_countered_as_a_spell() {
 
 #[test]
 fn unctus_s_retrofitter_leaving_first_means_no_animation() {
-    cr!("611.2b", "610.3c");
+    cr!("611.2b");
     ruling!(
         "Unctus's Retrofitter",
         "If Unctus's Retrofitter leaves the battlefield before its enters-the-battlefield ability resolves, that ability will have no effect. The target artifact won't become an artifact creature at all."

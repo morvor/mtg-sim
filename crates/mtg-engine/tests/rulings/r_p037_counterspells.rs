@@ -217,14 +217,20 @@ fn izzet_charm_draws_two_then_discards_two_while_resolving() {
     t.cast(P0, c).modes(&[2]).go();
     assert_eq!(t.hand_size(P0), 0);
     let gy = t.graveyard_size(P0);
-    let asked = t.asked().len();
+    // At every decision P0 makes while it resolves (the discard), Izzet Charm is still on
+    // the stack and both drawn cards are in hand.
+    let seen = crate::r_s01_common::watch(
+        &mut t,
+        P0,
+        |_| true,
+        |g| (g.stack.len(), g.player(P0).hand.len()),
+    );
     t.resolve();
-    // The two drawn cards were discarded during the resolution: nobody got priority.
+    let seen = seen.lock().unwrap().clone();
+    assert!(!seen.is_empty(), "a discard choice was asked");
+    assert!(seen.iter().all(|&(stack, hand)| stack == 1 && hand == 2), "{seen:?}");
     assert_eq!(t.hand_size(P0), 0);
     assert_eq!(t.graveyard_size(P0), gy + 3);
-    assert!(!t.asked()[asked..]
-        .iter()
-        .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::Priority { .. })));
 }
 
 #[test]

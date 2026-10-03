@@ -257,7 +257,7 @@ fn speaker_of_the_heavens_uses_the_team_s_life_in_two_headed_giant() {
 
 #[test]
 fn flameblast_dragon_targets_on_trigger_and_pays_on_resolution() {
-    cr!("603.3d", "608.2", "107.3f");
+    cr!("603.3d", "608.2", "118.12");
     ruling!(
         "Flameblast Dragon",
         "You choose the target when the ability triggers. When the ability resolves, you choose a value for X and decide whether to pay {X}{R}. If you do decide to pay {X}{R}, it's too late for any player to respond since the ability is already in the midst of resolving."
@@ -280,9 +280,10 @@ fn flameblast_dragon_targets_on_trigger_and_pays_on_resolution() {
     t.answer(P0, DecisionKind::X, Answer::Number(2));
     t.resolve();
     assert_eq!(t.life(P1), 18);
-    assert!(!t.asked()[from..]
+    // X was chosen while the ability resolved.
+    assert!(t.asked()[from..]
         .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
+        .any(|(_, d)| matches!(d, Decision::ChooseX { .. })));
 }
 
 #[test]

@@ -380,7 +380,7 @@ fn hydras(t: &TestGame) -> Vec<ObjectId> {
 
 #[test]
 fn zaxara_s_hydra_gets_the_spell_s_x_counters() {
-    cr!("107.3", "107.3f", "111.4");
+    cr!("107.3e", "111.4");
     ruling!(
         "Zaxara, the Exemplary",
         "The value of X in Zaxara's last ability is the value of X of the spell you cast."
@@ -511,9 +511,13 @@ fn an_exiled_rukh_egg_makes_no_bird() {
         "Rukh Egg",
         "If the Egg is exiled instead of being put into the graveyard, no Bird is put onto the battlefield."
     );
+    supported("Rest in Peace");
     let mut t = TestGame::new(2);
+    t.battlefield(P1, "Rest in Peace");
     let egg = t.battlefield(P0, "Rukh Egg");
-    t.g.exile_object(egg, None);
+    t.g.destroy(egg, None);
+    t.settle();
+    assert_eq!(t.zone(t.g.current(egg)), Zone::Exile);
     t.resolve_all();
     t.advance_to(P0, Step::End);
     t.resolve_all();
@@ -524,7 +528,7 @@ fn an_exiled_rukh_egg_makes_no_bird() {
 
 #[test]
 fn psemilla_s_first_enchantment_spell_counts_spells_before_it_arrived() {
-    cr!("603.2", "700.14");
+    cr!("603.2");
     ruling!(
         "Psemilla, Meletian Poet",
         "If you cast an enchantment spell during a turn before Psemilla is on the battlefield, its first ability won't trigger that turn even if you cast another enchantment spell later in the turn."
@@ -600,7 +604,7 @@ fn aphemia_exiles_only_one_enchantment_card() {
 
 #[test]
 fn sandstorm_salvager_s_trample_without_counters() {
-    cr!("608.2c", "122.6");
+    cr!("608.2c");
     ruling!(
         "Sandstorm Salvager",
         "In the rare case where +1/+1 counters can’t be put on one or more creature tokens you control, those creature tokens still gain trample until end of turn."
@@ -621,7 +625,7 @@ fn sandstorm_salvager_s_trample_without_counters() {
 
 #[test]
 fn malcator_counts_artifacts_that_entered_before_it_but_not_ones_that_became_artifacts() {
-    cr!("603.4", "700.14");
+    cr!("603.4");
     ruling!(
         "Malcator, Purity Overseer",
         "Malcator will count any artifacts that entered the battlefield under your control during the turn, even if you didn't control Malcator at the time. Malcator won't count non-artifact permanents you controlled that became artifacts."
@@ -649,7 +653,7 @@ fn malcator_counts_artifacts_that_entered_before_it_but_not_ones_that_became_art
 
 #[test]
 fn baru_s_cost_reduction_stops_at_green() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Baru, Wurmspeaker",
         "The cost reduction of Baru’s last ability can’t reduce the cost to activate it to less than {G}, even if you control a Wurm with power greater than 7."
@@ -759,7 +763,7 @@ fn shagrat_attaches_without_changing_control_of_the_equipment() {
 
 #[test]
 fn setzer_s_coin_flip_has_no_winner() {
-    cr!("705.2", "705.3");
+    cr!("705.2");
     ruling!(
         "Setzer, Wandering Gambler",
         "Some effects that instruct a player to flip a coin care only about whether the coin comes up heads or tails. These effects don't normally cause any player to win or lose that coin flip."
