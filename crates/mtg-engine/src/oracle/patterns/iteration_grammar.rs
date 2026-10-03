@@ -80,7 +80,11 @@ fn player_condition(c: &str, _b: &Builder) -> Option<PlayerFilter> {
         let raw = crate::oracle::raw_text().to_lowercase();
         let after_discard = ["each opponent discards a card. ", "each player discards a card. "]
             .iter()
-            .any(|p| raw.contains(&format!("{p}for each opponent who can't")) || raw.contains(&format!("{p}for each player who can't")));
+            .any(|p| {
+                ["for each opponent who can't", "for each player who can't", "each opponent who can't"]
+                    .iter()
+                    .any(|w| raw.contains(&format!("{p}{w}")))
+            });
         if !after_discard {
             return None;
         }
@@ -715,6 +719,19 @@ fn not_chosen_suffix<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "iteration: not chosen this way", priority: 100, parse: not_chosen_suffix } }
+
+/// "Each opponent discards a card. Each opponent who can't loses 3 life." (Entropic
+/// Battlecruiser): "for each opponent who can't, that player loses 3 life".
+fn each_who_cant(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (who, pred) = if let Some(p) = end(l).strip_prefix("each opponent who can't ") {
+        ("opponent", p)
+    } else {
+        ("player", end(l).strip_prefix("each player who can't ")?)
+    };
+    for_each_player(&format!("for each {who} who can't, that player {pred}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "iteration: each opponent who can't [instruction]", priority: 100, parse: each_who_cant } }
 
 /// "they"/"their" as the iterated player: "unless they pay {1}" → "unless that player
 /// pays {1}".
