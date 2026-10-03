@@ -26,8 +26,14 @@ fn when_exiled_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         Some(f)
     };
+    let rewritten = effect.contains("that card's");
     let effect = effect.replace("that card's", "its").replace("that card", "it");
-    let body = reflexive_body(&effect, b)?;
+    // The rewritten "its" still means that card (see `Builder::its_is_it`).
+    let saved = b.its_is_it;
+    b.its_is_it = saved || rewritten;
+    let body = reflexive_body(&effect, b);
+    b.its_is_it = saved;
+    let body = body?;
     // The exile just performed stored the exiled cards as "it" and recorded whether
     // anything was exiled.
     let exiled = Sel::Var(vars::IT);

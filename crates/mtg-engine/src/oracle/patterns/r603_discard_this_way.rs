@@ -27,8 +27,14 @@ fn when_you_discard_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
         Some(f)
     };
     // "... equal to that card's mana value" (Narset of the Ancient Way): its mana value.
+    let rewritten = effect.contains("that card's");
     let effect = effect.replace("that card's", "its").replace("that card", "it");
-    let body = reflexive_body(&effect, b)?;
+    // The rewritten "its" still means that card (see `Builder::its_is_it`).
+    let saved = b.its_is_it;
+    b.its_is_it = saved || rewritten;
+    let body = reflexive_body(&effect, b);
+    b.its_is_it = saved;
+    let body = body?;
     // The discard just performed stored the discarded cards as "it" and recorded whether
     // anything was discarded (an optional discard that was declined discards nothing).
     let discarded = Sel::Var(vars::IT);

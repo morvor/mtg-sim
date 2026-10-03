@@ -1402,7 +1402,9 @@ impl Game {
         n: u32,
         how: crate::event_causes::CounterPut,
     ) -> u32 {
-        if n == 0 {
+        // An object that has left its zone is a new object (CR 400.7): nothing is put on
+        // it, so "if you do" sees no counters put (Thought Gorger).
+        if n == 0 || target.object().is_some_and(|o| !self.is_live(o)) {
             return 0;
         }
         // "You can't get poison counters" (with shared poison counters, for the team,

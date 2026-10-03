@@ -628,6 +628,7 @@ fn p_face_up_or_down(l: &str, b: &mut Builder) -> Option<Effect> {
             chosen_creature: b.chosen_creature.clone(),
             group: b.group.clone(),
             named: b.named.clone(),
+        its_is_it: b.its_is_it,
             ctx: b.ctx,
         };
         let down = parse_clause(&format!("{head} face down"), &mut again)?;

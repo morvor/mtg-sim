@@ -173,6 +173,7 @@ fn divided_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     let rest = rest
         .trim_start()
         .strip_prefix("damage divided as you choose among ")?;
+    let up_to = rest.starts_with("up to ");
     let (max, rest) = if let Some(r) = rest.strip_prefix("one or two ") {
         (2, r)
     } else if let Some(r) = rest.strip_prefix("one, two, or three ") {
@@ -196,7 +197,8 @@ fn divided_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         TargetSpec::object(f, rest)
     };
-    spec.min = Value::c(1);
+    // "Up to N" may be zero targets; otherwise at least one (CR 601.2d).
+    spec.min = Value::c(if up_to { 0 } else { 1 });
     spec.max = Value::Const(max);
     spec.divide = Some(amount);
     let slot = b.add_target(spec, "targets (divided)");
