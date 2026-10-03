@@ -16914,16 +16914,11 @@ Runaway Carriage
 Runaway Steam-Kin
 Runaway Trash-Bot
 Rundvelt Hordemaster
-Rune of Flight
-Rune of Might
-Rune of Mortality
 Rune of Protection: Black
 Rune of Protection: Blue
 Rune of Protection: Green
 Rune of Protection: Red
 Rune of Protection: White
-Rune of Speed
-Rune of Sustenance
 Rune-Brand Juggler
 Rune-Cervin Rider
 Rune-Scarred Demon

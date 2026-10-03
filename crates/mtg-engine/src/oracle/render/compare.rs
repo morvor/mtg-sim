@@ -942,6 +942,14 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
             c if c.is_alphanumeric() || matches!(c, '\'' | '+' | '-' | '/' | '~' | '*') => {
                 cur.push(c)
             }
+            // A quotation mark: a quoted ability's "enchanted creature" is another
+            // object's (see [`attached_anaphora`]).
+            '"' => {
+                if !cur.is_empty() {
+                    tokens.push(std::mem::take(&mut cur));
+                }
+                tokens.push(QUOTE.into());
+            }
             _ => {
                 if !cur.is_empty() {
                     tokens.push(std::mem::take(&mut cur));
@@ -954,6 +962,10 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
     }
     let mut out = Vec::new();
     for t in tokens {
+        if t == QUOTE {
+            out.push(t);
+            continue;
+        }
         let t = t.trim_matches('\'').to_string();
         let t = t
             .strip_suffix("'s")
@@ -1012,8 +1024,14 @@ fn expand_symbol_counts(tokens: Vec<String>) -> Vec<String> {
     out
 }
 
+/// A quotation mark among the tokens, for [`attached_anaphora`] only.
+const QUOTE: &str = "\"";
+
 /// After the first "enchanted creature" (or "equipped creature", ...) in a unit, later
-/// ones may be "it": both refer to the object the source is attached to (anaphora).
+/// ones may be "it": both refer to the object the source is attached to (anaphora). Not
+/// across a quotation mark: in "As long as enchanted permanent is an Equipment, it has
+/// \"Equipped creature has flying.\"" the quoted ability's equipped creature is the
+/// Equipment's.
 fn attached_anaphora(tokens: Vec<String>) -> Vec<String> {
     let heads = ["creature", "permanent", "land", "artifact", "planeswalker"];
     let mut out: Vec<String> = Vec::new();
@@ -1021,6 +1039,11 @@ fn attached_anaphora(tokens: Vec<String>) -> Vec<String> {
     let mut i = 0;
     while i < tokens.len() {
         let t = &tokens[i];
+        if t == QUOTE {
+            seen = false;
+            i += 1;
+            continue;
+        }
         let is_attached = (t == "enchanted" || t == "equipped" || t == "fortified")
             && tokens
                 .get(i + 1)
@@ -1146,7 +1169,19 @@ fn sentence_rewrites(s: &str) -> String {
     if let Some(re) = TARGETS_X.get_or_init(|| {
         Regex::new(r"\b(up to |)x ((?:other )?target [^.]*?), where x is ([^.]+?)(\.|$)").ok()
     }) {
-        s = re.replace_all(&s, "$1$3 $2$4").to_string();
+        // Only when that X is the only one the definition is for ("tap X target
+        // creatures. They get -X/-0 ..." keeps its X).
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                if c[2]
+                    .split(|ch: char| !ch.is_alphanumeric())
+                    .any(|w| w == "x")
+                {
+                    return c[0].to_string();
+                }
+                format!("{}{} {}{}", &c[1], &c[3], &c[2], &c[4])
+            })
+            .to_string();
     }
     // "When ~ blocks, at end of combat, destroy it." / "..., destroy it at end of
     // combat.": a delayed trigger's time after a trigger condition, too.
