@@ -17,7 +17,7 @@ pub(crate) fn reflexive_body(text: &str, b: &Builder) -> Option<Body> {
 }
 
 /// [`reflexive_body`] where "it" is `it`.
-fn reflexive_body_about(text: &str, b: &Builder, it: Sel) -> Option<Body> {
+pub(crate) fn reflexive_body_about(text: &str, b: &Builder, it: Sel) -> Option<Body> {
     let text = text
         .replace("that creature's power", "its power")
         .replace("that creature's toughness", "its toughness");

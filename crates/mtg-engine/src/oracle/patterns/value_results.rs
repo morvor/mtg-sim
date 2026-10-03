@@ -15,6 +15,9 @@ fn word_end(rest: &str) -> bool {
 /// After "the number of" / "for each": what's counted. Tried before the value grammar's
 /// own readings.
 pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(v) = event_amount_groups(r, b) {
+        return Some(v);
+    }
     if let Some(v) = this_way_count(r, b) {
         return Some(v);
     }
@@ -24,6 +27,12 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// A whole value phrase ("the amount of damage dealt to you this turn"). Tried before the
 /// value grammar's own readings.
 pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(v) = event_amount(s, b) {
+        return Some(v);
+    }
+    if let Some(v) = excess(s, b) {
+        return Some(v);
+    }
     if let Some(v) = result_value(s, b) {
         return Some(v);
     }
@@ -375,6 +384,105 @@ fn rel_code(r: PlayerRel) -> Option<&'static str> {
     })
 }
 
+/// Whether the ability being compiled triggers on an event of this kind ("damage",
+/// "gain life", "lose life"), judged by its text.
+fn triggers_on(b: &Builder, what: &[&str]) -> bool {
+    if !b.in_trigger {
+        return false;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    // The trigger condition: the text before the first comma of a "when"/"whenever"
+    // ability (granted abilities in quotes included).
+    raw.split(['"', '\n'])
+        .filter_map(|part| {
+            let i = part.find("whenever ").or_else(|| part.find("when "))?;
+            Some(part[i..].split(',').next().unwrap_or(""))
+        })
+        .any(|cond| what.iter().any(|w| cond.contains(w)))
+}
+
+/// The amount of the event that triggered the ability: "the amount of life you gained"
+/// in a "whenever you gain life" trigger, "the amount of damage it dealt to that player"
+/// in a "whenever ~ deals combat damage to a player" trigger (for "one or more" triggers,
+/// the total of the batch, CR 603.2c).
+fn event_amount(s: &str, b: &Builder) -> Option<(Value, String)> {
+    let life: [(&str, &[&str]); 4] = [
+        ("the amount of life you gained", &["gain life", "gains life"]),
+        ("the amount of life you lost", &["lose life", "loses life"]),
+        ("the amount of life they gained", &["gain life", "gains life"]),
+        ("the amount of life they lost", &["lose life", "loses life"]),
+    ];
+    for (p, on) in life {
+        if let Some(rest) = s.strip_prefix(p) {
+            if word_end(rest) && !rest.trim_start().starts_with("this turn") && triggers_on(b, on) {
+                return Some((Value::EventAmount, rest.to_string()));
+            }
+        }
+    }
+    let x = s
+        .strip_prefix("the amount of damage")
+        .or_else(|| s.strip_prefix("the damage"))?;
+    let damage = ["damage"];
+    if !triggers_on(b, &damage) {
+        return None;
+    }
+    let x = x.strip_prefix(" dealt").or_else(|| {
+        [" it dealt", " ~ dealt", " he dealt", " she dealt", " those creatures dealt", " that creature dealt"]
+            .iter()
+            .find_map(|p| x.strip_prefix(p))
+    })?;
+    let x = [" to that player", " to them", " to it", " to that creature", " to ~"]
+        .iter()
+        .find_map(|p| x.strip_prefix(p))
+        .unwrap_or(x);
+    if !word_end(x) || x.trim_start().starts_with("this turn") {
+        return None;
+    }
+    Some((Value::EventAmount, x.to_string()))
+}
+
+/// "for each 2 damage dealt to them" in a damage trigger: the event's amount in groups.
+fn event_amount_groups(r: &str, b: &Builder) -> Option<(Value, String)> {
+    let (n, x) = parse_number(r)?;
+    let k = n.as_const().filter(|k| *k > 0)?;
+    let x = x.trim_start().strip_prefix("damage dealt")?;
+    let x = [" to that player", " to them"]
+        .iter()
+        .find_map(|p| x.strip_prefix(p))
+        .unwrap_or(x);
+    if !word_end(x) || x.trim_start().starts_with("this turn") || !triggers_on(b, &["damage"]) {
+        return None;
+    }
+    let v = if k == 1 {
+        Value::EventAmount
+    } else {
+        Value::Div(Box::new(Value::EventAmount), k, false)
+    };
+    Some((v, x.to_string()))
+}
+
+/// "the excess damage dealt this way", "the amount of excess damage dealt to that
+/// creature this way" (CR 120.10: the excess damage the latest damage instruction dealt,
+/// to the one permanent it damaged), and in a "whenever [a permanent] is dealt excess
+/// damage" trigger "that excess damage" (the triggering event's).
+fn excess(s: &str, b: &Builder) -> Option<(Value, String)> {
+    if let Some(rest) = s.strip_prefix("that excess damage") {
+        if word_end(rest) && b.in_trigger {
+            return Some((Value::EventAmount, rest.to_string()));
+        }
+        return None;
+    }
+    let x = s
+        .strip_prefix("the amount of excess damage dealt")
+        .or_else(|| s.strip_prefix("the excess damage dealt"))?;
+    let x = [" to that creature", " to that permanent", " to it"]
+        .iter()
+        .find_map(|p| x.strip_prefix(p))
+        .unwrap_or(x);
+    let rest = x.strip_prefix(" this way")?;
+    word_end(rest).then(|| (Value::Var(vars::EXCESS), rest.to_string()))
+}
+
 // ---------------------------------------------------------------------------
 // Results of earlier instructions ("this way", "the sacrificed creature")
 // ---------------------------------------------------------------------------
@@ -713,6 +821,156 @@ fn each_discards_then_draws(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "value results: each player discards their hand, then draws cards equal to [result]", priority: 5, parse: each_discards_then_draws } }
+
+// ---------------------------------------------------------------------------
+// X fixed by a payment ("you may pay {X}")
+// ---------------------------------------------------------------------------
+
+/// The cap on the X a player chooses as they pay a cost with {X} while an ability
+/// resolves ("X can't be greater than the amount of life you gained this turn"), read by
+/// `mana_abilities::bind_x_for_payment`.
+pub const X_MAX: Var = vars::USER + 7521;
+
+/// A cost of mana symbols with {X} in it ("{X}", "{X}{X}", "{X}{R}").
+fn x_mana_cost(s: &str) -> Option<Cost> {
+    let s = end(s);
+    let only_symbols = s.starts_with('{')
+        && s.ends_with('}')
+        && s.split('}').all(|p| p.is_empty() || (p.starts_with('{') && !p[1..].contains('{')));
+    if !only_symbols || !s.contains("{x}") {
+        return None;
+    }
+    let m = crate::mana::ManaCost::parse(&s.to_uppercase())?;
+    m.has_x().then(|| Cost::mana(m))
+}
+
+/// "You may pay {X}." (CR 107.3f: nothing defines X, so the player chooses it as they
+/// pay, and that's the value of X for the rest of the resolution, including a reflexive
+/// triggered ability it causes, CR 603.12); "you may pay {X}, where X is less than or
+/// equal to the amount of life you gained" (the choice is capped).
+fn may_pay_x(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you may pay ")?;
+    let (cost_s, cap) = match r.split_once(", where x is less than or equal to ") {
+        Some((c, v)) => (c, Some(v)),
+        None => (r, None),
+    };
+    let cost = x_mana_cost(cost_s)?;
+    let cap = match cap {
+        Some(v) => {
+            let (v, tail) = super::r107_numbers::value_phrase(v, b)?;
+            if !end(&tail).is_empty() {
+                return None;
+            }
+            Some(v)
+        }
+        None => None,
+    };
+    // The following sentences' X is this X.
+    b.named
+        .push((super::tokens_x_x::X_DEFINED.to_string(), Sel::None));
+    let pay = Effect::PayOptional {
+        who: PlayerRef::You,
+        cost,
+        then: Box::new(Effect::Noop),
+        otherwise: Box::new(Effect::Noop),
+    };
+    Some(match cap {
+        Some(v) => Effect::seq(vec![Effect::StoreValue { var: X_MAX, value: v }, pay]),
+        None => pay,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "value results: you may pay {X}", priority: 99, parse: may_pay_x } }
+
+/// The payment with {X} an effect ends with, if it does.
+fn ends_with_x_payment(e: &Effect) -> bool {
+    match e {
+        Effect::PayOptional { cost, .. } => cost.mana.as_ref().is_some_and(|m| m.has_x()),
+        Effect::Seq(v) => v.last().is_some_and(ends_with_x_payment),
+        _ => false,
+    }
+}
+
+/// "You may pay {X}. When you do, put X +1/+1 counters on that creature.": the reflexive
+/// triggered ability's X is the X paid, and its "it" / "that creature" is what the
+/// triggered ability was about (a payment acts on no object).
+fn when_you_do_after_x_payment(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("when you do, ") else {
+        return false;
+    };
+    if !ends_with_x_payment(prev) {
+        return false;
+    }
+    let body = super::value_grammar::with_x_defined(true, || {
+        super::r600_triggers::reflexive_body_about(r, b, b.it.clone())
+    });
+    let Some(body) = body else {
+        return false;
+    };
+    let e = Effect::If {
+        cond: Condition::PrevHappened,
+        then: Box::new(Effect::Reflexive {
+            body: Box::new(body),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "value results: when you do, after paying {X}", priority: 40, apply: when_you_do_after_x_payment } }
+
+/// "[trigger], you may pay {X}. If you do, draw X cards. X can't be greater than the
+/// amount of life you gained this turn.": the player can't choose a greater X as they pay.
+fn x_cant_be_greater(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.trim().to_lowercase();
+    let (head, cap) = lower.rsplit_once(". x can't be greater than ")?;
+    if !head.contains("you may pay {x}") {
+        return None;
+    }
+    let cap = end(cap);
+    let mut abilities = crate::oracle::parse_ability(&format!("{head}."), ctx)?;
+    let [a] = abilities.as_mut_slice() else {
+        return None;
+    };
+    let a = std::sync::Arc::make_mut(a);
+    let AbilityKind::Triggered(t) = &mut a.kind else {
+        return None;
+    };
+    let mut b = Builder::new(ctx);
+    b.in_trigger = true;
+    let (v, tail) = super::r107_numbers::value_phrase(cap, &mut b)?;
+    if !end(&tail).is_empty() || !b.targets.is_empty() {
+        return None;
+    }
+    if !cap_payment(&mut t.body.effect, &v) {
+        return None;
+    }
+    a.text = block.to_string();
+    Some(abilities)
+}
+
+/// Puts the cap on X right before the payment with {X} in `e`.
+fn cap_payment(e: &mut Effect, v: &Value) -> bool {
+    match e {
+        Effect::PayOptional { cost, .. } if cost.mana.as_ref().is_some_and(|m| m.has_x()) => {
+            let pay = std::mem::take(e);
+            *e = Effect::seq(vec![
+                Effect::StoreValue {
+                    var: X_MAX,
+                    value: v.clone(),
+                },
+                pay,
+            ]);
+            true
+        }
+        Effect::Seq(xs) => xs.iter_mut().any(|x| cap_payment(x, v)),
+        _ => false,
+    }
+}
+
+inventory::submit! { super::AbilityPattern { name: "value results: X can't be greater than [value]", priority: 10, parse: x_cant_be_greater } }
 
 #[cfg(test)]
 mod tests {
