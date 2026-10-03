@@ -199,6 +199,8 @@ pub fn parse_trigger_body(
     }
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
+    b.named
+        .extend(super::patterns::trigger_grammar_combat_cast::take_named());
     // "Whenever you cast a spell, earthbend 1. If that spell is a Lesson, ...": the spell
     // cast, even after "it" has come to mean something else.
     if matches!(it, Sel::TriggerSpell) {

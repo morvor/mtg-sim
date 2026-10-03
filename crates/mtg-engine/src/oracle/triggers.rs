@@ -175,7 +175,10 @@ fn parse_triggered_at(
         eff
     };
     let trigger_it = it.clone();
+    // Phrases the trigger event names ("the blocking creature", "that Archer").
+    let named = super::patterns::trigger_grammar_combat_cast::name_referents(&trigger);
     let mut body = parse_trigger_body(eff, ctx, it, it_player)?;
+    drop(named);
     // "look at that many cards from the top of your library": only a trigger with an
     // amount (damage dealt, creatures attacking) gives "that many" a meaning.
     super::patterns::dig_grammar::check_that_many(&body.effect, &trigger)?;

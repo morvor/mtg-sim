@@ -6,13 +6,20 @@
 //!
 //! The ability is the one on the stack (`EventInfo::spell`), or, for a mana ability, which
 //! never goes on the stack (CR 605.3a), the one its source just recorded as activated.
+//!
+//! Also: `Filter::Custom` [`ACTIVATED_ABILITY`] (an activated ability on the stack: "becomes
+//! the target of an activated ability"), and the `TriggerCond::Custom` triggers on a player
+//! becoming the target of a spell or ability ([`player_targeted`]: "Whenever you become
+//! the target of a spell or ability an opponent controls", CR 115.10, 603.2).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
-use crate::object::StackKind;
+use crate::events::Event;
+use crate::object::{EventInfo, StackKind};
+use crate::types::{Entity, ObjectId, PlayerId};
 
 /// `Condition::Custom`: the activated ability has {T} in its activation cost.
 pub const TAP_IN_COST: &str = "activated ability: {T} in its activation cost";
@@ -59,6 +66,38 @@ fn is_ninjutsu(g: &Game, ctx: &Ctx) -> bool {
     )
 }
 
+/// `Filter::Custom`: an activated ability on the stack (CR 602.2a).
+pub const ACTIVATED_ABILITY: &str = "stack object: activated ability";
+
+const PLAYER_TARGETED: &str = "player becomes the target:";
+
+fn rel_word(r: PlayerRel) -> &'static str {
+    match r {
+        PlayerRel::You => "you",
+        PlayerRel::Opponent => "opponent",
+        PlayerRel::NotYou => "another player",
+        _ => "any",
+    }
+}
+
+fn word_rel(w: &str) -> Option<PlayerRel> {
+    Some(match w {
+        "you" => PlayerRel::You,
+        "opponent" => PlayerRel::Opponent,
+        "another player" => PlayerRel::NotYou,
+        "any" => PlayerRel::Any,
+        _ => return None,
+    })
+}
+
+/// The `TriggerCond::Custom` name for "[who] becomes the target of a spell or ability
+/// [by] controls": each time a player matching `who` becomes a target of a spell or
+/// ability whose controller matches `by` (once per spell or ability, however many times it
+/// targets them). Event player = the controller of the spell or ability, spell = it.
+pub fn player_targeted(who: PlayerRel, by: PlayerRel) -> String {
+    format!("{PLAYER_TARGETED}{}:{}", rel_word(who), rel_word(by))
+}
+
 pub struct ActivatedAbilityKind;
 
 impl KeywordRules for ActivatedAbilityKind {
@@ -72,6 +111,49 @@ impl KeywordRules for ActivatedAbilityKind {
             NINJUTSU => Some(is_ninjutsu(g, ctx)),
             _ => None,
         }
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+        if name != ACTIVATED_ABILITY {
+            return None;
+        }
+        Some(matches!(
+            g.obj(id).stack.as_deref().map(|s| &s.kind),
+            Some(StackKind::Activated { .. })
+        ))
+    }
+
+    fn custom_trigger(
+        &self,
+        g: &Game,
+        name: &str,
+        src: ObjectId,
+        ctl: PlayerId,
+        ev: &Event,
+    ) -> Option<Vec<EventInfo>> {
+        let rest = name.strip_prefix(PLAYER_TARGETED)?;
+        let (who, by) = rest.split_once(':')?;
+        let (who, by) = (word_rel(who)?, word_rel(by)?);
+        let Event::BecameTarget {
+            target: Entity::Player(p),
+            by: s,
+            controller,
+        } = ev
+        else {
+            return Some(vec![]);
+        };
+        let ctx = Ctx::new(Some(src), ctl);
+        Some(
+            if g.player_rel_matches(who, *p, &ctx) && g.player_rel_matches(by, *controller, &ctx) {
+                vec![EventInfo {
+                    spell: Some(*s),
+                    player: Some(*controller),
+                    ..Default::default()
+                }]
+            } else {
+                vec![]
+            },
+        )
     }
 }
 

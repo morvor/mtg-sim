@@ -827,6 +827,1370 @@ fn tapped_or_activates(r: &str) -> Option<Parsed> {
     ))
 }
 
+// ---------------------------------------------------------------------------
+// Attacking (CR 508.3)
+// ---------------------------------------------------------------------------
+
+/// "a player who controls eight or more lands", "a player who controls more lands than
+/// you", "a player who has more life than you", "the monarch".
+fn player_who(s: &str) -> Option<PlayerFilter> {
+    if s == "the monarch" {
+        return Some(PlayerFilter::Monarch);
+    }
+    let x = s.strip_prefix("a player who ")?;
+    if x == "has more life than you" {
+        return Some(PlayerFilter::Life(
+            Cmp::Gt,
+            Box::new(Value::LifeTotal(PlayerRef::You)),
+        ));
+    }
+    let x = x.strip_prefix("controls ")?;
+    // "more lands than you"
+    if let Some(y) = x.strip_prefix("more ") {
+        let y = y.strip_suffix(" than you")?;
+        let (f, plural, tail) = parse_object_phrase(y)?;
+        if !plural || !end(tail).is_empty() {
+            return None;
+        }
+        let yours = Value::Count(f.clone().you_control());
+        return Some(PlayerFilter::Controls(
+            Box::new(f),
+            Cmp::Gt,
+            Box::new(yours),
+        ));
+    }
+    // "eight or more lands"
+    let (n, y) = parse_number(x)?;
+    let y = y.trim_start().strip_prefix("or more ")?;
+    let (f, plural, tail) = parse_object_phrase(y)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some(PlayerFilter::Controls(Box::new(f), Cmp::Ge, Box::new(n)))
+}
+
+/// The attacked player is a player (not a planeswalker or battle) matching `f`.
+fn attacked_player_is(f: PlayerFilter) -> Condition {
+    Condition::And(vec![
+        Condition::PlayerMatches(PlayerRef::TriggerPlayer, f),
+        Condition::Not(Box::new(Condition::SelNonEmpty(Sel::TriggerOtherObject))),
+    ])
+}
+
+/// "[subject] and at least [N] [other] [creatures] attack", "[subject] and another
+/// [creature] attack": the subject attacks along with that many other such creatures (the
+/// creatures attacking are those just declared, CR 508.1).
+fn attacks_with_others(r: &str) -> Option<Parsed> {
+    let x = r.strip_suffix(" attack")?;
+    let (subj, others) = x.split_once(" and ")?;
+    let (sf, it) = match subj {
+        "~" => (Filter::Source, Sel::This),
+        "equipped creature" | "enchanted creature" => {
+            (Filter::AttachedToSource, Sel::TriggerObject)
+        }
+        _ => return None,
+    };
+    let (n, phrase) = if let Some(y) = others.strip_prefix("at least ") {
+        let (n, y) = parse_number(y)?;
+        (n.as_const()?, y.trim_start())
+    } else if let Some(y) = others.strip_prefix("another ") {
+        (1, y)
+    } else {
+        return None;
+    };
+    let phrase = phrase.strip_prefix("other ").unwrap_or(phrase);
+    let (f, _, tail) = parse_object_phrase(phrase)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let count = Value::Count(Filter::and(vec![
+        f,
+        Filter::creature(),
+        Filter::Attacking,
+        Filter::not(sf.clone()),
+    ]));
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::Attacks(sf)),
+            cond: Condition::Compare(count, Cmp::Ge, Value::c(n)),
+        },
+        it,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+/// "[creature] attacks [a battle | a player who … | the monarch | one of your opponents
+/// or a planeswalker an opponent controls | a player and isn't blocked]".
+fn attacks_recipient(r: &str) -> Option<Parsed> {
+    let (subj_s, rec) = r.split_once(" attacks ")?;
+    let subj = super::triggers::parse_subject(subj_s)?;
+    if subj.one_or_more {
+        return None;
+    }
+    let f = subj.filter.clone();
+    let it = if subj.self_only {
+        Sel::This
+    } else {
+        Sel::TriggerObject
+    };
+    let tp = PlayerRef::TriggerPlayer;
+    if rec == "a battle" {
+        return Some((
+            TriggerCond::AttacksRecipient {
+                attacker: f,
+                recipient: DamageRecipient::Object(Filter::Type(CardType::Battle)),
+            },
+            it,
+            tp,
+        ));
+    }
+    if rec == "one of your opponents or a planeswalker an opponent controls" {
+        return Some((
+            TriggerCond::AttacksRecipient {
+                attacker: f,
+                recipient: DamageRecipient::PlayerOrPlaneswalker(PlayerRel::Opponent),
+            },
+            it,
+            tp,
+        ));
+    }
+    if rec == "a player and isn't blocked" {
+        // Declared unblocked while attacking a player (CR 509.1h).
+        return Some((
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::AttacksUnblocked(f)),
+                cond: Condition::SelMatches(
+                    Sel::TriggerObject,
+                    Filter::AttackingPlayer(PlayerRel::Any),
+                ),
+            },
+            it,
+            PlayerRef::DefendingPlayer,
+        ));
+    }
+    let who = player_who(rec)?;
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::Attacks(f)),
+            cond: attacked_player_is(who),
+        },
+        it,
+        tp,
+    ))
+}
+
+/// "[N] or more [creatures]", "at least [N] [creatures]", "one or more [creatures]".
+fn count_phrase(s: &str) -> Option<(u32, Filter, &str)> {
+    let (n, rest) = if let Some(x) = s.strip_prefix("one or more ") {
+        (1, x)
+    } else if let Some(x) = s.strip_prefix("at least ") {
+        let (n, x) = parse_number(x)?;
+        (n.as_const()?, x.trim_start())
+    } else {
+        let (n, x) = parse_number(s)?;
+        (n.as_const()?, x.trim_start().strip_prefix("or more ")?)
+    };
+    // "non-~ creatures": creatures other than this one.
+    let (rest, not_self) = match rest.strip_prefix("non-~ ") {
+        Some(x) => (x, true),
+        None => (rest, false),
+    };
+    let (mut f, plural, tail) = parse_object_phrase(rest)?;
+    if !plural && n != 1 {
+        return None;
+    }
+    if not_self {
+        f = Filter::and(vec![f, Filter::not(Filter::Source)]);
+    }
+    Some((n.max(1) as u32, f, tail))
+}
+
+/// Attack triggers about the attacking player: "you attack with exactly two creatures",
+/// "you attack with at least two [creatures]", "you attack with your commander", "you
+/// attack with a creature an opponent owns", "an opponent attacks with creatures", "an
+/// opponent attacks [a planeswalker you control with one or more creatures | one or more
+/// planeswalkers you control | you and/or one or more planeswalkers you control]".
+fn player_attacks(r: &str) -> Option<Parsed> {
+    let (subj, rest) = player_subject(r)?;
+    if subj.only.is_some() {
+        return None;
+    }
+    let who = subj.rel;
+    let t = rest
+        .strip_prefix("attacks ")
+        .or_else(|| rest.strip_prefix("attack "))?;
+    let objs = || Sel::TriggerObjects;
+    let tp = PlayerRef::TriggerPlayer;
+    if let Some(x) = t.strip_prefix("with ") {
+        if x == "creatures" {
+            return Some((TriggerCond::PlayerAttacks(who), objs(), tp));
+        }
+        if let Some(y) = x.strip_prefix("exactly ") {
+            let (n, y) = parse_number(y)?;
+            let n = n.as_const()?;
+            if !matches!(end(y), "creatures" | "creature") {
+                return None;
+            }
+            return Some((
+                TriggerCond::Where {
+                    trigger: Box::new(TriggerCond::PlayerAttacks(who)),
+                    cond: Condition::Compare(Value::EventAmount, Cmp::Eq, Value::c(n)),
+                },
+                objs(),
+                tp,
+            ));
+        }
+        if x == "your commander" {
+            return Some((
+                TriggerCond::PlayerAttacksWith {
+                    who,
+                    filter: Filter::and(vec![Filter::Commander, Filter::OwnedBy(PlayerRel::You)]),
+                    min: 1,
+                },
+                objs(),
+                tp,
+            ));
+        }
+        if x == "~ and/or your commander" {
+            return Some((
+                TriggerCond::PlayerAttacksWith {
+                    who,
+                    filter: Filter::Or(vec![
+                        Filter::Source,
+                        Filter::and(vec![Filter::Commander, Filter::OwnedBy(PlayerRel::You)]),
+                    ]),
+                    min: 1,
+                },
+                objs(),
+                tp,
+            ));
+        }
+        // "you attack with ~ and another legendary creature"
+        if let Some(y) = x.strip_prefix("~ and ") {
+            if who != PlayerRel::You {
+                return None;
+            }
+            return attacks_with_others(&format!("~ and {y} attack"));
+        }
+        // "you attack with a creature an opponent owns": once for each such creature;
+        // "that player" is its owner.
+        if let Some(y) = x.strip_prefix("a ").or_else(|| x.strip_prefix("an ")) {
+            let (f, plural, tail) = parse_object_phrase(y)?;
+            if plural || !end(tail).is_empty() || who != PlayerRel::You {
+                return None;
+            }
+            return Some((
+                TriggerCond::Attacks(Filter::and(vec![
+                    f,
+                    Filter::creature(),
+                    Filter::ControlledBy(PlayerRel::You),
+                ])),
+                Sel::TriggerObject,
+                PlayerRef::OwnerOf(Box::new(Sel::TriggerObject)),
+            ));
+        }
+        let (n, f, tail) = count_phrase(x)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some((
+            TriggerCond::PlayerAttacksWith {
+                who,
+                filter: Filter::and(vec![f, Filter::creature()]),
+                min: n,
+            },
+            objs(),
+            tp,
+        ));
+    }
+    if who != PlayerRel::Opponent {
+        return None;
+    }
+    // Attacks on you or your planeswalkers: "that player" is the attacking player.
+    let pw = || {
+        Filter::and(vec![
+            Filter::Type(CardType::Planeswalker),
+            Filter::ControlledBy(PlayerRel::You),
+        ])
+    };
+    let attacker = PlayerRef::ActivePlayer;
+    match t {
+        "a planeswalker you control with one or more creatures" => Some((
+            TriggerCond::IsAttacked(DamageRecipient::Object(pw())),
+            Sel::None,
+            attacker,
+        )),
+        "one or more planeswalkers you control" => Some((
+            TriggerCond::Batched {
+                trigger: Box::new(TriggerCond::IsAttacked(DamageRecipient::Object(pw()))),
+                per: BatchPer::Batch,
+            },
+            Sel::None,
+            attacker,
+        )),
+        "you and/or one or more planeswalkers you control" => Some((
+            TriggerCond::Batched {
+                trigger: Box::new(TriggerCond::IsAttacked(
+                    DamageRecipient::PlayerOrPlaneswalker(PlayerRel::You),
+                )),
+                per: BatchPer::Batch,
+            },
+            Sel::None,
+            attacker,
+        )),
+        _ => None,
+    }
+}
+
+/// "[N] or more [creatures] [you control | your opponents control] attack [a player]",
+/// "one or more [creatures] attack [one of your opponents or a planeswalker they control |
+/// one or more players | you and aren't blocked]".
+fn creatures_attack(r: &str) -> Option<Parsed> {
+    let (subject, verb_rest) = r
+        .split_once(" attack ")
+        .or_else(|| r.strip_suffix(" attack").map(|s| (s, "")))?;
+    let (n, f, tail) = count_phrase(subject)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let f = Filter::and(vec![f, Filter::creature()]);
+    // Who controls them (the attacking player).
+    let controller = controlled_by(&f);
+    let objs = Sel::TriggerObjects;
+    let tp = PlayerRef::TriggerPlayer;
+    let batch = |c: TriggerCond| TriggerCond::Batched {
+        trigger: Box::new(c),
+        per: BatchPer::Batch,
+    };
+    match verb_rest {
+        "" if n == 1 => None,
+        "" => {
+            let who = controller.unwrap_or(PlayerRel::Any);
+            // Only the attacking player's creatures are declared attackers.
+            Some((
+                TriggerCond::PlayerAttacksWith { who, filter: f, min: n },
+                objs,
+                tp,
+            ))
+        }
+        "a player" if n > 1 => Some((
+            TriggerCond::PlayerAttacked {
+                attacker: controller.unwrap_or(PlayerRel::Any),
+                defender: PlayerFilter::Any,
+                with: f,
+                min: n,
+            },
+            objs,
+            tp,
+        )),
+        "one or more players" if n == 1 => Some((
+            batch(TriggerCond::Where {
+                trigger: Box::new(TriggerCond::Attacks(f)),
+                cond: attacked_player_is(PlayerFilter::Any),
+            }),
+            objs,
+            PlayerRef::Iterated,
+        )),
+        "one of your opponents or a planeswalker they control" if n == 1 => Some((
+            batch(TriggerCond::AttacksRecipient {
+                attacker: f,
+                recipient: DamageRecipient::PlayerOrPlaneswalker(PlayerRel::Opponent),
+            }),
+            objs,
+            PlayerRef::Iterated,
+        )),
+        "you and aren't blocked" if n == 1 => Some((
+            // Declared unblocked while attacking you (CR 509.1h): "that player" is the
+            // attacking player.
+            batch(TriggerCond::AttacksUnblocked(Filter::and(vec![
+                f,
+                Filter::AttackingPlayer(PlayerRel::You),
+            ]))),
+            objs,
+            PlayerRef::ActivePlayer,
+        )),
+        _ => None,
+    }
+}
+
+/// The controller relation a creature description names ("you control", "your opponents
+/// control").
+fn controlled_by(f: &Filter) -> Option<PlayerRel> {
+    match f {
+        Filter::ControlledBy(r) => Some(*r),
+        Filter::And(v) => v.iter().find_map(controlled_by),
+        _ => None,
+    }
+}
+
+/// "a creature you control attacks or enters attacking": either event.
+fn attacks_or_enters_attacking(r: &str) -> Option<Parsed> {
+    let s = r.strip_suffix(" attacks or enters attacking")?;
+    let subj = super::triggers::parse_subject(s)?;
+    if subj.one_or_more || subj.self_only {
+        return None;
+    }
+    Some((
+        TriggerCond::AnyOf(vec![
+            TriggerCond::Attacks(subj.filter.clone()),
+            // Put onto the battlefield attacking (CR 508.4).
+            TriggerCond::EntersBattlefield(Filter::and(vec![subj.filter, Filter::Attacking])),
+        ]),
+        Sel::TriggerObject,
+        PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Blocking (CR 509.3)
+// ---------------------------------------------------------------------------
+
+/// "a [creature]" / "one or more [creatures]" after a block verb.
+fn block_object(s: &str) -> Option<(Filter, bool, &str)> {
+    if let Some(x) = s.strip_prefix("one or more ") {
+        let (f, plural, tail) = parse_object_phrase(x)?;
+        return plural.then_some((f, true, tail));
+    }
+    let x = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    let (f, plural, tail) = parse_object_phrase(x)?;
+    (!plural).then_some((f, false, tail))
+}
+
+/// A creature with lesser power than the other creature of a block: the blocked attacker
+/// (event object) vs. the blocker (other), or the reverse.
+fn lesser_power(of: Sel, than: Sel) -> Condition {
+    Condition::Compare(
+        Value::PowerOf(Box::new(of)),
+        Cmp::Lt,
+        Value::PowerOf(Box::new(than)),
+    )
+}
+
+fn block_events(r: &str) -> Option<Parsed> {
+    // "[creature] blocks or becomes blocked by ~" (Mirror Shield): "that creature" is the
+    // other creature.
+    if let Some(s) = r.strip_suffix(" blocks or becomes blocked by ~") {
+        let subj = super::triggers::parse_subject(s)?;
+        if subj.one_or_more || subj.self_only {
+            return None;
+        }
+        return Some((
+            TriggerCond::AnyOf(vec![
+                TriggerCond::BlocksCreature {
+                    blocker: subj.filter.clone(),
+                    attacker: Filter::Source,
+                },
+                TriggerCond::BlockedByCreature {
+                    attacker: subj.filter,
+                    blocker: Filter::Source,
+                },
+            ]),
+            Sel::TriggerOtherObject,
+            PlayerRef::ControllerOf(Box::new(Sel::TriggerOtherObject)),
+        ));
+    }
+    if let Some((s, o)) = r.split_once(" blocks or becomes blocked by ") {
+        let (g, many, tail) = block_object(o)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        let g = Filter::and(vec![g, Filter::creature()]);
+        if s == "~" && many {
+            // Once per combat (CR 509.3a, 509.3c), if any of those creatures matches.
+            return Some((
+                TriggerCond::Where {
+                    trigger: Box::new(TriggerCond::BlocksOrBecomesBlocked(Filter::Source)),
+                    cond: Condition::Exists(Filter::and(vec![
+                        g,
+                        Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]),
+                    ])),
+                },
+                Sel::This,
+                PlayerRef::You,
+            ));
+        }
+        let f = match s {
+            "enchanted creature" | "equipped creature" => Filter::AttachedToSource,
+            _ => return None,
+        };
+        if many {
+            return None;
+        }
+        // Once for each creature it blocks or is blocked by (CR 509.3b, 509.3d): "that
+        // creature" is that one.
+        return Some((
+            TriggerCond::AnyOf(vec![
+                TriggerCond::BlocksCreature {
+                    blocker: f.clone(),
+                    attacker: g.clone(),
+                },
+                TriggerCond::BlockedByCreature {
+                    attacker: f,
+                    blocker: g,
+                },
+            ]),
+            Sel::TriggerObject,
+            PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+        ));
+    }
+    // "a creature blocks a creature with lesser power" (No Quarter).
+    if let Some(s) = r.strip_suffix(" blocks a creature with lesser power") {
+        let subj = super::triggers::parse_subject(s)?;
+        if subj.one_or_more || subj.self_only {
+            return None;
+        }
+        return Some((
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::BlocksCreature {
+                    blocker: subj.filter,
+                    attacker: Filter::creature(),
+                }),
+                cond: lesser_power(Sel::TriggerObject, Sel::TriggerOtherObject),
+            },
+            Sel::None,
+            PlayerRef::Iterated,
+        ));
+    }
+    if let Some(s) = r.strip_suffix(" becomes blocked by a creature with lesser power") {
+        let subj = super::triggers::parse_subject(s)?;
+        if subj.one_or_more || subj.self_only {
+            return None;
+        }
+        return Some((
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::BlockedByCreature {
+                    attacker: subj.filter,
+                    blocker: Filter::creature(),
+                }),
+                cond: lesser_power(Sel::TriggerObject, Sel::TriggerOtherObject),
+            },
+            Sel::None,
+            PlayerRef::Iterated,
+        ));
+    }
+    // "a creature attacking one of your opponents becomes blocked by two or more
+    // creatures".
+    if let Some((s, n)) = r.split_once(" becomes blocked by ") {
+        let n = match n {
+            "two or more creatures" => 2,
+            "three or more creatures" => 3,
+            _ => return None,
+        };
+        let (s, attacking) = match s.strip_suffix(" attacking one of your opponents") {
+            Some(x) => (x, Some(Filter::AttackingPlayer(PlayerRel::Opponent))),
+            None => (s, None),
+        };
+        let subj = super::triggers::parse_subject(s)?;
+        if subj.one_or_more || subj.self_only {
+            return None;
+        }
+        let mut parts = vec![subj.filter];
+        parts.extend(attacking);
+        let attacker = Filter::and(parts);
+        return Some((
+            TriggerCond::BlockedByN { attacker, n },
+            Sel::TriggerObject,
+            PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+        ));
+    }
+    if let Some((s, o)) = r.split_once(" blocks ") {
+        if s == "~" {
+            // "~ blocks one or more black creatures", "~ blocks two or more creatures":
+            // once per combat (CR 509.3a), counting the creatures it blocks.
+            let (n, g, tail) = count_phrase(o)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            let blocked = Value::Count(Filter::and(vec![g, Filter::BlockedBySource]));
+            return Some((
+                TriggerCond::Where {
+                    trigger: Box::new(TriggerCond::Blocks(Filter::Source)),
+                    cond: Condition::Compare(blocked, Cmp::Ge, Value::c(n as i32)),
+                },
+                Sel::This,
+                PlayerRef::You,
+            ));
+        }
+        // "a creature blocks a black or red creature": once for each such block
+        // (CR 509.3b); "the blocking creature" / "the attacking creature" name them.
+        let subj = super::triggers::parse_subject(s)?;
+        if subj.one_or_more || subj.self_only {
+            return None;
+        }
+        let (g, many, tail) = block_object(o)?;
+        if many || !end(tail).is_empty() {
+            return None;
+        }
+        return Some((
+            TriggerCond::BlocksCreature {
+                blocker: subj.filter,
+                attacker: Filter::and(vec![g, Filter::creature()]),
+            },
+            Sel::None,
+            PlayerRef::Iterated,
+        ));
+    }
+    // "one or more creatures block": once per declaration of blockers.
+    if let Some(s) = r.strip_suffix(" block") {
+        let (n, f, tail) = count_phrase(s)?;
+        if n != 1 || !end(tail).is_empty() {
+            return None;
+        }
+        return Some((
+            TriggerCond::Batched {
+                trigger: Box::new(TriggerCond::Blocks(Filter::and(vec![f, Filter::creature()]))),
+                per: BatchPer::Batch,
+            },
+            Sel::None,
+            PlayerRef::Iterated,
+        ));
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// Damage (CR 120)
+// ---------------------------------------------------------------------------
+
+/// A source of damage: "~", "a [adjectives] source [you control | an opponent controls]
+/// [other than ~]", "a red instant or sorcery spell you control", or any object subject.
+fn damage_source(s: &str) -> Option<super::triggers::Subject> {
+    use super::triggers::Subject;
+    if let Some(x) = s.strip_prefix("a ").or_else(|| s.strip_prefix("an ")) {
+        if let Some(i) = x.find("source") {
+            let (adjs, rest) = (&x[..i], &x[i + "source".len()..]);
+            let mut parts = Vec::new();
+            for w in adjs.split_whitespace() {
+                parts.push(adjective(w)?);
+            }
+            let mut rest = rest.trim_start();
+            loop {
+                if rest.is_empty() {
+                    break;
+                }
+                if let Some(r) = rest.strip_prefix("you control") {
+                    parts.push(Filter::ControlledBy(PlayerRel::You));
+                    rest = r.trim_start();
+                } else if let Some(r) = rest.strip_prefix("an opponent controls") {
+                    parts.push(Filter::ControlledBy(PlayerRel::Opponent));
+                    rest = r.trim_start();
+                } else if let Some(r) = rest.strip_prefix("other than ~") {
+                    parts.push(Filter::not(Filter::Source));
+                    rest = r.trim_start();
+                } else if let Some(r) = rest.strip_prefix("of the chosen color") {
+                    parts.push(Filter::ChosenColor);
+                    rest = r.trim_start();
+                } else {
+                    return None;
+                }
+            }
+            return Some(Subject {
+                filter: Filter::and(parts),
+                self_only: false,
+                one_or_more: false,
+            });
+        }
+    }
+    super::triggers::parse_subject(s)
+}
+
+/// A recipient of damage, maybe one of several ("you or a permanent you control"), each
+/// with an optional condition on the event; `true` if it names "one or more" recipients
+/// (the damage dealt to them at once is one batch).
+type Recipient = (DamageRecipient, Option<Condition>);
+
+fn damage_recipients(s: &str) -> Option<(Vec<Recipient>, bool)> {
+    let one = |s: &str| -> Option<Recipient> {
+        let s = s.trim();
+        let pl = |rel| Some((DamageRecipient::Player(rel), None));
+        match s {
+            "you" => return pl(PlayerRel::You),
+            "an opponent" | "opponent" | "one of your opponents" => return pl(PlayerRel::Opponent),
+            "a player" => return pl(PlayerRel::Any),
+            "another player" => return pl(PlayerRel::NotYou),
+            "battle" | "a battle" => {
+                return Some((
+                    DamageRecipient::Object(Filter::Type(CardType::Battle)),
+                    None,
+                ))
+            }
+            "enchanted player" => {
+                return Some((
+                    DamageRecipient::Player(PlayerRel::Any),
+                    Some(Condition::PlayerMatches(
+                        PlayerRef::TriggerPlayer,
+                        PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(
+                            Sel::AttachedTo,
+                        )))),
+                    )),
+                ))
+            }
+            "its owner" => {
+                return Some((
+                    DamageRecipient::Player(PlayerRel::Any),
+                    Some(Condition::PlayerMatches(
+                        PlayerRef::TriggerPlayer,
+                        PlayerFilter::Ref(Box::new(PlayerRef::OwnerOf(Box::new(
+                            Sel::TriggerOtherObject,
+                        )))),
+                    )),
+                ))
+            }
+            "enchanted planeswalker" | "enchanted creature" | "equipped creature" => {
+                return Some((DamageRecipient::Object(Filter::AttachedToSource), None))
+            }
+            _ => {}
+        }
+        if let Some(pf) = player_who(s) {
+            return Some((
+                DamageRecipient::Player(PlayerRel::Any),
+                Some(Condition::PlayerMatches(PlayerRef::TriggerPlayer, pf)),
+            ));
+        }
+        let x = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+        let (f, plural, tail) = parse_object_phrase(x)?;
+        if plural || !end(tail).is_empty() || matches!(f, Filter::Any) {
+            return None;
+        }
+        Some((DamageRecipient::Object(f), None))
+    };
+    let s = s.trim();
+    // "one or more [creatures | blocking creatures | of your opponents | players]",
+    // "your opponents", "one or more permanents and/or players".
+    let plural_players = [
+        ("your opponents", PlayerRel::Opponent),
+        ("one or more of your opponents", PlayerRel::Opponent),
+        ("one or more opponents", PlayerRel::Opponent),
+        ("one or more players", PlayerRel::Any),
+    ];
+    for (p, rel) in plural_players {
+        if s == p {
+            return Some((vec![(DamageRecipient::Player(rel), None)], true));
+        }
+    }
+    if s == "one or more permanents and/or players" {
+        return Some((vec![(DamageRecipient::Any, None)], true));
+    }
+    if let Some(x) = s.strip_prefix("one or more ") {
+        let (f, plural, tail) = parse_object_phrase(x)?;
+        if !plural || !end(tail).is_empty() {
+            return None;
+        }
+        return Some((vec![(DamageRecipient::Object(f), None)], true));
+    }
+    if let Some(r) = one(s) {
+        return Some((vec![r], false));
+    }
+    // "you or a permanent you control", "a creature or opponent", "an opponent or battle".
+    let (a, b) = s.split_once(" or ")?;
+    let b = match (a.starts_with("a ") || a.starts_with("an "), b) {
+        // "a creature or opponent": the article covers both.
+        (true, b) if !b.starts_with("a ") && !b.starts_with("an ") && b != "you" => {
+            if one(&format!("a {b}")).is_some() && b != "opponent" && b != "battle" {
+                format!("a {b}")
+            } else {
+                b.to_string()
+            }
+        }
+        _ => b.to_string(),
+    };
+    Some((vec![one(a)?, one(&b)?], false))
+}
+
+/// "[source] deals [combat | noncombat] damage [to [recipients]] [during your turn]".
+fn deals_damage(r: &str) -> Option<Parsed> {
+    let (subj_s, rest) = [" deals ", " deal "]
+        .iter()
+        .find_map(|v| r.split_once(v))?;
+    let subj = damage_source(subj_s)?;
+    let (kind, rest) = if let Some(x) = rest.strip_prefix("combat damage") {
+        (Some(true), x)
+    } else if let Some(x) = rest.strip_prefix("noncombat damage") {
+        (Some(false), x)
+    } else {
+        (None, rest.strip_prefix("damage")?)
+    };
+    let mut rest = rest.trim_start();
+    let mut conds: Vec<Condition> = Vec::new();
+    let mut first_time = false;
+    for (q, your_turn) in [(" during your turn", true), (" for the first time each turn", false)] {
+        let matched = if let Some(x) = rest.strip_suffix(q) {
+            rest = x;
+            true
+        } else if rest == q.trim_start() {
+            rest = "";
+            true
+        } else {
+            false
+        };
+        if matched {
+            if your_turn {
+                conds.push(Condition::YourTurn);
+            } else {
+                first_time = true;
+            }
+        }
+    }
+    let (recipients, many) = if rest.is_empty() {
+        (vec![(DamageRecipient::Any, None)], false)
+    } else {
+        damage_recipients(rest.strip_prefix("to ")?)?
+    };
+    // Only forms the compositional parser doesn't read: several recipients, a player
+    // condition, a qualifier, or "one or more".
+    let combat_only = kind == Some(true);
+    let mk = |to: DamageRecipient, c: Option<Condition>| {
+        let mut d = TriggerCond::DealsDamage {
+            source: subj.filter.clone(),
+            to,
+            combat_only,
+        };
+        if kind == Some(false) {
+            d = TriggerCond::Noncombat(Box::new(d));
+        }
+        let mut cs: Vec<Condition> = conds.clone();
+        cs.extend(c);
+        match cs.len() {
+            0 => d,
+            1 => TriggerCond::Where {
+                trigger: Box::new(d),
+                cond: cs.pop().unwrap_or(Condition::Always),
+            },
+            _ => TriggerCond::Where {
+                trigger: Box::new(d),
+                cond: Condition::And(cs),
+            },
+        }
+    };
+    let to_object = recipients
+        .iter()
+        .all(|(r, _)| matches!(r, DamageRecipient::Object(_)));
+    let n = recipients.len();
+    let mut alts: Vec<TriggerCond> = recipients.into_iter().map(|(r, c)| mk(r, c)).collect();
+    let cond = if n == 1 {
+        alts.pop()?
+    } else {
+        TriggerCond::AnyOf(alts)
+    };
+    let source_it = if subj.self_only {
+        Sel::This
+    } else {
+        Sel::TriggerOtherObject
+    };
+    let (cond, it, player) = if subj.one_or_more {
+        // "one or more Pirates you control deal damage to your opponents": once per batch
+        // of damage, however many sources and players.
+        if !many && !matches!(rest, "a player" | "an opponent" | "one of your opponents") {
+            return None;
+        }
+        (
+            TriggerCond::Batched {
+                trigger: Box::new(cond),
+                per: if many { BatchPer::Batch } else { BatchPer::Player },
+            },
+            Sel::TriggerObjects,
+            if many {
+                PlayerRef::Iterated
+            } else {
+                PlayerRef::TriggerPlayer
+            },
+        )
+    } else if many || matches!(rest, "") {
+        // A source dealing damage to several recipients at once: once per source.
+        (
+            TriggerCond::Batched {
+                trigger: Box::new(cond),
+                per: BatchPer::Other,
+            },
+            source_it,
+            PlayerRef::Iterated,
+        )
+    } else if n > 1 {
+        // Either recipient: only the source is common to both events.
+        (cond, source_it, PlayerRef::Iterated)
+    } else if to_object {
+        if subj.self_only {
+            (
+                cond,
+                Sel::TriggerObject,
+                PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+            )
+        } else {
+            (cond, Sel::None, PlayerRef::Iterated)
+        }
+    } else {
+        (cond, source_it, PlayerRef::TriggerPlayer)
+    };
+    let cond = if first_time {
+        super::trigger_grammar_events::first_time(cond)
+    } else {
+        cond
+    };
+    Some((cond, it, player))
+}
+
+/// "you're dealt combat damage", "combat damage is dealt to you [or a planeswalker you
+/// control]", "your opponents are dealt combat damage", "one or more of your opponents
+/// are dealt combat damage [during your turn]", "one or more opponents are dealt
+/// noncombat damage", "an opponent is dealt combat damage by one or more creatures you
+/// control", "an opponent is dealt damage by [source] or by [source]".
+fn dealt_damage(r: &str) -> Option<Parsed> {
+    let (r, your_turn) = match r.strip_suffix(" during your turn") {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
+    let finish = |c: TriggerCond, per: BatchPer, player: PlayerRef| {
+        let c = if your_turn {
+            super::trigger_grammar_events::where_events(c, Condition::YourTurn)
+        } else {
+            c
+        };
+        Some((
+            TriggerCond::Batched {
+                trigger: Box::new(c),
+                per,
+            },
+            Sel::None,
+            player,
+        ))
+    };
+    let pdd = |who, combat_only| TriggerCond::PlayerDealtDamage { who, combat_only };
+    // "combat damage is dealt to you [or a planeswalker you control]"
+    if let Some(x) = r.strip_prefix("combat damage is dealt to ") {
+        return match x {
+            "you" => finish(pdd(PlayerRel::You, true), BatchPer::Batch, PlayerRef::ActivePlayer),
+            "you or a planeswalker you control" => finish(
+                TriggerCond::AnyOf(vec![
+                    pdd(PlayerRel::You, true),
+                    TriggerCond::IsDealtDamage {
+                        filter: Filter::and(vec![
+                            Filter::Type(CardType::Planeswalker),
+                            Filter::ControlledBy(PlayerRel::You),
+                        ]),
+                        combat_only: true,
+                    },
+                ]),
+                BatchPer::Batch,
+                PlayerRef::ActivePlayer,
+            ),
+            _ => None,
+        };
+    }
+    for (p, who, per) in [
+        ("you're dealt", PlayerRel::You, BatchPer::Batch),
+        ("you are dealt", PlayerRel::You, BatchPer::Batch),
+        ("your opponents are dealt", PlayerRel::Opponent, BatchPer::Batch),
+        ("one or more of your opponents are dealt", PlayerRel::Opponent, BatchPer::Batch),
+        ("one or more opponents are dealt", PlayerRel::Opponent, BatchPer::Batch),
+        ("an opponent is dealt", PlayerRel::Opponent, BatchPer::Player),
+    ] {
+        let Some(x) = r.strip_prefix(p) else {
+            continue;
+        };
+        let x = x.trim_start();
+        let (kind, x) = if let Some(y) = x.strip_prefix("combat damage") {
+            (Some(true), y)
+        } else if let Some(y) = x.strip_prefix("noncombat damage") {
+            (Some(false), y)
+        } else {
+            (None, x.strip_prefix("damage")?)
+        };
+        let base = pdd(who, kind == Some(true));
+        let base = if kind == Some(false) {
+            TriggerCond::Noncombat(Box::new(base))
+        } else {
+            base
+        };
+        let x = x.trim_start();
+        let player = if per == BatchPer::Player {
+            PlayerRef::TriggerPlayer
+        } else if who == PlayerRel::You {
+            // "the attacking player": the active player.
+            PlayerRef::ActivePlayer
+        } else {
+            PlayerRef::Iterated
+        };
+        if x.is_empty() {
+            // (Plain "you're dealt damage" is the compositional parser's.)
+            if kind.is_none() && who == PlayerRel::You {
+                return None;
+            }
+            return finish(base, per, player);
+        }
+        // "by one or more creatures you control", "by a red instant or sorcery spell you
+        // control or by a red planeswalker you control".
+        let by = x.strip_prefix("by ")?;
+        let mut sources = Vec::new();
+        for part in by.split(" or by ") {
+            let part = part.strip_prefix("one or more ").map_or_else(
+                || part.to_string(),
+                |p| {
+                    // "one or more creatures you control": any of them.
+                    format!("a {}", p)
+                },
+            );
+            let s = damage_source(&part).or_else(|| {
+                let x = part.strip_prefix("a ")?;
+                let (f, _, tail) = parse_object_phrase(x)?;
+                end(tail).is_empty().then_some(super::triggers::Subject {
+                    filter: f,
+                    self_only: false,
+                    one_or_more: false,
+                })
+            })?;
+            sources.push(s.filter);
+        }
+        let source = if sources.len() == 1 {
+            sources.pop()?
+        } else {
+            Filter::Or(sources)
+        };
+        let c = TriggerCond::Where {
+            trigger: Box::new(base),
+            cond: Condition::SelMatches(Sel::TriggerOtherObject, source),
+        };
+        return finish(c, per, player);
+    }
+    // "one or more creatures your opponents control are dealt excess noncombat damage"
+    if let Some(x) = r.strip_suffix(" are dealt excess noncombat damage") {
+        let (n, f, tail) = count_phrase(x)?;
+        if n != 1 || !end(tail).is_empty() {
+            return None;
+        }
+        return Some((
+            TriggerCond::Batched {
+                trigger: Box::new(TriggerCond::DealtExcessDamage {
+                    filter: f,
+                    noncombat_only: true,
+                }),
+                per: BatchPer::Batch,
+            },
+            Sel::None,
+            PlayerRef::Iterated,
+        ));
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// Becoming the target (CR 115.10, 603.3d)
+// ---------------------------------------------------------------------------
+
+/// What targets: "a spell or ability", "a spell", "an ability", "an activated ability",
+/// "an instant or sorcery spell", "an Aura spell", "an ability that targets only it",
+/// "a backup ability", then "[an opponent | you] controls".
+fn targeting_what(s: &str) -> Option<(PlayerRel, Option<Filter>)> {
+    let (s, by) = if let Some(x) = s.strip_suffix(" an opponent controls") {
+        (x, PlayerRel::Opponent)
+    } else if let Some(x) = s.strip_suffix(" you control") {
+        (x, PlayerRel::You)
+    } else {
+        (s, PlayerRel::Any)
+    };
+    let not_spell = || Filter::not(Filter::Spell);
+    let f = match s {
+        "a spell or ability" => None,
+        "a spell" => Some(Filter::Spell),
+        "an ability" => Some(not_spell()),
+        "an activated ability" => Some(Filter::Custom(
+            crate::kw::activated_ability_kind::ACTIVATED_ABILITY.into(),
+        )),
+        "an ability that targets only it" => Some(Filter::and(vec![
+            not_spell(),
+            Filter::StackTargets(Box::new(TargetsFilter::Only {
+                objects: Some(Filter::Source),
+                players: None,
+            })),
+        ])),
+        _ => {
+            let x = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+            let (f, c) = super::triggers::parse_spell_phrase(x)?;
+            if c.is_some() {
+                return None;
+            }
+            Some(f)
+        }
+    };
+    Some((by, f))
+}
+
+/// "[subject] become(s) the target of [what]": objects, players ("you", "you or a
+/// permanent you control", "a player or permanent"), and "you and/or at least one
+/// permanent you control" / "one or more creatures you control" (once per spell or
+/// ability).
+fn becomes_target(r: &str) -> Option<Parsed> {
+    let (subj, what) = r
+        .split_once(" becomes the target of ")
+        .or_else(|| r.split_once(" become the target of "))?;
+    let (by, kind) = targeting_what(what)?;
+    let only_kind = |c: TriggerCond| match &kind {
+        None => c,
+        Some(f) => TriggerCond::Where {
+            trigger: Box::new(c),
+            cond: Condition::SelMatches(Sel::TriggerSpell, f.clone()),
+        },
+    };
+    let player_target = |who: PlayerRel| {
+        TriggerCond::Custom(crate::kw::activated_ability_kind::player_targeted(who, by).into())
+    };
+    let perm = |other: bool| {
+        let mut v = vec![Filter::Permanent, Filter::ControlledBy(PlayerRel::You)];
+        if other {
+            v.push(Filter::Other);
+        }
+        TriggerCond::BecomesTarget {
+            filter: Filter::and(v),
+            by,
+        }
+    };
+    let tp = PlayerRef::TriggerPlayer;
+    let c = match subj {
+        "you" => (only_kind(player_target(PlayerRel::You)), Sel::TriggerSpell, tp),
+        "you or a permanent you control" | "you or another permanent you control" => (
+            only_kind(TriggerCond::AnyOf(vec![
+                player_target(PlayerRel::You),
+                perm(subj.contains("another")),
+            ])),
+            Sel::TriggerSpell,
+            tp,
+        ),
+        "you and/or at least one permanent you control" => (
+            TriggerCond::Batched {
+                trigger: Box::new(only_kind(TriggerCond::AnyOf(vec![
+                    player_target(PlayerRel::You),
+                    perm(false),
+                ]))),
+                per: BatchPer::Batch,
+            },
+            Sel::TriggerSpell,
+            tp,
+        ),
+        "a player or permanent" => (
+            only_kind(TriggerCond::AnyOf(vec![
+                player_target(PlayerRel::Any),
+                TriggerCond::BecomesTarget {
+                    filter: Filter::Permanent,
+                    by,
+                },
+            ])),
+            Sel::TriggerSpell,
+            tp,
+        ),
+        _ => {
+            let s = super::triggers::parse_subject(subj)?;
+            let c = only_kind(TriggerCond::BecomesTarget {
+                filter: s.filter,
+                by,
+            });
+            if s.one_or_more {
+                (
+                    TriggerCond::Batched {
+                        trigger: Box::new(c),
+                        per: BatchPer::Batch,
+                    },
+                    Sel::TriggerSpell,
+                    tp,
+                )
+            } else if s.self_only {
+                (c, Sel::This, tp)
+            } else {
+                (c, Sel::TriggerObject, tp)
+            }
+        }
+    };
+    Some(c)
+}
+
+/// "~ enters or becomes the target of an Aura spell", "~ enters or enchanted creature
+/// becomes the target of an Aura spell": either event.
+fn either_condition(r: &str) -> Option<Parsed> {
+    for (i, _) in r.match_indices(" or ") {
+        let (a, b) = (&r[..i], &r[i + " or ".len()..]);
+        let b_full = if b.starts_with("becomes ") || b.starts_with("attacks") {
+            // The same subject: "~ enters or becomes …".
+            let subj = a.split_once(' ')?.0;
+            if subj != "~" {
+                continue;
+            }
+            format!("{subj} {b}")
+        } else if ["enchanted ", "equipped ", "~ "]
+            .iter()
+            .any(|p| b.starts_with(p))
+        {
+            b.to_string()
+        } else {
+            continue;
+        };
+        let (Some(x), Some(y)) = (reparse(a), reparse(&b_full)) else {
+            continue;
+        };
+        return Some(any_of(vec![x, y]));
+    }
+    None
+}
+
+/// "When ~ enters and whenever one or more Assassins you control deal combat damage to a
+/// player": each condition (CR 603.2c); the batched one triggers once per batch.
+fn and_whenever_batched(r: &str) -> Option<Parsed> {
+    let (a, b) = r.split_once(" and whenever ")?;
+    let x = reparse(a)?;
+    let y = reparse(b)?;
+    if !super::trigger_grammar_events::is_batched(&y.0)
+        || super::trigger_grammar_events::is_batched(&x.0)
+    {
+        return None;
+    }
+    Some(any_of(vec![x, y]))
+}
+
+// ---------------------------------------------------------------------------
+// Referents named by the trigger event
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    static NAMED: std::cell::RefCell<Option<Vec<(String, Sel)>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Sets the phrases the trigger condition being compiled names for its body (cleared
+/// when the returned guard is dropped, or taken by the body's parser).
+pub(crate) fn name_referents(trigger: &TriggerCond) -> NamedGuard {
+    let v = named_referents(trigger);
+    NAMED.with(|n| *n.borrow_mut() = Some(v));
+    NamedGuard
+}
+
+pub(crate) struct NamedGuard;
+
+impl Drop for NamedGuard {
+    fn drop(&mut self) {
+        NAMED.with(|n| *n.borrow_mut() = None);
+    }
+}
+
+/// The phrases named by the trigger whose body is being parsed (only the body itself:
+/// abilities nested in it get none).
+pub(crate) fn take_named() -> Vec<(String, Sel)> {
+    NAMED.with(|n| n.borrow_mut().take()).unwrap_or_default()
+}
+
+fn mentions(f: &Filter, t: CardType) -> bool {
+    match f {
+        Filter::Type(x) => *x == t,
+        Filter::And(v) => v.iter().any(|g| mentions(g, t)),
+        Filter::Or(v) => !v.is_empty() && v.iter().all(|g| mentions(g, t)),
+        _ => false,
+    }
+}
+
+fn subtypes(f: &Filter) -> Vec<String> {
+    match f {
+        Filter::Subtype(s) => vec![s.to_lowercase()],
+        Filter::And(v) => v.iter().flat_map(subtypes).collect(),
+        _ => vec![],
+    }
+}
+
+/// Phrases a trigger event names: in "Whenever a Sliver deals combat damage to a creature,
+/// destroy that creature", "that creature" is the creature dealt damage; in "Whenever a
+/// creature blocks a black or red creature, the blocking creature gets +1/+1", the
+/// blocker; in "Whenever an Archer you control deals damage to a creature, that Archer
+/// deals that much damage to that creature's controller", the source.
+fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
+    let mut out: Vec<(String, Sel)> = Vec::new();
+    let mut push = |p: &str, s: Sel| {
+        if !out.iter().any(|(q, _)| q == p) {
+            out.push((p.to_string(), s));
+        }
+    };
+    match trigger {
+        TriggerCond::Where { trigger, .. }
+        | TriggerCond::FirstTimeEachTurn(trigger)
+        | TriggerCond::Noncombat(trigger) => return named_referents(trigger),
+        TriggerCond::DealsDamage { source, to, .. } => {
+            let source_self = matches!(source, Filter::Source);
+            if !source_self {
+                push("that source", Sel::TriggerOtherObject);
+                for s in subtypes(source) {
+                    push(&format!("that {s}"), Sel::TriggerOtherObject);
+                }
+            }
+            match to {
+                DamageRecipient::Object(f) if !matches!(f, Filter::Source) => {
+                    for (t, w) in [
+                        (CardType::Creature, "that creature"),
+                        (CardType::Planeswalker, "that planeswalker"),
+                        (CardType::Battle, "that battle"),
+                    ] {
+                        if mentions(f, t) {
+                            push(w, Sel::TriggerObject);
+                        }
+                    }
+                    push("that permanent", Sel::TriggerObject);
+                }
+                // Damage dealt to ~: the source is the only other object.
+                DamageRecipient::Object(_) if !source_self => {
+                    if mentions(source, CardType::Creature) {
+                        push("that creature", Sel::TriggerOtherObject);
+                    }
+                    if matches!(source, Filter::Spell)
+                        || matches!(source, Filter::And(v) if v.iter().any(|g| matches!(g, Filter::Spell)))
+                    {
+                        push("that spell", Sel::TriggerOtherObject);
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Several recipients: only the source is common to every event.
+        TriggerCond::AnyOf(v)
+            if !v.is_empty()
+                && v.iter().all(|c| {
+                    matches!(
+                        strip(c),
+                        TriggerCond::DealsDamage { source, .. } if !matches!(source, Filter::Source)
+                    )
+                }) =>
+        {
+            if let TriggerCond::DealsDamage { source, .. } = strip(&v[0]) {
+                push("that source", Sel::TriggerOtherObject);
+                if mentions(source, CardType::Creature) {
+                    push("that creature", Sel::TriggerOtherObject);
+                }
+            }
+        }
+        // Event object = the blocked attacker, other = the blocker (CR 509.3b).
+        TriggerCond::BlocksCreature { .. } => {
+            push("the blocking creature", Sel::TriggerOtherObject);
+            push("that blocking creature", Sel::TriggerOtherObject);
+            push("the attacking creature", Sel::TriggerObject);
+            push("that attacking creature", Sel::TriggerObject);
+        }
+        // Event object = the blocker, other = the attacker (CR 509.3d).
+        TriggerCond::BlockedByCreature { .. } => {
+            push("the blocking creature", Sel::TriggerObject);
+            push("that blocking creature", Sel::TriggerObject);
+            push("the attacking creature", Sel::TriggerOtherObject);
+            push("that attacking creature", Sel::TriggerOtherObject);
+        }
+        TriggerCond::BlockedByN { .. } => {
+            push("the attacking creature", Sel::TriggerObject);
+            push("that attacking creature", Sel::TriggerObject);
+        }
+        _ => {}
+    }
+    out
+}
+
+/// A trigger condition without its event qualifiers.
+fn strip(c: &TriggerCond) -> &TriggerCond {
+    match c {
+        TriggerCond::Where { trigger, .. }
+        | TriggerCond::FirstTimeEachTurn(trigger)
+        | TriggerCond::Noncombat(trigger) => strip(trigger),
+        c => c,
+    }
+}
+
 /// "When ~ dies during combat" and other events qualified by a combat timing.
 fn during_combat(r: &str) -> Option<Parsed> {
     let head = r.strip_suffix(" during combat")?;
@@ -848,6 +2212,17 @@ fn parse(r: &str) -> Option<Parsed> {
         .or_else(|| play_events(r))
         .or_else(|| activate_events(r))
         .or_else(|| tapped_or_activates(r))
+        .or_else(|| attacks_with_others(r))
+        .or_else(|| attacks_recipient(r))
+        .or_else(|| player_attacks(r))
+        .or_else(|| creatures_attack(r))
+        .or_else(|| attacks_or_enters_attacking(r))
+        .or_else(|| block_events(r))
+        .or_else(|| deals_damage(r))
+        .or_else(|| dealt_damage(r))
+        .or_else(|| becomes_target(r))
+        .or_else(|| and_whenever_batched(r))
+        .or_else(|| either_condition(r))
         .or_else(|| during_combat(r))
 }
 
@@ -911,6 +2286,105 @@ mod tests {
             "when an opponent plays a nonbasic land",
             "whenever an opponent casts a creature or planeswalker spell with the same name as a card in their graveyard",
             "when ~ dies during combat",
+        ]);
+    }
+
+    #[test]
+    fn combat_conditions() {
+        all(&[
+            "whenever ~ and at least one other creature token attack",
+            "whenever ~ and at least one human attack",
+            "whenever ~ and at least two zombies attack",
+            "whenever equipped creature and at least one other creature attack",
+            "whenever you attack with ~ and another legendary creature",
+            "whenever you attack with ~ and/or your commander",
+            "whenever ~ attacks a battle",
+            "whenever ~ attacks a player who controls eight or more lands",
+            "whenever ~ attacks a player who has more life than you",
+            "whenever equipped creature attacks the monarch",
+            "whenever ~ attacks a player and isn't blocked",
+            "whenever a creature attacks one of your opponents or a planeswalker an opponent controls",
+            "when you attack with exactly two creatures",
+            "whenever you attack with at least two creatures that have first strike",
+            "whenever you attack with two or more non-~ creatures",
+            "whenever you attack with your commander",
+            "whenever you attack with a creature an opponent owns",
+            "whenever an opponent attacks with creatures",
+            "whenever an opponent attacks a planeswalker you control with one or more creatures",
+            "whenever an opponent attacks one or more planeswalkers you control",
+            "whenever an opponent attacks you and/or one or more planeswalkers you control",
+            "whenever two or more creatures attack",
+            "whenever two or more creatures your opponents control attack",
+            "whenever two or more creatures you control attack a player",
+            "whenever three or more creatures you control with flying attack",
+            "whenever one or more devils you control attack one or more players",
+            "whenever one or more creatures an opponent controls attack you and aren't blocked",
+            "whenever one or more creatures attack one of your opponents or a planeswalker they control",
+            "whenever a creature you control attacks or enters attacking",
+            "whenever a creature with deathtouch blocks or becomes blocked by ~",
+            "whenever enchanted creature blocks or becomes blocked by a non-wall creature",
+            "whenever equipped creature blocks or becomes blocked by a vampire",
+            "whenever ~ blocks or becomes blocked by one or more black creatures",
+            "whenever ~ blocks or becomes blocked by one or more blue and/or black creatures",
+            "whenever a creature blocks a creature with lesser power",
+            "whenever a creature becomes blocked by a creature with lesser power",
+            "whenever a creature attacking one of your opponents becomes blocked by two or more creatures",
+            "whenever a creature blocks a black or red creature",
+            "whenever ~ blocks one or more black creatures",
+            "whenever ~ blocks two or more creatures",
+            "whenever one or more creatures block",
+        ]);
+    }
+
+    #[test]
+    fn damage_conditions() {
+        all(&[
+            "whenever a red source you control deals damage to one or more permanents and/or players",
+            "whenever a noncreature source you control deals damage",
+            "whenever a source of the chosen color deals damage to you",
+            "whenever a source you control deals damage to another player",
+            "whenever a source you control other than ~ deals damage to an opponent",
+            "whenever a source an opponent controls deals damage to you or a permanent you control",
+            "whenever a source you control deals noncombat damage to one or more of your opponents during your turn",
+            "whenever a creature deals combat damage to enchanted player",
+            "whenever a creature deals combat damage to its owner",
+            "whenever a creature deals damage to enchanted planeswalker",
+            "when ~ deals combat damage to a player who controls more lands than you",
+            "whenever one or more pirates you control deal damage to your opponents",
+            "whenever one or more zombies you control deal combat damage to one or more of your opponents",
+            "whenever one or more creatures you control deal combat damage to one or more players",
+            "whenever an instant or sorcery spell you control deals damage to an opponent or battle",
+            "whenever ~ deals combat damage to one or more blocking creatures",
+            "whenever ~ deals damage to a creature or opponent",
+            "whenever ~ deals damage to one or more creatures",
+            "when you're dealt combat damage",
+            "whenever combat damage is dealt to you",
+            "whenever combat damage is dealt to you or a planeswalker you control",
+            "whenever your opponents are dealt combat damage",
+            "when one or more of your opponents are dealt combat damage during your turn",
+            "whenever one or more opponents are dealt noncombat damage",
+            "whenever an opponent is dealt combat damage by one or more creatures you control",
+            "whenever an opponent is dealt damage by a red instant or sorcery spell you control or by a red planeswalker you control",
+            "whenever one or more creatures your opponents control are dealt excess noncombat damage",
+            "when ~ enters and whenever one or more assassins you control deal combat damage to a player",
+        ]);
+    }
+
+    #[test]
+    fn target_conditions() {
+        all(&[
+            "whenever you become the target of a spell or ability an opponent controls",
+            "whenever you become the target of a spell",
+            "whenever you or a permanent you control becomes the target of a spell or ability an opponent controls",
+            "whenever you or another permanent you control becomes the target of a spell or ability an opponent controls",
+            "whenever you and/or at least one permanent you control becomes the target of a spell or ability an opponent controls",
+            "whenever a player or permanent becomes the target of an ability you control",
+            "whenever a wolf or werewolf you control becomes the target of an instant or sorcery spell",
+            "whenever one or more creatures you control become the target of an activated ability",
+            "whenever ~ becomes the target of an aura spell",
+            "whenever ~ becomes the target of an ability that targets only it",
+            "whenever ~ enters or becomes the target of an aura spell",
+            "whenever ~ enters or enchanted creature becomes the target of an aura spell",
         ]);
     }
 

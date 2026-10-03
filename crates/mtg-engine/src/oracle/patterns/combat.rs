@@ -118,13 +118,14 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             }
             // The plural as written ("Elves"), else with its "s" dropped.
             let filter = object_filter(rest).or_else(|| object_filter(singular))?;
+            // "Them"/"those creatures": the attacking creatures with that quality.
             return Some((
                 TriggerCond::PlayerAttacksWith {
                     who,
                     filter,
                     min,
                 },
-                obj,
+                Sel::TriggerObjects,
                 PlayerRef::TriggerPlayer,
             ));
         }
