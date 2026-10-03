@@ -1037,6 +1037,11 @@ pub enum Sel {
     /// new objects (CR 400.7, 608.2h): "the permanent exiled this way" is judged as the
     /// permanent it was, "the spells countered this way" as the spells.
     Before(Box<Sel>),
+    /// The objects this turn's events matching the trigger condition were about (each
+    /// once), as they were then: "spells you've cast this turn", "permanents you've
+    /// sacrificed this turn", "creatures you controlled that dealt combat damage to a
+    /// player this turn" (see `kw/value_results.rs`).
+    ThisTurn(Box<TriggerCond>),
 }
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].

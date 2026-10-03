@@ -42,6 +42,29 @@ pub fn events_this_turn(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -
     n
 }
 
+/// The objects of this turn's events matching `cond` ([`crate::ability::Sel::ThisTurn`]):
+/// for a spell cast, the spell; for damage dealt, its source; otherwise the object the
+/// event was about. Each object once, in the order of the events.
+pub fn event_objects_this_turn(
+    g: &Game,
+    cond: &TriggerCond,
+    ctx: &Ctx,
+) -> Vec<crate::types::ObjectId> {
+    let mut out = Vec::new();
+    for ev in g.turn_events.iter().chain(g.events.iter()) {
+        for info in g.trigger_matches_ctx(cond, ctx, ev) {
+            let o = match cond {
+                TriggerCond::DealsDamage { .. } => info.other.or(info.object),
+                _ => info.spell.or(info.object),
+            };
+            if let Some(o) = o.filter(|o| !out.contains(o)) {
+                out.push(o);
+            }
+        }
+    }
+    out
+}
+
 /// `Value::Custom` "noncombat damage dealt this turn to:[you|opponents]": the total
 /// noncombat damage dealt this turn to you or to your opponents ("the total amount of
 /// noncombat damage dealt to your opponents this turn", CR 120.2b).

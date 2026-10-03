@@ -678,6 +678,10 @@ impl Renderer<'_> {
             Sel::Linked => decline("each card exiled with ~it".into(), case),
             Sel::LinkedNoted => decline("the last chosen card".into(), case),
             Sel::Before(inner) => self.sel(inner, case),
+            Sel::ThisTurn(c) => {
+                let g = self.gap(format!("Sel::ThisTurn({c:?})"));
+                decline(g, case)
+            }
             Sel::Matching(inner, f) => {
                 let f = Filter::and(vec![f.clone(), Filter::In(inner.clone())]);
                 let n = self.noun(&f, Num::Many);

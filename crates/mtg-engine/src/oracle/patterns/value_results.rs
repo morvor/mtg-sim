@@ -52,7 +52,13 @@ pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// (for readers outside instructions: cost changes, static abilities).
 pub fn whole_history_count(s: &str) -> Option<Value> {
     let v = super::value_grammar::whole_count(s, Some(&Sel::This))?;
-    matches!(v, Value::EventsThisTurn(..)).then_some(v)
+    let j = serde_json::to_string(&v).unwrap_or_default();
+    // Read by this grammar (not an object phrase with a loosely read qualifier, such as
+    // the creatures still on the battlefield that attacked this turn).
+    ["EventsThisTurn", "ThisTurn", "PermanentsEnteredThisTurn", "SpellsCastThisTurn", "Custom"]
+        .iter()
+        .any(|w| j.contains(w))
+        .then_some(v)
 }
 
 fn events(cond: TriggerCond, t: Tally) -> Value {
@@ -122,6 +128,42 @@ fn each_player_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { super::EffectPattern { name: "value results: each opponent ... that player ... this turn", priority: 5, parse: each_player_that_player } }
 
+/// "~ deals damage to each opponent equal to the number of cards that player has drawn
+/// this turn", "... equal to the number of tapped creatures that opponent controls": an
+/// amount for each player in turn (CR 608.2h), "that player" being that one.
+fn damage_each_player_equal(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, v) = l.split_once(" equal to ")?;
+    let (source, who) = [
+        ("~ deals damage to each opponent", (Sel::This, PlayerRef::EachOpponent)),
+        ("~ deals damage to each player", (Sel::This, PlayerRef::EachPlayer)),
+    ]
+    .into_iter()
+    .find_map(|(p, x)| (head == p).then_some(x))?;
+    if !(v.contains("that player") || v.contains("that opponent")) {
+        return None;
+    }
+    let v = v.replace("that opponent", "that player");
+    let saved = b.it_player.clone();
+    b.it_player = PlayerRef::Iterated;
+    let read = super::r107_numbers::value_phrase(&v, b);
+    b.it_player = saved;
+    let (amount, tail) = read?;
+    if !end(&tail).is_empty() {
+        return None;
+    }
+    Some(Effect::ForEachPlayer {
+        who,
+        effect: Box::new(Effect::DealDamage {
+            source,
+            amount,
+            to: Sel::Players(PlayerRef::Iterated),
+        }),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "value results: ~ deals damage to each opponent equal to [amount for that player]", priority: 60, parse: damage_each_player_equal } }
+
 /// "[player] [have|has|'ve] [verb]" (or the simple past "[player] [verb]"): the player
 /// and the rest after the auxiliary.
 fn player_perfect<'a>(s: &'a str, b: &Builder) -> Option<(PlayerRel, &'a str)> {
@@ -147,6 +189,12 @@ fn this_turn(s: &str) -> Option<&str> {
 /// turn", "opponents who lost life this turn", "2 life your opponents have lost this turn".
 fn history_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = players_who(r, b) {
+        return Some(v);
+    }
+    if let Some(v) = kinds_among_history(r, b) {
+        return Some(v);
+    }
+    if let Some(v) = more_history_count(r, b) {
         return Some(v);
     }
     if let Some(v) = life_in_groups(r, b) {
@@ -277,19 +325,335 @@ fn object_history(r: &str) -> Option<(Value, String)> {
     None
 }
 
+/// A damage source phrase: "~", "~ or a Dragon", "artifacts", "other sources named ~",
+/// "sources they controlled".
+fn source_phrase(s: &str) -> Option<Filter> {
+    let s = s.trim();
+    if s == "~" {
+        return Some(Filter::Source);
+    }
+    if let Some(r) = s.strip_prefix("~ or ") {
+        let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")).unwrap_or(r);
+        let (f, _, tail) = parse_object_phrase(r)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        return Some(Filter::Or(vec![Filter::Source, f]));
+    }
+    let (f, _, tail) = parse_object_phrase(s)?;
+    tail.trim().is_empty().then_some(f)
+}
+
+/// More history counts: "+1/+1 counters you've put on creatures under your control this
+/// turn", "[permanents] that entered the battlefield under your control this turn" / "you
+/// had enter the battlefield under your control this turn", "cards that were put into
+/// [player's] graveyard from [zones] this turn", "times you've cast a commander from the
+/// command zone this game", "other spells cast this turn", "creatures you controlled that
+/// dealt combat damage to a player this turn".
+fn more_history_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // Counters you've put.
+    for p in ["+1/+1 counters you've put on ", "+1/+1 counter you've put on "] {
+        if let Some(x) = r.strip_prefix(p) {
+            let i = x.find(" this turn")?;
+            let (objs, rest) = (&x[..i], &x[i..]);
+            let objs = objs
+                .strip_suffix(" under your control")
+                .map(|o| (o, true))
+                .unwrap_or((objs, false));
+            let (f, _, tail) = parse_object_phrase(objs.0)?;
+            if !tail.trim().is_empty() {
+                return None;
+            }
+            let f = if objs.1 {
+                Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)])
+            } else {
+                f
+            };
+            let rest = this_turn(rest)?;
+            return Some((
+                events(
+                    TriggerCond::CountersPutBy {
+                        who: PlayerRel::You,
+                        on_objects: Some(f),
+                        on_players: None,
+                        kind: Some("+1/+1".into()),
+                        each: false,
+                    },
+                    Tally::Amount,
+                ),
+                rest.to_string(),
+            ));
+        }
+    }
+    // "for each time it has attacked this turn" (the object "it" names: in a static
+    // ability, each affected object).
+    for p in ["times it has attacked this turn", "time it has attacked this turn"] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if word_end(rest) && !super::oracle_hardening_referents::is_no_referent(&b.it) {
+                let f = Filter::In(Box::new(b.it.clone()));
+                return Some((events(TriggerCond::Attacks(f), Tally::Events), rest.to_string()));
+            }
+        }
+    }
+    // Times a commander was cast from the command zone (CR 903.8).
+    for p in [
+        "times you've cast a commander from the command zone this game",
+        "time you've cast a commander from the command zone this game",
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if word_end(rest) {
+                return Some((
+                    Value::Custom(crate::kw::partner::COMMANDER_CASTS.into()),
+                    rest.to_string(),
+                ));
+            }
+        }
+    }
+    // Spells cast this turn by anyone.
+    for (p, other) in [
+        ("other spells cast this turn", true),
+        ("other spell cast this turn", true),
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if word_end(rest) {
+                let filter = if other {
+                    Filter::and(vec![Filter::Other, Filter::Spell])
+                } else {
+                    Filter::Spell
+                };
+                return Some((
+                    events(
+                        TriggerCond::CastSpell {
+                            who: PlayerRel::Any,
+                            filter,
+                        },
+                        Tally::Events,
+                    ),
+                    rest.to_string(),
+                ));
+            }
+        }
+    }
+    // "[objects] that entered the battlefield under your control this turn".
+    for m in [
+        " that entered the battlefield under your control",
+        " you had enter the battlefield under your control",
+        " entered the battlefield under your control",
+    ] {
+        let Some(i) = r.find(m) else { continue };
+        let Some(rest) = this_turn(&r[i + m.len()..]) else {
+            continue;
+        };
+        let noun = &r[..i];
+        // "for each other Zombie that entered the battlefield under your control this
+        // turn" when a Zombie entering triggered the ability: the others than that one.
+        let (noun, other) = match noun.strip_prefix("other ") {
+            Some(n) => (n, true),
+            None => (noun, false),
+        };
+        let (f, _, tail) = parse_object_phrase(noun)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        let entered = Value::PermanentsEnteredThisTurn(PlayerRef::You, f);
+        if other {
+            if !(b.in_trigger && triggers_on(b, &["enters"])) {
+                return None;
+            }
+            let v = Value::Max(
+                Box::new(Value::Diff(Box::new(entered), Box::new(Value::c(1)))),
+                Box::new(Value::c(0)),
+            );
+            return Some((v, rest.to_string()));
+        }
+        return Some((entered, rest.to_string()));
+    }
+    // "cards that were put into target player's graveyard from their library this turn",
+    // "cards that were put into your graveyard from your hand or library this turn".
+    for p in ["cards that were put into ", "card that was put into "] {
+        let Some(x) = r.strip_prefix(p) else { continue };
+        let (owner, x) = if let Some(x) = x.strip_prefix("your graveyard from ") {
+            (PlayerRel::You, x)
+        } else if let Some(y) = x
+            .strip_prefix("target player's graveyard from ")
+            .or_else(|| x.strip_prefix("target opponent's graveyard from "))
+        {
+            let pf = if x.starts_with("target player") {
+                PlayerFilter::Any
+            } else {
+                PlayerFilter::Opponent
+            };
+            let it = b.it.clone();
+            let slot = b.add_target(TargetSpec::player(pf, "target player"), "target player");
+            b.it = it;
+            b.it_player = PlayerRef::Target(slot);
+            (PlayerRel::Target(slot), y)
+        } else {
+            return None;
+        };
+        let i = x.find(" this turn")?;
+        let (zones, rest) = (&x[..i], &x[i..]);
+        let zones: Vec<ZoneKind> = match zones {
+            "your library" | "their library" => vec![ZoneKind::Library],
+            "your hand" | "their hand" => vec![ZoneKind::Hand],
+            "your hand or library" | "their hand or library" => {
+                vec![ZoneKind::Hand, ZoneKind::Library]
+            }
+            _ => return None,
+        };
+        let rest = this_turn(rest)?;
+        let conds: Vec<TriggerCond> = zones
+            .into_iter()
+            .map(|z| TriggerCond::ZoneChange {
+                filter: Filter::and(vec![Filter::Card, Filter::OwnedBy(owner)]),
+                from: Some(z),
+                to: Some(ZoneKind::Graveyard),
+            })
+            .collect();
+        let v = match conds.as_slice() {
+            [one] => events(one.clone(), Tally::Events),
+            _ => Value::Sum(conds.into_iter().map(|c| events(c, Tally::Events)).collect()),
+        };
+        return Some((v, rest.to_string()));
+    }
+    // "creatures you controlled that dealt combat damage to a player this turn".
+    for (m, combat_only) in [
+        (" that dealt combat damage to a player", true),
+        (" that dealt damage to a player", false),
+    ] {
+        let Some(i) = r.find(m) else { continue };
+        let Some(rest) = this_turn(&r[i + m.len()..]) else {
+            continue;
+        };
+        let noun = &r[..i];
+        let (noun, yours) = match noun.strip_suffix(" you controlled") {
+            Some(n) => (n, true),
+            None => (noun, false),
+        };
+        let (f, _, tail) = parse_object_phrase(noun)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        let source = if yours {
+            Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)])
+        } else {
+            f
+        };
+        let sel = Sel::ThisTurn(Box::new(TriggerCond::DealsDamage {
+            source,
+            to: DamageRecipient::Player(PlayerRel::Any),
+            combat_only,
+        }));
+        return Some((Value::CountSel(Box::new(sel)), rest.to_string()));
+    }
+    None
+}
+
+/// The objects of a history phrase as a selection: "spells you've cast this turn",
+/// "permanents you've sacrificed this turn".
+fn history_objects(s: &str, b: &Builder) -> Option<(Sel, String)> {
+    for (p, spells) in [
+        ("spells you've cast this turn", true),
+        ("permanents you've sacrificed this turn", false),
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if !word_end(rest) {
+                return None;
+            }
+            let cond = if spells {
+                TriggerCond::CastSpell {
+                    who: PlayerRel::You,
+                    filter: Filter::Spell,
+                }
+            } else {
+                TriggerCond::YouSacrifice(Filter::Permanent)
+            };
+            return Some((Sel::ThisTurn(Box::new(cond)), rest.to_string()));
+        }
+    }
+    let _ = b;
+    None
+}
+
+/// "card types among spells you've cast this turn", "card types among permanents you've
+/// sacrificed this turn", "colors among permanents you control and spells you've cast
+/// this turn".
+fn kinds_among_history(r: &str, b: &Builder) -> Option<(Value, String)> {
+    for (p, among) in [
+        ("card types among ", Among::CardTypes),
+        ("card type among ", Among::CardTypes),
+        ("colors among ", Among::Colors),
+        ("color among ", Among::Colors),
+    ] {
+        let Some(x) = r.strip_prefix(p) else { continue };
+        if let Some((sel, rest)) = history_objects(x, b) {
+            return Some((Value::DistinctAmong(among, Box::new(sel)), rest));
+        }
+        // "permanents you control and spells you've cast this turn".
+        if let Some((objs, hist)) = x.split_once(" and ") {
+            let (f, _, tail) = parse_object_phrase(objs)?;
+            if !tail.trim().is_empty() {
+                return None;
+            }
+            let (sel, rest) = history_objects(hist, b)?;
+            let sel = Sel::Union(vec![Sel::All(f), sel]);
+            return Some((Value::DistinctAmong(among, Box::new(sel)), rest));
+        }
+    }
+    None
+}
+
 /// "opponents who lost life this turn", "player who lost life this turn", "opponent who
 /// was dealt damage this turn", "opponents who were dealt combat damage this turn".
 fn players_who(r: &str, _b: &Builder) -> Option<(Value, String)> {
     let (who, x) = [
         ("opponents who ", PlayerRel::Opponent),
         ("opponent who ", PlayerRel::Opponent),
+        ("opponents that ", PlayerRel::Opponent),
+        ("opponent that ", PlayerRel::Opponent),
         ("your opponents who ", PlayerRel::Opponent),
+        ("your opponents that ", PlayerRel::Opponent),
         ("players who ", PlayerRel::Any),
         ("player who ", PlayerRel::Any),
     ]
     .iter()
     .find_map(|(p, rel)| r.strip_prefix(p).map(|x| (*rel, x)))?;
-    let (cond, x) = if let Some(x) = x.strip_prefix("lost life") {
+    // "your opponents who were dealt combat damage by ~ or a Dragon this turn".
+    for (p, combat_only) in [
+        ("were dealt combat damage by ", true),
+        ("was dealt combat damage by ", true),
+        ("were dealt damage by ", false),
+        ("was dealt damage by ", false),
+    ] {
+        if let Some(y) = x.strip_prefix(p) {
+            let i = y.find(" this turn")?;
+            let (src, rest) = (&y[..i], &y[i..]);
+            let source = source_phrase(src)?;
+            let rest = this_turn(rest)?;
+            return Some((
+                events(
+                    TriggerCond::DealsDamage {
+                        source,
+                        to: DamageRecipient::Player(who),
+                        combat_only,
+                    },
+                    Tally::Players,
+                ),
+                rest.to_string(),
+            ));
+        }
+    }
+    let (cond, x) = if let Some(x) = x.strip_prefix("discarded a card") {
+        (
+            TriggerCond::Discards {
+                who,
+                filter: Filter::Any,
+            },
+            x,
+        )
+    } else if let Some(x) = x.strip_prefix("drew a card") {
+        (TriggerCond::Draws { who }, x)
+    } else if let Some(x) = x.strip_prefix("lost life") {
         (TriggerCond::LosesLife { who }, x)
     } else if let Some(x) = x.strip_prefix("gained life") {
         (TriggerCond::GainsLife { who }, x)
@@ -381,6 +745,21 @@ fn history_amount(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         let rest = this_turn(z)?;
         return Some((events(cond, Tally::Amount), rest.to_string()));
     }
+    // "the greatest number of cards an opponent has drawn this turn".
+    for (p, pf) in [
+        ("greatest number of cards an opponent has drawn this turn", PlayerFilter::Opponent),
+        ("greatest number of cards a player has drawn this turn", PlayerFilter::Any),
+    ] {
+        if let Some(rest) = x.strip_prefix(p) {
+            if word_end(rest) {
+                let v = events(TriggerCond::Draws { who: PlayerRel::Iterated }, Tally::Events);
+                return Some((Value::OverPlayers(AggOp::Max, pf, Box::new(v)), rest.to_string()));
+            }
+        }
+    }
+    if let Some(v) = damage_to_objects(x, b) {
+        return Some(v);
+    }
     // Damage dealt to players.
     let (combat_only, noncombat, y) = if let Some(y) = x.strip_prefix("damage ") {
         (false, false, y)
@@ -393,11 +772,36 @@ fn history_amount(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     };
     let y = y.strip_prefix("already ").unwrap_or(y);
     let y = y.strip_prefix("dealt to ")?;
-    let (who, z) = player_subject(y, b)?;
+    let (who, z) = match player_subject(y, b) {
+        Some(x) => x,
+        None => target_player(y, b)?,
+    };
     let z = z
         .trim_start()
         .strip_prefix("so far ")
         .unwrap_or(z.trim_start());
+    // "the damage dealt to you so far this turn by artifacts".
+    if let Some(src) = this_turn(z).and_then(|r| r.strip_prefix(" by ")) {
+        if noncombat {
+            return None;
+        }
+        let (src, rest) = match src.find([',', '.']) {
+            Some(i) => (&src[..i], &src[i..]),
+            None => (src, ""),
+        };
+        let source = source_phrase(src)?;
+        return Some((
+            events(
+                TriggerCond::DealsDamage {
+                    source,
+                    to: DamageRecipient::Player(who),
+                    combat_only,
+                },
+                Tally::Amount,
+            ),
+            rest.to_string(),
+        ));
+    }
     let rest = this_turn(z)?;
     if noncombat {
         return Some((
@@ -411,6 +815,77 @@ fn history_amount(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             Tally::Amount,
         ),
         rest.to_string(),
+    ))
+}
+
+/// "target player" / "target opponent" as the player something was done to: adds the
+/// target.
+fn target_player<'a>(s: &'a str, b: &mut Builder) -> Option<(PlayerRel, &'a str)> {
+    for (p, pf) in [
+        ("target opponent", PlayerFilter::Opponent),
+        ("target player", PlayerFilter::Any),
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if word_end(rest) {
+                let it = b.it.clone();
+                let slot = b.add_target(TargetSpec::player(pf, p), p);
+                b.it = it;
+                b.it_player = PlayerRef::Target(slot);
+                return Some((PlayerRel::Target(slot), rest));
+            }
+        }
+    }
+    None
+}
+
+/// "the damage already dealt to it this turn" (the object "it" names), "the amount of
+/// damage dealt to ~ this turn by other sources named ~": damage dealt this turn to an
+/// object, optionally by sources of a kind.
+fn damage_to_objects(x: &str, b: &Builder) -> Option<(Value, String)> {
+    let y = x
+        .strip_prefix("damage already dealt to ")
+        .or_else(|| x.strip_prefix("damage dealt to "))?;
+    let (obj, z) = if let Some(z) = y.strip_prefix("~") {
+        (Filter::Source, z)
+    } else if let Some(z) = y.strip_prefix("it") {
+        if super::oracle_hardening_referents::is_no_referent(&b.it) || matches!(b.it, Sel::This)
+        {
+            return None;
+        }
+        (Filter::In(Box::new(b.it.clone())), z)
+    } else {
+        return None;
+    };
+    if !word_end(z) {
+        return None;
+    }
+    let after = this_turn(z)?;
+    let (source, rest) = match after.strip_prefix(" by ") {
+        Some(src) => {
+            let (src, rest) = match src.find([',', '.']) {
+                Some(i) => (&src[..i], &src[i..]),
+                None => (src, ""),
+            };
+            let src = src.replace("other sources named ~", "other permanents named ~");
+            let f = source_phrase(&src).or_else(|| {
+                // "sources they controlled": each player in turn.
+                matches!(src.as_str(), "sources they controlled" | "sources they control")
+                    .then_some(Filter::ControlledBy(PlayerRel::Iterated))
+            })?;
+            (f, rest.to_string())
+        }
+        None => (Filter::Any, after.to_string()),
+    };
+    Some((
+        events(
+            TriggerCond::DealsDamage {
+                source,
+                to: DamageRecipient::Object(obj),
+                combat_only: false,
+            },
+            Tally::Amount,
+        ),
+        rest,
     ))
 }
 

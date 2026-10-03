@@ -924,6 +924,10 @@ impl Game {
             Sel::Var(v) => {
                 crate::merge::with_components_of(self, ctx.vars.get(v).cloned().unwrap_or_default())
             }
+            Sel::ThisTurn(cond) => crate::kw::value_results::event_objects_this_turn(self, cond, ctx)
+                .into_iter()
+                .map(Entity::Object)
+                .collect(),
             Sel::Before(inner) => self
                 .eval_sel(inner, ctx)
                 .into_iter()
