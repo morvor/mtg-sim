@@ -94,7 +94,7 @@ impl To {
 }
 
 /// Strips `p` from the start of `s` if a word boundary follows.
-fn word<'a>(s: &'a str, p: &str) -> Option<&'a str> {
+pub(crate) fn word<'a>(s: &'a str, p: &str) -> Option<&'a str> {
     let r = s.strip_prefix(p)?;
     match r.chars().next() {
         None | Some(' ' | ',' | '.') => Some(r),
@@ -114,7 +114,7 @@ const SEPS: [&str; 7] = [
 ];
 
 /// Whether the builder is for a one-shot effect (targets and pronouns are allowed).
-type OneShot<'a, 'c> = Option<&'a mut Builder<'c>>;
+pub(crate) type OneShot<'a, 'c> = Option<&'a mut Builder<'c>>;
 
 /// One recipient. Returns it and the rest of the text.
 fn to_item<'s>(s: &'s str, b: &mut OneShot) -> Option<(To, &'s str)> {
@@ -696,7 +696,7 @@ impl OwnedPair for (bool, &str) {
 /// Instructions performed instead of (or after preventing) the damage: "it" is what the
 /// damage would be dealt to, "that player" the player it would be dealt to, "that many"
 /// the damage. No targets.
-fn instructions(text: &str, ctx: &CompileContext, it: Sel) -> Option<Effect> {
+pub(crate) fn instructions(text: &str, ctx: &CompileContext, it: Sel) -> Option<Effect> {
     // "that many" / "that much" is the event's amount (as in a trigger, see
     // `triggers_referents`): parsed as X, then X is the event amount.
     let has_x = text.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x");
@@ -1051,7 +1051,7 @@ inventory::submit! { StaticPattern { name: "replacement grammar: if [damage even
 
 /// A one-shot effect's duration prefix: "until end of turn, ", "until your next turn, ",
 /// "this turn, ".
-fn duration_prefix(l: &str) -> (Option<Duration>, &str) {
+pub(crate) fn duration_prefix(l: &str) -> (Option<Duration>, &str) {
     for (p, d) in [
         ("until end of turn, ", Duration::EndOfTurn),
         ("this turn, ", Duration::EndOfTurn),
@@ -1076,7 +1076,7 @@ fn with_pre(pre: Vec<Effect>, e: Effect) -> Effect {
 }
 
 /// Runs a parse, restoring the builder's targets if it fails.
-fn attempt<T>(b: &mut Builder, f: impl FnOnce(&mut Builder) -> Option<T>) -> Option<T> {
+pub(crate) fn attempt<T>(b: &mut Builder, f: impl FnOnce(&mut Builder) -> Option<T>) -> Option<T> {
     let saved = b.targets.len();
     let r = f(b);
     if r.is_none() {
