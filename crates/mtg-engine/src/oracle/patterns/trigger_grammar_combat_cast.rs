@@ -2501,7 +2501,6 @@ inventory::submit! { TriggerPattern { name: "trigger grammar II: cast, play, com
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     /// Every condition parses (all failures reported at once).
     fn all(v: &[&str]) {
