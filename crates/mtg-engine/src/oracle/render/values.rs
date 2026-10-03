@@ -38,6 +38,10 @@ impl Renderer<'_> {
                     format!("the number of {n}")
                 }
             }
+            Value::CountSel(s) if self.this_way_of(s).is_some() => {
+                let n = self.noun(&Filter::In(Box::new((**s).clone())), Num::Many);
+                format!("the number of {n}")
+            }
             Value::CountSel(s)
                 if matches!(s.as_ref(), Sel::Var(v) if *v == vars::IT)
                     && self.it_done.is_some() =>
@@ -121,7 +125,12 @@ impl Renderer<'_> {
             Value::StormCount => "the number of spells cast before it this turn".into(),
             Value::CardsDrawnThisTurn(p) => {
                 let p = self.player(p, Case::Subj);
-                format!("the number of cards {p} drew this turn")
+                // "the number of cards you've drawn this turn".
+                if p == "you" {
+                    "the number of cards you {alt:drew|drawn} this turn".to_string()
+                } else {
+                    format!("the number of cards {p} drew this turn")
+                }
             }
             Value::LifeGainedThisTurn(p) => {
                 let p = self.player(p, Case::Subj);
@@ -661,7 +670,7 @@ impl Renderer<'_> {
             Condition::Phase(p) => match p {
                 PhaseCond::Combat => "it's combat".into(),
                 PhaseCond::MainPhase => "it's your main phase".into(),
-                PhaseCond::Upkeep => "it's your upkeep".into(),
+                PhaseCond::Upkeep => "it's an upkeep step".into(),
                 PhaseCond::DeclareAttackers => "it's the declare attackers step".into(),
                 PhaseCond::EndStep => "it's the end step".into(),
             },
@@ -1261,8 +1270,14 @@ impl Renderer<'_> {
             Cmp::Eq => format!("is {b}"),
             Cmp::Ne => format!("isn't {b}"),
             Cmp::Lt => format!("is less than {b}"),
+            Cmp::Le if !super::nouns::is_plain_number(&b) => {
+                format!("is less than or equal to {b}")
+            }
             Cmp::Le => format!("is {b} or less"),
             Cmp::Gt => format!("is greater than {b}"),
+            Cmp::Ge if !super::nouns::is_plain_number(&b) => {
+                format!("is greater than or equal to {b}")
+            }
             Cmp::Ge => format!("is {b} or {{alt:greater|more}}"),
         };
         format!("{a} {rel}")

@@ -208,6 +208,11 @@ impl Renderer<'_> {
             Filter::Custom(n) => Some(n.as_str()),
             _ => None,
         })?;
+        // "Equipped creature has '{T}, Sacrifice Blazing Torch: ...'": the object granting
+        // the ability, named by its name in the quoted ability.
+        if name == crate::granted_by::GRANTER && atoms.len() == 1 {
+            return Some("~".into());
+        }
         if name == hga::SOURCE_OR_NEXT {
             let m = self.me();
             if atoms

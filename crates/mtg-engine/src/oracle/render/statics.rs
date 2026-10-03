@@ -90,6 +90,9 @@ impl Renderer<'_> {
                 return lines.join("\n");
             }
         }
+        if let Some(t) = self.level_symbol(s).or_else(|| self.station_symbol(s)) {
+            return t;
+        }
         // "Solved — [ability]" (CR 719.3b), compiled as the ability granted while solved.
         if s.condition.as_ref().is_some_and(super::is_solved) {
             if let StaticEffect::Continuous {
@@ -130,6 +133,17 @@ impl Renderer<'_> {
                 };
                 format!("{when}, {}", lower_first(&e))
             }
+            // "You may pay {0} rather than pay the power-up cost of the first power-up
+            // ability you activate during each of your turns."
+            Some(Condition::YourTurn)
+                if matches!(&s.effect, StaticEffect::CostModifier(cm)
+                    if super::tail_parts::first_ability_alt_cost(self, cm, true).is_some()) =>
+            {
+                let StaticEffect::CostModifier(cm) = &s.effect else {
+                    return self.gap("cost modifier");
+                };
+                super::tail_parts::first_ability_alt_cost(self, cm, true).unwrap_or_default()
+            }
             // Cost modifiers state their condition with "if" ("This spell costs {2} less
             // to cast if ...").
             Some(c) if matches!(s.effect, StaticEffect::CostModifier(_)) => {
@@ -150,6 +164,11 @@ impl Renderer<'_> {
             Some(Condition::NotYourTurn) => {
                 let e = self.static_effect(&s.effect);
                 format!("during turns other than yours, {}", lower_first(&e))
+            }
+            // "Players can't cast spells during combat."
+            Some(Condition::Phase(PhaseCond::Combat)) => {
+                let e = self.static_effect(&s.effect);
+                format!("{} during combat", e.trim_end_matches('.'))
             }
             // "~ can't attack or block unless an opponent has eight or more cards in their
             // graveyard."
@@ -536,7 +555,23 @@ impl Renderer<'_> {
             Condition::YourTurn => "during your turn".into(),
             Condition::NotYourTurn => "during an opponent's turn".into(),
             Condition::Phase(PhaseCond::Combat) => "during combat".into(),
-            Condition::Phase(PhaseCond::Upkeep) => "during an opponent's upkeep".into(),
+            Condition::Phase(PhaseCond::Upkeep) => "during any upkeep step".into(),
+            Condition::And(v)
+                if matches!(
+                    v.as_slice(),
+                    [Condition::NotYourTurn, Condition::Phase(PhaseCond::Upkeep)]
+                ) =>
+            {
+                "during an opponent's upkeep".into()
+            }
+            Condition::And(v)
+                if matches!(
+                    v.as_slice(),
+                    [Condition::YourTurn, Condition::Phase(PhaseCond::Upkeep)]
+                ) =>
+            {
+                "during your upkeep".into()
+            }
             Condition::Phase(PhaseCond::DeclareAttackers) => {
                 "during the declare attackers step".into()
             }
@@ -956,11 +991,94 @@ impl Renderer<'_> {
                 format!("{target}{who} {costs} {s} less {act}")
             }
             CostChange::ReduceMana { mana, colored_only } => {
-                let mut s = format!("{target}{who} {costs} {mana} less {act}");
+                // "As an additional cost to cast green permanent spells, you may pay 2 life.
+                // Those spells cost {G} less to cast if you paid life this way." (see
+                // `kw/offered_costs.rs`).
+                let paid_life = match &cm.applies_to {
+                    CostTarget::Spells(Filter::And(v)) => v.iter().any(|f| {
+                        matches!(f, Filter::Custom(n)
+                            if n.strip_prefix(crate::kw::offered_costs::PAID_OFFERED_COST)
+                                .is_some_and(|c| c.starts_with("pay ") && c.ends_with(" life")))
+                    }),
+                    _ => false,
+                };
+                let mut s = if paid_life && cm.who == PlayerRel::You {
+                    format!("those spells cost {mana} less {act} if you paid life this way")
+                } else {
+                    format!("{target}{who} {costs} {mana} less {act}")
+                };
                 if *colored_only {
-                    s.push_str(". This effect reduces only the amount of colored mana you pay");
+                    // A reduction of mana of one color reduces only that color's mana.
+                    let syms = mana.to_string();
+                    let colors: Vec<&str> = syms
+                        .split('}')
+                        .filter_map(|x| x.strip_prefix('{'))
+                        .collect();
+                    let one = match colors.first() {
+                        Some(c) if colors.iter().all(|x| x == c) => match *c {
+                            "W" => Some("white"),
+                            "U" => Some("blue"),
+                            "B" => Some("black"),
+                            "R" => Some("red"),
+                            "G" => Some("green"),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    let which = match one {
+                        Some(c) => format!("{{alt:colored|{c}}}"),
+                        None => "colored".into(),
+                    };
+                    s.push_str(&format!(
+                        ". This effect reduces only the amount of {which} mana you pay"
+                    ));
                 }
                 s
+            }
+            // "This spell costs {R} more to cast for each target beyond the first": paid
+            // with the spell's total cost like an additional cost (CR 601.2f).
+            CostChange::AdditionalCost(Cost { mana: None, parts })
+                if matches!(cm.applies_to, CostTarget::ThisSpell)
+                    && matches!(parts.as_slice(), [CostPart::Repeated { cost, times: Value::Custom(t) }]
+                        if t == "spell_targets_beyond_first" && cost.parts.is_empty() && cost.mana.is_some()) =>
+            {
+                let [CostPart::Repeated { cost, .. }] = parts.as_slice() else {
+                    return self.gap("cost per target");
+                };
+                let mana = cost
+                    .mana
+                    .as_ref()
+                    .map(|m| m.to_string())
+                    .unwrap_or_default();
+                format!("~ costs {mana} more to cast for each target beyond the first")
+            }
+            // "Planeswalkers' loyalty abilities you activate cost an additional +1 to
+            // activate" (CR 606.4: the loyalty cost changes).
+            CostChange::AdditionalCost(Cost { mana: None, parts })
+                if matches!(cm.applies_to, CostTarget::LoyaltyAbilities(_))
+                    && matches!(parts.as_slice(), [CostPart::Loyalty(_)]) =>
+            {
+                let [CostPart::Loyalty(n)] = parts.as_slice() else {
+                    return self.gap("loyalty cost");
+                };
+                let n = if *n > 0 {
+                    format!("+{n}")
+                } else {
+                    n.to_string()
+                };
+                let CostTarget::LoyaltyAbilities(f) = &cm.applies_to else {
+                    return self.gap("loyalty cost");
+                };
+                let o = self.noun(f, Num::Many);
+                let who = if cm.who == PlayerRel::You {
+                    " you activate"
+                } else {
+                    ""
+                };
+                format!(
+                    "{} loyalty abilities{who} cost an additional {n} to activate",
+                    super::nouns::possessive(&o)
+                )
             }
             CostChange::AdditionalCost(c) => {
                 let c = self.cost_as_payment(c);
@@ -1005,6 +1123,11 @@ impl Renderer<'_> {
                         "you may cast ~ by paying {c} rather than paying its mana cost. {flash}"
                     )
                 }
+            }
+            CostChange::AlternativeCost(_)
+                if super::tail_parts::first_ability_alt_cost(self, cm, false).is_some() =>
+            {
+                super::tail_parts::first_ability_alt_cost(self, cm, false).unwrap_or_default()
             }
             CostChange::AlternativeCost(c) if c.is_free() => {
                 let m = self.me();
@@ -1467,8 +1590,15 @@ impl Renderer<'_> {
                         && !poss.contains('{')
                     {
                         format!("{{alt:{poss}|its}}")
+                    } else if !poss.contains(['{', '|']) && !s.contains(['{', '|']) {
+                        // "Activated abilities of artifacts can't be activated."
+                        return format!(
+                            "{{alt:{poss} activated abilities|activated abilities of {s}}} can't be activated{m}"
+                        );
                     } else {
-                        poss
+                        // "Activated abilities of artifacts and creatures" (a list with
+                        // its own alternatives).
+                        return format!("activated abilities of {s} can't be activated{m}");
                     };
                     return format!("{poss} activated abilities can't be activated{m}");
                 }
@@ -1802,6 +1932,26 @@ impl Renderer<'_> {
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
                         format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default())
+                    }
+                    // "~ escapes with a +1/+1 counter on it" (CR 702.138c).
+                    A::AsEnters(e)
+                        if matches!(e.as_ref(), Effect::If {
+                        cond: Condition::CostPaid(c),
+                        then,
+                        otherwise,
+                    } if c == "escape"
+                        && matches!(otherwise.as_ref(), Effect::Noop)
+                        && matches!(then.as_ref(), Effect::EnterWithCounters { .. })
+                        && (subj == "~" || subj == "~it")) =>
+                    {
+                        let Effect::If { then, .. } = e.as_ref() else {
+                            return self.gap("escapes with");
+                        };
+                        let Effect::EnterWithCounters { kind, n } = then.as_ref() else {
+                            return self.gap("escapes with");
+                        };
+                        let (c, w) = self.counted(n, &counter_name(kind));
+                        format!("~ escapes with {c} on {it}{}", w.unwrap_or_default())
                     }
                     A::AsEnters(e) => self.as_enters(&subj, e),
                     A::EnterAsCopy { filter, optional } => {

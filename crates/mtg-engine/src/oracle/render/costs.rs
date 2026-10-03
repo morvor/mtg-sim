@@ -52,7 +52,31 @@ impl Renderer<'_> {
         if parts.is_empty() {
             return "{0}".into();
         }
-        parts.join(", ")
+        // "Sacrifice a black creature, a red creature, and a green creature": consecutive
+        // sacrifices are one instruction.
+        let mut merged: Vec<String> = Vec::new();
+        let mut run: Vec<String> = Vec::new();
+        let flush = |run: &mut Vec<String>, merged: &mut Vec<String>| {
+            match run.len() {
+                0 => {}
+                1 => merged.push(format!("Sacrifice {}", run[0])),
+                _ => merged.push(format!("Sacrifice {}", join_list(run, "and"))),
+            }
+            run.clear();
+        };
+        for p in parts {
+            match p.strip_prefix("Sacrifice ") {
+                Some(what) if !what.starts_with('~') && !what.contains(['{', '|']) => {
+                    run.push(what.to_string())
+                }
+                _ => {
+                    flush(&mut run, &mut merged);
+                    merged.push(p);
+                }
+            }
+        }
+        flush(&mut run, &mut merged);
+        merged.join(", ")
     }
 
     /// One non-mana cost, as an imperative ("sacrifice a creature").
@@ -69,6 +93,11 @@ impl Renderer<'_> {
             CostPart::Sacrifice { filter, count } => {
                 let det = self.det_for(count);
                 let f = super::effects::strip_controller(filter);
+                // "Sacrifice Blazing Torch" in an ability it grants: the object itself.
+                if matches!(&f, Filter::Custom(n) if n == crate::granted_by::GRANTER) {
+                    self.sacrificed = Some("~".into());
+                    return "sacrifice ~".into();
+                }
                 let head = self.noun(&f, Num::One);
                 self.sacrificed = head.split_whitespace().last().map(str::to_string);
                 let n = self.noun_det(&f, det);
@@ -413,6 +442,27 @@ impl Renderer<'_> {
                     restr.push("during your turn".into());
                 }
             }
+            // "Activate only during any upkeep step" / "... during your upkeep" / "...
+            // during an opponent's upkeep".
+            Some(Condition::Phase(PhaseCond::Upkeep)) => {
+                restr.push("during any upkeep step".into())
+            }
+            Some(Condition::And(v))
+                if matches!(
+                    v.as_slice(),
+                    [
+                        Condition::YourTurn | Condition::NotYourTurn,
+                        Condition::Phase(PhaseCond::Upkeep)
+                    ]
+                ) =>
+            {
+                let whose = if matches!(v[0], Condition::YourTurn) {
+                    "your"
+                } else {
+                    "an opponent's"
+                };
+                restr.push(format!("during {whose} upkeep"));
+            }
             // CR 702.178a: "Max speed — [ability]": the object has the ability as long as
             // your speed is 4.
             Some(Condition::MaxSpeed) => {}
@@ -427,6 +477,10 @@ impl Renderer<'_> {
             s = format!("Max speed — {s}");
         }
         for oc in &a.own_cost_changes {
+            // Payment rules ("Spend only black mana on X") are written below.
+            if matches!(oc.change, CostChange::Rule(_)) && oc.condition.is_none() {
+                continue;
+            }
             let c = self.own_cost_change(oc);
             s = join_words(&[s, c]);
         }

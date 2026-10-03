@@ -1640,7 +1640,14 @@ fn p_add_mana(l: &str, _b: &mut Builder) -> Option<Effect> {
             options,
         });
     } else if r.contains(" or ") {
-        // "{R} or {G}", "{W}, {U}, or {B}"
+        // "{R} or {G}", "{W}, {U}, or {B}": nothing but the symbols ("{B} or {G} for
+        // each permanent destroyed this way" and "X {G} or X {W}" say how many).
+        if r.split([',', ' '])
+            .map(|w| w.trim_end_matches('.'))
+            .any(|w| !w.is_empty() && w != "or" && !(w.starts_with('{') && w.ends_with('}')))
+        {
+            return None;
+        }
         let opts: Vec<ManaType> = r
             .split(|c| c == ',' || c == ' ')
             .filter(|w| w.starts_with('{'))
