@@ -25,6 +25,9 @@ use crate::types::{Entity, ObjectId, PlayerId};
 pub const TAP_IN_COST: &str = "activated ability: {T} in its activation cost";
 /// `Condition::Custom`: the activated ability is a ninjutsu ability (CR 702.49a).
 pub const NINJUTSU: &str = "activated ability: ninjutsu";
+/// `Condition::Custom`: it's the turn's first combat phase (CR 505.1a, 506.1): "at the end of
+/// the first combat phase on your turn" (Zariel, Archduke of Avernus).
+pub const FIRST_COMBAT_PHASE: &str = "turn: first combat phase";
 /// `Condition::Custom`: the activated ability is a power-up ability (CR 702.191a).
 pub const POWER_UP: &str = "activated ability: power-up";
 
@@ -124,6 +127,7 @@ impl KeywordRules for ActivatedAbilityKind {
             TAP_IN_COST => Some(event_ability(g, ctx).is_some_and(|a| a.cost.has_tap())),
             NINJUTSU => Some(is_keyword_ability(g, ctx, KeywordKind::Ninjutsu)),
             POWER_UP => Some(is_keyword_ability(g, ctx, KeywordKind::PowerUp)),
+            FIRST_COMBAT_PHASE => Some(g.turn.combat_phases <= 1),
             _ => None,
         }
     }

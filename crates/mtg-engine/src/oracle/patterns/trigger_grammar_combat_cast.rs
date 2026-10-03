@@ -2472,6 +2472,27 @@ fn counter_that_ability(l: &str, b: &mut crate::oracle::effects::Builder) -> Opt
 
 inventory::submit! { super::EffectPattern { name: "counter that ability (the one activated)", priority: 100, parse: counter_that_ability } }
 
+/// "At the end of the first combat phase on your turn" (CR 511.2: as the end of combat
+/// step begins).
+fn end_of_first_combat(r: &str) -> Option<Parsed> {
+    let whose = match r {
+        "at the end of the first combat phase on your turn" => PlayerRel::You,
+        "at the end of the first combat phase of each turn" => PlayerRel::Any,
+        _ => return None,
+    };
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::BeginningOf {
+                step: TriggerStep::EndOfCombat,
+                whose,
+            }),
+            cond: Condition::Custom(crate::kw::activated_ability_kind::FIRST_COMBAT_PHASE.into()),
+        },
+        Sel::This,
+        PlayerRef::ActivePlayer,
+    ))
+}
+
 /// "When ~ dies during combat" and other events qualified by a combat timing.
 fn during_combat(r: &str) -> Option<Parsed> {
     let head = r.strip_suffix(" during combat")?;
@@ -2507,6 +2528,7 @@ fn parse(r: &str) -> Option<Parsed> {
         .or_else(|| enters_not_from_hand(r))
         .or_else(|| cycle_this_or_another(r))
         .or_else(|| attacks_while_most_life(r))
+        .or_else(|| end_of_first_combat(r))
         .or_else(|| during_combat(r))
 }
 

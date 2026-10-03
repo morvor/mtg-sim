@@ -412,3 +412,30 @@ fn killian_draws_when_creatures_enchanted_by_your_auras_attack() {
     combat(&mut t, &at_p1(&[a, b]), &[]);
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn zariels_emblem_triggers_only_after_the_first_combat_phase() {
+    cr!("511.2", "505.1a");
+    assert_supported("Zariel, Archduke of Avernus");
+    let mut t = TestGame::new(2);
+    let zariel = t.battlefield(P0, "Zariel, Archduke of Avernus");
+    t.g.objects[zariel.0 as usize]
+        .counters
+        .insert("loyalty".into(), 6);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.activate(P0, zariel, 2, &[]).unwrap();
+    t.resolve_all();
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![(bears, Entity::Player(P1))]));
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert!(!t.obj_now(bears).tapped, "untapped at the end of the first combat");
+    // There is an additional combat phase, whose end doesn't trigger the emblem again.
+    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![(bears, Entity::Player(P1))]));
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert!(t.obj_now(bears).tapped);
+    assert_eq!(t.life(P1), 16);
+}
