@@ -2028,6 +2028,7 @@ impl Game {
         let ts = self.new_timestamp();
         let o = &mut self.objects[obj.0 as usize];
         o.attached_to = Some(to);
+        o.last_attached_to = None;
         // CR 613.7e: new timestamp when attached.
         o.timestamp = ts;
         self.dirty = true;
@@ -2037,8 +2038,13 @@ impl Game {
 
     pub fn unattach(&mut self, obj: ObjectId) {
         if let Some(prev) = self.obj(obj).attached_to {
+            // Remembered only when it became unattached because what it was attached to
+            // left the battlefield (CR 704.5n): "Equipment attached to that creature" then
+            // means those attached to it as it last existed there (CR 608.2h). One
+            // unattached earlier wasn't attached to it then.
+            let host_left = matches!(prev, Entity::Object(h) if !self.is_live(h));
             self.objects[obj.0 as usize].attached_to = None;
-            self.objects[obj.0 as usize].last_attached_to = Some(prev);
+            self.objects[obj.0 as usize].last_attached_to = host_left.then_some(prev);
             self.dirty = true;
             self.emit(Event::Unattached { obj, from: prev });
         }

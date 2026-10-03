@@ -168,7 +168,7 @@ fn praetors_grasp_only_its_caster_may_look_at_the_card() {
 
 #[test]
 fn vivien_exiles_one_of_the_top_three_face_down_and_the_rest_go_to_the_bottom() {
-    cr!("406.3", "701.20b");
+    cr!("406.3");
     let mut t = TestGame::new(2);
     let cards = stack(&mut t, P0, &["Grizzly Bears", "Shock", "Llanowar Elves"]);
     let vivien = t.battlefield(P0, "Vivien, Champion of the Wilds");
@@ -179,6 +179,9 @@ fn vivien_exiles_one_of_the_top_three_face_down_and_the_rest_go_to_the_bottom() 
     let exiled = t.g.current(cards[0]);
     assert_eq!(t.zone(exiled), Zone::Exile);
     assert!(t.g.obj(exiled).face_down);
+    // Having looked at it, P0 may go on looking at it; P1 may not (CR 406.3).
+    assert!(zones::may_look(&t.g, P0, exiled));
+    assert!(!zones::may_look(&t.g, P1, exiled));
     // The other two are on the bottom of P0's library.
     let lib = &t.g.player(P0).library;
     let mut bottom = lib[..2].to_vec();
@@ -360,7 +363,7 @@ fn clone_shell_leaves_a_noncreature_card_face_up_in_exile() {
 
 #[test]
 fn creation_of_avacyn_turns_the_exiled_card_face_up_and_you_lose_life() {
-    cr!("406.3", "714.2b");
+    cr!("406.3", "714.2b", "607.2a");
     let mut t = TestGame::new(2);
     let angel = t.library_top(P0, "Serra Angel");
     t.answer_choose(P0, &[Entity::Object(angel)]);
@@ -376,6 +379,40 @@ fn creation_of_avacyn_turns_the_exiled_card_face_up_and_you_lose_life() {
     assert_eq!(t.zone(exiled), Zone::Exile);
     assert!(!t.g.obj(exiled).face_down);
     assert_eq!(t.life(P0), 20 - 5);
+    // Chapter III: the exiled card is a creature card, so P0 may put it onto the
+    // battlefield.
+    t.answer_yes(P0, true);
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    let angel = t.g.current(angel);
+    assert!(t.on_battlefield(angel));
+    assert_eq!(t.g.obj(angel).controller, P0);
+}
+
+#[test]
+fn creation_of_avacyn_puts_the_card_into_hand_if_its_not_put_onto_the_battlefield() {
+    cr!("714.2b", "607.2a");
+    // A noncreature card can't be put onto the battlefield; a creature card P0 declines
+    // to put there. Either way it's put into its owner's hand.
+    for (name, creature) in [("Lightning Bolt", false), ("Serra Angel", true)] {
+        let mut t = TestGame::new(2);
+        let card = t.library_top(P0, name);
+        t.answer_choose(P0, &[Entity::Object(card)]);
+        let saga = t.enter(P0, "The Creation of Avacyn");
+        t.resolve_all();
+        // Chapter II, then chapter III.
+        t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+        t.g.flush_events();
+        t.resolve_all();
+        if creature {
+            t.answer_yes(P0, false);
+        }
+        t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+        t.g.flush_events();
+        t.resolve_all();
+        assert_eq!(t.zone(card), Zone::Hand(P0), "{name}");
+    }
 }
 
 #[test]
@@ -437,7 +474,7 @@ fn face_down_entry_cards_compile() {
 
 #[test]
 fn ashcloud_phoenix_returns_face_down_and_can_be_turned_up_for_its_morph_cost() {
-    cr!("708.2a", "708.3", "702.37e");
+    cr!("708.2a", "702.37e");
     ruling!(
         "Ashcloud Phoenix",
         "If Ashcloud Phoenix is face down, you can turn it face up for its morph cost, even if you didn't cast Ashcloud Phoenix face down using its morph ability."
@@ -540,7 +577,7 @@ fn cyber_controller_puts_milled_creature_cards_onto_the_battlefield_as_face_down
 
 #[test]
 fn deathmist_raptor_may_return_face_down() {
-    cr!("708.3");
+    cr!("708.2a");
     ruling!(
         "Deathmist Raptor",
         "You choose whether Deathmist Raptor will enter the battlefield face up or face down as the ability resolves."
@@ -567,6 +604,44 @@ fn deathmist_raptor_may_return_face_down() {
     let now = t.g.current(raptor);
     assert!(t.on_battlefield(now));
     assert!(t.g.obj(now).face_down);
+    assert_eq!(t.pt(now), (2, 2));
+    assert!(t.g.obj(now).chars.name.is_empty());
+}
+
+#[test]
+fn yarus_returns_a_dead_face_down_permanent_card_and_turns_it_face_up() {
+    cr!("708.8", "400.7");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Yarus, Roar of the Old Gods");
+    let giant = t.battlefield(P0, "Hill Giant");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, giant));
+    t.g.recompute();
+    destroy(&mut t, giant);
+    t.resolve_all();
+    // It's returned face down, then that permanent (a new object, CR 400.7) is turned
+    // face up.
+    let now = t.g.current(giant);
+    assert_ne!(now, giant);
+    assert!(t.on_battlefield(now));
+    assert!(!t.g.obj(now).face_down);
+    assert_eq!(t.g.obj(now).chars.name.as_str(), "Hill Giant");
+    assert_eq!(t.g.obj(now).controller, P0);
+
+    // A manifested instant card isn't a permanent card: it stays in the graveyard.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Yarus, Roar of the Old Gods");
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let manifested = mtg_engine::kwa::manifest::put_face_down(
+        &mut t.g,
+        bolt,
+        P0,
+        mtg_engine::kwa::manifest::MANIFESTED,
+        None,
+    )
+    .expect("manifested");
+    destroy(&mut t, manifested);
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), Zone::Graveyard(P0));
 }
 
 // ---------------------------------------------------------------------------
@@ -734,7 +809,7 @@ fn dermoplasm_puts_a_morph_creature_from_hand_onto_the_battlefield_face_up() {
 
 #[test]
 fn staff_room_turns_the_creature_face_up_or_puts_a_counter_on_it() {
-    cr!("708.8", "709.5");
+    cr!("708.8");
     let mut t = TestGame::new(2);
     let room = t.hand(P0, "Experimental Lab // Staff Room");
     t.lands(P0, "Forest", 3);
@@ -782,7 +857,7 @@ fn write_into_being_manifests_one_and_puts_the_other_on_top_or_bottom() {
 
 #[test]
 fn hide_in_plain_sight_cloaks_two_and_puts_the_rest_on_the_bottom() {
-    cr!("701.58a", "702.21a");
+    cr!("701.58a");
     let mut t = TestGame::new(2);
     let cards = stack(
         &mut t,

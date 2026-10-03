@@ -46,7 +46,7 @@ fn enter_attached_cards_compile() {
 
 #[test]
 fn dragon_scales_returns_attached_to_the_creature_that_entered() {
-    cr!("303.4f", "603.6a");
+    cr!("303.4", "603.6a");
     let mut t = TestGame::new(2);
     let scales = t.graveyard(P0, "Dragon Scales");
     t.answer_yes(P0, true);
@@ -76,7 +76,7 @@ fn dragon_scales_stays_in_the_graveyard_if_the_creature_is_gone() {
 
 #[test]
 fn academy_researchers_puts_an_aura_from_hand_onto_it() {
-    cr!("303.4f");
+    cr!("303.4");
     let mut t = TestGame::new(2);
     let strength = t.hand(P0, "Holy Strength");
     t.answer_yes(P0, true);
@@ -107,7 +107,7 @@ fn academy_researchers_cant_put_an_aura_that_cant_enchant_it() {
 
 #[test]
 fn gryffs_boon_returns_from_the_graveyard_attached_to_target_creature() {
-    cr!("303.4f", "602.5d");
+    cr!("303.4");
     let mut t = TestGame::new(2);
     let boon = t.graveyard(P0, "Gryff's Boon");
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -123,11 +123,7 @@ fn gryffs_boon_returns_from_the_graveyard_attached_to_target_creature() {
 
 #[test]
 fn unfinished_business_returns_auras_and_equipment_attached_to_the_returned_creature() {
-    cr!("303.4i", "301.5e");
-    ruling!(
-        "Unfinished Business",
-        "Any target Equipment cards that can't legally be attached to the creature will enter the battlefield unattached."
-    );
+    cr!("303.4", "301.5a");
     let mut t = TestGame::new(2);
     let bears = t.graveyard(P0, "Grizzly Bears");
     let strength = t.graveyard(P0, "Holy Strength");
@@ -148,6 +144,31 @@ fn unfinished_business_returns_auras_and_equipment_attached_to_the_returned_crea
         assert_eq!(attached(&t, a), Some(Entity::Object(bears)));
     }
     assert_eq!(t.pt(bears), (5, 4));
+}
+
+#[test]
+fn unfinished_business_equipment_that_cant_equip_the_creature_enters_unattached() {
+    cr!("301.5e", "702.16d");
+    ruling!(
+        "Unfinished Business",
+        "Any target Equipment cards that can't legally be attached to the creature will enter the battlefield unattached."
+    );
+    let mut t = TestGame::new(2);
+    // Protection from artifacts: it can't be equipped by an artifact.
+    let chosen = t.graveyard(P0, "Tel-Jilad Chosen");
+    let blade = t.graveyard(P0, "Bonesplitter");
+    let spell = t.hand(P0, "Unfinished Business");
+    t.lands(P0, "Plains", 5);
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, spell)
+        .target(Entity::Object(chosen))
+        .targets(&[Entity::Object(blade)])
+        .go();
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(chosen)));
+    let blade = t.g.current(blade);
+    assert!(t.on_battlefield(blade));
+    assert_eq!(attached(&t, blade), None);
 }
 
 #[test]
@@ -203,7 +224,7 @@ fn nomad_mythmaker_chooses_a_creature_the_aura_can_enchant() {
 
 #[test]
 fn bitterheart_witch_puts_a_curse_onto_the_battlefield_attached_to_target_player() {
-    cr!("303.4f", "702.5d");
+    cr!("303.4", "702.5d");
     let mut t = TestGame::new(2);
     let witch = t.battlefield(P0, "Bitterheart Witch");
     let curse = t.library_top(P0, "Curse of the Pierced Heart");
@@ -220,7 +241,7 @@ fn bitterheart_witch_puts_a_curse_onto_the_battlefield_attached_to_target_player
 
 #[test]
 fn magnetic_snuffler_returns_target_equipment_attached_to_it() {
-    cr!("301.5e");
+    cr!("301.5a");
     let mut t = TestGame::new(2);
     let blade = t.graveyard(P0, "Bonesplitter");
     t.answer_targets(P0, &[Entity::Object(blade)]);
@@ -233,7 +254,7 @@ fn magnetic_snuffler_returns_target_equipment_attached_to_it() {
 
 #[test]
 fn forum_filibuster_returns_an_aura_attached_to_the_new_token() {
-    cr!("603.12", "303.4f");
+    cr!("603.12", "303.4");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Forum Filibuster");
     let strength = t.graveyard(P0, "Holy Strength");
@@ -253,7 +274,7 @@ fn forum_filibuster_returns_an_aura_attached_to_the_new_token() {
 
 #[test]
 fn armored_skyhunter_attaches_an_equipment_put_onto_the_battlefield_this_way() {
-    cr!("701.3a", "301.5c");
+    cr!("701.3a", "608.2c");
     assert_compiles(&["Armored Skyhunter"]);
     let mut t = TestGame::new(2);
     let skyhunter = t.battlefield(P0, "Armored Skyhunter");

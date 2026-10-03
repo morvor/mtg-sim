@@ -428,9 +428,9 @@ pub struct GameObject {
     /// Dealt damage by a deathtouch source since the last SBA check (CR 704.5h).
     pub deathtouch_damage: bool,
     pub attached_to: Option<Entity>,
-    /// What it was last attached to, once it became unattached: "Equipment attached to
-    /// that creature" after the creature left the battlefield means the Equipment
-    /// attached to it as it last existed there (CR 608.2h).
+    /// What it was attached to when it became unattached because that object left the
+    /// battlefield: "Equipment attached to that creature" after the creature left means
+    /// the Equipment attached to it as it last existed there (CR 608.2h).
     #[serde(default)]
     pub last_attached_to: Option<Entity>,
     pub timestamp: Timestamp,

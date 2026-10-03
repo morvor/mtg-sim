@@ -248,7 +248,7 @@ fn devout_harpist_targets_only_an_aura_attached_to_a_creature() {
 
 #[test]
 fn treefolk_mystic_destroys_the_auras_on_the_creature_it_blocks() {
-    cr!("509.1", "603.2");
+    cr!("509.3b", "603.2");
     let mut t = TestGame::new(2);
     let mystic = t.battlefield(P0, "Treefolk Mystic");
     t.set_step(P1, Step::BeginningOfCombat);
@@ -286,6 +286,46 @@ fn corrosive_ooze_destroys_the_equipment_even_after_the_creature_died() {
     t.resolve_all();
     assert!(!t.on_battlefield(blade));
     assert!(t.on_battlefield(other));
+}
+
+#[test]
+fn corrosive_ooze_spares_equipment_unattached_before_the_creature_left() {
+    cr!("608.2h", "701.3d");
+    ruling!(
+        "Corrosive Ooze",
+        "If the creature Corrosive Ooze blocks or is blocking leaves the battlefield, the Equipment that was attached to that creature immediately before it left the battlefield will be destroyed"
+    );
+    let mut t = TestGame::new(2);
+    let ooze = t.battlefield(P0, "Corrosive Ooze");
+    t.set_step(P1, Step::BeginningOfCombat);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let blade = t.battlefield(P1, "Bonesplitter");
+    let scimitar = t.battlefield(P1, "Leonin Scimitar");
+    assert!(t.g.attach(blade, Entity::Object(bears)));
+    assert!(t.g.attach(scimitar, Entity::Object(bears)));
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(bears, Entity::Player(P0))]),
+    );
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        mtg_engine::decision::Answer::Blockers(vec![(ooze, bears)]),
+    );
+    t.advance_to(P1, Step::DeclareBlockers);
+    t.resolve_all();
+    // The Bonesplitter is unattached while the Bears are still on the battlefield; then
+    // the Bears leave with only the Scimitar attached.
+    t.g.unattach(blade);
+    t.g.destroy(bears, None);
+    t.g.flush_events();
+    t.settle();
+    assert!(!t.on_battlefield(bears));
+    t.advance_to(P1, Step::EndOfCombat);
+    t.resolve_all();
+    assert!(t.on_battlefield(blade));
+    assert!(!t.on_battlefield(scimitar));
 }
 
 #[test]
@@ -375,12 +415,14 @@ fn silence_the_believers_exiles_the_targets_and_the_auras_attached_to_them() {
     assert!(t.g.attach(on_a, Entity::Object(a)));
     assert!(t.g.attach(on_other, Entity::Object(other)));
     let spell = t.hand(P0, "Silence the Believers");
-    t.lands(P0, "Swamp", 7);
+    let swamps = t.lands(P0, "Swamp", 7);
     t.set_step(P0, Step::PrecombatMain);
     t.cast(P0, spell)
         .targets(&[Entity::Object(a), Entity::Object(b)])
         .go();
     t.resolve_all();
+    // {2}{B}{B} plus {2}{B} for the second target (strive).
+    assert!(swamps.iter().all(|l| t.obj_now(*l).tapped));
     assert!(t.in_exile("Grizzly Bears"));
     assert!(t.in_exile("Hill Giant"));
     assert!(t.in_exile("Holy Strength"));

@@ -61,7 +61,7 @@ fn control_cards_compile() {
 
 #[test]
 fn jinxed_ring_target_opponent_gains_control_of_it() {
-    cr!("108.4", "611.2a");
+    cr!("613.1b", "611.2a");
     let mut t = TestGame::new(2);
     let ring = t.battlefield(P0, "Jinxed Ring");
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -104,18 +104,21 @@ fn shield_broker_control_lasts_while_the_shield_counter_remains() {
     t.resolve_all();
     assert_eq!(t.counters(giant, "shield"), 1);
     assert_eq!(controller(&t, giant), P0);
-    // Once the shield counter is gone (removed instead of the creature being dealt
-    // damage or destroyed), P1 controls it again.
-    t.g.remove_counters(Entity::Object(giant), "shield", 1);
-    t.g.recompute();
-    t.settle();
+    // Damage that would be dealt to it removes the shield counter instead (CR 122.1c);
+    // once it's gone, P1 controls the creature again.
+    let shock = t.hand(P1, "Shock");
+    t.lands(P1, "Mountain", 1);
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P1, shock).target(Entity::Object(giant)).go();
+    t.resolve_all();
+    assert_eq!(t.obj_now(giant).damage, 0);
     assert_eq!(t.counters(giant, "shield"), 0);
     assert_eq!(controller(&t, giant), P1);
 }
 
 #[test]
 fn yes_man_when_they_do_draws_only_if_the_opponent_gained_control() {
-    cr!("603.12", "108.4");
+    cr!("603.12", "613.1b");
     ruling!(
         "Yes Man, Personal Securitron",
         "You won't draw two cards, because that effect is part of a reflexive triggered ability that triggers only if the target opponent gains control of Yes Man."
@@ -144,7 +147,7 @@ fn yes_man_when_they_do_draws_only_if_the_opponent_gained_control() {
 
 #[test]
 fn kitsune_exchanges_control_of_two_creatures_controlled_by_different_players() {
-    cr!("701.12a", "701.12b");
+    cr!("701.12b", "301.5d");
     ruling!(
         "Kitsune, Dragon's Daughter",
         "Gaining control of a creature doesn't cause you to gain control of any Auras or Equipment attached to it."
@@ -180,26 +183,42 @@ fn murderous_spoils_gains_control_of_the_equipment_that_was_attached() {
     assert_eq!(controller(&t, blade), P0);
     // Not an Equipment that wasn't attached to it.
     assert_eq!(controller(&t, other), P1);
+    // No duration: the control change lasts (CR 611.2a).
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(controller(&t, blade), P0);
 }
 
 #[test]
-fn brooding_saurian_returns_permanents_to_their_owners() {
-    cr!("108.4", "111.2");
+fn brooding_saurian_returns_nontoken_permanents_to_their_owners() {
+    cr!("613.1b", "111.2");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Brooding Saurian");
     let stolen = t.battlefield(P1, "Hill Giant");
     let lent = t.battlefield(P0, "Grizzly Bears");
     give_control(&mut t, stolen, P0);
     give_control(&mut t, lent, P1);
+    // A token P1 created (and owns), now controlled by P0: not a nontoken permanent.
+    let spec = mtg_engine::replacement::TokenCreate {
+        chars: t.g.obj(stolen).copiable.clone(),
+        card: t.g.obj(stolen).card.clone(),
+        tapped: false,
+        attacking: None,
+        copy_of: Some(stolen),
+        copy_exceptions: vec![],
+    };
+    let token = t.g.create_tokens(P1, spec, 1, None)[0];
+    assert_eq!(t.g.obj(token).owner, P1);
+    give_control(&mut t, token, P0);
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert_eq!(controller(&t, stolen), P1);
     assert_eq!(controller(&t, lent), P0);
+    assert_eq!(controller(&t, token), P0);
 }
 
 #[test]
 fn coveted_falcon_draws_a_card_for_each_permanent_the_opponent_gained() {
-    cr!("108.4", "611.2c");
+    cr!("613.1b", "608.2c");
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Hill Giant");
@@ -288,6 +307,29 @@ fn modify_memory_doesnt_draw_if_you_control_one_of_them() {
 }
 
 #[test]
+fn modify_memory_no_exchange_if_a_target_is_gone() {
+    cr!("701.12a", "608.2b");
+    let mut t = TestGame::new(3);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P2, "Hill Giant");
+    let spell = t.hand(P0, "Modify Memory");
+    t.lands(P0, "Island", 5);
+    t.set_step(P0, Step::PrecombatMain);
+    let hand = t.hand_size(P0);
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(a), Entity::Object(b)])
+        .go();
+    // One of the two creatures leaves: the whole exchange can't be completed, so no part
+    // of it happens.
+    t.g.destroy(a, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(controller(&t, b), P2);
+    // P0 still controls neither creature.
+    assert_eq!(t.hand_size(P0), hand - 1 + 3);
+}
+
+#[test]
 fn wellspring_gains_control_of_the_enchanted_land_until_end_of_turn() {
     cr!("611.2a", "303.4a");
     let mut t = TestGame::new(2);
@@ -365,7 +407,7 @@ fn unexpected_request_unattaches_the_equipment_at_the_next_end_step() {
 
 #[test]
 fn axis_of_mortality_two_target_players_exchange_life_totals() {
-    cr!("701.12a", "119.7");
+    cr!("701.12c");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Axis of Mortality");
     t.g.players[P1.idx()].life = 5;
@@ -424,6 +466,10 @@ fn akiri_unattaches_an_equipment_and_the_creature_becomes_tapped_and_indestructi
     assert!(t
         .obj_now(bears)
         .has_keyword(mtg_engine::keywords::KeywordKind::Indestructible));
+    t.g.destroy(bears, None);
+    t.g.flush_events();
+    t.settle();
+    assert!(t.on_battlefield(bears));
 }
 
 #[test]

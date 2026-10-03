@@ -46,7 +46,7 @@ fn waxing_moon_transforms_up_to_one_target_werewolf() {
 
 #[test]
 fn waxing_moon_may_be_cast_without_a_target() {
-    cr!("115.3", "601.2c");
+    cr!("601.2c");
     ruling!(
         "Waxing Moon",
         "You may cast Waxing Moon without targeting a Werewolf."
@@ -65,7 +65,7 @@ fn waxing_moon_may_be_cast_without_a_target() {
 
 #[test]
 fn tovolar_transforms_any_number_of_human_werewolves() {
-    cr!("701.27a", "603.4");
+    cr!("701.27a");
     ruling!(
         "Tovolar, Dire Overlord // Tovolar, the Midnight Scourge",
         "This ability will allow you to transform Human Werewolf creatures from previous visits to Innistrad as well."

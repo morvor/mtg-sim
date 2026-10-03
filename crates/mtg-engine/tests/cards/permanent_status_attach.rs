@@ -82,7 +82,7 @@ fn attach_cards_compile() {
 
 #[test]
 fn attach_target_equipment_to_target_creature() {
-    cr!("701.3a", "701.3c", "301.5b");
+    cr!("701.3a", "701.3c", "301.5a");
     let mut t = TestGame::new(2);
     let walker = t.battlefield(P0, "Auriok Windwalker");
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -102,7 +102,7 @@ fn attach_target_equipment_to_target_creature() {
 
 #[test]
 fn equipment_that_cant_equip_the_creature_doesnt_move() {
-    cr!("701.3b", "301.5b");
+    cr!("701.3b", "702.16d");
     // Protection from artifacts: it can't be equipped by an artifact (CR 702.16).
     let mut t = TestGame::new(2);
     let walker = t.battlefield(P0, "Auriok Windwalker");
@@ -416,7 +416,7 @@ fn sigarda_s_aid_attaches_the_equipment_that_entered() {
 
 #[test]
 fn carry_away_unattaches_the_enchanted_equipment() {
-    cr!("701.3d", "303.4e");
+    cr!("701.3d", "613.1b");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 2);
     let bears = t.battlefield(P1, "Grizzly Bears");

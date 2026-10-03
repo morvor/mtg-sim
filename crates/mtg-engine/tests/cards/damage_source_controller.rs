@@ -35,9 +35,11 @@ fn source_controller_cards_compile() {
 
 #[test]
 fn crag_saurian_the_sources_controller_gains_control_of_it() {
-    cr!("120.1", "603.2");
+    cr!("120.1", "603.2", "608.2h");
     let mut t = TestGame::new(2);
     let saurian = t.battlefield(P0, "Crag Saurian");
+    // Shock is in P1's graveyard by the time the ability resolves: its controller is the
+    // one it had as it last existed on the stack.
     shock(&mut t, saurian);
     assert_eq!(t.obj_now(saurian).controller, P1);
     assert_eq!(t.obj_now(saurian).damage, 2);
