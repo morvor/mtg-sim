@@ -219,6 +219,7 @@ impl Renderer<'_> {
             "attacking the event's player" => rel("attacking that player"),
             "toughness_gt_power" => rel("with toughness greater than its power"),
             "activated_this_turn" => rel("that was activated this turn"),
+            crate::kw::spell_not_cast::NOT_CAST => rel("that wasn't cast"),
             n if n.starts_with("base:p=") => (false, format!("with base power {}", &n[7..])),
             n if n.starts_with("base:t=") => (false, format!("with base toughness {}", &n[7..])),
             "attached to you" => rel("attached to you"),
