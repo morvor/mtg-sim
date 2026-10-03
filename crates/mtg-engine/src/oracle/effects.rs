@@ -1313,7 +1313,7 @@ fn other_than_subject(to: Sel, subject: &Sel) -> Sel {
     }
 }
 
-fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
+pub(crate) fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim();
     let fixed: [(&str, Sel); 8] = [
         ("each opponent", Sel::Players(PlayerRef::EachOpponent)),

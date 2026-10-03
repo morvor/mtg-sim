@@ -481,6 +481,34 @@ fn recipients(s: &str, src: &Sel, b: &mut Builder) -> Option<(Sel, String)> {
     Some((sel, rest))
 }
 
+/// "AMOUNT damage divided as you choose among COUNTED-TARGETS". CR 601.2d: the division
+/// is chosen as the spell is cast (or the ability put on the stack); each target gets at
+/// least 1. "Any number of targets" may be zero targets (CR 107.1c), and never more than
+/// the amount.
+fn divided_damage(
+    src: &Sel,
+    amount: Value,
+    r2: &str,
+    b: &mut Builder,
+) -> Option<(Effect, String)> {
+    let (mut spec, any_number, tail) = counted_targets(r2)?;
+    if any_number {
+        spec.min = Value::c(0);
+        spec.max = amount.clone();
+    } else if spec.fixed_min().is_some_and(|m| m < 1) {
+        spec.min = Value::c(1);
+    }
+    spec.divide = Some(amount);
+    let slot = b.add_target(spec, "targets (divided)");
+    Some((
+        Effect::DealDividedDamage {
+            source: src.clone(),
+            slot,
+        },
+        tail.to_string(),
+    ))
+}
+
 /// One "AMOUNT damage to RECIPIENTS" part. Returns the effect and the unparsed tail.
 fn damage_part(
     src: &Sel,
@@ -491,6 +519,9 @@ fn damage_part(
     let s = s.trim_start();
     if let Some(r) = s.strip_prefix("damage equal to ") {
         let (v, r2) = value_phrase(r, b)?;
+        if let Some(r3) = strip(r2.trim_start(), "divided as you choose among ") {
+            return divided_damage(src, v, r3, b);
+        }
         let r3 = r2.trim_start().strip_prefix("to ")?.to_string();
         let (to, tail) = recipients(&r3, src, b)?;
         return Some((damage(src, v, to), tail));
@@ -515,26 +546,7 @@ fn damage_part(
     let (amount, r) = amount_phrase(s, where_x)?;
     let r = strip(r, "damage")?;
     if let Some(r2) = strip(r, "divided as you choose among ") {
-        // CR 601.2d: the division is chosen as the spell is cast; each target gets at
-        // least 1. "Any number of targets" may be zero targets (CR 107.1c).
-        let (mut spec, any_number, tail) = counted_targets(r2)?;
-        if any_number {
-            spec.min = Value::c(0);
-        } else if spec.fixed_min().is_some_and(|m| m < 1) {
-            spec.min = Value::c(1);
-        }
-        if any_number {
-            spec.max = amount.clone();
-        }
-        spec.divide = Some(amount);
-        let slot = b.add_target(spec, "targets (divided)");
-        return Some((
-            Effect::DealDividedDamage {
-                source: src.clone(),
-                slot,
-            },
-            tail.to_string(),
-        ));
+        return divided_damage(src, amount, r2, b);
     }
     let r = strip(r, "to")?;
     let (to, tail) = recipients(r, src, b)?;
