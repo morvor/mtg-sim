@@ -384,6 +384,7 @@ impl Renderer<'_> {
                 format!("{a} if {c}, otherwise {b}")
             }
             Value::Custom(name) => self.custom_value(name),
+            Value::EventsThisTurn(c, t) => self.events_this_turn(c, *t),
         }
     }
 

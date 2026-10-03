@@ -1643,8 +1643,28 @@ pub enum Value {
     /// the object in [`vars::TESTED`] ("the greatest power among creatures you control",
     /// "the lowest mana value among nonland permanents"); 0 if there are none.
     Extreme(Box<Value>, Box<Sel>, bool),
+    /// "the number of creatures that died under your control this turn", "the number of
+    /// cards your opponents have drawn this turn", "for each opponent who lost life this
+    /// turn", "for each 2 life your opponents have lost this turn": this turn's events a
+    /// triggered ability with this trigger condition (with the same source and
+    /// controller) would trigger on, whether or not anything triggered (CR 603.1b),
+    /// tallied (see `kw/value_results.rs`).
+    EventsThisTurn(Box<TriggerCond>, Tally),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
+}
+
+/// How [`Value::EventsThisTurn`] tallies the events it finds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Tally {
+    /// How many objects (or players) the events were about: one per creature that died,
+    /// card drawn, spell cast.
+    Events,
+    /// The total of their amounts (life lost, damage dealt, counters put).
+    Amount,
+    /// How many different players they were about ("for each opponent who lost life this
+    /// turn").
+    Players,
 }
 
 /// How [`Value::Aggregate`] and [`Value::OverPlayers`] combine their values.

@@ -184,6 +184,9 @@ fn plausible_end(rest: &str) -> bool {
 }
 
 fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(v) = super::value_results::atom_ext(s, b) {
+        return Some(v);
+    }
     // "the number of cards you've drawn this turn" (Fractal Anomaly).
     if let Some(r) = s.strip_prefix("the number of cards you've drawn this turn") {
         if word_end(r) {
@@ -1016,6 +1019,9 @@ fn amount(s: &str) -> Option<(Cmp, Value, &str)> {
 
 /// After "the number of": what's counted.
 fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(v) = super::value_results::count_ext(r, b) {
+        return Some(v);
+    }
     // "counters removed this way": an amount chosen for the cost (see `cost_parts`).
     if let Some(v) = super::cost_parts::paid_this_way_prefix(r) {
         return Some(v);

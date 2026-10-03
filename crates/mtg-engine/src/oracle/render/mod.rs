@@ -21,6 +21,7 @@ mod dig;
 mod each_player;
 mod effects;
 mod extremes;
+mod history_values;
 mod keywords;
 mod nouns;
 mod once_each_turn;

@@ -1393,6 +1393,9 @@ impl Game {
                 }
             }
             Value::Custom(name) => crate::custom::custom_value(self, name, ctx),
+            Value::EventsThisTurn(cond, tally) => {
+                crate::kw::value_results::events_this_turn(self, cond, *tally, ctx)
+            }
         }
     }
 
