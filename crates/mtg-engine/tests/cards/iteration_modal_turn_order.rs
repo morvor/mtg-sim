@@ -212,3 +212,34 @@ fn rejoin_the_fight_opponents_choose_different_cards() {
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
 }
+
+#[test]
+fn minds_aglow_join_forces_totals_the_mana_paid() {
+    cr!("101.4b", "107.3");
+    ruling!(
+        "Minds Aglow",
+        "A player can’t choose to draw fewer than X cards."
+    );
+    compiles("Minds Aglow");
+    // "Join forces — Starting with you, each player may pay any amount of mana. Each player
+    // draws X cards, where X is the total amount of mana paid this way."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    t.lands(P1, "Island", 2);
+    let spell = t.hand(P0, "Minds Aglow");
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.answer(P1, DecisionKind::X, Answer::Number(1));
+    let (h0, h1) = (t.hand_size(P0), t.hand_size(P1));
+    t.cast(P0, spell).go();
+    let from = t.asked().len();
+    t.resolve();
+    // P0 was asked how much to pay before P1.
+    let order: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseX { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(order, vec![P0, P1]);
+    assert_eq!(t.hand_size(P0), h0 - 1 + 3);
+    assert_eq!(t.hand_size(P1), h1 + 3);
+}

@@ -115,6 +115,9 @@ impl Renderer<'_> {
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
             Value::Var(vars::EXCESS) => "the excess damage".into(),
+            Value::Var(crate::oracle::patterns::iteration_grammar::MANA_PAID) => {
+                "the total amount of mana paid this way".into()
+            }
             // "the number of grace votes" (CR 701.38a).
             Value::Var(x)
                 if self

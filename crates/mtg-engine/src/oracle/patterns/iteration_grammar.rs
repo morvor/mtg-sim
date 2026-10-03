@@ -606,6 +606,61 @@ fn for_each_quality(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "iteration: for each color/permanent type, [instruction about one of that quality]", priority: 100, parse: for_each_quality } }
 
+/// The total amount of mana the players paid with "Join forces — Starting with you, each
+/// player may pay any amount of mana."
+pub const MANA_PAID: Var = vars::USER + 7703;
+
+/// Marks, in [`Builder::named`], that [`MANA_PAID`] holds the mana the players paid.
+const MANA_PAID_NAME: &str = "\u{1}join forces";
+
+/// "Join forces — Starting with you, each player may pay any amount of mana.":
+/// each player in turn order, starting with you (knowing how much the players before paid,
+/// CR 101.4b), chooses an amount and pays that much mana; the amounts are added up for
+/// "the total amount of mana paid this way".
+fn join_forces(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "starting with you, each player may pay any amount of mana" {
+        return None;
+    }
+    let pay = Effect::Custom(crate::kw::join_forces::PAY_ANY_AMOUNT.into());
+    b.named.push((MANA_PAID_NAME.to_string(), Sel::None));
+    Some(Effect::seq(vec![
+        Effect::StoreValue {
+            var: MANA_PAID,
+            value: Value::c(0),
+        },
+        Effect::InTurnOrder {
+            first: TurnOrderStart::You,
+            who: PlayerFilter::Any,
+            effect: Box::new(Effect::AsPlayer {
+                who: PlayerRef::Iterated,
+                effect: Box::new(pay),
+            }),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "iteration: join forces (each player may pay any amount of mana)", priority: 100, parse: join_forces } }
+
+/// "Each player draws X cards, where X is the total amount of mana paid this way." after
+/// [`join_forces`].
+fn total_mana_paid(l: &str, b: &mut Builder) -> Option<Effect> {
+    const WHERE: &str = ", where x is the total amount of mana paid this way";
+    let l = end(l);
+    if !l.contains(WHERE) || !b.named.iter().any(|(p, _)| p == MANA_PAID_NAME) {
+        return None;
+    }
+    let head = l.replacen(WHERE, "", 1);
+    let e = super::value_grammar::with_x_defined(true, || parse_clause(&head, b))?;
+    Some(Effect::seq(vec![
+        Effect::SetX {
+            value: Value::Var(MANA_PAID),
+        },
+        e,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "iteration: [instruction], where X is the total amount of mana paid this way", priority: 50, parse: total_mana_paid } }
+
 /// Later sentences' names for the objects in [`CHOSEN`] ("the chosen creatures", "each
 /// permanent chosen this way", "creatures they control not chosen this way").
 fn name_chosen(b: &mut Builder, noun: &str) {

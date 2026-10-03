@@ -513,6 +513,13 @@ impl Renderer<'_> {
                     TurnOrderStart::NextOpponent => "the next opponent in turn order",
                 };
                 let w = self.player_filter_noun(who, Num::One);
+                // "Join forces — Starting with you, each player may pay any amount of mana."
+                if let Effect::AsPlayer { effect: inner, .. } = effect.as_ref() {
+                    if matches!(inner.as_ref(), Effect::Custom(n) if n == crate::kw::join_forces::PAY_ANY_AMOUNT)
+                    {
+                        return format!("starting with {start}, each {w} may pay any amount of mana");
+                    }
+                }
                 // "each player chooses a creature" / "each player may choose an artifact".
                 if let Effect::Store {
                     var,
