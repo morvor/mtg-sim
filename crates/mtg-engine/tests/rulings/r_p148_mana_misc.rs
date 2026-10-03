@@ -539,3 +539,47 @@ fn altar_of_the_lost_flashback_spells_cast_from_a_graveyard() {
     assert_eq!(t.hand_size(P0), 1);
     assert_eq!(t.zone(think), Zone::Exile);
 }
+
+#[test]
+fn crucible_mana_cant_turn_a_face_down_dragon_face_up() {
+    cr!("106.6", "116.2b", "702.37e");
+    ruling!(
+        "Crucible of the Spirit Dragon",
+        "Notably, turning a face-down creature face up isn't an activated ability."
+    );
+    supported("Imperial Hellkite");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 3);
+    let kite = t.hand(P0, "Imperial Hellkite");
+    t.cast(P0, kite)
+        .method(CastMethod::FaceDown(KeywordKind::Morph))
+        .go();
+    t.resolve_all();
+    let crucible = t.battlefield(P0, "Crucible of the Spirit Dragon");
+    t.g.add_counters(Entity::Object(crucible), "storage", 8, None);
+    let kite = t.g.current(kite);
+    assert!(t.g.obj(kite).face_down);
+    t.answer(P0, DecisionKind::X, Answer::Number(8));
+    for _ in 0..8 {
+        t.answer(P0, DecisionKind::Option, Answer::Index(3));
+    }
+    t.activate(P0, crucible, 2, &[]).unwrap();
+    assert_eq!(pool_total(&t, P0), 8);
+    let up =
+        mtg_engine::decision::Action::Special(mtg_engine::decision::SpecialAction::TurnFaceUp {
+            obj: kite,
+        });
+    t.g.turn.priority = Some(P0);
+    assert!(t.g.perform_action(P0, up).is_err());
+    assert!(t.g.obj(kite).face_down);
+    assert_eq!(pool_total(&t, P0), 8);
+    // Unrestricted mana can.
+    empty_pool(&mut t, P0);
+    mana(&mut t, P0, mtg_engine::mana::ManaType::R, 8);
+    let up =
+        mtg_engine::decision::Action::Special(mtg_engine::decision::SpecialAction::TurnFaceUp {
+            obj: kite,
+        });
+    t.g.perform_action(P0, up).unwrap();
+    assert!(!t.g.obj(t.g.current(kite)).face_down);
+}
