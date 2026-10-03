@@ -5,7 +5,6 @@
 //! 303.4f), characteristic-defining layers (CR 613), and the timing of gift triggers.
 
 use crate::r_p076_common::{is_blocked, mana};
-use crate::r_p190_mana_costs::only_unsupported;
 use crate::r_s01_common::{supported, tokens};
 use crate::r_s03_common::to_blockers;
 use crate::r_s05_common::{enter, move_to};
@@ -468,7 +467,8 @@ fn leyline_of_the_guildpact_lands_get_every_basic_type() {
         "Leyline of the Guildpact",
         "Giving a land additional basic land types doesn't change its name or whether it's legendary or basic."
     );
-    only_unsupported("Leyline of the Guildpact", "is all colors");
+    // "Each nonland permanent you control is all colors." compiles too now.
+    supported("Leyline of the Guildpact");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Leyline of the Guildpact");
     let mine = t.battlefield(P0, "Urza's Mine");
