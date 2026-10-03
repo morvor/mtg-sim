@@ -1063,9 +1063,21 @@ fn triggered_mana_units(
 /// payment may use either of them. Abilities that can't both be activated for one payment
 /// are told apart by [`ManaSource::conflicts_with`].
 pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<ManaSource> {
+    mana_sources_with(g, p, reserve, false)
+}
+
+/// [`mana_sources`]; with `reserve_may_tap` the reserved object's own mana abilities that
+/// don't sacrifice it are still listed (see [`SpendContext::reserve_may_tap`]).
+pub fn mana_sources_with(
+    g: &Game,
+    p: PlayerId,
+    reserve: Option<ObjectId>,
+    reserve_may_tap: bool,
+) -> Vec<ManaSource> {
     let mut out = Vec::new();
     for o in g.permanents() {
-        if Some(o.id) == reserve {
+        let reserved = Some(o.id) == reserve;
+        if reserved && !reserve_may_tap {
             continue;
         }
         for a in &o.chars.abilities {
@@ -1073,6 +1085,15 @@ pub fn mana_sources(g: &Game, p: PlayerId, reserve: Option<ObjectId>) -> Vec<Man
                 continue;
             };
             if !act.is_mana_ability {
+                continue;
+            }
+            if reserved
+                && act
+                    .cost
+                    .parts
+                    .iter()
+                    .any(|c| matches!(c, CostPart::SacrificeSelf))
+            {
                 continue;
             }
             // CR 602.5e: "Activate only as an instant" — never in the middle of a payment.
@@ -1530,7 +1551,7 @@ pub fn plan_payment(
     let sources = if spend.no_mana {
         Vec::new()
     } else {
-        mana_sources(g, p, reserve)
+        mana_sources_with(g, p, reserve, spend.reserve_may_tap)
     };
     // Mana that may be spent as though it were mana of any color (CR 602.1e) can meet
     // any colored requirement.

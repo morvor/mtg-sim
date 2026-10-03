@@ -326,6 +326,15 @@ fn red_herring_doesnt_attack_when_it_cant() {
         "Red Herring",
         "If Red Herring can't attack for any reason (such as being tapped), then it doesn't attack."
     );
+    // Able to attack, it must (so the cases below aren't vacuous).
+    let mut t = TestGame::new(2);
+    let herring = t.battlefield(P0, "Red Herring");
+    t.advance_to_step(Step::DeclareBlockers);
+    assert!(t
+        .g
+        .combat
+        .as_ref()
+        .is_some_and(|c| c.attackers.iter().any(|a| a.id == herring)));
     // Tapped, and (in another game) with Ghostly Prison's {2} attack tax unpaid.
     let mut t = TestGame::new(2);
     let herring = t.battlefield(P0, "Red Herring");

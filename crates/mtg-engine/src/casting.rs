@@ -2780,6 +2780,10 @@ impl Game {
             // mana abilities from paying the mana (Midnight Clock's "{T}: Add {U}" pays for
             // its "{2}{U}: Put an hour counter on this artifact").
             let reserve = if reserves_source(cost) { src } else { None };
+            let spend = SpendContext {
+                reserve_may_tap: !cost.has_tap(),
+                ..spend
+            };
             let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, reserve);
             return plan.is_some();
         }
@@ -3173,8 +3177,8 @@ impl Game {
             }
         }
         // Mana first (mana abilities must be activated before costs are paid, 601.2g),
-        // but a source the cost taps, untaps, sacrifices, exiles or returns must not be
-        // used for mana: reserve it.
+        // but a source the cost taps can't also be tapped for mana, and one the cost
+        // untaps, sacrifices, exiles or returns can't be sacrificed for mana: reserve it.
         if let Some(m) = &cost.mana {
             if m.symbols.contains(&crate::mana::ManaSymbol::Infinity) {
                 return Err(Illegal(
@@ -3182,6 +3186,10 @@ impl Game {
                 ));
             }
             let reserve = if reserves_source(cost) { src } else { None };
+            let spend = &SpendContext {
+                reserve_may_tap: !cost.has_tap(),
+                ..spend.clone()
+            };
             // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
             let m = &crate::as_though::payment_cost(self, p, m);
             let spent = crate::mana_abilities::pay_mana(self, p, m, spend, reserve)
@@ -3827,8 +3835,10 @@ pub(crate) fn filter_mentions_x(f: &Filter) -> bool {
 fn _unused(_: SpecialAction) {}
 
 /// Whether a cost uses its source itself ({T}, {Q}, "sacrifice/exile/return ~"), so the
-/// source's own mana abilities can't help pay its mana (CR 601.2g, 602.2b): the mana
-/// abilities of a source whose cost doesn't use it may pay for it.
+/// payment must keep the source available: a {T} cost keeps all its own mana abilities
+/// from paying, the others only those that sacrifice it (and no mana ability may
+/// sacrifice it). Mana abilities are activated before costs are paid (CR 601.2g-h,
+/// 602.2b), so a source whose cost doesn't use it may pay for it freely.
 fn reserves_source(cost: &Cost) -> bool {
     cost.parts.iter().any(|p| {
         matches!(

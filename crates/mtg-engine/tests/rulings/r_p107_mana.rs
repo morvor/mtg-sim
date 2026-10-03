@@ -88,6 +88,30 @@ fn midnight_clocks_mana_pays_for_its_own_hour_counter() {
     assert_eq!(t.counters(clock, "hour"), 1);
 }
 
+#[test]
+fn a_creature_taps_for_mana_then_is_sacrificed_for_its_own_cost() {
+    // Mana abilities are activated before costs are paid (601.2g), so Heart Warden's
+    // "{T}: Add {G}" helps pay "{2}, Sacrifice this creature: Draw a card." and is then
+    // sacrificed (601.2h). Only a {T} cost keeps the source from tapping for its own mana.
+    cr!("601.2g", "601.2h", "602.2b");
+    let mut t = TestGame::new(2);
+    let warden = t.battlefield(P0, "Heart Warden");
+    t.library_top(P0, "Island");
+    mana(&mut t, P0, ManaType::C, 1);
+    assert!(can_activate_containing(&mut t, P0, warden, "Draw a card"));
+    act(&mut t, P0, warden, "Draw a card", &[]).unwrap();
+    assert!(!t.g.is_live(warden), "sacrificed");
+    assert_eq!(pool_total(&t, P0), 0);
+    t.resolve_all();
+    assert_eq!(hand_names(&t, P0), vec!["Island".to_string()]);
+
+    // A cost with {T} can't use the source's own {T} mana ability (Mind Stone's
+    // "{1}, {T}, Sacrifice this artifact" with nothing else to pay the {1}).
+    let stone = t.battlefield(P0, "Mind Stone");
+    assert!(!can_activate_containing(&mut t, P0, stone, "Draw a card"));
+    assert!(act(&mut t, P0, stone, "Draw a card", &[]).is_err());
+}
+
 /// An Eldrazi Scion created by Adverse Conditions cast with no targets.
 fn scion_from_adverse_conditions(t: &mut TestGame) -> ObjectId {
     mana(t, P0, ManaType::U, 1);

@@ -58,7 +58,7 @@ fn a_vehicle_becomes_a_0_0_mutant_and_crewing_doesnt_restore_its_pt() {
 
 #[test]
 fn a_spacecraft_with_station_stays_0_0_based_with_more_charge_counters() {
-    cr!("613.4b", "702.184a", "721.2");
+    cr!("613.4b", "721.2");
     ruling!(
         "Pizza Face, Gastromancer",
         "If the target permanent has station, its base power and toughness will be set to 0/0."
