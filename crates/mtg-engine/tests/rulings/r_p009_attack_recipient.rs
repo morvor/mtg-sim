@@ -140,8 +140,148 @@ fn myr_battlesphere_taps_any_untapped_myr_as_it_resolves() {
     assert!(t.obj_now(myr).tapped, "the summoning-sick Myr was tapped");
     assert_eq!(t.life(P1), 19);
     assert_eq!(t.pt(sphere).0, 5);
-    assert!(t.asked()[from..].iter().any(|(_, d)| matches!(
-        d,
-        mtg_engine::decision::Decision::ChooseX { max: 1, .. }
-    )));
+    assert!(t.asked()[from..]
+        .iter()
+        .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseX { max: 1, .. })));
+}
+
+#[test]
+fn becomes_blocked_trigger_damages_what_it_attacks_not_the_blocker() {
+    cr!("506.2", "509.3c");
+    supported("Rakdos Roustabout");
+    // "it deals 1 damage to the player or planeswalker it's attacking" as it becomes
+    // blocked; if it leaves the battlefield first, what it was attacking as it left.
+    for dies in [false, true] {
+        let mut t = TestGame::new(2);
+        let pw = t.battlefield(P1, "Chandra Nalaar");
+        let rouse = t.battlefield(P0, "Rakdos Roustabout");
+        let wall = t.battlefield(P1, "Wall of Wood");
+        attack_with(&mut t, &[(rouse, obj(pw))]);
+        crate::r_p148_common::declare_blocks(&mut t, P1, &[(wall, rouse)]);
+        assert_eq!(t.stack_len(), 1);
+        if dies {
+            kill(&mut t, rouse);
+        }
+        t.resolve_all();
+        assert_eq!(t.counters(pw, counters::LOYALTY), 5, "dies: {dies}");
+        assert_eq!(t.obj_now(wall).damage, 0, "the blocker isn't dealt damage");
+        assert_eq!(t.life(P1), 20);
+    }
+}
+
+#[test]
+fn removed_from_combat_deals_no_damage_but_leaving_the_battlefield_does() {
+    cr!("506.4", "603.10");
+    ruling!(
+        "Fathom Fleet Swordjack",
+        "On the other hand, if it remains on the battlefield but leaves combat before its triggered ability resolves, no player or planeswalker is dealt damage."
+    );
+    ruling!(
+        "Raid Bombardment",
+        "If the attacking creature leaves the battlefield before Raid Bombardment's triggered ability resolves, Raid Bombardment deals 1 damage to the player or planeswalker that creature was attacking before it left the battlefield."
+    );
+    // Fathom Fleet Swordjack with two artifacts: removed from combat -> no damage;
+    // destroyed -> damage as normal.
+    for leaves_battlefield in [false, true] {
+        let mut t = TestGame::new(2);
+        let jack = t.battlefield(P0, "Fathom Fleet Swordjack");
+        t.battlefield(P0, "Ornithopter");
+        t.battlefield(P0, "Ornithopter");
+        attack_with(&mut t, &[(jack, pl(P1))]);
+        assert_eq!(t.stack_len(), 1);
+        if leaves_battlefield {
+            kill(&mut t, jack);
+        } else {
+            mtg_engine::combat::remove_from_combat(&mut t.g, jack);
+        }
+        t.resolve_all();
+        let expected = if leaves_battlefield { 18 } else { 20 };
+        assert_eq!(
+            t.life(P1),
+            expected,
+            "left the battlefield: {leaves_battlefield}"
+        );
+    }
+    // Raid Bombardment: the attacking Bears dies in response; still 1 damage to P1.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Raid Bombardment");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attack_with(&mut t, &[(bears, pl(P1))]);
+    kill(&mut t, bears);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+}
+
+#[test]
+fn attacking_a_battle_or_a_removed_planeswalker_deals_no_damage() {
+    cr!("310.5", "506.4c");
+    ruling!(
+        "Raid Bombardment",
+        "Raid Bombardment's ability won't do anything when a creature you control with power 2 or less attacks a battle."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Raid Bombardment");
+    let battle = t.battlefield(P0, "Invasion of Azgol");
+    t.g.objects[battle.0 as usize].choices.player = Some(P1);
+    let defense = t.counters(battle, counters::DEFENSE);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attack_with(&mut t, &[(bears, obj(battle))]);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.counters(battle, counters::DEFENSE), defense);
+    assert_eq!(t.life(P1), 20);
+    // Scorch Spitter attacking a planeswalker that leaves the battlefield before the
+    // ability resolves: the creature attacks nothing (CR 506.4c); no player is dealt
+    // damage.
+    let mut t = TestGame::new(2);
+    let pw = t.battlefield(P1, "Chandra Nalaar");
+    let spitter = t.battlefield(P0, "Scorch Spitter");
+    attack_with(&mut t, &[(spitter, obj(pw))]);
+    kill(&mut t, pw);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(t.g.combat.as_ref().unwrap().attacker(spitter).is_some());
+}
+
+#[test]
+fn hellrider_damages_each_attacking_creatures_own_recipient() {
+    cr!("506.2", "508.1b");
+    ruling!(
+        "Hellrider",
+        "For each attacking creature, Hellrider will deal damage to the corresponding player or planeswalker."
+    );
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Hellrider");
+    let pw = t.battlefield(P2, "Chandra Nalaar");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let c = t.battlefield(P0, "Grizzly Bears");
+    attack_with(&mut t, &[(a, pl(P1)), (b, pl(P2)), (c, obj(pw))]);
+    assert_eq!(t.stack_len(), 3);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.life(P2), 19);
+    assert_eq!(t.counters(pw, counters::LOYALTY), 5);
+}
+
+#[test]
+fn myr_battlesphere_gone_still_taps_myr_and_deals_x_damage() {
+    cr!("608.2h", "107.1c");
+    ruling!(
+        "Myr Battlesphere",
+        "If that has happened, Myr Battlesphere won't be able to get the +X/+0 bonus, but it will still deal X damage to the appropriate player or planeswalker."
+    );
+    let mut t = TestGame::new(2);
+    let sphere = t.battlefield(P0, "Myr Battlesphere");
+    let a = t.battlefield(P0, "Iron Myr");
+    let b = t.battlefield(P0, "Iron Myr");
+    attack_with(&mut t, &[(sphere, pl(P1))]);
+    assert_eq!(t.stack_len(), 1);
+    kill(&mut t, sphere);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.answer_choose(P0, &[obj(a), obj(b)]);
+    t.resolve_all();
+    assert!(t.obj_now(a).tapped && t.obj_now(b).tapped);
+    assert_eq!(t.life(P1), 18);
 }

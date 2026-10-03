@@ -17,18 +17,30 @@ const RECIPIENT: Var = u16::MAX - 4211;
 const PHRASES: &[(&str, bool)] = &[
     ("the player or planeswalker it's attacking", false),
     ("the player or planeswalker it is attacking", false),
-    ("the player or planeswalker that creature is attacking", false),
+    (
+        "the player or planeswalker that creature is attacking",
+        false,
+    ),
     ("the player or planeswalker ~ is attacking", true),
 ];
 
-fn replace_players(v: serde_json::Value, from: &serde_json::Value, to: &serde_json::Value, n: &mut usize) -> serde_json::Value {
+fn replace_players(
+    v: serde_json::Value,
+    from: &serde_json::Value,
+    to: &serde_json::Value,
+    n: &mut usize,
+) -> serde_json::Value {
     use serde_json::Value as J;
     if v == *from {
         *n += 1;
         return to.clone();
     }
     match v {
-        J::Array(a) => J::Array(a.into_iter().map(|x| replace_players(x, from, to, n)).collect()),
+        J::Array(a) => J::Array(
+            a.into_iter()
+                .map(|x| replace_players(x, from, to, n))
+                .collect(),
+        ),
         J::Object(m) => J::Object(
             m.into_iter()
                 .map(|(k, x)| (k, replace_players(x, from, to, n)))

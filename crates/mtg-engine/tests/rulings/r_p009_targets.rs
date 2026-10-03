@@ -7,8 +7,8 @@ use crate::r_p009_common::*;
 use crate::r_s01_common::supported;
 use crate::r_s06_common::damage;
 use crate::r_s25_common::{cast_new, lands_for_cost};
-use mtg_engine::object::CastMethod;
 use mtg_engine::keywords::KeywordKind;
+use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
 use mtg_engine::*;
@@ -92,7 +92,10 @@ fn spells_cant_be_cast_without_every_required_target() {
             targets.push(obj(t.battlefield(P0, "Grizzly Bears")));
         }
         targets.push(pl(P1));
-        assert!(!try_cast(&mut t, name, method, gy, &targets), "{name} was cast");
+        assert!(
+            !try_cast(&mut t, name, method, gy, &targets),
+            "{name} was cast"
+        );
         assert_eq!(t.stack_len(), 0, "{name}");
     }
     // With every target available, each can be cast.
@@ -142,17 +145,31 @@ fn the_remaining_legal_target_is_still_affected() {
     // Bedazzle: the land is gone; P1 is still dealt 2 damage.
     let mut t = TestGame::new(2);
     let field = t.battlefield(P1, "Mutavault");
-    try_cast(&mut t, "Bedeck // Bedazzle", CastMethod::Half(1), false, &[obj(field), pl(P1)]);
+    assert!(try_cast(
+        &mut t,
+        "Bedeck // Bedazzle",
+        CastMethod::Half(1),
+        false,
+        &[obj(field), pl(P1)]
+    ));
     kill(&mut t, field);
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
-    // ... and with the land still there but the player gone (hexproof granted), the land is
-    // still destroyed: covered by the land half here.
+    // ... and with P1 an illegal target (hexproof from Leyline of Sanctity), the land is
+    // still destroyed and P1 isn't dealt damage.
     let mut t = TestGame::new(2);
     let field = t.battlefield(P1, "Mutavault");
-    try_cast(&mut t, "Bedeck // Bedazzle", CastMethod::Half(1), false, &[obj(field), pl(P1)]);
+    assert!(try_cast(
+        &mut t,
+        "Bedeck // Bedazzle",
+        CastMethod::Half(1),
+        false,
+        &[obj(field), pl(P1)]
+    ));
+    add(&mut t, P1, "Leyline of Sanctity");
     t.resolve_all();
     assert!(!t.on_battlefield(field));
+    assert_eq!(t.life(P1), 20);
 
     // Injury and Hungry Flames: the creature is gone; the player is still dealt damage.
     for (name, method, gy, life) in [
@@ -170,7 +187,13 @@ fn the_remaining_legal_target_is_still_affected() {
     // Cunning Strike: one illegal target -> damage to the other and a card drawn.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
-    try_cast(&mut t, "Cunning Strike", CastMethod::Normal, false, &[obj(bears), pl(P1)]);
+    assert!(try_cast(
+        &mut t,
+        "Cunning Strike",
+        CastMethod::Normal,
+        false,
+        &[obj(bears), pl(P1)]
+    ));
     let hand = t.hand_size(P0);
     kill(&mut t, bears);
     t.resolve_all();
@@ -181,7 +204,13 @@ fn the_remaining_legal_target_is_still_affected() {
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let pw = t.battlefield(P1, "Chandra Nalaar");
-    try_cast(&mut t, "Cunning Strike", CastMethod::Normal, false, &[obj(bears), obj(pw)]);
+    assert!(try_cast(
+        &mut t,
+        "Cunning Strike",
+        CastMethod::Normal,
+        false,
+        &[obj(bears), obj(pw)]
+    ));
     let hand = t.hand_size(P0);
     kill(&mut t, bears);
     kill(&mut t, pw);
@@ -503,5 +532,3 @@ fn brokers_charm_first_mode_needs_an_opposing_target() {
     t.resolve_all();
     assert_eq!(dmg(&t, theirs), 3);
 }
-
-

@@ -445,7 +445,6 @@ fn nahiri_creates_and_equips_while_resolving() {
     assert_eq!(t.zone(eq), Zone::Battlefield);
 }
 
-
 #[test]
 fn impatience_counts_a_countered_spell_as_cast() {
     cr!("603.4", "601.2i", "701.6a");
@@ -497,4 +496,52 @@ fn you_didnt_cast_a_spell_this_turn() {
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert!(crate::r_s01_common::tokens(&t, P0).is_empty());
+}
+
+#[test]
+fn that_player_didnt_cast_checks_the_end_step_player() {
+    cr!("603.4");
+    supported("Predatory Advantage");
+    supported("Edgar, Moonlit Sovereign");
+    // Impatience on P1's turn: P0 (its controller) casts an instant, P1 casts nothing:
+    // P1 is dealt 2 damage.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Impatience");
+    t.set_step(P1, Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.turn.priority = Some(P0);
+    cast_new(&mut t, P0, "Giant Growth", &[obj(bears)]);
+    t.resolve_all();
+    t.advance_to(P1, Step::End);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 20);
+    // Predatory Advantage: P1 cast a creature spell on its turn -> no Lizard; a
+    // noncreature spell -> a Lizard.
+    for p1_casts in [false, true] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Predatory Advantage");
+        t.set_step(P1, Step::PrecombatMain);
+        if p1_casts {
+            cast_new(&mut t, P1, "Grizzly Bears", &[]);
+        } else {
+            let theirs = t.battlefield(P1, "Grizzly Bears");
+            cast_new(&mut t, P1, "Giant Growth", &[obj(theirs)]);
+        }
+        t.resolve_all();
+        t.advance_to(P1, Step::End);
+        t.settle();
+        t.resolve_all();
+        let lizards = crate::r_s01_common::tokens(&t, P0).len();
+        assert_eq!(lizards, if p1_casts { 0 } else { 1 }, "P1 cast: {p1_casts}");
+    }
+    // Edgar, Moonlit Sovereign: no spell this turn -> two counters.
+    let mut t = TestGame::new(2);
+    let edgar = t.battlefield(P0, "Edgar, Moonlit Sovereign");
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(edgar, counters::PLUS1), 2);
 }

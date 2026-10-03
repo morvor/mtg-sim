@@ -3,15 +3,17 @@
 //! or battle an attacking creature is attacking (CR 506.2, 508.1b). It isn't a target.
 //!
 //! The recipient is looked up as the ability resolves: what the creature is attacking now,
-//! or, if it's no longer attacking (it left the battlefield or was removed from combat),
-//! what it was attacking when the ability triggered — the trigger event records it — so
-//! the ability still deals its damage (Cavalcade of Calamity, Raid Bombardment rulings).
+//! or, if it left the battlefield, what it was attacking as it left, so the ability still
+//! deals its damage (Cavalcade of Calamity, Raid Bombardment rulings). A creature removed
+//! from combat but still on the battlefield isn't attacking anything (Fathom Fleet
+//! Swordjack ruling).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::{Effect, Sel, Var};
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
+use crate::object::Zone;
 use crate::types::*;
 
 /// `Effect::Custom` prefix: store what the selected attacking creature is attacking in a
@@ -25,21 +27,45 @@ pub fn attack_recipient_effect(var: Var, attacker: &Sel) -> Option<Effect> {
 }
 
 /// What the creature selected by `attacker` is attacking (see the module docs).
+///
+/// - Still attacking: what it's attacking now (nothing if the planeswalker it attacked
+///   was removed from combat, CR 506.4c).
+/// - Still on the battlefield but removed from combat: nothing (Fathom Fleet Swordjack
+///   ruling).
+/// - Left the battlefield: what it was attacking as it left (Raid Bombardment, Cavalcade
+///   of Calamity, Fathom Fleet Swordjack, Myr Battlesphere rulings).
+///
+/// A battle is neither a player nor a planeswalker: nothing (Raid Bombardment ruling).
 pub fn attack_recipient(g: &Game, attacker: &Sel, ctx: &Ctx) -> Option<Entity> {
-    let combat = g.combat.as_ref();
-    let live = g
-        .eval_sel_objects(attacker, ctx)
-        .into_iter()
-        .find_map(|o| combat.and_then(|c| c.attack_target(g.current(o))));
-    if live.is_some() {
-        return live;
+    let combat = g.combat.as_ref()?;
+    let mut ids = g.eval_sel_objects(attacker, ctx);
+    // The attacking creature of an attack / becomes-blocked trigger, if the selection no
+    // longer finds it.
+    if let Some(o) = ctx.event.as_ref().and_then(|e| e.object) {
+        if !ids.contains(&o) {
+            ids.push(o);
+        }
     }
-    // The creature is no longer attacking: what it attacked when the ability triggered.
-    let ev = ctx.event.as_ref()?;
-    if let Some(o) = ev.other {
-        return Some(Entity::Object(o));
+    let recipient = ids.iter().find_map(|&o| {
+        let cur = g.current(o);
+        if let Some(a) = combat.attacker(cur) {
+            return Some(a.target);
+        }
+        if g.is_live(cur) && g.obj(cur).zone == Zone::Battlefield {
+            // Removed from combat but still here.
+            return Some(None);
+        }
+        combat
+            .removed_attack_targets
+            .iter()
+            .rev()
+            .find(|(id, _)| *id == o || *id == cur)
+            .map(|(_, t)| Some(*t))
+    })??;
+    match recipient {
+        Entity::Object(o) if g.try_obj(o).is_some_and(|ob| ob.is(CardType::Battle)) => None,
+        t => Some(t),
     }
-    ev.player.map(Entity::Player)
 }
 
 pub struct AttackRecipient;

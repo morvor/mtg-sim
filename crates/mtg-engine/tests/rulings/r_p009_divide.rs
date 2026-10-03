@@ -69,7 +69,9 @@ fn division_is_chosen_as_the_spell_is_cast() {
     assert!(d.iter().all(|n| *n >= 1), "{d:?}");
     // X can't be 9: there's no way to give nine targets at least 1 of 8 damage.
     let mut t = TestGame::new(2);
-    let wurms: Vec<Entity> = (0..9).map(|_| obj(t.battlefield(P1, "Craw Wurm"))).collect();
+    let wurms: Vec<Entity> = (0..9)
+        .map(|_| obj(t.battlefield(P1, "Craw Wurm")))
+        .collect();
     t.lands(P0, "Mountain", 12);
     let swarm = t.hand(P0, "Meteor Swarm");
     let r = t.cast(P0, swarm).x(9).targets(&wurms).try_go();
@@ -107,16 +109,22 @@ fn division_is_chosen_as_the_trigger_is_put_on_the_stack() {
     supported("Dragonlord Atarka");
     // Fury: five targets is too many for 4 damage.
     let mut t = TestGame::new(2);
-    let bears: Vec<Entity> = (0..5).map(|_| obj(t.battlefield(P1, "Grizzly Bears"))).collect();
+    let bears: Vec<Entity> = (0..5)
+        .map(|_| obj(t.battlefield(P1, "Grizzly Bears")))
+        .collect();
     t.answer_targets(P0, &bears);
     t.enter(P0, "Fury");
     t.settle();
     t.clear_answers();
-    if t.stack_len() == 1 {
-        let top = t.g.stack[0];
-        assert!(targets_of(&t, top).len() <= 4);
-        assert!(division(&t).iter().all(|n| *n >= 1));
-    }
+    // At most four targets are offered; the five-target answer is rejected.
+    assert!(t.asked().iter().any(|(_, d)| matches!(
+        d,
+        mtg_engine::decision::Decision::ChooseTargets { max: 4, .. }
+    )));
+    assert_eq!(t.stack_len(), 1, "the trigger is put on the stack");
+    let top = t.g.stack[0];
+    assert!(targets_of(&t, top).len() <= 4);
+    assert!(division(&t).iter().all(|n| *n >= 1));
     // Fury: 3 and 1 among two targets, fixed on the stack.
     let mut t = TestGame::new(2);
     let a = t.battlefield(P1, "Craw Wurm");
@@ -176,10 +184,14 @@ fn ureni_fixes_x_and_the_division_when_it_triggers() {
     t.enter(P0, "Ureni, the Song Unending");
     t.settle();
     t.clear_answers();
-    if t.stack_len() == 1 {
-        let top = t.g.stack[0];
-        assert!(targets_of(&t, top).len() <= 1);
-    }
+    // X = 1: at most one target is offered; the two-target answer is rejected.
+    assert!(t.asked().iter().any(|(_, d)| matches!(
+        d,
+        mtg_engine::decision::Decision::ChooseTargets { max: 1, .. }
+    )));
+    assert_eq!(t.stack_len(), 1, "the trigger is put on the stack");
+    let top = t.g.stack[0];
+    assert!(targets_of(&t, top).len() <= 1);
 }
 
 #[test]
@@ -193,7 +205,9 @@ fn lukka_limits_targets_to_the_greatest_power() {
     let mut t = TestGame::new(2);
     let lukka = t.battlefield(P0, "Lukka, Bound to Ruin");
     t.battlefield(P0, "Grizzly Bears");
-    let ws: Vec<Entity> = (0..3).map(|_| obj(t.battlefield(P1, "Craw Wurm"))).collect();
+    let ws: Vec<Entity> = (0..3)
+        .map(|_| obj(t.battlefield(P1, "Craw Wurm")))
+        .collect();
     t.answer_targets(P0, &ws);
     divide(&mut t, P0, &[1, 1, 0]);
     let r = activate_containing(&mut t, P0, lukka, "divided");
@@ -201,6 +215,8 @@ fn lukka_limits_targets_to_the_greatest_power() {
     if let Ok(Some(ab)) = r {
         assert!(targets_of(&t, ab).len() <= 2);
         assert!(division(&t).iter().all(|n| *n >= 1));
+    } else {
+        assert_eq!(t.stack_len(), 0, "{r:?}");
     }
     // Greatest power 2 (Grizzly Bears): at most two targets.
     assert!(t.asked().iter().any(|(_, d)| matches!(
@@ -275,9 +291,7 @@ fn mythos_of_vadrok_restricts_targets_even_if_damage_is_prevented() {
     t.lands(P0, "Island", 1);
     let mythos = t.hand(P0, "Mythos of Vadrok");
     divide(&mut t, P0, &[1, 4]);
-    t.cast(P0, mythos)
-        .targets(&[obj(sorcerer), obj(wurm)])
-        .go();
+    t.cast(P0, mythos).targets(&[obj(sorcerer), obj(wurm)]).go();
     // The Wurm becomes an illegal target (hexproof) in response.
     t.lands(P1, "Forest", 1);
     let bd = t.hand(P1, "Blossoming Defense");

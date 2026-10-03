@@ -44,7 +44,10 @@ pub fn choose_x_for_optional_cost(g: &mut Game, cost: &Cost, ctx: &mut Ctx) {
         return;
     };
     let choice = crate::decision::Decision::ChooseX {
-        source: ctx.source.or(ctx.stack_obj).unwrap_or(crate::types::ObjectId(0)),
+        source: ctx
+            .source
+            .or(ctx.stack_obj)
+            .unwrap_or(crate::types::ObjectId(0)),
         min: 0,
         max,
     };

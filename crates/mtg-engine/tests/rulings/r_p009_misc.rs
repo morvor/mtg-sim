@@ -83,10 +83,8 @@ fn chandra_nalaar_x_is_at_most_her_loyalty() {
     t.answer(P0, DecisionKind::X, Answer::Number(7));
     let r = t.activate(P0, chandra, 1, &[obj(wurm)]);
     t.clear_answers();
-    if r.is_ok() {
-        t.resolve_all();
-        assert!(dmg(&t, wurm) <= 6);
-    }
+    assert!(r.is_err(), "X greater than her loyalty");
+    assert_eq!(t.counters(chandra, counters::LOYALTY), 6);
     // X = 0 is allowed: no damage, and her loyalty doesn't change.
     let mut t = TestGame::new(2);
     let chandra = t.battlefield(P0, "Chandra Nalaar");
@@ -163,9 +161,7 @@ fn nicol_bolas_opponents_discard_at_the_same_time() {
         .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. }))
         .map(|(p, _)| *p)
         .collect();
-    if choosers.len() == 2 {
-        assert_eq!(choosers, vec![P1, P2]);
-    }
+    assert_eq!(choosers, vec![P1, P2]);
 }
 
 // --- Graveyard abilities ------------------------------------------------------------------
@@ -286,7 +282,10 @@ fn landslide_sacrifices_mountains_while_resolving() {
     let ms = t.lands(P0, "Mountain", 3);
     let ls = t.hand(P0, "Landslide");
     t.cast(P0, ls).target(pl(P1)).go();
-    assert!(ms.iter().all(|m| t.on_battlefield(*m)), "nothing sacrificed yet");
+    assert!(
+        ms.iter().all(|m| t.on_battlefield(*m)),
+        "nothing sacrificed yet"
+    );
     t.answer_choose(P0, &[obj(ms[1]), obj(ms[2])]);
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
@@ -417,7 +416,9 @@ fn give_lifelink(t: &mut TestGame, id: ObjectId) {
     crate::r_s26_common::modify_until_eot(
         t,
         id,
-        vec![Modification::AddKeyword(Keyword::new(KeywordKind::Lifelink))],
+        vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Lifelink,
+        ))],
     );
 }
 
@@ -444,7 +445,11 @@ fn spawn_of_mayhem_with_lifelink_doesnt_kill_you() {
     give_lifelink(&mut t, spawn);
     t.resolve_all();
     assert!(!t.has_lost(P0));
-    assert_eq!(t.life(P0), 2, "1 lost and 2 gained (1 each from damage to two players)");
+    assert_eq!(
+        t.life(P0),
+        2,
+        "1 lost and 2 gained (1 each from damage to two players)"
+    );
 }
 
 #[test]

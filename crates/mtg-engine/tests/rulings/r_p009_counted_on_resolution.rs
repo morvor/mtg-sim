@@ -25,7 +25,11 @@ fn etb_counts_are_taken_as_the_ability_resolves() {
         "Gruesome Scourger",
         "The number of creatures you control is counted as Gruesome Scourger’s ability resolves. If Gruesome Scourger is still on the battlefield, it will count itself."
     );
-    for n in ["Munitions Expert", "Kessig Malcontents", "Gruesome Scourger"] {
+    for n in [
+        "Munitions Expert",
+        "Kessig Malcontents",
+        "Gruesome Scourger",
+    ] {
         supported(n);
     }
 
@@ -285,10 +289,7 @@ fn ghost_spider_counts_attackers_as_its_trigger_resolves() {
     let spider = t.battlefield(P0, "Ghost-Spider, Gwen Stacy");
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Grizzly Bears");
-    attack_with(
-        &mut t,
-        &[(spider, pl(P1)), (a, pl(P1)), (b, pl(P1))],
-    );
+    attack_with(&mut t, &[(spider, pl(P1)), (a, pl(P1)), (b, pl(P1))]);
     assert_eq!(t.stack_len(), 1);
     mtg_engine::combat::remove_from_combat(&mut t.g, a);
     t.resolve_all();
