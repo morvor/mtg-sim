@@ -230,10 +230,12 @@ pub fn dig(
     let k = take.min(cands.len() as u32);
     let min = if up_to { 0 } else { k };
     // ("For each card type, ... a card of that type": the cards taken must be chosen
-    // together, see `target_groups::choose_together`.)
+    // together, see `target_groups::choose_together`.) They're chosen by the player
+    // performing the instruction, whose library it may not be ("look at the top four
+    // cards of target opponent's library, exile one of them").
     let taken = crate::target_groups::choose_together(
         g,
-        p,
+        ctx.controller,
         ctx.source,
         "Choose cards to take",
         filter,
@@ -248,6 +250,8 @@ pub fn dig(
         .filter(|c| !taken.contains(c))
         .collect();
     let moved = g.move_to_destination(taken, take_to, ctx);
+    // "Look at the top four cards ..., exile one of them face down".
+    crate::zones::looked_then_exiled(g, ctx.controller, &moved);
     ctx.set_var(vars::IT, moved.iter().map(|o| Entity::Object(*o)).collect());
     ctx.prev_affected = moved.iter().map(|o| Entity::Object(*o)).collect();
     if take == 0 {

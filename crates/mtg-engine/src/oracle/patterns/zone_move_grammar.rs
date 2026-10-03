@@ -994,6 +994,38 @@ fn target_item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, Str
     ))
 }
 
+/// "the top card of your library", "the top two cards of that player's library": the
+/// cards, whether they're another player's, and the rest of the text.
+fn top_of_library(s: &str, b: &Builder) -> Option<(Sel, bool, String)> {
+    let r = s.strip_prefix("the top ")?;
+    let (n, r) = match r.strip_prefix("card of ") {
+        Some(r) => (Value::c(1), r),
+        None => {
+            let (n, r) = parse_number(r)?;
+            n.as_const()?;
+            (n, r.trim_start().strip_prefix("cards of ")?)
+        }
+    };
+    for (whose, mine) in [
+        ("your library", true),
+        ("that player's library", false),
+        ("their library", false),
+    ] {
+        if let Some(rest) = strip_word(r, whose) {
+            let who = if mine {
+                PlayerRef::You
+            } else {
+                b.it_player.clone()
+            };
+            if super::oracle_hardening_referents::is_no_player_referent(&who) {
+                return None;
+            }
+            return Some((Sel::TopOfLibrary(who, n), !mine, rest.to_string()));
+        }
+    }
+    None
+}
+
 fn item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, String)> {
     let s = s.trim_start();
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
@@ -1008,6 +1040,16 @@ fn item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, String)> {
     };
     if let Some((sel, rest)) = exiled_cards(s, b) {
         return Some((fixed(sel), rest));
+    }
+    // "the top two cards of that player's library" (Cybership).
+    if let Some((sel, others, rest)) = top_of_library(s, b) {
+        return Some((
+            Item {
+                kind: Kind::Fixed(sel),
+                others_zone: others,
+            },
+            rest,
+        ));
     }
     // "Choose two target creature cards in your graveyard. ... return the chosen cards":
     // those targets.
@@ -1511,8 +1553,28 @@ fn modifiers<'a>(
             }
             to.transformed = true;
             s = r;
+        } else if let Some(r) = strip_word(t, "face down and tapped")
+            .map(|r| (r, true))
+            .or_else(|| strip_word(t, "face down").map(|r| (r, false)))
+        {
+            // "Return it to the battlefield face down": a face-down 2/2 creature with no
+            // text, unless the effect lists other characteristics (CR 708.2a, 708.3).
+            if to.zone != ZoneKind::Battlefield {
+                return s;
+            }
+            to.face_down = true;
+            to.tapped |= r.1;
+            s = r.0;
         } else if let Some(r) = strip_word(t, "under your control") {
             to.controller = Some(PlayerRef::You);
+            s = r;
+        } else if let Some(r) = strip_word(t, "face up")
+        {
+            // "Put a creature card ... onto the battlefield face up" (Dermoplasm): as
+            // permanents normally enter.
+            if to.zone != ZoneKind::Battlefield || to.face_down {
+                return s;
+            }
             s = r;
         } else if let Some(r) = [
             "under its owner's control",
@@ -1520,6 +1582,9 @@ fn modifiers<'a>(
             "under their owner's control",
             "under his owner's control",
             "under her owner's control",
+            "under the control of that card's owner",
+            "under the control of its owner",
+            "under the control of their owners",
         ]
         .iter()
         .find_map(|p| strip_word(t, p))
@@ -2172,6 +2237,10 @@ fn f_enters_in_addition(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         "it's ",
         "it is ",
         "that creature is ",
+        // "If it's an artifact, creature, or land card, you may put it onto the battlefield
+        // with a manifestation counter on it. That permanent is an enchantment in addition
+        // to its other types." (Arbiter of the Ideal)
+        "that permanent is ",
         "each of them is ",
         "they're ",
         "they are ",

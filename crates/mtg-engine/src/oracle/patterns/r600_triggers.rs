@@ -13,18 +13,24 @@ use crate::oracle::CompileContext;
 /// its own body: it has its own targets. "That creature" refers to the objects the
 /// preceding instruction acted on.
 pub(crate) fn reflexive_body(text: &str, b: &Builder) -> Option<Body> {
+    reflexive_body_about(text, b, Sel::Var(vars::IT))
+}
+
+/// [`reflexive_body`] where "it" is `it`.
+fn reflexive_body_about(text: &str, b: &Builder, it: Sel) -> Option<Body> {
     let text = text
         .replace("that creature's power", "its power")
         .replace("that creature's toughness", "its toughness");
-    // "When you do, she deals 4 damage to target creature." (Elektra, Femme Fatale): a
-    // character's pronoun is the card itself.
+    // "When you do, she deals 4 damage to target creature." (Elektra, Femme Fatale), "When
+    // you do, if you control a red permanent other than ~, he deals damage ..." (Ajani,
+    // Nacatl Avenger): a character's pronoun is the card itself.
     let text = match ["she ", "he "].iter().find_map(|p| text.strip_prefix(p)) {
         Some(r) => format!("~ {r}"),
-        None => text,
+        None => text.replace(", she ", ", ~ ").replace(", he ", ", ~ "),
     };
     let mut sub = Builder::new(b.ctx);
     sub.in_trigger = true;
-    sub.it = Sel::Var(vars::IT);
+    sub.it = it;
     sub.it_player = b.it_player.clone();
     let effect = parse_effect_text(&text, &mut sub)?;
     Some(Body {
@@ -36,6 +42,11 @@ pub(crate) fn reflexive_body(text: &str, b: &Builder) -> Option<Body> {
 
 /// "When you do, [effect]" / "When you don't, [effect]" (CR 603.12).
 fn when_you_do(l: &str, b: &mut Builder) -> Option<Effect> {
+    when_you_do_about(l, b, Sel::Var(vars::IT))
+}
+
+/// [`when_you_do`] where the reflexive ability's "it" is `it`.
+fn when_you_do_about(l: &str, b: &mut Builder, it: Sel) -> Option<Effect> {
     let (r, did) = if let Some(r) = l.strip_prefix("when you do, ") {
         (r, true)
     } else if let Some(r) = l.strip_prefix("when you don't, ") {
@@ -43,7 +54,7 @@ fn when_you_do(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         return None;
     };
-    let body = reflexive_body(r, b)?;
+    let body = reflexive_body_about(r, b, it)?;
     let reflexive = Effect::Reflexive {
         body: Box::new(body),
     };
@@ -57,6 +68,30 @@ fn when_you_do(l: &str, b: &mut Builder) -> Option<Effect> {
         then: Box::new(reflexive),
         otherwise: Box::new(Effect::Noop),
     })
+}
+
+/// "Create a 2/1 ... Inkling creature token with flying. When you do, return up to one
+/// target Aura or Equipment card ... attached to that token." (Forum Filibuster), "create
+/// a colorless Equipment artifact token named Axe .... When you do, attach it to target
+/// creature you control." (Dain Ironfoot): when what "you do" is creating tokens, the
+/// reflexive ability's "it" and "that token" are the tokens created (CR 603.12).
+fn f_when_you_do_after_creating(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !matches!(
+        last_instruction(prev),
+        Effect::CreateToken { .. }
+            | Effect::CreateTokenWithPT { .. }
+            | Effect::CreateTokenCopy { .. }
+    ) {
+        // (Not a Role token created attached to a creature: "When you do, that creature
+        // fights ..." is about the creature, Curse of the Werefox.)
+        return false;
+    }
+    let Some(e) = when_you_do_about(end(l), b, Sel::Var(vars::CREATED)) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
 }
 
 /// The last instruction of an effect (looking into sequences).
@@ -286,6 +321,7 @@ fn do_this_only_once(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
 
 inventory::submit! { EffectPattern { name: "reflexive: when you do", priority: 0, parse: when_you_do } }
 inventory::submit! { FollowupPattern { name: "reflexive: continues after creating tokens", priority: 0, apply: f_reflexive_continues } }
+inventory::submit! { FollowupPattern { name: "reflexive: when you do, after creating tokens", priority: 0, apply: f_when_you_do_after_creating } }
 inventory::submit! { EffectPattern { name: "resolves for the nth time", priority: 0, parse: resolves_for_the_nth_time } }
 inventory::submit! { EffectPattern { name: "pay any number of times", priority: 0, parse: pay_any_number_of_times } }
 inventory::submit! { EffectPattern { name: "reflexive: when you pay this cost", priority: 0, parse: when_you_pay_this_cost } }

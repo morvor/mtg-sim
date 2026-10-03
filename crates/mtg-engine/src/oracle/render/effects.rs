@@ -4819,6 +4819,9 @@ impl Renderer<'_> {
                 Modification::SetChosenColors => {
                     parts.push("becomes the color or colors of your choice".into())
                 }
+                Modification::AddChosenColor => {
+                    parts.push("is the chosen color in addition to its other colors".into())
+                }
             }
         }
         let has = if gains { "gains" } else { "has" };
@@ -5016,6 +5019,9 @@ impl Renderer<'_> {
             ChoiceKind::OneOf(v) if *v == crate::types::land_types() => "a land type".into(),
             ChoiceKind::OneOf(v) => join_list(v, "or"),
             ChoiceKind::CreatureType => "a creature type".into(),
+            ChoiceKind::CreatureTypeOtherThan(v) => {
+                format!("a creature type other than {}", join_list(v, "or"))
+            }
             ChoiceKind::CardName => "a card name".into(),
             ChoiceKind::CardNameFiltered(f) => format!("a {f} card name"),
             ChoiceKind::Number { min, max } => format!("a number from {min} to {max}"),

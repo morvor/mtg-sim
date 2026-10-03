@@ -227,7 +227,8 @@ fn strax_dies_before_glory_of_battle_can_save_it() {
         "Strax, Sontaran Nurse",
         "Whenever ~ deals damage to a creature, put a +1/+1 counter on ~.",
     );
-    only_unsupported("Strax, Sontaran Nurse", "Grenades!");
+    // (Grenades!, once unsupported, now compiles: see `choice_grammar_random`.)
+    supported("Strax, Sontaran Nurse");
     supported("Prey Upon");
     supported("Feral Krushok");
     // Strax (5/5): "Glory of Battle — Whenever Strax deals damage to a creature, put a

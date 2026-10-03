@@ -675,6 +675,11 @@ impl Renderer<'_> {
                 }
                 decline(s, case)
             }
+            Sel::AtRandom { filter, count, .. } => {
+                let det = self.det_for(count);
+                let s = self.noun_det(filter, det);
+                decline(format!("{s} chosen at random"), case)
+            }
             Sel::Linked => decline("each card exiled with ~it".into(), case),
             Sel::LinkedNoted => decline("the last chosen card".into(), case),
             Sel::CreatorLinked => decline("the exiled card".into(), case),
@@ -1039,6 +1044,14 @@ impl Renderer<'_> {
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);
                 format!("not {q}")
+            }
+            PlayerFilter::OpponentOf(r) => {
+                let p = self.player(r, Case::Obj);
+                format!("who is an opponent of {p}")
+            }
+            PlayerFilter::AsChosen(x) => {
+                let q = self.player_quality(x);
+                format!("{q} as you activate this ability")
             }
         }
     }

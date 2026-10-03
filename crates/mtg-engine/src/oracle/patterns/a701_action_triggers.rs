@@ -369,6 +369,8 @@ fn support_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
         together: None,
         related_to: None,
         per_player: None,
+        random: false,
+        chosen_by: None,
     };
     let slot = b.add_target(spec, text);
     Some(Effect::AddCounters {

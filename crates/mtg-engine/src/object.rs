@@ -428,6 +428,11 @@ pub struct GameObject {
     /// Dealt damage by a deathtouch source since the last SBA check (CR 704.5h).
     pub deathtouch_damage: bool,
     pub attached_to: Option<Entity>,
+    /// What it was attached to when it became unattached because that object left the
+    /// battlefield: "Equipment attached to that creature" after the creature left means
+    /// the Equipment attached to it as it last existed there (CR 608.2h).
+    #[serde(default)]
+    pub last_attached_to: Option<Entity>,
     pub timestamp: Timestamp,
     /// Hasn't been continuously controlled since its controller's most recent turn began
     /// (CR 302.6 "summoning sickness").
@@ -585,6 +590,7 @@ impl GameObject {
             damage: 0,
             deathtouch_damage: false,
             attached_to: None,
+            last_attached_to: None,
             timestamp: 0,
             summoning_sick: true,
             control_since: 0,

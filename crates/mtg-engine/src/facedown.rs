@@ -129,7 +129,40 @@ pub fn can_look_at(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     {
         return o.controller == p;
     }
+    // "Look at target face-down creature": once allowed, while it remains on the
+    // battlefield.
+    if o.zone == Zone::Battlefield && crate::zones::may_look(g, p, id) {
+        return true;
+    }
+    // "You may look at face-down creatures your opponents control any time." (Found
+    // Footage)
+    if o.zone == Zone::Battlefield
+        && o.chars.is(CardType::Creature)
+        && g.opponents(p).contains(&o.controller)
+        && may_look_at_opponents_face_down(g, p)
+    {
+        return true;
+    }
     matches!(o.zone, Zone::Stack | Zone::Battlefield) && o.controller == p
+}
+
+/// `StaticEffect::Custom`: "You may look at face-down creatures your opponents control any
+/// time." (Found Footage)
+pub const LOOK_AT_OPPONENTS_FACE_DOWN: &str =
+    "facedown: may look at opponents' face-down creatures";
+
+/// Whether `p` controls a permanent with [`LOOK_AT_OPPONENTS_FACE_DOWN`].
+fn may_look_at_opponents_face_down(g: &Game, p: PlayerId) -> bool {
+    g.battlefield.iter().any(|id| {
+        let o = g.obj(*id);
+        o.controller == p
+            && !o.phased_out
+            && o.chars.abilities.iter().any(|a| {
+                matches!(&a.kind, AbilityKind::Static(s)
+                    if matches!(&s.effect, StaticEffect::Custom(n)
+                        if n.as_str() == LOOK_AT_OPPONENTS_FACE_DOWN))
+            })
+    })
 }
 
 /// `Event::Custom` name of a face-down object being revealed to all players (CR 708.9).
@@ -249,6 +282,20 @@ pub fn reveal_all(g: &mut Game, owner: Option<PlayerId>) {
     for id in ids {
         reveal(g, id);
     }
+}
+
+/// Turns a card exiled face down face up ("turn the exiled card face up"): from then on
+/// it's an ordinary exiled card that any player may examine (CR 406.3). Returns true if
+/// it did.
+pub fn turn_exiled_face_up(g: &mut Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    if !o.face_down || o.zone != Zone::Exile || !g.is_live(id) {
+        return false;
+    }
+    g.objects[id.0 as usize].face_down = false;
+    g.dirty = true;
+    g.recompute();
+    true
 }
 
 /// Turns a face-down permanent face up (CR 708.8). Returns true if it did.

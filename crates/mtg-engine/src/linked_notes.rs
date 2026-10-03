@@ -48,6 +48,23 @@ pub fn exec(g: &mut Game, what: &Sel, replace: bool, ctx: &mut Ctx) {
     }
 }
 
+/// The notes made for `old` (an object about to enter the battlefield, as replacement
+/// effects modify how it enters, CR 614.12a) become the notes of `new`, the permanent.
+pub fn carry(g: &mut Game, old: ObjectId, new: ObjectId) {
+    let keys: Vec<(ObjectId, u16)> = g
+        .linked_notes
+        .notes
+        .keys()
+        .filter(|(o, _)| *o == old)
+        .copied()
+        .collect();
+    for k in keys {
+        if let Some(v) = g.linked_notes.notes.remove(&k) {
+            g.linked_notes.notes.insert((new, k.1), v);
+        }
+    }
+}
+
 /// The selections of the [`Effect::NoteLinked`] instructions of an effect that refer only
 /// to its targets (and so are known while it waits on the stack).
 fn target_notes(e: &Effect, out: &mut Vec<Sel>) {

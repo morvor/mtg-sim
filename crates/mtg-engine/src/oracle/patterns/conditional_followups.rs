@@ -182,10 +182,18 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
         c
     };
     let original = c;
+    // "You may put the exiled card onto the battlefield if it's a creature card" (The
+    // Creation of Avacyn): "it" is the card exiled with the source that the instruction
+    // names (CR 607.2a), not the source.
+    let exiled_card = if matches!(b.it, Sel::This) && !pronoun_free(c) {
+        instruction_names_exiled_card(x, b)
+    } else {
+        None
+    };
     // Where "it" is the ability's source ("Whenever ~ attacks, you win the game if there
     // are twenty or more counters on it"), so is the condition's "it".
     let about_source;
-    let c = if matches!(b.it, Sel::This) && !pronoun_free(c) {
+    let c = if matches!(b.it, Sel::This) && !pronoun_free(c) && exiled_card.is_none() {
         about_source = c
             .split(' ')
             .map(|w| if w == "it" { "~" } else { w })
@@ -225,7 +233,9 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
             // ("Put target creature card ... onto the battlefield ... if its mana value is
             // ...").
             let it_after = b.it.clone();
-            if matches!(it_after, Sel::Var(_)) {
+            if let Some(sel) = exiled_card {
+                b.it = sel;
+            } else if matches!(it_after, Sel::Var(_)) {
                 let new_object_target = (first_new..b.targets.len())
                     .rev()
                     .find(|i| !matches!(b.targets[*i].what, TargetKind::Player(_)));
@@ -234,7 +244,8 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
                     None => it_before,
                 };
             }
-            let cond = super::conditions_referents::parse_condition_with(original, b);
+            let cond = super::conditions_referents::parse_condition_with(original, b)
+                .map(card_in_new_zone);
             b.it = it_after;
             let Some(cond) = cond else {
                 b.targets.truncate(first_new);
@@ -257,6 +268,67 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "[instruction] if [condition]", priority: 250, parse: trailing_if } }
+
+/// "Whenever a face-down creature you control dies, return it to the battlefield ... if
+/// it's a permanent card" (Yarus, Roar of the Old Gods): a condition on the triggering
+/// object as a card is about the card in its new zone (CR 400.7), not about the permanent
+/// as it last existed (a face-down permanent's last known information is a 2/2 creature
+/// with no name, CR 708.2a).
+fn card_in_new_zone(c: Condition) -> Condition {
+    fn names_card(f: &Filter) -> bool {
+        match f {
+            Filter::Card | Filter::PermanentCard => true,
+            Filter::And(v) => v.iter().any(names_card),
+            _ => false,
+        }
+    }
+    match c {
+        Condition::SelMatches(Sel::TriggerLki, f) if names_card(&f) => {
+            Condition::SelMatches(Sel::TriggerObject, f)
+        }
+        c => c,
+    }
+}
+
+/// The cards exiled with the source that the instruction `x` (read on a copy of the
+/// builder) moves ("put the exiled card onto the battlefield"), which a following "it"
+/// then refers to.
+fn instruction_names_exiled_card(x: &str, b: &Builder) -> Option<Sel> {
+    let mut probe = crate::oracle::effects::Builder {
+        targets: b.targets.clone(),
+        it: b.it.clone(),
+        it_player: b.it_player.clone(),
+        in_trigger: b.in_trigger,
+        sentences: b.sentences,
+        chosen_creature: b.chosen_creature.clone(),
+        group: b.group.clone(),
+        named: b.named.clone(),
+        ctx: b.ctx,
+    };
+    let e = crate::oracle::effects::parse_clause(x, &mut probe)?;
+    if probe.targets.len() != b.targets.len() {
+        return None;
+    }
+    fn linked(f: &Filter) -> bool {
+        match f {
+            Filter::In(s) => matches!(**s, Sel::Linked),
+            Filter::And(v) => v.iter().any(linked),
+            _ => false,
+        }
+    }
+    // The instruction (perhaps optional) moves the linked exiled cards.
+    let e = match e {
+        Effect::May { effect, .. } => *effect,
+        e => e,
+    };
+    match e {
+        Effect::Move {
+            what: what @ Sel::All(_),
+            ..
+        } if matches!(&what, Sel::All(f) if linked(f)) => Some(what),
+        _ => None,
+    }
+}
 
 /// "that creature isn't legendary", "it's legendary": whether the object named earlier is
 /// legendary.

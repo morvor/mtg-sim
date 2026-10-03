@@ -219,6 +219,9 @@ pub mod kvars {
     pub const AIRBENT: Var = vars::USER + 1065;
     /// The permanents just manifested or cloaked ("that creature", CR 701.40, 701.58).
     pub const MANIFESTED: Var = vars::USER + 1062;
+    /// The opponent a player just clashed with ("Otherwise, that player gains control of
+    /// enchanted creature", CR 701.30b).
+    pub const CLASHED_WITH: Var = vars::USER + 1030;
     /// The card "exile it and collect evidence N" exiled (other than the evidence), which
     /// the rest of the effect can find in exile (CR 400.7j).
     pub const EXILED_WITH_EVIDENCE: Var = vars::USER + 1059;

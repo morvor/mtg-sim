@@ -145,5 +145,10 @@ cargo run --release -p mtg-sim -- --games 200
 cargo run --release -p mtg-sim -- --random-decks --games 1000   # fuzz: random decks; panics/hangs print a repro command
 ```
 
+Build machines are small (4 cores, ~15 GB RAM) and running out of memory restarts the whole
+machine, killing every agent on it: `export CARGO_BUILD_JOBS=2`, never run two cargo builds
+at the same time in one worktree, and never build a second checkout just to compare
+before/after numbers (report the after number and the base from an earlier measurement).
+
 Before committing: `cargo build --workspace --all-targets` must be warning-free enough to
 read, and `cargo test --workspace` must pass. Run `cargo fmt` on files you touch.

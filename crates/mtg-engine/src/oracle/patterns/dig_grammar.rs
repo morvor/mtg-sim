@@ -1005,7 +1005,8 @@ pub fn dug_objects(s: &str, b: &Builder) -> Option<(Filter, String)> {
     None
 }
 
-fn dug(b: &Builder) -> bool {
+/// Whether an earlier sentence dug cards (a step on them is read by this grammar).
+pub fn dug(b: &Builder) -> bool {
     b.named.iter().any(|(n, _)| n == DIG_MARK)
 }
 

@@ -729,6 +729,15 @@ pub struct TargetSpec {
     /// for. See `per_player_targets.rs`.
     #[serde(default)]
     pub per_player: Option<PlayerFilter>,
+    /// "target ... chosen at random": nobody chooses; the targets are chosen at random
+    /// among the legal ones as the spell or ability is put on the stack (see
+    /// `patterns::choice_grammar_random`).
+    #[serde(default)]
+    pub random: bool,
+    /// "target ... of their choice": another player chooses this target (the player the
+    /// phrase names, e.g. the player whose upkeep it is), not the controller (CR 601.2c).
+    #[serde(default)]
+    pub chosen_by: Option<PlayerRef>,
 }
 
 /// A relationship the targets of one instance of the word "target" must have with each
@@ -835,6 +844,8 @@ impl TargetSpec {
             together: None,
             related_to: None,
             per_player: None,
+            random: false,
+            chosen_by: None,
         }
     }
     pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
@@ -979,6 +990,15 @@ pub enum Sel {
     All(Filter),
     /// Players.
     Players(PlayerRef),
+    /// Objects chosen at random during resolution ("a card at random from your
+    /// graveyard", "a creature an opponent controls chosen at random"): nobody chooses;
+    /// each object matching the filter is equally likely (CR 701.9b's random discard
+    /// works the same way). Stored in `store` like [`Sel::Choose`].
+    AtRandom {
+        filter: Filter,
+        count: Value,
+        store: Option<Var>,
+    },
     /// Objects chosen during resolution (not targeted): a player chooses.
     Choose {
         chooser: PlayerRef,
@@ -1108,6 +1128,13 @@ pub enum PlayerFilter {
     FirstDrawInDrawStep,
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
+    /// A requirement on a target player checked only as the target is chosen ("target
+    /// opponent who has more life than you do as you activate this ability"): it isn't
+    /// checked again as the ability resolves (see `target_rules::relaxed_on_resolution`).
+    AsChosen(Box<PlayerFilter>),
+    /// An opponent of one of the players a reference resolves to ("target player who ...
+    /// is their opponent", CR 102.3).
+    OpponentOf(Box<PlayerRef>),
     And(Vec<PlayerFilter>),
     Or(Vec<PlayerFilter>),
     Not(Box<PlayerFilter>),
@@ -1931,6 +1958,9 @@ pub enum Modification {
     /// "becomes the color or colors of your choice": the colors chosen for the effect's
     /// source (fixed when a resolving effect is created).
     SetChosenColors,
+    /// "are the chosen color in addition to their other colors": adds the color chosen
+    /// for the effect's source (CR 607.2d). Does nothing while no color is chosen.
+    AddChosenColor,
     // Layer 6
     AddAbility(Ability),
     /// "... becomes a copy of [object], except it has this ability" (CR 707.9a): the
@@ -2026,7 +2056,7 @@ impl Modification {
             | AddChosenType
             | SetChosenBasicLandType => Layer::L4Type,
             SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor
-            | SetChosenColors => Layer::L5Color,
+            | SetChosenColors | AddChosenColor => Layer::L5Color,
             AddAbility(_)
             | AddThisAbility
             | AddKeyword(_)
@@ -4364,6 +4394,8 @@ pub enum ChoiceKind {
     /// (and as the chosen type/color when the word is one).
     OneOf(Vec<String>),
     CreatureType,
+    /// "choose a creature type other than Wall": any creature type but those listed.
+    CreatureTypeOtherThan(Vec<String>),
     CardName,
     /// A card name of a nonland card, etc.
     CardNameFiltered(String),
