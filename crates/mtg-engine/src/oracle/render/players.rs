@@ -351,8 +351,10 @@ impl Renderer<'_> {
         let flat: Vec<&Filter> = flat
             .into_iter()
             .filter(|x| {
-                let kind = |f: &Filter| matches!(f, Filter::Custom(n)
-                    if n == "stack:activated ability" || n == "stack:triggered ability");
+                let kind = |f: &Filter| {
+                    matches!(f, Filter::Custom(n)
+                    if n == "stack:activated ability" || n == "stack:triggered ability")
+                };
                 // "activated or triggered ability": both kinds, what an ability on the
                 // stack is (CR 113.1).
                 !kind(x) && !matches!(x, Filter::Or(v) if v.iter().all(kind))

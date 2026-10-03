@@ -1106,6 +1106,25 @@ impl Renderer<'_> {
         }
         if let Some(f) = &np.fixed {
             let mut s = f.clone();
+            // Qualities a fixed phrase has no place for: never dropped silently.
+            // ("enchanted land" that's a land says it.)
+            let said = |w: &str| f.split(|c: char| !c.is_alphanumeric()).any(|x| x == w);
+            let types_said = np.types.iter().all(|t| said(t.word()));
+            let subtypes_said = np.subtypes.iter().all(|t| said(t));
+            if !np.status.is_empty()
+                || !np.supers.is_empty()
+                || !np.colors.is_empty()
+                || !np.quality.is_empty()
+                || !np.nons.is_empty()
+                || !subtypes_said
+                || !types_said
+                || !np.alts.is_empty()
+                || np.permanent_card
+                || np.controller_matches.is_some()
+                || np.cast_from.is_some()
+            {
+                return self.gap(format!("qualities of an alternative list ({np:?})"));
+            }
             // The qualities the alternatives share: "artifact, enchantment, or nonbasic land
             // an opponent controls", "artifact or non-Aura enchantment card in your
             // graveyard".
@@ -1117,6 +1136,19 @@ impl Renderer<'_> {
                     Num::One => " card",
                     Num::Many => " cards",
                 });
+            }
+            // What the alternatives all have: "... card with mana value 3 or less".
+            let mut with: Vec<String> = np.with.clone();
+            for w in &np.with_on {
+                with.push(format!("{} on it", with_article(w)));
+            }
+            if !with.is_empty() {
+                s.push_str(" with ");
+                s.push_str(&join_list(&with, "and"));
+            }
+            if !np.without.is_empty() {
+                s.push_str(" without ");
+                s.push_str(&join_list(&np.without, "or"));
             }
             if let (Some(z), true) = (np.zone, in_zone) {
                 if !s.contains(" in ") && !s.contains(" from ") {
