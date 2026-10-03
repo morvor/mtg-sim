@@ -110,6 +110,9 @@ fn choose_objects_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
     let without = format!("{}{}", &r[..k], &r[k + " at random".len()..]);
     // Permanents: "a creature", "a creature that attacked this turn". (Cards in a zone
     // chosen at random are the zone-move grammar's, `zone_move_grammar::p_choose_card`.)
+    if without.split(' ').any(|w| w == "card" || w == "cards") {
+        return None;
+    }
     let (n, r2) = parse_number(&without)?;
     let (f, _, tail) = parse_object_phrase(r2)?;
     if !end(tail).is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
@@ -178,6 +181,12 @@ fn chosen_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
     // Not targeted: "a creature an opponent controls chosen at random".
     let a = article_at?;
     let phrase = &before[a + 1..];
+    // Permanents only: "a creature card with mana value X chosen at random" and "a copy
+    // of a Liliana planeswalker chosen at random" choose among cards outside the game,
+    // which the engine doesn't model.
+    if phrase.split(' ').any(|w| w == "card" || w == "cards") || before.contains("copy of ") {
+        return None;
+    }
     let (n, r2) = parse_number(phrase)?;
     if n.as_const() != Some(1) {
         return None;
