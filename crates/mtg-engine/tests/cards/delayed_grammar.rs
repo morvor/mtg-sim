@@ -985,3 +985,22 @@ fn synthetic_destiny_counts_the_exiled_tokens() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 2);
 }
+
+#[test]
+fn okoye_gives_double_strike_only_when_attacking_the_monarch() {
+    cr!("603.7b", "725.1");
+    assert_supported("Okoye, Mighty and Adored");
+    for (monarch, life) in [(P1, 20 - 8), (P0, 20 - 4)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Okoye, Mighty and Adored");
+        let giant = t.battlefield(P0, "Hill Giant");
+        t.g.monarch = Some(monarch);
+        t.answer_targets(P0, &objs(&[giant]));
+        t.set_step(P0, Step::Upkeep);
+        t.advance_to(P0, Step::BeginningOfCombat);
+        t.resolve_all();
+        assert_eq!(t.counters(giant, "+1/+1"), 1);
+        t.attack(&[(giant, Entity::Player(P1))], &[]);
+        assert_eq!(t.life(P1), life, "monarch {monarch:?}");
+    }
+}
