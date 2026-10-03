@@ -68,7 +68,10 @@ fn that_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
     if before.contains("that creature's ") {
         s = s.replace("the creature's ", "its ");
     }
-    parse_clause(&s, b)
+    let saved = std::mem::replace(&mut b.its_is_it, true);
+    let e = parse_clause(&s, b);
+    b.its_is_it = saved;
+    e
 }
 
 /// Rewrites the possessives of "it"'s referent ("that creature's", "that spell's", ...)

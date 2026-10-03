@@ -296,12 +296,13 @@ fn a_counter_from_life_gained_with_lethal_damage_comes_too_late() {
     let mut t = TestGame::new(2);
     let ex = t.battlefield(P0, "Exemplar of Light");
     let hawk = t.battlefield(P0, "Vampire Nighthawk");
-    let angel = t.battlefield(P1, "Serra Angel");
+    // 3 damage: lethal to the 3/3 Exemplar, but not to the 4/4 it would become.
+    let monster = t.battlefield(P1, "Phantom Monster");
     attack_with(
         &mut t,
         &[(ex, Entity::Player(P1)), (hawk, Entity::Player(P1))],
     );
-    block_and_finish(&mut t, P1, &[(angel, ex)]);
+    block_and_finish(&mut t, P1, &[(monster, ex)]);
     t.resolve_all();
     assert_eq!(t.life(P0), 22);
     assert!(t.in_graveyard(P0, "Exemplar of Light"));

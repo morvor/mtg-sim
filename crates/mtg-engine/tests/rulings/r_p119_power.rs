@@ -311,7 +311,7 @@ fn meglonoth_checks_its_power_on_resolution() {
 
 #[test]
 fn cultivator_of_blades_chooses_and_counts_on_resolution() {
-    cr!("608.2h", "603.3c");
+    cr!("608.2h", "608.2d");
     ruling!(
         "Cultivator of Blades",
         "You choose whether or not to have your other attacking creatures get +X/+X as Cultivator of Blades's triggered ability resolves, not as you put it onto the stack."
@@ -345,7 +345,7 @@ fn cultivator_of_blades_chooses_and_counts_on_resolution() {
 
 #[test]
 fn stone_giant_destroys_the_creature_even_if_its_toughness_grew() {
-    cr!("603.7c", "608.2b");
+    cr!("603.7c");
     ruling!(
         "Stone Giant",
         "When the delayed triggered ability resolves, the targeted creature is destroyed, even if it’s no longer a creature, no longer under your control, or no longer has toughness less than Stone Giant’s power at that time."
@@ -721,10 +721,57 @@ fn vodalian_mindsinger_kicks_once_for_each_kicker_cost() {
     let m = t.hand(P0, "Vodalian Mindsinger");
     t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
     t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
-    let r = t.cast(P0, m).try_go();
-    if r.is_ok() {
+    t.cast(P0, m).try_go().expect("castable kicked once");
+    t.resolve_all();
+    let m = t.named_on_battlefield("Vodalian Mindsinger")[0];
+    assert_eq!(plus1(&t, m), 2, "kicked once: {{1}}{{R}} can't pay for {{1}}{{G}}");
+}
+
+// --- "~ deals damage equal to its power to that creature" ------------------------------
+
+/// Damage marked on `id`.
+fn damage_on(t: &TestGame, id: ObjectId) -> u32 {
+    t.g.obj(t.g.current(id)).damage
+}
+
+#[test]
+fn palazzo_archers_deals_its_own_last_known_power_to_the_attacker() {
+    cr!("608.2h");
+    ruling!(
+        "Palazzo Archers",
+        "If Palazzo Archers is no longer on the battlefield when its triggered ability resolves, use its power as it last existed on the battlefield to determine how much damage is dealt."
+    );
+    supported("Palazzo Archers");
+    for leaves in [false, true] {
+        let mut t = TestGame::new(2);
+        // A 3/4 Archers; "its power" is the Archers', not the 4/4 attacker's.
+        let archers = with_counters(&mut t, P0, "Palazzo Archers", 1);
+        let elemental = t.battlefield(P1, "Air Elemental");
+        t.g.turn.active = P1;
+        attack_with(&mut t, &[(elemental, Entity::Player(P0))]);
+        assert_eq!(stack(&t), 1);
+        if leaves {
+            destroy(&mut t, archers);
+        }
         t.resolve_all();
-        let m = t.named_on_battlefield("Vodalian Mindsinger");
-        assert!(m.is_empty() || plus1(&t, m[0]) < 4);
+        assert!(t.on_battlefield(elemental));
+        assert_eq!(damage_on(&t, elemental), 3, "leaves: {leaves}");
     }
+}
+
+#[test]
+fn abyssal_hunter_deals_its_own_power_to_a_tapped_target() {
+    cr!("115.1");
+    ruling!("Abyssal Hunter", "The ability can target an already tapped creature.");
+    supported("Abyssal Hunter");
+    let mut t = TestGame::new(2);
+    let hunter = t.battlefield(P0, "Abyssal Hunter");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.tap(giant);
+    t.lands(P0, "Swamp", 1);
+    t.activate(P0, hunter, 0, &[obj(giant)]).unwrap();
+    t.resolve_all();
+    // 1 damage (the Hunter's power), not 3 (the Giant's).
+    assert!(t.on_battlefield(giant));
+    assert_eq!(damage_on(&t, giant), 1);
 }
