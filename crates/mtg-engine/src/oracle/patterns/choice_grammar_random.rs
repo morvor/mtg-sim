@@ -222,7 +222,8 @@ inventory::submit! { EffectPattern { name: "choice grammar: chosen at random", p
 fn one_of_them_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (verb, r) = l.split_once(' ')?;
-    if r != "one of them at random" {
+    // "Destroy one of them chosen at random." (Chaos Defiler) says the same.
+    if r != "one of them at random" && r != "one of them chosen at random" {
         return None;
     }
     let them = super::pronoun_groups::plural_object_ref("them", b)??.0;

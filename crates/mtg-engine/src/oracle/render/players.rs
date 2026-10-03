@@ -521,6 +521,13 @@ impl Renderer<'_> {
                 )
             }
             Sel::Var(v) if self.plural_vars.contains(v) => them(case),
+            // The objects chosen by "for each player, choose ..." / "starting with you, each
+            // player chooses ..." (see `patterns::iteration_grammar`).
+            Sel::Var(crate::oracle::patterns::iteration_grammar::CHOSEN) => decline(
+                "{alt:each permanent chosen this way|each creature chosen this way|each card chosen this way|the chosen creatures|the chosen cards|the chosen permanents|those creatures|those cards|them}"
+                    .into(),
+                case,
+            ),
             Sel::Var(v) => match *v {
                 vars::SACRIFICED if self.sacrificed.as_deref() == Some("~") => {
                     decline("~".into(), case)

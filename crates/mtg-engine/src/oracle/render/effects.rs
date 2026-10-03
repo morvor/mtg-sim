@@ -330,6 +330,11 @@ impl Renderer<'_> {
 
     fn effect_inner(&mut self, e: &Effect) -> String {
         self.new_clause();
+        // "For each {B}{B} spent to cast it, each opponent discards a card": one action on
+        // that many, said as the instruction for each.
+        if let Some(each) = per_mana_spent(e) {
+            return self.effect(&each);
+        }
         // "You may cast that card" (`play_terms.rs`).
         if let Some(s) = self.cast_only_permission(e) {
             return s;
@@ -365,6 +370,20 @@ impl Renderer<'_> {
                 self.effect(effect)
             }
             Effect::May { who, effect } => self.may(who, effect),
+            // "Then each player who searched their library this way shuffles."
+            Effect::ForEachPlayer {
+                who: PlayerRef::Var(v),
+                effect,
+            } if *v == crate::oracle::patterns::iteration_grammar::SEARCHERS
+                && matches!(
+                    effect.as_ref(),
+                    Effect::Shuffle {
+                        who: PlayerRef::Iterated
+                    }
+                ) =>
+            {
+                "then each player who searched their library this way shuffles".to_string()
+            }
             Effect::PayOptional {
                 who,
                 cost,
@@ -473,7 +492,27 @@ impl Renderer<'_> {
             Effect::ForEach { sel, var, effect } => {
                 let s = match sel {
                     Sel::All(f) => self.for_each_noun(f),
-                    other => self.sel(other, Case::Obj),
+                    // "for each creature destroyed this way", "for each card exiled this
+                    // way".
+                    Sel::Matching(inner, f) if self.for_each_this_way(inner).is_some() => {
+                        let verb = self.for_each_this_way(inner).unwrap_or_default();
+                        let n = self.noun(f, Num::One);
+                        format!("{n} {verb} this way")
+                    }
+                    // "for each of them", "for each of those creatures", "for each of up to
+                    // three target creatures".
+                    // "Look at the top five cards of your library. For each card, ..."
+                    Sel::Var(vars::DUG) => "card".into(),
+                    other => {
+                        let s = self.sel(other, Case::Obj);
+                        if s == "them" {
+                            "of {alt:them|those creatures|those permanents|those cards|those tokens}".into()
+                        } else if matches!(other, Sel::Target(_)) {
+                            format!("of {s}")
+                        } else {
+                            s
+                        }
+                    }
                 };
                 // "If you do, it becomes plotted": done for the one object named "it".
                 if matches!(s.as_str(), "it" | "~it" | "~") {
@@ -485,6 +524,51 @@ impl Renderer<'_> {
                 }
                 let inner = self.effect(effect);
                 format!("for each {s}, {inner}")
+            }
+            // "Starting with you, each player chooses a creature."
+            Effect::InTurnOrder { first, who, effect } => {
+                let start = match first {
+                    TurnOrderStart::You => "you",
+                    TurnOrderStart::NextOpponent => "the next opponent in turn order",
+                };
+                let w = self.player_filter_noun(who, Num::One);
+                // "Join forces — Starting with you, each player may pay any amount of mana."
+                if let Effect::AsPlayer { effect: inner, .. } = effect.as_ref() {
+                    if matches!(inner.as_ref(), Effect::Custom(n) if n == crate::kw::join_forces::PAY_ANY_AMOUNT)
+                    {
+                        return format!("starting with {start}, each {w} may pay any amount of mana");
+                    }
+                }
+                // "each player chooses a creature" / "each player may choose an artifact".
+                if let Effect::Store {
+                    var,
+                    sel: Sel::Union(v),
+                } = effect.as_ref()
+                {
+                    if let [Sel::Var(a), Sel::Choose {
+                        chooser: PlayerRef::Iterated,
+                        filter,
+                        count: Value::Const(n),
+                        up_to,
+                        ..
+                    }] = v.as_slice()
+                    {
+                        if a == var {
+                            let (verb, det) = match (*n, *up_to) {
+                                (1, false) => ("chooses", Det::A),
+                                (1, true) => ("may choose", Det::A),
+                                (n, true) => ("chooses", Det::UpTo(number_word(n as i32))),
+                                (n, false) => ("chooses", Det::Count(number_word(n as i32))),
+                            };
+                            let saved = std::mem::replace(&mut self.in_as_player, true);
+                            let o = self.noun_det(filter, det);
+                            self.in_as_player = saved;
+                            return format!("starting with {start}, each {w} {verb} {o}");
+                        }
+                    }
+                }
+                let inner = self.effect(effect);
+                format!("starting with {start}, each {w}: {inner}")
             }
             // "Each player who controls a multicolored creature draws a card."
             Effect::ForEachPlayer { who, effect }
@@ -619,6 +703,19 @@ impl Renderer<'_> {
             Effect::RepeatThisProcess => "repeat this process".into(),
             Effect::Repeat { times, effect } => {
                 let inner = self.effect(effect);
+                // "for each {U}{U} spent to cast it, draw a card".
+                let spent = |v: &Value| match v {
+                    Value::Custom(c) => c.strip_prefix("mana_spent_of:").map(|l| (l.to_string(), 1)),
+                    _ => None,
+                };
+                let per = match times {
+                    Value::Div(v, n, false) => spent(v).map(|(l, _)| (l, *n)),
+                    v => spent(v),
+                };
+                if let Some((l, n)) = per {
+                    let syms = format!("{{{l}}}").repeat(n.max(1) as usize);
+                    return format!("for each {syms} spent to cast {{alt:it|~}}, {inner}");
+                }
                 let t = self.times(times);
                 format!("{inner} {t}")
             }
@@ -884,7 +981,11 @@ impl Renderer<'_> {
                     if parts.iter().all(|p| {
                         matches!(
                             p,
-                            Sel::Var(_) | Sel::Target(_) | Sel::This | Sel::TriggerObject
+                            Sel::Var(_)
+                                | Sel::Target(_)
+                                | Sel::This
+                                | Sel::TriggerObject
+                                | Sel::Players(_)
                         )
                     }) =>
                 {
@@ -1222,6 +1323,30 @@ impl Renderer<'_> {
                     .replace(&format!("{k} counters"), "counters of that kind")
                     .replace(&format!("{k} counter"), "counter of that kind");
                 format!("choose a counter on {f}. {inner}")
+            }
+            Effect::ForEachCounterKind { from, then } => {
+                let f = self.sel(from, Case::Obj);
+                // "put another counter of that kind on it or remove one from it".
+                if let Effect::ChooseOne { options, .. } = then.as_ref() {
+                    if let [(_, Effect::AddCounters { what: a, .. }), (_, Effect::RemoveCounters { what: r, .. })] =
+                        options.as_slice()
+                    {
+                        let (a, r) = (self.sel(a, Case::Obj), self.sel(r, Case::Obj));
+                        if a == r {
+                            return format!("for each kind of counter on {f}, put another counter of that kind on {a} or remove one from {a}");
+                        }
+                    }
+                }
+                let inner = self.effect(then);
+                let inner = inner.replace(
+                    &format!("put a {} counter on it", crate::ability::CHOSEN_COUNTER_KIND),
+                    "{alt:put another counter of that kind on it|give that permanent or player another counter of that kind}",
+                );
+                let k = crate::ability::CHOSEN_COUNTER_KIND;
+                let inner = inner
+                    .replace(&format!("{k} counters"), "counters of that kind")
+                    .replace(&format!("{k} counter"), "counter of that kind");
+                format!("for each kind of counter on {f}, {inner}")
             }
             Effect::MoveCounters { from, to, kind, n } => {
                 let noun = match kind {
@@ -1853,6 +1978,12 @@ impl Renderer<'_> {
                 mana,
                 restriction,
             } => {
+                if let (ManaProduction::EachColorAmong(f), PlayerRef::You, None) =
+                    (mana, who, restriction)
+                {
+                    let n = self.noun(f, Num::Many);
+                    return format!("for each color among {n}, add one mana of that color");
+                }
                 let m = self.mana_production(mana);
                 let mut s = self.with_subject(who, &format!("add {m}"), false);
                 if let Some(r) = restriction {
@@ -2237,7 +2368,58 @@ impl Renderer<'_> {
                 amount,
                 duration,
                 combat_only,
+                then,
             } => {
+                // "For each 1 damage prevented this way, [instruction]."
+                if let Some(e) = then {
+                    let each = match e.as_ref() {
+                        Effect::Repeat {
+                            times: Value::EventAmount,
+                            effect,
+                        } => Some((**effect).clone()),
+                        // A counted action on that many: once for each 1 damage.
+                        e => {
+                            let mut one = e.clone();
+                            let n = match &mut one {
+                                Effect::AddCounters { n, .. }
+                                | Effect::Discard { n, .. }
+                                | Effect::Mill { n, .. }
+                                | Effect::GainLife { n, .. }
+                                | Effect::LoseLife { n, .. } => Some(n),
+                                Effect::CreateToken { count, .. } => Some(count),
+                                _ => None,
+                            };
+                            match n {
+                                Some(n) if matches!(n, Value::EventAmount) => {
+                                    *n = Value::c(1);
+                                    Some(one)
+                                }
+                                _ => None,
+                            }
+                        }
+                    };
+                    let saved = self.event_scope;
+                    self.event_scope = true;
+                    let inner = match &each {
+                        Some(x) => {
+                            let x = self.effect(x).replace(
+                                " on it",
+                                " on {alt:that creature|it}",
+                            );
+                            format!("for each 1 damage prevented this way, {x}")
+                        }
+                        None => self.effect(e),
+                    };
+                    self.event_scope = saved;
+                    let head = self.effect(&Effect::PreventDamage {
+                        to: to.clone(),
+                        amount: amount.clone(),
+                        duration: duration.clone(),
+                        combat_only: *combat_only,
+                        then: None,
+                    });
+                    return format!("{head}. {inner}");
+                }
                 let c = if *combat_only { "combat " } else { "" };
                 let t = match to {
                     Sel::None => String::new(),
@@ -3531,6 +3713,15 @@ impl Renderer<'_> {
     }
 
     fn may(&mut self, who: &PlayerRef, effect: &Effect) -> String {
+        // "Its controller may search ..." recording who searched (for "each player who
+        // searched their library this way shuffles"): the record isn't said.
+        if let Effect::Seq(v) = effect {
+            if let [a, Effect::Store { var, .. }] = v.as_slice() {
+                if *var == crate::oracle::patterns::iteration_grammar::SEARCHERS {
+                    return self.may(who, a);
+                }
+            }
+        }
         if matches!(who, PlayerRef::You) {
             if let Some(c) = self.cast_up_to_one(effect) {
                 return c;
@@ -5202,6 +5393,16 @@ impl Renderer<'_> {
     }
 
     /// What mana an effect adds.
+    /// The verb of "[objects] [verb] this way" for the objects an earlier instruction
+    /// acted on, if `inner` holds them.
+    fn for_each_this_way(&self, inner: &Sel) -> Option<&'static str> {
+        let v = match inner {
+            Sel::Before(b) => b.as_ref(),
+            other => other,
+        };
+        self.this_way_of(v).map(|(verb, _, _)| verb)
+    }
+
     pub(crate) fn mana_production(&mut self, m: &ManaProduction) -> String {
         match m {
             ManaProduction::Fixed(v) => v.iter().map(|t| mana_symbol(*t)).collect(),
@@ -5314,6 +5515,10 @@ impl Renderer<'_> {
             ManaProduction::AnyColorAmong(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("one mana of any color among {n}")
+            }
+            ManaProduction::EachColorAmong(f) => {
+                let n = self.noun(f, Num::Many);
+                format!("one mana of each color among {n}")
             }
             ManaProduction::AnyTypeProduced => "one mana of any type that land produced".into(),
             ManaProduction::ManaCostOf(s) => {
@@ -6182,4 +6387,33 @@ impl Renderer<'_> {
             _ => return None,
         })
     }
+}
+
+/// A counted action whose count is how many times some mana was spent to cast the object
+/// ("each opponent discards a card for each {B}{B} spent"), as the [`Effect::Repeat`] of
+/// the action on one.
+fn per_mana_spent(e: &Effect) -> Option<Effect> {
+    let spent = |v: &Value| matches!(v, Value::Custom(c) if c.starts_with("mana_spent_of:"));
+    let mut one = e.clone();
+    let n = match &mut one {
+        Effect::AddCounters { n, .. }
+        | Effect::Discard { n, .. }
+        | Effect::Mill { n, .. }
+        | Effect::GainLife { n, .. }
+        | Effect::LoseLife { n, .. } => n,
+        Effect::CreateToken { count, .. } => count,
+        _ => return None,
+    };
+    let ok = match &*n {
+        Value::Div(v, _, false) => spent(v),
+        v => spent(v),
+    };
+    if !ok {
+        return None;
+    }
+    let times = std::mem::replace(n, Value::c(1));
+    Some(Effect::Repeat {
+        times,
+        effect: Box::new(one),
+    })
 }

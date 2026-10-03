@@ -417,9 +417,32 @@ pub fn strip_ability_word(text: &str) -> &str {
         // up to six words before a triggered ability (not a list of Saga chapters).
         // So can one before an activated ability with a mana cost ("I've Come Up with a
         // New Recipe! — {1}{G}{U}, {T}: ...").
+        // So can a title-cased one before any other ability ("The Will of the Hive Mind —
+        // Other creatures you control ...", "Top of the Food Chain — ~'s power is ...").
+        let title_cased = head.split_whitespace().all(|w| {
+            w.starts_with(|c: char| c.is_uppercase())
+                || matches!(
+                    w,
+                    "of" | "the"
+                        | "a"
+                        | "an"
+                        | "and"
+                        | "to"
+                        | "in"
+                        | "on"
+                        | "for"
+                        | "with"
+                        | "from"
+                        | "at"
+                        | "by"
+                )
+        });
         let long_flavor_word = !head.contains(',')
             && ((words <= 6 && (rest.starts_with("When") || rest.starts_with("At ")))
-                || (words <= 8 && rest.starts_with('{')));
+                || (words <= 8 && rest.starts_with('{'))
+                || (words <= 7
+                    && title_cased
+                    && rest.starts_with(|c: char| c.is_uppercase() || c == '~')));
         let looks_like_word = (words <= 4 || long_flavor_word)
             // An ability word starts its line: not a mode's name on a later line
             // ("Tiered\n• Thunder — {0} — ...", CR 702.183a).
@@ -481,8 +504,16 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let amount_x = patterns::cost_parts::amount_as_x(cost_s);
     let cost_s = amount_x.as_ref().map_or(cost_s, |(c, _)| c.as_str());
     let (cost, loyalty) = costs::parse_cost(cost_s)?;
-    // Activation restrictions at the end of the effect text.
-    let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
+    // Activation restrictions at the end of the effect text — or, for a modal ability,
+    // at the end of its header line ("{G}: Choose one. Activate only once each turn.").
+    let modal_restricted = eff_s.split_once('\n').and_then(|(head, modes)| {
+        let (h, timing, max, any) = costs::split_activation_restrictions(head);
+        (h.len() < head.trim().len()).then(|| (format!("{h}\n{modes}"), timing, max, any))
+    });
+    let (eff_text, timing, max_per_turn, any_player) = match &modal_restricted {
+        Some((t, timing, max, any)) => (t.as_str(), *timing, *max, *any),
+        None => costs::split_activation_restrictions(eff_s),
+    };
     // "This ability costs {1} less to activate for each ..." (CR 602.2b, 601.2f).
     let (eff_text, own_cost) =
         match patterns::activation_cost_modifiers::split_own_cost_sentence(eff_text) {

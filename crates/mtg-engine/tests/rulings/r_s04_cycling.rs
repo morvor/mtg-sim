@@ -14,7 +14,7 @@ use mtg_engine::*;
 
 /// Whether the stack object is an activated ability (the cycling ability), a triggered
 /// ability, or a spell: "A", "T", or "S".
-fn kinds_on_stack(t: &TestGame) -> String {
+pub(crate) fn kinds_on_stack(t: &TestGame) -> String {
     t.g.stack
         .iter()
         .map(|id| match t.g.obj(*id).stack.as_deref().map(|si| &si.kind) {
@@ -26,7 +26,7 @@ fn kinds_on_stack(t: &TestGame) -> String {
 }
 
 /// The candidates offered by the last search decision of `p` since decision `from`.
-fn search_candidates(t: &TestGame, p: PlayerId, from: usize) -> Vec<Entity> {
+pub(crate) fn search_candidates(t: &TestGame, p: PlayerId, from: usize) -> Vec<Entity> {
     t.asked()[from..]
         .iter()
         .rev()
@@ -39,7 +39,7 @@ fn search_candidates(t: &TestGame, p: PlayerId, from: usize) -> Vec<Entity> {
 
 /// P0 casts Stifle (or another counterspell for abilities) at the top object of the stack
 /// on P1's behalf, and it resolves.
-fn counter_top_with(t: &mut TestGame, caster: PlayerId, spell: &str) {
+pub(crate) fn counter_top_with(t: &mut TestGame, caster: PlayerId, spell: &str) {
     let top = top_of_stack(t);
     give_mana_for(t, caster, spell);
     let c = t.hand(caster, spell);
@@ -51,7 +51,7 @@ fn counter_top_with(t: &mut TestGame, caster: PlayerId, spell: &str) {
 /// cycling cost) is an activated ability: Stifle and Squelch can target it and countering
 /// it means no card is drawn; spell-only effects (Cancel, Remove Soul, Faerie Tauntings)
 /// don't interact with it.
-fn check_cycling_is_an_activated_ability(name: &str) {
+pub(crate) fn check_cycling_is_an_activated_ability(name: &str) {
     supported(name);
     // Cancel and Remove Soul can't target it; Stifle and Squelch can.
     let mut t = TestGame::new(2);
@@ -557,7 +557,7 @@ fn a_rampaging_war_mammoths_cycling_and_trigger_cant_be_countered_by_spell_count
 /// The typecycling ability of the real card `name` (its first cycling ability) is
 /// cycling: Lightning Rift triggers on it, and Stabilizer ("Players can't cycle cards")
 /// stops it.
-fn check_typecycling_is_cycling(name: &str) {
+pub(crate) fn check_typecycling_is_cycling(name: &str) {
     supported(name);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Lightning Rift");
@@ -619,7 +619,7 @@ fn landcycling_is_cycling() {
 /// P0 typecycles the real card `name` (its first cycling ability) with P1's Cosi's
 /// Trickster watching for shuffles, choosing `pick` (or nothing): the candidates offered.
 /// Asserts that no card was drawn and that P0 shuffled.
-fn typecycle(t: &mut TestGame, name: &str, pick: Option<ObjectId>) -> Vec<Entity> {
+pub(crate) fn typecycle(t: &mut TestGame, name: &str, pick: Option<ObjectId>) -> Vec<Entity> {
     let trickster = t.battlefield(P1, "Cosi's Trickster");
     t.lands(P0, "Wastes", 3);
     for l in ["Plains", "Island", "Swamp", "Mountain", "Forest"] {

@@ -73,6 +73,7 @@ pub fn has_open_repeat(e: &Effect) -> bool {
         Effect::May { effect, .. }
         | Effect::AsPlayer { effect, .. }
         | Effect::ForEachPlayer { effect, .. }
+        | Effect::InTurnOrder { effect, .. }
         | Effect::ForEach { effect, .. } => has_open_repeat(effect),
         _ => false,
     }

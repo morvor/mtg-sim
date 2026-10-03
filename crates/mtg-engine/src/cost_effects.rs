@@ -58,6 +58,28 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
                     }),
             )
         }
+        // "You may pay {1} and exile it": the object must still be there to be exiled — a
+        // card a dies trigger is about can be found in the graveyard (CR 400.7, 603.10a),
+        // as the exile itself finds it (`Game::resolve_sel`).
+        Effect::Exile {
+            what: what @ (Sel::This | Sel::TriggerObject | Sel::TriggerLki | Sel::Target(_)),
+            ..
+        } => {
+            let follow = matches!(what, Sel::This | Sel::TriggerLki);
+            let objs: Vec<_> = g
+                .eval_sel(what, ctx)
+                .into_iter()
+                .map(|e| {
+                    if follow {
+                        g.follow_zone_change_trigger_object(e, ctx)
+                    } else {
+                        e
+                    }
+                })
+                .filter_map(|e| e.object())
+                .collect();
+            Some(!objs.is_empty() && objs.iter().all(|o| g.is_live(*o)))
+        }
         // "Return a basic land card from your graveyard to your hand", "exile a creature
         // card from your graveyard": as many objects as it names must be there.
         Effect::Move {
@@ -82,4 +104,29 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
         } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
         _ => None,
     }
+}
+
+/// After a cost paid as an effect resolved ("you may pay {1} and discard a card. If you do,
+/// ... the discarded card's mana value"): the cards it discarded are "the discarded
+/// cards" for the instructions after it, as a discard instruction's would be.
+pub fn note_paid(g: &mut Game, cost: &crate::ability::Cost, ctx: &mut Ctx) {
+    let Some(paid) = g.last_paid.take() else {
+        return;
+    };
+    let discards = cost
+        .parts
+        .iter()
+        .any(|p| matches!(p, crate::ability::CostPart::Discard { .. }));
+    if !discards {
+        return;
+    }
+    let discarded: Vec<crate::types::Entity> = paid
+        .objects
+        .iter()
+        .filter(|o| {
+            !paid.sacrificed.contains(o) && !paid.exiled.contains(o) && !paid.tapped.contains(o)
+        })
+        .map(|o| crate::types::Entity::Object(g.current(*o)))
+        .collect();
+    ctx.set_var(crate::discard_rules::DISCARDED, discarded);
 }

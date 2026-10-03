@@ -713,6 +713,9 @@ pub struct Game {
     pub start: crate::start::StartState,
     /// Special actions allowed by effects and effects being ignored (CR 116.2c, 116.2d).
     pub special: crate::special_actions::SpecialState,
+    /// What the latest cost paid with [`Game::pay_cost`] paid (the cards a "you may pay
+    /// {1} and discard a card" cost discarded, for "the discarded card").
+    pub last_paid: Option<crate::casting::PaidCost>,
     /// Coins and dice (CR 705, 706).
     pub dice: crate::dice::DiceState,
     /// Zone bookkeeping: face-down exiled cards players may look at, revealed top cards
@@ -843,6 +846,7 @@ impl Game {
             apnap_choices: vec![],
             start: Default::default(),
             special: Default::default(),
+            last_paid: None,
             dice: Default::default(),
             zones: Default::default(),
             reveals: Default::default(),

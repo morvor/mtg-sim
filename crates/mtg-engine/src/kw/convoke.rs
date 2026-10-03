@@ -24,6 +24,11 @@ use std::collections::BTreeSet;
 pub const CONVOKED_IT: &str = "convoke:convoked it";
 /// `Value::Custom`: the number of creatures that convoked it.
 pub const CONVOKED_COUNT: &str = "convoke:number of creatures that convoked it";
+/// `Effect::Custom`: "Each creature that convoked it connives." Each creature tapped to
+/// pay for the spell connives (CR 702.51c, 701.50a), even one that has since left the
+/// battlefield (its last known information is used, CR 701.50b), one at a time in APNAP
+/// order (CR 701.50c).
+pub const CONVOKERS_CONNIVE: &str = "convoke:each creature that convoked it connives";
 
 /// One mana of the total cost that tapping a creature could pay instead: a colored symbol
 /// (payable by a creature sharing one of its colors) or one generic mana.
@@ -267,6 +272,25 @@ impl KeywordRules for Convoke {
         if !cands.is_empty() {
             cost.mana = Some(remaining(&m, &colors_of(g, &cands)).0);
         }
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name != CONVOKERS_CONNIVE {
+            return false;
+        }
+        let mut remaining: Vec<ObjectId> = g
+            .cast_info(ctx)
+            .map(|c| c.convoked.iter().copied().collect())
+            .unwrap_or_default();
+        while let Some(obj) = crate::kwa::next_in_apnap_order(
+            g,
+            &mut remaining,
+            ctx.source,
+            "Choose which connives next",
+        ) {
+            crate::kwa::connive::connive(g, obj, 1, ctx.source);
+        }
+        true
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {

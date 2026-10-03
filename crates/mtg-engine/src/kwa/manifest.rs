@@ -80,6 +80,9 @@ pub fn from_top(
 ) -> Vec<ObjectId> {
     let mut out = Vec::new();
     for _ in 0..n {
+        // Each card is manifested by its own event: "whenever one or more creatures
+        // enter" triggers once per card (CR 701.40e, 603.2c).
+        g.end_event_batch();
         let Some(top) = g.library_top(p) else {
             break;
         };
@@ -158,6 +161,8 @@ impl KeywordActionRules for Manifest {
             match (a.action, a.what) {
                 (KeywordAction::ManifestDread, _) => {
                     for _ in 0..n {
+                        // "Manifest dread X times": one event each (CR 701.40e, 603.2c).
+                        g.end_event_batch();
                         out.extend(manifest_dread(g, p, ctx.source));
                     }
                 }
@@ -179,6 +184,8 @@ impl KeywordActionRules for Manifest {
                         cards.shuffle(&mut g.rng);
                     }
                     for c in cards {
+                        // One at a time (CR 701.40e, 701.58e).
+                        g.end_event_batch();
                         out.extend(put_face_down(g, c, p, kind, ctx.source));
                     }
                 }
