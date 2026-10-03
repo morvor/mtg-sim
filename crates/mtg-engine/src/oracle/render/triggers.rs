@@ -223,7 +223,8 @@ impl Renderer<'_> {
                 if e == "player" {
                     format!("at the beginning of enchanted player's {step}")
                 } else {
-                    format!("at the beginning of the {step} of enchanted {e}'s controller")
+                    let n = self.attached_noun();
+                    format!("at the beginning of the {step} of {n}'s controller")
                 }
             }
             TriggerCond::Where { trigger, .. } | TriggerCond::FirstTimeEachTurn(trigger)

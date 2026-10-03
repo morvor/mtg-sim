@@ -152,6 +152,14 @@ impl Renderer<'_> {
                 }
                 None => self.gap("splice without quality"),
             },
+            // CR 702.48a: "[Quality] offering" ("Goblin offering").
+            KeywordKind::Offering => match &k.filter {
+                Some(f) => {
+                    let n = self.noun_det(f, Det::Bare);
+                    format!("{n} offering")
+                }
+                None => self.gap("offering without quality"),
+            },
             KeywordKind::Banding => match &k.filter {
                 Some(f) => {
                     let n = self.noun(f, Num::Many);
@@ -299,7 +307,8 @@ impl Renderer<'_> {
             Filter::Multicolored => "multicolored".into(),
             Filter::Monocolored => "monocolored".into(),
             Filter::Colorless => "colorless".into(),
-            Filter::ChosenColor => "the chosen color".into(),
+            Filter::ChosenColor | Filter::LinkedChosenColor => "the chosen color".into(),
+            Filter::ChosenCardType => "the chosen card type".into(),
             Filter::ChosenName => "the chosen name".into(),
             Filter::ControlledBy(PlayerRel::Chosen) => "the chosen player".into(),
             // CR 702.16i, 702.16k: protection from each opponent.

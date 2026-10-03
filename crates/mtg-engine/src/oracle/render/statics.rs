@@ -2090,6 +2090,22 @@ impl Renderer<'_> {
         }
     }
 
+    /// A filter that names no object type, as spells and as sources ("black spells",
+    /// "black sources"); `None` when it names a type.
+    fn spells_and_sources(&mut self, f: &Filter) -> (Option<String>, Option<String>) {
+        let saved = self.default_head;
+        self.default_head = Some("spell");
+        let sp = self.noun(f, Num::Many);
+        self.default_head = Some("source");
+        let so = self.noun(f, Num::Many);
+        self.default_head = saved;
+        if sp.ends_with("spells") && so.ends_with("sources") {
+            (Some(sp), Some(so))
+        } else {
+            (None, None)
+        }
+    }
+
     fn target_restriction(&mut self, by: &TargetRestriction) -> String {
         match by {
             TargetRestriction::Opponents => "spells or abilities your opponents control".into(),
@@ -2099,7 +2115,13 @@ impl Renderer<'_> {
                 if n.contains("spell") || n.contains("abilit") {
                     n
                 } else {
-                    format!("{n} spells or abilities from {n} sources")
+                    // A quality alone ("black"): "black spells or abilities from black
+                    // sources".
+                    let (sp, so) = self.spells_and_sources(f);
+                    match (sp, so) {
+                        (Some(sp), Some(so)) => format!("{sp} or abilities from {so}"),
+                        _ => format!("{n} spells or abilities from {n} sources"),
+                    }
                 }
             }
             TargetRestriction::OpponentsSources(f) => {
@@ -3155,14 +3177,53 @@ impl Renderer<'_> {
                 let w = self.rel_subject(*who);
                 format!("the first time {w} flip one or more coins each turn, those coins come up heads and {w} win those flips")
             }
+            // A die roll a player may modify (CR 706.2a): which rolls, at what cost, how
+            // often.
             D::Modifier(m) => {
-                let c = self.cost_as_payment(&m.cost);
-                let what = match m.kind {
-                    crate::dice::ModifierKind::Reroll => "reroll it".to_string(),
-                    crate::dice::ModifierKind::Add(n) if n >= 0 => format!("add {n} to the result"),
-                    crate::dice::ModifierKind::Add(n) => format!("subtract {} from the result", -n),
+                let free = m.cost.mana.is_none() && m.cost.parts.is_empty();
+                let pay = if free {
+                    String::new()
+                } else {
+                    format!("{} to ", self.cost_as_payment(&m.cost))
                 };
-                format!("whenever you roll a die, you may {c}. If you do, {what}")
+                let rolled = match m.whose {
+                    PlayerRel::You => "you rolled",
+                    PlayerRel::Any => "any player rolled",
+                    _ => return self.gap("die modifier for another player's rolls"),
+                };
+                let once = if m.once_per_turn {
+                    "once each turn, "
+                } else {
+                    ""
+                };
+                let die = match m.sides {
+                    Some(s) => format!("a d{s}"),
+                    None => "a die".to_string(),
+                };
+                match (m.natural, m.kind) {
+                    // "If you roll a 3 on a six-sided die, you may reroll that die."
+                    (Some(n), crate::dice::ModifierKind::Reroll)
+                        if matches!(m.whose, PlayerRel::You) =>
+                    {
+                        format!("{once}if you roll a {n} on {die}, you may {pay}reroll that die")
+                    }
+                    (Some(_), _) => self.gap("die modifier for one natural result"),
+                    (None, crate::dice::ModifierKind::Reroll) => {
+                        let dice = match m.sides {
+                            Some(s) => format!("d{s}s"),
+                            None => "dice".to_string(),
+                        };
+                        format!("{once}you may {pay}reroll one or more {dice} {rolled}")
+                    }
+                    (None, crate::dice::ModifierKind::Add(n)) => {
+                        let (verb, n) = if n >= 0 {
+                            ("increase", n)
+                        } else {
+                            ("decrease", -n)
+                        };
+                        format!("{once}you may {pay}{verb} the result of {die} {rolled} by {n}")
+                    }
+                }
             }
         }
     }

@@ -738,6 +738,10 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
         "A leading duration, condition or delayed time applies to the whole sentence wherever it's written.",
     ),
     (
+        "\"Choose a creature type. [Instruction] ... the chosen type.\" -> \"[Instruction] ... the creature type of your choice.\" (also colors, card types, basic land types; when nothing later uses the choice)",
+        "The same choice, made as the instruction that uses it is followed (CR 608.2c).",
+    ),
+    (
         "\"If C, Y. Otherwise, X.\" -> \"X. If C, Y instead.\"",
         "Both state the same choice between two instructions.",
     ),
@@ -1182,10 +1186,36 @@ pub fn equivalence_regexes() -> &'static [Option<Regex>] {
 fn sentence_rewrites(s: &str) -> String {
     static LEAD: OnceLock<Option<Regex>> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
-        Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+ remains? exiled|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."]|"[^"]*")*?"[^"]*\."|(?:[^."]|"[^"]*")+?\.)"#)
+        // A rendering's `{alt:...}` / `{opt:...}` (braces nest three deep) is one piece of
+        // the sentence, periods inside it included.
+        let brace = r"\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}";
+        Regex::new(&format!(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+ remains? exiled|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."{{]|"[^"]*"|{brace})*?"[^"]*\.""?|(?:[^."{{]|"[^"]*"|{brace})+?\.)"#))
             .ok()
     });
     let mut s = s.to_string();
+    // "Choose a creature type. Untap all creatures of the chosen type." / "Untap all
+    // creatures of the creature type of your choice.": the same choice, made as the
+    // instruction that uses it is followed (CR 608.2c), when nothing later uses it.
+    static CHOSEN: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = CHOSEN.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )choose an? (color|card type|creature type|basic land type)(?:\.|,) (?:then )?([^\n]*?)(?:\bthe chosen (?:type|color|card type|creature type|basic land type)\b|\bthat (?:type|color)\b|\{alt:the chosen (?:type|color)\|that (?:type|color)\})").ok()
+    }) {
+        let mut out = String::new();
+        let mut last = 0;
+        for c in re.captures_iter(&s) {
+            let m = c.get(0).map_or(0..0, |m| m.range());
+            let later = &s[m.end..];
+            let next_line = later.find('\n').map_or(later, |i| &later[..i]);
+            if next_line.contains("chosen") || next_line.contains("that type") {
+                continue;
+            }
+            out.push_str(&s[last..m.start]);
+            out.push_str(&format!("{}{}the {} of your choice", &c[1], &c[3], &c[2]));
+            last = m.end;
+        }
+        out.push_str(&s[last..]);
+        s = out;
+    }
     // "You may pay {3}{B}. If you don't, return it ..." and "Return it ... unless you pay
     // {3}{B}" are the same choice (CR 118.12).
     static MAY_PAY: OnceLock<Option<Regex>> = OnceLock::new();
@@ -1350,6 +1380,15 @@ fn sentence_rewrites(s: &str) -> String {
         let n = lead
             .replace_all(&s, |c: &regex::Captures| {
                 let (start, clause) = (&c[1], &c[2]);
+                // A sentence ending with a quoted ability ('has "X."'): the clause goes
+                // after the quotation, which is part of the sentence ('has "X" as long as
+                // ...'), unless the clause itself is quoted.
+                if let Some(head) = c[3].strip_suffix(".\"") {
+                    if start != "\"" {
+                        return format!("{start}{head}.\" {clause}.");
+                    }
+                    return format!("{start}{head} {clause}.\"");
+                }
                 // The sentence ends with its last period, or with a quoted ability's.
                 let body = c[3].strip_suffix('.').unwrap_or(&c[3]);
                 let duration = clause == "until end of turn" || clause == "this turn";

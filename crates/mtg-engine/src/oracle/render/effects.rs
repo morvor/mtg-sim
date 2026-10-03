@@ -3382,7 +3382,12 @@ impl Renderer<'_> {
             Condition::PrevHappened if self.after_clash => {
                 self.after_clash = false;
                 let t = self.effect(then);
-                format!("if you win, {t}")
+                if else_empty {
+                    return format!("if you win, {t}");
+                }
+                // "If you win, ... Otherwise, ..." (Pulling Teeth).
+                let o = self.effect(otherwise);
+                format!("if you win, {t}. otherwise, {o}")
             }
             Condition::PrevHappened => {
                 // "Counter target spell unless its controller pays {2}. If they do, ..."
@@ -3406,8 +3411,12 @@ impl Renderer<'_> {
                     } else {
                         "don't"
                     };
-                    let o = format!("if {who} {dont}, {o}");
-                    s = if s.is_empty() { o } else { format!("{s}. {o}") };
+                    // After "If you do, ...", the other case is "Otherwise, ...".
+                    s = if s.is_empty() {
+                        format!("if {who} {dont}, {o}")
+                    } else {
+                        format!("{s}. {{alt:if {who} {dont}|otherwise}}, {o}")
+                    };
                 }
                 s
             }

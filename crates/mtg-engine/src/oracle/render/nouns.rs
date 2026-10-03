@@ -240,7 +240,15 @@ impl Renderer<'_> {
         if self.info.has_subtype("Fortification") {
             return "fortified land".into();
         }
-        match &self.info.enchant {
+        // "Enchant creature without flying", "Enchant creature with power 3 or less":
+        // "enchanted creature" (the qualities after the noun aren't part of it).
+        let enchant = self.info.enchant.as_ref().map(|n| {
+            [" without ", " with "]
+                .iter()
+                .fold(n.as_str(), |s, w| s.split(w).next().unwrap_or(s))
+                .to_string()
+        });
+        match &enchant {
             // "Enchant creature card in a graveyard": "enchanted creature" (and "enchanted
             // creature card" for the card itself, see `move_effect`).
             Some(n) if n.contains(" card") => {
