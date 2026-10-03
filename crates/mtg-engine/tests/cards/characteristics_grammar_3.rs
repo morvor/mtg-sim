@@ -192,3 +192,50 @@ fn brine_hag_shrinks_the_creatures_that_dealt_damage_to_it() {
     assert!(t.in_graveyard(P0, "Craw Wurm"), "{}", t.dump_log());
     assert_eq!(t.pt(bears), (2, 2));
 }
+
+#[test]
+fn xathrid_gorgon_petrifies_a_creature() {
+    cr!("602.5a", "205.1b", "105.3");
+    assert_supported("Xathrid Gorgon");
+    let mut t = TestGame::new(2);
+    let gorgon = t.battlefield(P0, "Xathrid Gorgon");
+    let elf = t.battlefield(P1, "Llanowar Elves");
+    t.lands(P0, "Swamp", 3);
+    t.activate(P0, gorgon, 0, &[Entity::Object(elf)]).unwrap();
+    t.resolve();
+    let c = &t.obj_now(elf).chars;
+    assert!(c.card_types.contains(types::CardType::Artifact) && c.is_creature());
+    assert_eq!(c.colors, types::ColorSet::NONE);
+    assert!(c.has_keyword(keywords::KeywordKind::Defender));
+    assert_eq!(t.counters(elf, "petrification"), 1);
+    // Its mana ability can't be activated either.
+    t.g.turn.priority = Some(P1);
+    assert!(t.activate(P1, elf, 0, &[]).is_err());
+}
+
+#[test]
+fn cycle_of_life_targets_only_a_creature_you_cast_this_turn() {
+    cr!("601.2c", "613.4b");
+    assert_supported("Cycle of Life");
+    let mut t = TestGame::new(2);
+    let cycle = t.battlefield(P0, "Cycle of Life");
+    let old = t.battlefield(P0, "Grizzly Bears");
+    let bear = t.hand(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 2);
+    t.cast(P0, bear).go();
+    t.resolve();
+    let new = *t
+        .named_on_battlefield("Grizzly Bears")
+        .iter()
+        .find(|b| **b != old)
+        .expect("the cast Bears");
+    t.answer_targets(P0, &[Entity::Object(old)]);
+    t.activate(P0, cycle, 0, &[Entity::Object(new)]).unwrap();
+    t.resolve();
+    assert_eq!(t.pt(new), (0, 1));
+    assert_eq!(t.pt(old), (2, 2));
+    assert!(t.in_hand(P0, "Cycle of Life"));
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.pt(new), (3, 3));
+}

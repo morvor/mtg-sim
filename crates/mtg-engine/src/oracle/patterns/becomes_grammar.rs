@@ -1656,6 +1656,57 @@ fn lose_all_but(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "becomes grammar: you lose all but N life", priority: 1100, parse: lose_all_but } }
 
+/// "Its activated abilities can't be activated." (Xathrid Gorgon, after "Put a
+/// petrification counter on target creature."): none of the object's activated
+/// abilities, mana abilities included (CR 602.5a), for as long as it's that object.
+fn its_activated_abilities_cant(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (duration, r) = crate::oracle::effects::duration_suffix(end(l));
+    let subj = r.strip_suffix(" activated abilities can't be activated")?;
+    let subj = match subj {
+        "its" => "it",
+        s => s.strip_suffix("'s")?,
+    };
+    let saved = (b.targets.len(), b.it.clone());
+    let (what, rest) = object_ref(subj, b)?;
+    if !rest.is_empty() || b.targets.len() != saved.0 || matches!(what, Sel::None | Sel::This) {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    }
+    Some(Effect::AddRestriction {
+        restriction: Restriction::CantActivate {
+            who: PlayerFilter::Any,
+            sources: Filter::In(Box::new(what)),
+            include_mana: true,
+        },
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "becomes grammar: its activated abilities can't be activated", priority: 1100, parse: its_activated_abilities_cant } }
+
+/// "target creature you cast this turn" (Cycle of Life): a permanent its controller cast
+/// as a spell this turn (see `kw::permanent_cast_this_turn`).
+fn you_cast_this_turn<'a>(s: &'a str, f: &Filter) -> Option<(Filter, &'a str)> {
+    let rest = s.strip_prefix("you cast this turn")?;
+    if !rest.is_empty() && !rest.starts_with([' ', ',', '.']) {
+        return None;
+    }
+    // Only permanents: "spells you cast this turn" are another phrase's.
+    if !super::statics::filter_mentions(f, &|x| {
+        matches!(x, Filter::Type(CardType::Creature) | Filter::Permanent)
+    }) || super::statics::mentions_other_zones(f)
+    {
+        return None;
+    }
+    Some((
+        Filter::Custom(crate::kw::permanent_cast_this_turn::YOU_CAST_THIS_TURN.into()),
+        rest,
+    ))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "becomes grammar: [permanent] you cast this turn", priority: 1100, parse: you_cast_this_turn } }
+
 #[cfg(test)]
 mod tests {
     use super::split_predicates;
