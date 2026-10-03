@@ -1251,3 +1251,83 @@ fn youve_done_this_turn(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "spell cost grammar: you've [done something] this turn", priority: 100, parse: youve_done_this_turn } }
+
+/// "you may pay any amount of life", "pay any amount of mana", "you may pay any amount of
+/// {R}": the player chooses an amount and pays it (CR 107.1b, 119.4); "that many" / "that
+/// much" in the instructions that follow is the amount paid (see
+/// `kw/spell_cost_grammar.rs`).
+fn pay_any_amount(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (may, r) = match l.strip_prefix("you may pay any amount of ") {
+        Some(r) => (true, r),
+        None => (false, l.strip_prefix("pay any amount of ")?),
+    };
+    let kind = match r {
+        "life" => "life",
+        "mana" => "mana",
+        "{r}" | "{w}" | "{u}" | "{b}" | "{g}" | "{c}" => r,
+        _ => return None,
+    };
+    Some(Effect::Custom(rules::pay_any_amount(kind, may).into()))
+}
+
+inventory::submit! { EffectPattern { name: "spell cost grammar: pay any amount of life/mana", priority: 100, parse: pay_any_amount } }
+
+/// "If you do, draw that many cards." / "Look at that many cards ..." / "When you do, it
+/// deals that much damage to any target." after [`pay_any_amount`]: X is the amount paid.
+fn that_many_paid(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    fn ends_with_pay(e: &Effect) -> bool {
+        match e {
+            Effect::Custom(n) => rules::is_pay_any_amount(n),
+            Effect::Seq(v) => v.last().is_some_and(ends_with_pay),
+            Effect::AsPlayer { effect, .. } => ends_with_pay(effect),
+            _ => false,
+        }
+    }
+    if !ends_with_pay(prev) || !(l.contains("that many") || l.contains("that much")) {
+        return false;
+    }
+    let reworded = l.replace("that many", "x").replace("that much", "x");
+    // "When you do, it deals that much damage to any target": a reflexive triggered
+    // ability (CR 603.12) whose "it" keeps its meaning (nothing was acted on), and whose
+    // X is the amount paid, kept for it.
+    let e = if let Some(r) = reworded.strip_prefix("when you do, ") {
+        let mut sub = Builder::new(b.ctx);
+        sub.in_trigger = true;
+        sub.it = b.it.clone();
+        sub.it_player = b.it_player.clone();
+        let Some(effect) = super::value_grammar::with_x_defined(true, || {
+            crate::oracle::effects::parse_effect_text(r, &mut sub)
+        }) else {
+            return false;
+        };
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(Effect::Reflexive {
+                body: Box::new(Body {
+                    targets: sub.targets,
+                    effect: Effect::seq(vec![
+                        Effect::SetX {
+                            value: Value::Var(rules::AMOUNT_PAID),
+                        },
+                        effect,
+                    ]),
+                    modal: None,
+                }),
+            }),
+            otherwise: Box::new(Effect::Noop),
+        }
+    } else {
+        let Some(e) = super::value_grammar::with_x_defined(true, || {
+            crate::oracle::effects::parse_sentence(&reworded, b)
+        }) else {
+            return false;
+        };
+        e
+    };
+    let p = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![p, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "spell cost grammar: that many (the amount paid)", priority: 100, apply: that_many_paid } }

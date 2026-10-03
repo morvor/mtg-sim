@@ -640,3 +640,156 @@ fn string_of_disappearances_asks_the_returned_creatures_controller() {
     assert!(t.in_hand(P1, "Grizzly Bears"));
     assert!(t.in_hand(P0, "Hill Giant"));
 }
+
+#[test]
+fn payment_cards_compile() {
+    assert_compiles(&[
+        "Purgatory",
+        "Miara, Thorn of the Glade",
+        "Ripples of Undeath",
+        "Zoraline, Cosmos Caller",
+        "Draco",
+        "Mana-Charged Dragon",
+        "Urza's Saga",
+        "Asmoranomardicadaistinaculdacar",
+        "Foil",
+        "Land Grant",
+        "Necrodominance",
+        "Karn, Living Legacy",
+        "Leyline Tyrant",
+    ]);
+}
+
+#[test]
+fn miara_pays_mana_and_life_to_draw() {
+    cr!("118.12", "119.4");
+    // "Whenever ~ or another Elf you control dies, you may pay {1} and 1 life. If you do,
+    // draw a card."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Miara, Thorn of the Glade");
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    t.lands(P0, "Forest", 1);
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.g.destroy(elf, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn draco_upkeep_cost_is_reduced_by_domain() {
+    cr!("118.7", "118.12");
+    // "Domain — At the beginning of your upkeep, sacrifice ~ unless you pay {10}. This cost
+    // is reduced by {2} for each basic land type among lands you control."
+    let mut t = TestGame::new(2);
+    let draco = t.battlefield(P0, "Draco");
+    for l in ["Plains", "Island", "Swamp", "Mountain"] {
+        t.lands(P0, l, 1);
+    }
+    t.lands(P0, "Mountain", 2);
+    // Four basic land types: {2}.
+    t.answer_yes(P0, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Draw);
+    assert!(t.on_battlefield(draco));
+    assert_eq!(tapped_lands(&t, P0), 2);
+}
+
+#[test]
+fn urzas_saga_finds_an_artifact_with_mana_cost_0_or_1() {
+    cr!("202.1", "714.2c");
+    // "III — Search your library for an artifact card with mana cost {0} or {1}, put it
+    // onto the battlefield, then shuffle."
+    let mut t = TestGame::new(2);
+    let saga = t.battlefield(P0, "Urza's Saga");
+    t.library_top(P0, "Mind Stone");
+    t.library_top(P0, "Sol Ring");
+    t.library_top(P0, "Mind Stone");
+    t.g.objects[saga.0 as usize]
+        .counters
+        .insert("lore".into(), 2);
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Sol Ring").len(), 1, "{}", t.dump_log());
+    assert!(t.named_on_battlefield("Mind Stone").is_empty());
+}
+
+#[test]
+fn asmoranomardicadaistinaculdacar_costs_br_after_a_discard() {
+    cr!("118.9", "601.2b");
+    // "As long as you've discarded a card this turn, you may pay {B/R} to cast ~."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 1);
+    let asmor = t.hand(P0, "Asmoranomardicadaistinaculdacar");
+    t.g.recompute();
+    t.g.turn.priority = Some(P0);
+    let can = |t: &mut TestGame| {
+        t.g.cast_options(P0, asmor)
+            .into_iter()
+            .any(|o| t.g.can_begin_cast(P0, asmor, &o))
+    };
+    assert!(!can(&mut t));
+    let filler = t.hand(P0, "Grizzly Bears");
+    t.g.discard(P0, filler, None);
+    t.g.recompute();
+    assert!(can(&mut t));
+}
+
+#[test]
+fn foil_discards_an_island_and_another_card_instead_of_its_mana_cost() {
+    cr!("118.9");
+    // "You may discard an Island card and another card rather than pay ~'s mana cost."
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast_with(P1, bolt, &[Entity::Player(P0)]).expect("bolt");
+    let bolt = t.g.current(bolt);
+    let foil = t.hand(P0, "Foil");
+    let island = t.hand(P0, "Island");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.g.turn.priority = Some(P0);
+    let opts = t.g.cast_options(P0, foil);
+    let alt = opts
+        .into_iter()
+        .find(|o| o.alt_cost.is_some())
+        .expect("alternative cost");
+    t.answer_targets(P0, &[Entity::Object(bolt)]);
+    t.g.cast_spell(P0, foil, alt.method).expect("Foil");
+    let _ = (island, bears);
+    assert!(t.in_graveyard(P0, "Island"));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
+
+#[test]
+fn necrodominance_draws_as_many_cards_as_life_paid() {
+    cr!("119.4", "107.1b");
+    // "At the beginning of your end step, you may pay any amount of life. If you do, draw
+    // that many cards."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Necrodominance");
+    let hand = t.hand_size(P0);
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(t.hand_size(P0), hand + 3);
+}
+
+#[test]
+fn leyline_tyrant_deals_as_much_damage_as_red_mana_paid() {
+    cr!("603.12", "107.1b");
+    // "When this creature dies, you may pay any amount of {R}. When you do, it deals that
+    // much damage to any target."
+    let mut t = TestGame::new(2);
+    let tyrant = t.battlefield(P0, "Leyline Tyrant");
+    t.lands(P0, "Mountain", 3);
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.g.destroy(tyrant, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}

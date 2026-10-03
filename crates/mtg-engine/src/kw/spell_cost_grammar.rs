@@ -34,6 +34,22 @@ pub const CASTER_ENCHANTED: &str = "spell cost:caster is enchanted player";
 const TARGETS_PREFIX: &str = "spell cost:targets of type:";
 const PAID_TIMES: &str = "spell cost:times paid:";
 const MANA_COST_IS: &str = "spell cost:mana cost is:";
+const PAY_ANY: &str = "spell cost:pay any amount:";
+
+/// `Effect::Custom` name: the player chooses an amount of `kind` ("life", "mana", or a mana
+/// symbol such as "{r}") and pays it (`may`: they may choose not to). The amount paid is
+/// the ability's X from then on ("draw that many cards").
+pub fn pay_any_amount(kind: &str, may: bool) -> String {
+    format!("{PAY_ANY}{kind}:{}", if may { "may" } else { "must" })
+}
+
+/// The amount paid by [`pay_any_amount`], for a reflexive triggered ability's "that much"
+/// (CR 603.12).
+pub const AMOUNT_PAID: Var = crate::ability::vars::USER + 6011;
+
+pub fn is_pay_any_amount(name: &str) -> bool {
+    name.starts_with(PAY_ANY)
+}
 
 /// `Filter::Custom` name: the object's mana cost is exactly `m` ("with mana cost {0}").
 pub fn mana_cost_is(m: &crate::mana::ManaCost) -> String {
@@ -237,6 +253,46 @@ impl KeywordRules for SpellCostGrammar {
             .into_iter()
             .map(|n| (n, Cost::free(), true))
             .collect()
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        let Some(r) = name.strip_prefix(PAY_ANY) else {
+            return false;
+        };
+        let Some((kind, _may)) = r.split_once(':') else {
+            return false;
+        };
+        let p = ctx.controller;
+        let max = match kind {
+            "life" => g.player(p).life.max(0) as i64,
+            _ => g.max_mana_available(p) as i64,
+        };
+        let src = ctx.source.or(ctx.stack_obj).unwrap_or(ObjectId(0));
+        let n = match g.ask(p, crate::decision::Decision::ChooseX { source: src, min: 0, max }) {
+            crate::decision::Answer::Number(n) if n >= 0 => n.min(max),
+            _ => 0,
+        };
+        let cost = match kind {
+            "life" => Cost::free().with(CostPart::PayLife(Value::c(n as i32))),
+            "mana" => Cost::mana(crate::mana::ManaCost::generic(n as u32)),
+            sym => {
+                let Some(one) = crate::mana::ManaCost::parse(&sym.to_uppercase()) else {
+                    return true;
+                };
+                let mut m = crate::mana::ManaCost::default();
+                for _ in 0..n {
+                    m.add(&one);
+                }
+                Cost::mana(m)
+            }
+        };
+        let paid = n > 0 && g.pay_cost(p, &cost, ctx.source, ctx);
+        let n = if paid { n } else { 0 };
+        ctx.x = n as i32;
+        ctx.x_defined = true;
+        ctx.nums.insert(AMOUNT_PAID, n);
+        ctx.prev_happened = paid;
+        true
     }
 
     fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
