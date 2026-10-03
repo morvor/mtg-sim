@@ -87,6 +87,17 @@ impl Renderer<'_> {
                         format!("put that card {d}")
                     };
                 }
+                // "Exile four of them at random."
+                if let (true, Some(Value::Const(k)), true) = (*random, count, each_of.is_empty()) {
+                    if *k > 1 && matches!(filter, Filter::Any) {
+                        let n = number_word(*k);
+                        if to.zone == ZoneKind::Exile {
+                            return format!("exile {n} of them at random");
+                        }
+                        let d = self.dig_destination(to, true);
+                        return format!("put {n} of them at random {d}");
+                    }
+                }
                 let many = !matches!(count, Some(Value::Const(1)));
                 let what = if !each_of.is_empty() {
                     let names: Vec<String> = each_of

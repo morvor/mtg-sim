@@ -603,6 +603,11 @@ impl Renderer<'_> {
                     // "Whenever you're dealt damage".
                     return Ev::new("", format!("you're dealt {c}"));
                 }
+                // "Whenever one or more opponents are dealt noncombat damage" (once for
+                // the players dealt damage at once).
+                if self.batch_once && matches!(det, Det::OneOrMore) && w == "an opponent" {
+                    return Ev::new("one or more opponents", format!("are dealt {c}"));
+                }
                 Ev::new(w, format!("is dealt {c}"))
             }
             TriggerCond::BeginningOf { step, whose } => {

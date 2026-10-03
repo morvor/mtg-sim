@@ -123,6 +123,104 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               controller's after the next entry, isn't confused with it).",
     },
     Equivalence {
+        pattern: r"\b(?:each|all) ([a-z-]+?)s? (?:other than|except for) ~(?:it)?\b",
+        replacement: "each other $1",
+        why: "\"Other\" in an ability is other than the object it's on: \"all \
+              creatures other than ~\" and \"all creatures except for ~\" are \"each other \
+              creature\".",
+    },
+    Equivalence {
+        pattern: r"\bwith an? (morph|megamorph|kicker|multikicker|cycling|flashback|suspend|ninjutsu|disguise|madness|evoke|echo|buyback|unearth|embalm|eternalize|escape|dash|blitz|bestow|prowl|outlast|equip|crew) ability\b",
+        replacement: "with $1",
+        why: "A card \"with a morph ability\" is a card with morph: the keyword is the \
+              ability (CR 702.1).",
+    },
+    Equivalence {
+        pattern: r"\ba spell that's both (white|blue|black|red|green) and (white|blue|black|red|green)\b",
+        replacement: "a $1 and $2 spell",
+        why: "A spell that's both white and black is a white and black spell (CR 105.2).",
+    },
+    Equivalence {
+        pattern: r"\ba spell that's ((?:(?:white|blue|black|red|green), )+)or (white|blue|black|red|green)\b",
+        replacement: "a $1or $2 spell",
+        why: "A clause saying what a spell is describes it as the adjectives do: \"a spell \
+              that's white, blue, black, or red\" is \"a white, blue, black, or red spell\".",
+    },
+    Equivalence {
+        pattern: r"\b(creatures? or planeswalkers?) that's (white|blue|black|red|green) or (white|blue|black|red|green)\b",
+        replacement: "$2 or $3 $1",
+        why: "The same for colors: \"target creature or planeswalker that's green or blue\" \
+              is \"target green or blue creature or planeswalker\".",
+    },
+    Equivalence {
+        pattern: r"\b(target (?:face-up )?)exiled card((?: with [a-z]+)?(?: you own)?)",
+        replacement: "${1}card$2 in exile",
+        why: "An exiled card is a card in exile (CR 406.1).",
+    },
+    Equivalence {
+        pattern: r"\bthe (owner|controller) of (target (?:[a-z-]+ ){0,3}?(?:creature|permanent|spell|artifact|land|enchantment|card))\b",
+        replacement: "$2's $1",
+        why: "\"The owner of target creature\" is \"target creature's owner\" (as \"the owner \
+              of ~\").",
+    },
+    Equivalence {
+        pattern: r"\bif (\S+ or more) ([a-z ]+?cards?) (?:are|is) in (your|their|a) graveyard\b",
+        replacement: "if there are $1 $2 in $3 graveyard",
+        why: "\"If twenty or more creature cards are in your graveyard\" and \"if there are \
+              twenty or more creature cards in your graveyard\" are the same condition.",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?) that(?:'s| is| are) attacking\b",
+        replacement: "$1 attacking",
+        why: "\"A creature that's attacking that player\" is \"a creature attacking that \
+              player\".",
+    },
+    Equivalence {
+        pattern: r"\bin addition to (its|their) other creature types\b",
+        replacement: "in addition to $1 other types",
+        why: "Adding a creature type changes only creature types (CR 205.1a, 205.1b): \
+              \"in addition to its other creature types\" and \"in addition to its other \
+              types\" keep the same types.",
+    },
+    Equivalence {
+        pattern: r"\b(white|blue|black|red|green|colorless) legendary\b",
+        replacement: "legendary $1",
+        why: "Adjective order: \"red legendary creatures\" are \"legendary red creatures\".",
+    },
+    Equivalence {
+        pattern: r"\bthe blocking creature\b",
+        replacement: "thatit",
+        why: "Anaphora: \"Whenever ~ becomes blocked by a creature, the blocking creature \
+              gets -1/-1\": the creature the trigger event named.",
+    },
+    Equivalence {
+        pattern: r"\bany other target\b",
+        replacement: "another target",
+        why: "\"Another target\" is any target other than the earlier ones (CR 115.3).",
+    },
+    Equivalence {
+        pattern: r"\b(\d+)-(\d+)\b",
+        replacement: "$1 $2",
+        why: "A range of die results in a table, \"1-9\" or \"1—9\" (CR 706).",
+    },
+    Equivalence {
+        pattern: r"\btwelfth\b",
+        replacement: "12th",
+        why: "Ordinal written in words.",
+    },
+    Equivalence {
+        pattern: r"\b(you|they|that player) (?:have|has) not (cast|attacked|gained|lost)\b",
+        replacement: "$1 didn't $2",
+        why: "\"If you haven't cast a spell this turn\" and \"if you didn't cast a spell this \
+              turn\" ask the same thing about this turn.",
+    },
+    Equivalence {
+        pattern: r"\bthat (?:was|were) attached to\b",
+        replacement: "attached to",
+        why: "Tense: \"gain control of all Equipment that were attached to it\" after it was \
+              destroyed names the Equipment attached to it then.",
+    },
+    Equivalence {
         pattern: r"\b(put that card [^.]*?) and the rest\b",
         replacement: "$1. put the rest",
         why: "\"Put that card into your hand and the rest on the bottom of your library\": \

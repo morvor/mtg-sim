@@ -5114,6 +5114,7 @@ impl Renderer<'_> {
                     parts.push(format!("isn't {}", with_article(&join_list(&w, "or"))));
                 }
                 Modification::SetTypes { types, subtypes } => {
+                    becomes.sets_types = subtypes.is_empty();
                     becomes.add_types.extend(types.iter().copied());
                     becomes
                         .subtypes
@@ -5956,6 +5957,9 @@ struct Becomes {
     /// New creature types replace the old ones (CR 205.1a).
     replaces_creature_types: bool,
     land_type: bool,
+    /// The card types replace the old ones ("is an enchantment and loses all other card
+    /// types").
+    sets_types: bool,
     name: Option<String>,
     /// Write a set power and toughness as "with base power and toughness 4/4" after the
     /// types (newer Oracle wording) rather than as "a 4/4 ..." before them.
@@ -6094,6 +6098,10 @@ impl Becomes {
             s.push_str(&format!(" with base power and toughness {pt}"));
         }
         s.push_str(&with);
+        // CR 205.1a: new card types replace the old ones, which cards may say.
+        if self.sets_types && !self.additive {
+            s.push_str(" {opt:and loses all other card types}");
+        }
         let mut still = String::new();
         // Adding a supertype ("is snow", "is legendary") never removes anything.
         let only_supertypes =
@@ -6101,8 +6109,17 @@ impl Becomes {
         // "becomes a Human Warrior": only its creature types change (CR 205.1a); it
         // keeps its card types without adding any, so nothing is "in addition".
         let only_creature_types = self.replaces_creature_types && self.add_types.is_empty();
+        // CR 205.1b: "becomes a 4/4 Angel artifact creature" keeps its other card types
+        // and subtypes but creature types, which the Angel replaces.
+        let typed_artifact_creature = {
+            let mut t = self.add_types.clone();
+            t.sort_by_key(|x| x.word());
+            t == [CardType::Artifact, CardType::Creature]
+                && self.replaces_creature_types
+                && self.supertypes.is_empty()
+        };
         if self.additive && !self.land_type && !only_supertypes && !only_creature_types {
-            if artifact_creature {
+            if artifact_creature || typed_artifact_creature {
                 s.push_str(" {opt:in addition to its other types}");
                 return Some((s, still));
             }
