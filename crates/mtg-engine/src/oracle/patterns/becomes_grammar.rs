@@ -39,7 +39,266 @@ fn starts_with_verb(s: &str) -> bool {
 }
 
 /// Splits "[a], [b], and [c]" / "[a] and [b]" at the separators that start a predicate.
-#[cfg(test)]
+/// "[subject] gets +X/+Y [duration], where X is [value] and Y is its toughness"
+/// (Phyrexian Ingester, Bioplasm): "its" is the object of the first value.
+fn gets_x_y(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, def) = l.split_once(", where x is ")?;
+    let (xs, ys) = def.split_once(" and y is ")?;
+    let (subj, rest) = head
+        .split_once(" gets +x/+y")
+        .or_else(|| head.split_once(" get +x/+y"))?;
+    let duration = only_duration(rest)?;
+    // "Y is its toughness" after "X is the exiled creature card's power".
+    let ys = match (ys.strip_prefix("its "), xs.split_once("'s ")) {
+        (Some(stat), Some((obj, _))) => format!("{obj}'s {stat}"),
+        _ => ys.to_string(),
+    };
+    let saved = (b.targets.len(), b.it.clone());
+    let result = (|| {
+        let (what, r) = object_ref(subj, b)?;
+        if !r.trim().is_empty() || matches!(what, Sel::None) {
+            return None;
+        }
+        let (x, r1) = crate::oracle::statics::parse_value_phrase(xs, b)?;
+        let (y, r2) = crate::oracle::statics::parse_value_phrase(&ys, b)?;
+        if !r1.trim().is_empty() || !r2.trim().is_empty() || b.targets.len() != saved.0 {
+            return None;
+        }
+        Some(Effect::Modify {
+            what,
+            mods: vec![Modification::ModifyPT(x, y)],
+            duration,
+        })
+    })();
+    if result.is_none() {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+    }
+    result
+}
+
+inventory::submit! { EffectPattern { name: "becomes grammar: gets +X/+Y, where X is ... and Y is ...", priority: 150, parse: gets_x_y } }
+
+/// "It deals X plus 1 damage instead if that target is a creature or planeswalker.":
+/// "that target" is what "it" names in the condition.
+fn that_target_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.contains(" instead if that target is ") {
+        return false;
+    }
+    let mut t = l.replacen(" instead if that target is ", " instead if it's ", 1);
+    // "if it's white and/or blue": of either color.
+    if let Some((a, c)) = t.split_once(" instead if it's ") {
+        if let Some((x, y)) = c.split_once(" and/or ") {
+            if Color::from_word(x).is_some() && Color::from_word(y).is_some() {
+                t = format!("{a} instead if it's {x} or {y}");
+            }
+        }
+    }
+    let saved = b.it.clone();
+    if let Some(i) = last_damage_target(prev) {
+        b.it = Sel::Target(i);
+    }
+    let ok = crate::oracle_ext::apply_followup_ext(&t, prev, b);
+    if !ok {
+        b.it = saved;
+    }
+    ok
+}
+
+fn last_damage_target(e: &Effect) -> Option<u8> {
+    match e {
+        Effect::DealDamage {
+            to: Sel::Target(i), ..
+        } => Some(*i),
+        Effect::Seq(v) => v.last().and_then(last_damage_target),
+        _ => None,
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "becomes grammar: ... instead if that target is ...", priority: 50, apply: that_target_instead } }
+
+/// "creatures that are green and/or white": of any of those colors.
+fn that_are_colors<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = s.strip_prefix("that are ")?;
+    let (a, r) = r.split_once(' ')?;
+    let r = r.strip_prefix("and/or ")?;
+    let (c, rest) = match r.split_once(' ') {
+        Some((c, rest)) => (c, rest),
+        None => (r, ""),
+    };
+    let a = Color::from_word(a)?;
+    let c = Color::from_word(c)?;
+    let rest_start = s.len() - rest.len();
+    Some((
+        Filter::Or(vec![Filter::Color(a), Filter::Color(c)]),
+        &s[rest_start..],
+    ))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "becomes grammar: that are [color] and/or [color]", priority: 150, parse: that_are_colors } }
+
+/// "~ gets +X/+Y, where X is the exiled creature card's power and Y is its toughness."
+/// (Phyrexian Ingester): values that follow the game as the static ability applies.
+fn static_gets_x_y(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let (head, def) = l.split_once(", where x is ")?;
+    let (xs, ys) = def.split_once(" and y is ")?;
+    let subj_text = head.strip_suffix(" gets +x/+y")?;
+    let ys = match (ys.strip_prefix("its "), xs.split_once("'s ")) {
+        (Some(stat), Some((obj, _))) => format!("{obj}'s {stat}"),
+        _ => ys.to_string(),
+    };
+    let subj = super::statics::parse_subject(subj_text, Some(&Sel::This), ctx)?;
+    let mut b = Builder::new(ctx);
+    b.it = Sel::This;
+    let (x, r1) = crate::oracle::statics::parse_value_phrase(xs, &mut b)?;
+    let (y, r2) = crate::oracle::statics::parse_value_phrase(&ys, &mut b)?;
+    if !r1.trim().is_empty() || !r2.trim().is_empty() || !b.targets.is_empty() {
+        return None;
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected: subj.filter,
+            mods: vec![Modification::ModifyPT(x, y)],
+        })),
+        text,
+    )])
+}
+
+/// "As a historic permanent you control enters, it becomes a 7/7 Dinosaur creature in
+/// addition to its other types." (CR 614.1c: a replacement effect that modifies how the
+/// permanent enters; it's that from then on.)
+fn as_objects_enter_becomes(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("as ")?;
+    let (obj, pred) = r.split_once(" enters, it becomes ")?;
+    let obj = obj
+        .strip_prefix("a ")
+        .or_else(|| obj.strip_prefix("an "))
+        .or_else(|| obj.strip_prefix("another "))?;
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(obj)?;
+    if !end(tail).trim().is_empty() {
+        return None;
+    }
+    let f = if r.starts_with("another ") {
+        Filter::and(vec![f, Filter::Other])
+    } else {
+        f
+    };
+    let subj = super::statics::Subject {
+        filter: Filter::Any,
+        it: None,
+        hint: CardType::Creature,
+        lands: false,
+        creatures: super::statics::filter_mentions(&f, &|x| {
+            matches!(x, Filter::Type(CardType::Creature))
+        }),
+    };
+    let mods = type_predicate_mods(pred, &subj)?;
+    if makes_creature(&mods)
+        && !mods
+            .iter()
+            .any(|m| matches!(m, Modification::SetPT(Some(_), Some(_))))
+    {
+        return None;
+    }
+    let e = Effect::OnEntry(Box::new(Effect::Modify {
+        what: Sel::This,
+        mods,
+        duration: Duration::Permanent,
+    }));
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+            ReplacementDef {
+                event: ReplacementEvent::EntersBattlefield(f),
+                action: ReplacementAction::AsEnters(Box::new(e)),
+                self_replacement: false,
+                optional: false,
+            },
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "becomes grammar: as [objects] enter, it becomes ...", priority: 150, parse: as_objects_enter_becomes } }
+
+/// "Until end of turn, that permanent becomes saddled if it's a Mount and becomes an
+/// artifact creature if it's a Vehicle." (Alacrian Armory): each predicate applies if the
+/// object is of its kind.
+fn predicates_if_its(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (lead, core) = match l.strip_prefix("until end of turn, ") {
+        Some(r) => (" until end of turn", r),
+        None => ("", l),
+    };
+    if !core.contains(" if it's ") {
+        return None;
+    }
+    let i = core.find(" becomes ")?;
+    let subj_text = &core[..i];
+    let preds = split_predicates(&core[i + 1..]);
+    if preds.len() < 2 {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let result = (|| {
+        let (what, r) = object_ref(subj_text, b)?;
+        if !r.trim().is_empty() || matches!(what, Sel::None | Sel::All(_)) {
+            return None;
+        }
+        let mut out = Vec::new();
+        for p in preds {
+            let (pred, kind) = p.split_once(" if it's ")?;
+            let kind = kind
+                .strip_prefix("a ")
+                .or_else(|| kind.strip_prefix("an "))?;
+            let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(kind)?;
+            if plural || !tail.trim().is_empty() {
+                return None;
+            }
+            b.it = what.clone();
+            let e = crate::oracle::effects::parse_clause(&format!("it {pred}{lead}"), b)?;
+            out.push(Effect::If {
+                cond: Condition::SelMatches(what.clone(), f),
+                then: Box::new(e),
+                otherwise: Box::new(Effect::Noop),
+            });
+        }
+        b.it = what;
+        Some(Effect::seq(out))
+    })();
+    if result.is_none() {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+    }
+    result
+}
+
+inventory::submit! { EffectPattern { name: "becomes grammar: [predicate] if it's a [kind] and [predicate] if it's a [kind]", priority: 150, parse: predicates_if_its } }
+
+/// "equipped creature is a Human or an Angel" (a condition about one object's subtypes).
+fn is_a_or_a(c: &str) -> Option<Condition> {
+    let (subj, r) = c.split_once(" is ")?;
+    let sel = match subj {
+        "equipped creature" | "enchanted creature" => Sel::AttachedTo,
+        "~" => Sel::This,
+        _ => return None,
+    };
+    let mut fs = Vec::new();
+    for part in r.split(" or ") {
+        let w = part
+            .strip_prefix("a ")
+            .or_else(|| part.strip_prefix("an "))?;
+        fs.push(Filter::Subtype(crate::oracle::phrases::subtype_word(w)?));
+    }
+    if fs.len() < 2 {
+        return None;
+    }
+    Some(Condition::SelMatches(sel, Filter::Or(fs)))
+}
+
+inventory::submit! { super::ConditionPattern { name: "becomes grammar: [object] is a [type] or a [type]", priority: 150, parse: is_a_or_a } }
+
 fn split_predicates(s: &str) -> Vec<&str> {
     split_predicates_with(s, &[])
 }
@@ -83,6 +342,13 @@ fn split_duration(l: &str) -> (Duration, &str) {
         (Duration::EndOfTurn, _) if l.ends_with(" this turn") => (Duration::Permanent, l),
         (d, r) => (d, r),
     }
+}
+
+/// The duration `s` (" until end of turn", or nothing) consists of.
+fn only_duration(s: &str) -> Option<Duration> {
+    let t = format!("x{s}");
+    let (d, rest) = crate::oracle::effects::duration_suffix(&t);
+    (rest == "x").then_some(d)
 }
 
 /// "N/N" or "X/X" (X defined by the ability).
@@ -497,12 +763,24 @@ fn subject_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
         let (what, r) = match subj_text {
             // A card named for two characters ("Moon Girl and Devil Dinosaur") is "they".
             "they" if b.ctx.card_name.contains(" and ") => (Sel::This, String::new()),
+            // "each Advisor, Artificer, and Monk you control"
+            s if s.starts_with("each ") && s.contains(", and ") => {
+                object_ref(&super::statics::union_nouns(s), b)?
+            }
             _ => object_ref(subj_text, b)?,
         };
         if !r.trim().is_empty() || matches!(what, Sel::None) {
             return None;
         }
         let mut subj = subject(subj_text, b);
+        // A Vehicle that attacks or is crewed is a creature (CR 301.7): "~ becomes an
+        // Assassin in addition to its other types until end of turn".
+        if matches!(what, Sel::This)
+            && b.ctx.type_line.subtypes.iter().any(|s| s == "Vehicle")
+            && !matches!(duration, Duration::Permanent)
+        {
+            subj.creatures = true;
+        }
         // "Whenever a creature you control with flying attacks, you may have it become
         // ...": the trigger's object is a creature.
         if matches!(what, Sel::TriggerObject) && trigger_object_is_creature(b, rest) {
@@ -619,19 +897,27 @@ fn static_parts(l: &str) -> Option<(&str, Vec<&str>)> {
 }
 
 /// "other snow and Zombie creatures you control": the creatures that are snow or Zombies
-/// (a supertype and a subtype can't both be meant of one adjective list with "and").
-fn either_adjective(s: &str) -> Option<String> {
+/// (a supertype and a subtype joined by "and" before the noun).
+fn either_adjective(s: &str, ctx: &CompileContext) -> Option<Subject> {
     let words: Vec<&str> = s.split(' ').collect();
     let i = words.iter().position(|w| *w == "and")?;
-    let (a, c) = (words.get(i.checked_sub(1)?)?, words.get(i + 1)?);
-    let sup = |w: &str| Supertype::from_word(w).is_some();
-    let sub = |w: &str| crate::oracle::phrases::subtype_word(w).is_some();
-    if !((sup(a) && sub(c)) || (sub(a) && sup(c))) {
-        return None;
-    }
-    let mut v = words.clone();
-    v[i] = "or";
-    Some(v.join(" "))
+    let (a, c) = (*words.get(i.checked_sub(1)?)?, *words.get(i + 1)?);
+    let sup = |w: &str| Supertype::from_word(w);
+    let sub = |w: &str| crate::oracle::phrases::subtype_word(w);
+    let either = match (sup(a), sub(c), sub(a), sup(c)) {
+        (Some(x), Some(y), _, _) => Filter::Or(vec![Filter::Supertype(x), Filter::Subtype(y)]),
+        (_, _, Some(y), Some(x)) => Filter::Or(vec![Filter::Subtype(y), Filter::Supertype(x)]),
+        _ => return None,
+    };
+    let rest: Vec<&str> = words
+        .iter()
+        .enumerate()
+        .filter(|(j, _)| *j + 1 != i && *j != i && *j != i + 1)
+        .map(|(_, w)| *w)
+        .collect();
+    let mut subj = super::statics::parse_subject(&rest.join(" "), None, ctx)?;
+    subj.filter = Filter::and(vec![subj.filter, either]);
+    Some(subj)
 }
 
 /// "[objects] have base power and toughness 3/3 and lose all creature types" (Curse of
@@ -642,6 +928,9 @@ fn static_predicates(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ab
         return None;
     }
     let l = end(l);
+    if let Some(a) = static_gets_x_y(l, text, ctx) {
+        return Some(a);
+    }
     // "During your turn, ~ is a 4/4 ... creature ...": a condition on the whole ability.
     let mut cond = None;
     let mut line = l.to_string();
@@ -666,7 +955,7 @@ fn static_predicates(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ab
     let l = line.as_str();
     let (subj_text, preds) = static_parts(l)?;
     let subj = super::statics::parse_subject(subj_text, Some(&Sel::This), ctx)
-        .or_else(|| super::statics::parse_subject(&either_adjective(subj_text)?, None, ctx))?;
+        .or_else(|| either_adjective(subj_text, ctx))?;
     let mut b = Builder::new(ctx);
     let mut mods = Vec::new();
     for p in &preds {
@@ -851,6 +1140,8 @@ fn last_battlefield_move(e: &mut Effect) -> Option<&mut Destination> {
             then, otherwise, ..
         } if matches!(**otherwise, Effect::Noop) => last_battlefield_move(then),
         Effect::May { effect, .. } => last_battlefield_move(effect),
+        // "When you do, return target creature card ... to the battlefield."
+        Effect::Reflexive { body } => last_battlefield_move(&mut body.effect),
         _ => None,
     }
 }
@@ -957,10 +1248,7 @@ inventory::submit! { EffectPattern { name: "becomes grammar: [objects] become bl
 /// "switch its power and toughness until end of turn" (CR 613.4d).
 fn switch_its_pt(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("switch its power and toughness")?;
-    let (duration, rest) = crate::oracle::effects::duration_suffix(r);
-    if !rest.is_empty() {
-        return None;
-    }
+    let duration = only_duration(r)?;
     let (what, _) = object_ref("it", b)?;
     Some(Effect::Modify {
         what,

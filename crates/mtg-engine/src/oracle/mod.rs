@@ -426,7 +426,8 @@ pub fn strip_ability_word(text: &str) -> &str {
             && !head.contains('\n')
             && !head.contains(':')
             && !head.to_lowercase().starts_with("choose")
-            && head.chars().next().is_some_and(|c| c.is_uppercase())
+            // ("~ Formula": a flavor word with the card's name in it.)
+            && head.chars().next().is_some_and(|c| c.is_uppercase() || c == '~')
             && !head.contains('{')
             // Not a dash inside a quoted ability ("All creatures have "Boast — ...").
             && !head.contains('"')
