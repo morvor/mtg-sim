@@ -150,9 +150,32 @@ fn capitalize(w: &str) -> String {
     }
 }
 
+/// A two-word subtype at the start of `s` ("Time Lord", "Time Lords", CR 205.3m), as one
+/// word, and the rest.
+fn two_word_subtype(s: &str) -> Option<(&str, &str)> {
+    let s = s.trim_start();
+    let (a, r) = split_word(s);
+    let (b, rest) = split_word(r);
+    if a.ends_with(',') || b.is_empty() {
+        return None;
+    }
+    let two = &s[..a.len() + 1 + b.len()];
+    subtype_word(two.trim_end_matches(','))?;
+    Some((two, rest))
+}
+
 /// Recognizes a subtype word (any case/plural) and returns its canonical form.
 pub fn subtype_word(w: &str) -> Option<Subtype> {
     let lower = w.to_lowercase();
+    // Two-word subtypes: "Time Lord" (CR 205.3m).
+    if lower.contains(' ') {
+        let cap = singular(&lower)
+            .split(' ')
+            .map(capitalize)
+            .collect::<Vec<_>>()
+            .join(" ");
+        return subtype_kind(&cap).is_some().then(|| SmolStr::new(cap));
+    }
     let sg = singular(&lower);
     let cap = capitalize(&sg);
     if subtype_kind(&cap).is_some() {
@@ -413,7 +436,7 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     // The heads are a comma list ("artifact, enchantment, or creature").
     let mut comma_list = false;
     loop {
-        let (w, rest) = split_word(s);
+        let (w, rest) = two_word_subtype(s).unwrap_or_else(|| split_word(s));
         let w2 = w.trim_end_matches(',');
         let Some(f) = head_noun(w2) else { break };
         if w.ends_with(',') {

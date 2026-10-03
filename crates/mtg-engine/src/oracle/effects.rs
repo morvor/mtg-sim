@@ -496,6 +496,9 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
             x_defined = Some((effects.len().saturating_sub(1), defined_value));
             x_stored = false;
         }
+        // "Look at the top four cards of your library.": later sentences may choose "from
+        // among them" (`patterns::dig_grammar`).
+        super::patterns::dig_grammar::note_source(effects.last(), b);
         // "If you do, repeat this process.": the instructions so far are the process.
         if effects
             .last()

@@ -308,7 +308,14 @@ struct Verb {
 
 fn verb(v: &str) -> Option<Verb> {
     fn dig_reveal(e: &Effect) -> bool {
-        matches!(e, Effect::Dig { reveal: true, .. } | Effect::RevealHand { .. })
+        match e {
+            Effect::Dig { reveal: true, .. } | Effect::RevealHand { .. } => true,
+            // "You may reveal that card." (`dig_grammar`): the cards revealed are stored
+            // in `vars::REVEALED`.
+            Effect::DigStep(s) => matches!(**s, DigStep::Take { reveal: true, .. }),
+            Effect::Seq(v) => v.last().is_some_and(dig_reveal),
+            _ => false,
+        }
     }
     Some(match v {
         "milled" | "mill" => Verb {

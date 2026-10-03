@@ -17,6 +17,7 @@ mod custom;
 mod custom_effects;
 mod custom_filters;
 mod custom_more;
+mod dig;
 mod each_player;
 mod effects;
 mod extremes;
