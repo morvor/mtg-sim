@@ -268,6 +268,22 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
             plural_to_singular(r)?,
         ));
     }
+    // "each player other than target player", "each player who controls the fewest
+    // creatures": players described by `choice_grammar::player_phrase`.
+    if [
+        "each player other than target player ",
+        "each player who controls the fewest ",
+        "each player who controls the most ",
+    ]
+    .iter()
+    .any(|p| l.starts_with(p))
+    {
+        let saved = b.targets.len();
+        if let Some((who, rest)) = super::choice_grammar::player_phrase(l, b) {
+            return Some((Subject::Each(who, None), rest.trim_start().to_string()));
+        }
+        b.targets.truncate(saved);
+    }
     // "each player who controls ...", "each opponent with no cards in hand ..."
     for (p, who) in [
         ("each player ", PlayerRef::EachPlayer),
@@ -314,7 +330,10 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
             return Some((Subject::One(who), rest));
         }
     }
-    if let Some(r) = l.strip_prefix("enchanted player ") {
+    if let Some(r) = l
+        .strip_prefix("enchanted player ")
+        .or_else(|| l.strip_prefix("enchanted opponent "))
+    {
         if !b.ctx.type_line.subtypes.iter().any(|s| s.as_str() == "Aura") {
             return None;
         }
@@ -328,6 +347,8 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
     for p in [
         "that player or that planeswalker's controller ",
         "that player or that permanent's controller ",
+        // "That permanent's controller or that player creates ..." (Acorn Catapult).
+        "that permanent's controller or that player ",
     ] {
         if let Some(r) = l.strip_prefix(p) {
             let slot = b.targets.iter().rposition(|t| {

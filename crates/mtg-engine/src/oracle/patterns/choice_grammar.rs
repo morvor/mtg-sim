@@ -152,27 +152,55 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             }
         }
     }
-    if let Some(r) = s.strip_prefix("each player who controls the most ") {
+    // "each player who controls the fewest creatures" (Gor Muldrak): likewise.
+    for (p, tie, cmp, op) in [
+        (
+            "each player who controls the most ",
+            "or is tied for the most ",
+            Cmp::Ge,
+            AggOp::Max,
+        ),
+        (
+            "each player who controls the fewest ",
+            "or is tied for the fewest ",
+            Cmp::Le,
+            AggOp::Min,
+        ),
+    ] {
+        let Some(r) = s.strip_prefix(p) else {
+            continue;
+        };
         let (f, true, rest) = parse_object_phrase(r)? else {
             return None;
         };
         let rest = rest.trim_start();
-        let rest = rest
-            .strip_prefix("or is tied for the most ")
-            .unwrap_or(rest);
+        let rest = rest.strip_prefix(tie).unwrap_or(rest);
         let mine = Filter::and(vec![f.clone(), Filter::ControlledBy(PlayerRel::Iterated)]);
         return Some((
             PlayerRef::Each(PlayerFilter::Controls(
                 Box::new(f),
-                Cmp::Ge,
+                cmp,
                 Box::new(Value::OverPlayers(
-                    AggOp::Max,
+                    op,
                     PlayerFilter::Any,
                     Box::new(Value::Count(mine)),
                 )),
             )),
             format!(" {rest}"),
         ));
+    }
+    // "Each player other than target player creates ..." (Death by Dragons).
+    if let Some(r) = s.strip_prefix("each player other than target player") {
+        if r.is_empty() || r.starts_with(' ') {
+            let text = "target player";
+            let slot = b.add_target(TargetSpec::player(PlayerFilter::Any, text), text);
+            return Some((
+                PlayerRef::Each(PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+                    PlayerRef::Target(slot),
+                ))))),
+                r.to_string(),
+            ));
+        }
     }
     None
 }

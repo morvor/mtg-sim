@@ -577,3 +577,114 @@ fn create_aura_attached(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "token grammar: Aura token created attached", priority: 94, parse: create_aura_attached } }
+
+// ---------------------------------------------------------------------------
+// Delayed triggers about the tokens just created
+// ---------------------------------------------------------------------------
+
+/// The tokens a delayed trigger below is about, captured as it's created.
+const DELAYED_TOKENS: Var = vars::USER + 7350;
+
+/// "Exile that token when ~ leaves the battlefield." (Stangg), "Exile those tokens when ~
+/// leaves the battlefield." (Mysterio, Master of Illusion), "Sacrifice ~ when that token
+/// leaves the battlefield." (Stangg): a delayed triggered ability created as the ability
+/// resolves, which triggers once (CR 603.7a, 603.7c), about the tokens just created. One
+/// about the source leaving never triggers if the source has already left.
+fn f_delayed_about_tokens(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    fn has_create(e: &Effect) -> bool {
+        match e {
+            Effect::Seq(v) => v.iter().any(has_create),
+            e => is_create(e),
+        }
+    }
+    if !has_create(prev) || !b.in_trigger {
+        return false;
+    }
+    const TOKEN_WORDS: [&str; 6] = [
+        "that token",
+        "those tokens",
+        "the token",
+        "the tokens",
+        "it",
+        "them",
+    ];
+    let (instr, trigger) = if let Some(x) = l.strip_suffix(" when ~ leaves the battlefield") {
+        // The instruction is about the tokens.
+        let Some(w) = TOKEN_WORDS.iter().find(|w| x.ends_with(&format!(" {w}"))) else {
+            return false;
+        };
+        let head = &x[..x.len() - w.len()];
+        (
+            format!("{head}{}", if w.ends_with('s') || *w == "them" { "them" } else { "it" }),
+            TriggerCond::LeavesBattlefield(Filter::Source),
+        )
+    } else if let Some(x) = ["that token", "the token", "those tokens"]
+        .iter()
+        .find_map(|w| l.strip_suffix(&format!(" when {w} leaves the battlefield")))
+    {
+        (
+            x.to_string(),
+            TriggerCond::LeavesBattlefield(Filter::In(Box::new(Sel::Var(DELAYED_TOKENS)))),
+        )
+    } else {
+        return false;
+    };
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    b.it = Sel::Var(DELAYED_TOKENS);
+    let parsed = crate::oracle::effects::parse_simple(&instr, b);
+    let ok = match parsed {
+        Some(e) if b.targets.len() == saved.0 => Some(e),
+        _ => None,
+    };
+    b.it = saved.1.clone();
+    let Some(effect) = ok else {
+        b.targets.truncate(saved.0);
+        b.it_player = saved.2;
+        return false;
+    };
+    let Some((mut stores, effect)) = super::triggers_delayed::capture(&effect) else {
+        return false;
+    };
+    stores.insert(
+        0,
+        Effect::Store {
+            var: DELAYED_TOKENS,
+            sel: Sel::Var(vars::CREATED),
+        },
+    );
+    stores.push(Effect::DelayedTrigger {
+        trigger,
+        body: Box::new(Body::effect(effect)),
+        once: true,
+    });
+    super::tokens_copies_create::append_after_create(prev, Effect::seq(stores))
+}
+
+inventory::submit! { FollowupPattern { name: "token grammar: [instruction] when ~ / that token leaves the battlefield", priority: 79, apply: f_delayed_about_tokens } }
+
+/// "create X minus one 2/2 white Samurai creature tokens with vigilance" (Eiganjo
+/// Uprising), "create X plus one ...": a count that's X changed by a number (CR 107.1b:
+/// not less than 0).
+fn create_x_plus_minus(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("create x ")?;
+    let (minus, r) = if let Some(x) = r.strip_prefix("minus ") {
+        (true, x)
+    } else {
+        (false, r.strip_prefix("plus ")?)
+    };
+    let (n, rest) = parse_number(r)?;
+    let Value::Const(k) = n else {
+        return None;
+    };
+    let e = creation(&format!("create x {}", rest.trim_start()), b)?;
+    let count = if minus {
+        super::r107_numbers::nonnegative(Value::Diff(Box::new(Value::X), Box::new(Value::c(k))))
+    } else {
+        Value::Sum(vec![Value::X, Value::c(k)])
+    };
+    with_count(&e, count, false)
+}
+
+inventory::submit! { EffectPattern { name: "token grammar: create X minus N tokens", priority: 97, parse: create_x_plus_minus } }
