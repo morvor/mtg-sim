@@ -32,6 +32,17 @@ pub const SECOND_THIS_TURN: &str = "spell cost:second spell this turn";
 pub const CASTER_NOT_ACTIVE: &str = "spell cost:caster isn't the active player";
 pub const CASTER_ENCHANTED: &str = "spell cost:caster is enchanted player";
 const TARGETS_PREFIX: &str = "spell cost:targets of type:";
+const PAID_TIMES: &str = "spell cost:times paid:";
+
+/// `Value::Custom` name: how many times the spell `ctx.source`'s controller announced
+/// they'd pay its repeatable additional cost `name` (CR 601.2b).
+pub fn paid_times(name: &str) -> String {
+    format!("{PAID_TIMES}{name}")
+}
+
+/// `Value::Custom`: how many targets the spell `ctx.source` has (each time an object or
+/// player is chosen counts), once they're chosen (CR 601.2c); none before that.
+pub const OWN_TARGETS: &str = "spell cost:own targets";
 
 /// `Value::Custom` name: how many times the spell being cast targets an object of type `t`.
 pub fn targets_of_type(t: CardType) -> String {
@@ -129,6 +140,39 @@ fn pending_next_spell_reductions(g: &Game, p: PlayerId, card: ObjectId) -> Vec<(
     out
 }
 
+/// The names of the spell's own additional costs paid any number of times ("As an
+/// additional cost to cast this spell, you may sacrifice any number of creatures."): each
+/// is announced as the spell is cast, as a number of times (CR 601.2b).
+fn repeatable_costs(chars: &Characteristics) -> Vec<smol_str::SmolStr> {
+    let mut out = Vec::new();
+    for a in &chars.abilities {
+        let AbilityKind::Static(StaticAbility {
+            effect:
+                StaticEffect::CostModifier(CostModifier {
+                    applies_to: CostTarget::ThisSpell,
+                    change: CostChange::AdditionalCost(c),
+                    ..
+                }),
+            ..
+        }) = &a.kind
+        else {
+            continue;
+        };
+        for p in &c.parts {
+            if let CostPart::Repeated {
+                times: Value::Custom(n),
+                ..
+            } = p
+            {
+                if let Some(name) = n.strip_prefix(PAID_TIMES) {
+                    out.push(name.into());
+                }
+            }
+        }
+    }
+    out
+}
+
 pub struct SpellCostGrammar;
 
 impl KeywordRules for SpellCostGrammar {
@@ -174,7 +218,37 @@ impl KeywordRules for SpellCostGrammar {
         }
     }
 
+    fn spell_optional_costs(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+    ) -> Vec<(smol_str::SmolStr, Cost, bool)> {
+        repeatable_costs(&g.obj(spell).chars)
+            .into_iter()
+            .map(|n| (n, Cost::free(), true))
+            .collect()
+    }
+
     fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if let Some(n) = name.strip_prefix(PAID_TIMES) {
+            let times = ctx
+                .source
+                .and_then(|s| g.obj(s).stack.as_deref())
+                .map_or(0, |si| si.cast.paid.iter().filter(|p| p.as_str() == n).count());
+            return Some(times as i64);
+        }
+        if name == OWN_TARGETS {
+            let n: usize = ctx
+                .source
+                .and_then(|s| g.obj(s).stack.as_deref())
+                .map_or(0, |si| {
+                    si.chosen
+                        .iter()
+                        .map(|cm| cm.targets.iter().map(Vec::len).sum::<usize>())
+                        .sum()
+                });
+            return Some(n as i64);
+        }
         let t = CardType::from_word(name.strip_prefix(TARGETS_PREFIX)?)?;
         let (spell, _) = spell_and_caster(ctx);
         let Some(si) = spell.and_then(|s| g.obj(s).stack.as_deref()) else {

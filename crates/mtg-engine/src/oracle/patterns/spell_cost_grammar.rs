@@ -27,7 +27,7 @@
 //! that are black and/or red cost {X} less to cast, where X is ..." (player effects whose
 //! amounts are locked in as the effect begins, CR 611.2c).
 
-use super::{EffectPattern, StaticPattern};
+use super::{AbilityPattern, EffectPattern, StaticPattern};
 use crate::ability::*;
 use crate::kw::spell_cost_grammar as rules;
 use crate::mana::{ManaCost, ManaSymbol};
@@ -703,3 +703,208 @@ mod tests {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// A spell's own cost changes
+// ---------------------------------------------------------------------------
+
+/// "card you own in exile and in your graveyard that's an instant card, a sorcery card, or
+/// a card that has an Adventure" (Sailors' Bane): the cards of those kinds in either zone.
+pub(crate) fn cards_in_exile_and_graveyard(s: &str) -> Option<Value> {
+    let list = s
+        .strip_prefix("card you own in exile and in your graveyard that's ")
+        .or_else(|| s.strip_prefix("cards you own in exile and in your graveyard that are "))?;
+    let mut kinds = Vec::new();
+    for item in list.replace(", or ", ", ").replace(" or ", ", ").split(", ") {
+        let item = item.trim();
+        let item = item
+            .strip_prefix("a ")
+            .or_else(|| item.strip_prefix("an "))
+            .unwrap_or(item);
+        let (f, _, tail) = parse_object_phrase(item)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        kinds.push(f);
+    }
+    let kinds = Filter::Or(kinds);
+    let count = |z: ZoneKind| {
+        Value::Count(Filter::and(vec![
+            kinds.clone(),
+            Filter::Card,
+            Filter::InZone(z),
+            Filter::OwnedBy(PlayerRel::You),
+        ]))
+    };
+    Some(Value::Sum(vec![
+        count(ZoneKind::Exile),
+        count(ZoneKind::Graveyard),
+    ]))
+}
+
+/// "~ costs 3 life more to cast for each target." (Phyrexian Purge): the life is paid
+/// once for each target chosen (CR 601.2c, 601.2f).
+fn life_more_for_each_target(text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let r = end(&lower).strip_prefix("~ costs ")?;
+    let (n, r) = parse_number(r)?;
+    let Value::Const(_) = n else {
+        return None;
+    };
+    if end(r) != "life more to cast for each target" {
+        return None;
+    }
+    let repeated = CostPart::Repeated {
+        cost: Box::new(Cost::free().with(CostPart::PayLife(n))),
+        times: Value::Custom(rules::OWN_TARGETS.into()),
+    };
+    Some(vec![super::costs_casting_self::this_spell_cost_ability(
+        CostChange::AdditionalCost(Cost::free().with(repeated)),
+        None,
+        text,
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "spell cost grammar: ~ costs N life more for each target", priority: 80, parse: life_more_for_each_target } }
+
+/// "~ costs {1} less to cast if you control a Spirit. It also costs {1} less to cast if you
+/// control an enchantment." (Geistlight Snare): two cost changes.
+fn two_own_cost_changes(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') {
+        return None;
+    }
+    let (a, b) = text.split_once(". It also costs ")?;
+    let first = format!("{a}.");
+    let second = format!("~ costs {b}");
+    let mut out = super::costs_casting_self::own_cost_change(&first, ctx)?;
+    out.extend(super::costs_casting_self::own_cost_change(&second, ctx)?);
+    for x in out.iter_mut() {
+        *x = AbilityDef::new(x.kind.clone(), text);
+    }
+    Some(out)
+}
+
+inventory::submit! { AbilityPattern { name: "spell cost grammar: ~ costs less ... It also costs less", priority: 80, parse: two_own_cost_changes } }
+
+// ---------------------------------------------------------------------------
+// Additional costs paid any number of times
+// ---------------------------------------------------------------------------
+
+/// "sacrifice any number of creatures", "exile any number of black cards from your hand",
+/// "tap any number of untapped creatures you control", "remove any number of +1/+1
+/// counters from among creatures you control", "pay {1}{G} any number of times": one
+/// instance of the cost, and the name the number of times it's paid is announced under.
+fn repeatable_part(s: &str) -> Option<Cost> {
+    if let Some(m) = s
+        .strip_prefix("pay ")
+        .and_then(|r| r.strip_suffix(" any number of times"))
+    {
+        let mana = ManaCost::parse(&m.to_uppercase())?;
+        if mana.has_x() || format!("{mana}").to_lowercase() != m {
+            return None;
+        }
+        return Some(Cost::mana(mana));
+    }
+    let (verb, rest) = s.split_once(" any number of ")?;
+    if !matches!(verb, "sacrifice" | "exile" | "tap" | "remove") {
+        return None;
+    }
+    let part = crate::oracle::costs::parse_cost_part(&format!("{verb} x {rest}"))?;
+    let one = Value::c(1);
+    let part = match part {
+        CostPart::Sacrifice {
+            filter,
+            count: Value::X,
+        } => CostPart::Sacrifice { filter, count: one },
+        CostPart::Exile {
+            filter,
+            zone,
+            count: Value::X,
+        } => CostPart::Exile {
+            filter,
+            zone,
+            count: one,
+        },
+        CostPart::TapUntapped {
+            filter,
+            count: Value::X,
+        } => CostPart::TapUntapped { filter, count: one },
+        CostPart::RemoveCountersFromAmong {
+            kind,
+            filter,
+            count: Value::X,
+        } => CostPart::RemoveCountersFromAmong {
+            kind,
+            filter,
+            count: one,
+        },
+        _ => return None,
+    };
+    Some(Cost::free().with(part))
+}
+
+/// "As an additional cost to cast ~, [you may] sacrifice any number of creatures.[ ~ costs
+/// {2} less to cast for each creature sacrificed this way[ and {2} less to cast for each
+/// other artifact or creature you've sacrificed this turn].]": the number of times is
+/// announced as the spell is cast (CR 601.2b) and the cost paid with the rest of the total
+/// cost (CR 601.2f–h); a reduction for each one applies to that total (see
+/// `kw/spell_cost_grammar.rs`).
+fn any_number_additional_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let l = end(&lower);
+    let (first, second) = match l.split_once(". ") {
+        Some((a, b)) => (a, Some(b)),
+        None => (l, None),
+    };
+    let r = first.strip_prefix("as an additional cost to cast ~, ")?;
+    let r = r.strip_prefix("you may ").unwrap_or(r);
+    let one = repeatable_part(r)?;
+    let name = smol_str::SmolStr::new(r);
+    let times = Value::Custom(rules::paid_times(&name).into());
+    let cost = Cost::free().with(CostPart::Repeated {
+        cost: Box::new(one),
+        times: times.clone(),
+    });
+    let mut out = vec![super::costs_casting_self::this_spell_cost_ability(
+        CostChange::AdditionalCost(cost),
+        None,
+        text,
+    )];
+    if let Some(s) = second {
+        let s = s.strip_prefix("~ costs ")?;
+        let mut changes = Vec::new();
+        for (i, piece) in s.split(" and ").enumerate() {
+            let (mana, rest) = super::costs_casting_self::leading_mana(piece)?;
+            if !mana.symbols.iter().all(|s| matches!(s, ManaSymbol::Generic(_))) {
+                return None;
+            }
+            let fe = rest.trim_start().strip_prefix("less to cast for each ")?;
+            let counted = if i == 0 && fe.ends_with(" this way") {
+                // What the cost paid: as many as were announced.
+                times.clone()
+            } else {
+                super::costs_casting_self::for_each_value(fe)?
+            };
+            let n = mana.generic_amount() as i32;
+            changes.push(CostChange::ReduceGeneric(match n {
+                1 => counted,
+                n => Value::Mul(Box::new(Value::c(n)), Box::new(counted)),
+            }));
+        }
+        let _ = ctx;
+        for c in changes {
+            out.push(super::costs_casting_self::this_spell_cost_ability(
+                c, None, text,
+            ));
+        }
+    }
+    Some(out)
+}
+
+inventory::submit! { AbilityPattern { name: "spell cost grammar: additional cost paid any number of times", priority: 79, parse: any_number_additional_cost } }
