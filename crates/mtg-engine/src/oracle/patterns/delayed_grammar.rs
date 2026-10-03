@@ -664,7 +664,7 @@ fn object_event(rest: &str, subject: &Filter) -> Option<(TriggerCond, Sel, Playe
             Some(x) => Filter::and(vec![subject.clone(), x]),
             None => subject.clone(),
         };
-        (TriggerCond::Dies(f), Sel::TriggerObject, PlayerRef::You)
+        (TriggerCond::Dies(f), Sel::This, PlayerRef::You)
     };
     Some(match rest {
         " is put into a graveyard" | " is put into a graveyard from the battlefield" => dies(None),
@@ -774,8 +774,16 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
         // own event: "it" is the object (the new object after a zone change), or what the
         // trigger condition names ("deals combat damage to a non-Wall creature").
         if !source_subject {
+            // After a zone change, "it" is found through the object's last known
+            // information (its controller then, Searing Blood's rulings; the new object
+            // for instructions that move it, CR 400.7).
+            let leaves = matches!(
+                trigger,
+                TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_)
+            );
             b.it = match it {
                 Sel::This if deals_damage(&trigger) => Sel::Var(REFERENT),
+                Sel::This if leaves => Sel::TriggerLki,
                 Sel::This => Sel::TriggerObject,
                 other => other,
             };
