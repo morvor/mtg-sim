@@ -173,3 +173,22 @@ fn topography_tracker_makes_creatures_explore_twice() {
     assert_eq!(t.hand_size(P0), 2, "{}", t.dump_log());
     assert_eq!(t.counters(b, "+1/+1"), 0);
 }
+
+#[test]
+fn flames_of_the_blood_hand_stops_that_player_gaining_life_this_turn() {
+    cr!("614.1a", "611.2c");
+    compiles(&["Flames of the Blood Hand"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    let f = t.hand(P0, "Flames of the Blood Hand");
+    t.cast(P0, f).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 16);
+    t.g.gain_life(P1, 5);
+    t.settle();
+    assert_eq!(t.life(P1), 16);
+    // You can still gain life.
+    t.g.gain_life(P0, 2);
+    t.settle();
+    assert_eq!(t.life(P0), 22);
+}

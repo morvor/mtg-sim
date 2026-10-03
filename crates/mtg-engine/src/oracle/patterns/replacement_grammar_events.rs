@@ -214,9 +214,32 @@ fn p_if_player(l: &str, b: &mut Builder) -> Option<Effect> {
     let (dur, r) = duration_prefix(l);
     let r = r.strip_prefix("if ")?;
     let ctx = b.ctx;
-    attempt(b, |_b| {
+    attempt(b, |b| {
         let (ev, act) = r.split_once(", ")?;
-        let pev = player_event(ev, ctx)?;
+        // "If that player or that planeswalker's controller would gain life this turn"
+        // (after "target player or planeswalker"): the targeted player, or the controller
+        // of the targeted planeswalker, as the effect is created.
+        let pev = match ev.strip_prefix("that player or that planeswalker's controller would ")
+        {
+            Some(verb) => {
+                let k = b.targets.len().checked_sub(1)? as u8;
+                let who = PlayerFilter::Or(vec![
+                    PlayerFilter::Ref(Box::new(PlayerRef::Target(k))),
+                    PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::Target(
+                        k,
+                    ))))),
+                ]);
+                let mut pev = player_event(&format!("a player would {verb}"), ctx)?;
+                pev.event = match pev.event {
+                    ReplacementEvent::GainLife(_) => ReplacementEvent::GainLife(who),
+                    ReplacementEvent::LoseLife(_) => ReplacementEvent::LoseLife(who),
+                    ReplacementEvent::Draw(_) => ReplacementEvent::Draw(who),
+                    _ => return None,
+                };
+                pev
+            }
+            None => player_event(ev, ctx)?,
+        };
         if pev.cond.is_some() {
             return None;
         }

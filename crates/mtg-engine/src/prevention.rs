@@ -99,9 +99,12 @@ pub fn lock_players(g: &Game, f: &PlayerFilter, ctx: &Ctx) -> PlayerFilter {
                         _ => None,
                     })
                     .collect(),
-                PlayerRef::TriggerPlayer | PlayerRef::Iterated => {
-                    g.eval_players(r, ctx).into_iter().collect()
-                }
+                // "that planeswalker's controller", "that player": the players they are as
+                // the effect is created.
+                PlayerRef::TriggerPlayer
+                | PlayerRef::Iterated
+                | PlayerRef::ControllerOf(_)
+                | PlayerRef::OwnerOf(_) => g.eval_players(r, ctx).into_iter().collect(),
                 _ => return f.clone(),
             };
             PlayerFilter::Or(ps.into_iter().map(PlayerFilter::Is).collect())
@@ -177,6 +180,8 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             effect_only: *effect_only,
         },
         ReplacementEvent::Destroy(f) => ReplacementEvent::Destroy(lf(f)),
+        ReplacementEvent::GainLife(pf) => ReplacementEvent::GainLife(lock_players(g, pf, ctx)),
+        ReplacementEvent::LoseLife(pf) => ReplacementEvent::LoseLife(lock_players(g, pf, ctx)),
         // "If target player would draw a card": the player is locked in too.
         ReplacementEvent::Draw(PlayerFilter::Ref(r)) => match g.eval_player(r, ctx) {
             Some(p) => ReplacementEvent::Draw(PlayerFilter::Is(p)),
