@@ -3638,7 +3638,7 @@ pub enum Effect {
     },
     /// "Starting with you, each player chooses a creature", "starting with the next opponent
     /// in turn order, each opponent chooses ...": each of the players matching `who`, one
-    /// at a time in turn order beginning with `first` (CR 101.4c), performs the whole
+    /// at a time in turn order beginning with `first` (CR 101.4b), performs the whole
     /// instruction, knowing what those before did; `PlayerRef::Iterated` is that player.
     /// See `turn_order_choices.rs`.
     InTurnOrder {

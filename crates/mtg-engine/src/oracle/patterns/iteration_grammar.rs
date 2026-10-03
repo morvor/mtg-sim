@@ -214,7 +214,7 @@ fn choose_for_each(who: PlayerRef, y: &str, b: &mut Builder) -> Option<Effect> {
 /// may choose an artifact or enchantment you don't control", "starting with the next
 /// opponent in turn order, each opponent chooses a creature card in your graveyard that
 /// hasn't been chosen", "... chooses a different nonland card from among them": the players
-/// choose one at a time in turn order (CR 101.4c), each knowing the earlier choices (not
+/// choose one at a time in turn order (CR 101.4b), each knowing the earlier choices (not
 /// targeted, CR 115.10); later sentences name all the chosen objects.
 fn starting_with_choose(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);

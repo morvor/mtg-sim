@@ -1,7 +1,7 @@
 //! "Starting with you, each player chooses a creature.", "starting with the next opponent
 //! in turn order, each opponent chooses a creature card in your graveyard that hasn't been
 //! chosen" ([`Effect::InTurnOrder`]): the players make their choices one at a time, in turn
-//! order beginning with the named player (CR 101.4c: a player making a choice in turn
+//! order beginning with the named player (CR 101.4b: a player making a choice in turn
 //! order knows the choices made before), each performing the whole instruction before the
 //! next one starts.
 
@@ -10,7 +10,7 @@ use crate::eval::Ctx;
 use crate::game::Game;
 use crate::types::PlayerId;
 
-/// The players matching `who`, in turn order starting with `first` (CR 101.4c).
+/// The players matching `who`, in turn order starting with `first` (CR 101.4b).
 pub fn order(g: &Game, first: TurnOrderStart, who: &PlayerFilter, ctx: &Ctx) -> Vec<PlayerId> {
     let n = g.players.len();
     let you = ctx.controller.idx();
