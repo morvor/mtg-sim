@@ -1232,6 +1232,25 @@ fn player_attacks(r: &str) -> Option<Parsed> {
             tp,
         ));
     }
+    // "you attack the player who has the initiative": once, if creatures you control attack
+    // that player (CR 508.3e).
+    if t == "the player who has the initiative" {
+        return Some((
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::PlayerAttacked {
+                    attacker: who,
+                    defender: PlayerFilter::Any,
+                    with: Filter::creature(),
+                    min: 1,
+                }),
+                cond: Condition::Custom(
+                    crate::kw::activated_ability_kind::EVENT_PLAYER_HAS_INITIATIVE.into(),
+                ),
+            },
+            objs(),
+            tp,
+        ));
+    }
     if who != PlayerRel::Opponent {
         return None;
     }

@@ -28,6 +28,9 @@ pub const NINJUTSU: &str = "activated ability: ninjutsu";
 /// `Condition::Custom`: it's the turn's first combat phase (CR 505.1a, 506.1): "at the end of
 /// the first combat phase on your turn" (Zariel, Archduke of Avernus).
 pub const FIRST_COMBAT_PHASE: &str = "turn: first combat phase";
+/// `Condition::Custom`: the trigger event's player has the initiative (CR 725): "whenever you
+/// attack the player who has the initiative" (Loot Dispute).
+pub const EVENT_PLAYER_HAS_INITIATIVE: &str = "event player: has the initiative";
 /// `Condition::Custom`: the activated ability is a power-up ability (CR 702.191a).
 pub const POWER_UP: &str = "activated ability: power-up";
 
@@ -132,6 +135,12 @@ impl KeywordRules for ActivatedAbilityKind {
             NINJUTSU => Some(is_keyword_ability(g, ctx, KeywordKind::Ninjutsu)),
             POWER_UP => Some(is_keyword_ability(g, ctx, KeywordKind::PowerUp)),
             FIRST_COMBAT_PHASE => Some(g.turn.combat_phases <= 1),
+            EVENT_PLAYER_HAS_INITIATIVE => Some(
+                ctx.event
+                    .as_ref()
+                    .and_then(|e| e.player)
+                    .is_some_and(|p| g.initiative == Some(p)),
+            ),
             _ => None,
         }
     }

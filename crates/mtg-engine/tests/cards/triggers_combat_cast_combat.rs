@@ -485,3 +485,27 @@ fn rigo_draws_for_each_player_or_planeswalker_attacked_by_a_small_creature() {
     );
     assert_eq!(t.hand_size(P0), hand + 2);
 }
+
+#[test]
+fn loot_dispute_rewards_attacking_the_player_with_the_initiative() {
+    cr!("725.1", "508.3e");
+    assert_compiled("Loot Dispute", "the player who has the initiative");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Loot Dispute");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.initiative = Some(P0);
+    combat(&mut t, &at_p1(&[bears]), &[]);
+    let treasures = |t: &TestGame| {
+        t.g.battlefield
+            .iter()
+            .filter(|o| t.g.obj(**o).chars.subtypes.iter().any(|s| s == "Treasure"))
+            .count()
+    };
+    assert_eq!(treasures(&t), 0, "P1 doesn't have the initiative");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Loot Dispute");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.initiative = Some(P1);
+    combat(&mut t, &at_p1(&[bears]), &[]);
+    assert_eq!(treasures(&t), 1);
+}
