@@ -52,7 +52,10 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"spells you cast from your graveyard cost less\" also reduced spells cast from another player's graveyard | Patrician Geist | `r601_cost_by_cast_zone.rs` |\n\
 | \"enchanted creature or enchantment creature\" kept only the first phrase | Feast of Dreams | `phrases::two_phrases_same_head` |\n\
 | \"Reveal a [card] you own from outside the game and put it into your hand\" put the card into the hand without revealing it (tests for this and the row below in `tests/cards/roundtrip_tail_2.rs`) | Golden Wish, Burning Wish, Living Wish, Fae of Wishes (8 cards) | `r108_cards.rs` |\n\
-| \"Whenever a player attacks one of your opponents, that attacking player ...\": \"that attacking player\" was the attacked player (\"one or more of your opponents\" also triggered once per opponent attacked) | Jolene, the Plunder Queen, Combat Calligrapher, Ellie, Brick Master, Breena, the Demagogue | `choice_grammar.rs` (the active player, as `cards-tokens-copies` fixed it too), `patterns/combat.rs` (once per attack) |\n\n\
+| \"Whenever a player attacks one of your opponents, that attacking player ...\": \"that attacking player\" was the attacked player (\"one or more of your opponents\" also triggered once per opponent attacked) | Jolene, the Plunder Queen, Combat Calligrapher, Ellie, Brick Master, Breena, the Demagogue | `choice_grammar.rs` (the active player, as `cards-tokens-copies` fixed it too), `patterns/combat.rs` (once per attack) |\n\
+| \"Enchant artifact or non-Aura enchantment\" was read as artifact enchantments or non-Aura enchantments (tests for this and the rows below in `tests/cards/roundtrip_tail_3.rs`) | Puppet Crafting | `oracle/keywords.rs` |\n\
+| \"For each card drawn this way, discard a card unless you sacrifice a permanent\" was one choice for all the cards | Read the Runes | `unless_grammar.rs`, `unless_you_sacrifice.rs`, `hand_graveyard_grammar.rs` |\n\
+| \"N damage divided as you choose among X target creatures\" allowed one to N targets whatever X was | Meteor Swarm | `oracle/effects.rs` (divided damage) |\n\n\
 Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
 triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
 cycled card (CR 702.29d), so the two are the same.\n\n";

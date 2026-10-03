@@ -3046,6 +3046,39 @@ impl Renderer<'_> {
                     continue;
                 }
             }
+            // "Target land becomes the basic land type of your choice in addition to its
+            // other types until end of turn", "~ becomes the creature type of your choice
+            // in addition to its other types".
+            if let (
+                Some(Effect::Choose {
+                    who: PlayerRef::You,
+                    kind: kind @ (ChoiceKind::BasicLandType | ChoiceKind::CreatureType),
+                }),
+                Some(Effect::Modify {
+                    what,
+                    mods,
+                    duration,
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if matches!(mods.as_slice(), [Modification::AddChosenType])
+                    && !format!("{:?}", &v[i + 2..]).contains("Chosen")
+                {
+                    let w = self.sel(what, Case::Subj);
+                    let d = self.duration(duration);
+                    let k = if matches!(kind, ChoiceKind::BasicLandType) {
+                        "basic land type"
+                    } else {
+                        "creature type"
+                    };
+                    let s = format!(
+                        "{w} becomes the {k} of your choice in addition to its other types"
+                    );
+                    parts.push(join_words(&[s, d]));
+                    i += 2;
+                    continue;
+                }
+            }
             // "~ becomes the creature type of your choice until end of turn."
             if let (
                 Some(Effect::Choose {
@@ -6196,6 +6229,27 @@ impl Becomes {
                 let w: Vec<String> = known.iter().map(|t| t.word().to_string()).collect();
                 still = format!(". It's still {}", with_article(&w.join(" ")));
             }
+        }
+        // "have base power and toughness 6/6 and are Oozes in addition to their other
+        // types": the same base power and toughness and creature types, said in order.
+        if let (Some((Some(p), Some(t))), true) = (
+            &self.pt,
+            self.add_types.is_empty()
+                && !self.subtypes.is_empty()
+                && self.supertypes.is_empty()
+                && self.colors.is_none()
+                && self.name.is_none()
+                && self.additive
+                && !self.land_type
+                && grants.is_empty()
+                && !gains
+                && s.ends_with(" in addition to its other types"),
+        ) {
+            let pt = format!("{}/{}", r.value(p), r.value(t));
+            let kinds = with_article(&self.subtypes.join(" "));
+            s = format!(
+                "{{alt:{s}|has base power and toughness {pt} and is {kinds} in addition to its other types}}"
+            );
         }
         Some((s, still))
     }

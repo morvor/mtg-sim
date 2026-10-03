@@ -929,6 +929,16 @@ impl Renderer<'_> {
                 let s = self.cost_paid(name);
                 s.replace(" was ", " wasn't ")
             }
+            // "If it's not their turn" (the active player's turn, CR 102.1).
+            Condition::PlayerMatches(p, PlayerFilter::Active) if !matches!(p, PlayerRef::You) => {
+                let poss = self.player(p, Case::Poss);
+                let poss = if poss.starts_with("{alt:") {
+                    "their".to_string()
+                } else {
+                    poss
+                };
+                format!("it's not {poss} turn")
+            }
             Condition::WasCast => "you didn't cast it".into(),
             // "If you didn't cast it from your hand" / "if ~ was cast from anywhere other
             // than your hand".
