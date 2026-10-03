@@ -447,3 +447,53 @@ fn group_instead_of_number(blocks: Vec<String>, ctx: &CompileContext) -> Vec<Str
 }
 
 inventory::submit! { super::BlockGroupPattern { name: "replacement grammar: spell mastery instead of [number] joins the previous paragraph", priority: 150, group: group_instead_of_number } }
+
+/// "Prevent the next 1 damage that would be dealt to any target this turn. If it's a
+/// green creature, prevent the next 2 damage instead." (Elvish Healer): a bigger shield
+/// for a target with that quality as the ability resolves (CR 608.2c, 615.7).
+fn f_bigger_shield_if(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some((q, r)) = l
+        .strip_prefix("if it's a ")
+        .or_else(|| l.strip_prefix("if it's an "))
+        .and_then(|r| r.split_once(", prevent the next "))
+    else {
+        return false;
+    };
+    let Some((n, rest)) = parse_number(r) else {
+        return false;
+    };
+    if rest.trim() != "damage instead" {
+        return false;
+    }
+    let Some((f, false, tail)) = parse_object_phrase(q) else {
+        return false;
+    };
+    if !tail.trim().is_empty() {
+        return false;
+    }
+    let Effect::PreventDamage {
+        to: to @ Sel::Target(_),
+        amount: Some(_),
+        duration,
+        combat_only,
+    } = &*prev
+    else {
+        return false;
+    };
+    let bigger = Effect::PreventDamage {
+        to: to.clone(),
+        amount: Some(n),
+        duration: duration.clone(),
+        combat_only: *combat_only,
+    };
+    let cond = Condition::SelMatches(to.clone(), f);
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::If {
+        cond,
+        then: Box::new(bigger),
+        otherwise: Box::new(old),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "replacement grammar: if it's a [quality], prevent the next N damage instead", priority: 150, apply: f_bigger_shield_if } }

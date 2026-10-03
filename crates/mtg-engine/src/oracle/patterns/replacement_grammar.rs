@@ -372,6 +372,17 @@ pub(crate) fn recipients<'s>(s: &'s str, b: &mut OneShot) -> Option<(To, &'s str
         }
         break;
     }
+    // "a creature, battle, or opponent": the object list took the "or" before the
+    // player noun.
+    for (w, p) in [("opponent", PlayerFilter::Opponent), ("player", PlayerFilter::Any)] {
+        if let Some(r) = word(rest.trim_start(), w) {
+            if to.objects.is_some() {
+                to.add_player(p);
+                rest = r;
+                break;
+            }
+        }
+    }
     Some((to, rest))
 }
 

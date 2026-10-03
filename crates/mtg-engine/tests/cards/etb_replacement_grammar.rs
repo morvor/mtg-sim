@@ -281,3 +281,38 @@ fn infinite_reflection_nontoken_creatures_enter_as_copies_of_the_enchanted_creat
     t.resolve_all();
     assert_eq!(t.g.obj(t.g.current(theirs)).chars.name, "Grizzly Bears");
 }
+
+#[test]
+fn thief_of_blood_takes_all_counters_as_it_enters() {
+    cr!("614.1c", "614.12a", "122.6");
+    compiles(&[
+        "Thief of Blood",
+        "Shimatsu the Bloodcloaked",
+        "Devouring Hellion",
+        "Arsenal Thresher",
+    ]);
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.g.objects[a.0 as usize].counters.insert("+1/+1".into(), 2);
+    t.g.objects[b.0 as usize].counters.insert("-1/-1".into(), 1);
+    let thief = t.enter(P0, "Thief of Blood");
+    t.resolve_all();
+    assert_eq!(t.counters(a, "+1/+1"), 0);
+    assert_eq!(t.counters(b, "-1/-1"), 0);
+    assert_eq!(t.counters(t.g.current(thief), "+1/+1"), 3);
+}
+
+#[test]
+fn devouring_hellion_enters_with_twice_that_many_counters() {
+    cr!("614.1c", "614.12a");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    let h = t.enter(P0, "Devouring Hellion");
+    t.resolve_all();
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+    assert_eq!(t.counters(t.g.current(h), "+1/+1"), 4);
+}
