@@ -758,7 +758,17 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         }
     }
     // The longest phrase that names the object ("the creature an opponent controls"
-    // before "the creature").
+    // before "the creature"); "each of the chosen creatures" is the chosen creatures.
+    let s = match s.strip_prefix("each of ") {
+        Some(r)
+            if b.named
+                .iter()
+                .any(|(p, _)| p.ends_with('s') && r.starts_with(p.as_str())) =>
+        {
+            r
+        }
+        _ => s,
+    };
     let named = b
         .named
         .iter()

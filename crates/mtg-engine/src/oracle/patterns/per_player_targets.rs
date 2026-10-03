@@ -34,6 +34,8 @@ fn for_each_player_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         (PlayerFilter::Opponent, r)
     } else if let Some(r) = l.strip_prefix("for each player, ") {
         (PlayerFilter::Any, r)
+    } else if let Some(r) = l.strip_prefix("for each other player, ") {
+        (PlayerFilter::NotYou, r)
     } else {
         return None;
     };
