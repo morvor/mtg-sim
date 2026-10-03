@@ -1231,11 +1231,37 @@ fn static_if_damage(l: &str, ctx: &CompileContext) -> Option<StaticAbility> {
             } => Sel::This,
             _ => Sel::TriggerObject,
         };
-        let e = prevented_followup(second, ctx, it)?;
+        let e = prevented_followup(second, ctx, it.clone())
+            .or_else(|| reflexive_followup(second, ctx, it))?;
         def.action = ReplacementAction::PreventAndThen(None, Box::new(e));
         return Some(st);
     }
     None
+}
+
+/// "When damage is prevented this way, ~ deals that much damage to any other target."
+/// (Phyrexian Vindicator): a reflexive triggered ability (CR 603.12) with its own target,
+/// triggered when the prevention effect prevents damage (CR 615.5); "that much" is the
+/// damage prevented.
+fn reflexive_followup(l: &str, ctx: &CompileContext, it: Sel) -> Option<Effect> {
+    let r = end(l.trim()).strip_prefix("when damage is prevented this way, ")?;
+    let has_x = r.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x");
+    let t = r.replace("that much", "x").replace("that many", "x");
+    if has_x || t == r {
+        return None;
+    }
+    let mut b = Builder::new(ctx);
+    b.in_trigger = true;
+    b.it = it;
+    let effect = crate::oracle::effects::parse_effect_text(&format!("{t}."), &mut b)?;
+    let effect = x_to_event_amount(&effect)?;
+    Some(Effect::Reflexive {
+        body: Box::new(Body {
+            targets: b.targets,
+            effect,
+            modal: None,
+        }),
+    })
 }
 
 fn static_if_damage_one(l: &str, ctx: &CompileContext) -> Option<StaticAbility> {

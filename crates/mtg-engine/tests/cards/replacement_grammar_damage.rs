@@ -588,3 +588,18 @@ fn blood_of_the_martyr_may_redirect_damage_to_creatures_to_you() {
     assert_eq!(t.obj_now(bears).damage, 0);
     assert_eq!(t.life(P0), 18);
 }
+
+#[test]
+fn phyrexian_vindicator_prevents_damage_and_deals_that_much_to_another_target() {
+    cr!("615.5", "603.12");
+    compiles(&["Phyrexian Vindicator"]);
+    let mut t = TestGame::new(2);
+    let v = t.battlefield(P0, "Phyrexian Vindicator");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.g.deal_damage(giant, Entity::Object(v), 3, true);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(v).damage, 0);
+    assert_eq!(t.life(P1), 17, "{}", t.dump_log());
+}
