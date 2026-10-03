@@ -62,6 +62,7 @@ impl Renderer<'_> {
     pub(crate) fn dig_step(&mut self, step: &DigStep) -> String {
         match step {
             DigStep::Take {
+                from,
                 filter,
                 each_of,
                 count,
@@ -71,6 +72,21 @@ impl Renderer<'_> {
                 to,
                 ..
             } => {
+                // "Put that card onto the battlefield": the card a reveal found (all of
+                // one card).
+                if matches!(from, Sel::Var(v) if *v == vars::IT)
+                    && count.is_none()
+                    && matches!(filter, Filter::Any)
+                    && each_of.is_empty()
+                    && !*reveal
+                {
+                    let d = self.dig_destination(to, false);
+                    return if self.in_as_player {
+                        format!("{{alt:the player|that player}} puts that card {d}")
+                    } else {
+                        format!("put that card {d}")
+                    };
+                }
                 let many = !matches!(count, Some(Value::Const(1)));
                 let what = if !each_of.is_empty() {
                     let names: Vec<String> = each_of
@@ -144,6 +160,14 @@ impl Renderer<'_> {
             }
             DigStep::Rest { to, .. } => {
                 let d = self.dig_destination(to, true);
+                // "Shuffle the rest into your library" (not put in place).
+                if to.zone == ZoneKind::Library && to.position == LibraryPosition::Shuffled {
+                    return if self.in_as_player {
+                        format!("{{alt:the player|that player}} shuffles the rest {d}")
+                    } else {
+                        format!("shuffle the rest {d}")
+                    };
+                }
                 format!("put the rest {d}")
             }
             DigStep::Until {

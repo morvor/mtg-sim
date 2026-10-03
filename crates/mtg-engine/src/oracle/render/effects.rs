@@ -330,6 +330,17 @@ impl Renderer<'_> {
         format!("{s} {}", third_person(vp))
     }
 
+    /// "You may choose new targets for the copy" (CR 707.10c): the player who copies
+    /// the spell may choose; inside an instruction another player follows ("that player
+    /// may copy ~"), that player, so the clause shares the instruction's subject.
+    fn choose_new_targets(&self, copies: &str) -> String {
+        if self.in_as_player {
+            format!(" and may choose new targets for {copies}")
+        } else {
+            format!(". You may choose new targets for {copies}")
+        }
+    }
+
     /// An effect as text (sentences separated by ". ").
     pub(crate) fn effect(&mut self, e: &Effect) -> String {
         // Who performed the instruction an "if they do" after it refers to.
@@ -1062,6 +1073,13 @@ impl Renderer<'_> {
             Effect::Sacrifice { .. } => unreachable_text(),
             Effect::SacrificeObjects { what } => {
                 let w = self.sel(what, Case::Obj);
+                // A player sacrifices only permanents they control (CR 701.21a): "you
+                // control" restates it ("sacrifice any number of lands").
+                let w = if self.in_as_player {
+                    w
+                } else {
+                    w.replacen(" you control", " {opt:you control}", 1)
+                };
                 format!("sacrifice {w}")
             }
             // "You may put a permanent card from among them into your hand": up to one.
@@ -1602,7 +1620,7 @@ impl Renderer<'_> {
                     } else {
                         "the copies"
                     };
-                    s.push_str(&format!(". You may choose new targets for {c}"));
+                    s.push_str(&self.choose_new_targets(c));
                 }
                 s
             }
@@ -1646,7 +1664,7 @@ impl Renderer<'_> {
                     } else {
                         "the copies"
                     };
-                    s.push_str(&format!(". You may choose new targets for {c}"));
+                    s.push_str(&self.choose_new_targets(c));
                 }
                 s
             }
@@ -2061,12 +2079,38 @@ impl Renderer<'_> {
                     );
                     return self.with_subject(who, &vp, false);
                 }
-                let found = self.destination_phrase(found_to, false, true);
-                let rest = self.destination_phrase(rest_to, true, true);
-                let vp = format!(
-                    "reveal cards from the top of {p} library until {} reveal {f}. Put that card {found} and the rest {rest}",
+                let until = format!(
+                    "reveal cards from the top of {p} library until {} reveal {f}",
                     if p == "your" { "you" } else { "they" }
                 );
+                // Cards left where they are (in place, `FromTop`): the instructions that
+                // follow say where "that card" and the rest go.
+                let in_place = |d: &Destination| {
+                    d.zone == ZoneKind::Library && matches!(d.position, LibraryPosition::FromTop(_))
+                };
+                if in_place(found_to) && in_place(rest_to) {
+                    return self.with_subject(who, &until, false);
+                }
+                let found = self.destination_phrase(found_to, false, true);
+                // "Put that card onto the battlefield and shuffle the rest into your
+                // library."
+                let you = matches!(who, PlayerRef::You) && !self.in_as_player;
+                let rest = if rest_to.zone == ZoneKind::Library
+                    && rest_to.position == LibraryPosition::Shuffled
+                {
+                    format!("{} the rest into {p} library", if you { "shuffle" } else { "shuffles" })
+                } else {
+                    let r = self.destination_phrase(rest_to, true, true);
+                    format!("the rest {r}")
+                };
+                // Another player reveals: that player puts the cards (the second sentence
+                // names them again, "The player puts that card onto the battlefield").
+                let put = if you {
+                    "Put".to_string()
+                } else {
+                    "{alt:The player|That player} puts".to_string()
+                };
+                let vp = format!("{until}. {put} that card {found} and {rest}");
                 self.with_subject(who, &vp, false)
             }
             Effect::ExtraTurnWith { who, at_start } => {
@@ -2490,7 +2534,11 @@ impl Renderer<'_> {
                 mods,
                 expires,
             } => {
-                let f = self.noun(filter, Num::One);
+                let f = if matches!(filter, Filter::Any) {
+                    "spell".to_string()
+                } else {
+                    self.noun(filter, Num::One)
+                };
                 let f = if f.contains("spell") {
                     f
                 } else {
@@ -2500,8 +2548,30 @@ impl Renderer<'_> {
                     Duration::EndOfTurn | Duration::ThisTurn => " this turn",
                     _ => "",
                 };
-                // "The next noncreature spell you cast this turn has affinity for artifacts."
-                let vp = self.mods_vp(mods, false);
+                // The spell's own abilities as it's cast: "can't be countered" (CR
+                // 101.2), "can be cast as though it had flash" (flash matters only while
+                // the card is cast, CR 702.8a).
+                let vp = match mods.as_slice() {
+                    [Modification::AddKeyword(k)] if k.kind == crate::keywords::KeywordKind::Flash => {
+                        "can be cast as though it had flash".to_string()
+                    }
+                    [Modification::AddAbility(a)]
+                        if matches!(
+                            &a.kind,
+                            AbilityKind::Static(st)
+                                if st.condition.is_none()
+                                    && matches!(
+                                        st.effect,
+                                        StaticEffect::Restriction(Restriction::CantBeCountered(Filter::Source))
+                                    )
+                        ) =>
+                    {
+                        "can't be countered".to_string()
+                    }
+                    // "The next noncreature spell you cast this turn has affinity for
+                    // artifacts."
+                    _ => self.mods_vp(mods, false),
+                };
                 format!("the next {f} you cast{d} {vp}")
             }
             Effect::CopySpellRetargeted { what, target } => {
@@ -2585,6 +2655,10 @@ impl Renderer<'_> {
             Value::Const(n) => format!("{} times", number_word(*n)),
             other => {
                 let s = self.value(other);
+                // "Investigate that many times."
+                if s.starts_with("{alt:that much") || s == "that many" {
+                    return "that many times".into();
+                }
                 if Self::is_simple(other) {
                     format!("{s} times")
                 } else {
@@ -3025,6 +3099,11 @@ impl Renderer<'_> {
                                 ] {
                                     what = what.replace(h, "");
                                 }
+                            }
+                            // A player sacrifices only permanents they control (CR
+                            // 701.21a): "sacrifice any number of lands".
+                            if verb == "sacrifice" {
+                                what = what.replacen(" you control", " {opt:you control}", 1);
                             }
                             parts.push(format!("{verb} {what}"));
                             i += 2;
@@ -4157,7 +4236,26 @@ impl Renderer<'_> {
             .dests
             .iter()
             .map(|d| {
-                let mut alts = vec![self.destination_phrase(&d.to, many, own)];
+                // The searching player puts the card onto the battlefield, under their
+                // control (CR 110.2a): "under its controller's control" may go unsaid.
+                let to = match &d.to.controller {
+                    Some(c)
+                        if d.to.zone == ZoneKind::Battlefield
+                            && !matches!(c, PlayerRef::You)
+                            && same_player(c, &spec.who) =>
+                    {
+                        let mut t = d.to.clone();
+                        t.controller = None;
+                        let p = self.player(c, Case::Poss);
+                        let base = self.destination_phrase(&t, many, true);
+                        Some(format!("{base} {{opt:under {p} control}}"))
+                    }
+                    _ => None,
+                };
+                let mut alts = vec![match to {
+                    Some(t) => t,
+                    None => self.destination_phrase(&d.to, many, own),
+                }];
                 for o in &d.or {
                     alts.push(self.destination_phrase(o, many, own));
                 }
@@ -4191,6 +4289,19 @@ impl Renderer<'_> {
                 dests[i] = dests[i]["put ".len()..].to_string();
             }
         }
+        // Another player searches ("that player loses 3 life, searches their library for
+        // a card, puts it into their hand, then shuffles"): every verb is theirs.
+        let third = (!matches!(spec.who, PlayerRef::You) || self.in_as_player) && !spec.optional;
+        if third {
+            for d in dests.iter_mut() {
+                if let Some(r) = d.strip_prefix("put ") {
+                    *d = format!("puts {r}");
+                } else if let Some(r) = d.strip_prefix("exile ") {
+                    *d = format!("exiles {r}");
+                }
+            }
+            s = s.replace(", reveal ", ", reveals ");
+        }
         if !dests.is_empty() {
             s.push_str(&format!(", {}", dests.join(" and ")));
         }
@@ -4211,7 +4322,11 @@ impl Renderer<'_> {
                     ));
                 }
             } else if own || matches!(spec.whose, PlayerRef::Iterated) {
-                s.push_str(", then shuffle");
+                s.push_str(if third {
+                    ", then shuffles"
+                } else {
+                    ", then shuffle"
+                });
             } else {
                 // "Search target player's library ... Then that player shuffles."
                 s.push_str(". Then {alt:that player|they} shuffles");
@@ -5395,6 +5510,11 @@ impl Renderer<'_> {
                     }
                     other => {
                         let s = self.value(other);
+                        // "Add that much {R}": an amount an earlier instruction or the
+                        // event named.
+                        if s.starts_with("{alt:that much") || s == "that many" {
+                            return format!("{{alt:that much|that many}} {sym}");
+                        }
                         // "Add {B} for each charge counter on ~": a count of things.
                         match s.strip_prefix("the number of ") {
                             Some(rest) => format!(

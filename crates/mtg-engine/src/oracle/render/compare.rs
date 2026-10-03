@@ -92,6 +92,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 201.5b), and objects share a name per CR 201.2a.",
     },
     Equivalence {
+        pattern: r"\bthe player ([a-z]+s)\b",
+        replacement: "that player $1",
+        why: "Anaphora: \"Its controller reveals cards ... The player puts that card onto \
+              the battlefield\": \"the player\" and \"that player\" are the player just \
+              named.",
+    },
+    Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(target player|target opponent) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
         replacement: "$1$2 $3$4$5 that player $6",
         why: "As below, for a targeted player: \"target player draws three cards and \
@@ -99,13 +106,34 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               life\" (the same player, CR 115.1).",
     },
     Equivalence {
-        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|defending player|its controller|its owner|an opponent|a player|\{alt:[^}]*player[^}]*\}) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
+        pattern: r#"(^|[.:—•,] |\n|\bthen |\band |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|the player|defending player|its controller|its owner|an opponent|a player|\{alt:[^}]*player[^}]*\}) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
         replacement: "$1$2 $3$4$5 $2 $6",
         why: "A clause without a subject after \"and\", \"then\", or a comma shares the \
               subject of the clause before it: \"each opponent sacrifices a creature and loses 3 life\" is \
               \"each opponent sacrifices a creature and each opponent loses 3 life\". \
               Written out, so that the subject isn't mistaken for the controller's \
               (see the next entry).",
+    },
+    Equivalence {
+        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|they|defending player|its controller|its owner|that [a-z]+'s (?:controller|owner)|an opponent|a player|\{alt:[^}]*player[^}]*\}) may ([^.;"{]*?),? and may\b"#,
+        replacement: "$1$2 may $3 and $2 may",
+        why: "As above, for \"may\": in \"that player may copy ~ and may choose new targets \
+              for the copy\", the player who may choose is that player, not the \
+              ability's controller (so \"may\" without a subject, which is the \
+              controller's after the next entry, isn't confused with it).",
+    },
+    Equivalence {
+        pattern: r"\b(put that card [^.]*?) and the rest\b",
+        replacement: "$1. put the rest",
+        why: "\"Put that card into your hand and the rest on the bottom of your library\": \
+              the verb is said once for both objects.",
+    },
+    Equivalence {
+        pattern: r"\b(?:all )?other cards revealed this way\b|\bthe rest of the revealed cards\b",
+        replacement: "the rest",
+        why: "Anaphora: after an instruction that takes some of the cards revealed, \
+              \"all other cards revealed this way\" and \"the rest of the revealed \
+              cards\" are the rest of them.",
     },
     Equivalence {
         pattern: r"\b(?:is|are) put into your graveyard from the battlefield\b",
@@ -513,7 +541,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               phase triggers at each of them.",
     },
     Equivalence {
-        pattern: r"\b(until end of turn|this turn)\. (?:it's|it is) still an? (?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)\b",
+        pattern: r"\b(until end of turn|this turn)\. (?:it's|it is|they're|they are) still (?:an? )?(?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)s?\b",
         replacement: "in addition to its other types $1",
         why: "CR 205.1b: an effect that says the object is \"still a [type]\" and one that \
               gives types \"in addition to its other types\" both keep all its prior card \
@@ -521,7 +549,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               that duration.)",
     },
     Equivalence {
-        pattern: r"(?:\. (?:it's|it is)| (?:that's|that is)) still an? (?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)\b",
+        pattern: r"(?:\. (?:it's|it is|they're|they are)| (?:that's|that is|that are)) still (?:an? )?(?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)s?\b",
         replacement: " in addition to its other types",
         why: "CR 205.1b, as above.",
     },

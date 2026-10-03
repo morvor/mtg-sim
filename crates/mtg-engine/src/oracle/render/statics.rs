@@ -913,15 +913,22 @@ impl Renderer<'_> {
                 } else {
                     self.spell_noun_plural(&w)
                 };
-                format!("cast {s}")
+                // "cast spells from among cards exiled with ~".
+                match s.strip_prefix("spells exiled with ") {
+                    Some(r) => format!("cast {{alt:{s}|spells from among cards exiled with {r}}}"),
+                    None => format!("cast {s}"),
+                }
             }
         };
+        // Cards "exiled with ~" are in exile (CR 607.2a): the quality says where they are.
+        let linked = format!("{:?}", pp.what).contains("In(Linked)");
         let zone = match pp.zone {
             ZoneKind::Library if pp.top_only => format!("from the top of {p} library"),
+            ZoneKind::Exile if linked => String::new(),
             ZoneKind::Exile => "from exile".into(),
             z => format!("from {p} {}", zone_word(z)),
         };
-        let mut s = format!("{who} may {verb} {zone}");
+        let mut s = format!("{who} may {verb} {zone}").trim_end().to_string();
         if let Some(c) = &pp.cost {
             if c.is_free() {
                 s.push_str(" without paying their mana costs");
@@ -1936,6 +1943,9 @@ impl Renderer<'_> {
             }
             Restriction::MaxDrawsPerTurn(p, n) => {
                 let w = self.player_filter_subject(p);
+                if *n == 0 {
+                    return format!("{w} can't draw cards");
+                }
                 let c = if *n == 1 {
                     "one card".to_string()
                 } else {
