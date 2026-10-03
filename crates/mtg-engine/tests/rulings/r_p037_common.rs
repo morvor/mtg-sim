@@ -72,3 +72,9 @@ pub fn tokens_named(t: &TestGame, p: PlayerId, name: &str) -> Vec<ObjectId> {
         .map(|o| o.id)
         .collect()
 }
+
+/// Adds `n` mana of type `ty` to `p`'s mana pool (so paying a cost taps nothing).
+pub fn pool(t: &mut TestGame, p: PlayerId, ty: mtg_engine::mana::ManaType, n: usize) {
+    let mana = (0..n).map(|_| mtg_engine::mana::Mana::new(ty)).collect();
+    t.g.add_mana(p, mana, None);
+}
