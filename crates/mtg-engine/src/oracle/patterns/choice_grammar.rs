@@ -123,7 +123,8 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             && !super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
             && (r.is_empty() || r.starts_with(' '))
         {
-            return Some((b.it_player.clone(), r.to_string()));
+            // The attacking player is the active player (CR 506.2).
+            return Some((PlayerRef::ActivePlayer, r.to_string()));
         }
         return None;
     }
