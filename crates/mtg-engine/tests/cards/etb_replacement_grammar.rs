@@ -218,3 +218,50 @@ fn archelos_makes_other_permanents_enter_tapped_while_tapped() {
     t.resolve_all();
     assert!(!t.g.obj(t.g.current(giant)).tapped);
 }
+
+#[test]
+fn spark_double_copies_with_an_additional_counter_and_isnt_legendary() {
+    cr!("707.9b", "707.9e", "707.9f");
+    ruling!(
+        "Spark Double",
+        "If it copies a creature, Spark Double enters with a +1/+1 counter on it"
+    );
+    compiles(&["Spark Double", "Moritte of the Frost", "Altered Ego", "Auton Soldier"]);
+    let mut t = TestGame::new(2);
+    let legend = t.battlefield(P0, "Isamaru, Hound of Konda");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(legend)]);
+    let sd = t.enter(P0, "Spark Double");
+    t.resolve_all();
+    let sd = t.g.current(sd);
+    let o = t.g.obj(sd);
+    assert_eq!(o.chars.name, "Isamaru, Hound of Konda");
+    assert!(!o.chars.supertypes.contains(mtg_engine::types::Supertype::Legendary));
+    assert_eq!(t.counters(sd, "+1/+1"), 1);
+    // Both are still on the battlefield (no legend rule).
+    assert!(t.on_battlefield(legend));
+}
+
+#[test]
+fn altered_ego_enters_with_x_additional_counters() {
+    cr!("707.9e", "107.3");
+    ruling!(
+        "Altered Ego",
+        "The value of X in Altered Ego's last ability will be whatever value was chosen for X"
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Forest", 4);
+    t.lands(P0, "Island", 4);
+    let ego = t.hand(P0, "Altered Ego");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.cast(P0, ego).x(3).go();
+    t.resolve_all();
+    let copy = t
+        .named_on_battlefield("Grizzly Bears")
+        .into_iter()
+        .find(|o| *o != bears)
+        .expect("copy");
+    assert_eq!(t.counters(copy, "+1/+1"), 3);
+}
