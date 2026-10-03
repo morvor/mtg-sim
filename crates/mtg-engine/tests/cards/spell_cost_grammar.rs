@@ -4,6 +4,7 @@
 
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::CastMethod;
+use mtg_engine::object::Zone;
 use mtg_engine::types::CardType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -350,4 +351,240 @@ fn rowan_locks_in_the_life_lost_as_the_ability_resolves() {
     t.lands(P0, "Island", 3);
     let div = t.hand(P0, "Divination");
     assert_eq!(paid(&mut t, P0, div, &[]), 3);
+}
+
+#[test]
+fn own_cost_and_additional_cost_cards_compile() {
+    assert_compiles(&[
+        "Phyrexian Purge",
+        "Closing Statement",
+        "Sailors' Bane",
+        "Geistlight Snare",
+        "Corpse Cobble",
+        "Burn at the Stake",
+        "March of Wretched Sorrow",
+        "March of Swirling Mist",
+        "March of Burgeoning Life",
+        "March of Reckless Joy",
+        "March of Otherworldly Light",
+        "Gorex, the Tombshell",
+        "Explosive Singularity",
+        "Hierophant Bio-Titan",
+        "Dargo, the Shipwrecker",
+        "Bite Down on Crime",
+        "Voltage Surge",
+        "Tectonic Split",
+        "Bogslither's Embrace",
+        "Molten Exhale",
+    ]);
+}
+
+#[test]
+fn phyrexian_purge_costs_life_for_each_target() {
+    cr!("601.2c", "601.2f");
+    // "This spell costs 3 life more to cast for each target. Destroy any number of target
+    // creatures."
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 2);
+    let purge = t.hand(P0, "Phyrexian Purge");
+    t.answer_targets(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.g.turn.priority = Some(P0);
+    t.g.cast_spell(P0, purge, CastMethod::Normal).expect("cast");
+    assert_eq!(t.life(P0), 14);
+    t.resolve_all();
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+}
+
+#[test]
+fn closing_statement_costs_less_during_your_end_step() {
+    cr!("601.2f");
+    // "This spell costs {2} less to cast during your end step."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Plains", 3);
+    t.lands(P0, "Swamp", 3);
+    let cs = t.hand(P0, "Closing Statement");
+    t.set_step(P0, Step::End);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    assert_eq!(paid(&mut t, P0, cs, &[]), 3);
+}
+
+#[test]
+fn geistlight_snare_has_two_reductions() {
+    cr!("601.2f");
+    // "This spell costs {1} less to cast if you control a Spirit. It also costs {1} less
+    // to cast if you control an enchantment."
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Island", 1);
+    let opt = t.hand(P1, "Opt");
+    t.cast_with(P1, opt, &[]).expect("Opt");
+    let opt = t.g.current(opt);
+    t.battlefield(P0, "Glorious Anthem");
+    t.battlefield(P0, "Spectral Sailor");
+    t.lands(P0, "Island", 3);
+    let snare = t.hand(P0, "Geistlight Snare");
+    assert_eq!(paid(&mut t, P0, snare, &[Entity::Object(opt)]), 1);
+}
+
+#[test]
+fn torgaar_costs_less_for_each_creature_sacrificed() {
+    cr!("601.2b", "601.2f", "601.2h");
+    // "As an additional cost to cast this spell, you may sacrifice any number of
+    // creatures. This spell costs {2} less to cast for each creature sacrificed this way."
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Swamp", 8);
+    let torgaar = t.hand(P0, "Torgaar, Famine Incarnate");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Number(2));
+    // {6}{B}{B} minus {4}.
+    assert_eq!(paid(&mut t, P0, torgaar, &[]), 4);
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+}
+
+#[test]
+fn corpse_cobble_sacrifices_any_number_of_creatures() {
+    cr!("601.2b", "601.2h");
+    // "As an additional cost to cast this spell, sacrifice any number of creatures. Create
+    // an X/X blue and black Zombie creature token with menace, where X is the total power
+    // of the sacrificed creatures."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Swamp", 1);
+    let cobble = t.hand(P0, "Corpse Cobble");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Number(2));
+    paid(&mut t, P0, cobble, &[]);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    let zombie = t.named_on_battlefield("Zombie Token");
+    assert_eq!(zombie.len(), 1);
+    assert_eq!(t.pt(zombie[0]), (5, 5));
+}
+
+#[test]
+fn march_exiles_cards_for_a_reduction_independent_of_x() {
+    cr!("601.2b", "601.2f", "107.3b");
+    // March of Wretched Sorrow: "As an additional cost to cast this spell, you may exile
+    // any number of black cards from your hand. This spell costs {2} less to cast for each
+    // card exiled this way. ~ deals X damage to target creature or planeswalker and you
+    // gain X life."
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 1);
+    let march = t.hand(P0, "March of Wretched Sorrow");
+    let rot = t.hand(P0, "Mind Rot");
+    // X is 2 and one card is exiled: {2}{B} minus {2}.
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Number(1));
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    assert_eq!(paid(&mut t, P0, march, &[Entity::Object(giant)]), 1);
+    assert_eq!(t.zone(rot), Zone::Exile);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+}
+
+#[test]
+fn explosive_singularity_taps_creatures_for_a_reduction() {
+    cr!("601.2b", "601.2f");
+    // "As an additional cost to cast this spell, you may tap any number of untapped
+    // creatures you control. This spell costs {1} less to cast for each creature tapped
+    // this way."
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 10);
+    let es = t.hand(P0, "Explosive Singularity");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Number(2));
+    // {8}{R}{R} minus {2}.
+    assert_eq!(paid(&mut t, P0, es, &[Entity::Player(P1)]), 8);
+    assert!(t.obj_now(a).tapped && t.obj_now(b).tapped);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 10);
+}
+
+#[test]
+fn voltage_surge_optional_sacrifice() {
+    cr!("601.2b", "118.8");
+    // "As an additional cost to cast this spell, you may sacrifice an artifact. ~ deals 2
+    // damage to target creature or planeswalker. If this spell's additional cost was paid,
+    // ~ deals 4 damage instead."
+    let mut t = TestGame::new(2);
+    let thopter = t.battlefield(P0, "Ornithopter");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    let a = t.hand(P0, "Voltage Surge");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(false));
+    paid(&mut t, P0, a, &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    let b = t.hand(P0, "Voltage Surge");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    paid(&mut t, P0, b, &[Entity::Object(giant)]);
+    assert!(!t.on_battlefield(thopter));
+    t.resolve_all();
+    assert!(!t.on_battlefield(giant));
+}
+
+#[test]
+fn tectonic_split_sacrifices_half_the_lands_rounded_up() {
+    cr!("601.2f", "601.2h");
+    // "As an additional cost to cast this spell, sacrifice half the lands you control,
+    // rounded up."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 7);
+    let split = t.hand(P0, "Tectonic Split");
+    t.g.turn.priority = Some(P0);
+    t.g.cast_spell(P0, split, CastMethod::Normal).expect("cast");
+    let lands = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.obj_now(**o).controller == P0 && t.obj_now(**o).chars.card_types.contains(CardType::Land))
+        .count();
+    assert_eq!(lands, 3);
+}
+
+#[test]
+fn bite_down_on_crime_costs_less_if_evidence_was_collected() {
+    cr!("601.2b", "601.2f", "701.59a");
+    // "As an additional cost to cast this spell, you may collect evidence 6. This spell
+    // costs {2} less to cast if evidence was collected."
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Hill Giant");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.graveyard(P0, "Colossal Dreadmaw");
+    t.lands(P0, "Forest", 2);
+    let bite = t.hand(P0, "Bite Down on Crime");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    // {3}{G} minus {2}.
+    let before = tapped_lands(&t, P0);
+    t.answer_targets(P0, &[Entity::Object(mine)]);
+    t.answer_targets(P0, &[Entity::Object(theirs)]);
+    t.g.turn.priority = Some(P0);
+    let r = t.g.cast_spell(P0, bite, CastMethod::Normal);
+    assert!(r.is_ok(), "{r:?}");
+    assert_eq!(tapped_lands(&t, P0) - before, 2);
+    assert!(t.in_exile("Colossal Dreadmaw"));
+}
+
+#[test]
+fn molten_exhale_can_be_cast_with_flash_by_beholding_a_dragon() {
+    cr!("601.3c", "701.4a");
+    // "You may cast this spell as though it had flash if you behold a Dragon as an
+    // additional cost to cast it."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Shivan Dragon");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    let exhale = t.hand(P0, "Molten Exhale");
+    t.set_step(P1, Step::Upkeep);
+    t.g.turn.priority = Some(P0);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let opts = t.g.cast_options(P0, exhale);
+    assert!(opts.iter().any(|o| t.g.can_begin_cast(P0, exhale, o)));
 }
