@@ -37,7 +37,7 @@ fn phyrexian_symbols_count_one_toward_mana_value_even_paid_with_life() {
         "A Phyrexian mana symbol contributes 1 toward the mana value of a card, even if life is paid for it. Specifically, Nissa's mana value is always 7."
     );
     supported("Jace, the Perfected Mind");
-    only_unsupported("Nissa, Ascended Animist", "Phyrexian Horror creature token");
+    supported("Nissa, Ascended Animist");
     // Jace {2}{U}{U/P}: {U/P} paid with 2 life.
     let mut t = TestGame::new(2);
     let jace = t.hand(P0, "Jace, the Perfected Mind");
@@ -164,7 +164,7 @@ fn wildgrowth_archaic_two_hybrid_paid_with_two_green() {
         "Wildgrowth Archaic",
         "For each of the hybrid mana symbols in Wildgrowth Archaic's mana cost, you can choose to pay either {2} or {G}. If you choose to pay {2}, you can still use green mana to pay for one or both of the generic mana in that cost."
     );
-    only_unsupported("Wildgrowth Archaic", "Whenever you cast a creature spell");
+    supported("Wildgrowth Archaic");
     // {2/G}{2/G}: both paid as {2}, with four green mana.
     let mut t = TestGame::new(2);
     let w = t.hand(P0, "Wildgrowth Archaic");
