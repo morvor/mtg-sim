@@ -30,7 +30,8 @@ fn more_token_wordings_compile() {
         "You've Been Caught Stealing",
         "Saw in Half",
         "Frontline Heroism",
-        "Urza's Saga",
+        "Red Sun's Twilight",
+        "Pinnacle Starcage",
     ]);
 }
 
@@ -255,4 +256,58 @@ fn grist_puts_deathtouch_on_the_insect_if_a_black_card_was_milled() {
         assert_eq!(insect.len(), 1, "{}", t.dump_log());
         assert_eq!(t.counters(insect[0], "deathtouch"), u32::from(black));
     }
+}
+
+#[test]
+fn red_suns_twilight_copies_the_destroyed_artifacts_if_x_is_5_or_more() {
+    cr!("707.2", "111.2");
+    let mut t = TestGame::new(2);
+    let ring = t.battlefield(P1, "Sol Ring");
+    t.lands(P0, "Mountain", 7);
+    let r = t.hand(P0, "Red Sun's Twilight");
+    t.cast(P0, r).x(5).target(ring).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Sol Ring"));
+    let copies: Vec<ObjectId> = t
+        .named_on_battlefield("Sol Ring")
+        .into_iter()
+        .filter(|o| t.obj_now(*o).kind == ObjKind::Token && t.obj_now(*o).controller == P0)
+        .collect();
+    assert_eq!(copies.len(), 1, "{}", t.dump_log());
+    // X less than 5: no copies.
+    let mut t = TestGame::new(2);
+    let ring = t.battlefield(P1, "Sol Ring");
+    t.lands(P0, "Mountain", 6);
+    let r = t.hand(P0, "Red Sun's Twilight");
+    t.cast(P0, r).x(4).target(ring).go();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Sol Ring").is_empty());
+}
+
+#[test]
+fn pinnacle_starcage_creates_a_robot_for_each_card_put_into_a_graveyard() {
+    cr!("607.2a", "111.2");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Memnite");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    let cage = t.enter(P0, "Pinnacle Starcage");
+    t.resolve_all();
+    assert!(t.in_exile("Memnite") && t.in_exile("Grizzly Bears"));
+    t.lands(P0, "Plains", 8);
+    let uid = {
+        t.g.recompute();
+        t.g.obj(cage)
+            .chars
+            .abilities
+            .iter()
+            .find(|a| a.text.contains("Robot"))
+            .map(|a| a.uid)
+            .expect("ability")
+    };
+    t.g.turn.priority = Some(P0);
+    t.g.activate_ability(P0, cage, uid).expect("activate");
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Memnite") && t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(tokens(&t, P0, "Robot").len(), 2, "{}", t.dump_log());
 }

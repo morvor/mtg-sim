@@ -1183,3 +1183,62 @@ fn f_counter_on_token_if_milled(l: &str, prev: &mut Effect, b: &mut Builder) -> 
 }
 
 inventory::submit! { FollowupPattern { name: "token grammar: counter on the token if a card was milled this way", priority: 40, apply: f_counter_on_token_if_milled } }
+
+/// "for each artifact destroyed this way, create a token that's a copy of it" (Red Sun's
+/// Twilight): a token copy of each object the previous instruction destroyed.
+fn for_each_destroyed_copy(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("for each ")?;
+    let (phrase, rest) = r.split_once(" destroyed this way, ")?;
+    if rest != "create a token that's a copy of it" {
+        return None;
+    }
+    let (f, plural, tail) = parse_object_phrase(phrase)?;
+    if plural || !end(tail).is_empty() || b.ctx.is_spell() && b.targets.is_empty() {
+        return None;
+    }
+    Some(Effect::CreateTokenCopy {
+        of: Sel::All(Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::IT)))])),
+        count: Value::c(1),
+        controller: PlayerRef::You,
+        tapped: false,
+        attacking: false,
+        mods: vec![],
+    })
+}
+
+inventory::submit! { EffectPattern { name: "token grammar: for each destroyed this way, a token copy of it", priority: 99, parse: for_each_destroyed_copy } }
+
+/// "Put each card exiled with ~ into its owner's graveyard, then create a 2/2 colorless
+/// Robot artifact creature token for each card put into a graveyard this way." (Pinnacle
+/// Starcage).
+fn f_create_for_each_put_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(body) = l.strip_suffix(" for each card put into a graveyard this way") else {
+        return false;
+    };
+    let is_move = |e: &Effect| matches!(e, Effect::Move { .. });
+    let last_move = match &*prev {
+        Effect::Seq(v) => v.last().is_some_and(is_move),
+        e => is_move(e),
+    };
+    if !last_move || !body.starts_with("create ") {
+        return false;
+    }
+    let Some(e) = creation(body, b) else {
+        return false;
+    };
+    let count = Value::Count(Filter::and(vec![
+        Filter::Card,
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::In(Box::new(Sel::Var(vars::IT))),
+    ]));
+    let Some(e) = with_count(&e, count, false) else {
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "token grammar: create a token for each card put into a graveyard this way", priority: 50, apply: f_create_for_each_put_this_way } }
