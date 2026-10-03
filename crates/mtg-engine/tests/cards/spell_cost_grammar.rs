@@ -945,3 +945,23 @@ fn seal_of_the_guildpact_counts_the_chosen_colors_a_spell_is() {
     let div = t.hand(P0, "Divination");
     assert_eq!(paid(&mut t, P0, div, &[]), 2);
 }
+
+#[test]
+fn elminster_reduces_the_next_spell_by_the_cards_scried() {
+    cr!("611.2c", "611.2f", "701.22a");
+    // "Whenever you scry, the next instant or sorcery spell you cast this turn costs {X}
+    // less to cast, where X is the number of cards looked at while scrying this way."
+    assert_compiles(&["Elminster"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Elminster");
+    t.lands(P0, "Island", 6);
+    let opt = t.hand(P0, "Opt");
+    paid(&mut t, P0, opt, &[]);
+    t.resolve_all();
+    // Opt scried 1: Divination costs {1}{U}.
+    let div = t.hand(P0, "Divination");
+    assert_eq!(paid(&mut t, P0, div, &[]), 2);
+    t.resolve_all();
+    let div = t.hand(P0, "Divination");
+    assert_eq!(paid(&mut t, P0, div, &[]), 3);
+}

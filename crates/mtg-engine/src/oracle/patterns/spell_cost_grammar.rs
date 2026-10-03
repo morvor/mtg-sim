@@ -368,7 +368,12 @@ fn for_each_spell(s: &str) -> Option<Value> {
 
 /// "{1} less to cast for each ...", "{U} less to cast", "{X} less to cast, where X is
 /// ...", "an additional 3 life to cast".
-pub(crate) fn parse_amount(r: &str, ctx: &CompileContext, effect: bool) -> Option<Amount> {
+pub(crate) fn parse_amount(
+    r: &str,
+    ctx: &CompileContext,
+    effect: bool,
+    in_trigger: bool,
+) -> Option<Amount> {
     let r = end(r);
     let mut parts = Vec::new();
     let mut conds = Vec::new();
@@ -422,8 +427,11 @@ pub(crate) fn parse_amount(r: &str, ctx: &CompileContext, effect: bool) -> Optio
             return None;
         }
         let mut b = Builder::new(ctx);
-        b.it = Sel::TriggerObject;
-        b.it_player = PlayerRef::TriggerPlayer;
+        b.in_trigger = in_trigger;
+        if !effect {
+            b.it = Sel::TriggerObject;
+            b.it_player = PlayerRef::TriggerPlayer;
+        }
         let (v, rest) = crate::oracle::statics::parse_value_phrase(v, &mut b)?;
         if !end(&rest).is_empty() {
             return None;
@@ -548,7 +556,7 @@ fn spell_cost_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ab
     if verb_s != subj.singular {
         return None;
     }
-    let amount = parse_amount(rest, ctx, false)?;
+    let amount = parse_amount(rest, ctx, false, false)?;
     let mut parts = subj.parts;
     parts.extend(amount.parts);
     match subj.ordinal {
@@ -579,14 +587,17 @@ fn next_spell_costs_less(l: &str, b: &mut Builder) -> Option<Effect> {
     let rest = format!("{{{rest}");
     let subject = subject.strip_suffix(" you cast this turn")?;
     let parts = spell_noun(subject, true)?;
-    let amount = parse_amount(&rest, b.ctx, false)?;
-    if !amount.parts.is_empty() || !amount.conds.is_empty() {
+    let amount = parse_amount(&rest, b.ctx, true, b.in_trigger)?;
+    if !amount.parts.is_empty() || !amount.conds.is_empty() || amount.duration.is_some() {
         return None;
     }
-    // A fixed amount (a value would be determined as the spell is cast, not now).
-    match &amount.change {
-        CostChange::ReduceGeneric(Value::Const(_)) | CostChange::ReduceColored(_, Value::Const(_)) => {}
-        _ => return None,
+    // The amount is determined as the effect begins (CR 611.2c; see
+    // `kw/spell_cost_grammar.rs`).
+    if !matches!(
+        amount.change,
+        CostChange::ReduceGeneric(_) | CostChange::ReduceColored(..)
+    ) {
+        return None;
     }
     let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
         applies_to: CostTarget::ThisSpell,
@@ -596,7 +607,10 @@ fn next_spell_costs_less(l: &str, b: &mut Builder) -> Option<Effect> {
     s.zone = FunctionZone::Anywhere;
     let granted = AbilityDef::new(
         AbilityKind::Static(s),
-        &format!("This spell costs {} less to cast.", &rest[..rest.find('}')? + 1].to_uppercase()),
+        &format!(
+            "This spell costs {} less to cast.",
+            &rest[..rest.find('}')? + 1].to_uppercase()
+        ),
     );
     Some(Effect::NextSpell {
         filter: Filter::and(parts),
@@ -617,7 +631,7 @@ fn spells_cost_for_a_while(l: &str, b: &mut Builder) -> Option<Effect> {
     if subj.ordinal.is_some() || subj.singular || !subj.conds.is_empty() {
         return None;
     }
-    let amount = parse_amount(rest, b.ctx, true)?;
+    let amount = parse_amount(rest, b.ctx, true, b.in_trigger)?;
     if !amount.conds.is_empty() {
         return None;
     }

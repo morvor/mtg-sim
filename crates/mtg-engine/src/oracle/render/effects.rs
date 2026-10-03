@@ -5373,7 +5373,9 @@ impl Renderer<'_> {
             ChoiceKind::Color => "a color".into(),
             ChoiceKind::ColorOtherThan(c) => format!("a color other than {}", c.word()),
             ChoiceKind::Colors => "one or more colors".into(),
-            ChoiceKind::ColorsExactly(n) => format!("{} colors", crate::oracle::render::number_word(*n as i32)),
+            ChoiceKind::ColorsExactly(n) => {
+                format!("{} colors", crate::oracle::render::number_word(*n as i32))
+            }
             // CR 205.3i: every land type.
             ChoiceKind::OneOf(v) if *v == crate::types::land_types() => "a land type".into(),
             ChoiceKind::OneOf(v) => join_list(v, "or"),

@@ -146,6 +146,35 @@ pub fn lock_player_effect(g: &Game, effect: &mut PlayerModification, ctx: &Ctx) 
     }
 }
 
+/// Locks in the amounts of the cost changes granted to "the next spell you cast" (CR
+/// 611.2c): "costs {X} less to cast, where X is the number of cards looked at while
+/// scrying this way".
+pub fn lock_granted_cost_changes(g: &Game, mods: &mut [Modification], ctx: &Ctx) {
+    for m in mods.iter_mut() {
+        let Modification::AddAbility(a) = m else {
+            continue;
+        };
+        let AbilityKind::Static(s) = &a.kind else {
+            continue;
+        };
+        let StaticEffect::CostModifier(cm) = &s.effect else {
+            continue;
+        };
+        if !matches!(cm.applies_to, CostTarget::ThisSpell) {
+            continue;
+        }
+        let mut cm = cm.clone();
+        let mut pm = PlayerModification::CostModifier(cm.clone());
+        lock_player_effect(g, &mut pm, ctx);
+        if let PlayerModification::CostModifier(locked) = pm {
+            cm = locked;
+        }
+        let mut s = s.clone();
+        s.effect = StaticEffect::CostModifier(cm);
+        *a = AbilityDef::new(AbilityKind::Static(s), &a.text);
+    }
+}
+
 /// The reductions waiting "next spell" effects would give `card` if `p` cast it now.
 fn pending_next_spell_reductions(g: &Game, p: PlayerId, card: ObjectId) -> Vec<(CostChange, Ctx)> {
     let turn = g.turn.number;
