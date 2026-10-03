@@ -445,3 +445,56 @@ fn nahiri_creates_and_equips_while_resolving() {
     assert_eq!(t.zone(eq), Zone::Battlefield);
 }
 
+
+#[test]
+fn impatience_counts_a_countered_spell_as_cast() {
+    cr!("603.4", "601.2i", "701.6a");
+    ruling!(
+        "Impatience",
+        "If a spell is countered, it still counts as having been cast."
+    );
+    supported("Impatience");
+    // P1 casts Divination, which is countered: no damage at P1's end step.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Impatience");
+    t.set_step(P1, Step::PrecombatMain);
+    let div = cast_new(&mut t, P1, "Divination", &[]);
+    t.lands(P0, "Island", 2);
+    let cs = t.hand(P0, "Counterspell");
+    t.g.turn.priority = Some(P0);
+    t.cast(P0, cs).target(div).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Divination"));
+    t.advance_to(P1, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    // P0 cast Counterspell (on P1's turn) but no spell on its own turn: 2 damage at P0's
+    // end step.
+    t.advance_to(P0, Step::End);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn you_didnt_cast_a_spell_this_turn() {
+    cr!("603.4");
+    supported("Nightpack Ambusher");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Nightpack Ambusher");
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 1);
+    // Having cast a spell: no Wolf.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Nightpack Ambusher");
+    t.set_step(P0, Step::PostcombatMain);
+    cast_new(&mut t, P0, "Divination", &[]);
+    t.resolve_all();
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(crate::r_s01_common::tokens(&t, P0).is_empty());
+}

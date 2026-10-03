@@ -47,13 +47,19 @@ fn one_spell(desc: &str) -> Option<Filter> {
 }
 
 fn cast_this_turn(c: &str) -> Option<Condition> {
-    let (r, negated) = if let Some(r) = c.strip_prefix("you've cast ") {
-        (r, false)
-    } else if let Some(r) = c.strip_prefix("you haven't cast ") {
-        (r, true)
-    } else {
-        return None;
-    };
+    // "if that player didn't cast a spell this turn" (Impatience, in an "each player's"
+    // trigger): the trigger's player.
+    let subjects = [
+        ("you've cast ", PlayerRef::You, false),
+        ("you haven't cast ", PlayerRef::You, true),
+        ("you didn't cast ", PlayerRef::You, true),
+        ("that player cast ", PlayerRef::TriggerPlayer, false),
+        ("that player didn't cast ", PlayerRef::TriggerPlayer, true),
+        ("that player hasn't cast ", PlayerRef::TriggerPlayer, true),
+    ];
+    let (r, who, negated) = subjects
+        .into_iter()
+        .find_map(|(p, who, neg)| c.strip_prefix(p).map(|r| (r, who, neg)))?;
     let desc = r.strip_suffix(" this turn")?;
     // "a spell from your hand": where it was cast from (CR 601.2a).
     let (desc, from) = match desc.strip_suffix(" from your hand") {
@@ -68,7 +74,7 @@ fn cast_this_turn(c: &str) -> Option<Condition> {
         f = Filter::and(vec![f, Filter::CastFrom(z)]);
     }
     let cast = Condition::Compare(
-        Value::SpellsCastThisTurn(PlayerRef::You, f),
+        Value::SpellsCastThisTurn(who, f),
         Cmp::Ge,
         Value::c(1),
     );
@@ -216,6 +222,8 @@ mod tests {
             "you've cast an instant or sorcery spell this turn",
             "you haven't cast a spell this turn",
             "you haven't cast a spell from your hand this turn",
+            "you didn't cast a spell this turn",
+            "that player didn't cast a spell this turn",
             "you've committed a crime this turn",
             "you've surveilled this turn",
             "you sacrificed a permanent this turn",
