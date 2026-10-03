@@ -133,8 +133,10 @@ impl Game {
                         &format!("Pay {}?", describe_cost(cost)),
                         false,
                     );
+                    self.last_paid = None;
                     if pays && crate::entry_costs::pay(self, p, cost, ctx) {
                         paid = true;
+                        crate::cost_effects::note_paid(self, cost, ctx);
                         break;
                     }
                     if !pays && matches!(**then, Effect::Noop) {

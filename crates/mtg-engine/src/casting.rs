@@ -2818,7 +2818,10 @@ impl Game {
             ..Default::default()
         };
         match self.pay_total_cost(p, cost, src, &spend, ctx) {
-            Ok(_) => true,
+            Ok(paid) => {
+                self.last_paid = Some(paid);
+                true
+            }
             Err(_) => {
                 self.roll_back(snapshot);
                 false

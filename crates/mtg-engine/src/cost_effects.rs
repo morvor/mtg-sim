@@ -91,3 +91,28 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
         _ => None,
     }
 }
+
+/// After a cost paid as an effect resolved ("you may pay {1} and discard a card. If you do,
+/// ... the discarded card's mana value"): the cards it discarded are "the discarded
+/// cards" for the instructions after it, as a discard instruction's would be.
+pub fn note_paid(g: &mut Game, cost: &crate::ability::Cost, ctx: &mut Ctx) {
+    let Some(paid) = g.last_paid.take() else {
+        return;
+    };
+    let discards = cost
+        .parts
+        .iter()
+        .any(|p| matches!(p, crate::ability::CostPart::Discard { .. }));
+    if !discards {
+        return;
+    }
+    let discarded: Vec<crate::types::Entity> = paid
+        .objects
+        .iter()
+        .filter(|o| {
+            !paid.sacrificed.contains(o) && !paid.exiled.contains(o) && !paid.tapped.contains(o)
+        })
+        .map(|o| crate::types::Entity::Object(g.current(*o)))
+        .collect();
+    ctx.set_var(crate::discard_rules::DISCARDED, discarded);
+}
