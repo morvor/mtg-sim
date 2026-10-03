@@ -742,7 +742,7 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
         "The same choice, made as the instruction that uses it is followed (CR 608.2c).",
     ),
     (
-        "\"If C, Y. Otherwise, X.\" -> \"X. If C, Y instead.\"",
+        "\"If C, Y. Otherwise, X.\" and \"Y if C. Otherwise, X.\" -> \"X. If C, Y instead.\" (not after \"If you do\", whose \"Otherwise\" is \"If you don't\")",
         "Both state the same choice between two instructions.",
     ),
     (
@@ -1239,7 +1239,33 @@ fn sentence_rewrites(s: &str) -> String {
     }
     if let Some(otherwise) = otherwise {
         s = otherwise
-            .replace_all(&s, "$1$4. if $2, $3 instead.")
+            .replace_all(&s, |c: &regex::Captures| {
+                // "If you do, Y. Otherwise, X.": "otherwise" is "if you don't", which the
+                // rendering may say either way (the instruction it's about comes before).
+                if matches!(&c[2], "you do" | "they do" | "that player does") {
+                    return c[0].to_string();
+                }
+                format!("{}{}. if {}, {} instead.", &c[1], &c[4], &c[2], &c[3])
+            })
+            .to_string();
+    }
+    // "Draw a card if C. Otherwise, X." (the condition after its instruction): the same.
+    static TRAILING_OTHERWISE: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = TRAILING_OTHERWISE.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )([^.,:]+?) if ([^,.]+)\. otherwise, ([^.]+)\.").ok()
+    }) {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                let (body, cond) = (&c[2], &c[3]);
+                if body.starts_with("if ")
+                    || body.ends_with(" only")
+                    || cond == "able"
+                    || body.contains(" unless ")
+                {
+                    return c[0].to_string();
+                }
+                format!("{}{}. if {cond}, {body} instead.", &c[1], &c[4])
+            })
             .to_string();
     }
     // "X if C." and "If C, X." state the same condition (a trailing "if able" or "only
