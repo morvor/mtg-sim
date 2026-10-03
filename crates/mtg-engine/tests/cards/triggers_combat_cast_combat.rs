@@ -439,3 +439,49 @@ fn zariels_emblem_triggers_only_after_the_first_combat_phase() {
     assert!(t.obj_now(bears).tapped);
     assert_eq!(t.life(P1), 16);
 }
+
+#[test]
+fn mob_mentality_needs_every_non_wall_creature_attacking() {
+    cr!("508.1");
+    assert_supported("Mob Mentality");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Wall of Stone");
+    let aura = t.battlefield(P0, "Mob Mentality");
+    assert!(t.g.attach(aura, Entity::Object(a)));
+    combat(&mut t, &at_p1(&[a]), &[]);
+    assert_eq!(t.pt(a), (2, 2), "the other Bears didn't attack");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b2 = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Wall of Stone");
+    let aura = t.battlefield(P0, "Mob Mentality");
+    assert!(t.g.attach(aura, Entity::Object(a)));
+    combat(&mut t, &at_p1(&[a, b2]), &[]);
+    assert_eq!(t.pt(a), (4, 2));
+    let _ = b;
+}
+
+#[test]
+fn rigo_draws_for_each_player_or_planeswalker_attacked_by_a_small_creature() {
+    cr!("508.3b");
+    assert_supported("Rigo, Streetwise Mentor");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rigo, Streetwise Mentor");
+    let big = t.battlefield(P0, "Grizzly Bears");
+    let small = t.battlefield(P0, "Llanowar Elves");
+    let small2 = t.battlefield(P0, "Llanowar Elves");
+    let pw = t.battlefield(P1, "Ajani Goldmane");
+    let hand = t.hand_size(P0);
+    combat(
+        &mut t,
+        &[
+            (big, Entity::Player(P1)),
+            (small, Entity::Player(P1)),
+            (small2, Entity::Object(pw)),
+        ],
+        &[],
+    );
+    assert_eq!(t.hand_size(P0), hand + 2);
+}

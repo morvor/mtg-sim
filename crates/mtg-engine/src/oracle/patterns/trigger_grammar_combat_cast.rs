@@ -2033,6 +2033,9 @@ fn targeting_what(s: &str) -> Option<(PlayerRel, Option<Filter>)> {
         "an activated ability" => Some(Filter::Custom(
             crate::kw::activated_ability_kind::ACTIVATED_ABILITY.into(),
         )),
+        "a backup ability" => Some(Filter::Custom(
+            crate::kw::activated_ability_kind::BACKUP_ABILITY.into(),
+        )),
         "an ability that targets only it" => Some(Filter::and(vec![
             not_spell(),
             Filter::StackTargets(Box::new(TargetsFilter::Only {
@@ -2331,6 +2334,10 @@ fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
             push("the attacking creature", Sel::TriggerOtherObject);
             push("that attacking creature", Sel::TriggerOtherObject);
         }
+        // The spell or ability that targeted it (CR 115.10).
+        TriggerCond::BecomesTarget { .. } => {
+            push("that ability", Sel::TriggerSpell);
+        }
         TriggerCond::BlockedByN { .. } => {
             push("the attacking creature", Sel::TriggerObject);
             push("that attacking creature", Sel::TriggerObject);
@@ -2493,6 +2500,55 @@ fn end_of_first_combat(r: &str) -> Option<Parsed> {
     ))
 }
 
+/// "all non-Wall creatures you control attack" (Mob Mentality): you attack, and every such
+/// creature is attacking.
+fn all_attack(r: &str) -> Option<Parsed> {
+    let s = r.strip_prefix("all ")?.strip_suffix(" attack")?;
+    let (f, plural, tail) = parse_object_phrase(s)?;
+    if !plural || !end(tail).is_empty() || controlled_by(&f) != Some(PlayerRel::You) {
+        return None;
+    }
+    let idle = Filter::and(vec![f, Filter::creature(), Filter::not(Filter::Attacking)]);
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::PlayerAttacks(PlayerRel::You)),
+            cond: Condition::Not(Box::new(Condition::Exists(idle))),
+        },
+        Sel::TriggerObjects,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+/// "you attack a player or planeswalker with one or more creatures with power 1 or less"
+/// (Rigo, Streetwise Mentor): once for each player or planeswalker attacked (CR 508.3b)
+/// by such a creature of yours.
+fn attack_player_or_planeswalker_with(r: &str) -> Option<Parsed> {
+    let x = r.strip_prefix("you attack a player or planeswalker with one or more ")?;
+    let (f, plural, tail) = parse_object_phrase(x)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    let with = Value::Count(Filter::and(vec![
+        f,
+        Filter::creature(),
+        Filter::In(Box::new(Sel::TriggerObjects)),
+    ]));
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::IsAttacked(DamageRecipient::PlayerOrPlaneswalker(
+                PlayerRel::Any,
+            ))),
+            // You're the attacking (active) player.
+            cond: Condition::And(vec![
+                Condition::YourTurn,
+                Condition::Compare(with, Cmp::Ge, Value::c(1)),
+            ]),
+        },
+        Sel::TriggerObjects,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
 /// "When ~ dies during combat" and other events qualified by a combat timing.
 fn during_combat(r: &str) -> Option<Parsed> {
     let head = r.strip_suffix(" during combat")?;
@@ -2529,6 +2585,8 @@ fn parse(r: &str) -> Option<Parsed> {
         .or_else(|| cycle_this_or_another(r))
         .or_else(|| attacks_while_most_life(r))
         .or_else(|| end_of_first_combat(r))
+        .or_else(|| all_attack(r))
+        .or_else(|| attack_player_or_planeswalker_with(r))
         .or_else(|| during_combat(r))
 }
 

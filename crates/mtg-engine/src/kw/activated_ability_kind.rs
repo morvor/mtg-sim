@@ -78,6 +78,10 @@ fn is_keyword_ability(g: &Game, ctx: &Ctx, k: KeywordKind) -> bool {
 /// with a mana ability".
 pub const HAS_MANA_ABILITY: &str = "object: has a mana ability";
 
+/// `Filter::Custom`: a backup triggered ability on the stack (CR 702.165a): "becomes the
+/// target of a backup ability".
+pub const BACKUP_ABILITY: &str = "stack object: backup ability";
+
 /// `Filter::Custom`: an activated ability on the stack (CR 602.2a).
 pub const ACTIVATED_ABILITY: &str = "stack object: activated ability";
 
@@ -141,6 +145,13 @@ impl KeywordRules for ActivatedAbilityKind {
                     .iter()
                     .any(|a| matches!(&a.kind, AbilityKind::Activated(act) if act.is_mana_ability)),
             );
+        }
+        if name == BACKUP_ABILITY {
+            return Some(matches!(
+                g.obj(id).stack.as_deref().map(|s| &s.kind),
+                Some(StackKind::Triggered { ability, .. })
+                    if crate::keyword_impls::ability_from_keyword(ability) == Some(KeywordKind::Backup)
+            ));
         }
         if name != ACTIVATED_ABILITY {
             return None;
