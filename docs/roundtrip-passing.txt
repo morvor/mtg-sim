@@ -316,6 +316,7 @@ Ainok Bond-Kin
 Ainok Guide
 Ainok Survivalist
 Ainok Tracker
+Ainok Wayfarer
 Air Bladder
 Air Elemental
 Air Marshal
@@ -978,6 +979,7 @@ Arterial Flow
 Artful Dodge
 Artful Maneuver
 Artful Takedown
+Arthur, Marigold Knight
 Artifact Mutation
 Artificer Class
 Artificer's Assistant
@@ -1461,6 +1463,7 @@ Barrin, Master Wizard
 Barrow Ghoul
 Barrow Naughty
 Barrow Witches
+Barrowgoyf
 Barter in Blood
 Bartered Cow
 Bartizan Bats
@@ -1673,6 +1676,7 @@ Benalish Veteran
 Bender's Waterskin
 Beneath the Sands
 Benediction of Moons
+Benefaction of Rhonas
 Benevolent Ancestor
 Benevolent Blessing
 Benevolent Bodyguard
@@ -1766,6 +1770,7 @@ Birthday Escape
 Birthing Boughs
 Birthing Hulk
 Birthing Pod
+Birthing Ritual
 Bishop of Rebirth
 Bishop of Wings
 Bishop of the Bloodstained
@@ -2235,6 +2240,7 @@ Bontu's Last Reckoning
 Bontu's Monument
 Book Burning
 Book of Mazarbul
+Bookwurm
 Boom // Bust
 Boom Box
 Boom Scholar
@@ -2489,6 +2495,7 @@ Brion Stoutarm
 Brisela, Voice of Nightmares
 Bristlebane Battler
 Bristlebane Outrider
+Bristlebud Farmer
 Bristlepack Sentry
 Bristling Backwoods
 Bristling Boar
@@ -2794,6 +2801,7 @@ Canopy Spider
 Canopy Surge
 Canopy Tactician
 Canopy Vista
+Cantankerous Keepers
 Cantivore
 Canyon Crawler
 Canyon Drake
@@ -5588,6 +5596,7 @@ Earth Rumble Wrestlers
 Earth Servant
 Earth Tremor
 Earth Village Ruffians
+Earth's Mightiest Heroes
 Earth-Cult Elemental
 Earth-Origin Yak
 Earthbender Ascension
@@ -5661,6 +5670,7 @@ Edgewall Pack
 Edward Kenway
 Eel Umbra
 Eel-Hounds
+Eerie Gravestone
 Eerie Interlude
 Eerie Procession
 Eerie Soultender
@@ -5682,6 +5692,7 @@ Eiganjo, Seat of the Empire
 Eight-and-a-Half-Tails
 Eirdu, Carrier of Dawn // Isilu, Carrier of Twilight
 Eivor, Battle-Ready
+Eivor, Wolf-Kissed
 Eject
 Ekundu Cyclops
 Ekundu Griffin
@@ -6443,6 +6454,7 @@ Family Reunion
 Famished Foragers
 Famished Ghoul
 Famished Paladin
+Famished Worldsire
 Fan Bearer
 Fan Favorite
 Fanatic of Mogis
@@ -6995,6 +7007,7 @@ Flooded Strand
 Floodfarm Verge
 Floodgate
 Floodhound
+Floodpits Drowner
 Floodwaters
 Flopsie, Bumi's Buddy
 Flora Colossus
@@ -7597,6 +7610,7 @@ Gert and Old Lace, Runaways
 Get Lost
 Get Out
 Get the Point
+Getaway Barrel
 Getaway Car
 Geth's Grimoire
 Geth's Verdict
@@ -8356,6 +8370,7 @@ Green Ward
 Greenbelt Guardian
 Greenbelt Radical
 Greenhilt Trainee
+Greenhouse // Rickety Gazebo
 Greenhouse Propagator
 Greenseeker
 Greenside Watcher
@@ -8733,6 +8748,7 @@ Harmonized Trio // Brainstorm
 Harness Infinity
 Harness by Force
 Harnessed Snubhorn
+Harper Recruiter
 Harpoon Sniper
 Harried Artisan // Phyrexian Skyflayer
 Harried Spearguard
@@ -9600,6 +9616,7 @@ In Oketra's Name
 In Search of Greatness
 In Thrall to the Pit
 In the Darkness Bind Them
+In the Presence of Ages
 In the Trenches
 In the Web of War
 Inaction Injunction
@@ -9643,6 +9660,7 @@ Induce Paranoia
 Indulgent Aristocrat
 Indulgent Tormentor
 Indulging Patrician
+Industrial Advancement
 Inertia Bubble
 Inescapable Blaze
 Inescapable Brute
@@ -10093,6 +10111,7 @@ Jeskai Student
 Jeskai Windscout
 Jet Medallion
 Jet, Freedom Fighter
+Jet, Rebel Leader
 Jetmir's Garden
 Jetmir, Nexus of Revels
 Jetting Glasskite
@@ -10217,6 +10236,7 @@ Jyoti, Moag Ancient
 K'rrik, Son of Yawgmoth
 K'un-Lun Warrior
 K-9, Mark I
+Kaalia, Zenith Seeker
 Kabira Crossroads
 Kabira Evangel
 Kabira Outrider
@@ -10504,6 +10524,7 @@ Kiora's Dambreaker
 Kiora's Dismissal
 Kiora's Follower
 Kiora, Behemoth Beckoner
+Kiora, Master of the Depths
 Kiora, the Rising Tide
 Kira, Great Glass-Spinner
 Kird Ape
@@ -12101,6 +12122,7 @@ Midnight Recovery
 Midnight Ritual
 Midnight Scavengers
 Midnight Snack
+Midnight Tilling
 Midsummer Revel
 Midvast Protector
 Might Beyond Reason
@@ -12250,6 +12272,7 @@ Mire's Toll
 Mirelurk Queen
 Miren, the Moaning Well
 Miriam, Herd Whisperer
+Mirko Vosk, Mind Drinker
 Mirkwood
 Mirkwood Channeler
 Mirkwood Elk
@@ -12396,6 +12419,7 @@ Moldervine Reclamation
 Moldgraf Millipede
 Moldgraf Scavenger
 Mole Man, Moloid Master
+Mole Module
 Mole Worms
 Molecular Modifier
 Molecule Man
@@ -12567,6 +12591,7 @@ Mossfire Egg
 Mossfire Valley
 Mosstodon
 Mosswort Bridge
+Most Decrepit Old Bird // Speak Secrets
 Most Valuable Slayer
 Most Wanted
 Mothdust Changeling
@@ -13585,6 +13610,7 @@ Ossification
 Ossuary Rats
 Ostiary Thrull
 Ostracize
+Ostrich-Horse
 Oswald Fiddlebender
 Otawara, Soaring City
 Otepec Huntmaster
@@ -15255,6 +15281,7 @@ Release to Memory
 Relentless Advance
 Relentless Dead
 Relentless Hunter
+Relentless Pursuit
 Relentless Rohirrim
 Relentless Skaabs
 Relentless X-ATM092
@@ -15521,6 +15548,7 @@ Ribbon Snake
 Ribbons of Night
 Ribbons of the Reikai
 Ribskiff
+Rick Jones, Destined Sidekick
 Ricochet Trap
 Rictus Robber
 Riddle Gate Gargoyle
@@ -16434,6 +16462,7 @@ Scourge of the Undercity
 Scourgemark
 Scouring Sands
 Scout the Borders
+Scout the City
 Scout the Wilderness
 Scouting Hawk
 Scouting Trek
@@ -16745,6 +16774,7 @@ Seraphic Steed
 Serendib Efreet
 Serene Heart
 Serene Offering
+Serene Remembrance
 Serene Steward
 Serenity
 Sergeant-at-Arms
@@ -17200,6 +17230,7 @@ Silent Specter
 Silent Submersible
 Silhana Ledgewalker
 Silhana Starfletcher
+Silhana Wayfinder
 Silk Net
 Silk, Web Weaver
 Silkbind Faerie
@@ -17326,6 +17357,7 @@ Sister of Silence
 Sisterhood of Karn
 Sisters of the Flame
 Sivvi's Ruse
+Six
 Sixth Sense
 Sizzle
 Sizzling Barrage
@@ -17613,6 +17645,7 @@ Slow Motion
 Sludge Crawler
 Sludge Monster
 Sludge Strider
+Sludge Titan
 Sluggishness
 Sluiceway Scorpion
 Slum Reaper
@@ -17774,6 +17807,7 @@ Somberwald Sage
 Somberwald Spider
 Somberwald Stag
 Somberwald Vigilante
+Something Worth Saving
 Somnomancer
 Somnophore
 Sonar Strike
@@ -19114,6 +19148,7 @@ Syr Vondam, the Lucent
 Sythis, Harvest's Hand
 Séance
 T'Challa, the Black Panther
+TARDIS
 TCRI Building
 TVA Bureaucrat
 Tabaxi Toucaneers
@@ -19502,6 +19537,7 @@ Tezzeret, Agent of Bolas
 Tezzeret, Artifice Master
 Tezzeret, Cruel Captain
 Tezzeret, Master of Metal
+Tezzeret, Master of the Bridge
 Thalakos Deceiver
 Thalakos Dreamsower
 Thalakos Mistfolk
@@ -19817,6 +19853,7 @@ Thran Weaponry
 Thranduil the Strategist
 Thranduil's Company
 Thranduil's Decree
+Thranduil, Sindarin Liege // Silvan Rally
 Thranduil, the Elvenking
 Thrash // Threat
 Thrash of Raptors
@@ -19867,6 +19904,7 @@ Throne of the God-Pharaoh
 Throne of the High City
 Throttle
 Through the Breach
+Through the Forest Gate
 Throw from the Saddle
 Throwing Knife
 Thrull Parasite
@@ -20183,6 +20221,7 @@ Towering Indrik
 Towering Thunderfist
 Towering Titan
 Towering Viewpoint
+Towering-Wave Mystic
 Town Gossipmonger // Incited Rabble
 Town Sentry
 Toxic Abomination
@@ -20948,6 +20987,7 @@ Variable Chaser // Arc of Fortune
 Varis, Silverymoon Ranger
 Vashta Nerada
 Vassal Soul
+Vastlands Scavenger // Bind to Life
 Vastwood Animist
 Vastwood Fortification // Vastwood Thicket
 Vastwood Gorger
@@ -21310,6 +21350,7 @@ Vizier of the Scorpion
 Vizkopa Guildmage
 Vizkopa Vampire
 Vizzerdrix
+Voda Sea Scavenger
 Vodalian Arcanist
 Vodalian Hexcatcher
 Vodalian Hypnotist
