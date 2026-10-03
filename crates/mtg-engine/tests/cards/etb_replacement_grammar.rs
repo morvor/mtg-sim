@@ -352,3 +352,21 @@ fn thunderous_velocipede_gives_one_or_three_counters_by_mana_value() {
     t.resolve_all();
     assert_eq!(t.counters(t.g.current(big), "+1/+1"), 3);
 }
+
+#[test]
+fn animal_attendant_mana_makes_a_non_human_creature_enter_with_a_counter() {
+    cr!("106.6", "614.1c");
+    compiles(&["Animal Attendant", "Biophagus", "Guildmages' Forum"]);
+    let mut t = TestGame::new(2);
+    let att = t.battlefield(P0, "Animal Attendant");
+    t.lands(P0, "Forest", 1);
+    // Green.
+    t.answer(P0, DecisionKind::Option, mtg_engine::decision::Answer::Index(4));
+    t.activate(P0, att, 0, &[]).unwrap();
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    let b = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(b.len(), 1, "{}", t.dump_log());
+    assert_eq!(t.counters(b[0], "+1/+1"), 1, "{}", t.dump_log());
+}

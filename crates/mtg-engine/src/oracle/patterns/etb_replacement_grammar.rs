@@ -605,3 +605,65 @@ fn joint_subject(subj: &str) -> Option<Filter> {
     }
     Some(Filter::and(parts))
 }
+
+/// "{T}: Add one mana of any color. If that mana is spent to cast a non-Human creature
+/// spell, that creature enters with an additional +1/+1 counter on it." (Animal
+/// Attendant, Biophagus, Guildmages' Forum; CR 106.6): each unit of mana carries the
+/// effect, which applies to the spell it's spent on as that spell's permanent enters
+/// (CR 614.1c). It's modeled with the mana's delayed ability, resolving before the spell
+/// does.
+fn a_mana_spent_enters_with(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.to_lowercase();
+    let (idx, marker) = [
+        ". if that mana is spent to cast ",
+        ". if this mana is spent to cast ",
+        ". if that mana is spent on ",
+        ". if this mana is spent on ",
+    ]
+    .into_iter()
+    .find_map(|m| lower.find(m).map(|i| (i, m)))?;
+    let head = &block[..idx + 1];
+    let tail = end(&lower[idx + marker.len()..]);
+    let (spell_s, eff) = tail.split_once(", ")?;
+    let spell_s = spell_s
+        .strip_prefix("a ")
+        .or_else(|| spell_s.strip_prefix("an "))?;
+    let (f, plural, rest) = parse_object_phrase(spell_s)?;
+    if plural || !rest.trim().is_empty() {
+        return None;
+    }
+    let r = eff.strip_prefix("that creature enters with ")?;
+    let (kind, n) = counters_on(r)?;
+    let body = Body::effect(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(Filter::In(Box::new(Sel::TriggerSpell))),
+            action: ReplacementAction::EnterWithCounters(kind, n),
+            self_replacement: false,
+            optional: false,
+        },
+        duration: Duration::EndOfTurn,
+        uses: Some(1),
+    });
+    let abilities = crate::oracle::parse_ability(head, ctx)?;
+    let mut out = Vec::new();
+    for a in abilities {
+        let AbilityKind::Activated(act) = &a.kind else {
+            return None;
+        };
+        if !matches!(act.body.effect, Effect::AddMana { .. }) {
+            return None;
+        }
+        let mut act = act.clone();
+        act.body.effect = Effect::AddManaWithSpentTrigger {
+            add: Box::new(act.body.effect.clone()),
+            spell_filter: Filter::and(vec![f.clone(), Filter::Spell]),
+            body: Box::new(body.clone()),
+            abilities: false,
+        };
+        act.is_mana_ability = act.body.targets.is_empty();
+        out.push(AbilityDef::new(AbilityKind::Activated(act), block));
+    }
+    Some(out)
+}
+
+inventory::submit! { super::AbilityPattern { name: "etb replacement grammar: if that mana is spent to cast a creature spell, it enters with counters", priority: 150, parse: a_mana_spent_enters_with } }
