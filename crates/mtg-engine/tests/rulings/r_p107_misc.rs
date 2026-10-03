@@ -380,3 +380,51 @@ fn an_opponents_aura_doesnt_make_a_creature_a_modified_target_or_death() {
     t.resolve_all();
     assert_eq!(creatures(&t, P0).len(), 2);
 }
+
+#[test]
+fn serum_powder_works_from_hand_alongside_mulligans() {
+    cr!("103.5b", "103.5");
+    ruling!(
+        "Serum Powder",
+        "Using the ability doesn't prevent you from taking further mulligans, and taking a mulligan doesn't prevent you from using a Serum Powder's ability"
+    );
+    use mtg_engine::decision::{Answer, Decision};
+    let deck = |name: &str| -> Vec<std::sync::Arc<mtg_engine::card::CardDef>> {
+        (0..40).map(|_| mtg_engine::card::card(name)).collect()
+    };
+    let fillers = || -> Vec<std::sync::Arc<mtg_engine::card::CardDef>> {
+        (0..40).map(|_| filler_card()).collect()
+    };
+    let config = mtg_engine::game::GameConfig {
+        starting_player: Some(P0),
+        ..Default::default()
+    };
+    // Powder, mulligan, Powder again, keep.
+    let mut t = crate::r_s12_common::pregame(config.clone(), vec![deck("Serum Powder"), fillers()]);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Mulligan, Answer::Bool(true));
+    t.answer_yes(P0, true);
+    t.g.start();
+    assert_eq!(t.hand_size(P0), 6);
+    assert!(t.g.exile.len() >= 13);
+    let asked: Vec<&'static str> = t
+        .asked()
+        .into_iter()
+        .filter(|(p, _)| *p == P0)
+        .filter_map(|(_, d)| match d {
+            Decision::YesNo { .. } => Some("powder"),
+            Decision::Mulligan { .. } => Some("declare"),
+            _ => None,
+        })
+        .take(4)
+        .collect();
+    assert_eq!(asked, vec!["powder", "declare", "powder", "declare"]);
+    // Without a Serum Powder in hand, it isn't offered.
+    let mut t = crate::r_s12_common::pregame(config, vec![fillers(), fillers()]);
+    t.g.start();
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P0 && matches!(d, Decision::YesNo { .. })));
+    assert!(t.g.exile.is_empty());
+}
