@@ -24,13 +24,6 @@ fn count_subtype(t: &TestGame, p: PlayerId, sub: &str) -> usize {
         .count()
 }
 
-fn find_subtype(t: &TestGame, p: PlayerId, sub: &str) -> ObjectId {
-    t.g.permanents_controlled_by(p)
-        .into_iter()
-        .find(|o| t.g.obj(*o).chars.has_subtype(sub))
-        .unwrap_or_else(|| panic!("no {sub}"))
-}
-
 #[test]
 fn corpse_lunge_deals_the_power_of_the_card_its_cost_exiled() {
     cr!("400.7j", "601.2h");
@@ -295,4 +288,105 @@ fn doran_pumps_by_the_difference_between_power_and_toughness() {
     t.attack(&[(wurm, Entity::Player(P1))], &[]);
     // Craw Wurm 6/4: +2/+2.
     assert_eq!(t.life(P1), 12);
+}
+
+#[test]
+fn drach_nyen_gets_the_power_of_the_card_it_exiled() {
+    cr!("607.2a", "613.4c");
+    assert_supported("Drach'Nyen");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let dn = t.enter(P0, "Drach'Nyen");
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.attach(dn, Entity::Object(bears));
+    t.g.recompute();
+    // Hill Giant's power is 3.
+    assert_eq!(t.pt(bears), (5, 2));
+}
+
+#[test]
+fn venom_reflexive_counters_use_the_exiled_cards_toughness() {
+    cr!("603.12", "607.2a");
+    assert_supported("Venom, Deadly Devourer");
+    let mut t = TestGame::new(2);
+    let venom = t.battlefield(P0, "Venom, Deadly Devourer");
+    let giant = t.graveyard(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 3);
+    t.answer_targets(P0, &[Entity::Object(venom)]);
+    t.activate(P0, venom, 0, &[Entity::Object(giant)])
+        .expect("activate");
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    // Hill Giant's toughness is 3.
+    assert_eq!(t.counters(venom, "+1/+1"), 3);
+}
+
+#[test]
+fn blazing_effigy_adds_damage_from_other_effigies() {
+    cr!("120.2", "603.10a");
+    assert_supported("Blazing Effigy");
+    let mut t = TestGame::new(2);
+    let first = t.battlefield(P0, "Blazing Effigy");
+    let second = t.battlefield(P0, "Blazing Effigy");
+    let target = t.battlefield(P1, "Ancient Brontodon");
+    t.answer_targets(P0, &[Entity::Object(second)]);
+    t.answer_targets(P0, &[Entity::Object(target)]);
+    // The first Effigy dies and deals 3 to the second; the second dies (3 damage on a
+    // 0/3) and deals 3 + 3 to the Wurm.
+    t.g.destroy(first, None);
+    t.resolve_all();
+    assert_eq!(t.g.obj(target).damage, 6);
+}
+
+#[test]
+fn grothama_players_draw_the_damage_their_sources_dealt() {
+    cr!("120.2", "603.10a");
+    // Its other ability (granting a fight trigger) isn't part of this test.
+    let c = card("Grothama, All-Devouring");
+    assert!(
+        !c.unsupported_text().iter().any(|u| u.contains("draws cards")),
+        "{:?}",
+        c.unsupported_text()
+    );
+    let mut t = TestGame::new(2);
+    let g = t.battlefield(P0, "Grothama, All-Devouring");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.g.deal_damage(mine, Entity::Object(g), 2, false);
+    t.g.deal_damage(theirs, Entity::Object(g), 3, false);
+    t.g.flush_events();
+    let before = (t.hand_size(P0), t.hand_size(P1));
+    t.g.destroy(g, None);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before.0 + 2);
+    assert_eq!(t.hand_size(P1), before.1 + 3);
+}
+
+#[test]
+fn aesir_escape_valhalla_uses_the_exiled_cards_mana_value() {
+    cr!("714.2b", "607.2a");
+    assert_supported("The Aesir Escape Valhalla");
+    let mut t = TestGame::new(2);
+    let giant = t.graveyard(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    let saga = t.enter(P0, "The Aesir Escape Valhalla");
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    // Chapter I: Hill Giant's mana value is 4.
+    assert_eq!(t.life(P0), 24);
+    // Chapter II.
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 4);
+    // Chapter III returns the Saga and the exiled card to their owner's hand.
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(giant)), mtg_engine::object::Zone::Hand(P0));
 }
