@@ -396,3 +396,230 @@ fn inkshield_tokens_for_each_combat_damage_prevented() {
     assert_eq!(t.life(P0), 20);
     assert_eq!(controlled(&t, P0, "Inkling Token"), 3);
 }
+
+#[test]
+fn bladecoil_serpent_draws_for_each_uu_spent() {
+    cr!("601.2h");
+    compiles("Bladecoil Serpent");
+    // "When this creature enters, for each {U}{U} spent to cast it, draw a card."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 5);
+    t.lands(P0, "Wastes", 3);
+    let serpent = t.hand(P0, "Bladecoil Serpent");
+    let hand = t.hand_size(P0);
+    t.cast(P0, serpent).x(2).go();
+    t.resolve_all();
+    // Five blue mana spent: two {U}{U}.
+    assert_eq!(t.hand_size(P0), hand - 1 + 2);
+}
+
+#[test]
+fn all_suns_dawn_one_target_of_each_color() {
+    cr!("105.1", "115.1");
+    ruling!(
+        "All Suns' Dawn",
+        "You can target two blue-and-white multicolored cards by choosing one as the blue card and one as the white card."
+    );
+    compiles("All Suns' Dawn");
+    // "For each color, return up to one target card of that color from your graveyard to
+    // your hand. Exile All Suns' Dawn."
+    let mut t = TestGame::new(2);
+    let azorius = t.graveyard(P0, "Azorius Guildmage");
+    let azorius2 = t.graveyard(P0, "Azorius Guildmage");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 5);
+    let spell = t.hand(P0, "All Suns' Dawn");
+    // White: a Guildmage; blue: the other one; green: the Bears (no black or red card to
+    // choose).
+    t.answer_targets(P0, &[Entity::Object(azorius)]);
+    t.answer_targets(P0, &[Entity::Object(azorius2)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(
+        t.g.player(P0)
+            .hand
+            .iter()
+            .filter(|o| t.obj(**o).chars.name == "Azorius Guildmage")
+            .count(),
+        2
+    );
+    assert!(t.in_exile("All Suns' Dawn"));
+}
+
+#[test]
+fn revival_experiment_returns_one_card_of_each_permanent_type() {
+    cr!("110.4", "608.2c");
+    ruling!(
+        "Revival Experiment",
+        "The cards you return are chosen as Revival Experiment resolves."
+    );
+    compiles("Revival Experiment");
+    // "For each permanent type, return up to one card of that type from your graveyard to
+    // the battlefield. You lose 3 life for each card returned this way. Exile Revival
+    // Experiment."
+    let mut t = TestGame::new(2);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let forest = t.graveyard(P0, "Forest");
+    t.lands(P0, "Swamp", 3);
+    t.lands(P0, "Forest", 3);
+    let spell = t.hand(P0, "Revival Experiment");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert!(!t.in_graveyard(P0, "Grizzly Bears"));
+    // The Bears and the Forest returned: 6 life.
+    assert_eq!(t.life(P0), 14);
+}
+
+#[test]
+fn moonlight_bargain_each_looked_at_card_costs_life_or_goes_to_the_graveyard() {
+    cr!("118.12a", "608.2c");
+    compiles("Moonlight Bargain");
+    // "Look at the top five cards of your library. For each card, put that card into your
+    // graveyard unless you pay 2 life. Then put the rest into your hand."
+    let mut t = TestGame::new(2);
+    for _ in 0..5 {
+        t.library_top(P0, "Grizzly Bears");
+    }
+    t.lands(P0, "Swamp", 5);
+    let spell = t.hand(P0, "Moonlight Bargain");
+    let hand = t.hand_size(P0);
+    // Pay for two cards; the other three go to the graveyard.
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(false));
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(false));
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(false));
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert_eq!(t.life(P0), 16);
+    assert_eq!(t.hand_size(P0), hand - 1 + 2);
+    assert_eq!(
+        t.g.player(P0)
+            .graveyard
+            .iter()
+            .filter(|o| t.obj(**o).chars.name == "Grizzly Bears")
+            .count(),
+        3
+    );
+}
+
+#[test]
+fn killing_wave_pay_x_life_for_some_creatures_and_sacrifice_the_rest() {
+    cr!("118.12a", "608.2f", "107.3a");
+    ruling!(
+        "Killing Wave",
+        "A player may choose to pay life for some creatures and sacrifice the rest."
+    );
+    compiles("Killing Wave");
+    // "For each creature, its controller sacrifices it unless they pay X life."
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 4);
+    let spell = t.hand(P0, "Killing Wave");
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(false));
+    t.cast(P0, spell).x(3).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!([t.on_battlefield(a), t.on_battlefield(b)].iter().filter(|x| **x).count(), 1);
+}
+
+#[test]
+fn doppelgang_x_copies_of_each_target() {
+    cr!("707.2");
+    compiles("Doppelgang");
+    // "For each of X target permanents, create X tokens that are copies of that
+    // permanent."
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Forest", 4);
+    t.lands(P0, "Island", 4);
+    let spell = t.hand(P0, "Doppelgang");
+    t.cast(P0, spell)
+        .x(2)
+        .targets(&[Entity::Object(a), Entity::Object(b)])
+        .go();
+    t.resolve();
+    assert_eq!(controlled(&t, P0, "Grizzly Bears"), 3);
+    assert_eq!(controlled(&t, P0, "Hill Giant"), 2);
+}
+
+#[test]
+fn from_the_ashes_each_destroyed_lands_controller_may_search() {
+    cr!("608.2c", "701.23");
+    compiles("From the Ashes");
+    // "Destroy all nonbasic lands. For each land destroyed this way, its controller may
+    // search their library for a basic land card and put it onto the battlefield. Then
+    // each player who searched their library this way shuffles."
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Ancient Tomb");
+    t.battlefield(P1, "Ancient Tomb");
+    t.library_top(P1, "Forest");
+    t.library_top(P1, "Island");
+    t.lands(P0, "Mountain", 4);
+    let spell = t.hand(P0, "From the Ashes");
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert!(t.named_on_battlefield("Ancient Tomb").is_empty());
+    assert_eq!(controlled(&t, P1, "Forest") + controlled(&t, P1, "Island"), 2);
+}
+
+#[test]
+fn krenkos_buzzcrusher_destroys_one_nonbasic_land_of_each_player() {
+    cr!("115.10");
+    ruling!(
+        "Krenko's Buzzcrusher",
+        "None of the nonbasic lands are targets"
+    );
+    compiles("Krenko's Buzzcrusher");
+    // "When this creature enters, for each player, destroy up to one nonbasic land that
+    // player controls. For each land destroyed this way, its controller may search their
+    // library for a basic land card, put it onto the battlefield tapped, then shuffle."
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Ancient Tomb");
+    let theirs = t.battlefield(P1, "Ancient Tomb");
+    t.library_top(P1, "Forest");
+    t.answer_choose(P0, &[]);
+    t.answer_choose(P0, &[Entity::Object(theirs)]);
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    t.enter(P0, "Krenko's Buzzcrusher");
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(t.on_battlefield(mine));
+    assert!(!t.on_battlefield(theirs));
+    assert_eq!(controlled(&t, P1, "Forest"), 1);
+}
+
+#[test]
+fn mega_flare_damages_the_creature_chosen_for_each_opponent() {
+    cr!("601.2c", "115.1");
+    ruling!(
+        "Mega Flare",
+        "Use the greatest power among creatures you control as Mega Flare resolves"
+    );
+    compiles("Mega Flare");
+    // "For each opponent, choose up to one target creature that player controls. Mega Flare
+    // deals damage equal to the greatest power among creatures you control to each of the
+    // chosen creatures."
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Hill Giant");
+    let a = t.battlefield(P1, "Hill Giant");
+    let b = t.battlefield(P2, "Grizzly Bears");
+    t.lands(P0, "Mountain", 3);
+    let spell = t.hand(P0, "Mega Flare");
+    t.answer_targets(P0, &[Entity::Object(a)]);
+    t.answer_targets(P0, &[Entity::Object(b)]);
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert!(!t.on_battlefield(a));
+    assert!(!t.on_battlefield(b));
+}
