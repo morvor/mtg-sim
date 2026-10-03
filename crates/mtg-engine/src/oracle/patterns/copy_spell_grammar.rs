@@ -261,3 +261,41 @@ fn that_wasnt_cast<'a>(t: &'a str, f: &Filter) -> Option<(Filter, &'a str)> {
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "copy spell grammar: that wasn't cast", priority: 100, parse: that_wasnt_cast } }
+
+/// "Copy target creature spell you control. The copy gains haste and "At the beginning of
+/// the end step, sacrifice this token."" (Choreographed Sparks): the copies just made; the
+/// effect continues to apply to the permanent a copy of a permanent spell becomes
+/// (CR 400.7a).
+fn f_the_copy_gains(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l
+        .strip_prefix("the copy gains ")
+        .or_else(|| l.strip_prefix("the copies gain "))
+    else {
+        return false;
+    };
+    let ends_with_copy = match &*prev {
+        Effect::CopySpell { .. } | Effect::CopySpellExcept { .. } => true,
+        Effect::Seq(v) => matches!(
+            v.last(),
+            Some(Effect::CopySpell { .. } | Effect::CopySpellExcept { .. })
+        ),
+        _ => false,
+    };
+    if !ends_with_copy {
+        return false;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    b.it = Sel::Var(vars::CREATED);
+    let e = crate::oracle::effects::parse_simple(&format!("it gains {r}"), b);
+    let Some(e @ Effect::Modify { .. }) = e.filter(|_| b.targets.len() == saved.0) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "copy spell grammar: the copy gains", priority: 90, apply: f_the_copy_gains } }

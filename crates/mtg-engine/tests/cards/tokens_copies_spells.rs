@@ -44,6 +44,7 @@ fn spell_copy_wordings_compile() {
         "Chain of Acid",
         "Chain of Smog",
         "Errant, Street Artist",
+        "Choreographed Sparks",
     ]);
 }
 
@@ -216,4 +217,28 @@ fn errant_copies_only_a_spell_that_wasnt_cast() {
     t.activate(P0, errant, 0, &[Entity::Object(copy)]).unwrap();
     t.resolve_all();
     assert_eq!(t.life(P1), 11, "{}", t.dump_log());
+}
+
+#[test]
+fn choreographed_sparks_copy_token_has_haste_and_is_sacrificed_at_end_step() {
+    cr!("707.10", "608.3f", "400.7a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Mountain", 2);
+    let bears = t.hand(P0, "Grizzly Bears");
+    let spell = t.cast(P0, bears).go();
+    let cs = t.hand(P0, "Choreographed Sparks");
+    t.cast(P0, cs).modes(&[1]).target(spell).go();
+    t.resolve_all();
+    let token = tokens_named(&t, "Grizzly Bears");
+    assert_eq!(token.len(), 1, "{}", t.dump_log());
+    assert!(t
+        .obj_now(token[0])
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(tokens_named(&t, "Grizzly Bears").is_empty(), "{}", t.dump_log());
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }

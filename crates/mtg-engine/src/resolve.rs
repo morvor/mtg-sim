@@ -1068,6 +1068,11 @@ impl Game {
                 // CR 405.3: the copies are put on the stack at once, in the order
                 // their controller chooses.
                 crate::copy::order_copies(self, ctx.controller, &copies);
+                // "The copy gains haste" (Choreographed Sparks).
+                ctx.set_var(
+                    vars::CREATED,
+                    copies.iter().map(|c| Entity::Object(*c)).collect(),
+                );
             }
             Effect::TokensJoinCombat {
                 effect,
@@ -1125,6 +1130,10 @@ impl Game {
                     }
                 }
                 crate::copy::order_copies(self, ctx.controller, &copies);
+                ctx.set_var(
+                    vars::CREATED,
+                    copies.iter().map(|c| Entity::Object(*c)).collect(),
+                );
             }
             Effect::OfferSpecialAction {
                 def,
