@@ -219,3 +219,15 @@ fn scion_of_halaster_replaces_only_the_first_draw_each_turn() {
     assert_eq!(t.graveyard_size(P0), gy);
     assert_eq!(t.hand_size(P0), 2);
 }
+
+#[test]
+fn retriever_phoenix_returns_instead_of_learning() {
+    cr!("614.1a", "701.48a", "113.6b");
+    compiles(&["Retriever Phoenix"]);
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Retriever Phoenix");
+    t.answer_yes(P0, true);
+    mtg_engine::kwa::learn::learn(&mut t.g, P0, None);
+    t.settle();
+    assert_eq!(t.named_on_battlefield("Retriever Phoenix").len(), 1);
+}

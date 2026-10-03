@@ -2329,6 +2329,7 @@ pub enum ReplaceableAction {
     Proliferate,
     Explore,
     Connive,
+    Learn,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

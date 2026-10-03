@@ -88,6 +88,11 @@ fn player_event(s: &str, ctx: &CompileContext) -> Option<PlayerEvent> {
             who,
             objects: None,
         },
+        "learn" => ReplacementEvent::Action {
+            kind: ReplaceableAction::Learn,
+            who,
+            objects: None,
+        },
         "scry a number of cards" | "scry one or more cards" => ReplacementEvent::Action {
             kind: ReplaceableAction::Scry,
             who,
