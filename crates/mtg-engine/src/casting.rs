@@ -2517,6 +2517,8 @@ impl Game {
             Some(c) => &c.mana,
             None => &act.cost.mana,
         };
+        // "Spend this mana only on costs that contain {X}" (CR 107.3).
+        let cost_has_x = announced.as_ref().is_some_and(|m| m.has_x());
         if let Some(m) = announced {
             crate::cost_rules::announce_phyrexian(self, p, id, m);
         }
@@ -2537,6 +2539,7 @@ impl Game {
             source: Some(src),
             any_color: self.any_color_mana(p, src, true),
             class_level: crate::classes::gains_a_level(act),
+            has_x: cost_has_x,
             cost_of: Some(crate::rule_statics::payment::CostOf::Ability),
             // "Spend only black mana on X" (see `payment_rules`).
             x_spend: crate::payment_rules::x_spend(
