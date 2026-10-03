@@ -126,20 +126,74 @@ fn the_attacking_player_creates_the_treasure_once_per_attack() {
 
 #[test]
 fn that_attacking_player_is_the_player_who_attacked() {
-    cr!("508.3e", "303.4a");
+    cr!("508.3e", "303.4b", "303.4e");
     // Curse of Shallow Graves: "Whenever a player attacks enchanted player with one or
     // more creatures, that attacking player may create a tapped 2/2 black Zombie creature
-    // token." "That attacking player" is now the controller of the attacking creatures
-    // for every such trigger (it was the trigger's player, the attacked one, for
-    // Jolene's); the attacked player gets nothing.
+    // token." A companion check for the Jolene fix above (this wording was already
+    // compiled correctly): the attacker gets the token, not the attacked player nor the
+    // Curse's controller, and once however many creatures attack.
     supported("Curse of Shallow Graves");
-    let mut t = TestGame::new(2);
-    let curse = t.battlefield(P0, "Curse of Shallow Graves");
-    assert!(t.g.attach(curse, Entity::Player(P1)));
-    let bears = t.battlefield(P0, "Grizzly Bears");
+    let mut t = TestGame::new(3);
+    let curse = t.battlefield(P1, "Curse of Shallow Graves");
+    assert!(t.g.attach(curse, Entity::Player(P2)));
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
     t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
-    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.attack(&[(a, Entity::Player(P2)), (b, Entity::Player(P2))], &[]);
     t.resolve_all();
     assert_eq!(count_subtype(&t, P1, "Zombie"), 0);
+    assert_eq!(count_subtype(&t, P2, "Zombie"), 0);
     assert_eq!(count_subtype(&t, P0, "Zombie"), 1);
+}
+
+#[test]
+fn a_batched_attack_trigger_refers_to_all_the_attacking_creatures() {
+    cr!("603.2c", "508.3e");
+    // "Whenever you attack one or more of your opponents, put a +1/+1 counter on each of
+    // those creatures": one trigger for the declaration, and "those creatures" are the
+    // creatures attacking any of them. A batch of events that are each about several
+    // objects (the creatures attacking one player) kept none of them.
+    use mtg_engine::object::{Characteristics, Zone};
+    use mtg_engine::types::CardType;
+    use std::sync::Arc;
+    let trigger = TriggerCond::Batched {
+        trigger: Box::new(TriggerCond::PlayerAttacksPlayer {
+            attacker: PlayerRel::You,
+            defender: PlayerRel::Opponent,
+        }),
+        per: BatchPer::Batch,
+    };
+    let body = Body::effect(Effect::AddCounters {
+        what: Sel::TriggerObjects,
+        kind: smol_str::SmolStr::new("+1/+1"),
+        n: Value::c(1),
+    });
+    let mut chars = Characteristics {
+        name: smol_str::SmolStr::new("Batched Attack Watcher"),
+        rules_text: Arc::from(""),
+        ..Default::default()
+    };
+    chars.card_types.insert(CardType::Enchantment);
+    chars.abilities.push(AbilityDef::new(
+        AbilityKind::Triggered(TriggeredAbility::new(trigger, body)),
+        "triggered",
+    ));
+    let mut t = TestGame::new(3);
+    t.custom(P0, mtg_engine::card::CardDef::custom(chars), Zone::Battlefield);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let c = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.attack(
+        &[
+            (a, Entity::Player(P1)),
+            (b, Entity::Player(P1)),
+            (c, Entity::Player(P2)),
+        ],
+        &[],
+    );
+    t.resolve_all();
+    for x in [a, b, c] {
+        assert_eq!(t.counters(t.g.current(x), "+1/+1"), 1);
+    }
 }
