@@ -633,6 +633,10 @@ fn creature_qualities<'a>(t: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> 
         ),
         ("that has been dealt damage this turn", Filter::DealtDamageThisTurn),
         ("that was dealt damage this turn", Filter::DealtDamageThisTurn),
+        (
+            "that was turned face up this turn",
+            Filter::Custom(crate::kw::activated_ability_kind::TURNED_FACE_UP_THIS_TURN.into()),
+        ),
         ("that's enchanted", Filter::Enchanted),
         ("that are enchanted", Filter::Enchanted),
         ("that's equipped", Filter::Equipped),
@@ -2631,6 +2635,7 @@ inventory::submit! { TriggerPattern { name: "trigger grammar II: cast, play, com
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     /// Every condition parses (all failures reported at once).
     fn all(v: &[&str]) {
@@ -2661,6 +2666,11 @@ mod tests {
             "whenever enchanted player casts a spell other than the first spell they cast each turn or copies a spell",
             "whenever you cast a noncreature or dragon spell",
             "whenever you cast a noncreature spell or a dragon spell",
+            "whenever a player kicks a spell",
+            "whenever a player casts a card",
+            "whenever a land you control enters from anywhere other than your hand or you cast a spell from anywhere other than your hand",
+            "whenever you cycle ~ or cycle another card while ~ is on the battlefield",
+            "whenever you cast a creature spell that doesn't share a creature type with a creature you control or a creature card in your graveyard",
             "whenever you cast an equipment spell or a spell that targets a creature you control",
             "whenever you cast a noncreature spell with one or more blue mana symbols in its mana cost",
             "whenever you cast a permanent spell with a mana cost that contains {x}",
@@ -2728,6 +2738,14 @@ mod tests {
             "whenever ~ blocks one or more black creatures",
             "whenever ~ blocks two or more creatures",
             "whenever one or more creatures block",
+            "at the end of the first combat phase on your turn",
+            "whenever all non-wall creatures you control attack",
+            "whenever you attack a player or planeswalker with one or more creatures with power 1 or less",
+            "whenever you attack the player who has the initiative",
+            "whenever ~ attacks while you have the most life or are tied for most life",
+            "whenever a creature you control that was turned face up this turn deals combat damage to a player",
+            "whenever one or more creatures that are enchanted by an aura you control attack",
+            "whenever ~ blocks or becomes blocked by a creature that has been dealt damage this turn",
         ]);
     }
 
@@ -2780,7 +2798,64 @@ mod tests {
             "whenever ~ becomes the target of an ability that targets only it",
             "whenever ~ enters or becomes the target of an aura spell",
             "whenever ~ enters or enchanted creature becomes the target of an aura spell",
+            "whenever a creature you control becomes the target of a backup ability",
         ]);
+    }
+
+    fn cond(s: &str) -> TriggerCond {
+        crate::oracle::triggers::parse_trigger_condition(s)
+            .unwrap_or_else(|| panic!("failed to parse {s:?}"))
+            .0
+    }
+
+    #[test]
+    fn batching_follows_the_wording() {
+        // "you or a permanent you control": once for each of them targeted (Unsettled
+        // Mariner's ruling); "you and/or at least one permanent you control": once per spell
+        // or ability (Leyline of Combustion's ruling).
+        assert!(matches!(
+            cond("whenever you or a permanent you control becomes the target of a spell or ability an opponent controls"),
+            TriggerCond::AnyOf(_)
+        ));
+        assert!(matches!(
+            cond("whenever you and/or at least one permanent you control becomes the target of a spell or ability an opponent controls"),
+            TriggerCond::Batched { per: BatchPer::Batch, .. }
+        ));
+        // Several sources at once: one batch; one source dealing damage to several
+        // recipients: once per source.
+        assert!(matches!(
+            cond("whenever one or more pirates you control deal damage to your opponents"),
+            TriggerCond::Batched { per: BatchPer::Batch, .. }
+        ));
+        assert!(matches!(
+            cond("whenever ~ deals damage to one or more creatures"),
+            TriggerCond::Batched { per: BatchPer::Other, .. }
+        ));
+        // "a creature or opponent": each damage event.
+        assert!(matches!(
+            cond("whenever ~ deals damage to a creature or opponent"),
+            TriggerCond::AnyOf(_)
+        ));
+    }
+
+    #[test]
+    fn named_referents_follow_the_event() {
+        let names = |s: &str| -> Vec<(String, String)> {
+            named_referents(&cond(s))
+                .into_iter()
+                .map(|(p, s)| (p, format!("{s:?}")))
+                .collect()
+        };
+        let has = |v: &[(String, String)], p: &str, s: &str| v.iter().any(|(a, b)| a == p && b == s);
+        let v = names("whenever a sliver deals combat damage to a creature");
+        assert!(has(&v, "that creature", "TriggerObject"));
+        assert!(has(&v, "that sliver", "TriggerOtherObject"));
+        let v = names("whenever a creature deals damage to enchanted planeswalker");
+        assert!(has(&v, "that creature", "TriggerOtherObject"));
+        let v = names("whenever a creature blocks a black or red creature");
+        assert!(has(&v, "the blocking creature", "TriggerOtherObject"));
+        let v = names("whenever a creature becomes blocked by a creature with lesser power");
+        assert!(has(&v, "the blocking creature", "TriggerObject"));
     }
 
     #[test]
@@ -2800,6 +2875,8 @@ mod tests {
             "whenever enchanted artifact becomes tapped or a player activates an ability of enchanted artifact without {t} in its activation cost",
             "whenever an opponent casts a spell or activates an ability",
             "whenever you cast a spell from your graveyard or activate an ability of a card in your graveyard",
+            "whenever you activate a power-up ability",
+            "whenever an opponent activates an ability of an artifact, creature, or land on the battlefield, if it isn't a mana ability",
         ]);
     }
 }

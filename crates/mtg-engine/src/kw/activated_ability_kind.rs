@@ -90,6 +90,10 @@ pub const BACKUP_ABILITY: &str = "stack object: backup ability";
 /// planeswalkers you control".
 pub const ATTACKING_YOU_OR_YOUR_PLANESWALKER: &str = "attacking you or a planeswalker you control";
 
+/// `Filter::Custom`: a permanent turned face up this turn (CR 708.8): "a creature you control
+/// that was turned face up this turn".
+pub const TURNED_FACE_UP_THIS_TURN: &str = "permanent: turned face up this turn";
+
 /// `Filter::Custom`: an activated ability on the stack (CR 602.2a).
 pub const ACTIVATED_ABILITY: &str = "stack object: activated ability";
 
@@ -151,6 +155,11 @@ impl KeywordRules for ActivatedAbilityKind {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == TURNED_FACE_UP_THIS_TURN {
+            return Some(g.turn_events.iter().any(
+                |e| matches!(e, Event::TurnedFaceUp { obj } if g.current(*obj) == g.current(id)),
+            ));
+        }
         if name == ATTACKING_YOU_OR_YOUR_PLANESWALKER {
             let you = ctx.controller;
             return Some(
