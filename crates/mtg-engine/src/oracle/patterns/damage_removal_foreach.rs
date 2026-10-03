@@ -205,11 +205,14 @@ fn p_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
     let (clause, thing) = l.rsplit_once(" for each ")?;
     // "for each creature card milled this way" counts the cards the preceding mill
     // instruction milled (CR 701.17c); other "this way" counts are handled elsewhere.
-    if thing.ends_with("destroyed this way")
+    if (thing.ends_with("destroyed this way")
         || (thing.contains(" this way")
             && !end(thing).ends_with(" milled this way")
             // An amount chosen for the cost ("for each counter removed this way").
-            && super::cost_parts::paid_this_way(thing).is_none())
+            && super::cost_parts::paid_this_way(thing).is_none()))
+        // The objects an earlier instruction acted on, as the value grammar reads them
+        // (see `value_results`).
+        && !super::value_results::reads_this_way(thing, b)
     {
         return None;
     }

@@ -16,8 +16,12 @@ fn if_excess_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
         .or_else(|| r.strip_prefix("to that permanent "))
         .unwrap_or(r);
     let r = r.strip_prefix("this way, ")?;
+    // "discover X, where X is that excess damage": the same amount.
+    let defined = r.contains(", where x is that excess damage");
+    let r = &r.replace(", where x is that excess damage", "");
     // "that many" is the amount of excess damage.
-    if r.split(' ').any(|w| w == "x") {
+    let x_given = r.split(' ').any(|w| w == "x");
+    if x_given && (!defined || r.contains("that many")) {
         return None;
     }
     let e = parse_clause(&r.replace("that many", "x"), b)?;

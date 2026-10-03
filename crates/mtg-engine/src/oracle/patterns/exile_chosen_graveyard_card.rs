@@ -23,7 +23,13 @@ fn exile_a_graveyard_card(l: &str, b: &mut Builder) -> Option<Effect> {
         .push(("that card".to_string(), Sel::Var(EXILED_CARD)));
     // With no earlier antecedent, "it" is the exiled card too ("Exile a creature card from
     // your graveyard. Create a token that's a copy of it.", Mordor on the March).
-    if matches!(b.it, Sel::None) || super::oracle_hardening_referents::is_no_referent(&b.it) {
+    // A Saga's chapter ability doesn't call the Saga "it" ("I — Exile a permanent card from
+    // your graveyard. You gain life equal to its mana value.", The Aesir Escape Valhalla).
+    let saga = b.ctx.type_line.subtypes.iter().any(|s| s.as_str() == "Saga");
+    if matches!(b.it, Sel::None)
+        || super::oracle_hardening_referents::is_no_referent(&b.it)
+        || (saga && matches!(b.it, Sel::This))
+    {
         b.it = Sel::Var(EXILED_CARD);
     }
     Some(Effect::Seq(vec![

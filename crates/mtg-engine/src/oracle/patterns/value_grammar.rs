@@ -129,6 +129,47 @@ fn term(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // The phrases of this grammar first; amounts from earlier instructions and this
+    // turn's history (`value_results`) when they don't read the whole phrase.
+    let saved = (
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.named.len(),
+    );
+    let core = atom_core(s, b);
+    let core_rest = core.as_ref().map(|(_, rest)| rest.len());
+    if core
+        .as_ref()
+        .is_some_and(|(_, rest)| plausible_end(rest) && rest.trim().is_empty())
+    {
+        return core;
+    }
+    let core_state = (
+        b.targets.split_off(saved.0),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.named.split_off(saved.3.min(b.named.len())),
+    );
+    b.it = saved.1.clone();
+    b.it_player = saved.2.clone();
+    if let Some(v) = super::value_results::atom_ext(s, b) {
+        // The reading of more of the phrase.
+        let core_plausible = core.as_ref().is_some_and(|(_, rest)| plausible_end(rest));
+        if !core_plausible || core_rest.is_some_and(|n| v.1.len() < n) {
+            return Some(v);
+        }
+    }
+    b.targets.truncate(saved.0);
+    b.named.truncate(saved.3);
+    b.targets.extend(core_state.0);
+    b.named.extend(core_state.3);
+    b.it = core_state.1;
+    b.it_player = core_state.2;
+    core
+}
+
+fn atom_core(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let saved = b.targets.len();
     let saved_player = b.it_player.clone();
     let ext = atom_ext(s, b);
@@ -261,7 +302,7 @@ fn split_possessive(s: &str) -> Option<(&str, &str)> {
     Some((&s[..i], &s[i + 3..]))
 }
 
-fn stat_word(s: &str) -> Option<(Stat, &str)> {
+pub(crate) fn stat_word(s: &str) -> Option<(Stat, &str)> {
     for (p, st) in [
         ("power and/or toughness", Stat::PowerOrToughness),
         ("power", Stat::Power),
@@ -277,7 +318,7 @@ fn stat_word(s: &str) -> Option<(Stat, &str)> {
     None
 }
 
-fn of_referent(stat: Stat, sel: Sel) -> Value {
+pub(crate) fn of_referent(stat: Stat, sel: Sel) -> Value {
     let sel = Box::new(sel);
     match stat {
         Stat::Power => Value::PowerOf(sel),
@@ -445,7 +486,11 @@ fn zone_word(s: &str) -> Option<(ZoneKind, &str)> {
 fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     // "Auras you control that are attached to creatures", "that's attached to a
     // creature": attached to an object of that kind.
-    for p in ["that's attached to ", "that are attached to ", "attached to "] {
+    for p in [
+        "that's attached to ",
+        "that are attached to ",
+        "attached to ",
+    ] {
         if let Some(r) = t.strip_prefix(p) {
             let r2 = r
                 .strip_prefix("a ")
@@ -478,7 +523,11 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     // delve, the cards exiled to pay for it (CR 702.66a).
     for p in ["exiled with ~", "exiled with it"] {
         if let Some(r) = t.strip_prefix(p) {
-            if b.ctx.keywords.iter().any(|k| k.eq_ignore_ascii_case("delve")) {
+            if b.ctx
+                .keywords
+                .iter()
+                .any(|k| k.eq_ignore_ascii_case("delve"))
+            {
                 return word_end(r).then(|| {
                     (
                         Filter::and(vec![
@@ -596,7 +645,9 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
         let (n, rest) = parse_number(r)?;
         let n = n.as_const()?;
         return Some((
-            Filter::Custom(format!("{}{n}", crate::kw::value_counts::BASE_POWER_OR_TOUGHNESS).into()),
+            Filter::Custom(
+                format!("{}{n}", crate::kw::value_counts::BASE_POWER_OR_TOUGHNESS).into(),
+            ),
             rest,
         ));
     }
@@ -606,7 +657,11 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
         let (p, q): (i32, i32) = (p.parse().ok()?, q.parse().ok()?);
         return Some((
             Filter::Custom(
-                format!("{}{p}/{q}", crate::kw::value_counts::BASE_POWER_AND_TOUGHNESS).into(),
+                format!(
+                    "{}{p}/{q}",
+                    crate::kw::value_counts::BASE_POWER_AND_TOUGHNESS
+                )
+                .into(),
             ),
             rest,
         ));
@@ -733,7 +788,10 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
         let words: Vec<&str> = s.splitn(4, ' ').collect();
         if words.len() >= 3
             && words[1] == "and"
-            && matches!(head_noun(words[0]), Some(Filter::Subtype(_) | Filter::Type(_)))
+            && matches!(
+                head_noun(words[0]),
+                Some(Filter::Subtype(_) | Filter::Type(_))
+            )
             && crate::types::Color::from_word(words[2]).is_some()
         {
             let rest = words.get(3).copied().unwrap_or("");
@@ -804,7 +862,9 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
     // "other creatures with the same name as that creature": other than that creature,
     // not other than the source.
     let referent = parts.iter().find_map(|p| match p {
-        Filter::SameNameAs(sel) | Filter::SharesCreatureType(sel) if !matches!(**sel, Sel::This) => {
+        Filter::SameNameAs(sel) | Filter::SharesCreatureType(sel)
+            if !matches!(**sel, Sel::This) =>
+        {
             Some(sel.clone())
         }
         _ => None,
@@ -1016,6 +1076,47 @@ fn amount(s: &str) -> Option<(Cmp, Value, &str)> {
 
 /// After "the number of": what's counted.
 fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // The phrases of this grammar first; amounts from earlier instructions and this
+    // turn's history (`value_results`) when they don't read the whole phrase.
+    let saved = (
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.named.len(),
+    );
+    let core = count_core(r, b);
+    let core_rest = core.as_ref().map(|(_, rest)| rest.len());
+    if core
+        .as_ref()
+        .is_some_and(|(_, rest)| plausible_end(rest) && rest.trim().is_empty())
+    {
+        return core;
+    }
+    let core_state = (
+        b.targets.split_off(saved.0),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.named.split_off(saved.3.min(b.named.len())),
+    );
+    b.it = saved.1.clone();
+    b.it_player = saved.2.clone();
+    if let Some(v) = super::value_results::count_ext(r, b) {
+        // The reading of more of the phrase.
+        let core_plausible = core.as_ref().is_some_and(|(_, rest)| plausible_end(rest));
+        if !core_plausible || core_rest.is_some_and(|n| v.1.len() < n) {
+            return Some(v);
+        }
+    }
+    b.targets.truncate(saved.0);
+    b.named.truncate(saved.3);
+    b.targets.extend(core_state.0);
+    b.named.extend(core_state.3);
+    b.it = core_state.1;
+    b.it_player = core_state.2;
+    core
+}
+
+fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     // "counters removed this way": an amount chosen for the cost (see `cost_parts`).
     if let Some(v) = super::cost_parts::paid_this_way_prefix(r) {
         return Some(v);
@@ -1123,7 +1224,10 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         }
     }
     // CR 104.3: "players who have lost the game".
-    for p in ["players who have lost the game", "player who has lost the game"] {
+    for p in [
+        "players who have lost the game",
+        "player who has lost the game",
+    ] {
         if let Some(rest) = r.strip_prefix(p) {
             return Some((
                 Value::Custom(crate::kw::value_counts::PLAYERS_WHO_LOST.into()),

@@ -46,10 +46,14 @@ fn spells_cost_counted(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<
         [ManaSymbol::Generic(n)] => {
             // "{1} less to cast for each [thing counted]".
             let fe = end(r.strip_prefix(" for each ")?);
-            if fe.contains(" this turn") || fe.contains("target") {
+            let history = super::value_results::whole_history_count(fe);
+            if history.is_none() && (fe.contains(" this turn") || fe.contains("target")) {
                 return None;
             }
-            let t = super::statics::parse_for_each(fe, Some(&Sel::This))?;
+            let t = match history {
+                Some(v) => v,
+                None => super::statics::parse_for_each(fe, Some(&Sel::This))?,
+            };
             match *n {
                 1 => t,
                 n => Value::Mul(Box::new(Value::c(n as i32)), Box::new(t)),
