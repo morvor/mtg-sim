@@ -1,0 +1,1 @@
+Krosan Adaptation	the token copies of Krosan Adaptation are considered to have been “created”	Superseded: under the current CR 111.13 and 608.3f a copy of a permanent spell becomes a token as it resolves and is not "created" for replacement effects or triggered abilities that refer to creating a token (current behavior tested in tests/rulings/r_p076_spells_and_mana.rs)

@@ -1,0 +1,738 @@
+//! Replacement effects that modify how *other* permanents enter (CR 614.1d, 614.12):
+//! "Creatures your opponents control enter tapped."
+
+use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern, TriggerPattern};
+use crate::ability::*;
+use crate::oracle::effects::Builder;
+use crate::oracle::phrases::*;
+use crate::oracle::CompileContext;
+
+/// An entering object isn't on the battlefield yet, so "permanent" in the subject means
+/// any object that would become a permanent.
+fn entering_filter(f: Filter) -> Filter {
+    match f {
+        Filter::Permanent => Filter::Any,
+        Filter::And(v) => Filter::and(v.into_iter().map(entering_filter).collect()),
+        Filter::Or(v) => Filter::Or(v.into_iter().map(entering_filter).collect()),
+        other => other,
+    }
+}
+
+/// A plural subject that may list several kinds of objects sharing a controller suffix:
+/// "creatures and nonbasic lands your opponents control" means creatures your opponents
+/// control and nonbasic lands your opponents control.
+fn subject_list(subj: &str) -> Option<Filter> {
+    let (heads, suffix) = [
+        " you control",
+        " your opponents control",
+        " an opponent controls",
+    ]
+    .iter()
+    .find_map(|sfx| subj.strip_suffix(sfx).map(|h| (h, *sfx)))
+    .unwrap_or((subj, ""));
+    let mut parts = Vec::new();
+    for p in heads
+        .split(", and ")
+        .flat_map(|p| p.split(", or "))
+        .flat_map(|p| p.split(", "))
+        .flat_map(|p| p.split(" and "))
+        .flat_map(|p| p.split(" or "))
+    {
+        let (f, plural, tail) = parse_object_phrase(p.trim())?;
+        if !plural || !end(tail).is_empty() {
+            return None;
+        }
+        parts.push(f);
+    }
+    let head = match parts.len() {
+        0 => return None,
+        1 => parts.pop().unwrap(),
+        _ => Filter::Or(parts),
+    };
+    if suffix.is_empty() {
+        return Some(head);
+    }
+    // Parse the controller suffix on a neutral head noun ("card" = any object).
+    let probe = format!("card{suffix}");
+    let (sf, _, tail) = parse_object_phrase(&probe)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    // Keep only the controller part: the probe noun's own "is a card" restriction would
+    // wrongly exclude tokens ("Creatures your opponents control enter tapped" applies to
+    // creature tokens too, CR 111.1).
+    let sf = match sf {
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|f| !matches!(f, Filter::Card))
+                .collect(),
+        ),
+        Filter::Card => Filter::Any,
+        other => other,
+    };
+    Some(Filter::and(vec![head, sf]))
+}
+
+/// "[objects] enter tapped", e.g. "Artifacts, creatures, and lands your opponents
+/// control enter tapped." (a list in the subject is a union).
+fn others_enter_tapped(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let subj = l.strip_suffix(" enter tapped")?;
+    if subj.starts_with('~') || subj.contains(" this turn") {
+        return None;
+    }
+    let f = subject_list(subj)?;
+    let def = ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(entering_filter(f)),
+        action: ReplacementAction::EnterTapped,
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        block,
+    )])
+}
+
+/// "Creatures you control enter as a copy of ~." (Essence of the Wild): a replacement
+/// effect that makes other permanents enter as a copy of this one (CR 614.1c, 707.2).
+fn others_enter_as_copy_of_this(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let subj = end(&lower).strip_suffix(" enter as a copy of ~")?;
+    if subj.starts_with('~') || subj.contains(" this turn") {
+        return None;
+    }
+    let f = subject_list(subj)?;
+    let def = ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(entering_filter(f)),
+        action: ReplacementAction::EnterAsCopy {
+            filter: Filter::Source,
+            optional: false,
+        },
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        block,
+    )])
+}
+
+inventory::submit! {
+    AbilityPattern { name: "others enter as a copy of this", priority: 50, parse: others_enter_as_copy_of_this }
+}
+
+/// "Each other creature you control of the chosen type enters with an additional +1/+1
+/// counter on it.", "Nontoken creatures you control enter with an additional +1/+1
+/// counter on them for each ...": ETB replacement effects on other permanents
+/// (CR 614.1d, 122.6).
+fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    // Also a face-up conspiracy's (Muzzio's Preparations, CR 315.5).
+    if !ctx.is_permanent()
+        && !ctx
+            .type_line
+            .card_types
+            .contains(crate::types::CardType::Conspiracy)
+    {
+        return None;
+    }
+    let l = end(l);
+    // "As long as ~ is in your graveyard, each Human creature you control enters with an
+    // additional +1/+1 counter on it." (a static ability functioning from the graveyard)
+    let (l, zone) = match l.strip_prefix("as long as ~ is in your graveyard, ") {
+        Some(r) => (r, FunctionZone::Graveyard),
+        None => (l, FunctionZone::Battlefield),
+    };
+    let (subj, rest) = if let Some(r) = l.strip_prefix("each ") {
+        let (s, rest) = r.split_once(" enters with ")?;
+        // "each creature you control that's a Wolf or a Werewolf"
+        let (s, types) = match s.split_once(" that's a ") {
+            Some((a, b)) => {
+                let mut v = Vec::new();
+                for t in b.split(" or a ").flat_map(|x| x.split(" or an ")) {
+                    v.push(Filter::Subtype(subtype_word(t.trim())?));
+                }
+                (a, Some(Filter::Or(v)))
+            }
+            None => (s, None),
+        };
+        let (f, plural, tail) = parse_object_phrase(s)?;
+        if plural || !end(tail).is_empty() {
+            return None;
+        }
+        let f = match types {
+            Some(t) => Filter::and(vec![f, t]),
+            None => f,
+        };
+        (f, rest)
+    } else {
+        let (s, rest) = l.split_once(" enter with ")?;
+        let f = subject_list(s)?;
+        (f, rest)
+    };
+    if matches!(subj, Filter::Source) {
+        return None;
+    }
+    // "a number of additional +1/+1 counters on it equal to ~'s toughness"
+    if let Some(r) = rest.strip_prefix("a number of additional ") {
+        let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+        let r = strip(r, "counters")?;
+        let r = r
+            .strip_prefix("on it")
+            .or_else(|| r.strip_prefix("on them"))?;
+        let n = match end(r) {
+            "equal to ~'s power" => Value::PowerOf(Box::new(Sel::This)),
+            "equal to ~'s toughness" => Value::ToughnessOf(Box::new(Sel::This)),
+            _ => return None,
+        };
+        return others_counters_ability(subj, kind, n, zone, text);
+    }
+    // "an additional +1/+1 counter", "two additional +1/+1 counters"
+    let rest = match rest.strip_prefix("an additional ") {
+        Some(r) => r,
+        None if rest.contains(" additional ") => rest,
+        None => return None,
+    };
+    // "+1/+1 counter on it", "two +1/+1 counters on them for each ..."
+    let (n, r) = match parse_number(rest) {
+        Some((n, r)) if !rest.starts_with('+') && !rest.starts_with('-') => (n, r),
+        _ => (Value::c(1), rest),
+    };
+    let r = r
+        .trim_start()
+        .strip_prefix("additional ")
+        .unwrap_or(r.trim_start());
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = strip(r, "counters").or_else(|| strip(r, "counter"))?;
+    let r = r
+        .strip_prefix("on it")
+        .or_else(|| r.strip_prefix("on them"))?
+        .trim();
+    let n = if r.is_empty() {
+        n
+    } else if let Some(x) = r.strip_prefix(", where x is ") {
+        // "where X is the number of +1/+1 counters on ~" (~ is this effect's source)
+        if !matches!(n, Value::X) {
+            return None;
+        }
+        let x = end(x);
+        let (k, on) = x
+            .strip_prefix("the number of ")?
+            .split_once(" counters on ")?;
+        if on != "~" || k.contains(' ') {
+            return None;
+        }
+        Value::CountersOn(Box::new(Sel::This), Some(k.into()))
+    } else {
+        let each = r.strip_prefix("for each ")?;
+        let v = match each {
+            // This turn's history (see `value_results`).
+            _ if super::value_results::whole_history_count(each).is_some() => {
+                super::value_results::whole_history_count(each)?
+            }
+            "creature that died under your control this turn" => {
+                Value::Custom("creatures_you_controlled_died_this_turn".into())
+            }
+            _ => {
+                let (f, _, tail) = parse_object_phrase(each)?;
+                if !end(tail).is_empty() {
+                    return None;
+                }
+                Value::Count(f)
+            }
+        };
+        match n {
+            Value::Const(1) => v,
+            other => Value::Mul(Box::new(other), Box::new(v)),
+        }
+    };
+    others_counters_ability(subj, kind, n, zone, text)
+}
+
+fn others_counters_ability(
+    subj: Filter,
+    kind: crate::types::CounterKind,
+    n: Value,
+    zone: FunctionZone,
+    text: &str,
+) -> Option<Vec<Ability>> {
+    let def = ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(entering_filter(subj)),
+        action: ReplacementAction::EnterWithCounters(kind, n),
+        self_replacement: false,
+        optional: false,
+    };
+    let mut st = StaticAbility::new(StaticEffect::Replacement(def));
+    st.zone = zone;
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+/// "As long as ~ is in your graveyard, each Human creature you control enters with an
+/// additional +1/+1 counter on it." (The core would read "as long as" as a condition.)
+fn graveyard_others_enter_with_counters(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.to_lowercase();
+    if !lower.starts_with("as long as ~ is in your graveyard, ") {
+        return None;
+    }
+    others_enter_with_counters(&lower, block, ctx)
+}
+
+/// "You may have ~ enter as a copy of any creature on the battlefield." (CR 707.9,
+/// 614.1c); "You may have ~ enter tapped as a copy of any land on the battlefield."
+/// With a leading condition ("If you attacked this turn, you may have ~ enter as a copy
+/// ..."), the replacement applies only if the condition is true as it enters.
+fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    if let Some(r) = l.strip_prefix("if ") {
+        let (c, rest) = r.split_once(", you may have ~ enter ")?;
+        let cond = crate::oracle::statics::parse_condition(c, ctx)?;
+        // `l` is a prefix of the block (lowercased, without its final period).
+        let start = l.len() - rest.len() - "you may have ~ enter ".len();
+        if !block.is_ascii() || !lower[start..].starts_with("you may have ~ enter ") {
+            return None;
+        }
+        let out = enter_as_copy(&block[start..], ctx)?;
+        return Some(
+            out.into_iter()
+                .map(|a| {
+                    let mut kind = a.kind.clone();
+                    if let AbilityKind::Static(st) = &mut kind {
+                        st.condition = Some(cond.clone());
+                    }
+                    AbilityDef::new(kind, block)
+                })
+                .collect(),
+        );
+    }
+    let r = l.strip_prefix("you may have ~ enter ")?;
+    let (tapped, r) = match r.strip_prefix("tapped ") {
+        Some(x) => (true, x),
+        None => (false, r),
+    };
+    let r = r.strip_prefix("as a copy of ")?;
+    let (r, exceptions) = match r.split_once(", except ") {
+        Some((a, _)) => {
+            // Take the exception text from the original block (same offsets: the block
+            // is ASCII here) to keep quoted abilities' capitalization.
+            if !block.is_ascii() {
+                return None;
+            }
+            let start = l.find(", except ")? + ", except ".len();
+            let raw = end(&block[start..]);
+            // Fall back to the token-copy exception grammar ("it's 7/7", "it has haste
+            // and dethrone", "it's an artifact and it has \"...\"").
+            let exc = copy_exceptions(raw, ctx)
+                .map(|m| (m, vec![]))
+                .or_else(|| {
+                    let (masked, quotes) =
+                        super::statics::mask_quotes(end(&raw.to_lowercase()))?;
+                    super::tokens_copies_copy::copy_exceptions(&masked, &quotes, ctx)
+                        .map(|m| (m, vec![]))
+                })
+                .or_else(|| copy_exceptions_ext(raw, ctx))?;
+            (a, exc)
+        }
+        None => (r, (vec![], vec![])),
+    };
+    let (exceptions, extras) = exceptions;
+    // "another creature you control": not the entering permanent (CR 707.9).
+    let r = r
+        .strip_prefix("any ")
+        .or_else(|| r.strip_prefix("a "))
+        .or_else(|| r.strip_prefix("an "))
+        .or_else(|| r.starts_with("another ").then_some(r))?;
+    let r = r.strip_suffix(" on the battlefield").unwrap_or(r);
+    let (f, _, tail) = parse_object_phrase(r)?;
+    if !end(tail).is_empty() {
+        return None;
+    }
+    // "Enter tapped as a copy" is one effect; its "tapped" part is applied first (as a
+    // self-replacement, CR 616.1a) so it isn't lost when the permanent becomes a copy
+    // and loses this ability.
+    let rep = |action, self_replacement| {
+        AbilityDef::new(
+            AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+                ReplacementDef {
+                    event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                    action,
+                    self_replacement,
+                    optional: false,
+                },
+            ))),
+            block,
+        )
+    };
+    let mut out = vec![rep(
+        ReplacementAction::EnterAsCopy {
+            filter: f,
+            optional: true,
+        },
+        false,
+    )];
+    if tapped {
+        out.push(rep(ReplacementAction::EnterTapped, true));
+    }
+    if !exceptions.is_empty() || !extras.is_empty() {
+        let mut v = Vec::new();
+        if !exceptions.is_empty() {
+            v.push(Effect::EnterCopyExceptions(exceptions));
+        }
+        v.extend(extras);
+        out.push(rep(ReplacementAction::AsEnters(Box::new(Effect::seq(v))), true));
+    }
+    Some(out)
+}
+
+/// More copy exceptions (CR 707.9b, 707.9e, 707.9f): "it enters with an additional +1/+1
+/// counter on it if it's a creature", "if it's a creature, it enters with two additional
+/// +1/+1 counters on it and has changeling", "it's legendary and snow in addition to its
+/// other types", and items without a repeated "it" ("it isn't legendary, is an artifact
+/// in addition to its other types, and has myriad"). Returns the modifications and the
+/// additional or conditional parts ([`Effect::EnterCopyExtra`]).
+fn copy_exceptions_ext(s: &str, ctx: &CompileContext) -> Option<(Vec<Modification>, Vec<Effect>)> {
+    if s.contains('"') {
+        return None;
+    }
+    let lower = end(s.trim()).to_lowercase();
+    let lower = lower
+        .replace(", and is ", ", and it's ")
+        .replace(", is ", ", it's ")
+        .replace(", and has ", ", and it has ")
+        .replace(" and, if ", ", if ");
+    // Clauses start with "it" or "if".
+    let mut clauses: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let words: Vec<&str> = lower.split(' ').collect();
+    let mut i = 0;
+    while i < words.len() {
+        let w = words[i];
+        let next = words.get(i + 1).copied().unwrap_or("");
+        let starts = |n: &str| n == "it" || n == "if" || n.starts_with("it's") || n == "it";
+        if (w == "and" || w == "and,") && starts(next) && !cur.is_empty() {
+            clauses.push(cur.trim().trim_end_matches(',').to_string());
+            cur.clear();
+        } else if w.ends_with(',') && starts(next) && !cur.trim_start().starts_with("if ") {
+            cur.push_str(w.trim_end_matches(','));
+            clauses.push(cur.trim().to_string());
+            cur.clear();
+        } else {
+            cur.push_str(w);
+            cur.push(' ');
+        }
+        i += 1;
+    }
+    if !cur.trim().is_empty() {
+        clauses.push(cur.trim().trim_end_matches(',').to_string());
+    }
+    let mut mods = Vec::new();
+    let mut extras = Vec::new();
+    for c in clauses {
+        // "if it's a creature, it enters with ... [and has changeling]"
+        let (only_if, c) = match c.strip_prefix("if it's ").and_then(|r| r.split_once(", ")) {
+            Some((t, rest)) => (Some(copy_type_filter(t)?), rest.to_string()),
+            None => (None, c),
+        };
+        // "it enters with ... on it if it's a creature"
+        let (only_if, c) = match (only_if, c.rsplit_once(" if it's ")) {
+            (None, Some((rest, t))) => (Some(copy_type_filter(t)?), rest.to_string()),
+            (o, _) => (o, c),
+        };
+        if let Some(r) = c.strip_prefix("it enters with ") {
+            let (r, kw) = match r.split_once(" and has ") {
+                Some((a, k)) => (a, Some(k)),
+                None => (r, None),
+            };
+            let (n, rest) = parse_number(r)?;
+            let rest = rest.trim_start();
+            let rest = rest.strip_prefix("additional ").unwrap_or(rest);
+            let (kind, rest) = crate::oracle::costs::counter_kind(rest)?;
+            let rest = rest.trim_start();
+            let rest = rest
+                .strip_prefix("counters")
+                .or_else(|| rest.strip_prefix("counter"))?;
+            if rest.trim() != "on it" {
+                return None;
+            }
+            let mut emods = Vec::new();
+            if let Some(k) = kw {
+                for a in crate::oracle::keywords::parse_keyword_line(k, ctx)? {
+                    match &a.kind {
+                        AbilityKind::Keyword(k) => emods.push(Modification::AddKeyword(k.clone())),
+                        AbilityKind::Unsupported(_) => return None,
+                        // Changeling's characteristic-defining ability.
+                        _ => emods.push(Modification::AddAbility(a.clone())),
+                    }
+                }
+            }
+            extras.push(Effect::EnterCopyExtra {
+                only_if,
+                mods: emods,
+                effect: Box::new(Effect::EnterWithCounters { kind, n }),
+            });
+            continue;
+        }
+        if only_if.is_some() {
+            return None;
+        }
+        // "it's legendary and snow in addition to its other types"
+        if let Some(r) = c
+            .strip_prefix("it's ")
+            .and_then(|r| r.strip_suffix(" in addition to its other types"))
+        {
+            let mut sup = Vec::new();
+            let mut ok = true;
+            for w in r.split(' ').filter(|w| *w != "and") {
+                match crate::types::Supertype::from_word(w) {
+                    Some(st) => sup.push(st),
+                    None => ok = false,
+                }
+            }
+            if ok && !sup.is_empty() {
+                mods.push(Modification::AddSupertypes(sup));
+                continue;
+            }
+        }
+        mods.extend(copy_exceptions(&c, ctx)?);
+    }
+    (!mods.is_empty() || !extras.is_empty()).then_some((mods, extras))
+}
+
+/// "a creature", "a planeswalker" after "if it's".
+fn copy_type_filter(t: &str) -> Option<Filter> {
+    let t = t.trim();
+    let r = t.strip_prefix("a ").or_else(|| t.strip_prefix("an "))?;
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    (!plural && tail.trim().is_empty()).then_some(f)
+}
+
+/// Copy exceptions (CR 707.9b): "it's a Shapeshifter Rogue in addition to its other
+/// types", "it's an artifact in addition to its other types", "it has \"[ability]\"",
+/// "it isn't legendary", joined by "and".
+fn copy_exceptions(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
+    let mut out = Vec::new();
+    let mut rest = s.trim();
+    while !rest.is_empty() {
+        let lower = rest.to_lowercase();
+        if let Some(r) = lower.strip_prefix("it has \"") {
+            let close = r.find('"')?;
+            let inner = &rest["it has \"".len().."it has \"".len() + close];
+            for a in crate::oracle::parse_ability(inner, ctx)? {
+                if matches!(a.kind, AbilityKind::Unsupported(_)) {
+                    return None;
+                }
+                out.push(Modification::AddAbility(a));
+            }
+            rest = &rest["it has \"".len() + close + 1..];
+        } else if let Some(r) = lower.strip_prefix("it has ") {
+            // "except it has changeling" (Omni-Changeling): keywords, up to the next
+            // clause.
+            let len = r.find(", ").unwrap_or(r.len());
+            let kws = r[..len].trim_end_matches('.');
+            for a in crate::oracle::keywords::parse_keyword_line(kws, ctx)? {
+                match &a.kind {
+                    AbilityKind::Keyword(k) => out.push(Modification::AddKeyword(k.clone())),
+                    AbilityKind::Unsupported(_) => return None,
+                    _ => out.push(Modification::AddAbility(a)),
+                }
+            }
+            rest = &rest[rest.len() - (r.len() - len)..];
+        } else if let Some(r) = lower.strip_prefix("it isn't legendary") {
+            out.push(Modification::RemoveSupertypes(vec![
+                crate::types::Supertype::Legendary,
+            ]));
+            rest = &rest[rest.len() - r.len()..];
+        } else if let Some(r) = lower
+            .strip_prefix("it's an ")
+            .or_else(|| lower.strip_prefix("it's a "))
+        {
+            let (types, after) = r.split_once(" in addition to its other types")?;
+            let mut card_types = Vec::new();
+            let mut subtypes = Vec::new();
+            for w in types.split_whitespace() {
+                if let Some(t) = crate::types::CardType::from_word(w) {
+                    card_types.push(t);
+                } else {
+                    subtypes.push(subtype_word(w)?);
+                }
+            }
+            if !card_types.is_empty() {
+                out.push(Modification::AddTypes(card_types));
+            }
+            if !subtypes.is_empty() {
+                out.push(Modification::AddSubtypes(subtypes));
+            }
+            rest = &rest[rest.len() - after.len()..];
+        } else {
+            return None;
+        }
+        let t = rest.trim_start();
+        rest = t
+            .strip_prefix(", and ")
+            .or_else(|| t.strip_prefix("and "))
+            .or_else(|| t.strip_prefix(", "))
+            .unwrap_or(t)
+            .trim();
+        if rest == "." {
+            break;
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+// ---------------------------------------------------------------------------
+// Day and night (CR 731)
+// ---------------------------------------------------------------------------
+
+/// "If it's neither day nor night, it becomes day as ~ enters." — a replacement effect
+/// applied as the permanent enters (CR 614.1c, 731.1).
+fn day_as_enters(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let l = end(&lower);
+    let r = l.strip_prefix("if ")?;
+    let (c, e) = r.split_once(", ")?;
+    let e = e.strip_suffix(" as ~ enters")?;
+    let cond = crate::oracle::statics::parse_condition(c, ctx)?;
+    let eff = day_night_effect_inner(e)?;
+    let def = ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(Filter::Source),
+        action: ReplacementAction::AsEnters(Box::new(Effect::If {
+            cond,
+            then: Box::new(eff),
+            otherwise: Box::new(Effect::Noop),
+        })),
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        block,
+    )])
+}
+
+fn day_night_effect_inner(l: &str) -> Option<Effect> {
+    match end(l) {
+        "it becomes day" => Some(Effect::SetDayNight { day: true }),
+        "it becomes night" => Some(Effect::SetDayNight { day: false }),
+        _ => None,
+    }
+}
+
+fn day_night_effect(l: &str, _b: &mut Builder) -> Option<Effect> {
+    day_night_effect_inner(l)
+}
+
+fn day_night_condition(c: &str) -> Option<Condition> {
+    match end(c) {
+        "it's neither day nor night" => Some(Condition::And(vec![
+            Condition::Not(Box::new(Condition::IsDay)),
+            Condition::Not(Box::new(Condition::IsNight)),
+        ])),
+        _ => None,
+    }
+}
+
+/// "Whenever day becomes night or night becomes day" (CR 731.1a).
+fn day_night_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(r) == "day becomes night or night becomes day").then_some((
+        TriggerCond::DayNightChanges,
+        Sel::This,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! {
+    AbilityPattern { name: "others enter tapped", priority: 50, parse: others_enter_tapped }
+}
+inventory::submit! {
+    AbilityPattern { name: "enter as a copy", priority: 50, parse: enter_as_copy }
+}
+inventory::submit! {
+    StaticPattern { name: "others enter with additional counters", priority: 100, parse: others_enter_with_counters }
+}
+inventory::submit! {
+    AbilityPattern { name: "others enter with counters (from the graveyard)", priority: 50, parse: graveyard_others_enter_with_counters }
+}
+inventory::submit! {
+    AbilityPattern { name: "it becomes day as ~ enters", priority: 50, parse: day_as_enters }
+}
+inventory::submit! {
+    EffectPattern { name: "it becomes day/night", priority: 100, parse: day_night_effect }
+}
+inventory::submit! {
+    ConditionPattern { name: "neither day nor night", priority: 100, parse: day_night_condition }
+}
+inventory::submit! {
+    TriggerPattern { name: "day becomes night or night becomes day", priority: 100, parse: day_night_trigger }
+}
+
+/// "Whenever a permanent you control enters tapped": the permanent is checked as it
+/// exists immediately after the event (CR 603.6d).
+fn enters_tapped_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(r);
+    let x = r
+        .strip_suffix(" enters tapped")
+        .or_else(|| r.strip_suffix(" enters the battlefield tapped"))?;
+    let x = x
+        .strip_prefix("a ")
+        .or_else(|| x.strip_prefix("an "))
+        .unwrap_or(x);
+    let (f, _, tail) = parse_object_phrase(x)?;
+    if !end(tail).is_empty() || matches!(f, Filter::Source) {
+        return None;
+    }
+    Some((
+        TriggerCond::EntersBattlefield(Filter::and(vec![f, Filter::Tapped])),
+        Sel::TriggerObject,
+        PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+    ))
+}
+
+inventory::submit! {
+    TriggerPattern { name: "a permanent enters tapped", priority: 100, parse: enters_tapped_trigger }
+}
+
+/// "Permanents enter tapped this turn.", "Until your next turn, creatures your opponents
+/// control enter tapped.": a replacement effect created by a resolving spell or ability
+/// (CR 614.1c, 611.2a).
+fn enter_tapped_for_a_while(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (subj, duration) = if let Some(s) = l.strip_suffix(" enter tapped this turn") {
+        (s, Duration::EndOfTurn)
+    } else if let Some(s) = l
+        .strip_prefix("until your next turn, ")
+        .and_then(|r| r.strip_suffix(" enter tapped"))
+    {
+        (s, Duration::UntilYourNextTurn)
+    } else {
+        return None;
+    };
+    let f = subject_list(subj)?;
+    Some(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(entering_filter(f)),
+            action: ReplacementAction::EnterTapped,
+            self_replacement: false,
+            optional: false,
+        },
+        duration,
+        uses: None,
+    })
+}
+
+inventory::submit! {
+    EffectPattern { name: "[permanents] enter tapped this turn", priority: 100, parse: enter_tapped_for_a_while }
+}

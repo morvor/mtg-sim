@@ -1,0 +1,3 @@
+701.7c	Oracle errata history: cards once printed "put [tokens] onto the battlefield" now read "create"; the engine compiles current Oracle text, so there is no old wording to handle
+701.18d	Oracle errata history: cards once said "play" a spell; their Oracle text now says "cast", which is what the engine compiles
+701.18e	Oracle errata history: cards once said "play" an ability; their Oracle text now says "activate", which is what the engine compiles

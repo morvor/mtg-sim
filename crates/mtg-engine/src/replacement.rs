@@ -1,0 +1,1964 @@
+//! Replacement and prevention effects (CR 614–616).
+//!
+//! Events that can be replaced are first proposed as a [`ReplEvent`]. The pipeline
+//! repeatedly finds applicable replacement effects, lets the affected player choose one
+//! (respecting the ordering of CR 616.1a–e), applies it, and repeats on the modified
+//! event(s) until none apply. Each effect gets only one opportunity per event (CR 614.5).
+
+use crate::ability::*;
+use crate::card::CardDef;
+use crate::decision::{Answer, Decision};
+use crate::eval::Ctx;
+use crate::events::MoveCause;
+use crate::game::*;
+use crate::keywords::KeywordKind;
+use crate::object::*;
+use crate::types::*;
+use std::rc::Rc;
+use std::sync::Arc;
+
+/// Modifications to how a permanent enters the battlefield (CR 614.1c–d, 614.12).
+#[derive(Clone, Debug, Default)]
+pub struct EtbInfo {
+    pub tapped: bool,
+    pub counters: Vec<(CounterKind, u32)>,
+    /// Counters it enters with that the effect has a player other than its controller put
+    /// on it (CR 122.6a: tribute's chosen opponent, CR 702.104a).
+    pub counters_by: Vec<(CounterKind, u32, PlayerId)>,
+    pub controller: Option<PlayerId>,
+    /// Enters as a copy of this object's copiable values (CR 707.9).
+    pub copy_of: Option<ObjectId>,
+    pub copy_exceptions: Vec<Modification>,
+    /// The part of `copy_exceptions` that the entering permanent's own "enter as a copy
+    /// of ..., except ..." abilities added (as self-replacement effects applied before the
+    /// copy is chosen, CR 707.9b): exceptions of the copy effect its enter-as-copy
+    /// replacement creates, which stay when that copy effect replaces the one it would
+    /// have entered with (e.g. an embalmed token copy, CR 702.128b).
+    pub own_copy_exceptions: Vec<Modification>,
+    /// Parts of the copy effect's exception that are additional effects, conditional, or
+    /// linked triggered abilities (CR 707.9e–707.9g).
+    pub copy_extras: Vec<crate::copy_rules::CopyExtra>,
+    /// Modifications to its copiable values from "as this enters" abilities that set
+    /// power and toughness (CR 707.2), applied after any copy effect it enters with.
+    pub copiable_mods: Vec<Modification>,
+    pub face_down: Option<KeywordKind>,
+    pub transformed: bool,
+    pub attacking: Option<Entity>,
+    pub blocking: Option<ObjectId>,
+    pub attach_to: Option<Entity>,
+    /// The effect putting it onto the battlefield says what it enters attached to, even
+    /// if that object or player is undefined (`attach_to` is then `None`, CR 301.5e,
+    /// 303.4i). Unset with no `attach_to`, an Aura's controller chooses (CR 303.4f).
+    pub attach_specified: bool,
+    /// Effects to perform right after it is put onto the battlefield, before its
+    /// zone-change event is emitted: (source ability ctx, effect). ("As this enters"
+    /// replacement effects run earlier, while the replacement applies; see
+    /// [`ReplacementAction::AsEnters`].)
+    pub as_enters: Vec<(Ctx, Effect)>,
+    /// Cast info carried from the stack.
+    pub cast: Option<CastInfo>,
+    /// Face to put onto the battlefield (for MDFCs played/cast as back face).
+    pub face: Option<FaceState>,
+    /// For a move to exile caused by a replacement effect: the link id of the ability
+    /// whose replacement effect exiles the object, so the object is "exiled with" that
+    /// ability's source (CR 607.2b, 614.14).
+    pub link: Option<u16>,
+    /// A continuous effect of the resolving spell or ability that puts the permanent onto
+    /// the battlefield and says it "is" something: (source, controller, modifications).
+    /// It applies as the permanent enters (CR 611.2e), with a later timestamp than the
+    /// permanent's own static abilities (CR 613.7n).
+    pub with_mods: Option<(Option<ObjectId>, PlayerId, Vec<Modification>)>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MoveEv {
+    pub obj: ObjectId,
+    pub to: Zone,
+    pub pos: LibraryPosition,
+    pub cause: MoveCause,
+    pub by: Option<PlayerId>,
+    pub etb: EtbInfo,
+    /// The source that caused the move (for "if a spell or ability an opponent controls
+    /// causes you to discard" style checks and linked abilities).
+    pub source: Option<ObjectId>,
+}
+
+/// A token about to be created.
+#[derive(Clone, Debug)]
+pub struct TokenCreate {
+    pub chars: Characteristics,
+    pub card: Option<Arc<CardDef>>,
+    pub tapped: bool,
+    pub attacking: Option<Entity>,
+    /// A token created as a copy of this object (CR 707.2, 111.10).
+    pub copy_of: Option<ObjectId>,
+    pub copy_exceptions: Vec<Modification>,
+}
+
+/// A proposed event that replacement effects may modify.
+#[derive(Clone, Debug)]
+pub enum ReplEvent {
+    Move(MoveEv),
+    Damage {
+        source: ObjectId,
+        target: Entity,
+        amount: u32,
+        combat: bool,
+    },
+    Draw {
+        player: PlayerId,
+    },
+    GainLife {
+        player: PlayerId,
+        amount: u32,
+    },
+    LoseLife {
+        player: PlayerId,
+        amount: u32,
+        /// The life loss is the result of damage dealt to the player (CR 120.3a).
+        from_damage: bool,
+    },
+    AddCounters {
+        target: Entity,
+        kind: CounterKind,
+        n: u32,
+        source: Option<ObjectId>,
+        /// The player who would put them (CR 122.6, 122.6a).
+        by: Option<PlayerId>,
+        /// Whether by an effect, as a cost, as the result of damage, or by a game rule.
+        origin: crate::events::CounterOrigin,
+    },
+    CreateTokens {
+        controller: PlayerId,
+        spec: Box<TokenCreate>,
+        count: u32,
+        source: Option<ObjectId>,
+    },
+    Destroy {
+        obj: ObjectId,
+        /// The spell or ability destroying it (`None`: a state-based action).
+        source: Option<ObjectId>,
+        /// The controller of that spell or ability.
+        by: Option<PlayerId>,
+    },
+    LoseGame {
+        player: PlayerId,
+    },
+    /// A player would perform a keyword action (CR 701; see
+    /// [`ReplacementEvent::Action`]).
+    Action {
+        kind: ReplaceableAction,
+        player: PlayerId,
+        object: Option<ObjectId>,
+        amount: u32,
+    },
+}
+
+/// Identifies a replacement effect for the "only once per event" rule (CR 614.5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ReplKey {
+    Static(ObjectId, u64),
+    Instance(u32),
+    /// An effect generated by an ability of a player (e.g. protection, CR 702.16e).
+    Player(PlayerId, u64),
+}
+
+/// The key of the rules replacement for Attraction cards (CR 717.6).
+const JUNKYARD_KEY: u64 = u64::MAX - 717;
+
+#[derive(Clone, Debug)]
+struct Candidate {
+    key: ReplKey,
+    source: Option<ObjectId>,
+    /// The link of the ability generating the effect (CR 607, 614.14).
+    link: u16,
+    controller: PlayerId,
+    def: ReplacementDef,
+    class: u8,
+    text: String,
+    instance: Option<u32>,
+}
+
+/// The replacement effects that would modify how a permanent enters the battlefield,
+/// determined as the event is first proposed (CR 614.12).
+/// They still apply if applying one of them made a permanent leave the battlefield (an
+/// "as this enters, return a permanent you control" choice returning the permanent that
+/// grants riot), as long as the permanent still enters the same way: not once a copy,
+/// control, back-face, or face-down effect has changed what applies (CR 616.1b–d, 616.1f).
+struct EntrySnapshot {
+    obj: ObjectId,
+    copy_of: Option<ObjectId>,
+    controller: Option<PlayerId>,
+    face: Option<FaceState>,
+    transformed: bool,
+    face_down: Option<KeywordKind>,
+    battlefield: Vec<ObjectId>,
+    cands: Vec<Candidate>,
+}
+
+/// Which replacement effects to look for (see [`Game::replacement_candidates`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CandScope {
+    All,
+    /// Effects that modify how a permanent enters the battlefield.
+    EntryOnly,
+    /// All others.
+    NotEntry,
+}
+
+impl Game {
+    /// Runs the replacement pipeline on a proposed event and returns the event(s) that
+    /// actually happen.
+    pub fn replace(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        // What replacement effects do is part of the event they modify: no trigger check
+        // happens in the middle (see `trigger_timing`).
+        self.atomically(|g| g.replace_rec(ev, applied, 0, false, None))
+    }
+
+    /// Runs only self-replacement effects on an event that can't happen (CR 614.17c).
+    pub fn replace_self_only(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replace_rec(ev, applied, 0, true, None)
+    }
+
+    fn replace_rec(
+        &mut self,
+        ev: ReplEvent,
+        applied: Vec<ReplKey>,
+        depth: u32,
+        self_only: bool,
+        snap: Option<Rc<EntrySnapshot>>,
+    ) -> Vec<ReplEvent> {
+        if depth > 32 {
+            return vec![ev];
+        }
+        if self.dirty {
+            self.recompute();
+        }
+        let mut snap = snap;
+        let mut cands = match &ev {
+            // CR 614.12: which effects modify how a permanent enters, and how, is
+            // determined from the permanent as it would exist on the battlefield.
+            ReplEvent::Move(m) if m.to == Zone::Battlefield => {
+                let mut v = self.replacement_candidates(&ev, &applied, CandScope::NotEntry);
+                let m = m.clone();
+                let ev2 = ev.clone();
+                let mut entry = self.with_hypothetical_entry(&m, |g| {
+                    g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly)
+                });
+                match &snap {
+                    // Effects that applied to the permanent as the event was proposed
+                    // still apply, even if applying another one (an "as this enters,
+                    // return a permanent" choice) removed what generated them (Rhythm of
+                    // the Wild's riot). See [`EntrySnapshot`].
+                    Some(sn)
+                        if sn.obj == m.obj
+                            && sn.copy_of == m.etb.copy_of
+                            && sn.controller == m.etb.controller
+                            && sn.face == m.etb.face
+                            && sn.transformed == m.etb.transformed
+                            && sn.face_down == m.etb.face_down
+                            && sn.battlefield.iter().any(|o| !self.battlefield.contains(o)) =>
+                    {
+                        for c in &sn.cands {
+                            if !applied.contains(&c.key) && !entry.iter().any(|e| e.key == c.key) {
+                                entry.push(c.clone());
+                            }
+                        }
+                    }
+                    Some(sn) if sn.obj == m.obj => {}
+                    _ => {
+                        snap = Some(Rc::new(EntrySnapshot {
+                            obj: m.obj,
+                            copy_of: m.etb.copy_of,
+                            controller: m.etb.controller,
+                            face: m.etb.face,
+                            transformed: m.etb.transformed,
+                            face_down: m.etb.face_down,
+                            battlefield: self.battlefield.clone(),
+                            cands: entry.clone(),
+                        }));
+                    }
+                }
+                v.extend(entry);
+                v
+            }
+            _ => self.replacement_candidates(&ev, &applied, CandScope::All),
+        };
+        if self_only {
+            cands.retain(|c| c.def.self_replacement);
+        }
+        // CR 801.13: not effects that would affect objects or players outside their
+        // controller's range of influence.
+        cands.retain(|c| {
+            crate::multiplayer::range::replacement_in_range(
+                self,
+                c.controller,
+                c.source,
+                &c.def,
+                &ev,
+            )
+        });
+        if cands.is_empty() {
+            return vec![ev];
+        }
+        // CR 616.1a–e: self-replacement, then control, then copy, then back-face, then any.
+        let min_class = cands.iter().map(|c| c.class).min().unwrap();
+        cands.retain(|c| c.class == min_class);
+        let chooser = self.affected_player(&ev);
+        let pick = if cands.len() == 1 {
+            0
+        } else {
+            let options = cands.iter().map(|c| c.text.clone()).collect();
+            match self.ask(chooser, Decision::ChooseReplacement { options }) {
+                Answer::Index(i) if i < cands.len() => i,
+                _ => 0,
+            }
+        };
+        let cand = cands.swap_remove(pick);
+        let mut applied = applied;
+        applied.push(cand.key);
+        // Optional ("you may") replacements.
+        if cand.def.optional {
+            let who = cand.controller;
+            if !self.ask_yes_no(who, cand.source, &format!("Apply: {}?", cand.text), true) {
+                return self.replace_rec(ev, applied, depth + 1, self_only, snap);
+            }
+        }
+        let mut results = self.apply_replacement(&cand, ev, &applied);
+        if let ReplKey::Static(src, uid) = cand.key {
+            crate::structure::record_replacement(self, src, uid);
+        }
+        // CR 801.13a: the parts of the modified event that would have a spell or ability
+        // affect objects or players outside its controller's range of influence do nothing.
+        results.retain(|r| crate::multiplayer::range::replaced_event_in_range(self, r));
+        let mut out = Vec::new();
+        for r in results {
+            out.extend(self.replace_rec(r, applied.clone(), depth + 1, self_only, snap.clone()));
+        }
+        out
+    }
+
+    /// Descriptions of the replacement effects that would apply to the proposed event
+    /// `ev` (without applying any), e.g. to offer them alongside a replacement effect
+    /// that's applied outside the pipeline (CR 616.1).
+    pub fn applicable_replacements(&mut self, ev: &ReplEvent) -> Vec<String> {
+        if self.dirty {
+            self.recompute();
+        }
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replacement_candidates(ev, &applied, CandScope::All)
+            .into_iter()
+            .map(|c| c.text)
+            .collect()
+    }
+
+    /// Whether the proposed event can't happen: a mandatory replacement effect that applies
+    /// to it prevents it ("~ can't have counters put on it", CR 113.6i, 614.1). Used to
+    /// tell whether a player "can" do something before offering it.
+    pub fn would_be_prevented(&self, ev: &ReplEvent) -> bool {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replacement_candidates(ev, &applied, CandScope::All)
+            .iter()
+            .any(|c| matches!(c.def.action, ReplacementAction::Prevent) && !c.def.optional)
+    }
+
+    /// Whether a self-replacement effect (CR 614.15) applies to the proposed event.
+    pub(crate) fn self_replacement_applies(&self, ev: &ReplEvent) -> bool {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        self.replacement_candidates(ev, &applied, CandScope::All)
+            .iter()
+            .any(|c| c.def.self_replacement)
+    }
+
+    /// The player who chooses among replacement effects for an event (CR 616.1).
+    fn affected_player(&self, ev: &ReplEvent) -> PlayerId {
+        match ev {
+            ReplEvent::Move(m) => {
+                let o = self.obj(m.obj);
+                match o.zone {
+                    Zone::Battlefield | Zone::Stack => o.controller,
+                    _ => o.owner,
+                }
+            }
+            ReplEvent::Damage { target, .. } => match target {
+                Entity::Player(p) => *p,
+                Entity::Object(o) => self.obj(*o).controller,
+            },
+            ReplEvent::Draw { player }
+            | ReplEvent::GainLife { player, .. }
+            | ReplEvent::LoseLife { player, .. }
+            | ReplEvent::LoseGame { player } => *player,
+            ReplEvent::AddCounters { target, .. } => match target {
+                Entity::Player(p) => *p,
+                Entity::Object(o) => self.obj(*o).controller,
+            },
+            ReplEvent::CreateTokens { controller, .. } => *controller,
+            ReplEvent::Destroy { obj, .. } => self.obj(*obj).controller,
+            ReplEvent::Action { player, .. } => *player,
+        }
+    }
+
+    fn replacement_candidates(
+        &self,
+        ev: &ReplEvent,
+        applied: &[ReplKey],
+        scope: CandScope,
+    ) -> Vec<Candidate> {
+        let mut out = Vec::new();
+        let in_scope = |d: &ReplacementDef| match scope {
+            CandScope::All => true,
+            CandScope::EntryOnly => matches!(d.event, ReplacementEvent::EntersBattlefield(_)),
+            CandScope::NotEntry => !matches!(d.event, ReplacementEvent::EntersBattlefield(_)),
+        };
+        // Static abilities of objects (CR 614.12: include the entering object's own
+        // abilities for ETB replacements).
+        let mut sources: Vec<(ObjectId, PlayerId, Ability, ReplacementDef)> = self
+            .statics
+            .replacements
+            .iter()
+            .map(|(s, c, _, a, d)| (*s, *c, a.clone(), d.clone()))
+            .collect();
+        if let ReplEvent::Move(m) = ev {
+            if m.to == Zone::Battlefield && scope != CandScope::NotEntry {
+                let o = self.obj(m.obj);
+                // CR 614.12, 707.9: once it's entering as a copy, the copied object's
+                // "as this enters" / "enters with" abilities apply instead of its own.
+                // A card entering with another face up (a modal DFC's back face played
+                // as a land, or entering transformed) has that face's abilities.
+                let face = if m.etb.transformed {
+                    Some(FaceState::Back)
+                } else {
+                    m.etb.face
+                };
+                let face_chars = match (face, &o.card) {
+                    (Some(f), Some(card)) if f != o.face => Some(card.characteristics(f)),
+                    _ => None,
+                };
+                let chars = match (m.etb.copy_of, &face_chars) {
+                    (Some(c), _) => Some(&self.obj(c).copiable),
+                    (None, Some(fc)) => Some(fc),
+                    (None, None) => None,
+                };
+                // Copiable values and face characteristics hold keywords unexpanded: the
+                // "enters with" abilities a keyword stands for (vanishing, modular, ...)
+                // apply too (CR 702.63a, 707.2).
+                let derived: Vec<Ability> = chars
+                    .map(|c| {
+                        crate::keyword_impls::derived_by_keyword(c)
+                            .into_iter()
+                            .map(|(_, a)| a)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let abilities = chars.map_or(&o.chars.abilities, |c| &c.abilities);
+                let entering_ctx = Ctx::new(Some(m.obj), self.entering_controller(m));
+                for a in abilities.iter().chain(derived.iter()) {
+                    if let AbilityKind::Static(s) = &a.kind {
+                        // A conditional one ("If you attacked this turn, you may have ~
+                        // enter as a copy ...") applies only if its condition is true as
+                        // the permanent enters.
+                        if s.condition
+                            .as_ref()
+                            .is_some_and(|c| !self.eval_cond(c, &entering_ctx))
+                        {
+                            continue;
+                        }
+                        // CR 614.12: only effects that affect just that permanent apply
+                        // from the permanent itself ("Permanents enter tapped" doesn't
+                        // affect the permanent that has it).
+                        if let StaticEffect::Replacement(d) = &s.effect {
+                            if matches!(
+                                d.event,
+                                ReplacementEvent::EntersBattlefield(Filter::Source)
+                            ) && !sources
+                                .iter()
+                                .any(|(src, _, ab, _)| *src == m.obj && ab.uid == a.uid)
+                            {
+                                sources.push((
+                                    m.obj,
+                                    m.by.unwrap_or(o.controller),
+                                    a.clone(),
+                                    d.clone(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // CR 400.6: the moving object's own abilities that would affect the move apply,
+        // even from a hidden zone.
+        if let ReplEvent::Move(m) = ev {
+            for own in crate::zones::own_move_replacements(self, m) {
+                if !sources
+                    .iter()
+                    .any(|(src, _, ab, _)| *src == own.0 && ab.uid == own.2.uid)
+                {
+                    sources.push(own);
+                }
+            }
+        }
+        // CR 614.12: the counters a permanent enters with are modified only by replacement
+        // effects that already exist, or that come from that permanent itself and affect
+        // only it — not by the effects of the permanents entering at the same time.
+        let entering_now = |g: &Self, id: ObjectId| g.entering.iter().any(|e| g.current(*e) == id);
+        let entering_target = match ev {
+            ReplEvent::AddCounters {
+                target: Entity::Object(t),
+                ..
+            } if entering_now(self, *t) => Some(*t),
+            _ => None,
+        };
+        for (src, ctl, a, d) in sources {
+            let key = ReplKey::Static(src, a.uid);
+            if applied.contains(&key) || !in_scope(&d) {
+                continue;
+            }
+            if let Some(t) = entering_target {
+                // Only the source itself: "Source", or a conjunction including it
+                // (compleated: "Source and entering").
+                fn only_source(f: &Filter) -> bool {
+                    match f {
+                        Filter::Source => true,
+                        Filter::And(v) => v.iter().any(only_source),
+                        _ => false,
+                    }
+                }
+                let only_itself = src == t
+                    && matches!(
+                        &d.event,
+                        ReplacementEvent::PutCounters {
+                            on_objects: Some(f),
+                            ..
+                        } if only_source(f)
+                    );
+                if entering_now(self, src) && !only_itself {
+                    continue;
+                }
+            }
+            let mut ctx = Ctx::new(Some(src), ctl);
+            ctx.link = a.link;
+            if self.repl_event_matches(&d.event, &ctx, ev, None) {
+                out.push(Candidate {
+                    key,
+                    source: Some(src),
+                    link: a.link,
+                    controller: ctl,
+                    class: repl_class(&d, ev),
+                    text: format!("{}: {}", self.obj(src).chars.name, a.text),
+                    def: d,
+                    instance: None,
+                });
+            }
+        }
+        for inst in &self.replacements {
+            let key = ReplKey::Instance(inst.id);
+            if applied.contains(&key) {
+                continue;
+            }
+            if inst.uses == Some(0) || !in_scope(&inst.def) {
+                continue;
+            }
+            let ctx = Ctx::new(inst.source, inst.controller);
+            if self.repl_event_matches(&inst.def.event, &ctx, ev, inst.objects.as_deref()) {
+                out.push(Candidate {
+                    key,
+                    source: inst.source,
+                    link: 0,
+                    controller: inst.controller,
+                    class: repl_class(&inst.def, ev),
+                    // Named after the object that created it, so a player choosing the
+                    // order (CR 616.1) can tell the effects apart.
+                    text: match inst.source {
+                        Some(s) => format!("{} (effect #{})", self.obj(s).chars.name, inst.id),
+                        None => format!("effect #{}", inst.id),
+                    },
+                    def: inst.def.clone(),
+                    instance: Some(inst.id),
+                });
+            }
+        }
+        // Effects that shield and finality counters create (CR 122.1c, 122.1h).
+        for (key, obj, controller, def, text) in
+            crate::counter_rules::counter_replacements(self, ev)
+        {
+            if !applied.contains(&key) {
+                out.push(Candidate {
+                    key,
+                    source: Some(obj),
+                    link: 0,
+                    controller,
+                    class: 4,
+                    text,
+                    def,
+                    instance: None,
+                });
+            }
+        }
+        // CR 701.19c: a permanent that "can't be regenerated" isn't affected by
+        // regeneration shields or effects; other replacement effects still apply.
+        if let ReplEvent::Destroy { obj, .. } = ev {
+            if self.restricted_obj(*obj, |r| match r {
+                Restriction::CantBeRegenerated(f) => Some(f),
+                _ => None,
+            }) {
+                out.retain(|c| !matches!(c.def.action, ReplacementAction::Regenerate));
+            }
+        }
+        // Built-in rules replacement: commander to hand/library (CR 903.9b).
+        if let ReplEvent::Move(m) = ev {
+            let o = self.obj(m.obj);
+            let key = ReplKey::Static(m.obj, 0);
+            if o.is_commander
+                && self.config.variant == Variant::Commander
+                && matches!(m.to, Zone::Hand(_) | Zone::Library(_))
+                && !applied.contains(&key)
+                && scope != CandScope::EntryOnly
+            {
+                out.push(Candidate {
+                    key,
+                    source: None,
+                    link: 0,
+                    controller: o.owner,
+                    class: 4,
+                    text: "Commander: put into command zone instead".into(),
+                    def: ReplacementDef {
+                        event: ReplacementEvent::ZoneChange {
+                            filter: Filter::Any,
+                            from: None,
+                            to: None,
+                        },
+                        // CR 903.9c: a merged or melded commander splits up.
+                        action: crate::commander_rules::command_zone_instead(self, m),
+                        self_replacement: false,
+                        optional: true,
+                    },
+                    instance: None,
+                });
+            }
+        }
+        // Built-in rules replacement: a card with an Astrotorium card back that would be
+        // put into a zone other than the battlefield, exile or the command zone is put
+        // into the command zone instead (CR 717.6). It may apply more than once to the
+        // same event (an exception to CR 614.5).
+        if let ReplEvent::Move(m) = ev {
+            if scope != CandScope::EntryOnly && crate::attraction_cards::goes_to_junkyard(self, m) {
+                out.push(Candidate {
+                    key: ReplKey::Static(m.obj, JUNKYARD_KEY),
+                    source: None,
+                    link: 0,
+                    controller: self.obj(m.obj).owner,
+                    class: 4,
+                    text: "Attraction: put into the command zone instead".into(),
+                    def: ReplacementDef {
+                        event: ReplacementEvent::ZoneChange {
+                            filter: Filter::Any,
+                            from: None,
+                            to: None,
+                        },
+                        action: ReplacementAction::MoveInstead(Destination::zone(
+                            ZoneKind::Command,
+                        )),
+                        self_replacement: false,
+                        optional: false,
+                    },
+                    instance: None,
+                });
+            }
+        }
+        // Prevention effects of keyword abilities, e.g. protection (CR 702.16e).
+        if let ReplEvent::Damage {
+            source,
+            target,
+            amount,
+            ..
+        } = ev
+        {
+            if *amount > 0 && scope != CandScope::EntryOnly {
+                for s in crate::kw::damage_prevention(self, *source, *target) {
+                    let key = match s.holder {
+                        Entity::Object(o) => ReplKey::Static(o, s.id),
+                        Entity::Player(p) => ReplKey::Player(p, s.id),
+                    };
+                    if applied.contains(&key) {
+                        continue;
+                    }
+                    out.push(Candidate {
+                        key,
+                        source: s.holder.object(),
+                        link: 0,
+                        controller: s.controller,
+                        class: 4,
+                        text: s.text,
+                        def: ReplacementDef {
+                            event: ReplacementEvent::Damage {
+                                source: Filter::Any,
+                                to_players: Some(PlayerFilter::Any),
+                                to_objects: Some(Filter::Any),
+                                combat_only: false,
+                            },
+                            action: ReplacementAction::Prevent,
+                            self_replacement: false,
+                            optional: false,
+                        },
+                        instance: None,
+                    });
+                }
+            }
+        }
+        // "Exile it instead of putting it anywhere else" (unearth, CR 702.84a; flashback,
+        // CR 702.34a; ...): an object already going to that zone isn't put anywhere else,
+        // so the effect doesn't apply — a spell or ability exiling it succeeds, and the
+        // card is exiled with (linked to) that spell or ability, not the replacement's
+        // source (CR 607.2a). Library and battlefield destinations may still change the
+        // position or the way it enters, and one that exiles it face down or with
+        // counters still changes the event.
+        if let ReplEvent::Move(m) = ev {
+            out.retain(|c| {
+                !matches!(&c.def.action, ReplacementAction::MoveInstead(d)
+                    if !matches!(d.zone, ZoneKind::Library | ZoneKind::Battlefield)
+                        && m.to.kind() == Some(d.zone)
+                        && !d.face_down
+                        && d.with_counters.is_empty())
+            });
+        }
+        out
+    }
+
+    /// Whether the resolved replacement/prevention effect with this id would apply to
+    /// the event.
+    pub(crate) fn instance_matches(&self, id: u32, ev: &ReplEvent) -> bool {
+        self.replacements.iter().any(|inst| {
+            inst.id == id
+                && inst.uses != Some(0)
+                && self.repl_event_matches(
+                    &inst.def.event,
+                    &Ctx::new(inst.source, inst.controller),
+                    ev,
+                    inst.objects.as_deref(),
+                )
+        })
+    }
+
+    /// Evaluates `f` with the object of a move onto the battlefield temporarily put there
+    /// as it would exist (CR 614.12, 614.17d): under the player who'll control it, with
+    /// the face, copy effect, counters, and tapped status from replacement effects already
+    /// applied, its own static abilities, and continuous effects that already exist. The
+    /// replacement and restriction effects considered are those that exist now, not ones
+    /// the entering permanent's abilities would create.
+    pub(crate) fn with_hypothetical_entry<R>(
+        &mut self,
+        m: &MoveEv,
+        f: impl FnOnce(&Game) -> R,
+    ) -> R {
+        if self.dirty {
+            self.recompute();
+        }
+        let id = m.obj;
+        let saved_obj = self.objects[id.0 as usize].clone();
+        let saved_bf = self.battlefield.clone();
+        let saved_effects = self.effects.len();
+        let saved_statics = self.statics.clone();
+        let saved_next_ts = self.next_timestamp;
+        let saved_events = self.events.len();
+        let from = self.obj(id).zone;
+        let saved_list = self.zone_list_mut(from).map(|l| l.clone());
+        let controller = self.entry_controller(m);
+        if let Some(l) = self.zone_list_mut(from) {
+            l.retain(|x| *x != id);
+        }
+        {
+            let o = &mut self.objects[id.0 as usize];
+            o.zone = Zone::Battlefield;
+            o.controller = controller;
+            o.base_controller = controller;
+            o.tapped = m.etb.tapped;
+            o.phased_out = false;
+            o.timestamp = saved_next_ts;
+            o.face = if m.etb.transformed {
+                FaceState::Back
+            } else if let Some(fc) = m.etb.face {
+                fc
+            } else {
+                match o.face {
+                    FaceState::Half(_) | FaceState::Fused | FaceState::Flipped => FaceState::Front,
+                    f => f,
+                }
+            };
+            if let Some(card) = o.card.clone() {
+                o.base = card.characteristics(o.face);
+            }
+            if m.etb.face_down.is_some() {
+                o.face_down = true;
+            }
+            for (k, n) in &m.etb.counters {
+                *o.counters.entry(k.clone()).or_insert(0) += n;
+            }
+            for (k, n, _) in &m.etb.counters_by {
+                *o.counters.entry(k.clone()).or_insert(0) += n;
+            }
+        }
+        self.battlefield.push(id);
+        if let Some(src) = m.etb.copy_of {
+            let values = Box::new(self.obj(src).copiable.clone());
+            self.effects.push(ContinuousEffect {
+                id: 0,
+                source: Some(id),
+                controller,
+                timestamp: saved_next_ts,
+                duration: Duration::Permanent,
+                affected: Affected::Objects(vec![id]),
+                mods: vec![],
+                layer1: Some(Layer1::Copy {
+                    values,
+                    exceptions: m.etb.copy_exceptions.clone(),
+                }),
+                created_turn: self.turn.number,
+            });
+        }
+        self.compute_characteristics(false);
+        self.statics.replacements = saved_statics.replacements.clone();
+        self.statics.restrictions = saved_statics.restrictions.clone();
+        let r = f(self);
+        self.objects[id.0 as usize] = saved_obj;
+        self.battlefield = saved_bf;
+        if let (Some(l), Some(saved)) = (self.zone_list_mut(from), saved_list) {
+            *l = saved;
+        }
+        self.effects.truncate(saved_effects);
+        self.next_timestamp = saved_next_ts;
+        self.events.truncate(saved_events);
+        self.compute_characteristics(false);
+        r
+    }
+
+    /// Whether a "can't enter the battlefield" effect stops this move (CR 614.17d),
+    /// checking the object as it would exist on the battlefield.
+    pub(crate) fn cant_enter(&mut self, m: &MoveEv) -> bool {
+        // "[cards] in [zones] can't enter the battlefield": checked against the card in its
+        // zone. A card put onto the battlefield face down (manifested, cloaked) is turned
+        // face down first, so it's checked as the face-down 2/2 creature card (CR 701.40a,
+        // 701.58a, 708.3; Grafdigger's Cage makes manifesting from a library impossible).
+        if m.to == Zone::Battlefield {
+            if m.etb.face_down.is_none() {
+                if self.cant_enter_from_its_zone(m.obj) {
+                    return true;
+                }
+            } else if let Some(zone) = self.obj(m.obj).zone.kind() {
+                let any = self.statics.restrictions.iter().any(
+                    |(_, _, r)| matches!(r, Restriction::CantEnterFrom { zones, .. } if zones.contains(&zone)),
+                ) || self.rule_effects.iter().any(
+                    |e| matches!(&e.restriction, Restriction::CantEnterFrom { zones, .. } if zones.contains(&zone)),
+                );
+                if any && self.with_hypothetical_entry(m, |g| g.cant_enter_from(m.obj, zone)) {
+                    return true;
+                }
+            }
+        }
+        let any = self.statics.restrictions.iter().any(|(_, _, r)| {
+            matches!(
+                r,
+                Restriction::CantEnter(_) | Restriction::CantEnterBattlefield(_)
+            )
+        }) || self.rule_effects.iter().any(|e| {
+            matches!(
+                e.restriction,
+                Restriction::CantEnter(_) | Restriction::CantEnterBattlefield(_)
+            )
+        });
+        if !any {
+            return false;
+        }
+        self.with_hypothetical_entry(m, |g| {
+            let id = m.obj;
+            g.statics.restrictions.iter().any(|(s, c, r)| match r {
+                Restriction::CantEnter(f) | Restriction::CantEnterBattlefield(f) => {
+                    g.matches(id, f, &Ctx::new(Some(*s), *c))
+                }
+                _ => false,
+            }) || g.rule_effects.iter().any(|e| match &e.restriction {
+                Restriction::CantEnter(f) | Restriction::CantEnterBattlefield(f) => {
+                    e.objects.as_ref().is_none_or(|v| v.contains(&id))
+                        && g.matches(id, f, &Ctx::new(e.source, e.controller))
+                }
+                _ => false,
+            })
+        })
+    }
+
+    /// Whether a replacement effect's event pattern matches the proposed event.
+    fn repl_event_matches(
+        &self,
+        pat: &ReplacementEvent,
+        ctx: &Ctx,
+        ev: &ReplEvent,
+        locked: Option<&[ObjectId]>,
+    ) -> bool {
+        // Ranges of influence are applied to the candidates afterwards (CR 801.13).
+        let unranged;
+        let ctx = if crate::multiplayer::range::option_used(self) {
+            unranged = Ctx {
+                ignore_range: true,
+                ..ctx.clone()
+            };
+            &unranged
+        } else {
+            ctx
+        };
+        let locked_ok = |o: ObjectId| locked.is_none_or(|v| v.contains(&o));
+        match (pat, ev) {
+            (ReplacementEvent::EntersBattlefield(f), ReplEvent::Move(m)) => {
+                m.to == Zone::Battlefield && locked_ok(m.obj) && self.matches_entering(m, f, ctx)
+            }
+            (ReplacementEvent::ZoneChange { filter, from, to }, ReplEvent::Move(m)) => {
+                let o = self.obj(m.obj);
+                from.is_none_or(|z| o.zone.kind() == Some(z))
+                    && to.is_none_or(|z| m.to.kind() == Some(z))
+                    && locked_ok(m.obj)
+                    && self.matches(m.obj, filter, ctx)
+            }
+            // "If [a player] would discard [a card]" (CR 701.9): a move from a hand caused
+            // by discarding, e.g. madness (CR 702.35a).
+            (ReplacementEvent::Discard(pf, f), ReplEvent::Move(m)) => {
+                let o = self.obj(m.obj);
+                m.cause == MoveCause::Discard
+                    && matches!(o.zone, Zone::Hand(_))
+                    && locked_ok(m.obj)
+                    && self.player_filter_matches(pf, m.by.unwrap_or(o.owner), ctx)
+                    && self.matches(m.obj, f, ctx)
+            }
+            (ReplacementEvent::DiscardCausedBy { who, filter, by }, ReplEvent::Move(m)) => {
+                let o = self.obj(m.obj);
+                m.cause == MoveCause::Discard
+                    && matches!(o.zone, Zone::Hand(_))
+                    && self.special.casting == 0
+                    && locked_ok(m.obj)
+                    && self.player_filter_matches(who, m.by.unwrap_or(o.owner), ctx)
+                    && self.matches(m.obj, filter, ctx)
+                    && m.source
+                        .is_some_and(|s| self.player_rel_matches(*by, self.obj(s).controller, ctx))
+            }
+            (ReplacementEvent::Dies(f), ReplEvent::Move(m)) => {
+                let o = self.obj(m.obj);
+                o.zone == Zone::Battlefield
+                    && matches!(m.to, Zone::Graveyard(_))
+                    && o.is_creature()
+                    && locked_ok(m.obj)
+                    && self.matches(m.obj, f, ctx)
+            }
+            (ReplacementEvent::Draw(pf), ReplEvent::Draw { player }) => {
+                self.player_filter_matches(pf, *player, ctx)
+            }
+            (
+                ReplacementEvent::Damage {
+                    source,
+                    to_players,
+                    to_objects,
+                    combat_only,
+                },
+                ReplEvent::Damage {
+                    source: s,
+                    target,
+                    combat,
+                    amount,
+                },
+            ) => {
+                if *amount == 0 || (*combat_only && !combat) {
+                    return false;
+                }
+                if !crate::kw::damage_source_matches(self, *s, source, ctx) {
+                    return false;
+                }
+                match target {
+                    Entity::Player(p) => {
+                        to_players
+                            .as_ref()
+                            .is_some_and(|f| self.player_filter_matches(f, *p, ctx))
+                            && locked.is_none_or(|_| true)
+                    }
+                    Entity::Object(o) => {
+                        to_objects
+                            .as_ref()
+                            .is_some_and(|f| self.matches(*o, f, ctx))
+                            && locked_ok(*o)
+                    }
+                }
+            }
+            // CR 120.2b: noncombat damage is any damage other than combat damage.
+            (
+                ReplacementEvent::NoncombatDamage {
+                    source,
+                    to_players,
+                    to_objects,
+                },
+                ReplEvent::Damage { combat: false, .. },
+            ) => self.repl_event_matches(
+                &ReplacementEvent::Damage {
+                    source: source.clone(),
+                    to_players: to_players.clone(),
+                    to_objects: to_objects.clone(),
+                    combat_only: false,
+                },
+                ctx,
+                ev,
+                locked,
+            ),
+            (ReplacementEvent::GainLife(pf), ReplEvent::GainLife { player, amount }) => {
+                *amount > 0 && self.player_filter_matches(pf, *player, ctx)
+            }
+            (ReplacementEvent::LoseLife(pf), ReplEvent::LoseLife { player, amount, .. }) => {
+                *amount > 0 && self.player_filter_matches(pf, *player, ctx)
+            }
+            (
+                ReplacementEvent::LifeLossFromDamage(pf),
+                ReplEvent::LoseLife {
+                    player,
+                    amount,
+                    from_damage: true,
+                },
+            ) => *amount > 0 && self.player_filter_matches(pf, *player, ctx),
+            (
+                ReplacementEvent::PutCounters {
+                    on_objects,
+                    on_players,
+                    kind,
+                },
+                ReplEvent::AddCounters {
+                    target, kind: k, n, ..
+                },
+            ) => {
+                if *n == 0 || kind.as_ref().is_some_and(|x| x != k) {
+                    return false;
+                }
+                match target {
+                    Entity::Object(o) => on_objects
+                        .as_ref()
+                        .is_some_and(|f| self.matches(*o, f, ctx)),
+                    Entity::Player(p) => on_players
+                        .as_ref()
+                        .is_some_and(|f| self.player_filter_matches(f, *p, ctx)),
+                }
+            }
+            (
+                ReplacementEvent::PutCountersBy { by, kind },
+                ReplEvent::AddCounters {
+                    kind: k,
+                    n,
+                    by: putter,
+                    ..
+                },
+            ) => {
+                // CR 122.6a: the player who puts them, as the event says.
+                *n > 0
+                    && kind.as_ref().is_none_or(|x| x == k)
+                    && putter.is_some_and(|p| self.player_rel_matches(*by, p, ctx))
+            }
+            (
+                ReplacementEvent::PutCountersMatching {
+                    on_objects,
+                    on_players,
+                    kind,
+                    by,
+                    effect_only,
+                },
+                ReplEvent::AddCounters {
+                    target,
+                    kind: k,
+                    n,
+                    by: putter,
+                    origin,
+                    ..
+                },
+            ) => {
+                if *n == 0
+                    || kind.as_ref().is_some_and(|x| x != k)
+                    || (*effect_only && *origin != crate::events::CounterOrigin::Effect)
+                {
+                    return false;
+                }
+                if let Some(rel) = by {
+                    if !putter.is_some_and(|p| self.player_rel_matches(*rel, p, ctx)) {
+                        return false;
+                    }
+                }
+                match target {
+                    Entity::Object(o) => on_objects
+                        .as_ref()
+                        .is_some_and(|f| self.matches(*o, f, ctx)),
+                    Entity::Player(p) => on_players
+                        .as_ref()
+                        .is_some_and(|f| self.player_filter_matches(f, *p, ctx)),
+                }
+            }
+            (
+                ReplacementEvent::CreateTokens(pf),
+                ReplEvent::CreateTokens {
+                    controller, count, ..
+                },
+            ) => *count > 0 && self.player_filter_matches(pf, *controller, ctx),
+            (
+                ReplacementEvent::CreateTokensMatching { who, tokens },
+                ReplEvent::CreateTokens {
+                    controller,
+                    count,
+                    spec,
+                    ..
+                },
+            ) => {
+                *count > 0
+                    && self.player_filter_matches(who, *controller, ctx)
+                    && crate::create_rules::token_chars_match(&spec.chars, tokens)
+            }
+            (ReplacementEvent::Destroy(f), ReplEvent::Destroy { obj, .. }) => {
+                locked_ok(*obj) && self.matches(*obj, f, ctx)
+            }
+            (ReplacementEvent::LoseGame(pf), ReplEvent::LoseGame { player }) => {
+                self.player_filter_matches(pf, *player, ctx)
+            }
+            (
+                ReplacementEvent::Action { kind, who, objects },
+                ReplEvent::Action {
+                    kind: k,
+                    player,
+                    object,
+                    ..
+                },
+            ) => {
+                kind == k
+                    && self.player_filter_matches(who, *player, ctx)
+                    && match (objects, object) {
+                        (None, _) => true,
+                        (Some(f), Some(o)) => self.matches(*o, f, ctx),
+                        (Some(_), None) => false,
+                    }
+            }
+            // CR 614.1a: an event pattern with a condition on the event ("3 or more
+            // damage", "during your turn").
+            (ReplacementEvent::Where { event, cond }, ev) => {
+                self.repl_event_matches(event, ctx, ev, locked) && {
+                    let mut c = ctx.clone();
+                    c.event = Some(event_info_of(ev));
+                    self.eval_cond(cond, &c)
+                }
+            }
+            _ => false,
+        }
+    }
+
+    /// Checks an entering object against a filter "as it would exist on the battlefield"
+    /// (CR 614.12). We approximate with its current characteristics plus the
+    /// modifications already made to how it enters, and the player who will control it.
+    fn matches_entering(&self, m: &MoveEv, f: &Filter, ctx: &Ctx) -> bool {
+        let view = EnteringView {
+            obj: m.obj,
+            controller: self.entering_controller(m),
+        };
+        self.matches_view(&view, m.obj, f, ctx)
+    }
+
+    /// The player who will control a permanent entering the battlefield (as in
+    /// `perform_move`).
+    pub fn entering_controller(&self, m: &MoveEv) -> PlayerId {
+        let o = self.obj(m.obj);
+        m.etb
+            .controller
+            .or(if o.zone == Zone::Stack {
+                Some(o.controller)
+            } else {
+                None
+            })
+            .or(m.by)
+            .unwrap_or(o.owner)
+    }
+
+    fn apply_replacement(
+        &mut self,
+        cand: &Candidate,
+        ev: ReplEvent,
+        applied: &[ReplKey],
+    ) -> Vec<ReplEvent> {
+        let mut ctx = Ctx::new(cand.source, cand.controller);
+        ctx.link = cand.link;
+        // CR 615.12: prevention effects applied to damage that can't be prevented prevent
+        // nothing (their other effects still happen), and a shield that prevents nothing
+        // isn't used up (CR 609.7b).
+        let unpreventable = match &ev {
+            ReplEvent::Damage { source, combat, .. } => {
+                crate::prevention::is_prevention(&cand.def.action)
+                    && crate::prevention::damage_event_cant_be_prevented(self, *source, *combat)
+            }
+            _ => false,
+        };
+        // Use up one application of limited-use effects.
+        if let Some(id) = cand.instance {
+            if !unpreventable {
+                if let Some(inst) = self.replacements.iter_mut().find(|r| r.id == id) {
+                    if let Some(u) = inst.uses.as_mut() {
+                        *u = u.saturating_sub(1);
+                    }
+                }
+            }
+        }
+        let key = match cand.key {
+            ReplKey::Static(o, u) => (o.0 as u64) << 32 ^ u,
+            ReplKey::Instance(i) => (1u64 << 63) | i as u64,
+            ReplKey::Player(p, u) => (3u64 << 62) ^ ((p.0 as u64) << 48) ^ u,
+        };
+        let action = cand.def.action.clone();
+        match (action, ev) {
+            (
+                ReplacementAction::Prevent
+                | ReplacementAction::PreventAmount(_)
+                | ReplacementAction::PreventPortion(_)
+                | ReplacementAction::PreventAndThen(..),
+                ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                },
+            ) => {
+                // Prevention (CR 615): all of the damage, or a shield of N.
+                let (limit, then) = match &cand.def.action {
+                    ReplacementAction::Prevent => (None, None),
+                    ReplacementAction::PreventAmount(v) => (Some(v.clone()), None),
+                    ReplacementAction::PreventAndThen(v, e) => (v.clone(), Some((**e).clone())),
+                    _ => (None, None),
+                };
+                let inst = cand
+                    .instance
+                    .and_then(|id| self.replacements.iter().position(|r| r.id == id));
+                let shield = match &limit {
+                    None => None,
+                    Some(v) => Some(match inst.and_then(|i| self.replacements[i].remaining) {
+                        Some(r) => r,
+                        None => self.eval_value(v, &ctx).max(0) as u32,
+                    }),
+                };
+                // "Prevent half that damage": part of each damage event, not a shield.
+                let portion = match &cand.def.action {
+                    ReplacementAction::PreventPortion(v) => {
+                        let mut c = ctx.clone();
+                        c.event = Some(event_info_of(&ReplEvent::Damage {
+                            source,
+                            target,
+                            amount,
+                            combat,
+                        }));
+                        Some(self.eval_value(v, &c).max(0) as u32)
+                    }
+                    _ => None,
+                };
+                let prevented = if unpreventable {
+                    0
+                } else if let Some(p) = portion {
+                    p.min(amount)
+                } else {
+                    shield.map_or(amount, |s| s.min(amount))
+                };
+                if let (Some(i), Some(s)) = (inst, shield) {
+                    if !unpreventable {
+                        let rem = s - prevented;
+                        self.replacements[i].remaining = Some(rem);
+                        if rem == 0 {
+                            self.replacements.remove(i);
+                        }
+                    }
+                }
+                crate::prevention::damage_prevented(
+                    self,
+                    key,
+                    cand.source,
+                    source,
+                    target,
+                    prevented,
+                );
+                if let Some(e) = then {
+                    // CR 615.5: the rest of the effect happens immediately afterward.
+                    let mut c = ctx.clone();
+                    let mut info = event_info_of(&ReplEvent::Damage {
+                        source,
+                        target,
+                        amount,
+                        combat,
+                    });
+                    info.amount = prevented as i32;
+                    c.event = Some(info);
+                    // Applied to simultaneous damage events, a prevention effect is
+                    // applied once: its instruction happens once, for all the damage
+                    // (once for each recipient if it's about the recipient).
+                    let per_recipient = crate::prevention::followup_about_recipient(&e);
+                    // An instruction that doesn't count the damage happens for each
+                    // damage event (one counter per source, Nine Lives); shield counters
+                    // are one effect for all of it (CR 122.1c).
+                    let per_event = crate::prevention::followup_each_event(&e)
+                        && !crate::counter_rules::is_shield_prevention(&cand.key);
+                    let recipient = |c: &Ctx| c.event.as_ref().map(|i| (i.object, i.player));
+                    let this = recipient(&c);
+                    match self.prevention_followups.as_mut() {
+                        Some(list) if per_event => list.push((key, c, e)),
+                        Some(list) => match list.iter_mut().find(|(k, c0, _)| {
+                            *k == key && (!per_recipient || recipient(c0) == this)
+                        }) {
+                            Some((_, first, _)) => {
+                                if let Some(ev) = first.event.as_mut() {
+                                    ev.amount += prevented as i32;
+                                }
+                            }
+                            None => list.push((key, c, e)),
+                        },
+                        None => self.post_replacement_effects.push((c, e)),
+                    }
+                }
+                let left = amount - prevented;
+                if left == 0 {
+                    vec![]
+                } else {
+                    vec![ReplEvent::Damage {
+                        source,
+                        target,
+                        amount: left,
+                        combat,
+                    }]
+                }
+            }
+            (ReplacementAction::EnterTransformed, ReplEvent::Move(mut m)) => {
+                // Only a permanent represented by a double-faced card or token can enter
+                // transformed (CR 712.9, 712.13a); any other permanent just enters.
+                if crate::transform_rules::can_enter_transformed(self, m.obj) {
+                    m.etb.transformed = true;
+                }
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::EnterTapped, ReplEvent::Move(mut m)) => {
+                m.etb.tapped = true;
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::EnterUntapped, ReplEvent::Move(mut m)) => {
+                m.etb.tapped = false;
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::EnterWithCounters(k, v), ReplEvent::Move(mut m)) => {
+                let mut c = ctx.clone();
+                // The amount is computed for the replacement effect's source: the entering
+                // permanent itself, or e.g. "each other creature you control enters with X
+                // additional counters, where X is the number of counters on ~".
+                c.source = cand.source.or(Some(m.obj));
+                c.cast = m.etb.cast.clone();
+                c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
+                let n = self.eval_value(&v, &c).max(0) as u32;
+                if n > 0 {
+                    m.etb.counters.push((k, n));
+                }
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::AsEnters(e), ReplEvent::Move(mut m)) => {
+                // CR 614.12a: choices required by a replacement effect that modifies how a
+                // permanent enters are made before it enters. The effect runs now, with
+                // the entering object as its source; choices are stored on that object
+                // and carried onto the permanent (see `perform_move`), and entry
+                // modifications ("it enters tapped") are applied to this event.
+                let mut c = ctx.clone();
+                c.source = Some(m.obj);
+                c.controller = m.etb.controller.unwrap_or(cand.controller);
+                c.cast = m.etb.cast.clone();
+                c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
+                c.entering = Some(crate::eval::EntryMods::default());
+                self.exec(&e, &mut c);
+                if let Some(em) = c.entering.take() {
+                    m.etb.tapped |= em.tapped;
+                    m.etb.counters.extend(em.counters);
+                    m.etb.counters_by.extend(em.counters_by);
+                    m.etb
+                        .own_copy_exceptions
+                        .extend(em.copy_exceptions.iter().cloned());
+                    m.etb.copy_exceptions.extend(em.copy_exceptions);
+                    m.etb.copy_extras.extend(em.copy_extras);
+                    m.etb.copiable_mods.extend(em.copiable);
+                    // CR 614.1c: "it enters with haste" — performed on the permanent as
+                    // it's put onto the battlefield.
+                    for e in em.on_entry {
+                        m.etb.as_enters.push((c.clone(), e));
+                    }
+                    if em.prepared {
+                        // CR 722.3a/c: it gains the designation (and its prepare-spell
+                        // copy is created) as it's put onto the battlefield.
+                        m.etb.as_enters.push((
+                            c.clone(),
+                            Effect::SetPrepared {
+                                what: Sel::This,
+                                prepared: true,
+                            },
+                        ));
+                    }
+                }
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::EnterAsCopy { filter, optional }, ReplEvent::Move(mut m)) => {
+                // "enter as a copy of [this creature]" refers to the effect's source.
+                let c = ctx.clone();
+                let cands: Vec<ObjectId> = self
+                    .objects_matching(&filter, &c)
+                    .into_iter()
+                    .filter(|o| *o != m.obj)
+                    .collect();
+                // "You may have ~ enter as a copy": "you" is the player it enters under
+                // the control of (CR 109.5), who chooses before it enters (CR 614.12a),
+                // e.g. each player for their own card put onto the battlefield by Show
+                // and Tell.
+                let chooser = m.etb.controller.or(m.by).unwrap_or(cand.controller);
+                let min = if optional { 0 } else { 1 };
+                let chosen = self.ask_objects(
+                    chooser,
+                    Some(m.obj),
+                    "Choose an object to copy",
+                    cands,
+                    min,
+                    1,
+                );
+                if let Some(o) = chosen.first() {
+                    if m.etb.copy_of.is_some() {
+                        // CR 707.9e, 707.9g: another copy effect is applied after the one
+                        // it would have entered with: that one's exceptions (and linked
+                        // triggered abilities) don't happen; the exceptions of this one
+                        // do.
+                        m.etb.copy_exceptions = m.etb.own_copy_exceptions.clone();
+                        m.etb.copy_extras.clear();
+                    }
+                    m.etb.copy_of = Some(*o);
+                }
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::EnterUnderControl(r), ReplEvent::Move(mut m)) => {
+                // "enters under the control of an opponent of your choice": the player
+                // who would control it chooses among them (CR 614.12a).
+                let choice = match &r {
+                    PlayerRef::Each(_) => {
+                        let cands: Vec<Entity> = self
+                            .eval_players(&r, &ctx)
+                            .into_iter()
+                            .map(Entity::Player)
+                            .collect();
+                        let chooser = self.entering_controller(&m);
+                        self.ask_entities(chooser, Some(m.obj), "Choose a player", cands, 1, 1)
+                            .into_iter()
+                            .find_map(|e| match e {
+                                Entity::Player(p) => Some(p),
+                                _ => None,
+                            })
+                    }
+                    _ => self.eval_player(&r, &ctx),
+                };
+                if let Some(p) = choice {
+                    m.etb.controller = Some(p);
+                }
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::MoveInstead(dest), ReplEvent::Move(mut m)) => {
+                // CR 614.6: the modified event moves it to the whole destination (tapped,
+                // under whose control, with counters, your choice of position, ...).
+                let owner = self.obj(m.obj).owner;
+                let prepared = self.prepare_destination(&dest, &mut ctx);
+                self.redirect_move(&prepared, &mut m, owner, &ctx);
+                // CR 607.2b, 614.14: a card exiled by a replacement effect is exiled with
+                // (linked to) the effect's source.
+                if dest.zone == ZoneKind::Exile && cand.source.is_some() {
+                    m.source = cand.source;
+                    m.etb.link = Some(cand.link);
+                }
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::MoveInstead(dest), ReplEvent::Destroy { obj, .. }) => {
+                let owner = self.obj(obj).owner;
+                let prepared = self.prepare_destination(&dest, &mut ctx);
+                let etb = self.destination_etb(&prepared, owner, &ctx);
+                vec![ReplEvent::Move(MoveEv {
+                    obj,
+                    to: prepared.zone(owner),
+                    pos: prepared.position(),
+                    cause: MoveCause::Destroy,
+                    by: None,
+                    etb,
+                    source: cand.source,
+                })]
+            }
+            (ReplacementAction::Prevent, _) => vec![],
+            (ReplacementAction::Regenerate, ReplEvent::Destroy { obj, .. }) => {
+                // CR 701.19a: remove all damage, tap it, remove it from combat.
+                let o = &mut self.objects[obj.0 as usize];
+                o.damage = 0;
+                o.deathtouch_damage = false;
+                self.tap(obj);
+                crate::combat::remove_from_combat(self, obj);
+                if let Some(id) = cand.instance {
+                    self.replacements.retain(|r| r.id != id);
+                }
+                vec![]
+            }
+            (ReplacementAction::Multiply(k), ev) => {
+                vec![scale_event(ev, |n| n.saturating_mul(k.max(0) as u32))]
+            }
+            (
+                ReplacementAction::LifeFloor(v),
+                ReplEvent::LoseLife {
+                    player,
+                    amount,
+                    from_damage,
+                },
+            ) => {
+                // "Damage that would reduce your life total to less than N reduces it to N
+                // instead": a player with less than N life loses life normally.
+                let floor = self.eval_value(&v, &ctx) as i32;
+                let life = self.player(player).life;
+                let amount = if life >= floor && life - (amount as i32) < floor {
+                    (life - floor) as u32
+                } else {
+                    amount
+                };
+                if amount == 0 {
+                    vec![]
+                } else {
+                    vec![ReplEvent::LoseLife {
+                        player,
+                        amount,
+                        from_damage,
+                    }]
+                }
+            }
+            (ReplacementAction::Add(v), ev) => {
+                let d = self.eval_value(&v, &ctx).max(0) as u32;
+                vec![scale_event(ev, |n| n + d)]
+            }
+            (
+                ReplacementAction::PlusTokens { spec, count },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count: n,
+                    source,
+                },
+            ) => {
+                let original = ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count: n,
+                    source,
+                };
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&original));
+                let more = self.eval_value(&count, &c).max(0) as u32;
+                // Everything else the creating effect specifies (tapped, attacking) applies
+                // to the additional tokens too; they don't get the original tokens'
+                // characteristics or abilities.
+                let (tapped, attacking) = match &original {
+                    ReplEvent::CreateTokens { spec, .. } => (spec.tapped, spec.attacking),
+                    _ => (false, None),
+                };
+                let plus = TokenCreate {
+                    chars: crate::tokens::token_characteristics_in(self, &spec, &c),
+                    card: crate::tokens::predefined_card(&spec),
+                    tapped,
+                    attacking,
+                    copy_of: None,
+                    copy_exceptions: vec![],
+                };
+                // The same event creates them all (this effect doesn't apply to its own
+                // result again, CR 614.5).
+                vec![
+                    original,
+                    ReplEvent::CreateTokens {
+                        controller,
+                        spec: Box::new(plus),
+                        count: more,
+                        source,
+                    },
+                ]
+            }
+            (ReplacementAction::Subtract(v), ev) => {
+                // The amount may depend on the event's ("half that many, rounded down").
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ev));
+                let d = self.eval_value(&v, &c).max(0) as u32;
+                let e = scale_event(ev, |n| n.saturating_sub(d));
+                if event_amount(&e) == Some(0) {
+                    vec![]
+                } else {
+                    vec![e]
+                }
+            }
+            (
+                ReplacementAction::Redirect(sel),
+                ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                },
+            ) => {
+                // The new recipient may be relative to the damage event ("that damage is
+                // dealt to that source's controller instead").
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                }));
+                let new_target = self.eval_sel(&sel, &c).into_iter().next();
+                match new_target {
+                    // CR 614.9: redirection to something no longer valid does nothing.
+                    Some(t) if self.valid_damage_recipient(t) => {
+                        vec![ReplEvent::Damage {
+                            source,
+                            target: t,
+                            amount,
+                            combat,
+                        }]
+                    }
+                    _ => vec![ReplEvent::Damage {
+                        source,
+                        target,
+                        amount,
+                        combat,
+                    }],
+                }
+            }
+            (
+                ReplacementAction::RedirectNext(sel, n),
+                ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                },
+            ) => {
+                let original = ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                };
+                // CR 614.9: redirection to something no longer valid does nothing (and
+                // doesn't use up the shield).
+                let Some(to) = self
+                    .eval_sel(&sel, &ctx)
+                    .into_iter()
+                    .next()
+                    .filter(|t| self.valid_damage_recipient(*t))
+                else {
+                    return vec![original];
+                };
+                let inst = cand
+                    .instance
+                    .and_then(|id| self.replacements.iter().position(|r| r.id == id));
+                let shield = match inst.and_then(|i| self.replacements[i].remaining) {
+                    Some(r) => r,
+                    None => self.eval_value(&n, &ctx).max(0) as u32,
+                };
+                let moved = shield.min(amount);
+                if let Some(i) = inst {
+                    let rem = shield - moved;
+                    self.replacements[i].remaining = Some(rem);
+                    if rem == 0 {
+                        self.replacements.remove(i);
+                    }
+                }
+                let mut out = Vec::new();
+                if moved > 0 {
+                    out.push(ReplEvent::Damage {
+                        source,
+                        target: to,
+                        amount: moved,
+                        combat,
+                    });
+                }
+                if amount > moved {
+                    out.push(ReplEvent::Damage {
+                        source,
+                        target,
+                        amount: amount - moved,
+                        combat,
+                    });
+                }
+                out
+            }
+            (ReplacementAction::Instead(effect), ev) => {
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ev));
+                // CR 614.6: the modified event is caused by what caused the replaced one. A
+                // spell or ability that would have destroyed a permanent destroys what the
+                // replacement effect destroys instead; lethal damage's state-based action
+                // does if it would have (umbra armor, CR 702.89a).
+                if let ReplEvent::Destroy { source, by, .. } = &ev {
+                    c.cause = Some(crate::event_causes::Cause {
+                        obj: *source,
+                        by: *by,
+                    });
+                }
+                // CR 121.7: card draws resulting from a replacement or prevention effect
+                // happen after the parts of the original event that weren't replaced. A
+                // keyword action replaced entirely leaves no such part, and its instructions
+                // must run while this effect is known to have applied (CR 614.5: "instead
+                // you draw a card, then that creature connives").
+                if !matches!(ev, ReplEvent::Draw { .. } | ReplEvent::Action { .. })
+                    && crate::draw_rules::draws_cards(&effect)
+                {
+                    self.post_replacement_effects.push((c, *effect));
+                    return vec![];
+                }
+                self.repl_context.push(applied.to_vec());
+                self.exec(&effect, &mut c);
+                self.repl_context.pop();
+                vec![]
+            }
+            (ReplacementAction::Also(effect), ev) => {
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ev));
+                self.post_replacement_effects.push((c, *effect));
+                vec![ev]
+            }
+            (_, ev) => vec![ev],
+        }
+    }
+
+    pub fn valid_damage_recipient(&self, e: Entity) -> bool {
+        match e {
+            Entity::Player(p) => self.player(p).in_game(),
+            Entity::Object(o) => {
+                let ob = self.obj(o);
+                self.is_live(o)
+                    && ob.zone == Zone::Battlefield
+                    && (ob.is_creature()
+                        || ob.is(CardType::Planeswalker)
+                        || ob.is(CardType::Battle))
+            }
+        }
+    }
+}
+
+/// Characteristics of an object about to enter the battlefield, with the controller it
+/// will have there (CR 614.12).
+struct EnteringView {
+    obj: ObjectId,
+    controller: PlayerId,
+}
+
+impl crate::eval::View for EnteringView {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        &g.obj(id).chars
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.obj {
+            self.controller
+        } else {
+            g.obj(id).controller
+        }
+    }
+    fn controller_override(&self, id: ObjectId) -> Option<PlayerId> {
+        (id == self.obj).then_some(self.controller)
+    }
+}
+
+fn repl_class(d: &ReplacementDef, ev: &ReplEvent) -> u8 {
+    if d.self_replacement {
+        return 0;
+    }
+    if let ReplEvent::Move(m) = ev {
+        if m.to == Zone::Battlefield {
+            match &d.action {
+                ReplacementAction::EnterUnderControl(_) => return 1,
+                ReplacementAction::EnterAsCopy { .. } => return 2,
+                ReplacementAction::EnterTransformed => return 3,
+                _ => {}
+            }
+        }
+    }
+    4
+}
+
+fn scale_event(ev: ReplEvent, f: impl Fn(u32) -> u32) -> ReplEvent {
+    match ev {
+        ReplEvent::Damage {
+            source,
+            target,
+            amount,
+            combat,
+        } => ReplEvent::Damage {
+            source,
+            target,
+            amount: f(amount),
+            combat,
+        },
+        ReplEvent::GainLife { player, amount } => ReplEvent::GainLife {
+            player,
+            amount: f(amount),
+        },
+        ReplEvent::LoseLife {
+            player,
+            amount,
+            from_damage,
+        } => ReplEvent::LoseLife {
+            player,
+            amount: f(amount),
+            from_damage,
+        },
+        ReplEvent::AddCounters {
+            target,
+            kind,
+            n,
+            source,
+            by,
+            origin,
+        } => ReplEvent::AddCounters {
+            target,
+            kind,
+            n: f(n),
+            source,
+            by,
+            origin,
+        },
+        ReplEvent::CreateTokens {
+            controller,
+            spec,
+            count,
+            source,
+        } => ReplEvent::CreateTokens {
+            controller,
+            spec,
+            count: f(count),
+            source,
+        },
+        ReplEvent::Action {
+            kind,
+            player,
+            object,
+            amount,
+        } => ReplEvent::Action {
+            kind,
+            player,
+            object,
+            amount: f(amount),
+        },
+        other => other,
+    }
+}
+
+fn event_amount(ev: &ReplEvent) -> Option<u32> {
+    match ev {
+        ReplEvent::Damage { amount, .. }
+        | ReplEvent::GainLife { amount, .. }
+        | ReplEvent::LoseLife { amount, .. } => Some(*amount),
+        ReplEvent::AddCounters { n, .. } => Some(*n),
+        ReplEvent::CreateTokens { count, .. } => Some(*count),
+        ReplEvent::Action { amount, .. } => Some(*amount),
+        _ => None,
+    }
+}
+
+pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
+    let mut e = EventInfo::default();
+    match ev {
+        ReplEvent::Move(m) => {
+            e.object = Some(m.obj);
+            // Why it would move ("creatures played by your opponents", CR 305.1).
+            e.cause = Some(m.cause);
+        }
+        ReplEvent::Damage {
+            source,
+            target,
+            amount,
+            ..
+        } => {
+            e.other = Some(*source);
+            match target {
+                Entity::Player(p) => e.player = Some(*p),
+                Entity::Object(o) => e.object = Some(*o),
+            }
+            e.amount = *amount as i32;
+        }
+        ReplEvent::Draw { player } | ReplEvent::LoseGame { player } => e.player = Some(*player),
+        ReplEvent::GainLife { player, amount } | ReplEvent::LoseLife { player, amount, .. } => {
+            e.player = Some(*player);
+            e.amount = *amount as i32;
+        }
+        ReplEvent::AddCounters { target, n, .. } => {
+            match target {
+                Entity::Player(p) => e.player = Some(*p),
+                Entity::Object(o) => e.object = Some(*o),
+            }
+            e.amount = *n as i32;
+        }
+        ReplEvent::CreateTokens {
+            controller, count, ..
+        } => {
+            e.player = Some(*controller);
+            e.amount = *count as i32;
+        }
+        ReplEvent::Destroy { obj, .. } => e.object = Some(*obj),
+        ReplEvent::Action {
+            player,
+            object,
+            amount,
+            ..
+        } => {
+            e.player = Some(*player);
+            e.object = *object;
+            e.amount = *amount as i32;
+        }
+    }
+    e
+}
+
+impl Game {
+    /// Proposes a keyword action to replacement effects (CR 614.1a, 701): returns the
+    /// amount to perform it with ("that many cards plus four"), or `None` if it was
+    /// replaced by something else ("proliferate twice instead" performs its own
+    /// instructions, during which this effect doesn't apply again, CR 614.5).
+    pub fn replace_action(
+        &mut self,
+        kind: ReplaceableAction,
+        player: PlayerId,
+        object: Option<ObjectId>,
+        amount: u32,
+    ) -> Option<u32> {
+        let applicable = self.statics_or_instances_have_action(kind);
+        if !applicable {
+            return Some(amount);
+        }
+        let evs = self.replace(ReplEvent::Action {
+            kind,
+            player,
+            object,
+            amount,
+        });
+        self.run_post_replacement_effects();
+        match evs.into_iter().next() {
+            Some(ReplEvent::Action { amount, .. }) => Some(amount),
+            _ => None,
+        }
+    }
+
+    /// Whether any replacement effect watches that keyword action (a fast path).
+    fn statics_or_instances_have_action(&mut self, kind: ReplaceableAction) -> bool {
+        if self.dirty {
+            self.recompute();
+        }
+        fn watches(e: &ReplacementEvent, kind: ReplaceableAction) -> bool {
+            match e {
+                ReplacementEvent::Action { kind: k, .. } => *k == kind,
+                ReplacementEvent::Where { event, .. } => watches(event, kind),
+                _ => false,
+            }
+        }
+        self.statics
+            .replacements
+            .iter()
+            .any(|(_, _, _, _, d)| watches(&d.event, kind))
+            || self
+                .replacements
+                .iter()
+                .any(|r| watches(&r.def.event, kind))
+    }
+}

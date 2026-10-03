@@ -1,0 +1,379 @@
+//! Game events. Every game action emits events; triggered abilities (CR 603) and
+//! turn history ("if a creature died this turn") are driven by them.
+
+use crate::ability::{Ability, ZoneKind};
+use crate::object::Zone;
+use crate::turn::Step;
+use crate::types::*;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+/// Why an object changed zones.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MoveCause {
+    Cast,
+    PlayLand,
+    Resolve,
+    /// Put onto the battlefield / into a zone by an effect.
+    Effect,
+    Destroy,
+    Sacrifice,
+    Discard,
+    Mill,
+    Draw,
+    Counter,
+    /// A state-based action (e.g. lethal damage is "destroy", toughness 0 is this).
+    StateBased,
+    /// Ceased to exist (tokens off the battlefield, copies off the stack).
+    CeaseToExist,
+    Exile,
+    Return,
+    Search,
+    Cleanup,
+    Cost,
+    /// Returned to the command zone (commander rule).
+    Commander,
+    /// A dungeon card brought from outside the game into the command zone by the venture
+    /// into the dungeon keyword action (CR 309.2a, 701.49): the only way a dungeon card
+    /// can be brought into the game (CR 309.2d).
+    Venture,
+    Other,
+}
+
+/// How counters come to be put on a permanent or player (CR 122.6). Only counters put by
+/// an effect are put "by an effect" (CR 609.1): "If an effect would put one or more
+/// counters on a permanent ..." doesn't apply to the others.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CounterOrigin {
+    /// The effect of a spell or ability (CR 609.1), including the counters a permanent
+    /// enters with (CR 122.6, 614.1c).
+    #[default]
+    Effect,
+    /// Paying a cost (CR 118, 602.2b): "those counters are put on as a cost, not as an
+    /// effect".
+    Cost,
+    /// The result of damage dealt by a source with wither or infect, or of combat damage
+    /// dealt by a creature with toxic (CR 120.3b, 120.3d, 702.80a, 702.90b–c, 702.164c).
+    Damage,
+    /// A turn-based action (a Saga's lore counter, CR 703.4f, 714.3c) or a special action
+    /// (exiling a card with suspend, CR 116.2f, 702.62a).
+    Rule,
+}
+
+/// Triggered abilities of permanents captured just before an event, so that
+/// leaves-the-battlefield abilities "look back in time" (CR 603.10).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct LookbackSnapshot {
+    /// (source object, its controller, triggered ability)
+    pub sources: Vec<(ObjectId, PlayerId, Ability)>,
+    /// The "triggers an additional time" effects that applied (CR 603.2d, 603.10a: an
+    /// effect of a permanent leaving at the same time still applies to abilities that
+    /// trigger on that event).
+    pub additional_triggers: Vec<(ObjectId, PlayerId, crate::ability::StaticEffect)>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Event {
+    ZoneChange {
+        old: ObjectId,
+        new: ObjectId,
+        from: Zone,
+        to: Zone,
+        cause: MoveCause,
+        /// Player responsible (who sacrificed, discarded, cast, ...).
+        by: Option<PlayerId>,
+        #[serde(skip)]
+        lookback: Option<Arc<LookbackSnapshot>>,
+    },
+    SpellCast {
+        spell: ObjectId,
+        player: PlayerId,
+        from: Option<ZoneKind>,
+    },
+    AbilityActivated {
+        /// The ability on the stack (None for mana abilities).
+        ability: Option<ObjectId>,
+        source: ObjectId,
+        player: PlayerId,
+        is_mana: bool,
+    },
+    AbilityTriggeredOnStack {
+        ability: ObjectId,
+        source: ObjectId,
+    },
+    /// An activated or triggered ability finished resolving (CR 608.2p).
+    AbilityResolved {
+        ability: ObjectId,
+        source: ObjectId,
+        controller: PlayerId,
+    },
+    SpellResolved {
+        spell: ObjectId,
+    },
+    Countered {
+        what: ObjectId,
+        /// The spell or ability that countered it (only a spell or ability whose text
+        /// says "counter" counters, CR 701.6a), if known.
+        cause: Option<ObjectId>,
+        /// The controller of that spell or ability.
+        by: Option<PlayerId>,
+    },
+    Damage {
+        source: ObjectId,
+        target: Entity,
+        amount: u32,
+        combat: bool,
+    },
+    /// A permanent was dealt excess damage (CR 120.10).
+    ExcessDamage {
+        obj: ObjectId,
+        amount: u32,
+        combat: bool,
+    },
+    /// A prevention effect prevented some or all of the damage that would have been dealt
+    /// (CR 615.13). `by` is the prevention effect's source; `key` identifies the effect.
+    DamagePrevented {
+        source: ObjectId,
+        target: Entity,
+        amount: u32,
+        by: Option<ObjectId>,
+        key: u64,
+    },
+    LifeGained {
+        player: PlayerId,
+        amount: u32,
+    },
+    LifeLost {
+        player: PlayerId,
+        amount: u32,
+    },
+    Drew {
+        player: PlayerId,
+        card: ObjectId,
+        /// 1-based count of cards drawn this turn by this player.
+        nth: u32,
+    },
+    Discarded {
+        player: PlayerId,
+        card: ObjectId,
+        /// The controller of the spell or ability whose effect made the player discard
+        /// the card ("when a spell or ability an opponent controls causes you to discard
+        /// ~"); `None` when it was discarded to pay a cost (CR 601.2h, 602.2b) or because
+        /// of a game rule (CR 514.1).
+        by: Option<PlayerId>,
+    },
+    Milled {
+        player: PlayerId,
+        cards: Vec<ObjectId>,
+    },
+    CountersAdded {
+        target: Entity,
+        kind: CounterKind,
+        n: u32,
+        /// The player who put them (CR 122.6, 122.6a): the controller of the spell or
+        /// ability putting them, the player paying the cost, the controller of the source
+        /// of the damage (wither, infect, toxic), or, for counters a permanent enters with,
+        /// the player the effect names (tribute's opponent) or else its controller.
+        by: Option<PlayerId>,
+        /// Whether they were put by an effect, as a cost, as the result of damage, or by
+        /// a game rule.
+        origin: CounterOrigin,
+        /// What the permanent was as they were put on it, for conditions about this
+        /// turn's events (`None` for a player, a card in another zone, or counters a
+        /// permanent entered with: what it was as it entered applies).
+        #[serde(skip)]
+        as_put: Option<Arc<crate::event_causes::AsPut>>,
+    },
+    CountersRemoved {
+        target: Entity,
+        kind: CounterKind,
+        n: u32,
+        /// The player who removed them — the controller of the effect or the player paying
+        /// the cost — if a player did ("when you remove the last ... counter").
+        by: Option<PlayerId>,
+    },
+    Tapped {
+        obj: ObjectId,
+        for_mana: bool,
+    },
+    Untapped {
+        obj: ObjectId,
+    },
+    AttackersDeclared {
+        player: PlayerId,
+        attackers: Vec<(ObjectId, Entity)>,
+    },
+    BlockersDeclared {
+        blocks: Vec<(ObjectId, ObjectId)>,
+    },
+    BecameBlocked {
+        attacker: ObjectId,
+        blockers: Vec<ObjectId>,
+    },
+    AttackerUnblocked {
+        attacker: ObjectId,
+    },
+    /// A creature started blocking an attacker other than by being declared as a blocker:
+    /// an effect made it block (`entered == false`), or it was put onto the battlefield
+    /// blocking (`entered == true`) (CR 509.3a–e, 509.4).
+    BlockAdded {
+        blocker: ObjectId,
+        attacker: ObjectId,
+        entered: bool,
+        /// The blocker was already a blocking creature.
+        was_blocking: bool,
+        /// The attacker was already a blocked creature.
+        was_blocked: bool,
+    },
+    BecameTarget {
+        target: Entity,
+        by: ObjectId,
+        controller: PlayerId,
+    },
+    StepBegan {
+        step: Step,
+        active: PlayerId,
+    },
+    /// A step (or a phase without steps) ended: its mana pools have emptied (CR 500.5)
+    /// and "until end of step" effects have ended.
+    StepEnded {
+        step: Step,
+        active: PlayerId,
+    },
+    TurnBegan {
+        active: PlayerId,
+        number: u32,
+    },
+    TokenCreated {
+        obj: ObjectId,
+        controller: PlayerId,
+    },
+    LandPlayed {
+        player: PlayerId,
+        land: ObjectId,
+    },
+    Cycled {
+        player: PlayerId,
+        card: ObjectId,
+        /// The value of X chosen for the cycling ability's cost, which abilities that
+        /// trigger on the cycling refer to (CR 107.3e).
+        x: i32,
+    },
+    TurnedFaceUp {
+        obj: ObjectId,
+    },
+    TurnedFaceDown {
+        obj: ObjectId,
+    },
+    Transformed {
+        obj: ObjectId,
+    },
+    ControlChanged {
+        obj: ObjectId,
+        from: PlayerId,
+        to: PlayerId,
+    },
+    PlayerLost {
+        player: PlayerId,
+    },
+    PlayerWon {
+        player: PlayerId,
+    },
+    Searched {
+        player: PlayerId,
+    },
+    Shuffled {
+        player: PlayerId,
+    },
+    Sacrificed {
+        obj: ObjectId,
+        player: PlayerId,
+    },
+    Destroyed {
+        obj: ObjectId,
+        /// The spell or ability whose effect destroyed it (CR 701.8b: an effect that uses
+        /// the word "destroy"). A replacement effect's modified event is caused by the
+        /// spell or ability whose event it replaced (umbra armor, CR 702.89a). `None` for
+        /// a state-based action (CR 704.5g–h).
+        cause: Option<ObjectId>,
+        /// The controller of that spell or ability.
+        by: Option<PlayerId>,
+    },
+    Attached {
+        obj: ObjectId,
+        to: Entity,
+    },
+    Unattached {
+        obj: ObjectId,
+        from: Entity,
+    },
+    PhasedOut {
+        obj: ObjectId,
+    },
+    PhasedIn {
+        obj: ObjectId,
+    },
+    /// A die was rolled (CR 706): its result after modifiers and its natural result
+    /// (CR 706.2). The planar die has no numerical result (CR 706.7).
+    DieRolled {
+        player: PlayerId,
+        sides: u32,
+        result: u32,
+        natural: u32,
+        planar: bool,
+    },
+    /// A coin was flipped (CR 705). A flip only cares about heads or tails has neither a
+    /// winner nor a loser (CR 705.2).
+    CoinFlipped {
+        player: PlayerId,
+        won: bool,
+        lost: bool,
+        heads: bool,
+    },
+    DayNightChanged {
+        is_day: bool,
+    },
+    BecameMonarch {
+        player: PlayerId,
+    },
+    TookInitiative {
+        player: PlayerId,
+    },
+    CrimeCommitted {
+        player: PlayerId,
+    },
+    ManaAdded {
+        player: PlayerId,
+        source: Option<ObjectId>,
+    },
+    /// `by` exploited `obj` (CR 702.110b): `player`, the controller of `by`'s exploit
+    /// ability, sacrificed `obj` (as it was on the battlefield) as that ability resolved.
+    Exploited {
+        obj: ObjectId,
+        by: ObjectId,
+        player: PlayerId,
+    },
+    /// A copy of a spell was put onto the stack (CR 707.10); `player` controls the copy.
+    SpellCopied {
+        spell: ObjectId,
+        player: PlayerId,
+    },
+    /// `player` tapped `obj` for mana (CR 106.12): a mana ability of it with {T} in its
+    /// cost resolved and produced `mana` (CR 106.12a).
+    TappedForMana {
+        obj: ObjectId,
+        player: PlayerId,
+        mana: Vec<crate::mana::ManaType>,
+    },
+    /// Marks the end of a group of simultaneous events (one action of a resolving spell or
+    /// ability, CR 608.2c). Events between two markers (or flushes) form one batch for
+    /// "whenever one or more …" triggers (CR 603.2c). Not recorded in turn history.
+    BatchBoundary,
+    /// Any other event identified by name (used by keyword/card implementations).
+    Custom {
+        name: smol_str::SmolStr,
+        player: Option<PlayerId>,
+        obj: Option<ObjectId>,
+        amount: i32,
+    },
+}

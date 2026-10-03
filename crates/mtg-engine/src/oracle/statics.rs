@@ -1,0 +1,974 @@
+//! Parsing static abilities (CR 604), conditions, and value phrases.
+
+use super::effects::{parse_pt_mod, Builder};
+use super::phrases::*;
+use super::CompileContext;
+use crate::ability::*;
+use crate::keywords::KeywordKind;
+use crate::types::*;
+
+fn static_ability(effect: StaticEffect, text: &str) -> Ability {
+    AbilityDef::new(AbilityKind::Static(StaticAbility::new(effect)), text)
+}
+
+fn keyword_list_mods(s: &str) -> Option<Vec<Modification>> {
+    // A quoted keyword ability (`has "cumulative upkeep {1}."`) grants that keyword.
+    let parts = match end(s)
+        .strip_prefix('"')
+        .and_then(|r| r.strip_suffix('"'))
+        .filter(|r| !r.contains('"'))
+    {
+        Some(inner) => vec![inner.trim_end_matches('.').to_string()],
+        None => super::keywords::split_keyword_phrases(end(s)),
+    };
+    let mut out = Vec::new();
+    for p in &parts {
+        let tl = TypeLine::default();
+        let ctx = CompileContext {
+            card_name: "",
+            full_name: "",
+            type_line: &tl,
+            layout: crate::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        for a in super::keywords::parse_keyword_line(p, &ctx)? {
+            if let AbilityKind::Keyword(k) = &a.kind {
+                out.push(Modification::AddKeyword(k.clone()));
+            }
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// Parses a static ability line on a permanent.
+pub fn parse_static(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = text.to_lowercase();
+    let l = end(&lower);
+    // "As long as [condition], [static]". Lines the built-in forms don't understand fall
+    // through whole to the pluggable static patterns.
+    if let Some(r) = l.strip_prefix("as long as ") {
+        let parsed = r.split_once(", ").and_then(|(c, rest)| {
+            let cond = parse_condition(c, ctx)?;
+            // "As long as ~ is in your graveyard, ...": it functions from the graveyard
+            // (CR 113.6b).
+            let from_graveyard =
+                super::patterns::graveyard_order::requires_source_in_graveyard(&cond);
+            // "As long as there are three or more cards exiled with ~, it gets +3/+3":
+            // "it" is the object the condition names.
+            let own;
+            let rest = match rest.strip_prefix("it ") {
+                Some(r) if c.contains('~') && !c.contains("it ") => {
+                    own = format!("~ {r}");
+                    own.as_str()
+                }
+                _ => rest,
+            };
+            let mut abilities = parse_static_inner(rest, text, ctx)?;
+            for a in abilities.iter_mut() {
+                if let AbilityKind::Static(s) = &a.kind {
+                    let mut s2 = s.clone();
+                    // Keep an inner condition ("..., your opponents can't cast spells
+                    // during your turn"): both must hold.
+                    s2.condition = Some(match s2.condition.take() {
+                        Some(inner) => Condition::And(vec![cond.clone(), inner]),
+                        None => cond.clone(),
+                    });
+                    if from_graveyard {
+                        s2.zone = FunctionZone::Graveyard;
+                    }
+                    *a = AbilityDef::new(AbilityKind::Static(s2), text);
+                }
+            }
+            Some(abilities)
+        });
+        if parsed.is_some() {
+            return parsed;
+        }
+    }
+    parse_static_inner(l, text, ctx)
+}
+
+fn parse_static_inner(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    // ETB replacements.
+    if l == "~ enters tapped" || l == "~ enters the battlefield tapped" {
+        return Some(vec![static_ability(
+            StaticEffect::Replacement(ReplacementDef {
+                event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                action: ReplacementAction::EnterTapped,
+                self_replacement: false,
+                optional: false,
+            }),
+            text,
+        )]);
+    }
+    if let Some(r) = l
+        .strip_prefix("~ enters with ")
+        .or_else(|| l.strip_prefix("~ enters the battlefield with "))
+    {
+        let (n, r2) = parse_number(r)?;
+        let (kind, r3) = super::costs::counter_kind(r2)?;
+        let r3 = strip(r3, "counters").or_else(|| strip(r3, "counter"))?;
+        if end(r3) != "on it" {
+            return None;
+        }
+        return Some(vec![static_ability(
+            StaticEffect::Replacement(ReplacementDef {
+                event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                action: ReplacementAction::EnterWithCounters(kind, n),
+                self_replacement: false,
+                optional: false,
+            }),
+            text,
+        )]);
+    }
+    // Self restrictions.
+    let self_restr: [(&str, Restriction); 9] = [
+        ("~ can't block", Restriction::CantBlock(Filter::Source)),
+        ("~ can't attack", Restriction::CantAttack(Filter::Source)),
+        (
+            "~ can't attack or block",
+            Restriction::CantAttackOrBlock(Filter::Source),
+        ),
+        (
+            "~ can't be blocked",
+            Restriction::CantBeBlocked(Filter::Source),
+        ),
+        (
+            "~ attacks each combat if able",
+            Restriction::MustAttack(Filter::Source),
+        ),
+        (
+            "~ blocks each combat if able",
+            Restriction::MustBlock(Filter::Source),
+        ),
+        (
+            "~ can't be countered",
+            Restriction::CantBeCountered(Filter::Source),
+        ),
+        (
+            "~ doesn't untap during your untap step",
+            Restriction::DoesntUntap(Filter::Source),
+        ),
+        (
+            "~ can block only creatures with flying",
+            Restriction::CanBlockOnly {
+                blocker: Filter::Source,
+                attackers: Filter::HasKeyword(KeywordKind::Flying),
+            },
+        ),
+    ];
+    for (p, r) in self_restr {
+        if l == p {
+            let mut s = StaticAbility::new(StaticEffect::Restriction(r));
+            if p == "~ can't be countered" {
+                s.zone = FunctionZone::Stack;
+            }
+            return Some(vec![AbilityDef::new(AbilityKind::Static(s), text)]);
+        }
+    }
+    if let Some((f, _, _)) = l
+        .strip_prefix("~ can't be blocked by ")
+        .and_then(parse_object_phrase)
+        .filter(|(_, _, tail)| end(tail).is_empty())
+    {
+        // "creatures with greater power": than ~ (see `patterns::filters_relational`).
+        let f = super::patterns::filters_relational::substitute(&f, &Sel::This)?;
+        return Some(vec![static_ability(
+            StaticEffect::Restriction(Restriction::CantBeBlockedBy {
+                attacker: Filter::Source,
+                blocker: f,
+            }),
+            text,
+        )]);
+    }
+    if l == "~ can't be blocked except by two or more creatures" {
+        return Some(vec![static_ability(
+            StaticEffect::Restriction(Restriction::MinBlockers {
+                attacker: Filter::Source,
+                n: 2,
+            }),
+            text,
+        )]);
+    }
+    if l == "~ can block an additional creature each combat" {
+        return Some(vec![static_ability(
+            StaticEffect::Restriction(Restriction::ExtraBlocks {
+                blocker: Filter::Source,
+                n: Some(1),
+            }),
+            text,
+        )]);
+    }
+    if l == "~ can block any number of creatures" {
+        return Some(vec![static_ability(
+            StaticEffect::Restriction(Restriction::ExtraBlocks {
+                blocker: Filter::Source,
+                n: None,
+            }),
+            text,
+        )]);
+    }
+    // Enchanted/equipped creature statics.
+    for (prefix, affected) in [
+        ("enchanted creature ", Filter::AttachedToSource),
+        ("equipped creature ", Filter::AttachedToSource),
+        ("enchanted permanent ", Filter::AttachedToSource),
+        ("enchanted land ", Filter::AttachedToSource),
+        ("enchanted artifact ", Filter::AttachedToSource),
+    ] {
+        if let Some(r) = l.strip_prefix(prefix) {
+            if let Some(v) = anthem(r, affected, text).or_else(|| attached_restriction(r, text)) {
+                return Some(v);
+            }
+            break;
+        }
+    }
+    // "[filter] get +N/+N [and have ...]" / "[filter] have [keywords]"
+    // (Spells on the stack are left to the registry's patterns, which grant only the
+    // keywords the engine applies to a spell.)
+    if let Some((f, _, rest)) =
+        parse_object_phrase(l).filter(|(f, _, _)| f.zone() != Some(ZoneKind::Stack))
+    {
+        let rest = rest.trim();
+        if rest.starts_with("get ")
+            || rest.starts_with("gets ")
+            || rest.starts_with("have ")
+            || rest.starts_with("has ")
+        {
+            if let Some(v) = anthem(rest, f, text) {
+                return Some(v);
+            }
+        }
+    }
+    if let Some(r) = l
+        .strip_prefix("~ gets ")
+        .map(|r| format!("gets {r}"))
+        .or_else(|| l.strip_prefix("~ has ").map(|r| format!("has {r}")))
+    {
+        if let Some(v) = anthem(&r, Filter::Source, text) {
+            return Some(v);
+        }
+    }
+    // Cost modifiers.
+    if let Some(a) = parse_cost_modifier(l, text) {
+        return Some(vec![a]);
+    }
+    // Player effects.
+    let player_pairs: [(&str, StaticEffect); 6] = [
+        (
+            "you have hexproof",
+            StaticEffect::PlayerEffect {
+                affected: PlayerFilter::You,
+                effect: PlayerModification::Hexproof,
+            },
+        ),
+        (
+            "you have shroud",
+            StaticEffect::PlayerEffect {
+                affected: PlayerFilter::You,
+                effect: PlayerModification::Shroud,
+            },
+        ),
+        (
+            "you have no maximum hand size",
+            StaticEffect::PlayerEffect {
+                affected: PlayerFilter::You,
+                effect: PlayerModification::MaxHandSize(None),
+            },
+        ),
+        (
+            "you may play an additional land on each of your turns",
+            StaticEffect::AdditionalLandPlays(PlayerRel::You, 1),
+        ),
+        (
+            "players can't gain life",
+            StaticEffect::Restriction(Restriction::CantGainLife(PlayerFilter::Any)),
+        ),
+        (
+            "your opponents can't gain life",
+            StaticEffect::Restriction(Restriction::CantGainLife(PlayerFilter::Opponent)),
+        ),
+    ];
+    for (p, e) in player_pairs {
+        if l == p {
+            return Some(vec![static_ability(e, text)]);
+        }
+    }
+    if l == "you can't lose the game and your opponents can't win the game" {
+        return Some(vec![
+            static_ability(
+                StaticEffect::Restriction(Restriction::CantLoseGame(PlayerFilter::You)),
+                text,
+            ),
+            static_ability(
+                StaticEffect::Restriction(Restriction::CantWinGame(PlayerFilter::Opponent)),
+                text,
+            ),
+        ]);
+    }
+    if let Some(r) = l.strip_prefix("you may look at the top card of your library any time") {
+        if end(r).is_empty() {
+            return Some(vec![static_ability(
+                StaticEffect::LookAtTopCard(PlayerRel::You),
+                text,
+            )]);
+        }
+    }
+    // CDA: "~'s power and toughness are each equal to [value]".
+    // (Phrases this doesn't understand fall through to the pattern registry.)
+    if let Some(v) = l
+        .strip_prefix("~'s power and toughness are each equal to ")
+        .and_then(|r| parse_value_phrase(r, &mut Builder::new(ctx)))
+        .and_then(|(v, tail)| end(&tail).is_empty().then_some(v))
+    {
+        let mut s = StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods: vec![Modification::CdaPT(Some(v.clone()), Some(v))],
+        });
+        s.is_cda = true;
+        s.zone = FunctionZone::Anywhere;
+        return Some(vec![AbilityDef::new(AbilityKind::Static(s), text)]);
+    }
+    if let Some(v) = l
+        .strip_prefix("~'s power is equal to ")
+        .and_then(|r| parse_value_phrase(r, &mut Builder::new(ctx)))
+        .and_then(|(v, tail)| end(&tail).is_empty().then_some(v))
+    {
+        let mut s = StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods: vec![Modification::CdaPT(Some(v), None)],
+        });
+        s.is_cda = true;
+        s.zone = FunctionZone::Anywhere;
+        return Some(vec![AbilityDef::new(AbilityKind::Static(s), text)]);
+    }
+    crate::oracle_ext::parse_static_ext(l, text, ctx)
+}
+
+/// "gets +1/+1", "get +1/+1 and have flying", "have flying and haste", "has trample".
+fn anthem(r: &str, affected: Filter, text: &str) -> Option<Vec<Ability>> {
+    let r = end(r);
+    let mut mods = Vec::new();
+    let rest = if let Some(x) = r.strip_prefix("gets ").or_else(|| r.strip_prefix("get ")) {
+        let (p, t, tail) = parse_pt_mod(x)?;
+        mods.push(Modification::ModifyPT(p, t));
+        tail.trim().to_string()
+    } else {
+        r.to_string()
+    };
+    let rest = rest.trim();
+    if !rest.is_empty() {
+        let k = rest
+            .strip_prefix("and have ")
+            .or_else(|| rest.strip_prefix("and has "))
+            .or_else(|| rest.strip_prefix("have "))
+            .or_else(|| rest.strip_prefix("has "))?;
+        mods.extend(keyword_list_mods(k)?);
+    }
+    if mods.is_empty() {
+        return None;
+    }
+    Some(vec![static_ability(
+        StaticEffect::Continuous { affected, mods },
+        text,
+    )])
+}
+
+fn attached_restriction(r: &str, text: &str) -> Option<Vec<Ability>> {
+    let r = end(r);
+    let f = Filter::AttachedToSource;
+    let restr = match r {
+        "can't attack or block" => Restriction::CantAttackOrBlock(f),
+        "can't block" => Restriction::CantBlock(f),
+        "can't attack" => Restriction::CantAttack(f),
+        "doesn't untap during its controller's untap step" => Restriction::DoesntUntap(f),
+        _ => return None,
+    };
+    Some(vec![static_ability(StaticEffect::Restriction(restr), text)])
+}
+
+/// "spells your opponents cast cost {1} more to cast", "creature spells you cast cost {1} less to cast".
+fn parse_cost_modifier(l: &str, text: &str) -> Option<Ability> {
+    // "Each creature spell you cast with toughness greater than its power costs {1} less
+    // to cast." (Doran, Besieged by Time): each such spell.
+    let (spells, rest) = l.split_once(" cost ").or_else(|| {
+        l.strip_prefix("each ")
+            .and_then(|x| x.split_once(" costs "))
+    })?;
+    // "creature spells you cast with power 4 or greater" (Goreclaw): the qualifier
+    // follows the caster; read it as "creature spells with power 4 or greater". So is
+    // "spells you cast that share a card type with the exiled card" (Semblance Anvil).
+    let qualified = [
+        (" you cast with ", " with ", PlayerRel::You),
+        (" your opponents cast with ", " with ", PlayerRel::Opponent),
+        (" you cast that ", " that ", PlayerRel::You),
+        (" your opponents cast that ", " that ", PlayerRel::Opponent),
+    ]
+    .into_iter()
+    .find_map(|(sep, join, who)| {
+        let (a, b) = spells.split_once(sep)?;
+        Some((who, format!("{a}{join}{b}")))
+    });
+    let qualified_spells;
+    let (who, spells) = if let Some((who, s)) = qualified {
+        qualified_spells = s;
+        (who, qualified_spells.as_str())
+    } else if let Some(s) = spells.strip_suffix(" you cast") {
+        (PlayerRel::You, s)
+    } else if let Some(s) = spells.strip_suffix(" your opponents cast") {
+        (PlayerRel::Opponent, s)
+    } else if let Some(s) = spells.strip_suffix(" cast") {
+        (PlayerRel::Any, s)
+    } else {
+        (PlayerRel::Any, spells)
+    };
+    let filter = if spells == "spells" || spells == "noncreature spells" && false {
+        Filter::Any
+    } else {
+        let (f, _, tail) = parse_object_phrase(spells)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        f
+    };
+    let (amount, tail) = rest.split_once('}')?;
+    let n: i32 = amount.trim_start_matches('{').parse().ok()?;
+    let change = match end(tail) {
+        "more to cast" => CostChange::IncreaseGeneric(Value::c(n)),
+        "less to cast" => CostChange::ReduceGeneric(Value::c(n)),
+        _ => return None,
+    };
+    Some(static_ability(
+        StaticEffect::CostModifier(CostModifier {
+            applies_to: CostTarget::Spells(filter),
+            who,
+            change,
+        }),
+        text,
+    ))
+}
+
+/// Statics that appear on instants/sorceries: additional costs, "can't be countered".
+pub fn parse_spell_static(text: &str, _ctx: &CompileContext) -> Option<Ability> {
+    let lower = text.to_lowercase();
+    let l = end(&lower);
+    if l == "~ can't be countered" {
+        let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBeCountered(
+            Filter::Source,
+        )));
+        s.zone = FunctionZone::Stack;
+        return Some(AbilityDef::new(AbilityKind::Static(s), text));
+    }
+    if let Some(r) = l.strip_prefix("as an additional cost to cast ~, ") {
+        let (c, _) = super::costs::parse_cost(r)?;
+        let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+            applies_to: CostTarget::ThisSpell,
+            who: PlayerRel::You,
+            change: CostChange::AdditionalCost(c),
+        }));
+        s.zone = FunctionZone::Anywhere;
+        return Some(AbilityDef::new(AbilityKind::Static(s), text));
+    }
+    None
+}
+
+/// Conditions: "you control an artifact", "you have 10 or less life", "it's your turn".
+/// Falls back to the pluggable [`crate::oracle::patterns::ConditionPattern`]s when the
+/// built-in phrases don't match.
+pub fn parse_condition(c: &str, ctx: &CompileContext) -> Option<Condition> {
+    parse_condition_core(c, ctx).or_else(|| crate::oracle_ext::parse_condition_ext(end(c)))
+}
+
+fn parse_condition_core(c: &str, _ctx: &CompileContext) -> Option<Condition> {
+    let c = end(c);
+    match c {
+        "it's your turn" => return Some(Condition::YourTurn),
+        "it's not your turn" => return Some(Condition::NotYourTurn),
+        "you're the monarch" => return Some(Condition::IsMonarch),
+        "you have the city's blessing" => return Some(Condition::CitysBlessing),
+        "it's night" => return Some(Condition::IsNight),
+        "it's day" => return Some(Condition::IsDay),
+        "~ was kicked" | "it was kicked" => return Some(Condition::CostPaid("kicker".into())),
+        "you cast it" | "you cast ~" => return Some(Condition::WasCast),
+        _ => {}
+    }
+    if let Some(r) = c.strip_prefix("you control ") {
+        let r2 = r
+            .strip_prefix("a ")
+            .or_else(|| r.strip_prefix("an "))
+            .unwrap_or(r);
+        if let Some((n, rest)) = parse_number(r) {
+            // "you control three or more artifacts"
+            if let Some(rest2) = strip(rest, "or more") {
+                let (f, _, tail) = parse_object_phrase(rest2)?;
+                if !end(tail).is_empty() {
+                    return None;
+                }
+                return Some(Condition::Compare(
+                    Value::Count(f.you_control()),
+                    Cmp::Ge,
+                    n,
+                ));
+            }
+        }
+        let (f, _, tail) = parse_object_phrase(r2)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Condition::Exists(f.you_control()));
+    }
+    if let Some(r) = c
+        .strip_prefix("you have ")
+        .filter(|r| parse_number(r).is_some())
+    {
+        let (n, rest) = parse_number(r)?;
+        let rest = end(rest);
+        // The whole rest: "you have 30 or more life and an opponent has 10 or less life"
+        // is two conditions, not one ending in "or less life".
+        let cmp = if rest == "or less life" {
+            Cmp::Le
+        } else if rest == "or more life" {
+            Cmp::Ge
+        } else if rest == "or more cards in hand" {
+            return Some(Condition::Compare(
+                Value::HandSize(PlayerRef::You),
+                Cmp::Ge,
+                n,
+            ));
+        } else if rest == "or more cards in your graveyard" {
+            return Some(Condition::Compare(
+                Value::GraveyardSize(PlayerRef::You),
+                Cmp::Ge,
+                n,
+            ));
+        } else if rest == "or fewer cards in hand" {
+            return Some(Condition::Compare(
+                Value::HandSize(PlayerRef::You),
+                Cmp::Le,
+                n,
+            ));
+        } else {
+            return None;
+        };
+        return Some(Condition::Compare(Value::LifeTotal(PlayerRef::You), cmp, n));
+    }
+    if c == "you have no cards in hand" {
+        return Some(Condition::Compare(
+            Value::HandSize(PlayerRef::You),
+            Cmp::Eq,
+            Value::c(0),
+        ));
+    }
+    None
+}
+
+/// Value phrases: "the number of creatures you control", "its power", "X", "twice X",
+/// read by the value grammar (`patterns::value_grammar`).
+pub fn parse_value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    super::patterns::value_grammar::parse_value(s, b)
+}
+
+/// The value grammar's fixed phrases (see `patterns::value_grammar`).
+pub fn parse_value_phrase_core(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let s = s.trim();
+    // "twice the number of profit votes" (Emissary Green).
+    if let Some(r) = s.strip_prefix("twice the number of ") {
+        let (v, rest) = parse_value_phrase(&format!("the number of {r}"), b)?;
+        return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
+    }
+    // Skemfar Shadowsage.
+    if let Some(rest) = s.strip_prefix(
+        "the greatest number of creatures you control that have a creature type in common",
+    ) {
+        return Some((
+            Value::Custom("greatest_creatures_you_control_sharing_a_type".into()),
+            rest.to_string(),
+        ));
+    }
+    // CR 702.167c: "the total power of the exiled cards used to craft it".
+    if let Some(v) = crate::oracle::patterns::craft::used_to_craft_value(s) {
+        return Some(v);
+    }
+    // "the amount of mana spent to cast ~" (CR 601.2h), also as "it" when "it" is the
+    // source ("When you cast this spell, create X ..., where X is the amount of mana spent
+    // to cast it.").
+    for (p, needs_self) in [
+        ("the amount of mana spent to cast ~", false),
+        ("the amount of mana spent to cast it", true),
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if !needs_self || matches!(b.it, Sel::This) {
+                return Some((Value::ManaSpent, rest.to_string()));
+            }
+        }
+    }
+    // CR 107.4h: "the amount of {S} spent to cast ~" (mana from snow sources).
+    for p in [
+        "the amount of {s} spent to cast ~",
+        "the amount of {S} spent to cast ~",
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            return Some((
+                Value::Custom(crate::kw::snow_mana::SNOW_MANA_SPENT.into()),
+                rest.to_string(),
+            ));
+        }
+    }
+    // "the amount of life you gained this turn" (CR 119.3: the total of this turn's
+    // life-gain events).
+    for p in [
+        "the amount of life you gained this turn",
+        "the amount of life you've gained this turn",
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            return Some((Value::LifeGainedThisTurn(PlayerRef::You), rest.to_string()));
+        }
+    }
+    // CR 903.3e: "your commander's mana value".
+    if let Some(rest) = s.strip_prefix("your commander's mana value") {
+        return Some((
+            Value::Custom(crate::commander_rules::YOUR_COMMANDER_MANA_VALUE.into()),
+            rest.to_string(),
+        ));
+    }
+    // CR 702.188a: "the mana value of the returned creature" (returned to pay a
+    // web-slinging cost).
+    if let Some(rest) = s.strip_prefix("the mana value of the returned creature") {
+        return Some((
+            Value::Custom(crate::kw::web_slinging::RETURNED_MANA_VALUE.into()),
+            rest.to_string(),
+        ));
+    }
+    // CR 905.2b: "the highest number you noted for cards named ~".
+    if let Some(rest) = s.strip_prefix("the highest number you noted for cards named ~") {
+        return Some((
+            Value::Custom(crate::draft::HIGHEST_NOTED.into()),
+            rest.to_string(),
+        ));
+    }
+    // "one plus the number of spells cast this turn" (Magus of the Mind).
+    if let Some((n, r)) = s.split_once(" plus ") {
+        if let Some((Value::Const(k), tail)) = parse_number(n) {
+            if tail.trim().is_empty() {
+                let (v, rest) = parse_value_phrase(r, b)?;
+                return Some((Value::Sum(vec![Value::c(k), v]), rest));
+            }
+        }
+    }
+    // "the number of spells cast this turn": by all players.
+    if let Some(rest) = s.strip_prefix("the number of spells cast this turn") {
+        return Some((
+            Value::Custom("spells_cast_this_turn".into()),
+            rest.to_string(),
+        ));
+    }
+    if let Some(rest) = s.strip_prefix(
+        "the number of creatures that were exiled under your opponents' control this turn",
+    ) {
+        return Some((
+            Value::Custom("creatures_exiled_from_opponents_this_turn".into()),
+            rest.to_string(),
+        ));
+    }
+    // "the total number of instant and sorcery cards you own in exile and in your
+    // graveyard" (Beacon Bolt): the cards in either zone.
+    if let Some(r) = s
+        .strip_prefix("the total number of ")
+        .or_else(|| s.strip_prefix("the number of "))
+    {
+        const ZONES: &str = " you own in exile and in your graveyard";
+        if let Some((head, rest)) = r.split_once(ZONES) {
+            let v = super::patterns::statics::parse_for_each(&format!("{head}{ZONES}"), None)?;
+            return Some((v, rest.to_string()));
+        }
+    }
+    if let Some(r) = s.strip_prefix("the number of ") {
+        // "the number of +1/+1 counters on it", "the number of charge counters on ~",
+        // "the number of counters on target permanent".
+        if let Some(v) = counters_on_value(r, b) {
+            return Some(v);
+        }
+        // Chroma: "the number of red mana symbols in the mana costs of permanents you
+        // control" (CR 700.5).
+        if let Some((v, rest)) = super::patterns::chroma::mana_symbols_among_your_permanents(r) {
+            return Some((v, rest.to_string()));
+        }
+        // "the number of players being attacked" ("for each player being attacked").
+        if let Some(rest) = r
+            .strip_prefix("players being attacked")
+            .or_else(|| r.strip_prefix("player being attacked"))
+        {
+            return Some((
+                Value::Custom(crate::kw::players_being_attacked::PLAYERS_BEING_ATTACKED.into()),
+                rest.to_string(),
+            ));
+        }
+        // Domain (CR 207.2c): "the number of basic land types among lands you control".
+        if let Some(rest) = r.strip_prefix("basic land types among lands you control") {
+            return Some((Value::Domain, rest.to_string()));
+        }
+        // "the number of cards in your hand"
+        if let Some(rest) = r.strip_prefix("cards in your hand") {
+            return Some((Value::HandSize(PlayerRef::You), rest.to_string()));
+        }
+        if let Some(rest) = r.strip_prefix("cards in your graveyard") {
+            return Some((Value::GraveyardSize(PlayerRef::You), rest.to_string()));
+        }
+        // CR 702.140: "the number of times ~ has mutated".
+        if let Some(rest) = r.strip_prefix("times ~ has mutated") {
+            return Some((
+                Value::Custom(crate::kw::mutate::TIMES_MUTATED.into()),
+                rest.to_string(),
+            ));
+        }
+        // CR 700.11: "the number of times you descended this turn".
+        if let Some(rest) = r.strip_prefix("times you descended this turn") {
+            return Some((
+                Value::Custom(crate::game_terms::TIMES_DESCENDED.into()),
+                rest.to_string(),
+            ));
+        }
+        // CR 903.8: "the number of times you've cast your commander from the command
+        // zone this game" (also "for each time ..." read as "the number of time ...").
+        if let Some(rest) = r
+            .strip_prefix("times you've cast your commander from the command zone this game")
+            .or_else(|| {
+                r.strip_prefix("time you've cast your commander from the command zone this game")
+            })
+        {
+            return Some((
+                Value::Custom(crate::kw::partner::COMMANDER_CASTS.into()),
+                rest.to_string(),
+            ));
+        }
+        // CR 700.8a: "the number of creatures in your party".
+        if let Some(rest) = r.strip_prefix("creatures in your party") {
+            return Some((
+                Value::Custom(crate::game_terms::PARTY_SIZE.into()),
+                rest.to_string(),
+            ));
+        }
+        if let Some(rest) = r.strip_prefix("creature cards in your graveyard") {
+            return Some((
+                Value::CardsInGraveyard(PlayerRef::You, Filter::creature()),
+                rest.to_string(),
+            ));
+        }
+        // "the number of colors among permanents you control" (Vivid, CR 105.2).
+        // Also "for each color among ..." read as "the number of color among ...".
+        if let Some(r) = r
+            .strip_prefix("colors among ")
+            .or_else(|| r.strip_prefix("color among "))
+        {
+            let (f, true, rest) = parse_object_phrase(r)? else {
+                return None;
+            };
+            return Some((Value::ColorsAmong(f), rest.to_string()));
+        }
+        // Converge (CR 207.2c): "the number of colors of mana spent to cast ~" (also "for
+        // each color of mana spent to cast ~"). A copy wasn't cast: no mana was spent.
+        if let Some(rest) = r
+            .strip_prefix("colors of mana spent to cast ~")
+            .or_else(|| r.strip_prefix("color of mana spent to cast ~"))
+        {
+            return Some((Value::ColorsSpent, rest.to_string()));
+        }
+        // Votes (CR 701.38): "the number of [word] votes" (also "for each [word] vote"),
+        // counted by the vote earlier in the same spell or ability.
+        if let Some(v) = crate::oracle::patterns::a701_choices_votes::word_votes(r) {
+            return Some(v);
+        }
+        // "the number of spells you've cast this turn [from anywhere other than your
+        // hand]" (paradox).
+        if let Some(v) = super::patterns::spells_cast_this_turn::spells_you_cast_value(r) {
+            return Some(v);
+        }
+        // "the number of differently named lands you control" (CR 201.2b).
+        if let Some(r) = r.strip_prefix("differently named ") {
+            let (f, _, rest) = parse_object_phrase(r)?;
+            return Some((Value::DistinctNames(f), rest.to_string()));
+        }
+        // "the number of different mana values among cards in your graveyard" (also
+        // "for each different mana value among ...").
+        if let Some((v, rest)) = super::patterns::mana_values_among::value(r) {
+            return Some((v, rest.to_string()));
+        }
+        // "the number of card types among other nonland permanents you control".
+        if let Some((v, rest)) = super::patterns::card_types_among::value(r) {
+            return Some((v, rest.to_string()));
+        }
+        let (f, _, rest) = parse_object_phrase(r)?;
+        // "the number of creatures blocking it"
+        if let Some((f, rest)) = super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {
+            return Some((Value::Count(f), rest));
+        }
+        // "for each creature card milled this way": among the cards the preceding
+        // instruction milled, where they went (CR 701.17c).
+        if let Some(rest) = rest.trim_start().strip_prefix("milled this way") {
+            // In the first sentence of a "whenever one or more [cards] are milled"
+            // trigger, before any instruction of its own, they're the trigger event's
+            // cards (The Wise Mothman).
+            let mill_trigger = b.in_trigger
+                && b.sentences == 0
+                && matches!(b.it, Sel::TriggerObjects)
+                && super::raw_text().to_lowercase().contains(" are milled, ");
+            let among = if mill_trigger {
+                Sel::TriggerObjects
+            } else {
+                Sel::Var(vars::IT)
+            };
+            let milled = Filter::and(vec![f, Filter::In(Box::new(among))]);
+            return Some((Value::Count(milled), rest.to_string()));
+        }
+        // "the number of creatures tapped this way" (Angel's Trumpet).
+        if let Some(rest) = rest.trim_start().strip_prefix("tapped this way") {
+            let tapped = Filter::and(vec![f, Filter::In(Box::new(Sel::Var(vars::TAPPED)))]);
+            return Some((Value::Count(tapped), rest.to_string()));
+        }
+        return Some((Value::Count(f), rest.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("the sacrificed ") {
+        // "... equal to the sacrificed creature's power, then ... equal to its toughness".
+        let v = sacrificed_value(r)?;
+        b.it = Sel::Var(vars::SACRIFICED);
+        return Some(v);
+    }
+    // "your devotion to black", "your devotion to black and red" (CR 700.5).
+    if let Some(r) = s.strip_prefix("your devotion to ") {
+        let color = |w: &str| Color::from_word(w.trim_end_matches(['.', ',']));
+        let (w, mut rest) = split_word(r);
+        let mut set = ColorSet::NONE;
+        set.insert(color(w)?);
+        if let Some((c2, r2)) = rest.strip_prefix("and ").and_then(|r2| {
+            let (w2, r3) = split_word(r2);
+            color(w2).map(|c| (c, r3))
+        }) {
+            set.insert(c2);
+            rest = r2;
+        }
+        return Some((Value::Devotion(set), rest.to_string()));
+    }
+    // Totals and extremes of objects named by reference ("the total power of those
+    // creatures", "the greatest mana value among [two groups]").
+    if let Some(v) = super::patterns::filters_relational::value_of_objects(s, b) {
+        return Some(v);
+    }
+    if let Some(r) = s.strip_prefix("the greatest power among ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Value::GreatestPower(f), rest.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("the greatest mana value among ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Value::GreatestManaValue(f), rest.to_string()));
+    }
+    // "the total power of creatures you control", "the total power of the exiled cards
+    // used to craft it" (CR 702.167c), "the mana value of the card used to craft it": the
+    // objects a description matches, their values summed (CR 607.3).
+    if let Some(r) = s.strip_prefix("the total power of ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Value::PowerOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
+    if let Some(v) = super::patterns::spells_cast_this_turn::total_mana_value_of_spells_you_cast(s)
+    {
+        return Some(v);
+    }
+    if let Some(r) = s.strip_prefix("the total toughness of ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Value::ToughnessOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
+    if let Some(r) = s.strip_prefix("the mana value of ") {
+        let (f, _, rest) = parse_object_phrase(r.strip_prefix("the ").unwrap_or(r))?;
+        return Some((Value::ManaValueOf(Box::new(Sel::All(f))), rest.to_string()));
+    }
+    // CR 701.17c–d: "the milled card's mana value" (each milled card's, summed).
+    if let Some(rest) = s
+        .strip_prefix("the milled card's mana value")
+        .or_else(|| s.strip_prefix("the milled cards' total mana value"))
+        .or_else(|| s.strip_prefix("the total mana value of cards milled this way"))
+    {
+        return Some((
+            Value::ManaValueOf(Box::new(Sel::Var(vars::IT))),
+            rest.to_string(),
+        ));
+    }
+    for (p, v) in [
+        ("its power", Value::PowerOf(Box::new(b.it.clone()))),
+        // CR 208.4b
+        ("its base power", Value::BasePowerOf(Box::new(b.it.clone()))),
+        ("its toughness", Value::ToughnessOf(Box::new(b.it.clone()))),
+        // A named character's possessive pronouns ("equal to his power").
+        ("his power", Value::PowerOf(Box::new(b.it.clone()))),
+        ("her power", Value::PowerOf(Box::new(b.it.clone()))),
+        ("his toughness", Value::ToughnessOf(Box::new(b.it.clone()))),
+        ("her toughness", Value::ToughnessOf(Box::new(b.it.clone()))),
+        ("~'s power", Value::PowerOf(Box::new(Sel::This))),
+        ("~'s toughness", Value::ToughnessOf(Box::new(Sel::This))),
+        ("its mana value", Value::ManaValueOf(Box::new(b.it.clone()))),
+        ("that much", Value::EventAmount),
+        ("the damage dealt this way", Value::Prev),
+        // CR 120.10: the excess damage the previous damage instruction dealt.
+        (
+            "the amount of excess damage dealt this way",
+            Value::Var(vars::EXCESS),
+        ),
+        ("your life total", Value::LifeTotal(PlayerRef::You)),
+        // CR 702.179f: 0 for a player who has no speed.
+        ("your speed", Value::Speed(PlayerRef::You)),
+        ("x", Value::X),
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            return Some((v, rest.to_string()));
+        }
+    }
+    let (n, rest) = parse_number(s)?;
+    Some((n, rest.to_string()))
+}
+
+/// "[kind] counter(s) on [object]" / "counters on [object]": how many of those counters
+/// the object has (all kinds when no kind is named).
+fn counters_on_value(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let (kind, rest) = match strip(r, "counters on ").or_else(|| strip(r, "counter on ")) {
+        Some(rest) => (None, rest),
+        None => {
+            let (k, rest) = super::costs::counter_kind(r)?;
+            let rest = strip(rest, "counters on ").or_else(|| strip(rest, "counter on "))?;
+            (Some(k), rest)
+        }
+    };
+    let (sel, tail) = super::effects::object_ref(rest, b)?;
+    Some((Value::CountersOn(Box::new(sel), kind), tail))
+}
+
+/// "[the sacrificed] creature's power", "artifact's mana value": a characteristic of the
+/// permanent sacrificed to pay the cost (its last known information).
+fn sacrificed_value(r: &str) -> Option<(Value, String)> {
+    let (noun, r) = r.split_once("'s ")?;
+    if !matches!(
+        noun,
+        "creature" | "artifact" | "permanent" | "land" | "enchantment"
+    ) {
+        return None;
+    }
+    let what = Box::new(Sel::Var(vars::SACRIFICED));
+    for (p, v) in [
+        ("power", Value::PowerOf(what.clone())),
+        ("toughness", Value::ToughnessOf(what.clone())),
+        ("mana value", Value::ManaValueOf(what.clone())),
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if rest.is_empty() || rest.starts_with([' ', ',', '.']) {
+                return Some((v, rest.to_string()));
+            }
+        }
+    }
+    None
+}
+
+/// "*/*" P/T with a CDA line that the compiler didn't catch: nothing to add by default.
+pub fn star_pt_cda(_norm: &str, _ctx: &CompileContext) -> Option<Ability> {
+    None
+}

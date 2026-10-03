@@ -1,0 +1,4624 @@
+//! The ability language: a data representation of everything card text can say.
+//!
+//! Oracle text is compiled into these structures by [`crate::oracle`], and the engine
+//! interprets them. The main pieces:
+//!
+//! * [`AbilityDef`] — one ability of an object: spell, activated, triggered, static,
+//!   or keyword (CR 113).
+//! * [`Effect`] — what a spell or ability does when it resolves (CR 609, 610).
+//! * [`Sel`] — selects players/objects an effect acts on (targets, "each creature", …).
+//! * [`Filter`] — predicates over objects ("nontoken creature you control").
+//! * [`Value`] — numbers, possibly computed from the game ("the number of Elves you control").
+//! * [`Condition`] — booleans over the game ("if you control an artifact").
+//! * [`Cost`] — costs to cast/activate (CR 118).
+//! * [`TriggerCond`] — trigger events (CR 603).
+//! * [`StaticEffect`] — continuous effects, restrictions, replacement effects (CR 604, 611, 614).
+
+use crate::keywords::{Keyword, KeywordKind};
+use crate::mana::{ManaCost, ManaRestriction, ManaType};
+use crate::types::{CardType, Color, ColorSet, CounterKind, PlayerId, Subtype, Supertype};
+use serde::{Deserialize, Serialize};
+use smol_str::SmolStr;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+static NEXT_ABILITY_UID: AtomicU64 = AtomicU64::new(1);
+
+/// Allocates a process-unique id for an ability definition. Ability identity matters
+/// for "activate only once each turn", linked abilities (CR 607), and for removing
+/// specific abilities.
+pub fn next_ability_uid() -> u64 {
+    NEXT_ABILITY_UID.fetch_add(1, Ordering::Relaxed)
+}
+
+/// One ability (CR 113).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AbilityDef {
+    pub uid: u64,
+    pub kind: AbilityKind,
+    /// Oracle text this ability was compiled from (for display/debugging).
+    pub text: String,
+    /// For abilities linked by CR 607: abilities on the same object with the same
+    /// non-zero `link` share data (e.g. "exiled with this").
+    pub link: u16,
+}
+
+impl AbilityDef {
+    pub fn new(kind: AbilityKind, text: impl Into<String>) -> Arc<AbilityDef> {
+        Arc::new(AbilityDef {
+            uid: next_ability_uid(),
+            kind,
+            text: text.into(),
+            link: 0,
+        })
+    }
+    pub fn with_link(kind: AbilityKind, text: impl Into<String>, link: u16) -> Arc<AbilityDef> {
+        Arc::new(AbilityDef {
+            uid: next_ability_uid(),
+            kind,
+            text: text.into(),
+            link,
+        })
+    }
+    pub fn keyword(&self) -> Option<&Keyword> {
+        match &self.kind {
+            AbilityKind::Keyword(k) => Some(k),
+            _ => None,
+        }
+    }
+    pub fn is_mana_ability(&self) -> bool {
+        match &self.kind {
+            AbilityKind::Activated(a) => a.is_mana_ability,
+            AbilityKind::Triggered(t) => t.is_mana_ability,
+            _ => false,
+        }
+    }
+}
+
+pub type Ability = Arc<AbilityDef>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum AbilityKind {
+    /// The effect text of an instant or sorcery (CR 113.3a).
+    Spell(SpellAbility),
+    Activated(ActivatedAbility),
+    Triggered(TriggeredAbility),
+    Static(StaticAbility),
+    Keyword(Keyword),
+    /// Text the compiler could not understand. Its presence marks a card as only
+    /// partially supported; it has no game effect.
+    Unsupported(String),
+}
+
+/// What gets put on the stack: targets + effect, or a set of modes (CR 700.2).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Body {
+    pub targets: Vec<TargetSpec>,
+    pub effect: Effect,
+    pub modal: Option<Modal>,
+}
+
+impl Body {
+    pub fn simple(targets: Vec<TargetSpec>, effect: Effect) -> Body {
+        Body {
+            targets,
+            effect,
+            modal: None,
+        }
+    }
+    pub fn effect(effect: Effect) -> Body {
+        Body {
+            targets: vec![],
+            effect,
+            modal: None,
+        }
+    }
+}
+
+/// Modal spells and abilities (CR 700.2).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Modal {
+    pub min: Value,
+    pub max: Value,
+    /// "You may choose the same mode more than once" (CR 700.2d).
+    pub allow_repeat: bool,
+    pub modes: Vec<Mode>,
+    /// Escalate / spree / "choose one that hasn't been chosen" bookkeeping is handled by
+    /// the engine based on these flags.
+    pub per_mode_cost: bool,
+    /// Modes chosen by an opponent (CR 700.2e) or at random.
+    pub chooser: ModeChooser,
+    /// "Each mode must target a different player": no player is the target of two of
+    /// the chosen modes (see `mode_players.rs`).
+    #[serde(default)]
+    pub different_players: bool,
+    /// "You may choose two": the controller chooses that many modes or none (a triggered
+    /// ability with no mode chosen is removed from the stack, CR 700.2b).
+    #[serde(default)]
+    pub optional: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModeChooser {
+    #[default]
+    Controller,
+    Opponent,
+    Random,
+    /// The controller chooses modes whose total number of pawprint symbols is at most this
+    /// many ("Choose up to five {P} worth of modes", CR 107.18, 700.2i).
+    Pawprints(u32),
+    /// The controller chooses among the modes that haven't been chosen before for this
+    /// object's ability ("choose one that hasn't been chosen"), or that haven't been chosen
+    /// this turn: see `modal_history`.
+    Unchosen {
+        this_turn: bool,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Mode {
+    pub text: String,
+    pub targets: Vec<TargetSpec>,
+    pub effect: Effect,
+    /// Spree / tiered additional cost for choosing this mode.
+    pub cost: Option<Cost>,
+}
+
+impl Mode {
+    /// The number of pawprint symbols ({P}) listed for this mode (CR 107.18, 700.2i):
+    /// they indicate the mode and aren't a cost.
+    pub fn pawprints(&self) -> u32 {
+        let head = self.text.split('—').next().unwrap_or("");
+        head.matches("{P}").count() as u32
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SpellAbility {
+    pub body: Body,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActivatedAbility {
+    pub cost: Cost,
+    pub body: Body,
+    pub timing: ActivationTiming,
+    /// Mana abilities (CR 605) don't use the stack.
+    pub is_mana_ability: bool,
+    /// Loyalty abilities (CR 606).
+    pub is_loyalty: bool,
+    /// "Activate only once each turn" and similar.
+    pub max_per_turn: Option<u32>,
+    /// Extra condition ("Activate only if you control an artifact").
+    pub condition: Option<Condition>,
+    /// Zone the ability functions from (battlefield by default; hand for cycling etc.).
+    pub zone: FunctionZone,
+    /// "Any player may activate this ability."
+    pub any_player: bool,
+    /// "Only your opponents may activate this ability" (CR 602.2): an opponent of the
+    /// source's controller may activate it, and its controller can't.
+    #[serde(default)]
+    pub only_opponents: bool,
+    /// "Activate only once": how many times the ability may be activated over the
+    /// object's existence (CR 400.7: a new object can activate it again).
+    #[serde(default)]
+    pub max_total: Option<u32>,
+    /// "This ability costs {1} less to activate for each ...": changes to this ability's
+    /// own total cost (CR 602.2b, 601.2f; see `activation_costs.rs`).
+    #[serde(default)]
+    pub own_cost_changes: Vec<OwnCostChange>,
+    /// "This ability can't be copied." (Gogo, Master of Mimicry): an instruction that
+    /// functions while the ability is on the stack (CR 113.6g, 707.10).
+    #[serde(default)]
+    pub cant_be_copied: bool,
+}
+
+/// A change an activated ability makes to its own total cost, applying while its condition
+/// holds ("This ability costs {2} less to activate if you control a legendary creature").
+/// Values and conditions are evaluated with the ability's targets once they're chosen.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OwnCostChange {
+    pub change: CostChange,
+    pub condition: Option<Condition>,
+}
+
+impl ActivatedAbility {
+    pub fn new(cost: Cost, body: Body) -> Self {
+        ActivatedAbility {
+            cost,
+            body,
+            timing: ActivationTiming::Instant,
+            is_mana_ability: false,
+            is_loyalty: false,
+            max_per_turn: None,
+            condition: None,
+            zone: FunctionZone::Battlefield,
+            any_player: false,
+            only_opponents: false,
+            max_total: None,
+            own_cost_changes: Vec::new(),
+            cant_be_copied: false,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ActivationTiming {
+    #[default]
+    Instant,
+    /// "Activate only as a sorcery" (CR 602.5d).
+    Sorcery,
+    /// "Activate only during your upkeep" etc.
+    YourUpkeep,
+    /// "Activate only during combat".
+    Combat,
+    /// "Activate only before blockers are declared" (CR 506.8).
+    BeforeBlockers,
+    YourTurn,
+    OpponentsTurn,
+    /// Other combat timing windows: "Activate only before attackers are declared",
+    /// "only during combat after blockers are declared", ... (CR 506.8, 506.8g).
+    CombatWindow(CombatTiming),
+    /// "Activate only as an instant" (CR 602.5e): only while the player has priority and
+    /// no spell or ability is being cast, activated or paid for, so a mana ability with it
+    /// can't be activated in the middle of a payment (as CR 605.3a would otherwise allow).
+    AsInstant,
+}
+
+/// Where an ability functions (CR 113.6).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum FunctionZone {
+    #[default]
+    Battlefield,
+    Hand,
+    Graveyard,
+    Exile,
+    Library,
+    Stack,
+    Command,
+    /// Functions in every zone (e.g. characteristic-defining abilities, CR 604.3).
+    Anywhere,
+    /// Functions everywhere except the given zone, even outside the game (an ability that
+    /// states which zones it doesn't function in, CR 113.6c).
+    AnywhereExcept(ZoneKind),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TriggeredAbility {
+    pub trigger: TriggerCond,
+    /// Intervening "if" clause (CR 603.4): checked on trigger and on resolution.
+    pub intervening_if: Option<Condition>,
+    pub body: Body,
+    /// "This ability triggers only once each turn."
+    pub once_per_turn: bool,
+    /// Triggered mana abilities (CR 605.1b) resolve immediately.
+    pub is_mana_ability: bool,
+    pub zone: FunctionZone,
+    /// "This ability can't be countered." — an instruction that functions while the
+    /// ability is on the stack (CR 603.1a).
+    #[serde(default)]
+    pub cant_be_countered: bool,
+    /// "[...] Do this only once each turn.": the ability triggers only if its source's
+    /// controller hasn't taken the optional action this turn (CR 603.2h).
+    #[serde(default)]
+    pub do_once_per_turn: bool,
+}
+
+/// Whether a triggered ability with this trigger and body is a mana ability (CR 605.1b):
+/// it triggers from resolving a mana ability ("is tapped for mana"), has no targets, and
+/// could add mana.
+pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
+    fn from_mana_ability(t: &TriggerCond) -> bool {
+        match t {
+            TriggerCond::TappedForMana { .. } | TriggerCond::TappedForManaOfType { .. } => true,
+            TriggerCond::ThisTurn(t)
+            | TriggerCond::UntilYourNextTurn(t)
+            | TriggerCond::Where { trigger: t, .. } => from_mana_ability(t),
+            _ => false,
+        }
+    }
+    // CR 605.1b: unlike an activated mana ability (CR 605.1a), a triggered mana ability
+    // may also move cards to or from a library ("add {G} and draw a card").
+    fn could_add_mana(e: &Effect) -> bool {
+        match e {
+            Effect::AddMana { .. } => true,
+            Effect::Seq(v) => v.iter().any(could_add_mana),
+            Effect::ChooseOne { options, .. } => options.iter().all(|(_, e)| could_add_mana(e)),
+            _ => false,
+        }
+    }
+    from_mana_ability(trigger)
+        && body.targets.is_empty()
+        && body.modal.is_none()
+        && could_add_mana(&body.effect)
+}
+
+impl TriggeredAbility {
+    pub fn new(trigger: TriggerCond, body: Body) -> Self {
+        TriggeredAbility {
+            trigger,
+            intervening_if: None,
+            body,
+            once_per_turn: false,
+            is_mana_ability: false,
+            zone: FunctionZone::Battlefield,
+            cant_be_countered: false,
+            do_once_per_turn: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StaticAbility {
+    /// "As long as ..." condition.
+    pub condition: Option<Condition>,
+    pub effect: StaticEffect,
+    pub zone: FunctionZone,
+    /// Characteristic-defining abilities apply first within their layer and in all zones
+    /// (CR 604.3, 613.3).
+    pub is_cda: bool,
+}
+
+impl StaticAbility {
+    pub fn new(effect: StaticEffect) -> Self {
+        StaticAbility {
+            condition: None,
+            effect,
+            zone: FunctionZone::Battlefield,
+            is_cda: false,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Costs (CR 118)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Cost {
+    pub mana: Option<ManaCost>,
+    pub parts: Vec<CostPart>,
+}
+
+impl Cost {
+    pub fn free() -> Cost {
+        Cost::default()
+    }
+    pub fn mana(m: ManaCost) -> Cost {
+        Cost {
+            mana: Some(m),
+            parts: vec![],
+        }
+    }
+    pub fn tap() -> Cost {
+        Cost {
+            mana: None,
+            parts: vec![CostPart::Tap],
+        }
+    }
+    pub fn with(mut self, p: CostPart) -> Cost {
+        self.parts.push(p);
+        self
+    }
+    pub fn has_tap(&self) -> bool {
+        self.parts.iter().any(|p| matches!(p, CostPart::Tap))
+    }
+    /// Whether the cost includes the untap symbol {Q} (CR 107.6).
+    pub fn has_untap(&self) -> bool {
+        self.parts.iter().any(|p| matches!(p, CostPart::Untap))
+    }
+    pub fn is_free(&self) -> bool {
+        self.mana.as_ref().is_none_or(|m| m.is_zero()) && self.parts.is_empty()
+    }
+    pub fn loyalty(&self) -> Option<i32> {
+        self.parts.iter().find_map(|p| {
+            if let CostPart::Loyalty(n) = p {
+                Some(*n)
+            } else {
+                None
+            }
+        })
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum CostPart {
+    /// {T}
+    Tap,
+    /// {Q}
+    Untap,
+    PayLife(Value),
+    /// Loyalty cost: +N or −N loyalty counters (CR 606).
+    Loyalty(i32),
+    SacrificeSelf,
+    Sacrifice {
+        filter: Filter,
+        count: Value,
+    },
+    DiscardSelf,
+    Discard {
+        filter: Filter,
+        count: Value,
+        random: bool,
+    },
+    DiscardHand,
+    ExileSelf,
+    /// Exile cards from a zone (e.g. "Exile a card from your graveyard").
+    Exile {
+        filter: Filter,
+        zone: ZoneKind,
+        count: Value,
+    },
+    ReturnToHand {
+        filter: Filter,
+        count: Value,
+    },
+    ReturnSelfToHand,
+    RemoveCounters {
+        kind: CounterKind,
+        count: Value,
+    },
+    /// "Remove X +1/+1 counters from among creatures you control" etc.
+    RemoveCountersFromAmong {
+        kind: Option<CounterKind>,
+        filter: Filter,
+        count: Value,
+    },
+    AddCounters {
+        kind: CounterKind,
+        count: Value,
+    },
+    /// "Tap an untapped creature you control".
+    TapUntapped {
+        filter: Filter,
+        count: Value,
+    },
+    /// "Tap any number of [untapped creatures you control] with total power N or greater"
+    /// (crew, CR 702.122a). `keyword` is the ability the creatures are tapped for: effects
+    /// may change which creatures can be tapped for it and how much power they count
+    /// ("can't crew Vehicles", "crews Vehicles as though its power were 2 greater"; see
+    /// `kw/crew.rs`).
+    TapTotalPower {
+        filter: Filter,
+        power: Value,
+        keyword: KeywordKind,
+    },
+    UntapTapped {
+        filter: Filter,
+        count: Value,
+    },
+    PayEnergy(Value),
+    PayPlayerCounters {
+        kind: CounterKind,
+        count: Value,
+    },
+    Mill(Value),
+    RevealFromHand {
+        filter: Filter,
+        count: Value,
+    },
+    ExertSelf,
+    /// "Collect evidence N" (CR 701.59).
+    CollectEvidence(u32),
+    /// Forage (CR 701.61): exile three cards from your graveyard or sacrifice a Food.
+    Forage,
+    /// Put a card from hand on top/bottom of library etc.
+    PutFromHandOnLibrary {
+        filter: Filter,
+        count: Value,
+        top: bool,
+    },
+    /// Arbitrary effect performed as a cost (e.g. "Blight 1").
+    Effect(Box<Effect>),
+    /// "pay its mana cost": the mana cost of the selected object, with X as 0 unless the
+    /// object is a spell on the stack (CR 107.3h).
+    PayManaCostOf(Box<Sel>),
+    /// "[cost] for each [thing]": the cost repeated a number of times determined as it's
+    /// paid, with any choices made separately for each repetition, paid all at once or not
+    /// at all (cumulative upkeep, CR 702.24a).
+    Repeated {
+        cost: Box<Cost>,
+        times: Value,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Zones
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum ZoneKind {
+    Library,
+    Hand,
+    Battlefield,
+    Graveyard,
+    Stack,
+    Exile,
+    Command,
+    Ante,
+    /// Outside the game (sideboard, CR 400.11).
+    Outside,
+}
+
+/// A search (CR 701.23): "[who] search(es) [whose] [zones] for [parts][, reveal
+/// them][, put them DESTS][, then shuffle]".
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchSpec {
+    /// The searching player(s) ("each opponent may search": a variable).
+    pub who: PlayerRef,
+    /// Whose zones are searched, evaluated for each searcher (`Iterated` = their own).
+    pub whose: PlayerRef,
+    /// The zones searched (library, graveyard, hand).
+    pub zones: Vec<ZoneKind>,
+    /// "and/or": the searcher chooses which of the zones to search.
+    pub zones_optional: bool,
+    /// The cards searched for: each part is found separately ("a Forest card and a
+    /// Plains card"); a card is found for at most one part.
+    pub parts: Vec<SearchPart>,
+    /// "with different names" (CR 201.2).
+    pub distinct_names: bool,
+    /// The searcher may decline to search ("you may search").
+    pub optional: bool,
+    pub reveal: bool,
+    /// Where the found cards go, in order: each takes its count of the found cards (as
+    /// many as possible), the last (count `None`) the rest. Empty: they stay where they
+    /// are (a later instruction refers to them).
+    pub dests: Vec<SearchDest>,
+    pub shuffle: SearchShuffle,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchPart {
+    pub filter: Filter,
+    pub count: Value,
+    /// "up to N", "any number of": the searcher may find fewer.
+    pub up_to: bool,
+    /// "all cards with that name": every matching card in a public zone is found.
+    #[serde(default)]
+    pub all: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchDest {
+    /// How many of the found cards go here (`None`: the rest).
+    pub count: Option<Value>,
+    pub to: Destination,
+    /// "put it into your hand or graveyard", "onto the battlefield or into your hand":
+    /// other places the searcher may put these cards instead, chosen as they're put.
+    #[serde(default)]
+    pub or: Vec<Destination>,
+}
+
+/// When a searched library is shuffled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SearchShuffle {
+    #[default]
+    No,
+    /// After the found cards are put where they go ("then shuffle"); "if you search your
+    /// library this way, shuffle" is the same: only searched libraries are shuffled.
+    After,
+    /// "Then shuffle and put that card on top" (CR 701.24b): the library is shuffled
+    /// except the found cards, which are then put in their position in it.
+    Before,
+}
+
+/// Where an effect puts an object.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Destination {
+    pub zone: ZoneKind,
+    /// For libraries: position from top (0 = top). `None` = bottom when `bottom` is true.
+    pub position: LibraryPosition,
+    /// Battlefield: enters tapped.
+    pub tapped: bool,
+    /// Battlefield: under whose control (default: owner, or the effect's controller for
+    /// "put onto the battlefield under your control").
+    pub controller: Option<PlayerRef>,
+    /// Exile face down.
+    pub face_down: bool,
+    /// Battlefield: enters attacking.
+    pub attacking: bool,
+    /// Battlefield: enters transformed (back face up).
+    pub transformed: bool,
+    /// Counters it enters with.
+    pub with_counters: Vec<(CounterKind, Value)>,
+    /// Battlefield: "that permanent is [characteristic]" — a continuous effect of the
+    /// resolving spell or ability that applies as it enters (CR 611.2e).
+    #[serde(default)]
+    pub with_mods: Vec<Modification>,
+    /// Battlefield: "put onto the battlefield attached to [object or player]" (CR 301.5e,
+    /// 303.4f–i).
+    #[serde(default)]
+    pub attached_to: Option<Sel>,
+    /// Library: a choice between positions ("your choice of the top or bottom of its
+    /// owner's library"), made by the controller of the effect as the object moves; empty
+    /// for the single `position`.
+    #[serde(default)]
+    pub position_choice: Vec<LibraryPosition>,
+}
+
+impl Destination {
+    pub fn zone(zone: ZoneKind) -> Destination {
+        Destination {
+            zone,
+            position: LibraryPosition::Top,
+            tapped: false,
+            controller: None,
+            face_down: false,
+            attacking: false,
+            transformed: false,
+            with_counters: vec![],
+            with_mods: vec![],
+            attached_to: None,
+            position_choice: vec![],
+        }
+    }
+    pub fn battlefield() -> Destination {
+        Destination::zone(ZoneKind::Battlefield)
+    }
+    pub fn under_your_control(mut self) -> Destination {
+        self.controller = Some(PlayerRef::You);
+        self
+    }
+    pub fn tapped(mut self) -> Destination {
+        self.tapped = true;
+        self
+    }
+    pub fn library_top() -> Destination {
+        Destination::zone(ZoneKind::Library)
+    }
+    pub fn library_bottom() -> Destination {
+        let mut d = Destination::zone(ZoneKind::Library);
+        d.position = LibraryPosition::Bottom;
+        d
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LibraryPosition {
+    Top,
+    Bottom,
+    /// On the bottom, several cards in a random order (a single card: the bottom).
+    BottomRandom,
+    /// Nth from the top (0-based).
+    FromTop(u32),
+    /// Shuffle into.
+    Shuffled,
+}
+
+// ---------------------------------------------------------------------------
+// Targets (CR 115)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TargetSpec {
+    pub what: TargetKind,
+    /// The fewest targets that must be chosen. Like `max`, it's evaluated as targets are
+    /// chosen, after X and the number of times the spell is kicked are announced
+    /// (CR 601.2b, 601.2c): "X target creatures" has exactly X targets (`min` and `max`
+    /// both X), never more than `max`.
+    pub min: Value,
+    pub max: Value,
+    /// Each target in this slot must be different from targets in these other slots
+    /// ("another target creature").
+    pub distinct_from: Vec<u8>,
+    /// "Divide N damage among any number of targets" (CR 601.2d).
+    pub divide: Option<Value>,
+    /// Targets chosen by an opponent (CR 601.7).
+    pub chosen_by_opponent: bool,
+    /// Human-readable description ("target creature you control").
+    pub text: String,
+    /// The target is required only if this condition holds as targets are chosen, e.g.
+    /// only if a kicker cost was paid (CR 601.2c).
+    #[serde(default)]
+    pub condition: Option<Condition>,
+    /// A requirement on the targets chosen for this instance of the word "target" taken
+    /// together ("two target cards from a single graveyard", "two target creatures that
+    /// share a creature type"); see `target_groups.rs`.
+    #[serde(default)]
+    pub together: Option<TargetGroup>,
+    /// A relationship the targets of this instance of the word "target" must have with
+    /// those of an earlier one, slot `.0` ("move a counter from target creature onto
+    /// another target creature with the same controller"); see `target_groups.rs`.
+    #[serde(default)]
+    pub related_to: Option<(u8, TargetGroup)>,
+    /// "For each opponent, ... up to one target creature that player controls": this
+    /// instance of the word "target" is chosen once for each player in the game this
+    /// filter matches, `min` to `max` targets for each, where the object filter's
+    /// `PlayerRel::Iterated` is that player. A player with no legal choice gets no
+    /// target; on resolution each target must still match for the player it was chosen
+    /// for. See `per_player_targets.rs`.
+    #[serde(default)]
+    pub per_player: Option<PlayerFilter>,
+    /// "target ... chosen at random": nobody chooses; the targets are chosen at random
+    /// among the legal ones as the spell or ability is put on the stack (see
+    /// `patterns::choice_grammar_random`).
+    #[serde(default)]
+    pub random: bool,
+    /// "target ... of their choice": another player chooses this target (the player the
+    /// phrase names, e.g. the player whose upkeep it is), not the controller (CR 601.2c).
+    #[serde(default)]
+    pub chosen_by: Option<PlayerRef>,
+}
+
+/// A relationship the targets of one instance of the word "target" must have with each
+/// other, both as they're chosen (CR 601.2c) and as the spell or ability resolves
+/// (CR 608.2b).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TargetGroup {
+    /// All have the same owner: cards "from a single graveyard", or "two target cards
+    /// from an opponent's graveyard" (one opponent's graveyard).
+    SameOwner,
+    /// All are controlled by the same player ("two target creatures a single player
+    /// controls").
+    SameController,
+    /// There's a creature type all of them have.
+    ShareCreatureType,
+    /// There's a card type all of them have.
+    ShareCardType,
+    /// There's one of these card types all of them have ("another target permanent that
+    /// shares one of those types with it", the types the first target was described by).
+    ShareCardTypeAmong(Vec<CardType>),
+    /// There's a permanent type (artifact, battle, creature, enchantment, land,
+    /// planeswalker) all of them have.
+    SharePermanentType,
+    /// No two of them have a creature type in common ("that share no creature types").
+    ShareNoCreatureType,
+    /// No two of them are controlled by the same player ("with different controllers",
+    /// "up to two target artifacts controlled by different players").
+    DifferentControllers,
+    /// No two of them have the same name ("with different names", CR 201.2).
+    DifferentNames,
+    /// No two of them have the same mana value ("with different mana values").
+    DifferentManaValues,
+    /// No two of them have the same power ("with different powers").
+    DifferentPowers,
+    /// All have the same toughness ("with equal toughness").
+    EqualToughness,
+    /// Each stands for a different card type it has ("for each card type, ... a card of
+    /// that type"): an object with several card types counts as any one of them.
+    OnePerCardType,
+    /// Their total of a value is at most the value ("with total mana value 6 or less",
+    /// "with total mana value X or less", "with total power 10 or less").
+    TotalAtMost(TotalStat, Box<Value>),
+}
+
+/// A step of a dig: cards looked at, revealed, milled or exiled from the top of a library
+/// ([`vars::DUG`]), then chosen among and distributed ("You may put a creature card and/or
+/// a land card from among them into your hand. Put the rest into your graveyard.").
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum DigStep {
+    /// "[Chooser] [may] put/reveal [count] [filter] from among [from] [destination]":
+    /// cards of `from` still where they were are chosen and put `to` (left where they are
+    /// when `to` is the "in place" library position `FromTop(0)`). The chosen cards are
+    /// stored in [`vars::DUG_CHOSEN`]; the objects they became in `vars::IT`.
+    Take {
+        from: Sel,
+        chooser: PlayerRef,
+        filter: Filter,
+        /// An "and/or" list of descriptions ("a creature card and/or a land card"): each
+        /// card chosen stands for a different one of them (`filter` is any of them).
+        each_of: Vec<Filter>,
+        /// How many; `None`: all the matching cards, without a choice.
+        count: Option<Value>,
+        up_to: bool,
+        /// Chosen at random ("a random creature card from among them").
+        random: bool,
+        /// The chosen cards are revealed (CR 701.20a).
+        reveal: bool,
+        to: Destination,
+    },
+    /// "Put the rest [destination]": the cards of `from` still where they were.
+    Rest { from: Sel, to: Destination },
+    /// "Reveal (exile) cards from the top of [player]'s library until [they] reveal
+    /// (exile) [count] [filter] cards" (CR 701.20a): the revealed cards are stored in
+    /// [`vars::DUG`], those matching in [`vars::DUG_FOUND`] and `vars::IT`.
+    Until {
+        who: PlayerRef,
+        filter: Filter,
+        count: Value,
+        exile: bool,
+    },
+}
+
+/// What [`TargetGroup::TotalAtMost`] adds up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TotalStat {
+    ManaValue,
+    Power,
+    Toughness,
+    /// Power plus toughness.
+    PowerAndToughness,
+}
+
+impl TargetSpec {
+    pub fn one(what: TargetKind, text: impl Into<String>) -> TargetSpec {
+        TargetSpec {
+            what,
+            min: Value::Const(1),
+            max: Value::Const(1),
+            distinct_from: vec![],
+            divide: None,
+            chosen_by_opponent: false,
+            text: text.into(),
+            condition: None,
+            together: None,
+            related_to: None,
+            per_player: None,
+            random: false,
+            chosen_by: None,
+        }
+    }
+    pub fn up_to(n: i32, what: TargetKind, text: impl Into<String>) -> TargetSpec {
+        TargetSpec {
+            min: Value::Const(0),
+            max: Value::Const(n),
+            ..TargetSpec::one(what, text)
+        }
+    }
+    pub fn object(filter: Filter, text: impl Into<String>) -> TargetSpec {
+        TargetSpec::one(TargetKind::Object(filter), text)
+    }
+    pub fn player(filter: PlayerFilter, text: impl Into<String>) -> TargetSpec {
+        TargetSpec::one(TargetKind::Player(filter), text)
+    }
+    pub fn any_target() -> TargetSpec {
+        TargetSpec::one(TargetKind::AnyTarget, "any target")
+    }
+    /// `min` when it's a fixed number (most target phrases: "target", "up to two").
+    pub fn fixed_min(&self) -> Option<i32> {
+        match self.min {
+            Value::Const(n) => Some(n),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TargetKind {
+    /// A permanent, card, or spell matching the filter (the filter should include its
+    /// zone; the default zone for objects is the battlefield).
+    Object(Filter),
+    Player(PlayerFilter),
+    /// "any target": creature, player, planeswalker, or battle (CR 115.4).
+    AnyTarget,
+    /// Object or player: `(object filter, player filter)`.
+    ObjectOrPlayer(Filter, PlayerFilter),
+    /// A spell on the stack.
+    Spell(Filter),
+    /// An activated or triggered ability on the stack.
+    Ability(Filter),
+    /// A spell or ability on the stack.
+    SpellOrAbility(Filter),
+}
+
+// ---------------------------------------------------------------------------
+// Selections, players, filters
+// ---------------------------------------------------------------------------
+
+/// A variable slot used to remember objects/players/numbers during resolution
+/// ("exile target creature. Its controller creates a token" — "its" refers to the
+/// exiled creature's last known information).
+pub type Var = u16;
+
+/// Well-known variables.
+/// The link shared by a pregame choice and the characteristic-defining ability that refers
+/// to it (CR 607.2p). Choices made for it are kept as the card changes zones.
+pub const PREGAME_LINK: u16 = 0x7fff;
+
+pub mod vars {
+    use super::Var;
+    /// Objects affected by the most recent effect ("it", "those cards", "the exiled card").
+    pub const IT: Var = 0;
+    /// Objects created by the most recent effect (tokens).
+    pub const CREATED: Var = 1;
+    /// Cards drawn/revealed/looked at.
+    pub const REVEALED: Var = 2;
+    /// Objects dealt damage by the most recent damage effect ("a creature dealt damage
+    /// this way").
+    pub const DAMAGED: Var = 3;
+    /// Permanents sacrificed to pay the cost of the resolving spell or ability, or by an
+    /// earlier instruction of it ("the sacrificed creature", last known information).
+    pub const SACRIFICED: Var = 9;
+    /// Permanents the most recent tap instruction tapped ("the number of creatures tapped
+    /// this way"): not those that were already tapped.
+    pub const TAPPED: Var = USER + 3066;
+    /// Permanents the most recent "turn ... face down" instruction turned face down: not
+    /// those that already were face down or couldn't be (CR 708.2b, 712.16).
+    pub const TURNED_FACE_DOWN: Var = USER + 7088;
+    /// First user-defined variable.
+    pub const USER: Var = 10;
+    /// The cards the most recent dig looked at, revealed, milled or exiled from the top
+    /// of a library ("from among them", "the rest", see [`super::DigStep`]).
+    pub const DUG: Var = USER + 9201;
+    /// The cards a "reveal cards until you reveal N [kind] cards" found ("those land
+    /// cards", [`super::DigStep::Until`]).
+    pub const DUG_FOUND: Var = USER + 9202;
+    /// The cards the most recent [`super::DigStep::Take`] chose, before they moved ("the
+    /// revealed cards", "the chosen cards").
+    pub const DUG_CHOSEN: Var = USER + 9203;
+    /// The cards of [`DUG`] the dig's selections took so far (cards rearranged within a
+    /// library stay the same objects, so they're told apart from "the rest" this way).
+    pub const DUG_TAKEN: Var = USER + 9204;
+    /// The object a static ability's continuous effect is being applied to, while its
+    /// values are evaluated ("each creature you control gets +1/+1 for each +1/+1 counter
+    /// on it"), or a resolving effect's values are determined for (distinct from
+    /// [`SACRIFICED`], which the same effect may use).
+    pub const AFFECTED: Var = 8;
+    /// The excess damage dealt by the most recent damage effect ("the excess damage dealt
+    /// this way", CR 120.10), as a number.
+    pub const EXCESS: Var = 7;
+    /// The object a [`Filter::ValueCmp`] is testing, or that a [`Value::Extreme`] is
+    /// measuring, while its values are evaluated ("with toughness greater than its power",
+    /// "the greatest power among creatures you control"; see `relational.rs`).
+    pub const TESTED: Var = 6;
+}
+
+/// Selects players and/or objects.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Sel {
+    /// Nothing.
+    None,
+    /// The source object of the ability (the permanent itself, "this creature").
+    This,
+    /// All legal targets chosen in target slot N.
+    Target(u8),
+    /// All targets across all slots.
+    AllTargets,
+    /// Objects/players stored in a variable.
+    Var(Var),
+    /// The object the triggering event was about ("that creature", "it"). For zone
+    /// changes, the object in its new zone.
+    TriggerObject,
+    /// Last known information of the triggering object (e.g. "its power" in a dies trigger).
+    TriggerLki,
+    /// The other object involved in the trigger (e.g. the blocker, or the damage source).
+    TriggerOtherObject,
+    /// The objects of the batch of events that triggered a "one or more" ability
+    /// ("Whenever one or more creatures you control attack, they gain indestructible until
+    /// end of turn.", CR 603.2c).
+    TriggerObjects,
+    /// The player from the triggering event ("that player").
+    TriggerPlayer,
+    /// The permanent or player this object is attached to ("enchanted creature").
+    AttachedTo,
+    /// The permanents or players the selected objects are attached to ("the permanent
+    /// target Aura is attached to").
+    HostOf(Box<Sel>),
+    /// Objects attached to the source ("equipment attached to it").
+    AttachedToThis,
+    /// All objects matching the filter.
+    All(Filter),
+    /// Players.
+    Players(PlayerRef),
+    /// Objects chosen at random during resolution ("a card at random from your
+    /// graveyard", "a creature an opponent controls chosen at random"): nobody chooses;
+    /// each object matching the filter is equally likely (CR 701.9b's random discard
+    /// works the same way). Stored in `store` like [`Sel::Choose`].
+    AtRandom {
+        filter: Filter,
+        count: Value,
+        store: Option<Var>,
+    },
+    /// Objects chosen during resolution (not targeted): a player chooses.
+    Choose {
+        chooser: PlayerRef,
+        filter: Filter,
+        count: Value,
+        up_to: bool,
+        store: Option<Var>,
+    },
+    /// Cards linked to this object by CR 607 ("the exiled cards", "cards exiled with this").
+    Linked,
+    /// Objects linked to the ability of the object that created this token or put this
+    /// permanent onto the battlefield (CR 607.1d): "the card exiled with [that object]".
+    CreatorLinked,
+    /// Cards the controller exiled before the game began with abilities of cards with this
+    /// name ("a card you exiled with cards named [name]", CR 607.2n).
+    ExiledWithCardsNamed(SmolStr),
+    /// The spell this ability resolves for (for "copy that spell").
+    TriggerSpell,
+    /// Union of selections.
+    Union(Vec<Sel>),
+    /// The top card of a player's graveyard.
+    TopOfGraveyard(PlayerRef),
+    /// The top N cards of each of the players' libraries ("the top two cards of your
+    /// library"), top first.
+    TopOfLibrary(PlayerRef, Value),
+    /// The objects the linked abilities of the source noted ([`Effect::NoteLinked`],
+    /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
+    /// has since changed zones is a new object the note doesn't find (CR 400.7).
+    LinkedNoted,
+    /// The selected objects that match the filter, each judged as it is now or, if it has
+    /// left the zone it was in, as it last existed there (CR 608.2h): "the creatures you
+    /// controlled that were destroyed this way", "the creature cards sacrificed this
+    /// way".
+    Matching(Box<Sel>, Filter),
+    /// The selected objects as they last existed before the zone change that made them
+    /// new objects (CR 400.7, 608.2h): "the permanent exiled this way" is judged as the
+    /// permanent it was, "the spells countered this way" as the spells.
+    Before(Box<Sel>),
+    /// The objects this turn's events matching the trigger condition were about (each
+    /// once), as they were then: "spells you've cast this turn", "permanents you've
+    /// sacrificed this turn", "creatures you controlled that dealt combat damage to a
+    /// player this turn" (see `kw/value_results.rs`).
+    ThisTurn(Box<TriggerCond>),
+}
+
+/// Where an [`Effect::InTurnOrder`] instruction starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TurnOrderStart {
+    /// "starting with you".
+    You,
+    /// "starting with the next opponent in turn order".
+    NextOpponent,
+}
+
+/// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
+pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
+
+/// Refers to one or more players.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum PlayerRef {
+    /// A specific player (locked in at resolution).
+    Player(PlayerId),
+    /// The controller of the resolving spell/ability, or of the source for statics.
+    You,
+    /// Each opponent.
+    EachOpponent,
+    /// Each player.
+    EachPlayer,
+    /// Each other player (multiplayer-aware "each other player").
+    EachOtherPlayer,
+    /// Players chosen as targets in slot N.
+    Target(u8),
+    /// Controller of the object(s) selected.
+    ControllerOf(Box<Sel>),
+    /// Owner of the object(s) selected.
+    OwnerOf(Box<Sel>),
+    /// The player from the triggering event.
+    TriggerPlayer,
+    /// The active player.
+    ActivePlayer,
+    /// The defending player (CR 508.5).
+    DefendingPlayer,
+    /// A player chosen during resolution by the controller.
+    ChosenPlayer(Var),
+    /// Players stored in a variable.
+    Var(Var),
+    /// Each player matching a filter.
+    Each(PlayerFilter),
+    /// The owner of the source object.
+    Owner,
+    /// "that player" in the context of a "for each player" loop.
+    Iterated,
+    /// The opponent chosen by "choose an opponent".
+    ChosenOpponent,
+    /// The monarch / initiative holder etc.
+    Monarch,
+    /// The players the linked abilities of the source noted, or that such an ability
+    /// still on the stack targets ([`Effect::NoteLinked`], CR 607.1): "When ~ enters,
+    /// target player loses 6 life. When ~ leaves the battlefield, that player gains 6
+    /// life." (Laquatus's Champion).
+    LinkedNoted,
+}
+
+/// Player predicates, used in targets and filters.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum PlayerFilter {
+    Any,
+    /// Exactly this player.
+    Is(PlayerId),
+    You,
+    Opponent,
+    NotYou,
+    /// The controller of the source (same as You for most purposes).
+    Controller,
+    /// A player who was dealt damage this turn, etc.
+    DealtDamageThisTurn,
+    /// Life comparisons.
+    Life(Cmp, Box<Value>),
+    /// Hand size comparisons.
+    HandSize(Cmp, Box<Value>),
+    /// Graveyard size comparisons ("an opponent has eight or more cards in their
+    /// graveyard"), counting cards only (CR 108.2b).
+    GraveyardSize(Cmp, Box<Value>),
+    /// The monarch.
+    Monarch,
+    /// Controls a number of permanents matching the filter ("controls an Island",
+    /// "controls fewer creatures than you").
+    Controls(Box<Filter>, Cmp, Box<Value>),
+    /// Has a number of counters of a kind ("is poisoned": one or more poison counters,
+    /// CR 122.1f).
+    Counters(SmolStr, Cmp, Box<Value>),
+    /// The defending player.
+    Defending,
+    /// The active player.
+    Active,
+    /// A player who attacked with creatures this turn ("target player who attacked this
+    /// turn"): only the active player declares attackers (CR 508.1).
+    AttackedThisTurn,
+    /// A player with one or more poison counters (CR 122.1f).
+    Poisoned,
+    /// A player who has max speed: their speed is 4 (CR 702.179e).
+    MaxSpeed,
+    /// A player whose life total is less than half their own starting life total (CR
+    /// 119.1; "that player has less than half their starting life total").
+    LessThanHalfStartingLife,
+    /// A player the card they would draw now would be the first one they draw in this
+    /// draw step: it's one of their draw steps and they haven't drawn a card in it yet
+    /// (CR 504.1, 121.2) — "except the first one they draw in each of their draw steps"
+    /// is `Not` this. See `draw_rules::next_draw_is_first_in_draw_step`.
+    FirstDrawInDrawStep,
+    /// One of the players a reference resolves to ("enchanted player").
+    Ref(Box<PlayerRef>),
+    /// A requirement on a target player checked only as the target is chosen ("target
+    /// opponent who has more life than you do as you activate this ability"): it isn't
+    /// checked again as the ability resolves (see `target_rules::relaxed_on_resolution`).
+    AsChosen(Box<PlayerFilter>),
+    /// An opponent of one of the players a reference resolves to ("target player who ...
+    /// is their opponent", CR 102.3).
+    OpponentOf(Box<PlayerRef>),
+    And(Vec<PlayerFilter>),
+    Or(Vec<PlayerFilter>),
+    Not(Box<PlayerFilter>),
+}
+
+/// Comparison operators for filters and conditions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Cmp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl Cmp {
+    pub fn eval(self, a: i64, b: i64) -> bool {
+        match self {
+            Cmp::Eq => a == b,
+            Cmp::Ne => a != b,
+            Cmp::Lt => a < b,
+            Cmp::Le => a <= b,
+            Cmp::Gt => a > b,
+            Cmp::Ge => a >= b,
+        }
+    }
+}
+
+/// Relationship of a player to the source's controller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlayerRel {
+    You,
+    Opponent,
+    Any,
+    NotYou,
+    /// The player chosen as target in slot N (for "creature target player controls").
+    Target(u8),
+    /// The player chosen as target in slot N, or the controller of the permanent chosen
+    /// there ("each creature that player or that planeswalker's controller controls").
+    TargetOrController(u8),
+    /// The triggering player.
+    TriggerPlayer,
+    /// The defending player.
+    Defending,
+    /// The active player.
+    Active,
+    /// A teammate (multiplayer team variants).
+    Teammate,
+    /// The iterated player in "for each player".
+    Iterated,
+    /// The player or opponent chosen for the source ("the chosen player", CR 607.2d).
+    Chosen,
+    /// The players stored in a variable: "that player" captured when a delayed triggered
+    /// ability was created ("at the beginning of that player's next end step", CR 603.7c).
+    Var(Var),
+}
+
+/// The four kinds of stickers (CR 123.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StickerType {
+    Name,
+    Ability,
+    PowerToughness,
+    Art,
+}
+
+/// What a spell or ability on the stack targets (CR 115.9).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TargetsFilter {
+    /// "with [N] target(s)": the number of times objects or players were chosen as its
+    /// targets, not how many are still legal (CR 115.9a).
+    Count(u32),
+    /// "that targets [object or player]": some current target matches (CR 115.9b).
+    Targets {
+        objects: Option<Filter>,
+        players: Option<PlayerFilter>,
+    },
+    /// "that targets only [object or player]": exactly one different object or player was
+    /// chosen as its target(s), and it matches (CR 115.9c).
+    Only {
+        objects: Option<Filter>,
+        players: Option<PlayerFilter>,
+    },
+}
+
+/// A special action granted by a static ability (CR 116.2d, 116.2e) or by an effect
+/// (CR 116.2c).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpecialActionDef {
+    /// Who may take it (relative to the source's controller).
+    pub who: PlayerFilter,
+    /// What taking it costs.
+    pub cost: Cost,
+    pub action: SpecialActionEffect,
+    /// "Any time you could activate a mana ability" (CR 605.3a): besides any time the
+    /// player has priority, it can be taken while a mana payment is being made — as a
+    /// spell is cast or an ability activated, or when an effect asks for one — so mana it
+    /// adds helps pay (see `mana_abilities::mana_sources`).
+    #[serde(default)]
+    pub mana_timing: bool,
+}
+
+/// What a special action does.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum SpecialActionEffect {
+    /// An effect, carried out immediately without using the stack.
+    Effect(Effect),
+    /// "For that player to ignore this effect until end of turn" (CR 116.2d): the source's
+    /// other static abilities don't apply to that player (or to objects they control)
+    /// until end of turn.
+    IgnoreSourceEffects,
+}
+
+/// How an effect changes the targets of a spell or ability (CR 115.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetChange {
+    /// "Change the target(s)": each target to another legal target, or none (CR 115.7a).
+    All,
+    /// "Change a target": only one of them (CR 115.7b).
+    One,
+    /// "Change any targets": any number of them (CR 115.7c).
+    Any,
+    /// "Choose new targets": any number may be left unchanged (CR 115.7d).
+    ChooseNew,
+}
+
+/// Object predicates (CR 608.2j: filters check only the stated characteristics).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Filter {
+    Any,
+    And(Vec<Filter>),
+    Or(Vec<Filter>),
+    Not(Box<Filter>),
+    Type(CardType),
+    Supertype(Supertype),
+    Subtype(Subtype),
+    /// Has at least one of the listed colors.
+    Color(Color),
+    /// Has exactly these colors.
+    ExactColors(ColorSet),
+    Colorless,
+    Multicolored,
+    Monocolored,
+    /// Is a permanent (on the battlefield).
+    Permanent,
+    /// "permanent card" — a card with a permanent type (CR 110.4b).
+    PermanentCard,
+    /// A spell on the stack.
+    Spell,
+    /// A spell on the stack, described by a static ability that affects spells
+    /// continuously ("Instant and sorcery spells you control have lifelink", CR 611.3a):
+    /// it applies to whichever spells match while they're on the stack, including one
+    /// whose control changed. (A static ability granting abilities to `Spell`s makes them
+    /// gain the abilities as they're cast instead, CR 610.5; see
+    /// `next_spell::is_cast_grant`.)
+    SpellOnStack,
+    /// Nonland permanents / cards etc. are expressed with Not(Type(Land)).
+    Token,
+    /// A card (not a token, not a copy of a card on the stack).
+    Card,
+    /// A copy (of a spell or card).
+    Copy,
+    ControlledBy(PlayerRel),
+    OwnedBy(PlayerRel),
+    /// Controlled by a player matching the filter, relative to the source ("attacking
+    /// creatures whose controller controls fewer creatures than you").
+    ControllerMatches(Box<PlayerFilter>),
+    /// Controlled by one of the players a reference resolves to ("creatures that player
+    /// controls", "lands they control"); outside the battlefield and stack, owned.
+    ControlledByPlayer(Box<PlayerRef>),
+    /// Owned by one of the players a reference resolves to ("cards in their graveyard").
+    OwnedByPlayer(Box<PlayerRef>),
+    /// Attached to one of the selected objects or players ("Equipment attached to it",
+    /// "Curses attached to them").
+    AttachedToAnyOf(Box<Sel>),
+    /// In the given zone. Filters without a zone apply to the battlefield (for permanents)
+    /// or the stack (for spells).
+    InZone(ZoneKind),
+    Tapped,
+    Untapped,
+    Attacking,
+    Blocking,
+    Blocked,
+    Unblocked,
+    /// "attacking you", "attacking your opponents": attacking that player, not a
+    /// planeswalker they control or a battle they protect (CR 506.2, 508.1b).
+    AttackingPlayer(PlayerRel),
+    /// "creature blocking it", "creature blocked by it" relative to the source.
+    BlockingSource,
+    BlockedBySource,
+    /// "creature blocking it" where "it" isn't the source: blocking one of the selected
+    /// creatures.
+    BlockingAnyOf(Box<Sel>),
+    /// A target of one of the selected spells or abilities ("those creatures" after
+    /// "whenever you cast a spell that targets one or more creatures"), as last known
+    /// if the spell has left the stack.
+    TargetOf(Box<Sel>),
+    /// "attacking alone" / "blocking alone" (CR 506.5).
+    AttackingAlone,
+    BlockingAlone,
+    /// "attacking a player alone" (CR 506.6).
+    AttackingPlayerAlone,
+    /// Had to attack in the current combat (CR 506.7).
+    HadToAttack,
+    Power(Cmp, Box<Value>),
+    Toughness(Cmp, Box<Value>),
+    /// Its power compared with its base power ("with power greater than its base power",
+    /// CR 208.4b).
+    PowerVsBase(Cmp),
+    ManaValue(Cmp, Box<Value>),
+    /// Loyalty/defense comparisons.
+    Loyalty(Cmp, Box<Value>),
+    Named(SmolStr),
+    /// Has the same name as an object in the selection.
+    SameNameAs(Box<Sel>),
+    /// "with a different name than [objects]": has at least one name and no name in
+    /// common with any of the selected objects, even if some of them have no name
+    /// (CR 201.2c).
+    DifferentNameFrom(Box<Sel>),
+    /// "with a name originally printed in the [set] expansion" (CR 206.3): the name is on
+    /// the list the Comprehensive Rules give for that set code (CR 206.3a-c).
+    NameOriginallyPrintedIn(SmolStr),
+    /// Shares a creature type / card type / color with a selection.
+    SharesCreatureType(Box<Sel>),
+    SharesCardType(Box<Sel>),
+    SharesColor(Box<Sel>),
+    HasKeyword(KeywordKind),
+    HasCounter(Option<CounterKind>),
+    /// The number of counters of a kind (of all kinds: None) on it compared with a value
+    /// ("with three or more +1/+1 counters on it", "with exactly one tide counter on it").
+    CounterCount(Option<CounterKind>, Cmp, Box<Value>),
+    /// Has at least one ability (for "creature with no abilities" use Not).
+    HasAbilities,
+    /// The source object itself.
+    Source,
+    /// "another", "other": not the source.
+    Other,
+    /// A member of the selection.
+    In(Box<Sel>),
+    /// One of these specific objects, fixed when an effect was created (e.g. "a source of
+    /// your choice", CR 609.7a). A chosen permanent spell also matches the permanent it
+    /// becomes.
+    Objects(Vec<crate::types::ObjectId>),
+    /// The object the source is attached to ("enchanted creature").
+    AttachedToSource,
+    /// Attached to one of the selected permanents or players ("Auras attached to target
+    /// permanent").
+    AttachedTo(Box<Sel>),
+    /// An object each of the selected objects could legally be attached to right now
+    /// ("another permanent it can enchant", CR 301.5c, 303.4).
+    CanBeAttachedBy(Box<Sel>),
+    /// Attached to something ("equipped", "enchanted").
+    Attached,
+    /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").
+    Enchanted,
+    Equipped,
+    /// Entered the battlefield this turn.
+    EnteredThisTurn,
+    /// Was dealt damage this turn.
+    DealtDamageThisTurn,
+    /// "historic": artifact, legendary, or Saga (CR 700.6).
+    Historic,
+    /// Face-down.
+    FaceDown,
+    /// Has a mana cost with {X}.
+    HasX,
+    /// Has a Phyrexian mana symbol in its mana cost ("a spell with {H} in its mana cost",
+    /// CR 107.4g: {H} means any of the fifteen Phyrexian mana symbols).
+    HasPhyrexianMana,
+    /// Is a commander (CR 903.3).
+    Commander,
+    /// Modified: has counters, or is equipped/enchanted by a permanent its controller controls (CR 700.9).
+    Modified,
+    /// Power greater than its base power etc. can be added as needed.
+    /// "creature card with mana value less than or equal to X" etc. use ManaValue.
+    /// Cards in a graveyard that were put there from the battlefield this turn.
+    DiedThisTurn,
+    /// Attacked this turn.
+    AttackedThisTurn,
+    /// "of the chosen color": has the color chosen for the source (CR 607.2d). Matches
+    /// nothing while no color is chosen (CR 607.5a).
+    ChosenColor,
+    /// "of the chosen type": has the creature type, land type, or card type chosen for
+    /// the source.
+    ChosenType,
+    /// "with the chosen name": has the card name chosen for the source.
+    ChosenName,
+    /// "of the chosen card type": has the card type chosen for the source.
+    ChosenCardType,
+    /// Has the prepared designation (CR 722.3a).
+    Prepared,
+    /// A spell or ability on the stack with at least one target that is an object matching
+    /// the filter ("a spell that targets ~", "a spell that targets a creature you control").
+    Targets(Box<Filter>),
+    /// Has a sticker on it ("stickered", CR 123.4), or a sticker of the given kind ("with a
+    /// name sticker on it").
+    HasSticker(Option<StickerType>),
+    /// A spell or ability on the stack described by its targets: "with a single target",
+    /// "that targets you", "that targets only [something]" (CR 115.9).
+    StackTargets(Box<TargetsFilter>),
+    /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
+    CastFrom(ZoneKind),
+    /// A spell for which the named optional additional cost was paid ("a kicked spell":
+    /// `"kicked"`, see `kw/kicker.rs`).
+    CastWithCost(SmolStr),
+    /// Was dealt damage this turn by an object in the selection ("a creature dealt damage
+    /// by ~ this turn").
+    DealtDamageThisTurnBy(Box<Sel>),
+    /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
+    /// Of the color chosen by the source's linked ability ("the chosen color",
+    /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).
+    LinkedChosenColor,
+    /// Of the creature type chosen by the source's linked ability.
+    LinkedChosenCreatureType,
+    /// With a mana value of the quality ("odd" or "even") chosen by the source's linked
+    /// ability (CR 607.2f).
+    ManaValueOfChosenQuality,
+    /// An ability on the stack whose source (as it last existed, CR 113.7a) matches the
+    /// filter: "activated or triggered ability ... from an artifact source".
+    AbilityFrom(Box<Filter>),
+    /// A value of the object compared with another value: the object is in
+    /// [`vars::TESTED`] while both are evaluated ("with toughness greater than its power",
+    /// "with total power and toughness 5 or less", "with the greatest mana value among
+    /// creatures you control"; see `relational.rs`).
+    ValueCmp(Box<Value>, Cmp, Box<Value>),
+    /// A requirement on the objects chosen together for one selection ("up to four cards
+    /// with different names", "any number of creature cards with total mana value 6 or
+    /// less", "sacrifice three artifact tokens with different names"). Every object
+    /// matches it on its own; whatever chooses the objects (target slots, searches,
+    /// choices, costs) checks the group (see `relational.rs`,
+    /// `target_groups::choose_together`).
+    Together(TargetGroup),
+    /// Custom predicates implemented in code, by name.
+    Custom(SmolStr),
+}
+
+impl Filter {
+    pub fn creature() -> Filter {
+        Filter::Type(CardType::Creature)
+    }
+    pub fn and(v: Vec<Filter>) -> Filter {
+        let mut out = Vec::new();
+        for f in v {
+            match f {
+                Filter::Any => {}
+                Filter::And(inner) => out.extend(inner),
+                other => out.push(other),
+            }
+        }
+        match out.len() {
+            0 => Filter::Any,
+            1 => out.pop().unwrap(),
+            _ => Filter::And(out),
+        }
+    }
+    pub fn not(f: Filter) -> Filter {
+        Filter::Not(Box::new(f))
+    }
+    pub fn you_control(self) -> Filter {
+        Filter::and(vec![self, Filter::ControlledBy(PlayerRel::You)])
+    }
+    pub fn opp_controls(self) -> Filter {
+        Filter::and(vec![self, Filter::ControlledBy(PlayerRel::Opponent)])
+    }
+    pub fn in_zone(self, z: ZoneKind) -> Filter {
+        Filter::and(vec![self, Filter::InZone(z)])
+    }
+    pub fn other(self) -> Filter {
+        Filter::and(vec![self, Filter::Other])
+    }
+    /// The zone this filter restricts to, if any.
+    pub fn zone(&self) -> Option<ZoneKind> {
+        match self {
+            Filter::InZone(z) => Some(*z),
+            Filter::Spell | Filter::SpellOnStack => Some(ZoneKind::Stack),
+            Filter::Permanent => Some(ZoneKind::Battlefield),
+            Filter::And(v) => v.iter().find_map(|f| f.zone()),
+            _ => None,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Values and conditions
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Value {
+    Const(i32),
+    /// The value of X chosen for the spell/ability (CR 107.3).
+    X,
+    /// Number of objects matching the filter.
+    Count(Filter),
+    /// Number of entities in a selection.
+    CountSel(Box<Sel>),
+    /// Number of players matching.
+    CountPlayers(PlayerFilter),
+    PowerOf(Box<Sel>),
+    ToughnessOf(Box<Sel>),
+    ManaValueOf(Box<Sel>),
+    LoyaltyOf(Box<Sel>),
+    CountersOn(Box<Sel>, Option<CounterKind>),
+    PlayerCounters(PlayerRef, CounterKind),
+    LifeTotal(PlayerRef),
+    StartingLife,
+    HandSize(PlayerRef),
+    LibrarySize(PlayerRef),
+    GraveyardSize(PlayerRef),
+    /// Number of cards in a player's graveyard matching filter.
+    CardsInGraveyard(PlayerRef, Filter),
+    /// "that much" — the amount from the triggering event (damage, life, counters).
+    EventAmount,
+    /// Result of the previous effect in a sequence (damage dealt, cards milled, ...).
+    Prev,
+    /// Numeric variable.
+    Var(Var),
+    /// Devotion to colors (CR 700.5).
+    Devotion(ColorSet),
+    /// Number of basic land types among lands you control (domain).
+    Domain,
+    /// Number of spells cast this turn before this one (storm, CR 702.40).
+    StormCount,
+    /// Number of cards drawn this turn by a player.
+    CardsDrawnThisTurn(PlayerRef),
+    /// Life gained this turn by a player.
+    LifeGainedThisTurn(PlayerRef),
+    /// Life lost this turn by a player.
+    LifeLostThisTurn(PlayerRef),
+    /// Number of creatures that died this turn.
+    CreaturesDiedThisTurn,
+    /// Number of permanents that entered the battlefield under the player's control this
+    /// turn matching the filter as they entered, whether or not they're still there or
+    /// have changed since ("two or more nonland permanents entered the battlefield under
+    /// your control this turn").
+    PermanentsEnteredThisTurn(PlayerRef, Filter),
+    /// Number of spells the player cast this turn matching the filter as they were on the
+    /// stack, whether or not they're still there ("you've cast four or more instant and
+    /// sorcery spells this turn"). Copies of spells weren't cast.
+    SpellsCastThisTurn(PlayerRef, Filter),
+    /// Total mana value of the spells the player has cast this turn that match the filter
+    /// (each as it last existed on the stack); copies weren't cast (CR 707.10).
+    SpellsCastThisTurnManaValue(PlayerRef, Filter),
+    /// Number of times this ability has resolved this turn.
+    TimesResolvedThisTurn,
+    /// Number of distinct card types among cards in graveyards etc.
+    CardTypesAmong(Filter),
+    /// Number of different color pairs (CR 105.5) among matching objects that are
+    /// exactly two colors.
+    ColorPairsAmong(Filter),
+    /// "the number of colors among [objects]": how many of the five colors at least one
+    /// matching object is (CR 105.2; colorless isn't a color, CR 105.2c).
+    ColorsAmong(Filter),
+    /// The source permanent's class level (CR 716.2d: a permanent without a level is
+    /// treated as level 1).
+    ClassLevel,
+    /// The value of X of another object ("put X +1/+1 counters on it" for "a spell with
+    /// {X} in its mana cost"): the value used by that object (CR 107.3e).
+    XOf(Box<Sel>),
+    /// Greatest power among objects matching.
+    GreatestPower(Filter),
+    GreatestManaValue(Filter),
+    /// "its base power" (CR 208.4b): the base power of the first selected object.
+    BasePowerOf(Box<Sel>),
+    /// "the number of differently named [objects]": the most objects matching the filter
+    /// that have different names (CR 201.2b). Objects with no name don't count.
+    DistinctNames(Filter),
+    /// "the number of different mana values among [objects]": how many distinct mana
+    /// values the matching objects have (CR 202.3; a land card's is 0, X is 0 off the
+    /// stack, CR 202.3e).
+    ManaValuesAmong(Filter),
+    /// Number of different mana types spent to cast this spell (converge etc.).
+    ColorsSpent,
+    /// Amount of mana spent to cast this spell.
+    ManaSpent,
+    /// The number the player chose ("choose a number").
+    Chosen,
+    /// Kicker count.
+    TimesKicked,
+    /// Speed (CR 702.179).
+    Speed(PlayerRef),
+    /// The number of turns the player has taken this game, including the current turn if
+    /// it's theirs ("your first, second, or third turn of the game"; not the number of
+    /// turns the game has had, as players may take extra turns).
+    TurnsTaken(PlayerRef),
+    /// "the greatest power among creatures you control", "the total mana value of
+    /// artifacts you control", "the number of +1/+1 counters among creatures you control":
+    /// a characteristic of each selected object, combined (0 when nothing is selected).
+    Aggregate(AggOp, Stat, Box<Sel>),
+    /// "the number of card types among cards in your graveyard", "the number of different
+    /// mana values among ...", "the number of colors that spell is": how many different
+    /// values of something the selected objects have between them.
+    DistinctAmong(Among, Box<Sel>),
+    /// "the highest life total among all players", "the greatest number of creatures a
+    /// player controls", "the total number of rad counters among players": the value
+    /// evaluated for each matching player (as `PlayerRef::Iterated`), combined.
+    OverPlayers(AggOp, PlayerFilter, Box<Value>),
+    Sum(Vec<Value>),
+    Diff(Box<Value>, Box<Value>),
+    Mul(Box<Value>, Box<Value>),
+    /// Integer division, rounded up or down.
+    Div(Box<Value>, i32, bool),
+    Min(Box<Value>, Box<Value>),
+    Max(Box<Value>, Box<Value>),
+    /// The first value if the condition holds, otherwise the second ("choose one. If you
+    /// control a commander as you cast this spell, you may choose both instead").
+    If(Box<Condition>, Box<Value>, Box<Value>),
+    /// The greatest (`true`) or least value among the selected objects, each measured with
+    /// the object in [`vars::TESTED`] ("the greatest power among creatures you control",
+    /// "the lowest mana value among nonland permanents"); 0 if there are none.
+    Extreme(Box<Value>, Box<Sel>, bool),
+    /// "the number of creatures that died under your control this turn", "the number of
+    /// cards your opponents have drawn this turn", "for each opponent who lost life this
+    /// turn", "for each 2 life your opponents have lost this turn": this turn's events a
+    /// triggered ability with this trigger condition (with the same source and
+    /// controller) would trigger on, whether or not anything triggered (CR 603.1b),
+    /// tallied (see `kw/value_results.rs`).
+    EventsThisTurn(Box<TriggerCond>, Tally),
+    /// Custom computed values implemented in code.
+    Custom(SmolStr),
+}
+
+/// How [`Value::EventsThisTurn`] tallies the events it finds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Tally {
+    /// How many objects (or players) the events were about: one per creature that died,
+    /// card drawn, spell cast.
+    Events,
+    /// The total of their amounts (life lost, damage dealt, counters put).
+    Amount,
+    /// How many different players they were about ("for each opponent who lost life this
+    /// turn").
+    Players,
+}
+
+/// How [`Value::Aggregate`] and [`Value::OverPlayers`] combine their values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AggOp {
+    /// "the greatest", "the highest".
+    Max,
+    /// "the least", "the lowest".
+    Min,
+    /// "the total" (CR 607.3: several answers are summed).
+    Sum,
+}
+
+/// A number each object has, for [`Value::Aggregate`].
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Stat {
+    Power,
+    Toughness,
+    /// "power and/or toughness": the greater of the two.
+    PowerOrToughness,
+    ManaValue,
+    /// Counters of a kind (all kinds when `None`).
+    Counters(Option<CounterKind>),
+    /// Mana symbols of a color in its mana cost (hybrid symbols of the color count, CR
+    /// 107.4e).
+    ManaSymbols(crate::types::Color),
+}
+
+/// What [`Value::DistinctAmong`] counts the different values of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Among {
+    CardTypes,
+    /// Card types that are permanent types (CR 110.4a).
+    PermanentTypes,
+    CreatureTypes,
+    /// Plains, Island, Swamp, Mountain, Forest (CR 205.3i).
+    BasicLandTypes,
+    Colors,
+    ManaValues,
+    /// Mana costs as printed symbol sequences (CR 202.1); no mana cost doesn't count.
+    ManaCosts,
+    Powers,
+    Names,
+    /// Kinds of counters (CR 122.1).
+    CounterKinds,
+    /// "the greatest number of [objects] that have a creature type in common": the size
+    /// of the largest group sharing one creature type.
+    LargestCreatureTypeGroup,
+}
+
+impl Value {
+    pub fn c(n: i32) -> Value {
+        Value::Const(n)
+    }
+    pub fn as_const(&self) -> Option<i32> {
+        if let Value::Const(n) = self {
+            Some(*n)
+        } else {
+            None
+        }
+    }
+}
+
+impl Default for Value {
+    fn default() -> Self {
+        Value::Const(0)
+    }
+}
+
+impl From<i32> for Value {
+    fn from(n: i32) -> Self {
+        Value::Const(n)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Condition {
+    Always,
+    Never,
+    Not(Box<Condition>),
+    And(Vec<Condition>),
+    Or(Vec<Condition>),
+    /// Compare two values.
+    Compare(Value, Cmp, Value),
+    /// At least one object matches ("if you control an artifact").
+    Exists(Filter),
+    /// The selection is non-empty.
+    SelNonEmpty(Sel),
+    /// All objects in the selection match the filter ("if it's a creature").
+    SelMatches(Sel, Filter),
+    /// A player matches.
+    PlayerMatches(PlayerRef, PlayerFilter),
+    /// It's the controller's turn.
+    YourTurn,
+    /// It's not the controller's turn.
+    NotYourTurn,
+    /// The spell was kicked / a particular additional or alternative cost was paid.
+    CostPaid(SmolStr),
+    /// Spell was cast (for ETB "if you cast it").
+    WasCast,
+    /// The previous "you may" / optional cost in this resolution was taken ("if you do").
+    PrevHappened,
+    /// The previous effect affected at least one object/did something ("if a creature died this way").
+    PrevAffectedAny,
+    /// The spell/ability was cast from the given zone.
+    CastFrom(ZoneKind),
+    /// Whether all of these trigger conditions have occurred this turn, regardless of
+    /// whether any ability triggered on them (CR 603.1b).
+    AllTriggerConditionsThisTurn(Vec<TriggerCond>),
+    /// The word chosen by the linked ability is this one (anchor words, CR 607.2m).
+    ChosenWord(String),
+    /// Game-state predicates about the current turn.
+    Phase(PhaseCond),
+    /// You have the city's blessing (CR 702.131).
+    CitysBlessing,
+    /// You are the monarch.
+    IsMonarch,
+    /// You have the initiative.
+    HasInitiative,
+    /// It's day / night (CR 731).
+    IsDay,
+    IsNight,
+    /// Source has max speed etc.
+    MaxSpeed,
+    /// "only before/after [a point in the combat phase]" timing windows (CR 506.8).
+    CombatTiming(CombatTiming),
+    /// This word (e.g. an anchor word, CR 614.12c) was chosen for the source.
+    Chose(SmolStr),
+    /// This ability's source is tapped/untapped/attacking… via SelMatches(This, …).
+    /// Custom conditions implemented in code.
+    Custom(SmolStr),
+}
+
+/// A point in the combat phase referred to by timing restrictions (CR 506.8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CombatPoint {
+    /// "combat" / "the combat phase".
+    Combat,
+    /// "attackers are declared" (the declare attackers step, CR 506.8a).
+    AttackersDeclared,
+    /// "blockers are declared" (the declare blockers step, CR 506.8b).
+    BlockersDeclared,
+    /// "the combat damage step".
+    CombatDamageStep,
+    /// "the end of combat step".
+    EndOfCombatStep,
+}
+
+/// "Cast/activate only [before/after] [point]", optionally "during combat" (CR 506.8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CombatTiming {
+    pub point: CombatPoint,
+    /// "after" rather than "before".
+    pub after: bool,
+    /// Also requires "during combat" (CR 506.8c): relative to the current combat phase
+    /// rather than the first combat phase of the turn (CR 506.8d).
+    pub during_combat: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PhaseCond {
+    Combat,
+    MainPhase,
+    Upkeep,
+    DeclareAttackers,
+    EndStep,
+}
+
+// ---------------------------------------------------------------------------
+// Effects (CR 609–610)
+// ---------------------------------------------------------------------------
+
+/// How long a continuous effect from a resolving spell/ability lasts (CR 611.2).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Duration {
+    /// "until end of turn" — ends in the cleanup step (CR 514.2).
+    EndOfTurn,
+    /// "until end of combat".
+    EndOfCombat,
+    /// "until your next turn".
+    UntilYourNextTurn,
+    /// "until the end of your next turn".
+    UntilEndOfYourNextTurn,
+    /// "for as long as [source] remains on the battlefield" / "for as long as you control".
+    WhileSourceOnBattlefield,
+    WhileYouControlSource,
+    /// "for as long as [object] remains tapped" etc.
+    WhileCondition(Condition),
+    /// Indefinitely (e.g. "gain control of target creature").
+    Permanent,
+    /// Until the affected object leaves (used by Auras granting effects via resolution).
+    UntilHostLeaves,
+    /// For as long as the affected objects are face down: characteristics an effect lists
+    /// for a permanent it turns face down ("Turn target creature face down. It becomes a
+    /// 2/2 Cyberman artifact creature.", CR 708.2a) stop applying once it's turned face up.
+    WhileFaceDown,
+    /// "for as long as it has a [kind] counter on it": for each affected object, until it
+    /// has no counters of that kind (CR 611.2b: it doesn't apply again if it gets one
+    /// later, and does nothing to an object that has none as the effect begins).
+    WhileAffectedHasCounter(CounterKind),
+    /// "this turn" for rule-modifying effects — same as EndOfTurn.
+    ThisTurn,
+    /// "[doesn't untap] during its controller's next untap step": for each affected
+    /// object, until its controller's next untap step has passed (CR 502.3).
+    ThroughNextUntapStep,
+    /// "[doesn't untap] during your next untap step": until the next untap step of the
+    /// effect's controller has passed; it applies only during that player's untap steps,
+    /// so an affected permanent another player gains control of untaps as usual during
+    /// that player's untap step (CR 502.3).
+    ThroughYourNextUntapStep,
+    /// "until your next upkeep", "until your next end step": until that step of the
+    /// controller's turn next begins (CR 500.4).
+    UntilYourNextStep(TriggerStep),
+    /// "until a player planeswalks" (CR 901.11); with `away_from_plane`, "until a player
+    /// planeswalks away from a plane" (planeswalking away from only a phenomenon doesn't
+    /// end it).
+    UntilPlaneswalk {
+        away_from_plane: bool,
+    },
+}
+
+/// A phase or step an effect adds to a turn (CR 500.8–500.10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TurnPart {
+    /// An additional beginning phase (untap, upkeep, and draw steps).
+    BeginningPhase,
+    /// An additional combat phase.
+    CombatPhase,
+    /// An additional main phase (always a postcombat main phase, CR 505.1a).
+    MainPhase,
+    /// A single step. Added after a phase, it's the only step of a new phase of its kind:
+    /// the phase's other steps are skipped (CR 500.10).
+    Step(TriggerStep),
+}
+
+/// Layer-specific modifications of characteristics (CR 613).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Modification {
+    // Layer 2
+    SetController(PlayerRef),
+    // Layer 3
+    /// Replace one color word or basic land type with another in the text (CR 612).
+    ChangeText {
+        from: SmolStr,
+        to: SmolStr,
+    },
+    /// Sets the name (CR 612.8): the object loses its other names.
+    SetName(SmolStr),
+    /// "Exchange the text boxes of [two objects]" (CR 612.5). As the effect is created,
+    /// it becomes a [`Modification::SetText`] for each object with the other's rules text.
+    ExchangeText,
+    /// Replaces the object's rules text (CR 612.5).
+    SetText {
+        abilities: Vec<Ability>,
+        text: SmolStr,
+    },
+    /// Has the full text of the selected card (CR 612.6): its name, mana cost, color
+    /// indicator, type line, rules text, and power and toughness.
+    FullTextOf(Box<Sel>),
+    /// Adds rules text following the object's own, without changing its own text (a
+    /// splice ability, CR 612.10, 702.47c).
+    AddText {
+        abilities: Vec<Ability>,
+        text: SmolStr,
+    },
+    /// "Has all names of nonlegendary creature cards in addition to its name" (CR 612.7).
+    AllCreatureNames,
+    /// A name sticker: adds `word` to the object's name after `position` words (CR 123.6,
+    /// 612.9).
+    NameSticker {
+        word: SmolStr,
+        position: u32,
+    },
+    /// "It has no mana cost": an exception of a copy effect, which becomes part of the
+    /// copy's copiable values (CR 707.9b), e.g. the token an embalm or eternalize ability
+    /// creates (CR 702.128a, 702.129a).
+    NoManaCost,
+    // Layer 4
+    AddTypes(Vec<CardType>),
+    RemoveTypes(Vec<CardType>),
+    AddSupertypes(Vec<Supertype>),
+    RemoveSupertypes(Vec<Supertype>),
+    AddSubtypes(Vec<Subtype>),
+    RemoveSubtypes(Vec<Subtype>),
+    /// Set card types (removes others) but keep supertypes unless listed.
+    SetTypes {
+        types: Vec<CardType>,
+        subtypes: Vec<Subtype>,
+    },
+    /// "is every creature type" (changeling, CR 702.73).
+    AllCreatureTypes,
+    RemoveAllCreatureTypes,
+    /// Lands become a basic land type, losing other land types (CR 305.7).
+    SetBasicLandType(Vec<Subtype>),
+    /// "is the chosen type in addition to its other types": adds the creature type or
+    /// land type chosen for the effect's source (CR 607.2d). Does nothing while no type
+    /// is chosen (CR 607.5a).
+    AddChosenType,
+    /// "Enchanted land is the chosen type": like [`Modification::SetBasicLandType`] with
+    /// the basic land type chosen for the effect's source (CR 305.7).
+    SetChosenBasicLandType,
+    // Layer 5
+    SetColors(ColorSet),
+    /// "[This] is the chosen color": the color chosen by the linked ability (CR 607.2p).
+    /// Does nothing while no color is chosen (CR 607.5a).
+    SetLinkedChosenColor,
+    AddColors(ColorSet),
+    /// "becomes the color of your choice": the color chosen for the effect's source
+    /// (fixed when a resolving effect is created).
+    SetChosenColor,
+    /// "becomes the color or colors of your choice": the colors chosen for the effect's
+    /// source (fixed when a resolving effect is created).
+    SetChosenColors,
+    /// "are the chosen color in addition to their other colors": adds the color chosen
+    /// for the effect's source (CR 607.2d). Does nothing while no color is chosen.
+    AddChosenColor,
+    // Layer 6
+    AddAbility(Ability),
+    /// "... becomes a copy of [object], except it has this ability" (CR 707.9a): the
+    /// ability whose resolution creates the effect. Replaced by an [`AddAbility`] of that
+    /// ability as the effect is created (see `Game::fix_mods`); on its own it adds nothing.
+    ///
+    /// [`AddAbility`]: Modification::AddAbility
+    AddThisAbility,
+    AddKeyword(Keyword),
+    /// Adds a keyword whose variable is defined by the effect ("~ has bushido X, where X
+    /// is ..."): X is reevaluated each time characteristics are computed (CR 702.1b). It
+    /// becomes the keyword's N, and the value of {X} in its cost.
+    AddKeywordX(Keyword, Value),
+    /// Adds each keyword of these kinds, with all its variants and variables, that an
+    /// object matching the filter has ("... has flying. The same is true for first strike,
+    /// landwalk, protection, ...", CR 702.1c).
+    AddKeywordsOf {
+        kinds: Vec<KeywordKind>,
+        from: Filter,
+    },
+    /// "has all activated abilities of [objects]", "gains all activated and triggered
+    /// abilities of target creature" (CR 113.10, 613.1f): the abilities of the selected
+    /// objects of the selected kinds, as those objects' characteristics stand when this
+    /// applies (an object's own abilities and those it has gained in earlier layer-6
+    /// effects, CR 613.8). Keyword abilities that stand for only abilities of those kinds
+    /// come along ("Some keywords are activated abilities"). The gained abilities refer to
+    /// the object that has them (CR 201.5b) and linked abilities gained together stay
+    /// linked only to each other (CR 607.5). A resolving effect fixes which abilities as
+    /// it's created (CR 608.2h; see `Game::fix_mods`). See `ability_grants.rs`.
+    AddAbilitiesOf {
+        from: Box<Sel>,
+        which: AbilitySelection,
+    },
+    RemoveKeyword(KeywordKind),
+    /// Loses one particular keyword ability: the instances of that kind with the same
+    /// parameter text (Animate Dead: "it loses \"enchant creature card in a graveyard\"").
+    LoseKeyword(Keyword),
+    /// Loses the keyword abilities of a kind with a quality: those whose quality is
+    /// `quality` ("loses islandwalk", "loses protection from red": each landwalk and each
+    /// protection ability is a separate ability, CR 702.14, 702.16g), or, with `None`,
+    /// every one that has a quality ("loses all \"bands with other\" abilities" leaves plain
+    /// banding, CR 702.22b).
+    LoseKeywordWithQuality {
+        kind: KeywordKind,
+        quality: Option<Filter>,
+    },
+    RemoveAllAbilities,
+    /// "can't have or gain [ability]".
+    CantHaveKeyword(KeywordKind),
+    // Layer 7
+    /// 7a: characteristic-defining P/T.
+    CdaPT(Option<Value>, Option<Value>),
+    /// 7b: set base power/toughness.
+    SetPT(Option<Value>, Option<Value>),
+    /// 7c: +N/+N.
+    ModifyPT(Value, Value),
+    /// 7d: switch.
+    SwitchPT,
+    /// Behavior implemented in code, applied in `layer`: see
+    /// `KeywordRules::custom_modification` (e.g. a hand-written card's "has the creature
+    /// types of the last creature card exiled with it").
+    Custom {
+        name: SmolStr,
+        layer: Layer,
+    },
+}
+
+impl Modification {
+    /// The layer (1–7) and sublayer ordinal this modification applies in.
+    pub fn layer(&self) -> Layer {
+        use Modification::*;
+        match self {
+            SetController(_) => Layer::L2Control,
+            ChangeText { .. }
+            | SetName(_)
+            | ExchangeText
+            | SetText { .. }
+            | FullTextOf(_)
+            | AddText { .. }
+            | AllCreatureNames
+            | NameSticker { .. }
+            | NoManaCost => Layer::L3Text,
+            AddTypes(_)
+            | RemoveTypes(_)
+            | AddSupertypes(_)
+            | RemoveSupertypes(_)
+            | AddSubtypes(_)
+            | RemoveSubtypes(_)
+            | SetTypes { .. }
+            | AllCreatureTypes
+            | RemoveAllCreatureTypes
+            | SetBasicLandType(_)
+            | AddChosenType
+            | SetChosenBasicLandType => Layer::L4Type,
+            SetColors(_) | AddColors(_) | SetLinkedChosenColor | SetChosenColor
+            | SetChosenColors | AddChosenColor => Layer::L5Color,
+            AddAbility(_)
+            | AddThisAbility
+            | AddKeyword(_)
+            | AddKeywordX(..)
+            | AddKeywordsOf { .. }
+            | AddAbilitiesOf { .. }
+            | RemoveKeyword(_)
+            | LoseKeyword(_)
+            | LoseKeywordWithQuality { .. }
+            | RemoveAllAbilities
+            | CantHaveKeyword(_) => Layer::L6Ability,
+            CdaPT(..) => Layer::L7aCda,
+            SetPT(..) => Layer::L7bSet,
+            ModifyPT(..) => Layer::L7cModify,
+            SwitchPT => Layer::L7dSwitch,
+            Custom { layer, .. } => *layer,
+        }
+    }
+}
+
+/// Layers and sublayers in application order (CR 613.1–613.4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum Layer {
+    L1aCopy,
+    L1bFaceDown,
+    L2Control,
+    L3Text,
+    L4Type,
+    L5Color,
+    L6Ability,
+    L7aCda,
+    L7bSet,
+    L7cModify,
+    L7dSwitch,
+}
+
+impl Layer {
+    pub const ALL: [Layer; 11] = [
+        Layer::L1aCopy,
+        Layer::L1bFaceDown,
+        Layer::L2Control,
+        Layer::L3Text,
+        Layer::L4Type,
+        Layer::L5Color,
+        Layer::L6Ability,
+        Layer::L7aCda,
+        Layer::L7bSet,
+        Layer::L7cModify,
+        Layer::L7dSwitch,
+    ];
+}
+
+/// Description of a token to create (CR 111).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TokenSpec {
+    pub name: SmolStr,
+    pub colors: ColorSet,
+    pub supertypes: Vec<Supertype>,
+    pub card_types: Vec<CardType>,
+    pub subtypes: Vec<Subtype>,
+    pub power: Option<i32>,
+    pub toughness: Option<i32>,
+    pub abilities: Vec<Ability>,
+    /// Name of a Scryfall token card to copy characteristics from, when available.
+    pub scryfall_name: Option<SmolStr>,
+    /// Power and toughness given by values ("an X/X ... token, where X is ..."): each is
+    /// determined once, as the token is created, and becomes part of the token's
+    /// copiable values in place of `power`/`toughness` (CR 111.3, 107.3, 608.2h).
+    #[serde(default)]
+    pub pt_values: Option<Box<(Value, Value)>>,
+}
+
+/// What mana an effect adds (CR 106).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ManaProduction {
+    /// Fixed mana, e.g. {G} or {C}{C}.
+    Fixed(Vec<ManaType>),
+    /// N mana of any one color (chosen).
+    AnyOneColor(Value),
+    /// N mana in any combination of colors.
+    AnyCombination(Value),
+    /// N mana in any combination of the listed types ("three mana in any combination of
+    /// {R} and/or {G}"): each mana is one of them, chosen separately.
+    CombinationOf(Vec<ManaType>, Value),
+    /// One mana of one of the listed types (chosen).
+    OneOf(Vec<ManaType>),
+    /// One mana of any type that a permanent matching the filter could produce
+    /// (CR 106.7), e.g. "any type that a land you control could produce".
+    CouldProduce(Filter),
+    /// One mana of any *color* that a permanent matching the filter could produce
+    /// (CR 106.7), e.g. "any color that a land an opponent controls could produce".
+    CouldProduceColor(Filter),
+    /// N mana of the chosen color (stored on the source, e.g. "the chosen color").
+    ChosenColor(Value),
+    /// One mana of one of the listed types or of the color chosen for the source
+    /// ("Add {R} or one mana of the chosen color").
+    OneOfOrChosenColor(Vec<ManaType>),
+    /// N mana of a fixed type.
+    Amount(ManaType, Value),
+    /// Mana of any color among the colors of the selected objects (commander identity etc.).
+    AnyColorAmong(Filter),
+    /// One mana of each color among the matching objects ("For each color among
+    /// permanents you control, add one mana of that color", CR 105.4, 106.1).
+    EachColorAmong(Filter),
+    /// One mana of any type the permanent tapped for mana produced (from the triggering
+    /// event, "one mana of any type that land produced").
+    AnyTypeProduced,
+    /// Mana represented by the symbols of the selected object's mana cost ("add mana equal
+    /// to enchanted permanent's mana cost", CR 106.8–106.11).
+    ManaCostOf(Sel),
+    /// Doubles the amount of each type of unspent mana the player has (CR 701.10f;
+    /// Doubling Cube). The new mana has no restrictions (CR 106.6 example).
+    DoubleUnspent,
+    /// One mana of any type the triggering mana ability produced ("add one mana of any
+    /// type that land produced", CR 106.12a).
+    TypeProduced,
+    /// One mana of any color in the controller's commander's color identity (CR 903.4,
+    /// 702.124c: the combined identities of their commanders). Undefined without a
+    /// commander, so no mana is added (CR 903.4f).
+    CommanderIdentity,
+}
+
+/// Replacement effect definitions (CR 614–616).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReplacementDef {
+    pub event: ReplacementEvent,
+    pub action: ReplacementAction,
+    /// Self-replacement effects apply first (CR 614.15).
+    pub self_replacement: bool,
+    /// Optional replacement ("you may").
+    pub optional: bool,
+}
+
+/// Which events a replacement effect watches (relative to its source).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ReplacementEvent {
+    /// An object matching the filter would enter the battlefield (CR 614.1c–d).
+    EntersBattlefield(Filter),
+    /// An object would be put into a zone from another zone.
+    ZoneChange {
+        filter: Filter,
+        from: Option<ZoneKind>,
+        to: Option<ZoneKind>,
+    },
+    /// A permanent matching would die (battlefield → graveyard).
+    Dies(Filter),
+    /// A player matching would draw a card.
+    Draw(PlayerFilter),
+    /// A player matching would draw `min` or more cards (an effect that refers to the
+    /// number of cards drawn, CR 121.2a, 616.1g).
+    DrawCards { who: PlayerFilter, min: u32 },
+    /// Damage would be dealt. `source`/`target` filter the damage event.
+    Damage {
+        source: Filter,
+        to_players: Option<PlayerFilter>,
+        to_objects: Option<Filter>,
+        combat_only: bool,
+    },
+    /// Noncombat damage would be dealt (CR 120.2b): "prevent all noncombat damage that
+    /// would be dealt to ...", "if a source would deal noncombat damage to ...". The
+    /// fields filter the damage event as in [`ReplacementEvent::Damage`].
+    NoncombatDamage {
+        source: Filter,
+        to_players: Option<PlayerFilter>,
+        to_objects: Option<Filter>,
+    },
+    /// A player would gain life.
+    GainLife(PlayerFilter),
+    /// A player would lose life.
+    LoseLife(PlayerFilter),
+    /// A player would lose life as the result of being dealt damage (CR 120.3a): "damage
+    /// that would reduce your life total to less than 1 ..." changes the result of the
+    /// damage, not the damage itself.
+    LifeLossFromDamage(PlayerFilter),
+    /// Counters would be put on an object/player.
+    PutCounters {
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+    },
+    /// A player matching `by` would put counters (of `kind`) on a permanent ("If you would
+    /// put one or more counters on a permanent", CR 122.6a).
+    PutCountersBy {
+        by: PlayerRel,
+        kind: Option<CounterKind>,
+    },
+    /// Counters (of `kind`) would be put on an object matching `on_objects` or a player
+    /// matching `on_players`, by a player matching `by` if given (CR 122.6, 122.6a: "If you
+    /// would put one or more counters on a permanent you control"), and, if `effect_only`,
+    /// by an effect (CR 609.1: "If an effect would put one or more counters on a permanent
+    /// you control" doesn't apply to counters put as a cost, as the result of damage, or by
+    /// a turn-based action; see [`crate::events::CounterOrigin`]).
+    PutCountersMatching {
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        by: Option<PlayerRel>,
+        effect_only: bool,
+    },
+    /// One or more tokens would be created under a player's control.
+    CreateTokens(PlayerFilter),
+    /// One or more tokens with the characteristics described by `tokens` would be created
+    /// under a player's control ("If one or more creature tokens would be created ...").
+    /// The tokens' characteristics are those they're created with, before any continuous
+    /// effects apply to them (CR 701.7b; see `create_rules.rs`).
+    CreateTokensMatching { who: PlayerFilter, tokens: Filter },
+    /// A permanent would be destroyed.
+    Destroy(Filter),
+    /// Would lose the game.
+    LoseGame(PlayerFilter),
+    /// A step/phase would begin for a player ("skip your draw step").
+    SkipStep { step: StepKind, whose: PlayerRel },
+    /// Adding mana ("if a land you control would produce mana, it produces twice as much").
+    ProduceMana(Filter),
+    /// A permanent would untap during its controller's untap step.
+    UntapDuringUntapStep(Filter),
+    /// A spell or ability would be countered.
+    Countered(Filter),
+    /// Discard.
+    Discard(PlayerFilter, Filter),
+    /// Mill.
+    Mill(PlayerFilter),
+    /// "If you would search your library".
+    Search(PlayerFilter),
+    /// "As [this permanent] is turned face up, ..." (CR 614.1e): performed with
+    /// [`ReplacementAction::AsEnters`] as the permanent turns face up.
+    TurnedFaceUp,
+    /// "As [this permanent] transforms into [this face], ..." (CR 712.20): performed with
+    /// [`ReplacementAction::AsEnters`] while the permanent transforms into the face that
+    /// has it, not afterward.
+    Transforms,
+    /// The event matches `event` and the condition holds as it would happen, evaluated
+    /// with the event as the triggering event ("if a source would deal 3 or more damage
+    /// to ...", "if an opponent would lose life during your turn", "if damage would be
+    /// dealt to ~ while it has a +1/+1 counter on it"): `Value::EventAmount` is the
+    /// event's amount, `Sel::TriggerObject` / `PlayerRef::TriggerPlayer` what it would
+    /// happen to, `Sel::TriggerOtherObject` the source of damage (CR 614.1a).
+    Where {
+        event: Box<ReplacementEvent>,
+        cond: Condition,
+    },
+    /// A spell or ability controlled by a player matching `by` would cause a player
+    /// matching `who` to discard a card matching `filter` (CR 701.9): "If a spell or
+    /// ability an opponent controls causes you to discard ~, ...". A discard to pay a cost
+    /// isn't caused by a spell's or ability's effect.
+    DiscardCausedBy {
+        who: PlayerFilter,
+        filter: Filter,
+        by: PlayerRel,
+    },
+    /// A player matching `who` would perform a keyword action (CR 701), with the object
+    /// matching `objects` for an action an object performs ("if a creature you control
+    /// would explore"): "If you would proliferate, proliferate twice instead.", "If an
+    /// opponent would mill one or more cards, they mill that many cards plus four
+    /// instead." (CR 614.1a, 701.17d).
+    Action {
+        kind: ReplaceableAction,
+        who: PlayerFilter,
+        objects: Option<Filter>,
+    },
+}
+
+/// Keyword actions that replacement effects can modify (see
+/// [`ReplacementEvent::Action`]). The amount of the event is the number of cards milled
+/// or scried, or the N of "connives N"; 1 for the others.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReplaceableAction {
+    Mill,
+    Scry,
+    Proliferate,
+    Explore,
+    Connive,
+    Learn,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum StepKind {
+    Untap,
+    Upkeep,
+    Draw,
+    Main,
+    Combat,
+    End,
+    Turn,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ReplacementAction {
+    /// Enters tapped (CR 614.1c).
+    EnterTapped,
+    /// "[Permanents] enter untapped": undoes "enters tapped" replacement effects applied
+    /// before it (the affected player chooses the order, CR 616.1), and an instruction
+    /// putting it onto the battlefield tapped (Spelunking's rulings).
+    EnterUntapped,
+    /// Enters with counters.
+    EnterWithCounters(CounterKind, Value),
+    /// "As this enters, ..." — the effect is performed while the replacement applies,
+    /// before the permanent enters (CR 614.1c, 614.12a). Choices ([`Effect::Choose`]) are
+    /// stored on the entering object and carried onto the permanent; the entry-modifying
+    /// effects [`Effect::EnterTapped`] and [`Effect::EnterWithCounters`] change how it
+    /// enters. Conditional ETB replacements ("enters tapped unless ...") are expressed as
+    /// `AsEnters(If { .. })`.
+    AsEnters(Box<Effect>),
+    /// Enters as a copy of (chosen) object (CR 707.9).
+    EnterAsCopy { filter: Filter, optional: bool },
+    /// Enters under another player's control.
+    EnterUnderControl(PlayerRef),
+    /// Put into a different zone instead ("exile it instead").
+    MoveInstead(Destination),
+    /// Nothing happens (skip, prevention of the entire event).
+    Prevent,
+    /// Prevent N damage (a shield that is used up).
+    PreventAmount(Value),
+    /// Multiply the amount (double damage, double tokens, double counters) ×N.
+    Multiply(i32),
+    /// Add N to the amount.
+    Add(Value),
+    /// "those tokens plus [N] [token] are created instead" (CR 614.1a): the token creation
+    /// event also creates `count` of these tokens under the same player's control
+    /// (`Value::EventAmount` is how many tokens the event creates, "that many").
+    PlusTokens { spec: TokenSpec, count: Value },
+    /// Subtract N from the amount.
+    Subtract(Value),
+    /// Redirect damage to the selection.
+    Redirect(Sel),
+    /// Redirect the next N damage to the selection: a redirection shield that is used up
+    /// ("the next 1 damage that would be dealt to ~ this turn is dealt to target creature
+    /// you control instead", CR 614.9). Damage beyond what's left of the shield is dealt
+    /// to the original recipient.
+    RedirectNext(Sel, Value),
+    /// Do something else entirely instead.
+    Instead(Box<Effect>),
+    /// Perform the original event and then an additional effect.
+    Also(Box<Effect>),
+    /// Regeneration shield (CR 701.19).
+    Regenerate,
+    /// Prevent N (or all, when `None`) of the damage, then perform an additional effect
+    /// right afterward that can refer to the amount prevented as the event amount
+    /// (CR 615.5): "prevent that damage. You gain life equal to the damage prevented this
+    /// way."
+    PreventAndThen(Option<Value>, Box<Effect>),
+    /// Enters transformed, with its back face up (CR 616.1d, 712.14).
+    EnterTransformed,
+    /// "... reduces it to N instead": a life loss that would bring the player's life total
+    /// below N brings it to N. A player who already has less than N life loses life
+    /// normally.
+    LifeFloor(Value),
+    /// "[A permanent tapped for mana] produces [type] instead of any other type"
+    /// (CR 106.12b): each mana it would produce is of that type; the amount is unchanged.
+    ManaTypeInstead(crate::mana::ManaType),
+    /// Prevent part of each damage event (CR 615.1a), evaluated for that event
+    /// (`Value::EventAmount` is the damage): "prevent half that damage, rounded up",
+    /// "prevent all but 1 of that damage", "you may prevent X of that damage, where X is
+    /// ...". Unlike [`ReplacementAction::PreventAmount`] in a one-shot effect, it isn't a
+    /// shield that is used up.
+    PreventPortion(Value),
+}
+
+/// Rule-modifying effects (CR 613.11): restrictions and requirements.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Restriction {
+    CantAttack(Filter),
+    CantBlock(Filter),
+    /// "can't attack or block".
+    CantAttackOrBlock(Filter),
+    /// "can't attack you" (`planeswalkers`: "or planeswalkers you control"; `battles`:
+    /// battles the player protects), and "can't attack unless defending player ..."
+    /// (the player it would attack, CR 508.5).
+    CantAttackPlayer {
+        attackers: Filter,
+        defender: PlayerFilter,
+        planeswalkers: bool,
+        battles: bool,
+    },
+    /// "is goaded" as a static ability: goaded by the source's controller for as long as
+    /// the effect applies (CR 701.15b).
+    Goaded(Filter),
+    /// "assigns combat damage equal to its toughness rather than its power" (modifies
+    /// CR 510.1a).
+    DamageByToughness(Filter),
+    /// "assigns no combat damage (this turn)": the creature assigns no combat damage
+    /// (CR 510.1a).
+    AssignsNoCombatDamage(Filter),
+    /// "attacks each combat if able".
+    MustAttack(Filter),
+    /// "[attackers] attack [defender] (this turn / each combat) if able": a requirement
+    /// that each such creature attacks that player (CR 508.1d), e.g. encore's tokens
+    /// (CR 702.141a).
+    MustAttackPlayer {
+        attackers: Filter,
+        defender: PlayerFilter,
+    },
+    /// "blocks each combat if able".
+    MustBlock(Filter),
+    /// "must be blocked if able" / lure.
+    MustBeBlocked(Filter),
+    /// Evasion: "can't be blocked" (or except by filter).
+    CantBeBlocked(Filter),
+    CantBeBlockedBy {
+        attacker: Filter,
+        blocker: Filter,
+    },
+    /// "can't be blocked except by two or more creatures" (menace-like).
+    MinBlockers {
+        attacker: Filter,
+        n: u32,
+    },
+    /// "can't be blocked by more than one creature".
+    MaxBlockedBy {
+        attacker: Filter,
+        n: u32,
+    },
+    /// "can block an additional creature each combat" / "any number".
+    ExtraBlocks {
+        blocker: Filter,
+        n: Option<u32>,
+    },
+    /// "can block only creatures with flying".
+    CanBlockOnly {
+        blocker: Filter,
+        attackers: Filter,
+    },
+    /// "can attack as though it didn't have defender" (overrides CR 702.3b).
+    AttackDespiteDefender(Filter),
+    /// "[attackers] can attack as though they had haste" (CR 302.6, 508.1a with 609.4):
+    /// they may attack though their controller hasn't controlled them continuously since
+    /// their most recent turn began. With `defender`, only those players and planeswalkers
+    /// they control ("can attack your opponents and planeswalkers your opponents control
+    /// as though those creatures had haste"). See `as_though::may_attack_as_though_haste`.
+    AttackAsThoughHaste {
+        attackers: Filter,
+        defender: Option<PlayerFilter>,
+    },
+    /// "[blockers] can block as though they were untapped" (CR 509.1a with 609.4).
+    BlockAsThoughUntapped(Filter),
+    /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
+    CantAttackAlone(Filter),
+    CantBlockAlone(Filter),
+    /// "No more than N creatures can attack/block each combat" (CR 508.1c, 509.1b).
+    MaxAttackers(u32),
+    MaxBlockers(u32),
+    /// "All creatures able to block [filter] do so" (a blocking requirement for each
+    /// creature able to block it, CR 509.1c).
+    MustBeBlockedByAll(Filter),
+    /// "[blocker] blocks [attacker] this combat if able" (provoke, CR 702.39a): a
+    /// requirement that each such creature blocks each such attacker (CR 509.1c).
+    MustBlockAttacker {
+        blocker: Filter,
+        attacker: Filter,
+    },
+    /// "[attackers] can't attack [defender] (or planeswalkers they control) unless their
+    /// controller pays [cost] for each ..." (CR 508.1d, 508.1h).
+    AttackCost {
+        attackers: Filter,
+        defender: PlayerFilter,
+        planeswalkers: bool,
+        cost: Cost,
+    },
+    /// "[blockers] can't block unless their controller pays [cost] for each blocking
+    /// creature" (CR 509.1c, 509.1d).
+    BlockCost {
+        blockers: Filter,
+        cost: Cost,
+    },
+    CantBeTargeted {
+        what: Filter,
+        by: TargetRestriction,
+    },
+    PlayerCantBeTargeted {
+        who: PlayerFilter,
+        by: TargetRestriction,
+    },
+    /// "can't cast spells" (matching filter).
+    CantCast {
+        who: PlayerFilter,
+        what: Filter,
+    },
+    /// "can't activate abilities" of matching sources (non-mana unless specified).
+    CantActivate {
+        who: PlayerFilter,
+        sources: Filter,
+        include_mana: bool,
+    },
+    /// "can't be countered".
+    CantBeCountered(Filter),
+    /// "[spells] can't be copied" (CR 113.6g, 707.10): "This spell can't be copied." on an
+    /// instant or sorcery, functioning on the stack. See `rule_statics::cant_be_copied`.
+    CantBeCopied(Filter),
+    /// "[objects] can't enter the battlefield" (CR 608.3e). Handled exactly like
+    /// [`Restriction::CantEnter`] (CR 614.17d).
+    CantEnterBattlefield(Filter),
+    /// "doesn't untap during its controller's untap step".
+    DoesntUntap(Filter),
+    /// "[Players] can't untap more than [n] [objects] during their untap steps"
+    /// (modifies CR 502.3).
+    MaxUntaps {
+        who: PlayerFilter,
+        what: Filter,
+        n: u32,
+    },
+    /// "Untap [permanents you control] during each other player's untap step": they untap
+    /// along with the active player's permanents (CR 502.3).
+    UntapDuringOthersUntapSteps(Filter),
+    /// "can't gain life".
+    CantGainLife(PlayerFilter),
+    /// "can't lose life".
+    CantLoseLife(PlayerFilter),
+    /// "can't lose the game" / "can't win the game".
+    CantLoseGame(PlayerFilter),
+    CantWinGame(PlayerFilter),
+    /// "can't draw more than one card each turn" etc.
+    MaxDrawsPerTurn(PlayerFilter, u32),
+    /// "can't cast more than one spell each turn".
+    MaxSpellsPerTurn(PlayerFilter, u32),
+    /// "Each player can't cast more than one noncreature spell each turn.", "Each player
+    /// who has cast a nonartifact spell this turn can't cast additional nonartifact
+    /// spells.": a player who has cast `n` spells matching `what` this turn can't cast
+    /// another one (counting spells cast before the effect began, CR 601.3).
+    MaxSpellsOfKindPerTurn {
+        who: PlayerFilter,
+        what: Filter,
+        n: u32,
+    },
+    /// "can't be sacrificed".
+    CantBeSacrificed(Filter),
+    /// "Players can't pay life [or sacrifice (permanents)] to cast spells or activate
+    /// abilities [that aren't mana abilities]" (Karn's Sylex, Yasharn, Angel of
+    /// Jubilation; CR 118.3, 119.4): the players `who` describes can't pay life (with
+    /// `life`) nor sacrifice permanents matching `sacrifice` to pay the costs of casting
+    /// spells or activating abilities (with `mana_abilities`, mana abilities too). Costs
+    /// paid as a spell or ability resolves aren't affected. See `rule_statics::payment`.
+    CantPayToCastOrActivate {
+        who: PlayerFilter,
+        life: bool,
+        sacrifice: Option<Filter>,
+        mana_abilities: bool,
+    },
+    /// "Spells and abilities your opponents control can't cause you to sacrifice
+    /// permanents" (Sigarda, Host of Herons), "Triggered abilities you control can't cause
+    /// you to sacrifice or exile creature tokens you control" (The Master, Multiplied):
+    /// the spells and abilities `by` describes can't make their controller's opponent (or
+    /// controller) sacrifice permanents matching `what` (CR 701.21), nor, with `exile`,
+    /// exile them. See `rule_statics::sacrifice_causes`.
+    CantCauseSacrifice {
+        what: Filter,
+        by: SacrificeCauses,
+        exile: bool,
+    },
+    /// "[objects] can't be regenerated [this turn]": regeneration shields and effects
+    /// don't apply when they're destroyed (CR 701.19c).
+    CantBeRegenerated(Filter),
+    /// "[objects] can't enter the battlefield" (CR 614.17d), checked against the object as
+    /// it would exist on the battlefield.
+    CantEnter(Filter),
+    /// "[cards] in [zones] can't enter the battlefield" (Kunoros, Hound of Athreos;
+    /// Grafdigger's Cage): checked against the card as it exists in that zone, before it
+    /// would move (so a noncreature card entering as a copy of a creature isn't stopped).
+    CantEnterFrom {
+        what: Filter,
+        zones: Vec<ZoneKind>,
+    },
+    /// "can't be the target of spells or abilities your opponents control" is CantBeTargeted.
+    /// "damage can't be prevented".
+    DamageCantBePrevented,
+    /// "Damage [sources matching the filter] would deal can't be prevented" (CR 615.12).
+    SourceDamageCantBePrevented(Filter),
+    /// "Combat damage [that would be dealt by sources matching the filter] can't be
+    /// prevented" (CR 615.12): only combat damage (CR 120.2a).
+    CombatDamageCantBePrevented(Filter),
+    /// "can't transform".
+    CantTransform(Filter),
+    /// "[permanents] can't be turned face up" (CR 708.7): not by a special action
+    /// (morph, disguise, a manifested or cloaked creature's mana cost, CR 702.37e,
+    /// 702.168d, 701.40b, 701.58b) nor by an effect. See `rule_statics::face_up`.
+    CantTurnFaceUp(Filter),
+    /// "can't search libraries".
+    CantSearch(PlayerFilter),
+    /// Cast spells only at sorcery speed etc.
+    SorcerySpeedOnly(PlayerFilter),
+    /// "can't play lands".
+    CantPlayLands(PlayerFilter),
+    /// "can't play lands [with a quality]": land cards matching the filter (judged by the
+    /// characteristics of the face played) can't be played by those players.
+    CantPlayLandCards {
+        who: PlayerFilter,
+        what: Filter,
+    },
+    /// "While [a player] is choosing targets as part of casting a spell or activating an
+    /// ability, that player must choose at least one [object] if able" (CR 601.2c).
+    MustTarget {
+        chooser: PlayerFilter,
+        what: Filter,
+    },
+    /// "[objects] can't become untapped / phase in / be turned face up / be equipped /
+    /// be enchanted by other Auras / become suspected": an action the rules would
+    /// otherwise allow doesn't happen to them (see `prohibitions.rs`).
+    CantBe {
+        what: Filter,
+        action: ObjectAction,
+    },
+    /// "can only attack alone" (CR 506.5): it can attack only if no other creatures
+    /// attack.
+    AttackOnlyAlone(Filter),
+    /// "No more than N creatures can attack you each combat" (`player`), "... can attack
+    /// ~ each combat" (`object`): a limit on the creatures attacking that player or
+    /// planeswalker (CR 508.1c).
+    MaxAttackersAgainst {
+        player: Option<PlayerFilter>,
+        object: Option<Filter>,
+        n: u32,
+    },
+    /// "[attacker] must be blocked by [a Dalek] if able": a requirement that a creature
+    /// matching `blocker` blocks it (CR 509.1c).
+    MustBeBlockedBy {
+        attacker: Filter,
+        blocker: Filter,
+    },
+    /// "[attacker] must be blocked by two or more creatures if able" (`min` 2), "... by
+    /// exactly one creature if able" (`min` 1, `max` 1): a requirement on how many
+    /// creatures block it (CR 509.1c).
+    BlockerCountRequirement {
+        attacker: Filter,
+        min: u32,
+        max: Option<u32>,
+    },
+    /// "If a creature you control attacks, ~ also attacks if able", "If ~ attacks, all
+    /// creatures you control attack if able": each creature matching `attackers` attacks
+    /// if able if another creature matching `triggers` attacks (with `same_controller`,
+    /// one its controller controls) (CR 508.1d).
+    AttackTogether {
+        attackers: Filter,
+        triggers: Filter,
+        same_controller: bool,
+    },
+    /// "[creatures] attack a player other than [players] if able" (the second requirement
+    /// of goad, CR 701.15b, without goading).
+    MustAttackOtherThan {
+        attackers: Filter,
+        players: PlayerFilter,
+    },
+    /// "[players] can't block with more than one creature (this combat)" (CR 509.1b).
+    MaxBlockersOf {
+        who: PlayerFilter,
+        n: u32,
+    },
+    /// "can't block creatures with power greater than this"...
+    Custom(SmolStr),
+}
+
+/// Something that can't happen to an object ([`Restriction::CantBe`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObjectAction {
+    /// "can't become untapped" (CR 701.26b: it doesn't untap, by any means).
+    Untapped,
+    /// "can't phase in" (CR 702.26).
+    PhasedIn,
+    /// "can't be equipped" (CR 301.5c).
+    Equipped,
+    /// "can't be enchanted by other Auras" (CR 303.4).
+    EnchantedByOtherAuras,
+    /// "can't become suspected" (CR 701.60).
+    Suspected,
+}
+
+/// The spells and abilities a [`Restriction::CantCauseSacrifice`] is about, relative to
+/// the controller of its source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SacrificeCauses {
+    /// "Spells and abilities your opponents control".
+    OpponentsSpellsAndAbilities,
+    /// "Triggered abilities you control".
+    YourTriggeredAbilities,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TargetRestriction {
+    /// Hexproof-like: by spells/abilities opponents control.
+    Opponents,
+    /// Shroud-like: by any spell or ability.
+    Any,
+    /// By sources matching the filter (protection-like).
+    Sources(Filter),
+    /// By spells and abilities the restriction's controller's opponents control whose
+    /// sources match the filter ("black or red spells your opponents control",
+    /// "abilities your opponents control").
+    OpponentsSources(Filter),
+}
+
+/// Cost modification static effects (CR 601.2f).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CostModifier {
+    /// Spells (or abilities) affected.
+    pub applies_to: CostTarget,
+    /// Whose spells ("spells you cast", "spells your opponents cast").
+    pub who: PlayerRel,
+    pub change: CostChange,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum CostTarget {
+    Spells(Filter),
+    /// Activated abilities of sources matching.
+    Abilities(Filter),
+    /// The source itself (a spell that costs less, e.g. affinity-like).
+    ThisSpell,
+    /// Specific: "Equip abilities", "ninjutsu abilities".
+    Keyword(KeywordKind),
+    /// "[Keyword] abilities of [sources matching]" ("Exhaust abilities of other permanents
+    /// you control", Boom Scholar).
+    KeywordAbilitiesOf(KeywordKind, Filter),
+    /// Loyalty abilities of sources matching (CR 606.4).
+    LoyaltyAbilities(Filter),
+    /// Activated abilities chosen by kind, source, targets and order ("Abilities your
+    /// opponents activate that target a Merfolk you control", "the first equip ability you
+    /// activate each turn"); see `activation_costs.rs`.
+    ActivatedAbilities(Box<AbilityScope>),
+}
+
+/// Which activated abilities a cost change or an activation permission applies to.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AbilityScope {
+    /// The abilities' sources, relative to the effect's source.
+    pub sources: Filter,
+    pub class: AbilityClass,
+    /// "that aren't mana abilities".
+    pub nonmana: bool,
+    /// "that target [filter]": one of the ability's targets matches (CR 601.2f: targets
+    /// are chosen before the total cost is determined).
+    pub targeting: Option<Filter>,
+    /// "the first [such] ability you activate each turn".
+    pub first_each_turn: bool,
+}
+
+impl AbilityScope {
+    pub fn new(sources: Filter, class: AbilityClass) -> Self {
+        AbilityScope {
+            sources,
+            class,
+            nonmana: false,
+            targeting: None,
+            first_each_turn: false,
+        }
+    }
+}
+
+/// Which abilities of other objects [`Modification::AddAbilitiesOf`] gives: "all activated
+/// abilities", "all activated and triggered abilities", "all loyalty abilities", "...
+/// except mana abilities", "... except for loyalty abilities".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbilitySelection {
+    pub activated: bool,
+    pub triggered: bool,
+    /// Only activated abilities of this class ("all loyalty abilities").
+    pub only: Option<AbilityClass>,
+    /// Not activated abilities of this class ("except mana abilities").
+    pub except: Option<AbilityClass>,
+}
+
+impl AbilitySelection {
+    pub const ACTIVATED: AbilitySelection = AbilitySelection {
+        activated: true,
+        triggered: false,
+        only: None,
+        except: None,
+    };
+    pub const ACTIVATED_AND_TRIGGERED: AbilitySelection = AbilitySelection {
+        activated: true,
+        triggered: true,
+        only: None,
+        except: None,
+    };
+}
+
+/// A kind of activated ability.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AbilityClass {
+    Any,
+    /// Loyalty abilities (CR 606).
+    Loyalty,
+    /// Mana abilities (CR 605).
+    Mana,
+    /// Abilities a keyword defines ("equip abilities", "cycling costs").
+    Keyword(KeywordKind),
+}
+
+/// "You may activate [abilities] any time you could cast an instant", "... twice each
+/// turn rather than only once", "... as though those creatures had haste": a permission
+/// that relaxes when or how often its controller may activate abilities (CR 602.5d,
+/// 606.3, 302.6 with 609.4); see `activation_costs.rs`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActivationPermission {
+    pub scope: AbilityScope,
+    /// Instant timing instead of sorcery timing (CR 602.5d, 606.3).
+    pub instant_timing: bool,
+    /// How many times each turn the loyalty abilities of each permanent may be activated
+    /// (CR 606.3: once).
+    pub loyalty_per_turn: Option<u32>,
+    /// {T}/{Q} abilities of creatures as though they had haste (CR 302.6, 609.4).
+    pub as_though_haste: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum CostChange {
+    /// Costs {N} more.
+    IncreaseGeneric(Value),
+    /// Costs {N} less (generic only).
+    ReduceGeneric(Value),
+    /// Costs specific mana more ("costs {W} more").
+    IncreaseMana(ManaCost),
+    /// Costs specific colored mana less.
+    ReduceColored(Color, Value),
+    /// Costs {N} less, but "this effect can't reduce the mana in that cost to less than
+    /// one mana" (Training Grounds): never reduces a cost with no generic mana, and never
+    /// adds mana to one.
+    ReduceGenericMinOne(Value),
+    /// Costs the given mana symbols less (CR 118.7a–g). `colored_only`: "This effect
+    /// reduces only the amount of colored mana you pay."
+    ReduceMana { mana: ManaCost, colored_only: bool },
+    /// Additional non-mana cost ("As an additional cost to cast spells, pay 2 life").
+    AdditionalCost(Cost),
+    /// "You may pay X rather than pay this spell's mana cost."
+    AlternativeCost(Cost),
+    /// An alternative cost that also lets the spell be cast as though it had flash: "You
+    /// may cast creature spells with mana value 3 or less by paying {E} rather than paying
+    /// their mana costs. If you cast a spell this way, you may cast it as though it had
+    /// flash." (CR 118.9, 601.3c; see `kw/offered_costs.rs`).
+    AlternativeCostWithFlash(Cost),
+    /// "You may cast this spell as though it had flash if you pay [cost] more to cast it"
+    /// (CR 601.3c).
+    FlashForAdditionalCost(Cost),
+    /// "As an additional cost to cast this spell, you may [cost]": an optional additional
+    /// cost announced as the spell is cast (CR 601.2b), recorded as `name` in the spell's
+    /// `CastInfo::paid` if it's paid (see `cost_choices.rs`).
+    OptionalAdditionalCost { name: SmolStr, cost: Cost },
+    /// "As an additional cost to cast this spell, [cost] or [cost]": the player chooses
+    /// which one to pay as the spell is cast (CR 601.2b); the chosen option's name is
+    /// recorded in the spell's `CastInfo::paid` (see `cost_choices.rs`).
+    AdditionalCostChoice(Vec<(SmolStr, Cost)>),
+    /// "You can spend mana of any type to cast creature spells." (CR 609.4b, 118.14): the
+    /// cost doesn't change, but each of its mana symbols can be paid with mana of any type.
+    SpendAnyType,
+    /// A rule the text of a spell or activated ability makes about announcing or paying
+    /// its own cost ("X can't be 0.", "Spend only black mana on X.", "You can't spend mana
+    /// to cast this spell."): the cost doesn't change (see `payment_rules.rs`).
+    Rule(CostRule),
+}
+
+/// A rule about announcing or paying the cost of the spell or activated ability whose text
+/// states it (see `payment_rules.rs`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CostRule {
+    /// "X can't be 0." (CR 107.3a): the least value that may be announced for X.
+    XAtLeast(u32),
+    /// "Spend only black mana on X.", "Spend only black and/or red mana on X.", "Spend
+    /// only colored mana on X.": only mana of these colors may pay the part of the cost
+    /// that X represents (CR 107.3a, 601.2h). It's still generic mana (cost reductions
+    /// may reduce it, and life can't pay it). `distinct`: "No more than one mana of each
+    /// color may be spent this way."
+    XOnlyColors { colors: ColorSet, distinct: bool },
+    /// "You can't spend mana to cast this spell." (Hogaak, Arisen Necropolis): no mana may
+    /// pay its total cost, so only other ways of paying it can (CR 601.2h): convoke, delve,
+    /// and life where an effect lets a mana symbol be paid with life (CR 118.3).
+    NoMana,
+}
+
+/// Static abilities (CR 604) and what they do.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum StaticEffect {
+    /// A characteristic-changing continuous effect applied to objects matching `affected`
+    /// (relative to the source).
+    Continuous {
+        affected: Filter,
+        mods: Vec<Modification>,
+    },
+    /// Effects on players ("You have hexproof", "Your maximum hand size is ...").
+    PlayerEffect {
+        affected: PlayerFilter,
+        effect: PlayerModification,
+    },
+    Restriction(Restriction),
+    CostModifier(CostModifier),
+    Replacement(ReplacementDef),
+    /// A permission that relaxes activation timing or limits (CR 602.5d, 606.3, 302.6).
+    ActivationPermission(ActivationPermission),
+    /// Permission to play/cast cards from a zone ("You may play lands from the top of your
+    /// library", "You may cast spells from your graveyard").
+    PlayPermission(PlayPermission),
+    /// Can be cast as though it had flash (a filter of spells).
+    FlashPermission {
+        who: PlayerRel,
+        what: Filter,
+    },
+    /// "If [cause] causes a triggered ability of [sources] to trigger, that ability triggers
+    /// an additional time" (CR 603.2d). `cause: None` means any trigger event.
+    AdditionalTrigger {
+        sources: Filter,
+        cause: Option<Box<TriggerCond>>,
+    },
+    /// "You may spend [types] mana as though it were mana of any color to pay [costs]"
+    /// (CR 602.1e). An empty list means mana of any type.
+    SpendAsAnyColor {
+        applies_to: CostTarget,
+        types: Vec<ManaType>,
+    },
+    /// An action a player may take with this card from their opening hand (CR 103.6):
+    /// with no delayed ability, "you may begin the game with it on the battlefield";
+    /// otherwise "you may reveal this card from your opening hand. If you do, [delayed
+    /// triggered ability]", whose source is this card (CR 603.7g).
+    OpeningHand {
+        delayed: Option<Box<(TriggerCond, Body)>>,
+    },
+    /// "If this card is your commander, choose a color before the game begins" (CR 607.2p):
+    /// the choice is linked to the characteristic-defining ability in the same paragraph
+    /// and persists as the card changes zones.
+    PregameChoice {
+        kind: ChoiceKind,
+        only_if_commander: bool,
+    },
+    /// "Before you shuffle your deck to start the game, you may reveal this card from your
+    /// deck and exile [a card matching `what`] you drafted that isn't in your deck"
+    /// (CR 607.2n). Functions in the library before the game begins.
+    BeforeShuffleExile {
+        what: Filter,
+    },
+    /// Companion (CR 702.139a): the condition the owner's starting deck must fulfill for
+    /// this card to be revealed as their companion before the game (CR 103.2b).
+    Companion(crate::start::DeckCondition),
+    /// "Any time you could mulligan and this card is in your hand, you may [effect]"
+    /// (CR 103.5b). Functions in the hand while mulligans are declared.
+    AnyTimeCouldMulligan(Box<Effect>),
+    /// A static ability that functions on the stack and creates a delayed triggered ability
+    /// as the permanent spell resolves and the permanent enters (CR 608.3g), e.g. dash's
+    /// "return it to its owner's hand at the beginning of the next end step". The
+    /// condition is checked against the spell ("if it was cast for its dash cost").
+    DelayedTriggerAsEnters {
+        condition: Option<Condition>,
+        trigger: TriggerCond,
+        body: Body,
+    },
+    /// A special action players may take any time they have priority (CR 116.2d, 116.2e):
+    /// "You may discard this card any time you could cast an instant", "Any player may pay
+    /// {2} for that player to ignore this effect until end of turn".
+    SpecialAction(SpecialActionDef),
+    /// "You may look at the top card of your library any time."
+    LookAtTopCard(PlayerRel),
+    /// "Play with the top card of your library revealed."
+    RevealTopCard(PlayerRel),
+    /// Additional land plays per turn.
+    AdditionalLandPlays(PlayerRel, u32),
+    /// How coins are flipped and dice are rolled, and die-roll modifiers (CR 705, 706).
+    Dice(crate::dice::DiceStatic),
+    /// "Cast this spell only [condition]" — e.g. "only during combat before blockers are
+    /// declared" (CR 506.8). Checked from the card itself while it's being cast.
+    CastOnlyIf(Condition),
+    /// "~ can be attached only to a [filter]" (Gate Smasher, Konda's Banner): an Equipment
+    /// that can't legally be attached to other objects (CR 301.5, 701.3b, 704.5n).
+    AttachOnlyTo(Filter),
+    /// An optional cost to attack with the source, paid "as it attacks" (CR 508.1g), e.g.
+    /// "You may exert this creature as it attacks. When you do, [then]."
+    OptionalAttackCost {
+        cost: Cost,
+        then: Option<Box<Body>>,
+    },
+    /// "Enchant [filter]" is a keyword; this covers "can be attached only to ..." etc.
+    /// Mana abilities that tap for more: handled via Replacement(ProduceMana).
+    /// "Prevent all combat damage that would be dealt ..." is a Replacement.
+    /// Custom behavior implemented in code, by name.
+    Custom(SmolStr),
+    /// "If you cast a spell this way, it gains [ability]": spells matching `what` that a
+    /// player casts from `zone` using a permission from this object gain the
+    /// modifications; they last until the end of the game, even after the spell becomes a
+    /// permanent and even if this object leaves (CR 611.3d).
+    CastGrant {
+        zone: ZoneKind,
+        what: Filter,
+        mods: Vec<Modification>,
+    },
+    /// "The "legend rule" doesn't apply [to tokens you control]" (CR 704.5j): legendary
+    /// permanents matching the filter (relative to the source) are left out of the legend
+    /// rule (see `legend_rule.rs`).
+    LegendRuleExempt(Filter),
+    /// "Damage isn't removed from [permanents matching the filter] during cleanup steps"
+    /// (an exception to CR 514.2; see `rule_statics::cleanup_damage`).
+    DamageNotRemoved(Filter),
+    /// "Counters remain on ~ as it moves to any zone other than a player's hand or library"
+    /// (an exception to CR 122.2 and 400.7; see `rule_statics::counters_remain`).
+    CountersRemain,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum PlayerModification {
+    Hexproof,
+    Shroud,
+    ProtectionFrom(Filter),
+    MaxHandSize(Option<Value>),
+    /// Hand size modifier (+N).
+    HandSizeDelta(i32),
+    /// "You may play an additional land on each of your turns."
+    AdditionalLandPlays(u32),
+    CantLoseGame,
+    /// A cost modifier (CR 601.2f) for the affected player's spells or abilities, created
+    /// by a resolved effect for a duration ("Until your next turn, instant, sorcery, and
+    /// planeswalker spells that player casts cost {2} less to cast."). Its `who` is
+    /// relative to the affected player. Applied with the static cost modifiers (see
+    /// `layers.rs`, `collect_statics`).
+    CostModifier(CostModifier),
+    /// "You may cast [spells] this turn as though they had flash" (CR 601.3b): a timing
+    /// permission for the affected player's spells matching the filter, created by a
+    /// resolved effect for a duration. Applied with the static flash permissions (see
+    /// `layers.rs`, `collect_statics`).
+    FlashPermission(Filter),
+    /// A permission to play cards (CR 601.2, 305.1) created by a resolved effect for a
+    /// duration ("Until end of turn, you may play lands and cast spells from the top of
+    /// your library."). Its `who` is relative to the affected player. Collected with the
+    /// static play permissions (see `layers.rs`, `collect_statics`).
+    PlayPermission(PlayPermission),
+    /// A permission to activate abilities with other timing or more often, created by a
+    /// resolved effect for a duration ("Until end of turn, you may activate loyalty
+    /// abilities of Jace planeswalkers you control on any player's turn any time you could
+    /// cast an instant."). Collected with the static permissions (`collect_statics`).
+    ActivationPermission(ActivationPermission),
+    /// "For each {B} in a cost, you may pay 2 life rather than pay that mana." (K'rrik,
+    /// Son of Yawgmoth): each mana symbol of that color in a cost the player pays may be
+    /// paid with `life` life instead (CR 118.3b, 119.4). It changes only how costs are paid,
+    /// not the costs (see `payment_rules.rs`).
+    PayLifeForMana {
+        color: Color,
+        life: u32,
+    },
+    /// "Spells you cast have ..." etc. are handled elsewhere.
+    /// Skip draw step etc. handled via replacements.
+    /// "You can't be attacked", etc.
+    Custom(SmolStr),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PlayPermission {
+    pub who: PlayerRel,
+    pub zone: ZoneKind,
+    /// Only the top card of the library, if zone is Library.
+    pub top_only: bool,
+    pub what: Filter,
+    /// Lands can be played.
+    pub lands: bool,
+    /// Spells can be cast.
+    pub spells: bool,
+    /// Alternative cost, e.g. "without paying its mana cost" or "by paying life".
+    pub cost: Option<Cost>,
+    /// "If you cast a spell this way, you may cast it as though it had flash" (CR 702.8a):
+    /// spells cast with this permission may be cast any time their player could cast an
+    /// instant.
+    #[serde(default)]
+    pub flash: bool,
+    /// Other terms the permission comes with (see [`PlayTerms`]): an additional cost ("by
+    /// discarding a card in addition to paying its other costs", CR 601.2b, 601.2f), mana
+    /// flexibility ("and you may spend mana as though it were mana of any color to cast
+    /// those spells", CR 609.4b), "you can't cast more than one spell this way each turn"
+    /// (`limit`), ...
+    #[serde(default)]
+    pub terms: PlayTerms,
+}
+
+/// The terms an effect's permission to play particular cards comes with (CR 601.3,
+/// 305.1): what it allows, and how spells cast with it are cast. A player who has several
+/// permissions to play a card chooses which one they're using as they begin to play it,
+/// and gets that one's terms (see `permissions.rs`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlayTerms {
+    /// "You may cast that card": a permission to cast it, not to play it as a land (to
+    /// play a card is to play it as a land or cast it, whichever is appropriate; a land
+    /// can't be cast, CR 305.9).
+    #[serde(default)]
+    pub spells_only: bool,
+    /// The alternative cost a spell cast with the permission must be cast for ("If you
+    /// cast a spell this way, pay life equal to its mana value rather than pay its mana
+    /// cost.", CR 118.9b): no other alternative cost can be used with it (CR 118.9a).
+    /// `Value::ManaValueOf(Sel::This)` in it is the mana value of the spell the card would
+    /// become (X being 0, CR 107.3b).
+    #[serde(default)]
+    pub alt_cost: Option<Cost>,
+    /// An additional cost a spell cast with the permission must be cast with ("by paying 2
+    /// life in addition to paying its other costs", CR 601.2b, 601.2f); amounts may be
+    /// relative to the spell as for `alt_cost`.
+    #[serde(default)]
+    pub extra_cost: Option<Cost>,
+    /// "You may cast it as though it had flash" (CR 702.8a, 601.3b).
+    #[serde(default)]
+    pub flash: bool,
+    /// "A spell cast this way costs {N} more to cast" (CR 601.2f).
+    #[serde(default)]
+    pub cost_increase: u32,
+    /// "Each land played this way enters tapped" (CR 614.1d).
+    #[serde(default)]
+    pub lands_enter_tapped: bool,
+    /// "You may spend mana as though it were mana of any color to cast that spell": for
+    /// spells cast with this permission only (CR 609.4b, 118.14).
+    #[serde(default)]
+    pub spend_as_any_color: bool,
+    /// "Mana of any type can be spent to cast it": for spells cast with this permission
+    /// only (CR 118.14).
+    #[serde(default)]
+    pub spend_any_type: bool,
+    /// "You may cast red spells from among them", "a creature spell from among those
+    /// cards": the qualities the card must have as it's played with the permission, judged
+    /// by the characteristics it would have as it's played (CR 601.3e). Relative to the
+    /// permission's source and player.
+    #[serde(default)]
+    pub what: Option<Filter>,
+    /// "You may cast a spell from among those cards", "you may play one of those cards",
+    /// "up to two of those cards": how many of the cards the effect's permissions are for
+    /// may be played with them; once that many are, the others' permissions end.
+    #[serde(default)]
+    pub limit: Option<u32>,
+    /// The permissions an effect gave together with a `limit` share this number, given
+    /// as they're given (0: none).
+    #[serde(default)]
+    pub group: u32,
+    /// "You may play it until you exile another card with ~": the permission ends when
+    /// its source gives another such permission.
+    #[serde(default)]
+    pub until_another: bool,
+    /// "During any turn you attacked with ~, you may play that card", "you may play it if
+    /// you control a Kavu": the card may be played with the permission only while the
+    /// condition holds (relative to the permission's source and player).
+    #[serde(default)]
+    pub condition: Option<Condition>,
+    /// "During your next turn, you may play that card": not during the turn the
+    /// permission was given.
+    #[serde(default)]
+    pub later_turn: bool,
+    /// "If that spell would be put into your graveyard, exile it instead": a replacement
+    /// effect for each spell cast with the permission (CR 614.1a), for as long as it's
+    /// that object (CR 400.7).
+    #[serde(default)]
+    pub exile_instead: bool,
+}
+
+impl PlayTerms {
+    /// Adds `other`'s terms to these.
+    pub fn merge(&mut self, other: &PlayTerms) {
+        if let Some(f) = &other.what {
+            self.what = Some(match self.what.take() {
+                Some(w) => Filter::and(vec![w, f.clone()]),
+                None => f.clone(),
+            });
+        }
+        if other.limit.is_some() {
+            self.limit = other.limit;
+        }
+        if other.group != 0 {
+            self.group = other.group;
+        }
+        self.until_another |= other.until_another;
+        if let Some(c) = &other.condition {
+            self.condition = Some(match self.condition.take() {
+                Some(w) => Condition::And(vec![w, c.clone()]),
+                None => c.clone(),
+            });
+        }
+        self.later_turn |= other.later_turn;
+        self.exile_instead |= other.exile_instead;
+        self.spells_only |= other.spells_only;
+        if other.alt_cost.is_some() {
+            self.alt_cost = other.alt_cost.clone();
+        }
+        if let Some(e) = &other.extra_cost {
+            match self.extra_cost.as_mut() {
+                Some(c) => crate::casting::add_cost(c, e),
+                None => self.extra_cost = Some(e.clone()),
+            }
+        }
+        self.flash |= other.flash;
+        self.cost_increase += other.cost_increase;
+        self.lands_enter_tapped |= other.lands_enter_tapped;
+        self.spend_as_any_color |= other.spend_as_any_color;
+        self.spend_any_type |= other.spend_any_type;
+    }
+}
+
+/// Trigger events (CR 603). Filters are relative to the ability's source.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TriggerCond {
+    /// "When/Whenever [filter] enters" (CR 603.6a).
+    EntersBattlefield(Filter),
+    /// "When/Whenever [filter] leaves the battlefield" (look back in time, CR 603.10a).
+    LeavesBattlefield(Filter),
+    /// "When/Whenever [filter] dies".
+    Dies(Filter),
+    /// General zone change.
+    ZoneChange {
+        filter: Filter,
+        from: Option<ZoneKind>,
+        to: Option<ZoneKind>,
+    },
+    /// "Whenever [player] casts a [filter] spell".
+    CastSpell {
+        who: PlayerRel,
+        filter: Filter,
+    },
+    /// "Whenever you cast your Nth spell each turn".
+    NthSpellCast {
+        who: PlayerRel,
+        n: u32,
+    },
+    /// "Whenever [player] activates an ability" (of matching source).
+    AbilityActivated {
+        who: PlayerRel,
+        source: Filter,
+        include_mana: bool,
+    },
+    /// "Whenever [filter] attacks".
+    Attacks(Filter),
+    /// "Whenever you attack" / "Whenever [player] attacks" (one or more creatures).
+    PlayerAttacks(PlayerRel),
+    /// "Whenever [filter] attacks and isn't blocked".
+    AttacksUnblocked(Filter),
+    /// "Whenever [filter] blocks" / "blocks a creature".
+    Blocks(Filter),
+    /// "Whenever [filter] becomes blocked".
+    BecomesBlocked(Filter),
+    /// "Whenever [filter] blocks or becomes blocked".
+    BlocksOrBecomesBlocked(Filter),
+    /// "Whenever [filter] attacks alone" (CR 506.5).
+    AttacksAlone(Filter),
+    /// "Whenever [filter] attacks a player alone" (CR 506.6).
+    AttacksPlayerAlone(Filter),
+    /// "Whenever [attacker] attacks [you / a planeswalker you control / ...]" (CR 508.3a).
+    AttacksRecipient {
+        attacker: Filter,
+        recipient: DamageRecipient,
+    },
+    /// "Whenever [a player, planeswalker, or battle] is attacked" (CR 508.3b): once per
+    /// attacked player/permanent.
+    IsAttacked(DamageRecipient),
+    /// "Whenever [player] attacks with [N or more] [filter]" (CR 508.3c).
+    PlayerAttacksWith {
+        who: PlayerRel,
+        filter: Filter,
+        min: u32,
+    },
+    /// "Whenever [player] attacks [another player]" (CR 508.3e): once per attacked player.
+    PlayerAttacksPlayer {
+        attacker: PlayerRel,
+        defender: PlayerRel,
+    },
+    /// "Whenever [blocker] blocks a creature" (CR 509.3b): once per attacker blocked.
+    /// Event object = the blocked attacker ("that creature"), other = the blocker.
+    BlocksCreature {
+        blocker: Filter,
+        attacker: Filter,
+    },
+    /// "Whenever [attacker] becomes blocked by a creature" (CR 509.3d): once per blocker.
+    /// Event object = the blocker ("that creature"), other = the attacker.
+    BlockedByCreature {
+        attacker: Filter,
+        blocker: Filter,
+    },
+    /// "Whenever [attacker] becomes blocked by N or more creatures" (CR 509.3e).
+    BlockedByN {
+        attacker: Filter,
+        n: u32,
+    },
+    /// "Whenever [source filter] deals (combat) damage to [recipient]".
+    DealsDamage {
+        source: Filter,
+        to: DamageRecipient,
+        combat_only: bool,
+    },
+    /// "Whenever [filter] is dealt damage".
+    IsDealtDamage {
+        filter: Filter,
+        combat_only: bool,
+    },
+    /// "Whenever [filter] is dealt excess damage" (CR 120.10).
+    DealtExcessDamage {
+        filter: Filter,
+        noncombat_only: bool,
+    },
+    /// "Whenever [player] is dealt damage".
+    PlayerDealtDamage {
+        who: PlayerRel,
+        combat_only: bool,
+    },
+    /// "At the beginning of [whose] [step]".
+    BeginningOf {
+        step: TriggerStep,
+        whose: PlayerRel,
+    },
+    Draws {
+        who: PlayerRel,
+    },
+    Discards {
+        who: PlayerRel,
+        filter: Filter,
+    },
+    GainsLife {
+        who: PlayerRel,
+    },
+    LosesLife {
+        who: PlayerRel,
+    },
+    CountersPut {
+        filter: Filter,
+        kind: Option<CounterKind>,
+        /// "Whenever a [kind] counter is put on …": triggers once for each counter put
+        /// (Fathom Mage's and Flourishing Defenses's rulings), rather than once for each
+        /// put action ("one or more [kind] counters are put on …").
+        #[serde(default)]
+        each: bool,
+    },
+    /// "Whenever [who] put(s) one or more [kind] counters on [objects or players]" (once
+    /// for each put action on each permanent or player) / "Whenever [who] put(s) a [kind]
+    /// counter on …" (`each`: once for each counter) (CR 122.6, 122.6a): counters put by a
+    /// player matching `who`, however they were put (by an effect, as a cost, as the result
+    /// of damage, or by a turn-based action, [`crate::events::CounterOrigin`]). Event
+    /// object = the permanent (none for a player), player = the player who put them,
+    /// amount = how many.
+    CountersPutBy {
+        who: PlayerRel,
+        on_objects: Option<Filter>,
+        on_players: Option<PlayerFilter>,
+        kind: Option<CounterKind>,
+        each: bool,
+    },
+    /// "Whenever a spell or ability [by] controls destroys [filter]" (CR 701.8): a
+    /// permanent destroyed by the effect of a spell or ability (not by a state-based
+    /// action, CR 704.5g–h, and not sacrificed or exiled). Looks back in time
+    /// (CR 603.10a). Event object = the permanent as it last existed on the battlefield,
+    /// player = the controller of the spell or ability.
+    DestroyedBy {
+        filter: Filter,
+        by: PlayerRel,
+    },
+    /// "When/Whenever [filter spell] is countered by a spell or ability [by] controls"
+    /// (CR 701.6). Looks back in time (CR 603.10e). Event object = the spell as it last
+    /// existed on the stack, player = the controller of the spell or ability that
+    /// countered it.
+    CounteredBy {
+        filter: Filter,
+        by: PlayerRel,
+    },
+    CountersRemoved {
+        filter: Filter,
+        kind: Option<CounterKind>,
+    },
+    /// "When the Nth [kind] counter is put on [filter]": one or more counters are put on it
+    /// such that it had fewer than N before and N or more after (CR 122.7).
+    CounterThreshold {
+        filter: Filter,
+        kind: CounterKind,
+        n: u32,
+    },
+    BecomesTapped(Filter),
+    BecomesUntapped(Filter),
+    /// "Whenever [filter] is tapped for mana of a specified type" / "Whenever you tap a
+    /// permanent for {C}" (CR 106.12a): only if that type of mana was produced.
+    TappedForManaOfType {
+        filter: Filter,
+        mana: ManaType,
+    },
+    /// "Whenever [filter] becomes the target of a spell or ability [opponent controls]".
+    BecomesTarget {
+        filter: Filter,
+        by: PlayerRel,
+    },
+    Sacrificed(Filter),
+    TokenCreated(Filter),
+    LandPlayed {
+        who: PlayerRel,
+        filter: Filter,
+    },
+    /// "Whenever you cycle or discard" / "When you cycle this card".
+    Cycled {
+        who: PlayerRel,
+        filter: Filter,
+    },
+    /// "Whenever a player searches their library".
+    Searched(PlayerRel),
+    /// "Whenever [filter] is turned face up".
+    TurnedFaceUp(Filter),
+    Transforms(Filter),
+    /// "Whenever you sacrifice [filter]".
+    YouSacrifice(Filter),
+    /// "Whenever a spell or ability an opponent controls causes you to discard" etc. use Custom.
+    /// State triggers (CR 603.8): "When you control no Islands, sacrifice this".
+    State(Condition),
+    /// "Whenever you gain control of" etc.
+    ControlChanged(Filter),
+    /// "Whenever a player loses the game".
+    PlayerLoses,
+    /// "Whenever you roll a die".
+    RollDie(PlayerRel),
+    /// "Whenever you flip a coin" / "win a coin flip".
+    FlipCoin(PlayerRel),
+    /// "Whenever [player] mills"/"cards are put into graveyard from library".
+    Mills(PlayerRel),
+    /// "Whenever you commit a crime" (CR 700.13).
+    CommitCrime(PlayerRel),
+    /// "Whenever day becomes night or night becomes day".
+    DayNightChanges,
+    /// "Whenever you expend N" (CR 700.14).
+    Expend {
+        who: PlayerRel,
+        n: u32,
+    },
+    /// "Whenever [filter] phases out" (looks back in time, CR 603.10b).
+    PhasesOut(Filter),
+    /// "Whenever [filter] becomes unattached from a permanent" (looks back, CR 603.10c).
+    /// "That permanent" is the trigger object.
+    BecomesUnattached(Filter),
+    /// "When you lose control of [filter]" (looks back in time, CR 603.10d).
+    LoseControl(Filter),
+    /// "When/Whenever [filter spell] is countered" (looks back in time, CR 603.10e).
+    SpellCountered(Filter),
+    /// "Whenever an ability of [source] resolves" / "Whenever the final chapter ability of
+    /// a Saga you control resolves" (CR 608.2p): triggers once the ability has finished
+    /// resolving. "That Saga" is the trigger object.
+    AbilityResolved {
+        source: Filter,
+        final_chapter: bool,
+    },
+    /// "Whenever [cause] causes a triggered ability [of a matching source] to trigger":
+    /// triggers on another ability triggering (CR 603.3b). `cause` names the kind of
+    /// event and what it's about (e.g. `EntersBattlefield(Permanent)`); "that ability" is
+    /// the trigger spell.
+    AbilityTriggered {
+        cause: Box<TriggerCond>,
+        source: Filter,
+    },
+    /// An ability with several trigger conditions ("When ~ enters or dies", "At the
+    /// beginning of your upkeep and whenever you cast a green spell"). It triggers once for
+    /// each event that matches any of them (CR 603.2c): for a single event, the first
+    /// matching condition is used.
+    AnyOf(Vec<TriggerCond>),
+    /// A trigger event qualified by a condition that is part of the trigger event itself
+    /// ("attacks alone", "while you control …", "your second card each turn"). The
+    /// condition is evaluated with the event information when the event occurs; unlike an
+    /// intervening "if" clause (CR 603.4) it isn't checked again on resolution.
+    Where {
+        trigger: Box<TriggerCond>,
+        cond: Condition,
+    },
+    /// "… for the first time each turn": triggers only if no earlier event this turn
+    /// matched the inner trigger condition.
+    FirstTimeEachTurn(Box<TriggerCond>),
+    /// Triggers once for each batch of simultaneous events matching the inner condition
+    /// (CR 603.2c), grouped by `per`: "whenever one or more creatures die" (once per
+    /// batch), "one or more creatures you control deal combat damage to a player" (once
+    /// per damaged player), "whenever ~ is dealt damage" (once however many sources dealt
+    /// damage at the same time). The event info carries all matching objects (`objects`)
+    /// and the total amount; other fields come from the first matching event.
+    Batched {
+        trigger: Box<TriggerCond>,
+        per: BatchPer,
+    },
+    /// "Whenever [player] copies a [filter] spell" ("whenever you cast or copy an instant or
+    /// sorcery spell"): a copy of a spell was put onto the stack (CR 707.10).
+    SpellCopied {
+        who: PlayerRel,
+        filter: Filter,
+    },
+    /// A player performed a named keyword action reported as [`crate::events::Event::Custom`]
+    /// ("scry", "surveil", "proliferate"): "whenever you scry".
+    PlayerAction {
+        name: SmolStr,
+        who: PlayerRel,
+    },
+    /// "Whenever [attacker] attacks [defender] [with N or more [filter]]", "whenever
+    /// [defender] is attacked" (CR 508.3b, 508.3e): once for each player attacked by
+    /// creatures the attacking player controls, when attackers are declared. Needs at least
+    /// `min` attackers matching `with` attacking that player. Event player = the attacked
+    /// player, objects = the creatures attacking them, amount = their number.
+    PlayerAttacked {
+        attacker: PlayerRel,
+        defender: PlayerFilter,
+        with: Filter,
+        min: u32,
+    },
+    /// "Whenever [obj] becomes attached to [other]" (`attached`) / "becomes unattached from
+    /// [other]" (CR 701.3). Event object = the Aura/Equipment, other = the permanent.
+    AttachChanged {
+        attached: bool,
+        obj: Filter,
+        other: Filter,
+    },
+    /// "Whenever [filter] phases in" (`phased_in`) / "phases out" (CR 702.26).
+    Phases {
+        phased_in: bool,
+        filter: Filter,
+    },
+    /// A delayed triggered ability that lasts for the rest of the turn ("until end of
+    /// turn, whenever …", "whenever … this turn", CR 603.7b); removed in the cleanup step
+    /// (CR 514.2).
+    ThisTurn(Box<TriggerCond>),
+    /// A delayed triggered ability that lasts until its controller's next turn ("until your
+    /// next turn, whenever …", CR 603.7b): removed as that turn begins, even if its untap
+    /// step is skipped.
+    UntilYourNextTurn(Box<TriggerCond>),
+    /// The inner damage trigger ("deals damage", "is dealt damage"), for noncombat damage
+    /// only: "whenever a source you control deals noncombat damage to an opponent".
+    Noncombat(Box<TriggerCond>),
+    /// "Whenever [filter] is tapped for mana", "whenever [player] taps [filter] for mana"
+    /// (CR 106.12a): a mana ability with {T} in its cost resolved and produced mana. `who`
+    /// is the player who activated it. Event object = the permanent, player = `who`.
+    TappedForMana {
+        who: PlayerRel,
+        filter: Filter,
+    },
+    /// Keyword-provided and card-specific triggers implemented in code, by name.
+    Custom(SmolStr),
+}
+
+/// How a [`TriggerCond::Batched`] trigger groups the events of one batch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BatchPer {
+    /// Once per batch.
+    Batch,
+    /// Once per player in the events (`EventInfo::player`).
+    Player,
+    /// Once per object the events are about (`EventInfo::object`), e.g. the creature dealt
+    /// damage.
+    Object,
+    /// Once per other object (`EventInfo::other`), e.g. the source dealing damage.
+    Other,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum DamageRecipient {
+    Any,
+    Player(PlayerRel),
+    /// A creature/permanent matching.
+    Object(Filter),
+    PlayerOrPlaneswalker(PlayerRel),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TriggerStep {
+    Untap,
+    Upkeep,
+    Draw,
+    PrecombatMain,
+    BeginningOfCombat,
+    DeclareAttackers,
+    DeclareBlockers,
+    CombatDamage,
+    EndOfCombat,
+    PostcombatMain,
+    End,
+    Cleanup,
+    /// "At the beginning of each turn".
+    Turn,
+}
+
+/// Instructions performed as a spell or ability resolves.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub enum Effect {
+    #[default]
+    Noop,
+    Seq(Vec<Effect>),
+    If {
+        cond: Condition,
+        then: Box<Effect>,
+        otherwise: Box<Effect>,
+    },
+    /// "[Player] may [effect]" — the result is recorded for `Condition::PrevHappened`.
+    May {
+        who: PlayerRef,
+        effect: Box<Effect>,
+    },
+    /// "[Player] may pay [cost]. If they do, [then]. If they don't, [otherwise]."
+    /// Also covers "unless [player] pays" (swap then/otherwise).
+    PayOptional {
+        who: PlayerRef,
+        cost: Cost,
+        then: Box<Effect>,
+        otherwise: Box<Effect>,
+    },
+    /// Perform for each entity in the selection, binding it to `var`.
+    ForEach {
+        sel: Sel,
+        var: Var,
+        effect: Box<Effect>,
+    },
+    /// For each player (APNAP order), binding `PlayerRef::Iterated`.
+    ForEachPlayer {
+        who: PlayerRef,
+        effect: Box<Effect>,
+    },
+    /// "Starting with you, each player chooses a creature", "starting with the next opponent
+    /// in turn order, each opponent chooses ...": each of the players matching `who`, one
+    /// at a time in turn order beginning with `first` (CR 101.4b), performs the whole
+    /// instruction, knowing what those before did; `PlayerRef::Iterated` is that player.
+    /// See `turn_order_choices.rs`.
+    InTurnOrder {
+        first: TurnOrderStart,
+        who: PlayerFilter,
+        effect: Box<Effect>,
+    },
+    /// "[player] does the same": the player performs the effect in place of its
+    /// controller, so "you" in it is that player (none if `who` names no player).
+    AsPlayer {
+        who: PlayerRef,
+        effect: Box<Effect>,
+    },
+    Repeat {
+        times: Value,
+        effect: Box<Effect>,
+    },
+    /// "[instructions]. If [condition], repeat this process." / "You may repeat this
+    /// process any number of times.": the process (`body`) is performed, and performed
+    /// again, with new choices, after each pass in which it performed
+    /// [`Effect::RepeatThisProcess`] — so whether to repeat is decided anew after every
+    /// pass, from that pass's results, and repeating includes the instruction to repeat
+    /// (CR 608.2c). See [`crate::repeat_process`].
+    RepeatProcess {
+        body: Box<Effect>,
+    },
+    /// "repeat this process", inside the body of [`Effect::RepeatProcess`]: once the
+    /// current pass ends, the process is performed again.
+    RepeatThisProcess,
+    /// Choose one of several effects at resolution ("choose one —" when not modal on cast,
+    /// or "choose one at random").
+    ChooseOne {
+        who: PlayerRef,
+        options: Vec<(String, Effect)>,
+    },
+    /// Store a selection into a variable (evaluated now).
+    Store {
+        var: Var,
+        sel: Sel,
+    },
+    /// Store a number into a variable.
+    StoreValue {
+        var: Var,
+        value: Value,
+    },
+    /// "Note [a number]": records information for the abilities linked to this one to refer
+    /// to ("the noted number", CR 607.2e). Read with `Value::Chosen`.
+    Note {
+        value: Value,
+    },
+    /// Sets the value of X for the rest of the resolution, and for reflexive triggers it
+    /// creates ("that many" after paying a cost any number of times, CR 603.12a).
+    SetX {
+        value: Value,
+    },
+
+    // --- Objects -----------------------------------------------------------
+    Destroy {
+        what: Sel,
+        no_regen: bool,
+    },
+    Exile {
+        what: Sel,
+        face_down: bool,
+        /// Link exiled cards to the source (CR 607, "exiled with this").
+        link: bool,
+    },
+    /// "[Player] sacrifices [count] [filter]" — the player chooses.
+    Sacrifice {
+        who: PlayerRef,
+        filter: Filter,
+        count: Value,
+    },
+    /// Sacrifice specific objects (e.g. "sacrifice this creature").
+    SacrificeObjects {
+        what: Sel,
+    },
+    /// Move objects to a destination ("return to owner's hand", "put on top of library",
+    /// "put onto the battlefield").
+    Move {
+        what: Sel,
+        to: Destination,
+    },
+    Tap {
+        what: Sel,
+    },
+    Untap {
+        what: Sel,
+    },
+    DealDamage {
+        source: Sel,
+        amount: Value,
+        to: Sel,
+    },
+    /// Damage whose excess (beyond lethal damage, loyalty, or defense) is dealt to
+    /// another permanent or player instead (CR 120.4a): "Excess damage is dealt to that
+    /// creature's controller instead."
+    DealDamageExcess {
+        source: Sel,
+        amount: Value,
+        to: Sel,
+        excess_to: Sel,
+    },
+    /// Divided damage using the division chosen on casting (CR 601.2d).
+    DealDividedDamage {
+        source: Sel,
+        slot: u8,
+    },
+    Fight {
+        a: Sel,
+        b: Sel,
+    },
+    AddCounters {
+        what: Sel,
+        kind: CounterKind,
+        n: Value,
+    },
+    /// "Remove N [kind] counters from [what]" (CR 122). `kind: None`: N counters in all,
+    /// of the kinds the controller of the spell or ability chooses where the object has
+    /// several (every counter if N is at least how many it has: "remove all counters").
+    RemoveCounters {
+        what: Sel,
+        kind: Option<CounterKind>,
+        n: Value,
+    },
+    /// "Remove up to N [kind] counters from [what]", "remove any number of counters from
+    /// [what]" (`max: None`): for each object, the controller of the spell or ability
+    /// chooses how many to remove (at most `max`) and, of several kinds, which.
+    RemoveCountersUpTo {
+        what: Sel,
+        kind: Option<CounterKind>,
+        max: Option<Value>,
+    },
+    /// "Choose a counter on [from]. Put an additional counter of that kind on ...": the
+    /// controller chooses a kind of counter among the counters on `from` (objects or
+    /// players), then `then` is performed with [`CHOSEN_COUNTER_KIND`] standing for that
+    /// kind. Nothing happens if there are none.
+    ChooseCounterKind {
+        from: Sel,
+        then: Box<Effect>,
+    },
+    /// "For each kind of counter on target permanent or player, give that permanent or
+    /// player another counter of that kind": `then` is performed once for each kind of
+    /// counter on `from` (as the instruction begins, CR 608.2h), with
+    /// [`CHOSEN_COUNTER_KIND`] standing for that kind.
+    ForEachCounterKind {
+        from: Sel,
+        then: Box<Effect>,
+    },
+    /// "Move [n / all] [kind] counters from [from] onto [to]" (CR 122.5). `kind: None`:
+    /// counters of each kind; `n: None`: all of them.
+    MoveCounters {
+        from: Sel,
+        to: Sel,
+        kind: Option<CounterKind>,
+        n: Option<Value>,
+    },
+    /// "Put [its] counters on [to]" for an object that has left the battlefield: the same
+    /// number of each kind of counter it had (or only of `kind`) (CR 122.8, 122.9).
+    PutCountersOf {
+        from: Sel,
+        to: Sel,
+        kind: Option<CounterKind>,
+    },
+    /// Apply layer modifications to the selected objects for a duration (CR 611.2).
+    Modify {
+        what: Sel,
+        mods: Vec<Modification>,
+        duration: Duration,
+    },
+    /// Create a rule-modifying effect (restriction/requirement) for a duration.
+    AddRestriction {
+        restriction: Restriction,
+        duration: Duration,
+    },
+    /// Create a player effect for a duration.
+    AddPlayerEffect {
+        who: PlayerRef,
+        effect: PlayerModification,
+        duration: Duration,
+    },
+    /// Create a replacement/prevention effect for a duration (or until used).
+    AddReplacement {
+        def: ReplacementDef,
+        duration: Duration,
+        /// Number of times it can apply before it's used up.
+        uses: Option<u32>,
+    },
+    GainControl {
+        what: Sel,
+        who: PlayerRef,
+        duration: Duration,
+    },
+    ExchangeControl {
+        a: Sel,
+        b: Sel,
+    },
+    CreateToken {
+        spec: TokenSpec,
+        count: Value,
+        controller: PlayerRef,
+        tapped: bool,
+        attacking: bool,
+    },
+    /// "Create an X/X [token]": a token whose power and toughness are numbers the effect
+    /// defines (CR 107.3c), determined as the token is created, so they're part of its
+    /// copiable values (CR 707.2); otherwise as [`Effect::CreateToken`] (`spec`'s own power
+    /// and toughness are replaced).
+    CreateTokenWithPT {
+        spec: TokenSpec,
+        power: Value,
+        toughness: Value,
+        count: Value,
+        controller: PlayerRef,
+        tapped: bool,
+        attacking: bool,
+    },
+    /// "Create a 0/0 green Ooze creature token ... The token enters with X +1/+1 counters
+    /// on it" (Printlifter Ooze): the tokens `effect` creates enter with these counters
+    /// (CR 122.6) — abilities that trigger on them entering see them with the counters.
+    /// Each number is determined just before the tokens are created ("other creatures"
+    /// than them are the creatures already there).
+    TokensEnterWithCounters {
+        counters: Vec<(CounterKind, Value)>,
+        effect: Box<Effect>,
+    },
+    /// "Create a Monster Role token attached to it": tokens that enter the battlefield
+    /// attached to an object or player (CR 111.10j, 303.4f–i, 301.5e). An Aura token that
+    /// can't legally enchant it isn't created.
+    CreateTokenAttached {
+        spec: TokenSpec,
+        count: Value,
+        controller: PlayerRef,
+        to: Sel,
+    },
+    /// Create token copies of objects (CR 707.2, 111.10).
+    CreateTokenCopy {
+        of: Sel,
+        count: Value,
+        controller: PlayerRef,
+        tapped: bool,
+        attacking: bool,
+        /// Exceptions ("except it's a 1/1", "except it has haste").
+        mods: Vec<Modification>,
+    },
+    CounterSpell {
+        what: Sel,
+    },
+    CopySpell {
+        what: Sel,
+        count: Value,
+        new_targets: bool,
+    },
+    /// "Create a 1/1 ... token that's tapped and attacking that player" (`attacking`: the
+    /// tokens attack that player, CR 508.4), "create a 1/1 ... token that's blocking that
+    /// creature" (`blocking`: the tokens `effect` creates block that creature, CR 509.4).
+    TokensJoinCombat {
+        effect: Box<Effect>,
+        attacking: Option<PlayerRef>,
+        blocking: Option<Sel>,
+    },
+    /// "Copy it, except the copy isn't legendary" (CR 707.9, 707.10): `CopySpell` whose
+    /// exceptions become part of each copy's copiable values (CR 707.9b), and so of the
+    /// token a copy of a permanent spell becomes (CR 608.3f).
+    CopySpellExcept {
+        what: Sel,
+        count: Value,
+        new_targets: bool,
+        mods: Vec<Modification>,
+    },
+    /// "Until end of turn, you may pay {1} any time you could cast an instant. If you do,
+    /// ..." (CR 116.2c): lets the players take a special action later, while `duration`
+    /// lasts. `repeatable`: whether it can be taken more than once.
+    OfferSpecialAction {
+        def: Box<SpecialActionDef>,
+        duration: Duration,
+        repeatable: bool,
+    },
+    /// "[Player] puts a [kind of] sticker on [objects]" (CR 123.3): they choose one of the
+    /// stickers they have access to that isn't on an object they own, and pay its ticket
+    /// cost unless `free` (CR 123.3c). `max_ticket`: "with ticket cost X or less".
+    PutSticker {
+        who: PlayerRef,
+        what: Sel,
+        kind: Option<StickerType>,
+        max_ticket: Option<Value>,
+        free: bool,
+    },
+    /// "Mana of any type can be spent to cast [that spell]" (CR 118.14): `who` may spend
+    /// mana as though it were colorless mana or mana of any color to cast the card.
+    SpendAnyTypeMana {
+        who: PlayerRef,
+        what: Sel,
+        duration: Duration,
+    },
+    /// "[Player] may change the target(s) of / choose new targets for [spell or ability]"
+    /// (CR 115.7). With `to`, the new target must be that object or player ("change the
+    /// target of target spell to this creature").
+    ChangeTargets {
+        what: Sel,
+        who: PlayerRef,
+        how: TargetChange,
+        to: Option<Sel>,
+    },
+    /// "[this] becomes a copy of [object]" (CR 707).
+    BecomeCopy {
+        what: Sel,
+        of: Sel,
+        duration: Duration,
+    },
+    /// `BecomeCopy` with the copy effect's exceptions ("..., except those creatures aren't
+    /// legendary", CR 707.9), which become part of the copiable values.
+    BecomeCopyExcept {
+        what: Sel,
+        of: Sel,
+        duration: Duration,
+        exceptions: Vec<Modification>,
+    },
+    Transform {
+        what: Sel,
+    },
+    Regenerate {
+        what: Sel,
+    },
+    /// Attach the source (or selection) to a target (CR 701.3).
+    Attach {
+        what: Sel,
+        to: Sel,
+    },
+    /// Attach as though the permanent it's attached to were a creature ("equip
+    /// planeswalker", CR 702.6e).
+    AttachAsCreature {
+        what: Sel,
+        to: Sel,
+    },
+    Unattach {
+        what: Sel,
+    },
+    PhaseOut {
+        what: Sel,
+    },
+    /// Turn face down / face up.
+    TurnFaceUp {
+        what: Sel,
+    },
+    /// "Turn [permanents] face down" (CR 708.2a, 708.2b).
+    TurnFaceDown {
+        what: Sel,
+    },
+    /// Put a creature/permanent into its owner's library at a position.
+    /// (Use Move.)
+    /// Remove from combat.
+    RemoveFromCombat {
+        what: Sel,
+    },
+    /// "Choose a color/creature type/card name/number" — stored on the source object.
+    Choose {
+        who: PlayerRef,
+        kind: ChoiceKind,
+    },
+    /// "[It] enters tapped": only meaningful inside [`ReplacementAction::AsEnters`], where
+    /// it modifies how the permanent enters (CR 614.1c); elsewhere it does nothing.
+    EnterTapped,
+    /// "[It] enters with N [kind] counters on it": only meaningful inside
+    /// [`ReplacementAction::AsEnters`] (CR 614.1c, 122.6); elsewhere it does nothing.
+    EnterWithCounters {
+        kind: CounterKind,
+        n: Value,
+    },
+    /// "[It] enters prepared": only meaningful inside [`ReplacementAction::AsEnters`]
+    /// (CR 722.3a); elsewhere it does nothing.
+    EnterPrepared,
+    /// "... enter as a copy of X, except [exceptions]": if the permanent enters as a copy,
+    /// these modifications are part of its copiable values (CR 707.9b). Only meaningful
+    /// inside [`ReplacementAction::AsEnters`].
+    EnterCopyExceptions(Vec<Modification>),
+    /// "... enter as a copy of X, except [if it's a creature,] it enters with N additional
+    /// counters [and has ...]" / "When you do, ...": parts of a copy exception that are
+    /// additional effects (CR 707.9e), conditional (CR 707.9f), or linked triggered
+    /// abilities (CR 707.9g). They happen only if it enters as a copy and no other copy
+    /// effect is applied after this one. Only meaningful inside
+    /// [`ReplacementAction::AsEnters`].
+    EnterCopyExtra {
+        /// Applies only if the copy (without this exception) matches.
+        only_if: Option<Filter>,
+        /// Modifications that become part of its copiable values.
+        mods: Vec<Modification>,
+        /// `EnterWithCounters` (placed as it enters) or an effect performed as it enters
+        /// (e.g. a reflexive triggered ability).
+        effect: Box<Effect>,
+    },
+    /// "[It] enters with haste", "as ~ enters, it becomes a 3/3 creature": an effect on
+    /// the permanent performed as it's put onto the battlefield, with the permanent as
+    /// its source (CR 614.1c). Only meaningful inside [`ReplacementAction::AsEnters`],
+    /// where it's deferred until right after the permanent enters (before its
+    /// zone-change event); elsewhere it does nothing.
+    OnEntry(Box<Effect>),
+    /// "As ~ enters, it becomes your choice of a 3/3 creature or a 2/2 creature with
+    /// flying": an "as enters" ability that sets power and toughness (and maybe other
+    /// characteristics) modifies the permanent's copiable values (CR 707.2). Only
+    /// meaningful inside [`ReplacementAction::AsEnters`].
+    EnterAs(Vec<Modification>),
+    /// "It becomes day" / "it becomes night" (CR 731.1).
+    SetDayNight {
+        day: bool,
+    },
+    /// "[permanents] become prepared" / "become unprepared" (CR 722.3a–c).
+    SetPrepared {
+        what: Sel,
+        prepared: bool,
+    },
+
+    // --- Players ------------------------------------------------------------
+    Draw {
+        who: PlayerRef,
+        n: Value,
+    },
+    Discard {
+        who: PlayerRef,
+        n: Value,
+        random: bool,
+        filter: Filter,
+    },
+    DiscardHand {
+        who: PlayerRef,
+    },
+    Mill {
+        who: PlayerRef,
+        n: Value,
+    },
+    GainLife {
+        who: PlayerRef,
+        n: Value,
+    },
+    LoseLife {
+        who: PlayerRef,
+        n: Value,
+    },
+    SetLife {
+        who: PlayerRef,
+        n: Value,
+    },
+    /// Two players exchange life totals (CR 119.7, 119.8).
+    ExchangeLifeTotals {
+        a: PlayerRef,
+        b: PlayerRef,
+    },
+    AddMana {
+        who: PlayerRef,
+        mana: ManaProduction,
+        restriction: Option<ManaRestriction>,
+    },
+    /// "Add [mana]. When that mana is spent to cast [a spell], [effect]." (CR 106.6): the
+    /// inner `AddMana` adds mana carrying a delayed triggered ability that triggers when
+    /// that mana is spent (one per mana produced, CR 106.6a). `abilities`: "... to cast a
+    /// spell or activate an ability" (Sunken Palace): it also triggers when the mana is
+    /// spent to activate an ability, which is then "that ability".
+    AddManaWithSpentTrigger {
+        add: Box<Effect>,
+        spell_filter: Filter,
+        body: Box<Body>,
+        #[serde(default)]
+        abilities: bool,
+        /// "If that mana is spent to cast [a spell], [effect]": an additional effect that
+        /// affects the spell the mana is spent on (CR 106.6), applied as the mana is spent
+        /// rather than by a delayed triggered ability.
+        #[serde(default)]
+        additional: bool,
+    },
+    /// "[Add mana]. Until end of turn, you don't lose this mana as steps and phases end."
+    /// (CR 500.4): the mana the inner effect adds stays in its pool until the turn's cleanup
+    /// step ends (the effect ends in CR 514.2).
+    PersistentMana(Box<Effect>),
+    /// "This Class's level becomes N" (a class level bar's activated ability, CR 107.16a,
+    /// 716.2a).
+    SetClassLevel {
+        level: u32,
+    },
+    /// "[Player] activates a mana ability of each [filter] they control" (Drain Power).
+    ActivateManaAbilities {
+        who: PlayerRef,
+        filter: Filter,
+    },
+    /// "[Player] loses all unspent mana [and you add the mana lost this way]" (CR 106.13):
+    /// empties the player's mana pool; the lost mana (with its sources, restrictions, and
+    /// riders) is added to `to`'s mana pool, if any.
+    LoseUnspentMana {
+        who: PlayerRef,
+        to: Option<PlayerRef>,
+    },
+    AddPlayerCounters {
+        who: PlayerRef,
+        kind: CounterKind,
+        n: Value,
+    },
+    Scry {
+        who: PlayerRef,
+        n: Value,
+    },
+    Surveil {
+        who: PlayerRef,
+        n: Value,
+    },
+    /// Search a library for cards matching filter and put them into a destination.
+    Search {
+        who: PlayerRef,
+        whose: PlayerRef,
+        filter: Filter,
+        count: Value,
+        to: Destination,
+        reveal: bool,
+        shuffle: bool,
+    },
+    /// The general search (CR 701.23, see [`crate::search_rules`]): one or more zones,
+    /// several card descriptions, distinct names, split destinations.
+    SearchCards(Box<SearchSpec>),
+    Shuffle {
+        who: PlayerRef,
+    },
+    /// Shuffle objects into their owners' libraries.
+    ShuffleInto {
+        what: Sel,
+    },
+    /// "[Player] shuffles [objects] into their library" (CR 701.24): the objects are put
+    /// into their owners' libraries at the same time, then each of those libraries and
+    /// `library`'s is shuffled once, even if some or none of the objects could be put
+    /// there (CR 701.24c, 701.24d). The number of objects moved is the result
+    /// (`Value::Prev`, "then draw that many cards").
+    ShuffleIntoLibrary {
+        what: Sel,
+        library: PlayerRef,
+    },
+    /// Reveal/look at the top N cards and choose some to put somewhere
+    /// ("Look at the top N cards, put M of them into your hand and the rest on the bottom").
+    Dig {
+        who: PlayerRef,
+        n: Value,
+        reveal: bool,
+        filter: Filter,
+        take: Value,
+        take_up_to: bool,
+        take_to: Destination,
+        rest_to: Destination,
+    },
+    /// A step of a dig (see [`DigStep`] and `dig_steps.rs`).
+    DigStep(Box<DigStep>),
+    RevealHand {
+        who: PlayerRef,
+    },
+    /// "Look at [player]'s hand": the controller sees the cards in those players' hands;
+    /// unlike revealing (CR 701.20a), no other player sees them.
+    LookAtHand {
+        who: PlayerRef,
+    },
+    /// Reveal cards from the top until a card matching filter is revealed.
+    RevealUntil {
+        who: PlayerRef,
+        filter: Filter,
+        found_to: Destination,
+        rest_to: Destination,
+    },
+    ExtraTurn {
+        who: PlayerRef,
+    },
+    /// "Take an extra turn after this one. At the beginning of that turn's end step, ...":
+    /// an extra turn (CR 500.7) and what happens as that turn begins, if it does (a skipped
+    /// turn never begins, CR 614.10) — effects that refer to "that turn", performed then as
+    /// effects of "this turn" (e.g. `AtNext` an end step).
+    ExtraTurnWith {
+        who: PlayerRef,
+        at_start: Box<Effect>,
+    },
+    ExtraCombat {
+        after_this: bool,
+    },
+    /// "After this phase, there is an additional combat phase", "you get an additional
+    /// upkeep step after this step" (CR 500.8–500.10): adds `parts` (in this order) to the
+    /// current turn directly after the current step, or after the current phase; `n`
+    /// times. If `who` is set ("you get ..."), nothing is added unless it's that player's
+    /// turn (CR 500.10a).
+    AddTurnParts {
+        parts: Vec<TurnPart>,
+        after_phase: bool,
+        n: Value,
+        who: Option<PlayerRef>,
+    },
+    /// Skip a player's next step/phase/turn.
+    Skip {
+        who: PlayerRef,
+        step: StepKind,
+    },
+    /// Create a delayed triggered ability (CR 603.7).
+    DelayedTrigger {
+        trigger: TriggerCond,
+        body: Box<Body>,
+        /// Fires once and is then removed.
+        once: bool,
+    },
+    /// Notes the selected objects and players for the abilities linked to this one
+    /// (CR 607.1, 607.2e): what the ability affected or what a player chose, which a
+    /// linked ability refers to as "that player" or "the last chosen card"
+    /// ([`PlayerRef::LinkedNoted`], [`Sel::LinkedNoted`]). With `replace`, the new note
+    /// replaces earlier ones ("the last chosen card"); otherwise it adds to them
+    /// (CR 607.3). See `linked_notes.rs`.
+    NoteLinked {
+        what: Sel,
+        replace: bool,
+    },
+    /// A reflexive triggered ability ("When you do, ..."): created during resolution, it
+    /// triggers immediately and is put on the stack the next time a player would receive
+    /// priority, with its own targets (CR 603.12). Wrap it in a condition to make it
+    /// trigger only if the action was taken.
+    Reflexive {
+        body: Box<Body>,
+    },
+    /// "At the beginning of the next end step" / "at end of combat" (common delayed triggers).
+    AtNext {
+        step: TriggerStep,
+        effect: Box<Effect>,
+    },
+    /// "[Player] gets an emblem with [ability]" (CR 114.2): each such player puts an
+    /// emblem with the abilities into the command zone; they own and control it.
+    CreateEmblem {
+        who: PlayerRef,
+        abilities: Vec<Ability>,
+    },
+    /// "Each player chooses from among the permanents they control an artifact, a creature,
+    /// an enchantment, and a land, then sacrifices the rest" (CR 101.4): each player, in
+    /// APNAP order, chooses one permanent they control among `among` for each of `keep`
+    /// in the order given (CR 101.4c; a permanent with several of those types may be
+    /// chosen for each of them), then all their other permanents among `among` are
+    /// sacrificed at the same time. A filter repeated in `keep` ("chooses three lands
+    /// they control") is a choice of another permanent each time; with `up_to` ("chooses
+    /// up to two creatures they control"), each choice may be declined.
+    KeepAndSacrificeRest {
+        who: PlayerRef,
+        among: Filter,
+        keep: Vec<Filter>,
+        #[serde(default)]
+        up_to: bool,
+    },
+    /// "Restart the game[, leaving in exile all ... exiled with ~]" (CR 104.6, 727): the
+    /// game ends and a new one begins with the resolving ability's controller as the
+    /// starting player. Cards selected by `keep` stay in exile, out of their owners' decks
+    /// (CR 727.5); they're "it" for the rest of the effect, which happens just before the
+    /// new game's first untap step (CR 727.4).
+    RestartGame {
+        keep: Option<Sel>,
+    },
+    /// Win or lose the game.
+    WinGame {
+        who: PlayerRef,
+    },
+    LoseGame {
+        who: PlayerRef,
+    },
+    /// Cast a card during resolution (CR 608.2g), optionally without paying its mana cost.
+    CastCard {
+        who: PlayerRef,
+        what: Sel,
+        free: bool,
+        optional: bool,
+    },
+    /// "[You] may play that card [without paying its mana cost]" during resolution: a land
+    /// card is played (only during the player's turn with a land play left, CR 305.2b,
+    /// 305.3); any other card is cast (CR 608.2g).
+    PlayCard {
+        who: PlayerRef,
+        what: Sel,
+        free: bool,
+        optional: bool,
+    },
+    /// Play a land / cast a spell from exile etc. later: grant a play permission to the
+    /// selected cards for a duration.
+    GrantPlayPermission {
+        who: PlayerRef,
+        what: Sel,
+        duration: Duration,
+        free: bool,
+    },
+    /// The permissions to play cards `effect` gives (`GrantPlayPermission`) come with
+    /// `terms`: "you may cast that card" (not play it as a land), "If you cast a spell
+    /// this way, pay life equal to its mana value rather than pay its mana cost", "you may
+    /// cast them as though they had flash" (see [`PlayTerms`], `permissions.rs`).
+    WithPlayTerms {
+        terms: PlayTerms,
+        effect: Box<Effect>,
+    },
+    /// Prevent the next N damage / all damage (CR 615).
+    PreventDamage {
+        to: Sel,
+        amount: Option<Value>,
+        duration: Duration,
+        combat_only: bool,
+        /// The rest of the effect, performed right after damage is prevented (CR 615.5):
+        /// "For each 1 damage prevented this way, put a +1/+1 counter on that creature."
+        /// The event amount is the damage prevented; the event object, the recipient.
+        #[serde(default)]
+        then: Option<Box<Effect>>,
+    },
+    /// "Prevent the next N damage that would be dealt this turn to any number of targets,
+    /// divided as you choose": a prevention shield for each target of the slot, of the
+    /// amount divided to it as the spell was cast (CR 601.2d, 615).
+    PreventDividedDamage {
+        slot: u8,
+        duration: Duration,
+    },
+    /// Become the monarch (CR 725).
+    BecomeMonarch {
+        who: PlayerRef,
+    },
+    TakeInitiative {
+        who: PlayerRef,
+    },
+    /// Keyword actions implemented in code (proliferate, explore, amass, connive, ...).
+    KeywordAction {
+        action: KeywordAction,
+        who: PlayerRef,
+        what: Sel,
+        n: Value,
+    },
+    /// Keyword actions with parameters beyond who/what/N (amass's Army subtype, the
+    /// options of a villainous choice or a vote), implemented in the `kwa/` registry.
+    KeywordActionEx(Box<crate::kwa::Spec>),
+    /// "Change the text of [objects] by replacing all instances of one [kind of word] with
+    /// another" (CR 612): the words are chosen as it resolves; a layer 3 effect results.
+    ChangeText {
+        what: Sel,
+        words: crate::text_change::TextWords,
+        /// Words the new word can't be ("The new creature type can't be Wall").
+        exclude: Vec<SmolStr>,
+        duration: Duration,
+    },
+    /// "Exile [objects] until [event]" (CR 610.3): when the event happens, the objects
+    /// return to the zones they were in (to the battlefield under their owners' control).
+    ExileUntil {
+        what: Sel,
+        until: UntilEvent,
+    },
+    /// "[Permanents] phase out until [event]" (CR 610.4).
+    PhaseOutUntil {
+        what: Sel,
+        until: UntilEvent,
+    },
+    /// Performs `effect`, with `replacement` applying to the events it causes as a
+    /// self-replacement effect (CR 614.15): "Counter target spell. If that spell is
+    /// countered this way, put it on top of its owner's library instead of into that
+    /// player's graveyard."
+    SelfReplace {
+        replacement: ReplacementDef,
+        effect: Box<Effect>,
+    },
+    /// "A source of your choice" (CR 609.7a): the player chooses a source of damage —
+    /// a permanent, a spell, or a face-up object in the command zone — matching the
+    /// filter. The choice is stored in `var`.
+    ChooseSource {
+        who: PlayerRef,
+        filter: Filter,
+        var: Var,
+    },
+    /// "The next [filter] spell you cast this turn [has ...]" (CR 611.2f): a continuous
+    /// effect that begins to apply to the next matching spell its controller puts on the
+    /// stack. `expires` is how long the effect waits for that spell.
+    NextSpell {
+        filter: Filter,
+        mods: Vec<Modification>,
+        expires: Duration,
+    },
+    /// "Copy [spell] for each other [object or player] it could target" (CR 707.10d), or
+    /// "copy [spell]. The copy targets [target]" (`target`, CR 707.10e).
+    CopySpellRetargeted {
+        what: Sel,
+        target: Option<Sel>,
+    },
+    /// "Copy [card]": a copy of each selected card, created in the zone the card is in
+    /// (CR 707.12); "create a copy of the card with the chosen/noted name" (`named`):
+    /// created outside the game from the Oracle card reference (CR 707.13), or from the
+    /// last known information of the card with that name (CR 707.14). The copies are
+    /// stored in `vars::CREATED` ("you may cast the copy").
+    CopyCard {
+        what: Sel,
+        named: Option<crate::copy_rules::NamedCopy>,
+    },
+    /// "Roll a d20. 1—9 | ..." (CR 706).
+    RollDice(Box<crate::dice::DieRoll>),
+    /// "Flip a coin. If you win the flip, ..." (CR 705).
+    FlipCoins(Box<crate::dice::CoinFlip>),
+    /// Separating objects into two piles, or choosing one of them (CR 700.3).
+    Piles(Box<crate::piles::PileAction>),
+    /// Exchanging numerical values or the contents of zones (CR 701.12d, 701.12g).
+    Exchange(Box<crate::exchange::ExchangeSpec>),
+    /// Card-specific behavior implemented in code, by name.
+    Custom(SmolStr),
+}
+
+/// The event that ends an "until" effect (CR 610.3, 610.4).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UntilEvent {
+    /// "until [this object] leaves the battlefield".
+    SourceLeavesBattlefield,
+    /// "until an opponent becomes the monarch" (an opponent of the effect's controller,
+    /// CR 725): it ends when one does, not merely because an opponent is the monarch.
+    OpponentBecomesMonarch,
+}
+
+impl Effect {
+    /// The permissions to play cards this effect gives are permissions to cast them ("you
+    /// may cast that card"): a land can't be played with them (CR 305.9).
+    pub fn cast_only(self) -> Effect {
+        Effect::WithPlayTerms {
+            terms: PlayTerms {
+                spells_only: true,
+                ..Default::default()
+            },
+            effect: Box::new(self),
+        }
+    }
+
+    pub fn seq(v: Vec<Effect>) -> Effect {
+        let mut out = Vec::new();
+        for e in v {
+            match e {
+                Effect::Noop => {}
+                Effect::Seq(inner) => out.extend(inner),
+                other => out.push(other),
+            }
+        }
+        match out.len() {
+            0 => Effect::Noop,
+            1 => out.pop().unwrap(),
+            _ => Effect::Seq(out),
+        }
+    }
+}
+
+/// Choices stored on the source ("the chosen color", "the chosen creature type").
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChoiceKind {
+    Color,
+    /// "choose a color other than [color]".
+    ColorOtherThan(Color),
+    /// "the color or colors of your choice": one or more of the five colors, never
+    /// colorless (CR 105.4).
+    Colors,
+    /// "choose A, B, or C": one of the listed words — creature types, land types, card
+    /// types, colors, or anchor words (CR 614.12c, 607.2f). Stored as the chosen text
+    /// (and as the chosen type/color when the word is one).
+    OneOf(Vec<String>),
+    CreatureType,
+    /// "choose a creature type other than Wall": any creature type but those listed.
+    CreatureTypeOtherThan(Vec<String>),
+    CardName,
+    /// A card name of a nonland card, etc.
+    CardNameFiltered(String),
+    Number {
+        min: i32,
+        max: i32,
+    },
+    Opponent,
+    Player,
+    BasicLandType,
+    CardType,
+    OddOrEven,
+    /// One of several words with no rules meaning, e.g. anchor words ("choose Khans or
+    /// Dragons", CR 607.2f, 607.2m, 614.12b).
+    Word(Vec<String>),
+}
+
+/// Keyword actions (CR 701) that aren't expressible as simple effect sequences.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KeywordAction {
+    Proliferate,
+    Investigate,
+    Explore,
+    Amass,
+    Connive,
+    Goad,
+    Populate,
+    Bolster,
+    Adapt,
+    Monstrosity,
+    Manifest,
+    ManifestDread,
+    Cloak,
+    Support,
+    Detain,
+    Fateseal,
+    Clash,
+    Venture,
+    Incubate,
+    Discover,
+    CollectEvidence,
+    Suspect,
+    Forage,
+    Endure,
+    TimeTravel,
+    Learn,
+    TheRingTemptsYou,
+    OpenAttraction,
+    RollAttractions,
+    Planeswalk,
+    SetInMotion,
+    Abandon,
+    Vote,
+    Exert,
+    Meld,
+    Convert,
+    Double,
+    Triple,
+    Assemble,
+    VillainousChoice,
+    Harness,
+    Airbend,
+    Earthbend,
+    Waterbend,
+    Blight,
+    Heal,
+    Recruit,
+    EmpowerJace,
+    Behold,
+    Exchange,
+    Seek,
+    Conjure,
+    Specialize,
+    Perpetually,
+    Mutate,
+    Other,
+}

@@ -1,0 +1,172 @@
+//! # mtg-engine
+//!
+//! A Magic: The Gathering rules engine for simulations, implementing the Comprehensive
+//! Rules (see `data/comprehensive-rules.txt`) over Scryfall oracle card data.
+//!
+//! ## Architecture
+//!
+//! * [`game::Game`] holds the entire game state. Objects live in an arena indexed by
+//!   [`types::ObjectId`]; every zone change creates a new object (CR 400.7) and the old one
+//!   remains as last known information.
+//! * [`ability`] is the data language card text compiles into; [`oracle`] is the
+//!   compiler from Scryfall oracle text; [`resolve`] interprets effects.
+//! * Characteristics are computed by the layer system in [`layers`] (CR 613).
+//! * Events ([`events`]) drive triggered abilities ([`triggers`], CR 603); proposed events
+//!   pass through replacement effects ([`replacement`], CR 614–616) before happening.
+//! * [`turn`] runs the turn structure and priority loop; [`sba`] performs state-based
+//!   actions; [`casting`] handles casting/activation/costs; [`combat`] handles combat.
+//! * Players make choices through the [`decision::Agent`] trait.
+//! * Keyword abilities are implemented in [`keyword_impls`] and the [`kw`] registry.
+//! * [`testing`] provides a harness for rules tests.
+
+pub mod ability;
+pub mod ability_grants;
+pub mod actions;
+pub mod activation_costs;
+pub mod adventure;
+pub mod agents;
+pub mod aggregates;
+pub mod ante;
+pub mod apnap;
+pub mod as_though;
+pub mod attach;
+pub mod attack_choice;
+pub mod attraction_cards;
+pub mod battle;
+pub mod behold;
+pub mod block_choice;
+pub mod card;
+pub mod cards;
+pub mod cases;
+pub mod casting;
+pub mod casual;
+pub mod choices;
+pub mod classes;
+pub mod combat;
+pub mod commander_rules;
+pub mod copy;
+pub mod copy_rules;
+pub mod cost_choices;
+pub mod cost_effects;
+pub mod cost_rules;
+pub mod counter_rules;
+pub mod create_rules;
+pub mod custom;
+pub mod decision;
+pub mod deck;
+pub mod designations;
+pub mod destinations;
+pub mod dfc;
+pub mod dice;
+pub mod dig_steps;
+pub mod discard_rules;
+pub mod draft;
+pub mod draw_rules;
+pub mod dungeons;
+pub mod end_turn;
+pub mod entry_costs;
+pub mod eval;
+pub mod event_causes;
+pub mod event_feed;
+pub mod events;
+pub mod excess_damage;
+pub mod exchange;
+pub mod facedown;
+pub mod flip;
+pub mod game;
+pub mod game_end;
+pub mod game_terms;
+pub mod granted_by;
+pub mod keyword_actions;
+pub mod keyword_actions_impl;
+pub mod keyword_impls;
+pub mod keywords;
+pub mod kw;
+pub mod kwa;
+pub mod layers;
+pub mod legend_rule;
+pub mod library;
+pub mod life_totals;
+pub mod linked_notes;
+pub mod mana;
+pub mod mana_abilities;
+pub mod mana_value;
+pub mod match_play;
+pub mod merge;
+pub mod mill_rules;
+pub mod modal_history;
+pub mod mode_players;
+pub mod monarch_initiative;
+pub mod mulligan;
+pub mod multiplayer;
+pub mod names;
+pub mod next_spell;
+pub mod object;
+pub mod opening_hand;
+pub mod oracle;
+pub mod oracle_ext;
+pub mod payment_rules;
+pub mod per_player_targets;
+pub mod permissions;
+pub mod piles;
+pub mod planechase;
+pub mod player_control;
+pub mod prevention;
+pub mod prohibitions;
+pub mod radiation;
+pub mod relational;
+pub mod repeat_process;
+pub mod replacement;
+pub mod resolve;
+pub mod restart;
+pub mod reveal;
+pub mod rooms;
+pub mod rule_statics;
+pub mod saga;
+pub mod sba;
+pub mod scry_rules;
+pub mod search_rules;
+pub mod shortcuts;
+pub mod shuffle_rules;
+pub mod simultaneous;
+pub mod skip;
+pub mod special_actions;
+pub mod spell_choice;
+pub mod spell_costs;
+pub mod spells_cast_before;
+pub mod splice;
+pub mod stack;
+pub mod stack_ability_filters;
+pub mod start;
+pub mod stickers;
+pub mod structure;
+pub mod subgame;
+pub mod target_groups;
+pub mod target_rules;
+pub mod teams;
+pub mod testing;
+pub mod text_change;
+pub mod tokens;
+pub mod tokens_predefined;
+pub mod transform_rules;
+pub mod trigger_timing;
+pub mod triggers;
+pub mod turn;
+pub mod turn_order_choices;
+pub mod turn_structure;
+pub mod types;
+pub mod untap_choice;
+pub mod untap_limits;
+pub mod until;
+pub mod variants;
+pub mod x_cost_filters;
+pub mod zones;
+
+pub use card::{card, CardDb, CardDef};
+pub use decision::{Action, Agent, Answer, Decision};
+pub use game::{Game, GameConfig, GameResult};
+pub use types::{Entity, ObjectId, PlayerId};
+
+/// Re-export of the data crate (CR, Scryfall) and its citation macros.
+pub use mtg_data;
+pub use mtg_data::{cr, ruling};
