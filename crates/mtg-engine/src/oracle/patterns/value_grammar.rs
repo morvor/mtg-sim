@@ -129,6 +129,28 @@ fn term(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // The phrases of this grammar first; amounts from earlier instructions and this
+    // turn's history (`value_results`) when they don't read the whole phrase.
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.named.len());
+    let core = atom_core(s, b);
+    if core.as_ref().is_some_and(|(_, rest)| plausible_end(rest)) {
+        return core;
+    }
+    let core_state = (b.targets.split_off(saved.0), b.it.clone(), b.it_player.clone());
+    b.it = saved.1.clone();
+    b.it_player = saved.2.clone();
+    if let Some(v) = super::value_results::atom_ext(s, b) {
+        return Some(v);
+    }
+    b.targets.truncate(saved.0);
+    b.named.truncate(saved.3);
+    b.targets.extend(core_state.0);
+    b.it = core_state.1;
+    b.it_player = core_state.2;
+    core
+}
+
+fn atom_core(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let saved = b.targets.len();
     let saved_player = b.it_player.clone();
     let ext = atom_ext(s, b);
@@ -184,9 +206,6 @@ fn plausible_end(rest: &str) -> bool {
 }
 
 fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
-    if let Some(v) = super::value_results::atom_ext(s, b) {
-        return Some(v);
-    }
     // "the number of cards you've drawn this turn" (Fractal Anomaly).
     if let Some(r) = s.strip_prefix("the number of cards you've drawn this turn") {
         if word_end(r) {
@@ -1019,9 +1038,28 @@ fn amount(s: &str) -> Option<(Cmp, Value, &str)> {
 
 /// After "the number of": what's counted.
 fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // The phrases of this grammar first; amounts from earlier instructions and this
+    // turn's history (`value_results`) when they don't read the whole phrase.
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.named.len());
+    let core = count_core(r, b);
+    if core.as_ref().is_some_and(|(_, rest)| plausible_end(rest)) {
+        return core;
+    }
+    let core_state = (b.targets.split_off(saved.0), b.it.clone(), b.it_player.clone());
+    b.it = saved.1.clone();
+    b.it_player = saved.2.clone();
     if let Some(v) = super::value_results::count_ext(r, b) {
         return Some(v);
     }
+    b.targets.truncate(saved.0);
+    b.named.truncate(saved.3);
+    b.targets.extend(core_state.0);
+    b.it = core_state.1;
+    b.it_player = core_state.2;
+    core
+}
+
+fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     // "counters removed this way": an amount chosen for the cost (see `cost_parts`).
     if let Some(v) = super::cost_parts::paid_this_way_prefix(r) {
         return Some(v);

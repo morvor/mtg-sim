@@ -1510,14 +1510,15 @@ pub fn names_one_object(it: &Sel) -> bool {
 /// with an extreme quality, "it" is the sacrificed object (as `edict_greatest_power.rs`
 /// has it).
 pub fn note_sacrificed(e: &Effect, b: &mut Builder) {
-    if let Effect::Sacrifice { who, count, .. } = e {
+    if let Effect::Sacrifice { who, filter, count } = e {
         let single = !matches!(
             who,
             PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
         );
-        // Also any one permanent one player sacrifices: "Sacrifice a creature. You gain
-        // life equal to that creature's toughness." (its last known information).
-        if single && matches!(count, Value::Const(1)) {
+        if single
+            && matches!(count, Value::Const(1))
+            && serde_json::to_string(filter).is_ok_and(|j| j.contains("\"Extreme\""))
+        {
             b.it = Sel::Var(vars::SACRIFICED);
         }
     }

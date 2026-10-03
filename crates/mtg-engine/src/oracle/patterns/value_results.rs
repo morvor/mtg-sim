@@ -15,6 +15,11 @@ fn word_end(rest: &str) -> bool {
 /// After "the number of" / "for each": what's counted. Tried before the value grammar's
 /// own readings.
 pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // An amount chosen for a cost ("cards exiled this way" by an exile cost, "counters
+    // removed this way") is the cost grammar's.
+    if super::cost_parts::paid_this_way_prefix(r).is_some() {
+        return None;
+    }
     if let Some(v) = life_lost_this_way(r) {
         return Some(v);
     }
@@ -51,14 +56,44 @@ pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// "the number of [s]" / "for each [s]" read as a whole phrase about this turn's history
 /// (for readers outside instructions: cost changes, static abilities).
 pub fn whole_history_count(s: &str) -> Option<Value> {
+    // This grammar's own reading first (the value grammar would read "creatures that
+    // attacked this turn" as those still on the battlefield).
+    {
+        use crate::card::Layout;
+        use crate::oracle::CompileContext;
+        let tl = crate::types::TypeLine::default();
+        let ctx = CompileContext {
+            card_name: "",
+            full_name: "",
+            type_line: &tl,
+            layout: Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        let mut b = Builder::new(&ctx);
+        b.it = Sel::This;
+        if let Some((v, rest)) = count_ext(end(s), &mut b) {
+            if rest.trim().is_empty() && b.targets.is_empty() {
+                return Some(v);
+            }
+        }
+    }
     let v = super::value_grammar::whole_count(s, Some(&Sel::This))?;
     let j = serde_json::to_string(&v).unwrap_or_default();
     // Read by this grammar (not an object phrase with a loosely read qualifier, such as
     // the creatures still on the battlefield that attacked this turn).
-    ["EventsThisTurn", "ThisTurn", "PermanentsEnteredThisTurn", "SpellsCastThisTurn", "Custom"]
-        .iter()
-        .any(|w| j.contains(w))
-        .then_some(v)
+    [
+        "EventsThisTurn",
+        "ThisTurn",
+        "PermanentsEnteredThisTurn",
+        "SpellsCastThisTurn",
+        "Custom",
+    ]
+    .iter()
+    .any(|w| j.contains(w))
+    .then_some(v)
 }
 
 fn events(cond: TriggerCond, t: Tally) -> Value {
@@ -105,7 +140,11 @@ fn trigger_names_player(b: &Builder) -> bool {
     }
     let raw = crate::oracle::raw_text().to_lowercase();
     raw.split(['"', '\n']).any(|part| {
-        let Some(i) = part.find("whenever ").or_else(|| part.find("when ")).or_else(|| part.find("at the beginning of ")) else {
+        let Some(i) = part
+            .find("whenever ")
+            .or_else(|| part.find("when "))
+            .or_else(|| part.find("at the beginning of "))
+        else {
             return false;
         };
         let cond = part[i..].split(',').next().unwrap_or("");
@@ -135,8 +174,14 @@ fn damage_each_player_equal(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (head, v) = l.split_once(" equal to ")?;
     let (source, who) = [
-        ("~ deals damage to each opponent", (Sel::This, PlayerRef::EachOpponent)),
-        ("~ deals damage to each player", (Sel::This, PlayerRef::EachPlayer)),
+        (
+            "~ deals damage to each opponent",
+            (Sel::This, PlayerRef::EachOpponent),
+        ),
+        (
+            "~ deals damage to each player",
+            (Sel::This, PlayerRef::EachPlayer),
+        ),
     ]
     .into_iter()
     .find_map(|(p, x)| (head == p).then_some(x))?;
@@ -333,7 +378,10 @@ fn source_phrase(s: &str) -> Option<Filter> {
         return Some(Filter::Source);
     }
     if let Some(r) = s.strip_prefix("~ or ") {
-        let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")).unwrap_or(r);
+        let r = r
+            .strip_prefix("a ")
+            .or_else(|| r.strip_prefix("an "))
+            .unwrap_or(r);
         let (f, _, tail) = parse_object_phrase(r)?;
         if !tail.trim().is_empty() {
             return None;
@@ -352,7 +400,10 @@ fn source_phrase(s: &str) -> Option<Filter> {
 /// dealt combat damage to a player this turn".
 fn more_history_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     // Counters you've put.
-    for p in ["+1/+1 counters you've put on ", "+1/+1 counter you've put on "] {
+    for p in [
+        "+1/+1 counters you've put on ",
+        "+1/+1 counter you've put on ",
+    ] {
         if let Some(x) = r.strip_prefix(p) {
             let i = x.find(" this turn")?;
             let (objs, rest) = (&x[..i], &x[i..]);
@@ -387,11 +438,17 @@ fn more_history_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     }
     // "for each time it has attacked this turn" (the object "it" names: in a static
     // ability, each affected object).
-    for p in ["times it has attacked this turn", "time it has attacked this turn"] {
+    for p in [
+        "times it has attacked this turn",
+        "time it has attacked this turn",
+    ] {
         if let Some(rest) = r.strip_prefix(p) {
             if word_end(rest) && !super::oracle_hardening_referents::is_no_referent(&b.it) {
                 let f = Filter::In(Box::new(b.it.clone()));
-                return Some((events(TriggerCond::Attacks(f), Tally::Events), rest.to_string()));
+                return Some((
+                    events(TriggerCond::Attacks(f), Tally::Events),
+                    rest.to_string(),
+                ));
             }
         }
     }
@@ -512,7 +569,12 @@ fn more_history_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             .collect();
         let v = match conds.as_slice() {
             [one] => events(one.clone(), Tally::Events),
-            _ => Value::Sum(conds.into_iter().map(|c| events(c, Tally::Events)).collect()),
+            _ => Value::Sum(
+                conds
+                    .into_iter()
+                    .map(|c| events(c, Tally::Events))
+                    .collect(),
+            ),
         };
         return Some((v, rest.to_string()));
     }
@@ -747,13 +809,27 @@ fn history_amount(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     }
     // "the greatest number of cards an opponent has drawn this turn".
     for (p, pf) in [
-        ("greatest number of cards an opponent has drawn this turn", PlayerFilter::Opponent),
-        ("greatest number of cards a player has drawn this turn", PlayerFilter::Any),
+        (
+            "greatest number of cards an opponent has drawn this turn",
+            PlayerFilter::Opponent,
+        ),
+        (
+            "greatest number of cards a player has drawn this turn",
+            PlayerFilter::Any,
+        ),
     ] {
         if let Some(rest) = x.strip_prefix(p) {
             if word_end(rest) {
-                let v = events(TriggerCond::Draws { who: PlayerRel::Iterated }, Tally::Events);
-                return Some((Value::OverPlayers(AggOp::Max, pf, Box::new(v)), rest.to_string()));
+                let v = events(
+                    TriggerCond::Draws {
+                        who: PlayerRel::Iterated,
+                    },
+                    Tally::Events,
+                );
+                return Some((
+                    Value::OverPlayers(AggOp::Max, pf, Box::new(v)),
+                    rest.to_string(),
+                ));
             }
         }
     }
@@ -848,8 +924,7 @@ fn damage_to_objects(x: &str, b: &Builder) -> Option<(Value, String)> {
     let (obj, z) = if let Some(z) = y.strip_prefix("~") {
         (Filter::Source, z)
     } else if let Some(z) = y.strip_prefix("it") {
-        if super::oracle_hardening_referents::is_no_referent(&b.it) || matches!(b.it, Sel::This)
-        {
+        if super::oracle_hardening_referents::is_no_referent(&b.it) || matches!(b.it, Sel::This) {
             return None;
         }
         (Filter::In(Box::new(b.it.clone())), z)
@@ -869,8 +944,11 @@ fn damage_to_objects(x: &str, b: &Builder) -> Option<(Value, String)> {
             let src = src.replace("other sources named ~", "other permanents named ~");
             let f = source_phrase(&src).or_else(|| {
                 // "sources they controlled": each player in turn.
-                matches!(src.as_str(), "sources they controlled" | "sources they control")
-                    .then_some(Filter::ControlledBy(PlayerRel::Iterated))
+                matches!(
+                    src.as_str(),
+                    "sources they controlled" | "sources they control"
+                )
+                .then_some(Filter::ControlledBy(PlayerRel::Iterated))
             })?;
             (f, rest.to_string())
         }
@@ -924,9 +1002,15 @@ fn triggers_on(b: &Builder, what: &[&str]) -> bool {
 /// the total of the batch, CR 603.2c).
 fn event_amount(s: &str, b: &Builder) -> Option<(Value, String)> {
     let life: [(&str, &[&str]); 4] = [
-        ("the amount of life you gained", &["gain life", "gains life"]),
+        (
+            "the amount of life you gained",
+            &["gain life", "gains life"],
+        ),
         ("the amount of life you lost", &["lose life", "loses life"]),
-        ("the amount of life they gained", &["gain life", "gains life"]),
+        (
+            "the amount of life they gained",
+            &["gain life", "gains life"],
+        ),
         ("the amount of life they lost", &["lose life", "loses life"]),
     ];
     for (p, on) in life {
@@ -944,14 +1028,27 @@ fn event_amount(s: &str, b: &Builder) -> Option<(Value, String)> {
         return None;
     }
     let x = x.strip_prefix(" dealt").or_else(|| {
-        [" it dealt", " ~ dealt", " he dealt", " she dealt", " those creatures dealt", " that creature dealt"]
-            .iter()
-            .find_map(|p| x.strip_prefix(p))
-    })?;
-    let x = [" to that player", " to them", " to it", " to that creature", " to ~"]
+        [
+            " it dealt",
+            " ~ dealt",
+            " he dealt",
+            " she dealt",
+            " those creatures dealt",
+            " that creature dealt",
+        ]
         .iter()
         .find_map(|p| x.strip_prefix(p))
-        .unwrap_or(x);
+    })?;
+    let x = [
+        " to that player",
+        " to them",
+        " to it",
+        " to that creature",
+        " to ~",
+    ]
+    .iter()
+    .find_map(|p| x.strip_prefix(p))
+    .unwrap_or(x);
     if !word_end(x) || x.trim_start().starts_with("this turn") {
         return None;
     }
@@ -988,14 +1085,18 @@ fn trigger_spell_value(s: &str, b: &Builder) -> Option<(Value, String)> {
         return None;
     }
     let spell_ref = |r: &str| -> Option<String> {
-        let rest = r
-            .strip_prefix("that spell")
-            .or_else(|| r.strip_prefix("it").filter(|_| matches!(b.it, Sel::TriggerSpell | Sel::TriggerObject)))?;
+        let rest = r.strip_prefix("that spell").or_else(|| {
+            r.strip_prefix("it")
+                .filter(|_| matches!(b.it, Sel::TriggerSpell | Sel::TriggerObject))
+        })?;
         word_end(rest).then(|| rest.to_string())
     };
     if let Some(r) = s.strip_prefix("the amount of mana spent to cast ") {
         let rest = spell_ref(r)?;
-        return Some((Value::Custom(crate::kw::opus::MANA_SPENT_ON_THAT_SPELL.into()), rest));
+        return Some((
+            Value::Custom(crate::kw::opus::MANA_SPENT_ON_THAT_SPELL.into()),
+            rest,
+        ));
     }
     if let Some(r) = s
         .strip_prefix("the number of colors of mana spent to cast ")
@@ -1004,10 +1105,16 @@ fn trigger_spell_value(s: &str, b: &Builder) -> Option<(Value, String)> {
         let rest = spell_ref(r)?;
         return Some((Value::Custom(COLORS_SPENT_ON_THAT_SPELL.into()), rest));
     }
-    for p in ["the number of times that spell was kicked", "the number of time that spell was kicked"] {
+    for p in [
+        "the number of times that spell was kicked",
+        "the number of time that spell was kicked",
+    ] {
         if let Some(rest) = s.strip_prefix(p) {
             if word_end(rest) {
-                return Some((Value::Custom(TIMES_THAT_SPELL_WAS_KICKED.into()), rest.to_string()));
+                return Some((
+                    Value::Custom(TIMES_THAT_SPELL_WAS_KICKED.into()),
+                    rest.to_string(),
+                ));
             }
         }
     }
@@ -1055,8 +1162,11 @@ fn life_lost_this_way(r: &str) -> Option<(Value, String)> {
 
 /// "If no life is lost this way, ..." after a life-loss instruction.
 fn no_life_lost_this_way(c: &str) -> Option<Condition> {
-    matches!(end(c), "no life is lost this way" | "no life was lost this way")
-        .then(|| Condition::Compare(Value::Prev, Cmp::Eq, Value::c(0)))
+    matches!(
+        end(c),
+        "no life is lost this way" | "no life was lost this way"
+    )
+    .then(|| Condition::Compare(Value::Prev, Cmp::Eq, Value::c(0)))
 }
 
 inventory::submit! { super::ConditionPattern { name: "value results: no life is lost this way", priority: 100, parse: no_life_lost_this_way } }
@@ -1112,9 +1222,31 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
         (" tapped", vars::TAPPED, None),
         (" drawn", vars::REVEALED, None),
     ];
-    let (noun, mut var, extra) = verbs.iter().find_map(|(v, var, extra)| {
-        head.strip_suffix(v).map(|n| (n, *var, extra.clone()))
-    })?;
+    // "for each card discarded this way" in a "whenever you discard one or more cards"
+    // trigger, "the number of nonland cards milled this way" in a "whenever one or more
+    // nonland cards are milled" trigger: the objects of the triggering batch.
+    let batch_verb = [
+        (" discarded", "discard"),
+        (" milled", "mill"),
+        (" exiled", "exile"),
+        (" sacrificed", "sacrifice"),
+    ]
+    .into_iter()
+    .find(|(v, w)| head.ends_with(v) && triggers_on(b, &[w]));
+    if let Some((v, _)) = batch_verb {
+        let noun = head.strip_suffix(v)?;
+        let (f, _, tail) = parse_object_phrase(noun)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        return Some((
+            Sel::Matching(Box::new(Sel::TriggerObjects), f),
+            rest.to_string(),
+        ));
+    }
+    let (noun, mut var, extra) = verbs
+        .iter()
+        .find_map(|(v, var, extra)| head.strip_suffix(v).map(|n| (n, *var, extra.clone())))?;
     let noun = noun
         .strip_suffix(" that were")
         .or_else(|| noun.strip_suffix(" that was"))
@@ -1223,8 +1355,124 @@ fn result_ref(s: &str, b: &Builder) -> Option<(Sel, String)> {
             }
         }
     }
+    // "those creatures" in a "whenever one or more creatures ..." trigger: the batch's
+    // objects (CR 603.2c).
+    for p in ["those creatures", "those cards"] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if word_end(rest)
+                && b.in_trigger
+                && crate::oracle::raw_text()
+                    .to_lowercase()
+                    .contains("one or more")
+            {
+                return Some((Sel::TriggerObjects, rest.to_string()));
+            }
+        }
+    }
+    // "the creature that died" in a dies trigger: as it last existed (CR 603.10a).
+    if let Some(rest) = s.strip_prefix("the creature that died") {
+        if word_end(rest) && triggers_on(b, &["dies", "die"]) {
+            return Some((Sel::TriggerLki, rest.to_string()));
+        }
+    }
+    // "the exiled card", "the card you exiled": the card the cost exiled (CR 400.7j), or
+    // that an earlier instruction of the ability exiled, or else the card exiled with the
+    // source by its linked ability (CR 607.2a).
+    for p in [
+        "the exiled card",
+        "the card you exiled",
+        "the exiled creature card",
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if word_end(rest) || rest.starts_with('\'') {
+                let sel = Sel::Union(vec![
+                    Sel::Var(crate::zones::COST_EXILED),
+                    Sel::Matching(
+                        Box::new(Sel::Var(vars::IT)),
+                        Filter::InZone(ZoneKind::Exile),
+                    ),
+                    Sel::All(Filter::and(vec![
+                        Filter::In(Box::new(Sel::Linked)),
+                        Filter::InZone(ZoneKind::Exile),
+                    ])),
+                ]);
+                return Some((sel, rest.to_string()));
+            }
+        }
+    }
+    // "the revealed card" of a spell whose additional cost reveals a card from your hand.
+    if let Some(rest) = s.strip_prefix("the revealed card") {
+        let raw = crate::oracle::raw_text().to_lowercase();
+        if (word_end(rest) || rest.starts_with('\''))
+            && raw.contains("as an additional cost to cast this spell, reveal ")
+        {
+            return Some((Sel::Var(crate::zones::COST_REVEALED), rest.to_string()));
+        }
+    }
+    // "the tapped creature": the creature tapped to pay the cost.
+    if let Some(rest) = s.strip_prefix("the tapped creature") {
+        if word_end(rest) || rest.starts_with('\'') {
+            return Some((Sel::Var(vars::TAPPED), rest.to_string()));
+        }
+    }
     let x = s.strip_prefix("the ").unwrap_or(s);
     this_way_sel(x, b)
+}
+
+/// "~'s loyalty" (as it last existed, if it has left the battlefield), "three times ~'s
+/// power", "the difference between its power and toughness" (the smaller subtracted from
+/// the larger), "the number of creatures you control in excess of the number of
+/// creatures target opponent controls".
+fn stat_extras(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(rest) = s.strip_prefix("~'s loyalty") {
+        if word_end(rest) {
+            return Some((Value::LoyaltyOf(Box::new(Sel::This)), rest.to_string()));
+        }
+    }
+    if let Some(r) = s.strip_prefix("three times ") {
+        let (v, rest) = super::value_grammar::parse_value(r, b)?;
+        return Some((Value::Mul(Box::new(Value::c(3)), Box::new(v)), rest));
+    }
+    if let Some(r) = s.strip_prefix("the difference between ") {
+        let (pw, tail) = r.split_once(" and ")?;
+        let p = super::value_grammar::parse_value(&format!("{pw}"), b)?;
+        if !p.1.trim().is_empty() {
+            return None;
+        }
+        // "its toughness", or just "toughness" (of the same object).
+        let (t, rest) = match tail.strip_prefix("toughness") {
+            Some(rest) => {
+                let Value::PowerOf(sel) = &p.0 else {
+                    return None;
+                };
+                (Value::ToughnessOf(sel.clone()), rest.to_string())
+            }
+            None => super::value_grammar::parse_value(tail, b)?,
+        };
+        if !matches!((&p.0, &t), (Value::PowerOf(_), Value::ToughnessOf(_))) {
+            return None;
+        }
+        let d = |a: &Value, b: &Value| Value::Diff(Box::new(a.clone()), Box::new(b.clone()));
+        return Some((
+            Value::Max(Box::new(d(&p.0, &t)), Box::new(d(&t, &p.0))),
+            rest,
+        ));
+    }
+    if let Some(r) = s.strip_prefix("the number of ") {
+        if let Some((a, c)) = r.split_once(" in excess of ") {
+            let (va, ta) = super::value_grammar::parse_value(&format!("the number of {a}"), b)?;
+            if !ta.trim().is_empty() {
+                return None;
+            }
+            let (vc, rest) = super::value_grammar::parse_value(c, b)?;
+            let v = Value::Max(
+                Box::new(Value::Diff(Box::new(va), Box::new(vc))),
+                Box::new(Value::c(0)),
+            );
+            return Some((v, rest));
+        }
+    }
+    None
 }
 
 /// Amounts about the results of earlier instructions: "the sacrificed creature's power",
@@ -1238,8 +1486,14 @@ fn result_value(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     // "the greatest number of cards a player discarded this way" (Windfall): the most
     // any one player discarded.
     for (p, pf) in [
-        ("the greatest number of cards a player discarded this way", PlayerFilter::Any),
-        ("the greatest number of cards an opponent discarded this way", PlayerFilter::Opponent),
+        (
+            "the greatest number of cards a player discarded this way",
+            PlayerFilter::Any,
+        ),
+        (
+            "the greatest number of cards an opponent discarded this way",
+            PlayerFilter::Opponent,
+        ),
     ] {
         if let Some(rest) = s.strip_prefix(p) {
             // The discarded cards are in their owners' graveyards (or wherever a
@@ -1262,10 +1516,16 @@ fn result_value(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         ("the lowest ", AggOp::Min),
     ] {
         if let Some(x) = s.strip_prefix(p) {
-            let Some((stat, y)) = stat_word(x) else { continue };
+            let Some((stat, y)) = stat_word(x) else {
+                continue;
+            };
             let link = if op == AggOp::Sum { " of " } else { " among " };
-            let Some(y) = y.strip_prefix(link) else { continue };
-            let Some((sel, rest)) = result_ref(y, b) else { continue };
+            let Some(y) = y.strip_prefix(link) else {
+                continue;
+            };
+            let Some((sel, rest)) = result_ref(y, b) else {
+                continue;
+            };
             return Some((Value::Aggregate(op, stat, Box::new(sel)), rest));
         }
     }
@@ -1308,12 +1568,19 @@ fn result_value(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             }
         }
     }
+    if let Some(v) = stat_extras(s, b) {
+        return Some(v);
+    }
     // "the sacrificed creature's power", "the discarded card's mana value".
     let (sel, r) = result_ref(s, b)?;
     let r = r.strip_prefix("'s ")?;
     let (stat, rest) = stat_word(r)?;
     if !word_end(rest) {
         return None;
+    }
+    // "... equal to the sacrificed creature's power, then ... equal to its toughness".
+    if matches!(sel, Sel::Var(v) if v == vars::SACRIFICED) {
+        b.it = sel.clone();
     }
     Some((of_referent(stat, sel), rest.to_string()))
 }
@@ -1348,6 +1615,36 @@ pub fn cost_sacrificed_text(cost: &Cost, effect: &str) -> Option<String> {
     changed.then_some(text)
 }
 
+/// "Sacrifice a creature. You gain life equal to that creature's toughness.", "you may
+/// sacrifice another creature. If you do, ... where X is that creature's power": after one
+/// player sacrifices one permanent, "that creature" (as it last existed) is the sacrificed
+/// one, until an instruction names a target (which "that creature" would mean then).
+pub fn note_sacrificed(e: &Effect, b: &mut Builder) {
+    let ours = |sel: &Sel| matches!(sel, Sel::Var(v) if *v == vars::SACRIFICED);
+    let single = |who: &PlayerRef| {
+        !matches!(
+            who,
+            PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
+        )
+    };
+    let sacrifices_one = match e {
+        Effect::Sacrifice { who, count, .. } => single(who) && matches!(count, Value::Const(1)),
+        _ => false,
+    };
+    if sacrifices_one {
+        b.named
+            .retain(|(n, sel)| !(n == "that creature" && ours(sel)));
+        b.named
+            .push(("that creature".to_string(), Sel::Var(vars::SACRIFICED)));
+        return;
+    }
+    let names_target = serde_json::to_string(e).is_ok_and(|j| j.contains("\"Target\""));
+    if names_target {
+        b.named
+            .retain(|(n, sel)| !(n == "that creature" && ours(sel)));
+    }
+}
+
 /// "Target player discards a card. ~ deals damage to that player equal to that card's
 /// mana value.": after one player discards one card, "that card" / "it" is the discarded
 /// card (the new object it became, CR 400.7j).
@@ -1362,12 +1659,28 @@ pub fn note_discarded(e: &Effect, b: &mut Builder) {
         Effect::Discard { who, n, .. } => single(who) && matches!(n, Value::Const(1)),
         Effect::AsPlayer { who, effect } => {
             single(who)
-                && matches!(&**effect, Effect::Discard { who: PlayerRef::You, n: Value::Const(1), .. })
+                && matches!(
+                    &**effect,
+                    Effect::Discard {
+                        who: PlayerRef::You,
+                        n: Value::Const(1),
+                        ..
+                    }
+                )
         }
         _ => false,
     };
+    // "that card" (not "it", which may well be the source: "unless her additional cost
+    // was paid"), until the next instruction has been read.
+    let discarded = |sel: &Sel| matches!(sel, Sel::Var(v) if *v == crate::discard_rules::DISCARDED);
+    b.named
+        .retain(|(n, sel)| !(n == "that card" && discarded(sel)));
     if one {
-        b.it = Sel::Var(crate::discard_rules::DISCARDED);
+        b.named.retain(|(n, _)| n != "that card");
+        b.named.push((
+            "that card".to_string(),
+            Sel::Var(crate::discard_rules::DISCARDED),
+        ));
     }
 }
 
@@ -1378,7 +1691,10 @@ fn a_number_of_cards(l: &str, b: &mut Builder) -> Option<Effect> {
     let i = l.find(" a number of cards equal to ")?;
     let (head, tail) = (&l[..i], &l[i + " a number of cards equal to ".len()..]);
     let verb = head.rsplit(' ').next()?;
-    if !matches!(verb, "discard" | "discards" | "mill" | "mills" | "draw" | "draws") {
+    if !matches!(
+        verb,
+        "discard" | "discards" | "mill" | "mills" | "draw" | "draws"
+    ) {
         return None;
     }
     crate::oracle::effects::parse_clause(&format!("{head} cards equal to {tail}"), b)
@@ -1392,9 +1708,10 @@ inventory::submit! { super::EffectPattern { name: "value results: [verb] a numbe
 /// 608.2c, 101.4); not each player in turn.
 fn each_discards_then_draws(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let (who, r) = [
-        ("each player discards their hand, then draws cards equal to ", PlayerRef::EachPlayer),
-    ]
+    let (who, r) = [(
+        "each player discards their hand, then draws cards equal to ",
+        PlayerRef::EachPlayer,
+    )]
     .into_iter()
     .find_map(|(p, w)| l.strip_prefix(p).map(|r| (w, r)))?;
     if !reads_result_value(r, b) {
@@ -1413,6 +1730,189 @@ fn each_discards_then_draws(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { super::EffectPattern { name: "value results: each player discards their hand, then draws cards equal to [result]", priority: 5, parse: each_discards_then_draws } }
 
 // ---------------------------------------------------------------------------
+// "that many" after an instruction with an amount
+// ---------------------------------------------------------------------------
+
+/// The numeric variable holding the amount an instruction named, for a later "that many".
+const NAMED_AMOUNT: Var = vars::USER + 7523;
+
+/// The amount the last instruction of `e` names, if it's one that names an amount of
+/// cards ("draw two cards", "draws cards equal to ...", "mill X cards").
+fn named_amount(e: &mut Effect) -> Option<&mut Value> {
+    match e {
+        Effect::Draw { n, .. } | Effect::Mill { n, .. } | Effect::Discard { n, .. } => Some(n),
+        Effect::AsPlayer { effect, .. } | Effect::May { effect, .. } => named_amount(effect),
+        Effect::Seq(v) => v.last_mut().and_then(named_amount),
+        _ => None,
+    }
+}
+
+/// `e`'s named amount kept in [`NAMED_AMOUNT`] (determined once, CR 608.2h), and `then`
+/// read with "that many" as that amount.
+fn with_that_many(mut e: Effect, then_text: &str, b: &mut Builder) -> Option<(Effect, Effect)> {
+    if then_text
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|w| w == "x")
+    {
+        return None;
+    }
+    let n = named_amount(&mut e)?;
+    let amount = std::mem::replace(n, Value::Var(NAMED_AMOUNT));
+    let then = crate::oracle::effects::parse_clause(&then_text.replacen("that many", "x", 1), b)?;
+    let then = super::r107_numbers::substitute_x(&then, &Value::Var(NAMED_AMOUNT))?;
+    let e = Effect::seq(vec![
+        Effect::StoreValue {
+            var: NAMED_AMOUNT,
+            value: amount,
+        },
+        e,
+    ]);
+    Some((e, then))
+}
+
+/// "Target player draws two cards, then discards that many cards.", "draw cards equal to
+/// the number of cards in your hand, then discard that many cards": "that many" is the
+/// amount the first instruction named (Horrid Shadowspinner's ruling: not the number of
+/// cards actually drawn).
+fn then_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (first, second) = l.split_once(", then ")?;
+    if !second.contains("that many") || first.contains("that many") {
+        return None;
+    }
+    // The subject of the first clause does the second ("target player draws ..., then
+    // discards ...").
+    let subject = [
+        "target player ",
+        "target opponent ",
+        "each player ",
+        "each opponent ",
+    ]
+    .iter()
+    .find(|p| first.starts_with(**p));
+    let e = crate::oracle::effects::parse_clause(first, b)?;
+    if !matches!(named_amount(&mut e.clone()), Some(_)) {
+        return None;
+    }
+    let second = match subject {
+        Some(p) if p.starts_with("target") => format!("that player {second}"),
+        Some(_) => return None,
+        None => second.to_string(),
+    };
+    let (e, then) = with_that_many(e, &second, b)?;
+    Some(Effect::seq(vec![e, then]))
+}
+
+inventory::submit! { super::EffectPattern { name: "value results: [draw N], then [instruction with that many]", priority: 60, parse: then_that_many } }
+
+/// "You may draw cards equal to its power. If you do, discard that many cards.", "Draw two
+/// cards. Then discard that many cards.": "that many" is the amount the previous
+/// instruction named.
+fn that_many_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let (r, conditional) = if let Some(r) = l.strip_prefix("if you do, ") {
+        (r, true)
+    } else if let Some(r) = l.strip_prefix("then ") {
+        (r, false)
+    } else {
+        return false;
+    };
+    if !r.contains("that many") {
+        return false;
+    }
+    let optional = matches!(last_of(prev), Effect::May { .. });
+    if conditional != optional {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    let Some((e, then)) = with_that_many(old.clone(), r, b) else {
+        *prev = old;
+        return false;
+    };
+    let then = if conditional {
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(then),
+            otherwise: Box::new(Effect::Noop),
+        }
+    } else {
+        then
+    };
+    *prev = Effect::seq(vec![e, then]);
+    true
+}
+
+fn last_of(e: &Effect) -> &Effect {
+    match e {
+        Effect::Seq(v) => v.last().map_or(e, last_of),
+        _ => e,
+    }
+}
+
+inventory::submit! { super::FollowupPattern { name: "value results: if you do / then, [instruction with that many]", priority: 45, apply: that_many_followup } }
+
+// ---------------------------------------------------------------------------
+// Counters in amounts that depend on each object or player
+// ---------------------------------------------------------------------------
+
+/// The object each instruction of a [`Effect::ForEach`] is about.
+const EACH_OBJECT: Var = vars::USER + 7524;
+
+/// "Put a number of +1/+1 counters on each other creature you control equal to that
+/// creature's toughness." (Canopy Gargantuan): each object gets its own number (CR
+/// 608.2h), all at once (CR 608.2f).
+fn counters_each_equal_to_its(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("put a number of ")?;
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = r.trim_start().strip_prefix("counters on each ")?;
+    let (objs, stat) = r.split_once(" equal to ")?;
+    let (f, _, tail) = parse_object_phrase(objs)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let st = ["that creature's ", "that permanent's ", "its "]
+        .iter()
+        .find_map(|p| stat.strip_prefix(p))?;
+    let (stat, rest) = super::value_grammar::stat_word(st)?;
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    let each = Sel::Var(EACH_OBJECT);
+    Some(Effect::ForEach {
+        sel: Sel::All(f),
+        var: EACH_OBJECT,
+        effect: Box::new(Effect::AddCounters {
+            what: each.clone(),
+            kind,
+            n: super::value_grammar::of_referent(stat, each),
+        }),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "value results: put a number of counters on each [object] equal to its [stat]", priority: 60, parse: counters_each_equal_to_its } }
+
+/// "Each opponent gets a number of rad counters equal to its power." (Feral Ghoul):
+/// players get counters (CR 122.1).
+fn players_get_counters_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (who, r) = [
+        ("each opponent gets a number of ", PlayerRef::EachOpponent),
+        ("each player gets a number of ", PlayerRef::EachPlayer),
+        ("you get a number of ", PlayerRef::You),
+    ]
+    .into_iter()
+    .find_map(|(p, w)| l.strip_prefix(p).map(|r| (w, r)))?;
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = r.trim_start().strip_prefix("counters equal to ")?;
+    let (n, tail) = super::r107_numbers::value_phrase(r, b)?;
+    if !end(&tail).is_empty() {
+        return None;
+    }
+    Some(Effect::AddPlayerCounters { who, kind, n })
+}
+
+inventory::submit! { super::EffectPattern { name: "value results: players get a number of counters equal to [value]", priority: 60, parse: players_get_counters_equal_to } }
+
+// ---------------------------------------------------------------------------
 // X fixed by a payment ("you may pay {X}")
 // ---------------------------------------------------------------------------
 
@@ -1426,7 +1926,8 @@ fn x_mana_cost(s: &str) -> Option<Cost> {
     let s = end(s);
     let only_symbols = s.starts_with('{')
         && s.ends_with('}')
-        && s.split('}').all(|p| p.is_empty() || (p.starts_with('{') && !p[1..].contains('{')));
+        && s.split('}')
+            .all(|p| p.is_empty() || (p.starts_with('{') && !p[1..].contains('{')));
     if !only_symbols || !s.contains("{x}") {
         return None;
     }
@@ -1465,7 +1966,13 @@ fn may_pay_x(l: &str, b: &mut Builder) -> Option<Effect> {
         otherwise: Box::new(Effect::Noop),
     };
     Some(match cap {
-        Some(v) => Effect::seq(vec![Effect::StoreValue { var: X_MAX, value: v }, pay]),
+        Some(v) => Effect::seq(vec![
+            Effect::StoreValue {
+                var: X_MAX,
+                value: v,
+            },
+            pay,
+        ]),
         None => pay,
     })
 }
