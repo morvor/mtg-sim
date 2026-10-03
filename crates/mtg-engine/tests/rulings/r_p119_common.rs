@@ -49,3 +49,70 @@ pub fn has_kw(t: &mut TestGame, id: ObjectId, k: mtg_engine::keywords::KeywordKi
 pub fn pool_total(t: &TestGame, p: PlayerId) -> usize {
     t.g.player(p).mana_pool.total() as usize
 }
+
+/// Puts the real card `name` onto the battlefield under `p`'s control through a real zone
+/// change, entering with `n` +1/+1 counters (as if an effect had it enter with them) and
+/// transformed if `transformed`.
+pub fn enter_with(
+    t: &mut TestGame,
+    p: PlayerId,
+    name: &str,
+    n: u32,
+    transformed: bool,
+) -> ObjectId {
+    use mtg_engine::events::MoveCause;
+    use mtg_engine::object::Zone;
+    use mtg_engine::replacement::{EtbInfo, MoveEv};
+    let id =
+        t.g.create_card_object(mtg_engine::card::card(name), p, Zone::Nowhere);
+    let counters = if n > 0 {
+        vec![(PLUS1_KIND.into(), n)]
+    } else {
+        vec![]
+    };
+    let id =
+        t.g.move_object_ev(MoveEv {
+            obj: id,
+            to: Zone::Battlefield,
+            pos: mtg_engine::ability::LibraryPosition::Top,
+            cause: MoveCause::Effect,
+            by: Some(p),
+            etb: EtbInfo {
+                controller: Some(p),
+                counters,
+                transformed,
+                ..Default::default()
+            },
+            source: None,
+        })
+        .expect("failed to enter");
+    t.g.flush_events();
+    t.settle();
+    id
+}
+
+const PLUS1_KIND: &str = "+1/+1";
+
+/// Casts a spell from `p`'s hand with lands for its cost, queuing one target answer per
+/// slot (each slot may have several targets), without resolving it.
+pub fn cast_slots(t: &mut TestGame, p: PlayerId, name: &str, slots: &[&[Entity]]) -> ObjectId {
+    lands_for_cost(t, p, name);
+    let card = t.hand(p, name);
+    for s in slots {
+        t.answer_targets(p, s);
+    }
+    t.cast(p, card).go()
+}
+
+/// Destroys all creatures at once (Day of Judgment's effect), then settles.
+pub fn wrath(t: &mut TestGame) {
+    cast_new(t, P0, "Day of Judgment", &[]);
+    t.resolve();
+}
+
+/// Counters the spell `id` on the stack.
+pub fn counter_spell(t: &mut TestGame, id: ObjectId) {
+    assert!(t.g.counter(id, None));
+    t.g.flush_events();
+    t.settle();
+}

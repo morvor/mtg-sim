@@ -1076,7 +1076,15 @@ impl Renderer<'_> {
                         t = format!("each of {t}");
                     }
                 }
-                format!("{s} deals {a} damage to {t}{}", w.unwrap_or_default())
+                // "~ deals damage equal to its power": the source's own value is "its"
+                // even while another object is "it" (Gleeful Arsonist's spell).
+                let w = w.unwrap_or_default();
+                let w = if matches!(source, Sel::This) && s == "~" {
+                    w.replace(" ~'s ", " ~it's ")
+                } else {
+                    w
+                };
+                format!("{s} deals {a} damage to {t}{w}")
             }
             Effect::DealDamageExcess {
                 source,

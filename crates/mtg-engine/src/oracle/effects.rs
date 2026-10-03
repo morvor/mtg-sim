@@ -1221,7 +1221,17 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         // "Each creature you control deals damage equal to its power": "its" is each of
         // the sources in turn (the executor binds `vars::AFFECTED` to each).
         let multi = matches!(src, Sel::All(_) | Sel::Union(_));
-        let saved_it = multi.then(|| std::mem::replace(&mut b.it, Sel::Var(vars::AFFECTED)));
+        // "Whenever an opponent casts a spell, ~ deals damage equal to its power": "its"
+        // is the source, not the spell that was cast (Gleeful Arsonist). (Other patterns
+        // rewrite "that card's" to "its" for the object "it" refers to, so only a spell
+        // the trigger refers to is passed over.)
+        let saved_it = if multi {
+            Some(std::mem::replace(&mut b.it, Sel::Var(vars::AFFECTED)))
+        } else if r.starts_with("its ") && matches!(b.it, Sel::TriggerSpell) {
+            Some(std::mem::replace(&mut b.it, src.clone()))
+        } else {
+            None
+        };
         let parsed = super::statics::parse_value_phrase(r, b);
         if let Some(it) = saved_it {
             b.it = it;
