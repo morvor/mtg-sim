@@ -2472,8 +2472,42 @@ mod probe {
             return;
         };
         for l in std::fs::read_to_string(list).unwrap().lines() {
-            let l = l.trim().to_lowercase();
+            let raw = l.trim();
+            if let Some(x) = raw.strip_prefix("text ") {
+                let tl = crate::types::TypeLine::parse("Creature — Human");
+                let ctx = crate::oracle::CompileContext {
+                    card_name: "Probe",
+                    full_name: "Probe",
+                    type_line: &tl,
+                    layout: crate::card::Layout::Normal,
+                    face_index: 0,
+                    keywords: &[],
+                    power: None,
+                    toughness: None,
+                };
+                let r = crate::oracle::parse_ability(x, &ctx);
+                println!("PROBE TEXT {x}\n   {}", if r.is_some() { "OK" } else { "FAIL" });
+                continue;
+            }
+            let l = raw.to_lowercase();
             if l.is_empty() {
+                continue;
+            }
+            if let Some(x) = l.strip_prefix("text ") {
+                // A whole ability of a creature card named "Probe".
+                let tl = crate::types::TypeLine::parse("Creature — Human");
+                let ctx = crate::oracle::CompileContext {
+                    card_name: "Probe",
+                    full_name: "Probe",
+                    type_line: &tl,
+                    layout: crate::card::Layout::Normal,
+                    face_index: 0,
+                    keywords: &[],
+                    power: None,
+                    toughness: None,
+                };
+                let r = crate::oracle::parse_ability(x, &ctx);
+                println!("PROBE TEXT {x}\n   {}", if r.is_some() { "OK" } else { "FAIL" });
                 continue;
             }
             if let Some(x) = l.strip_prefix("obj ") {

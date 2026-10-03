@@ -377,6 +377,11 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
         let slot = b.add_target(TargetSpec::one(TargetKind::Object(f), text.to_string()), text);
         return Some((Sel::Target(slot), r.to_string(), true));
     }
+    // "that source's controller", "that creature's controller": an object the trigger
+    // event names (see `Builder::named`).
+    if let Some((who, r)) = crate::oracle::effects::named_possessive_player(s, b) {
+        return Some((Sel::Players(who), r, true));
+    }
     // Players: "each other opponent" (other than the one the ability is about), "each
     // opponent", "that player", ...
     let players: [(&str, Option<PlayerRef>); 6] = [

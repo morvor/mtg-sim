@@ -102,6 +102,11 @@ pub fn player_targeted(who: PlayerRel, by: PlayerRel) -> String {
     format!("{PLAYER_TARGETED}{}:{}", rel_word(who), rel_word(by))
 }
 
+/// Whether a `TriggerCond::Custom` name is one of [`player_targeted`]'s.
+pub fn is_player_targeted(name: &str) -> bool {
+    name.starts_with(PLAYER_TARGETED)
+}
+
 pub struct ActivatedAbilityKind;
 
 impl KeywordRules for ActivatedAbilityKind {

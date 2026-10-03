@@ -29,7 +29,12 @@ const COUNTER_IT: &str = "counter the targeting spell";
 fn is_becomes_target(t: &TriggerCond) -> bool {
     match t {
         TriggerCond::BecomesTarget { .. } => true,
-        TriggerCond::Where { trigger, .. } => is_becomes_target(trigger),
+        // "Whenever you [or a permanent you control] become the target of …".
+        TriggerCond::Custom(name) => crate::kw::activated_ability_kind::is_player_targeted(name),
+        TriggerCond::AnyOf(v) => !v.is_empty() && v.iter().all(is_becomes_target),
+        TriggerCond::Where { trigger, .. } | TriggerCond::Batched { trigger, .. } => {
+            is_becomes_target(trigger)
+        }
         TriggerCond::FirstTimeEachTurn(inner) => is_becomes_target(inner),
         _ => false,
     }
