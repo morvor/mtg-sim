@@ -28,6 +28,10 @@ fn a_creature_that_left_still_connives_and_its_connive_this_way_trigger_triggers
         "Spymaster's Vault",
         "If a resolving spell or ability instructs a specific creature to connive but that creature has left the battlefield, the creature still connives, although you can't put any +1/+1 counters on it. Abilities that trigger \"when [that creature] connives\" will trigger."
     );
+    // Spymaster's Vault's own ability targets (it would be removed from the stack, CR
+    // 608.2b, if its target left), but its ruling states the general connive rule in
+    // target-agnostic terms, and every clause of it (the creature still connives, gets no
+    // counter, and "when it connives" abilities trigger) is exercised here.
     supported("Psychic Pickpocket");
     // Psychic Pickpocket: "When this creature enters, it connives. When it connives this
     // way, return up to one target nonland permanent to its owner's hand." It's destroyed

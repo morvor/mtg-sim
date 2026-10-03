@@ -96,6 +96,8 @@ fn cyclonus_converted_by_first_strike_damage_can_convert_again() {
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(c, Entity::Player(P1))], &[]);
     assert_eq!(t.life(P1), 20 - 8 - 5);
+    // It connived after the regular damage: a card drawn and one discarded.
+    assert_eq!(t.graveyard_size(P0), 1);
     let o = t.obj_now(c);
     assert_eq!(o.face, FaceState::Back);
     assert_eq!(o.chars.name, "Cyclonus, Cybertronian Fighter");

@@ -170,7 +170,7 @@ fn akoum_flameseekers_discard_isnt_optional() {
 
 #[test]
 fn zadas_commando_cant_be_summoning_sick_but_the_other_ally_can() {
-    cr!("302.6", "602.5a", "118.3");
+    cr!("302.6", "602.5a");
     ruling!(
         "Zada's Commando",
         "To activate a cohort ability, the Ally with that ability must have been under your control continuously since the beginning of your most recent turn. Informally, it can't have \"summoning sickness.\" However, the other Ally you tap can be one that just came under your control. (Note that tapping the second Ally doesn't use {T} [the tap symbol].)"
@@ -220,7 +220,7 @@ fn calix_can_target_itself_with_its_constellation_ability() {
 
 #[test]
 fn a_copy_of_protean_thaumaturge_has_its_constellation_ability() {
-    cr!("707.2", "707.9a");
+    cr!("707.2");
     ruling!(
         "Protean Thaumaturge",
         "If something becomes a copy of Protean Thaumaturge, it also has the constellation ability."
