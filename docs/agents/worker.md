@@ -134,6 +134,17 @@ reviewer reported, and remaining gaps.
 >     an engine bug the ruling exposes), make it, with tests, instead. If supporting a
 >     card would be hacky, leave it as "unsupported: <text>" (a card-support workstream
 >     handles the compiler and hand-written definitions).
+> SPEND EFFORT WHERE BUGS ARE (measured: rulings batches find about one real engine bug
+> per 100 rulings, almost always in interactions):
+> - Do the interaction rulings first and test them thoroughly: timing and triggers,
+>   replacement and prevention effects, layers and characteristic changes, copies, control
+>   changes, last known information, zone changes and new objects, multiplayer, costs and
+>   mana. These are where the engine is most often wrong.
+> - Rulings that only restate what the card's own text says (e.g. "~ can target a creature
+>   you control", "the token is a 1/1") still get a test, but a cheap one: put them in a
+>   compact table-driven test (a list of cases, each with its card, a minimal setup and the
+>   asserted outcome, and its own literal ruling! line), not a separate long test each.
+> - Keep each test to the setup the ruling needs; no elaborate scenarios beyond it.
 > The rulings in a batch are about similar abilities: share helpers and scenarios. Check
 > a card with `cargo run --release -q -p mtg-tools -- unsupported --card "Name"` and a
 > ruling with `cargo run --release -q -p mtg-tools -- rulings-coverage --text "substring"`.
