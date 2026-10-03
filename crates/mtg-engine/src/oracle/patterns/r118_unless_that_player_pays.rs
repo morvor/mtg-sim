@@ -32,6 +32,13 @@ fn unless_that_player_pays(l: &str, b: &mut Builder) -> Option<Effect> {
             }
             (Cost::mana(ManaCost::parse("{X}")?), Some(v))
         }
+        // "unless they pay X life" (Killing Wave): the X of the spell (CR 107.3a).
+        None if cost_text == "x life"
+            && ((b.ctx.is_spell() && !b.in_trigger)
+                || super::value_grammar::x_defined()) =>
+        {
+            (Cost::free().with(CostPart::PayLife(Value::X)), None)
+        }
         None => (resolution_cost(cost_text)?, None),
     };
     let effect = match eff.strip_prefix("you may ") {

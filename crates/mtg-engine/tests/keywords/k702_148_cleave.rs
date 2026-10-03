@@ -289,6 +289,7 @@ fn life_lost_behind_a_shield(t: &mut TestGame, giant: ObjectId) -> i32 {
             amount: None,
             duration: mtg_engine::ability::Duration::EndOfTurn,
             combat_only: false,
+            then: None,
         },
         &[Entity::Player(P0)],
     );

@@ -74,6 +74,7 @@ pub fn is_sequencing(e: &Effect) -> bool {
             | Effect::PayOptional { .. }
             | Effect::ForEach { .. }
             | Effect::ForEachPlayer { .. }
+            | Effect::InTurnOrder { .. }
             | Effect::AsPlayer { .. }
             | Effect::Repeat { .. }
             | Effect::RepeatProcess { .. }

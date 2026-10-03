@@ -517,7 +517,16 @@ impl Renderer<'_> {
                     }
                 })
                 .collect();
-            s = join_words(&[s, format!("Activate only {}.", join_list(&r, "and"))]);
+            let restriction = format!("Activate only {}.", join_list(&r, "and"));
+            // A modal ability says it on its header line ("{G}: Choose one. Activate only
+            // once each turn.").
+            match s.split_once('\n') {
+                Some((head, modes)) if a.body.modal.is_some() && head.ends_with(" —") => {
+                    let head = head.trim_end_matches(" —");
+                    s = format!("{head}. {restriction}\n{modes}");
+                }
+                _ => s = join_words(&[s, restriction]),
+            }
         }
         if a.any_player {
             s.push_str(" Any player may activate this ability.");

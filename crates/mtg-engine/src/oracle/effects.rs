@@ -202,6 +202,9 @@ pub fn parse_trigger_body(
             modal: Some(modal),
         });
     }
+    if let Some(body) = reflexive_modal(t, ctx, &it, &it_player) {
+        return Some(body);
+    }
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
     b.named
@@ -217,6 +220,37 @@ pub fn parse_trigger_body(
     Some(Body {
         targets: b.targets,
         effect,
+        modal: None,
+    })
+}
+
+/// "[instruction]. When you do, choose one —\n• mode\n• mode" (Gorbag of Minas Morgul):
+/// a reflexive triggered ability that is modal (CR 603.12, 700.2), created if the
+/// instruction was performed.
+fn reflexive_modal(t: &str, ctx: &CompileContext, it: &Sel, it_player: &PlayerRef) -> Option<Body> {
+    let (head, rest) = t.split_once('\n')?;
+    let i = head.to_lowercase().rfind(". when you do, choose ")?;
+    let (first, header) = (&head[..i + 1], &head[i + ". when you do, ".len()..]);
+    let modal = parse_modal(&format!("{header}\n{rest}"), ctx, Some((it, it_player)))?;
+    let mut b = Builder::new(ctx);
+    b.in_trigger = true;
+    b.it = it.clone();
+    b.it_player = it_player.clone();
+    let effect = parse_effect_text(first, &mut b)?;
+    let reflexive = Effect::If {
+        cond: Condition::PrevHappened,
+        then: Box::new(Effect::Reflexive {
+            body: Box::new(Body {
+                targets: vec![],
+                effect: Effect::Noop,
+                modal: Some(modal),
+            }),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    Some(Body {
+        targets: b.targets,
+        effect: Effect::seq(vec![effect, reflexive]),
         modal: None,
     })
 }
@@ -758,7 +792,17 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         }
     }
     // The longest phrase that names the object ("the creature an opponent controls"
-    // before "the creature").
+    // before "the creature"); "each of the chosen creatures" is the chosen creatures.
+    let s = match s.strip_prefix("each of ") {
+        Some(r)
+            if b.named
+                .iter()
+                .any(|(p, _)| p.ends_with('s') && r.starts_with(p.as_str())) =>
+        {
+            r
+        }
+        _ => s,
+    };
     let named = b
         .named
         .iter()

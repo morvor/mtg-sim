@@ -36,6 +36,27 @@ fn up_to(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
 
 inventory::submit! { ModalHeaderPattern { name: "choose up to n", priority: 100, parse: up_to } }
 
+/// "choose up to X" (X from the cost, or the X paid for the spell that became the
+/// permanent, CR 107.3m), "choose up to X, where X is the number of Lesson cards in your
+/// graveyard": at most X modes, X determined as the modes are chosen (CR 601.2b, 603.3c).
+fn up_to_x(h: &str, ctx: &CompileContext) -> Option<ModalHeader> {
+    let r = h.strip_prefix("choose up to x")?;
+    let max = if r.is_empty() {
+        Value::X
+    } else {
+        let v = r.strip_prefix(", where x is ")?;
+        let mut b = crate::oracle::effects::Builder::new(ctx);
+        let (value, rest) = crate::oracle::statics::parse_value_phrase(v, &mut b)?;
+        if !b.targets.is_empty() || !rest.trim().is_empty() {
+            return None;
+        }
+        value
+    };
+    Some(header(Value::c(0), max, ModeChooser::Controller))
+}
+
+inventory::submit! { ModalHeaderPattern { name: "choose up to x", priority: 100, parse: up_to_x } }
+
 /// "choose up to four. you may choose the same mode more than once", "choose x. you may
 /// choose the same mode more than once" (CR 700.2d; X is announced before the modes are
 /// chosen, CR 601.2b).
@@ -112,6 +133,9 @@ fn conditional_count(h: &str, ctx: &CompileContext) -> Option<ModalHeader> {
         .strip_suffix(" as you cast ~")
         .or_else(|| cond.strip_suffix(" as you cast this spell"))
         .unwrap_or(cond);
+    // "When you cast ~, choose one. If it was kicked, choose both instead." (Depth
+    // Defiler): the spell, the only thing "it" can name in a header.
+    let cond = if cond == "it was kicked" { "~ was kicked" } else { cond };
     // "it" in the condition would have no referent in the header.
     if cond.split_whitespace().any(|w| w == "it" || w == "it's") {
         return None;

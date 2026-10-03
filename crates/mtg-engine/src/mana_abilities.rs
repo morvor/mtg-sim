@@ -131,6 +131,13 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     vec![t]
                 }
             }
+            ManaProduction::EachColorAmong(f) => {
+                let mut cs = ColorSet::NONE;
+                for o in g.objects_matching(f, ctx) {
+                    cs = cs.union(g.obj(o).chars.colors);
+                }
+                cs.iter().map(|c| vec![ManaType::from_color(c)]).collect()
+            }
             ManaProduction::CommanderIdentity => {
                 let t = commander_identity_types(g, ctx.controller);
                 if t.is_empty() {

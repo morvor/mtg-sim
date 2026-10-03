@@ -488,6 +488,7 @@ fn f_bigger_shield_if(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         amount: Some(_),
         duration,
         combat_only,
+        then: None,
     } = &*prev
     else {
         return false;
@@ -497,6 +498,7 @@ fn f_bigger_shield_if(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         amount: Some(n),
         duration: duration.clone(),
         combat_only: *combat_only,
+        then: None,
     };
     let cond = Condition::SelMatches(to.clone(), f);
     let old = std::mem::replace(prev, Effect::Noop);

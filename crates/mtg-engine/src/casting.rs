@@ -2793,7 +2793,15 @@ impl Game {
     pub fn can_pay_cost(&self, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
         let chars = src.map(|s| self.obj(s).chars.clone()).unwrap_or_default();
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
-        self.can_pay_cost_optimistic_in(p, cost, src, &chars, &Ctx::new(src, p))
+        // What the cost's parts name ("you may pay {1} and exile it": the object the
+        // trigger is about, a target, an object an earlier instruction stored).
+        let mut c = Ctx::new(src, p);
+        c.stack_obj = ctx.stack_obj;
+        c.targets = ctx.targets.clone();
+        c.vars = ctx.vars.clone();
+        c.event = ctx.event.clone();
+        c.iter_player = ctx.iter_player;
+        self.can_pay_cost_optimistic_in(p, cost, src, &chars, &c)
     }
 
     /// Pays a cost during resolution ("you may pay ..."). Returns true if paid.
@@ -2826,7 +2834,10 @@ impl Game {
             ..Default::default()
         };
         match self.pay_total_cost(p, cost, src, &spend, ctx) {
-            Ok(_) => true,
+            Ok(paid) => {
+                self.last_paid = Some(paid);
+                true
+            }
             Err(_) => {
                 self.roll_back(snapshot);
                 false
