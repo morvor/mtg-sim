@@ -157,7 +157,8 @@ impl Game {
         if !self.player(p).in_game() || self.result.is_some() || self.cant_lose_game(p) {
             return;
         }
-        for e in self.replace(ReplEvent::LoseGame { player: p }) {
+        let who = self.team_loss_replacer(p);
+        for e in self.replace(ReplEvent::LoseGame { player: who }) {
             self.execute_repl_event(e);
         }
         // A replacement effect's card draws happen once it has been applied (CR 121.7),
@@ -165,12 +166,46 @@ impl Game {
         self.run_post_replacement_effects();
     }
 
+    /// In Two-Headed Giant a player losing is their team losing (CR 810.8a), so a
+    /// replacement effect on "you would lose the game" controlled by either teammate
+    /// applies to it: the event is offered as the loss of the teammate whose replacement
+    /// effect applies (the player themselves first).
+    fn team_loss_replacer(&mut self, p: PlayerId) -> PlayerId {
+        if self.config.variant != Variant::TwoHeadedGiant
+            || !self
+                .applicable_replacements(&ReplEvent::LoseGame { player: p })
+                .is_empty()
+        {
+            return p;
+        }
+        for q in self.team_members(p) {
+            if q != p
+                && self.player(q).in_game()
+                && !self
+                    .applicable_replacements(&ReplEvent::LoseGame { player: q })
+                    .is_empty()
+            {
+                return q;
+            }
+        }
+        p
+    }
+
     /// Several players lose the game at the same time (CR 104.4a): the result is decided
-    /// only once all of them have lost.
+    /// only once all of them have lost. In Two-Headed Giant a team loses once, however many
+    /// of its players would lose (CR 810.8a): its other players lose with it.
     pub fn lose_game_simultaneously(&mut self, ps: &[PlayerId]) {
         let was = self.losing_simultaneously;
         self.losing_simultaneously = true;
+        let mut teams_done: Vec<u8> = Vec::new();
         for &p in ps {
+            if self.config.variant == Variant::TwoHeadedGiant {
+                let team = self.player(p).team;
+                if teams_done.contains(&team) {
+                    continue;
+                }
+                teams_done.push(team);
+            }
             self.lose_game(p);
         }
         self.losing_simultaneously = was;

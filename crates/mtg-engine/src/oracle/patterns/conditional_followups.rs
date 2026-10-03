@@ -303,6 +303,7 @@ fn instruction_names_exiled_card(x: &str, b: &Builder) -> Option<Sel> {
         chosen_creature: b.chosen_creature.clone(),
         group: b.group.clone(),
         named: b.named.clone(),
+        its_is_it: b.its_is_it,
         ctx: b.ctx,
     };
     let e = crate::oracle::effects::parse_clause(x, &mut probe)?;

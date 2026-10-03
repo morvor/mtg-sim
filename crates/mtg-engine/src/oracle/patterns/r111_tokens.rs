@@ -107,7 +107,14 @@ fn legendary_named_token(l: &str, b: &mut Builder) -> Option<Effect> {
             let short = b.ctx.card_name.split(", ").next()?;
             format!("{}'s {}", short.to_lowercase(), rest)
         }
-        _ => name.to_string(),
+        // "Create Stangg Twin, ..." on Stangg (normalized to "~ twin").
+        _ => match name.strip_prefix("~ ") {
+            Some(rest) if !rest.contains('~') => {
+                let short = b.ctx.card_name.split(", ").next()?;
+                format!("{} {}", short.to_lowercase(), rest)
+            }
+            _ => name.to_string(),
+        },
     };
     if name.is_empty() || name.contains('~') || name.split(' ').count() > 5 {
         return None;
@@ -189,6 +196,11 @@ fn token_by_card_name(l: &str, _b: &mut Builder) -> Option<Effect> {
         return None;
     };
     let r = end(r);
+    // "create a tapped Mutavault token" (Mutable Explorer).
+    let (r, tapped) = match r.trim_start().strip_prefix("tapped ") {
+        Some(x) => (x, "tapped:"),
+        None => (r, ""),
+    };
     let name = r
         .strip_suffix(" tokens")
         .or_else(|| r.strip_suffix(" token"))?
@@ -201,7 +213,7 @@ fn token_by_card_name(l: &str, _b: &mut Builder) -> Option<Effect> {
         return None;
     }
     Some(Effect::Custom(SmolStr::new(format!(
-        "named-token:{n}:{}",
+        "named-token:{n}:{tapped}{}",
         sc.name
     ))))
 }
