@@ -472,3 +472,18 @@ fn bogardan_dragonheart_becomes_a_hasty_flying_dragon() {
     assert!(c.has_keyword(KeywordKind::Flying) && c.has_keyword(KeywordKind::Haste));
     assert_eq!(t.pt(heart), (4, 4));
 }
+
+#[test]
+fn moon_girl_and_devil_dinosaur_are_they() {
+    cr!("613.4b", "603.2");
+    assert_supported("Moon Girl and Devil Dinosaur");
+    let mut t = TestGame::new(2);
+    let duo = t.battlefield(P0, "Moon Girl and Devil Dinosaur");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Grizzly Bears");
+    t.g.draw_cards(P0, 2);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.pt(duo), (6, 6));
+    assert!(chars(&t, duo).has_keyword(KeywordKind::Trample));
+}

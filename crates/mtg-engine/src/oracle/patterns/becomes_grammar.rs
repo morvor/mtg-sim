@@ -798,11 +798,16 @@ fn subject_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
     let subj_text = subj_text.strip_suffix(" each").unwrap_or(subj_text);
     let preds = split_predicates_with(rest, OTHER_VERBS);
     let saved = (b.targets.clone(), b.it.clone());
+    // A subject only this grammar reads (a list of subtypes, a card named for two
+    // characters as "they").
     let mut listed_subject = false;
     let result = (|| {
         let (what, r) = match subj_text {
             // A card named for two characters ("Moon Girl and Devil Dinosaur") is "they".
-            "they" if b.ctx.card_name.contains(" and ") => (Sel::This, String::new()),
+            "they" if b.ctx.card_name.contains(" and ") => {
+                listed_subject = true;
+                (Sel::This, String::new())
+            }
             // "each Advisor, Artificer, and Monk you control"
             s if s.starts_with("each ") && s.contains(", and ") => {
                 listed_subject = true;
