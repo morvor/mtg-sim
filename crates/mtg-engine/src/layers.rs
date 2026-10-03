@@ -340,6 +340,15 @@ impl Game {
                 for m in exceptions {
                     apply_mod(&mut v, m, self, &ctx, *t);
                 }
+                // A copy exception can't give power and toughness to a copy that isn't a
+                // creature in its copiable values when what it copies has none (a Vehicle
+                // copying a land that became a creature, "except it's 4/3", is 0/0 once
+                // crewed; CR 208.3, Mindlink Mech rulings).
+                if !v.is(CardType::Creature) && values.power.is_none() && values.toughness.is_none()
+                {
+                    v.power = None;
+                    v.toughness = None;
+                }
                 drop_ungainable_subtypes(&mut v, values);
                 self.objects[t.0 as usize].chars = v;
             }
