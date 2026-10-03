@@ -81,6 +81,8 @@ fn player_event(s: &str, ctx: &CompileContext) -> Option<PlayerEvent> {
     let who = player_subject(subj)?;
     let event = match verb {
         "draw a card" => ReplacementEvent::Draw(who),
+        // An instruction to draw cards, whatever their number (CR 121.2a, 616.1g).
+        "draw one or more cards" => ReplacementEvent::DrawCards { who, min: 1 },
         "lose life" => ReplacementEvent::LoseLife(who),
         "gain life" => ReplacementEvent::GainLife(who),
         "proliferate" => ReplacementEvent::Action {
@@ -121,6 +123,18 @@ fn player_action(s: &str, ev: &PlayerEvent, ctx: &CompileContext) -> Option<(Rep
     if let Some(r) = s.strip_prefix("you may ") {
         let (a, _) = player_action(r, ev, ctx)?;
         return Some((a, true));
+    }
+    if let ReplacementEvent::DrawCards { .. } = ev.event {
+        for p in ["you draw that many cards plus ", "they draw that many cards plus "] {
+            if let Some(x) = s.strip_prefix(p).and_then(|x| x.strip_suffix(" instead")) {
+                let (n, rest) = parse_number(x)?;
+                if !rest.trim().is_empty() {
+                    return None;
+                }
+                return Some((ReplacementAction::Add(n), false));
+            }
+        }
+        return None;
     }
     let draw = matches!(ev.event, ReplacementEvent::Draw(_));
     if draw && s == "skip that draw instead" {

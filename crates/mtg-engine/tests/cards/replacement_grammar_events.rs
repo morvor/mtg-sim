@@ -231,3 +231,19 @@ fn retriever_phoenix_returns_instead_of_learning() {
     t.settle();
     assert_eq!(t.named_on_battlefield("Retriever Phoenix").len(), 1);
 }
+
+#[test]
+fn quantum_riddler_draws_one_more_with_one_or_fewer_cards_in_hand() {
+    cr!("121.2a", "616.1g", "614.11");
+    compiles(&["Quantum Riddler"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Quantum Riddler");
+    t.hand(P0, "Island");
+    t.g.draw_cards(P0, 2);
+    t.settle();
+    assert_eq!(t.hand_size(P0), 4);
+    // Four cards in hand: a normal draw.
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert_eq!(t.hand_size(P0), 5);
+}
