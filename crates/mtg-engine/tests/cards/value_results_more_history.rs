@@ -206,7 +206,7 @@ fn april_oneil_draws_for_each_card_type_among_spells_cast() {
 
 #[test]
 fn indulge_excess_counts_creatures_that_dealt_combat_damage_to_a_player() {
-    cr!("510.2");
+    cr!("510.2", "702.127a");
     let c = card("Indulge // Excess");
     assert!(
         c.unsupported_text().is_empty(),
@@ -217,33 +217,60 @@ fn indulge_excess_counts_creatures_that_dealt_combat_damage_to_a_player() {
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Grizzly Bears");
     t.battlefield(P0, "Grizzly Bears");
+    // An opponent's creature that dealt combat damage to you doesn't count.
+    let theirs = t.battlefield(P1, "Grizzly Bears");
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(a, Entity::Player(P1)), (b, Entity::Player(P1))], &[]);
     t.advance_to(P0, Step::PostcombatMain);
-    let v = mtg_engine::ability::Value::CountSel(Box::new(mtg_engine::ability::Sel::ThisTurn(
-        Box::new(mtg_engine::ability::TriggerCond::DealsDamage {
-            source: mtg_engine::ability::Filter::and(vec![
-                mtg_engine::ability::Filter::creature(),
-                mtg_engine::ability::Filter::ControlledBy(mtg_engine::ability::PlayerRel::You),
-            ]),
-            to: mtg_engine::ability::DamageRecipient::Player(mtg_engine::ability::PlayerRel::Any),
-            combat_only: true,
-        }),
-    )));
-    let ctx = mtg_engine::eval::Ctx::new(None, P0);
-    assert_eq!(t.g.eval_value(&v, &ctx), 2);
+    t.g.deal_damage(theirs, Entity::Player(P0), 2, true);
+    // A creature that dealt combat damage and then left the battlefield still counts.
+    t.g.destroy(a, None);
+    t.g.flush_events();
+    let excess = t.graveyard(P0, "Indulge // Excess");
+    t.lands(P0, "Mountain", 2);
+    t.cast(P0, excess)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Aftermath,
+        ))
+        .go();
+    t.resolve();
+    assert_eq!(count_subtype(&t, P0, "Treasure"), 2);
 }
 
 #[test]
 fn blitzwing_converts_when_no_life_was_lost_this_way() {
-    cr!("119.3", "608.2c");
+    cr!("119.3", "608.2c", "701.28a");
     let c = card("Blitzwing, Cruel Tormentor // Blitzwing, Adaptive Assailant");
     assert!(
         !c.unsupported_text()
             .iter()
-            .any(|u| u.contains("no life is lost")),
+            .any(|u| u.contains("no life is lost") || u.contains("life that player lost")),
         "{:?}",
         c.unsupported_text()
+    );
+    let play = |lost: u32| {
+        let mut t = TestGame::new(2);
+        let bw = t.battlefield(P0, "Blitzwing, Cruel Tormentor // Blitzwing, Adaptive Assailant");
+        if lost > 0 {
+            t.g.lose_life(P1, lost);
+            t.g.flush_events();
+        }
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.set_step(P0, Step::PostcombatMain);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        let name = t.g.obj(t.g.current(bw)).chars.name.to_string();
+        (t.life(P1), name)
+    };
+    // The opponent lost 3 life this turn: they lose 3 more, and Blitzwing stays.
+    assert_eq!(
+        play(3),
+        (14, "Blitzwing, Cruel Tormentor".to_string())
+    );
+    // No life lost this way: Blitzwing converts.
+    assert_eq!(
+        play(0),
+        (20, "Blitzwing, Adaptive Assailant".to_string())
     );
 }
 

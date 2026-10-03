@@ -126,7 +126,7 @@ fn jaws_of_defeat_loses_the_difference_between_power_and_toughness() {
 
 #[test]
 fn superior_numbers_counts_creatures_in_excess() {
-    cr!("107.1b");
+    cr!("608.2h");
     assert_supported("Superior Numbers");
     let mut t = TestGame::new(2);
     for _ in 0..4 {
@@ -139,6 +139,24 @@ fn superior_numbers_counts_creatures_in_excess() {
     t.resolve();
     // Four creatures against one: 3 damage.
     assert_eq!(t.obj_now(target).damage, 3);
+}
+
+#[test]
+fn superior_numbers_deals_no_damage_when_outnumbered() {
+    cr!("107.1b");
+    // Two creatures against three: the difference is negative, so 0 damage is dealt.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Grizzly Bears");
+    let target = t.battlefield(P1, "Craw Wurm");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Forest", 2);
+    let sn = t.hand(P0, "Superior Numbers");
+    t.cast(P0, sn).target(target).target(P1).go();
+    t.resolve();
+    assert_eq!(t.obj_now(target).damage, 0);
+    assert!(t.on_battlefield(target));
 }
 
 #[test]
@@ -237,22 +255,41 @@ fn horrid_shadowspinner_discards_as_many_as_its_power_when_it_chose_to_draw() {
 fn blood_oath_counts_cards_of_the_chosen_type_revealed() {
     cr!("701.20a", "607.2d");
     assert_supported("Blood Oath");
-    let mut t = TestGame::new(2);
-    t.hand(P1, "Grizzly Bears");
-    t.hand(P1, "Hill Giant");
-    t.hand(P1, "Island");
-    t.lands(P0, "Mountain", 4);
-    let bo = t.hand(P0, "Blood Oath");
-    t.answer(
-        P0,
-        DecisionKind::Option,
-        mtg_engine::decision::Answer::Index(0),
-    );
-    t.cast(P0, bo).target(P1).go();
-    t.resolve();
-    // Whatever card type was chosen, 3 damage for each card of it in that hand.
-    let lost = 20 - t.life(P1);
-    assert!(lost % 3 == 0 && lost <= 6, "lost {lost}");
+    let play = |choice: usize| {
+        let mut t = TestGame::new(2);
+        t.hand(P1, "Grizzly Bears");
+        t.hand(P1, "Hill Giant");
+        t.hand(P1, "Island");
+        t.lands(P0, "Mountain", 4);
+        let bo = t.hand(P0, "Blood Oath");
+        t.answer(
+            P0,
+            DecisionKind::Option,
+            mtg_engine::decision::Answer::Index(choice),
+        );
+        t.cast(P0, bo).target(P1).go();
+        t.resolve();
+        let options = t
+            .asked()
+            .into_iter()
+            .find_map(|(_, d)| match d {
+                mtg_engine::decision::Decision::ChooseOption { options, .. } => Some(options),
+                _ => None,
+            })
+            .expect("a card type was chosen");
+        (t.life(P1), options)
+    };
+    let (_, options) = play(0);
+    let index = |name: &str| {
+        options
+            .iter()
+            .position(|o| o.eq_ignore_ascii_case(name))
+            .unwrap_or_else(|| panic!("no {name} among {options:?}"))
+    };
+    // Two creature cards revealed: 6 damage; one land card: 3; no sorcery: none.
+    assert_eq!(play(index("creature")).0, 14);
+    assert_eq!(play(index("land")).0, 17);
+    assert_eq!(play(index("sorcery")).0, 20);
 }
 
 #[test]
@@ -335,7 +372,7 @@ fn blazing_effigy_adds_damage_from_other_effigies() {
     t.answer_targets(P0, &[Entity::Object(second)]);
     t.answer_targets(P0, &[Entity::Object(target)]);
     // The first Effigy dies and deals 3 to the second; the second dies (3 damage on a
-    // 0/3) and deals 3 + 3 to the Wurm.
+    // 0/3) and deals 3 + 3 to the Brontodon.
     t.g.destroy(first, None);
     t.resolve_all();
     assert_eq!(t.g.obj(target).damage, 6);

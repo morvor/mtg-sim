@@ -149,6 +149,7 @@ fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         b.targets.split_off(saved.0),
         b.it.clone(),
         b.it_player.clone(),
+        b.named.split_off(saved.3.min(b.named.len())),
     );
     b.it = saved.1.clone();
     b.it_player = saved.2.clone();
@@ -162,6 +163,7 @@ fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     b.targets.truncate(saved.0);
     b.named.truncate(saved.3);
     b.targets.extend(core_state.0);
+    b.named.extend(core_state.3);
     b.it = core_state.1;
     b.it_player = core_state.2;
     core
@@ -1094,6 +1096,7 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         b.targets.split_off(saved.0),
         b.it.clone(),
         b.it_player.clone(),
+        b.named.split_off(saved.3.min(b.named.len())),
     );
     b.it = saved.1.clone();
     b.it_player = saved.2.clone();
@@ -1107,6 +1110,7 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     b.targets.truncate(saved.0);
     b.named.truncate(saved.3);
     b.targets.extend(core_state.0);
+    b.named.extend(core_state.3);
     b.it = core_state.1;
     b.it_player = core_state.2;
     core

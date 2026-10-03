@@ -118,11 +118,27 @@ fn desmond_miles_surveils_the_damage_it_dealt() {
     assert_supported("Desmond Miles");
     let mut t = TestGame::new(2);
     let dm = t.battlefield(P0, "Desmond Miles");
+    // An Assassin card in the graveyard: +1/+0.
+    t.graveyard(P0, "Royal Assassin");
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    t.g.recompute();
+    let p = t.pt(dm).0;
+    assert!(p >= 2);
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(dm, Entity::Player(P1))], &[]);
     t.resolve_all();
-    let p = t.g.obj(t.g.current(dm)).chars.power.unwrap_or(0) as i32;
     assert_eq!(t.life(P1), 20 - p);
+    let surveilled: Vec<usize> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::Surveil { cards } => Some(cards.len()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(surveilled, vec![p as usize]);
 }
 
 #[test]
@@ -208,7 +224,7 @@ fn wildgrowth_archaic_counts_colors_spent_on_the_creature_spell() {
     t.battlefield(P0, "Wildgrowth Archaic");
     t.lands(P0, "Forest", 1);
     t.lands(P0, "Plains", 1);
-    // {1}{W}: Watchwolf? Use a two-mana creature paid with two colors.
+    // Grizzly Bears ({1}{G}) paid with green and white mana.
     let bears = t.hand(P0, "Grizzly Bears");
     t.cast(P0, bears).go();
     t.resolve_all();
@@ -234,4 +250,32 @@ fn rumbling_aftershocks_deals_damage_for_each_time_kicked() {
     t.resolve_all();
     // Kicked once: 1 damage from the Aftershocks, 4 from Burst Lightning.
     assert_eq!(t.life(P1), 15);
+}
+
+#[test]
+fn well_of_lost_dreams_x_is_at_most_the_life_gained() {
+    cr!("107.3f", "119.3");
+    assert_supported("Well of Lost Dreams");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Well of Lost Dreams");
+    t.lands(P0, "Plains", 6);
+    for _ in 0..6 {
+        t.library_top(P0, "Island");
+    }
+    t.answer_yes(P0, true);
+    // Asking for 5 gets the most allowed: the 3 life gained.
+    t.answer(P0, DecisionKind::X, Answer::Number(5));
+    let before = t.hand_size(P0);
+    t.g.gain_life(P0, 3);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 3);
+    // Three lands were tapped to pay {3}.
+    let tapped = t
+        .g
+        .permanents_controlled_by(P0)
+        .into_iter()
+        .filter(|o| t.g.obj(*o).tapped)
+        .count();
+    assert_eq!(tapped, 3);
 }

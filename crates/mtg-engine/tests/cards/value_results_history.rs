@@ -4,7 +4,6 @@
 //! this turn", "for each 1 life your opponents have lost this turn", "the damage dealt to
 //! you this turn", cost reductions "for each creature that attacked this turn".
 
-use mtg_engine::ability::*;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -66,6 +65,16 @@ fn mahadi_counts_every_creature_that_died_this_turn_even_tokens() {
     kill(&mut t, a);
     kill(&mut t, b);
     t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(count_subtype(&t, P0, "Treasure"), 2);
+    // Next turn, the creatures that died last turn don't count.
+    for p in [P0, P1] {
+        for _ in 0..3 {
+            t.library_top(p, "Island");
+        }
+    }
+    t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert_eq!(count_subtype(&t, P0, "Treasure"), 2);
@@ -252,21 +261,31 @@ fn gnoll_war_band_ignores_opponents_who_left_the_game() {
         "Gnoll War Band",
         "Opponents who have left the game will not be counted"
     );
-    let mut t = TestGame::new(3);
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    t.g.deal_damage(bears, Entity::Player(P1), 1, false);
-    t.g.deal_damage(bears, Entity::Player(P2), 1, false);
-    t.g.flush_events();
-    let v = Value::EventsThisTurn(
-        Box::new(TriggerCond::PlayerDealtDamage {
-            who: PlayerRel::Opponent,
-            combat_only: false,
-        }),
-        Tally::Players,
-    );
-    let ctx = mtg_engine::eval::Ctx::new(None, P0);
-    assert_eq!(t.g.eval_value(&v, &ctx), 2);
+    // {5}{R}, {1} less for each opponent who was dealt damage this turn.
+    let setup = |lands: usize| {
+        let mut t = TestGame::new(3);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.g.deal_damage(bears, Entity::Player(P1), 1, false);
+        t.g.deal_damage(bears, Entity::Player(P2), 1, false);
+        // Damage to yourself doesn't count.
+        t.g.deal_damage(bears, Entity::Player(P0), 1, false);
+        t.g.flush_events();
+        t.lands(P0, "Mountain", lands);
+        let gwb = t.hand(P0, "Gnoll War Band");
+        (t, gwb)
+    };
+    // Both opponents were dealt damage: {3}{R}.
+    let (mut t, gwb) = setup(4);
+    assert!(t.cast(P0, gwb).try_go().is_ok());
+    let (mut t, gwb) = setup(3);
+    assert!(t.cast(P0, gwb).try_go().is_err());
+    // One of them has left the game: {4}{R}.
+    let (mut t, gwb) = setup(4);
     t.g.player_mut(P2).has_lost = true;
     t.g.player_mut(P2).left_game = true;
-    assert_eq!(t.g.eval_value(&v, &ctx), 1);
+    assert!(t.cast(P0, gwb).try_go().is_err());
+    let (mut t, gwb) = setup(5);
+    t.g.player_mut(P2).has_lost = true;
+    t.g.player_mut(P2).left_game = true;
+    assert!(t.cast(P0, gwb).try_go().is_ok());
 }

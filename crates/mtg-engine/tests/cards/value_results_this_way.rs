@@ -159,6 +159,8 @@ fn reign_of_the_pit_uses_the_total_power_of_the_sacrificed_creatures() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Grizzly Bears");
     t.battlefield(P1, "Hill Giant");
+    // The Giant is a 4/4 on the battlefield (a 3/3 card in the graveyard).
+    t.battlefield(P1, "Glorious Anthem");
     t.lands(P0, "Swamp", 6);
     let rp = t.hand(P0, "Reign of the Pit");
     t.cast(P0, rp).go();
@@ -168,7 +170,7 @@ fn reign_of_the_pit_uses_the_total_power_of_the_sacrificed_creatures() {
             .into_iter()
             .find(|o| t.g.obj(*o).chars.has_subtype("Demon"))
             .expect("Demon token");
-    assert_eq!(t.pt(demon), (5, 5));
+    assert_eq!(t.pt(demon), (6, 6));
 }
 
 #[test]
@@ -214,12 +216,15 @@ fn doomgape_gains_the_sacrificed_creatures_toughness() {
     let mut t = TestGame::new(2);
     let dg = t.battlefield(P0, "Doomgape");
     let giant = t.battlefield(P0, "Hill Giant");
+    // As it last existed on the battlefield, the Giant was a 4/4.
+    t.battlefield(P0, "Glorious Anthem");
     t.answer_choose(P0, &[Entity::Object(giant)]);
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert!(t.on_battlefield(dg));
-    assert_eq!(t.life(P0), 23);
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+    assert_eq!(t.life(P0), 24);
 }
 
 #[test]
@@ -229,12 +234,14 @@ fn shadowheart_draws_cards_equal_to_the_sacrificed_creatures_power() {
     let mut t = TestGame::new(2);
     let sh = t.battlefield(P0, "Shadowheart, Dark Justiciar");
     let giant = t.battlefield(P0, "Hill Giant");
+    // As it last existed on the battlefield, the Giant had power 4.
+    t.battlefield(P0, "Glorious Anthem");
     t.lands(P0, "Swamp", 2);
     t.answer_choose(P0, &[Entity::Object(giant)]);
     let before = t.hand_size(P0);
     t.activate(P0, sh, 0, &[]).expect("activate");
     t.resolve();
-    assert_eq!(t.hand_size(P0), before + 3);
+    assert_eq!(t.hand_size(P0), before + 4);
 }
 
 #[test]

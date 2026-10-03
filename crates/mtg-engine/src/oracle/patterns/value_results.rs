@@ -1395,6 +1395,17 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     let (noun, mut var, extra) = verbs
         .iter()
         .find_map(|(v, var, extra)| head.strip_suffix(v).map(|n| (n, *var, extra.clone())))?;
+    // "You and defending player each discard a card or sacrifice a permanent. You draw a
+    // card for each land card put into a graveyard this way.": the instruction is read as
+    // one per player, and the results would be only the last player's.
+    let split_subject = raw_text_named().lines().any(|l| {
+        l.contains(" this way")
+            && l.find("you and ")
+                .is_some_and(|i| l[i..].split(['.', ',']).next().is_some_and(|c| c.contains(" each ")))
+    });
+    if split_subject {
+        return None;
+    }
     let noun = noun
         .strip_suffix(" that were")
         .or_else(|| noun.strip_suffix(" that was"))
@@ -1795,14 +1806,33 @@ pub fn cost_sacrificed_text(cost: &Cost, effect: &str) -> Option<String> {
         .collect();
     let [CostPart::Sacrifice {
         count: Value::Const(1),
-        ..
+        filter,
     }] = sacs.as_slice()
     else {
         return None;
     };
+    // The noun names what the cost sacrifices ("Sacrifice a land: ... that creature's
+    // power" is about some other creature).
+    fn has_type(f: &Filter, t: crate::types::CardType) -> bool {
+        match f {
+            Filter::Type(x) => *x == t,
+            Filter::And(fs) => fs.iter().any(|f| has_type(f, t)),
+            _ => false,
+        }
+    }
     let mut text = effect.to_string();
     let mut changed = false;
     for noun in ["creature", "artifact", "permanent", "land", "enchantment"] {
+        let t = match noun {
+            "creature" => Some(crate::types::CardType::Creature),
+            "artifact" => Some(crate::types::CardType::Artifact),
+            "land" => Some(crate::types::CardType::Land),
+            "enchantment" => Some(crate::types::CardType::Enchantment),
+            _ => None,
+        };
+        if t.is_some_and(|t| !has_type(filter, t)) {
+            continue;
+        }
         for (that, the) in [("that", "the"), ("That", "The")] {
             let from = format!("{that} {noun}");
             if text.contains(&format!("{from}'s")) {
@@ -1826,8 +1856,19 @@ pub fn note_sacrificed(e: &Effect, b: &mut Builder) {
             PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
         )
     };
+    // Only a sacrificed creature is "that creature" ("you may sacrifice a Forest. If you
+    // do, that creature gains trample": the creature the ability is about).
+    fn is_creature(f: &Filter) -> bool {
+        match f {
+            Filter::Type(crate::types::CardType::Creature) => true,
+            Filter::And(fs) => fs.iter().any(is_creature),
+            _ => false,
+        }
+    }
     let sacrifices_one = match e {
-        Effect::Sacrifice { who, count, .. } => single(who) && matches!(count, Value::Const(1)),
+        Effect::Sacrifice {
+            who, count, filter, ..
+        } => single(who) && matches!(count, Value::Const(1)) && is_creature(filter),
         _ => false,
     };
     if sacrifices_one {
@@ -2254,12 +2295,23 @@ inventory::submit! { super::FollowupPattern { name: "value results: when you do,
 /// amount of life you gained this turn.": the player can't choose a greater X as they pay.
 fn x_cant_be_greater(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
     let lower = block.trim().to_lowercase();
-    let (head, cap) = lower.rsplit_once(". x can't be greater than ")?;
+    // "you may pay {X}, where X is less than or equal to the amount of life you gained. If
+    // you do, draw X cards.": the same cap, read before the instruction it follows.
+    const LE: &str = "you may pay {x}, where x is less than or equal to ";
+    let inline;
+    let (head, cap) = match lower.split_once(LE) {
+        Some((before, after)) => {
+            let (cap, rest) = after.split_once(". ")?;
+            inline = format!("{before}you may pay {{x}}. {rest}");
+            (inline.as_str(), cap)
+        }
+        None => lower.rsplit_once(". x can't be greater than ")?,
+    };
     if !head.contains("you may pay {x}") {
         return None;
     }
     let cap = end(cap);
-    let mut abilities = crate::oracle::parse_ability(&format!("{head}."), ctx)?;
+    let mut abilities = crate::oracle::parse_ability(&format!("{}.", head.trim_end_matches('.')), ctx)?;
     let [a] = abilities.as_mut_slice() else {
         return None;
     };
@@ -2420,3 +2472,4 @@ mod tests {
         }
     }
 }
+

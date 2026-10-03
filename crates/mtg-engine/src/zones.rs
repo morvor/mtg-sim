@@ -187,6 +187,14 @@ pub fn record_cost_moved(
     if !revealed.is_empty() {
         vars.insert(COST_REVEALED, revealed);
     }
+    // Permanents a "tap an untapped [permanent]" cost tapped ("the power of the creature
+    // tapped this way").
+    if !paid.tapped.is_empty() {
+        vars.insert(
+            vars::TAPPED,
+            paid.tapped.iter().map(|o| Entity::Object(*o)).collect(),
+        );
+    }
     let exiled: Vec<Entity> = paid
         .exiled
         .iter()
