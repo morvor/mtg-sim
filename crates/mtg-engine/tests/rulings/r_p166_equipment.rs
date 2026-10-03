@@ -134,7 +134,8 @@ fn equipment_attack_triggers_need_the_equipment_attached_as_attackers_are_declar
     t.set_step(P0, Step::PrecombatMain);
     attack_with(&mut t, &at_p1(&[bears]));
     assert_eq!(triggers_on_stack(&t, "+1/+1 counter"), 1);
-    t.answer_targets(P0, &[Entity::Object(sword), Entity::Object(squire)]);
+    t.answer_targets(P0, &[Entity::Object(sword)]);
+    t.answer_targets(P0, &[Entity::Object(squire)]);
     activate_containing(&mut t, P0, squire, "Attach").unwrap();
     t.resolve();
     assert_eq!(attached_to(&t, sword), Some(Entity::Object(squire)));

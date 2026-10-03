@@ -263,6 +263,50 @@ fn might_enter_as_aura(g: &Game, mv: &MoveEv) -> bool {
             .is_some_and(|s| g.obj(s).copiable.has_subtype("Aura"))
 }
 
+/// What the Aura `id` (as it would exist on the battlefield) could enter attached to:
+/// permanents, the cards in the zone its enchant ability names, and players it can
+/// legally enchant (CR 303.4f).
+fn aura_entry_hosts(g: &Game, id: ObjectId) -> Vec<Entity> {
+    let elsewhere: Vec<ObjectId> = match enchant_zone_outside_battlefield(&g.obj(id).chars) {
+        Some(z) => g.objects_in_zone_kind(z),
+        None => vec![],
+    };
+    g.permanent_ids()
+        .into_iter()
+        .chain(elsewhere)
+        .map(Entity::Object)
+        .chain(g.players_in_game().into_iter().map(Entity::Player))
+        .filter(|e| can_attach(g, id, *e))
+        .collect()
+}
+
+/// Whether the card `id` could be put onto the battlefield under `controller`'s control
+/// by an effect that doesn't say what it's attached to. An Aura with nothing it could
+/// legally enchant can't (CR 303.4g), so an effect offering a choice of cards to put onto
+/// the battlefield doesn't offer it ("you can't choose to put it onto the battlefield at
+/// all").
+pub(crate) fn could_enter_unspecified(g: &mut Game, id: ObjectId, controller: PlayerId) -> bool {
+    let mut mv = MoveEv {
+        obj: id,
+        to: Zone::Battlefield,
+        pos: LibraryPosition::Top,
+        cause: MoveCause::Effect,
+        by: Some(controller),
+        etb: Default::default(),
+        source: None,
+    };
+    mv.etb.controller = Some(controller);
+    if !might_enter_as_aura(g, &mv) {
+        return true;
+    }
+    g.with_hypothetical_entry(&mv, |g| {
+        let o = g.obj(id);
+        !(o.chars.has_subtype("Aura") && o.is(CardType::Enchantment))
+            || o.is(CardType::Battle)
+            || !aura_entry_hosts(g, id).is_empty()
+    })
+}
+
 /// Decides what a permanent entering the battlefield is attached to, adjusting the move
 /// (CR 301.5e, 303.4f–i, 310.10). Returns false if it can't enter: an Aura with no legal
 /// object or player to enchant, or one put onto the battlefield attached to something it
@@ -296,19 +340,7 @@ pub(crate) fn entry_attachment(g: &mut Game, mv: &mut MoveEv) -> bool {
         };
         let legal = target.is_some_and(|t| can_attach(g, id, t));
         let candidates: Vec<Entity> = if kind == EntryKind::Aura && !specified {
-            // Permanents, and the cards in the zone its enchant ability names.
-            let elsewhere: Vec<ObjectId> = match enchant_zone_outside_battlefield(&g.obj(id).chars)
-            {
-                Some(z) => g.objects_in_zone_kind(z),
-                None => vec![],
-            };
-            g.permanent_ids()
-                .into_iter()
-                .chain(elsewhere)
-                .map(Entity::Object)
-                .chain(g.players_in_game().into_iter().map(Entity::Player))
-                .filter(|e| can_attach(g, id, *e))
-                .collect()
+            aura_entry_hosts(g, id)
         } else {
             vec![]
         };
