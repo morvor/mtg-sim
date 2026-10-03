@@ -332,18 +332,26 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
             let raw = end(&block[start..]);
             // Fall back to the token-copy exception grammar ("it's 7/7", "it has haste
             // and dethrone", "it's an artifact and it has \"...\"").
-            let exc = copy_exceptions(raw, ctx).or_else(|| {
-                let (masked, quotes) = super::statics::mask_quotes(end(&raw.to_lowercase()))?;
-                super::tokens_copies_copy::copy_exceptions(&masked, &quotes, ctx)
-            })?;
+            let exc = copy_exceptions(raw, ctx)
+                .map(|m| (m, vec![]))
+                .or_else(|| {
+                    let (masked, quotes) =
+                        super::statics::mask_quotes(end(&raw.to_lowercase()))?;
+                    super::tokens_copies_copy::copy_exceptions(&masked, &quotes, ctx)
+                        .map(|m| (m, vec![]))
+                })
+                .or_else(|| copy_exceptions_ext(raw, ctx))?;
             (a, exc)
         }
-        None => (r, vec![]),
+        None => (r, (vec![], vec![])),
     };
+    let (exceptions, extras) = exceptions;
+    // "another creature you control": not the entering permanent (CR 707.9).
     let r = r
         .strip_prefix("any ")
         .or_else(|| r.strip_prefix("a "))
-        .or_else(|| r.strip_prefix("an "))?;
+        .or_else(|| r.strip_prefix("an "))
+        .or_else(|| r.starts_with("another ").then_some(r))?;
     let r = r.strip_suffix(" on the battlefield").unwrap_or(r);
     let (f, _, tail) = parse_object_phrase(r)?;
     if !end(tail).is_empty() {
@@ -375,13 +383,137 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if tapped {
         out.push(rep(ReplacementAction::EnterTapped, true));
     }
-    if !exceptions.is_empty() {
-        out.push(rep(
-            ReplacementAction::AsEnters(Box::new(Effect::EnterCopyExceptions(exceptions))),
-            true,
-        ));
+    if !exceptions.is_empty() || !extras.is_empty() {
+        let mut v = Vec::new();
+        if !exceptions.is_empty() {
+            v.push(Effect::EnterCopyExceptions(exceptions));
+        }
+        v.extend(extras);
+        out.push(rep(ReplacementAction::AsEnters(Box::new(Effect::seq(v))), true));
     }
     Some(out)
+}
+
+/// More copy exceptions (CR 707.9b, 707.9e, 707.9f): "it enters with an additional +1/+1
+/// counter on it if it's a creature", "if it's a creature, it enters with two additional
+/// +1/+1 counters on it and has changeling", "it's legendary and snow in addition to its
+/// other types", and items without a repeated "it" ("it isn't legendary, is an artifact
+/// in addition to its other types, and has myriad"). Returns the modifications and the
+/// additional or conditional parts ([`Effect::EnterCopyExtra`]).
+fn copy_exceptions_ext(s: &str, ctx: &CompileContext) -> Option<(Vec<Modification>, Vec<Effect>)> {
+    if s.contains('"') {
+        return None;
+    }
+    let lower = end(s.trim()).to_lowercase();
+    let lower = lower
+        .replace(", and is ", ", and it's ")
+        .replace(", is ", ", it's ")
+        .replace(", and has ", ", and it has ")
+        .replace(" and, if ", ", if ");
+    // Clauses start with "it" or "if".
+    let mut clauses: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let words: Vec<&str> = lower.split(' ').collect();
+    let mut i = 0;
+    while i < words.len() {
+        let w = words[i];
+        let next = words.get(i + 1).copied().unwrap_or("");
+        let starts = |n: &str| n == "it" || n == "if" || n.starts_with("it's") || n == "it";
+        if (w == "and" || w == "and,") && starts(next) && !cur.is_empty() {
+            clauses.push(cur.trim().trim_end_matches(',').to_string());
+            cur.clear();
+        } else if w.ends_with(',') && starts(next) && !cur.trim_start().starts_with("if ") {
+            cur.push_str(w.trim_end_matches(','));
+            clauses.push(cur.trim().to_string());
+            cur.clear();
+        } else {
+            cur.push_str(w);
+            cur.push(' ');
+        }
+        i += 1;
+    }
+    if !cur.trim().is_empty() {
+        clauses.push(cur.trim().trim_end_matches(',').to_string());
+    }
+    let mut mods = Vec::new();
+    let mut extras = Vec::new();
+    for c in clauses {
+        // "if it's a creature, it enters with ... [and has changeling]"
+        let (only_if, c) = match c.strip_prefix("if it's ").and_then(|r| r.split_once(", ")) {
+            Some((t, rest)) => (Some(copy_type_filter(t)?), rest.to_string()),
+            None => (None, c),
+        };
+        // "it enters with ... on it if it's a creature"
+        let (only_if, c) = match (only_if, c.rsplit_once(" if it's ")) {
+            (None, Some((rest, t))) => (Some(copy_type_filter(t)?), rest.to_string()),
+            (o, _) => (o, c),
+        };
+        if let Some(r) = c.strip_prefix("it enters with ") {
+            let (r, kw) = match r.split_once(" and has ") {
+                Some((a, k)) => (a, Some(k)),
+                None => (r, None),
+            };
+            let (n, rest) = parse_number(r)?;
+            let rest = rest.trim_start();
+            let rest = rest.strip_prefix("additional ").unwrap_or(rest);
+            let (kind, rest) = crate::oracle::costs::counter_kind(rest)?;
+            let rest = rest.trim_start();
+            let rest = rest
+                .strip_prefix("counters")
+                .or_else(|| rest.strip_prefix("counter"))?;
+            if rest.trim() != "on it" {
+                return None;
+            }
+            let mut emods = Vec::new();
+            if let Some(k) = kw {
+                for a in crate::oracle::keywords::parse_keyword_line(k, ctx)? {
+                    match &a.kind {
+                        AbilityKind::Keyword(k) => emods.push(Modification::AddKeyword(k.clone())),
+                        AbilityKind::Unsupported(_) => return None,
+                        // Changeling's characteristic-defining ability.
+                        _ => emods.push(Modification::AddAbility(a.clone())),
+                    }
+                }
+            }
+            extras.push(Effect::EnterCopyExtra {
+                only_if,
+                mods: emods,
+                effect: Box::new(Effect::EnterWithCounters { kind, n }),
+            });
+            continue;
+        }
+        if only_if.is_some() {
+            return None;
+        }
+        // "it's legendary and snow in addition to its other types"
+        if let Some(r) = c
+            .strip_prefix("it's ")
+            .and_then(|r| r.strip_suffix(" in addition to its other types"))
+        {
+            let mut sup = Vec::new();
+            let mut ok = true;
+            for w in r.split(' ').filter(|w| *w != "and") {
+                match crate::types::Supertype::from_word(w) {
+                    Some(st) => sup.push(st),
+                    None => ok = false,
+                }
+            }
+            if ok && !sup.is_empty() {
+                mods.push(Modification::AddSupertypes(sup));
+                continue;
+            }
+        }
+        mods.extend(copy_exceptions(&c, ctx)?);
+    }
+    (!mods.is_empty() || !extras.is_empty()).then_some((mods, extras))
+}
+
+/// "a creature", "a planeswalker" after "if it's".
+fn copy_type_filter(t: &str) -> Option<Filter> {
+    let t = t.trim();
+    let r = t.strip_prefix("a ").or_else(|| t.strip_prefix("an "))?;
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    (!plural && tail.trim().is_empty()).then_some(f)
 }
 
 /// Copy exceptions (CR 707.9b): "it's a Shapeshifter Rogue in addition to its other

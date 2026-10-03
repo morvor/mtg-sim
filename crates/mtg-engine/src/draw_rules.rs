@@ -200,7 +200,7 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
 /// more cards, ..."); this happens before any of the individual draws. Returns the cards
 /// drawn by the instruction if such an effect replaced it.
 pub fn replace_multiple_draws(g: &mut Game, p: PlayerId, n: u32) -> Option<Vec<ObjectId>> {
-    if n < 2 {
+    if n < 1 {
         return None;
     }
     if g.dirty {
@@ -255,6 +255,17 @@ pub fn replace_multiple_draws(g: &mut Game, p: PlayerId, n: u32) -> Option<Vec<O
     }
     match def.action {
         ReplacementAction::Prevent => Some(vec![]),
+        // "you draw that many cards plus one instead" (Quantum Riddler): the instruction
+        // draws more cards; this effect doesn't apply to it again (CR 614.5).
+        ReplacementAction::Add(v) => {
+            let extra = g.eval_value(&v, &Ctx::new(source, controller)).max(0) as u32;
+            let mut ctx_applied = applied;
+            ctx_applied.push(key);
+            g.repl_context.push(ctx_applied);
+            let out = g.draw_cards(p, n + extra);
+            g.repl_context.pop();
+            Some(out)
+        }
         ReplacementAction::Instead(effect) => {
             let mut ctx = Ctx::new(source, controller);
             ctx.event = Some(EventInfo {

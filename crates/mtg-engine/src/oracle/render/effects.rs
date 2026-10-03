@@ -1974,6 +1974,7 @@ impl Renderer<'_> {
                 spell_filter,
                 body,
                 abilities,
+                additional,
             } => {
                 let a = self.effect(add);
                 let f = self.noun_det(spell_filter, Det::A);
@@ -1985,6 +1986,8 @@ impl Renderer<'_> {
                 let b = self.in_event_scope(|r| r.body(body));
                 if *abilities {
                     format!("{a}. When you spend this mana to cast {f} or activate an ability, {b}")
+                } else if *additional {
+                    format!("{a}. If that mana is spent to cast {f}, {b}")
                 } else {
                     format!("{a}. When that mana is spent to cast {f}, {b}")
                 }

@@ -12,33 +12,35 @@ use crate::types::*;
 /// also has the player take another action queues it as the first thing that happens in
 /// the next step that actually occurs (CR 614.10b).
 pub fn static_skip(g: &mut Game, kind: StepKind, active: PlayerId) -> bool {
-    let cands: Vec<(ObjectId, PlayerId, ReplacementDef)> = g
+    let applies = |d: &ReplacementDef, s: Option<ObjectId>, c: PlayerId| match &d.event {
+        ReplacementEvent::SkipStep { step, whose } => {
+            *step == kind && g.player_rel_matches(*whose, active, &Ctx::new(s, c))
+        }
+        _ => false,
+    };
+    let mut cands: Vec<(Option<ObjectId>, PlayerId, ReplacementDef)> = g
         .statics
         .replacements
         .iter()
-        .filter(|(s, c, _, _, d)| match &d.event {
-            ReplacementEvent::SkipStep { step, whose } => {
-                *step == kind && g.player_rel_matches(*whose, active, &Ctx::new(Some(*s), *c))
-            }
-            _ => false,
-        })
-        .map(|(s, c, _, _, d)| (*s, *c, d.clone()))
+        .filter(|(s, c, _, _, d)| applies(d, Some(*s), *c))
+        .map(|(s, c, _, _, d)| (Some(*s), *c, d.clone()))
         .collect();
+    // One-shot effects ("you skip your draw step this turn"): several of them still skip
+    // the step only once.
+    cands.extend(
+        g.replacements
+            .iter()
+            .filter(|r| r.uses != Some(0) && applies(&r.def, r.source, r.controller))
+            .map(|r| (r.source, r.controller, r.def.clone())),
+    );
     for (src, ctl, d) in cands {
-        if d.optional
-            && !g.ask_yes_no(
-                active,
-                Some(src),
-                &format!("Skip your {kind:?} step?"),
-                false,
-            )
-        {
+        if d.optional && !g.ask_yes_no(active, src, &format!("Skip your {kind:?} step?"), false) {
             continue;
         }
         match &d.action {
             ReplacementAction::Instead(e) | ReplacementAction::Also(e) => {
                 g.step_start_actions
-                    .push((Ctx::new(Some(src), ctl), (**e).clone()));
+                    .push((Ctx::new(src, ctl), (**e).clone()));
             }
             _ => {}
         }
