@@ -295,16 +295,20 @@ fn humiliate_needs_no_creature_and_chooses_it_after_the_reveal() {
     let h = t.hand(P0, "Humiliate");
     give_mana_for(&mut t, P0, "Humiliate");
     t.cast(P0, h).target(Entity::Player(P1)).go();
-    let from = t.asked().len();
     let card = t.g.player(P1).hand[0];
+    // P1's hand and graveyard sizes at each of P0's choices.
+    let seen = watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::ChooseEntities { .. }),
+        |g| (g.players[1].hand.len(), g.players[1].graveyard.len()),
+    );
     t.answer_choose(P0, &[Entity::Object(card)]);
     t.answer_choose(P0, &[Entity::Object(b)]);
     t.resolve_all();
-    // P0 chooses the card, it's discarded, and only then P0 chooses the creature.
-    let choices = entity_choices(&t, from);
-    assert_eq!(choices.first().map(|c| c.0), Some(P0), "{choices:?}");
-    assert_eq!(choices.last().map(|c| c.0), Some(P0), "{choices:?}");
-    assert!(choices.len() >= 2, "{choices:?}");
+    // P0 chooses the card while it is still in P1's hand; it's discarded, and only then
+    // P0 chooses the creature.
+    assert_eq!(seen.lock().unwrap().clone(), vec![(1, 0), (0, 1)]);
     assert_eq!(t.counters(b, counters::PLUS1), 1);
     assert_eq!(t.counters(a, counters::PLUS1), 0);
     assert_eq!(t.hand_size(P1), 0);
