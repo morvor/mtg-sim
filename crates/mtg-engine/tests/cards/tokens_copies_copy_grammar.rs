@@ -154,12 +154,24 @@ fn cleaver_skaab_creates_two_copies_of_the_sacrificed_zombie() {
     );
     let mut t = TestGame::new(2);
     let skaab = t.battlefield(P0, "Cleaver Skaab");
-    let corpse = t.battlefield(P0, "Walking Corpse");
+    // A Zombie token (a token copy of Walking Corpse) pays the sacrifice cost.
+    let tc = mtg_engine::replacement::TokenCreate {
+        chars: card("Walking Corpse").characteristics(mtg_engine::object::FaceState::Front),
+        card: None,
+        tapped: false,
+        attacking: None,
+        copy_of: None,
+        copy_exceptions: vec![],
+    };
+    let corpse = t.g.create_tokens(P0, tc, 1, None)[0];
+    assert_eq!(tokens_named(&t, "Walking Corpse"), vec![corpse]);
     t.lands(P0, "Island", 3);
     t.answer_choose(P0, &[Entity::Object(corpse)]);
     activate_containing(&mut t, P0, skaab, "Sacrifice another Zombie");
     t.resolve_all();
-    assert_eq!(tokens_named(&t, "Walking Corpse").len(), 2, "{}", t.dump_log());
+    let now = tokens_named(&t, "Walking Corpse");
+    assert_eq!(now.len(), 2, "{}", t.dump_log());
+    assert!(!now.contains(&corpse));
 }
 
 #[test]

@@ -338,7 +338,7 @@ fn mysterio_exiles_its_illusions_when_it_leaves() {
 
 #[test]
 fn death_by_dragons_gives_a_dragon_to_each_player_but_the_target() {
-    cr!("111.2", "101.4");
+    cr!("111.2");
     let mut t = TestGame::new(3);
     t.lands(P0, "Mountain", 6);
     let d = t.hand(P0, "Death by Dragons");

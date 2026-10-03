@@ -197,6 +197,8 @@ fn saw_in_half_copies_have_half_the_power_and_toughness_rounded_up() {
     );
     let mut t = TestGame::new(2);
     let wurm = t.battlefield(P1, "Craw Wurm");
+    // A +1/+1 counter makes it 7/5 as it last existed: the copies are 4/3, not 3/2.
+    t.g.add_counters(Entity::Object(wurm), mtg_engine::types::counters::PLUS1, 1, None);
     t.lands(P0, "Swamp", 3);
     let s = t.hand(P0, "Saw in Half");
     t.cast(P0, s).target(wurm).go();
@@ -209,7 +211,8 @@ fn saw_in_half_copies_have_half_the_power_and_toughness_rounded_up() {
     assert_eq!(copies.len(), 2, "{}", t.dump_log());
     for c in copies {
         assert_eq!(t.obj_now(c).controller, P1);
-        assert_eq!(t.pt(c), (3, 2));
+        assert_eq!(t.pt(c), (4, 3));
+        assert_eq!(t.counters(c, mtg_engine::types::counters::PLUS1), 0);
     }
 }
 
