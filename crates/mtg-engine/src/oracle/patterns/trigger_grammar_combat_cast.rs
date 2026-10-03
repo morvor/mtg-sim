@@ -329,8 +329,12 @@ fn one_spell(s: &str) -> Option<(Filter, Option<Condition>)> {
     let x = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
     // Qualifiers the object phrase would misread ("with the same name as a card" is a
     // name comparison of its own).
-    for q in [" with the same name as a card in their graveyard"] {
-        if let Some(head) = x.strip_suffix(q) {
+    for q in [
+        " with the same name as a card in their graveyard",
+        " that doesn't share a creature type with ",
+    ] {
+        if let Some(i) = x.find(q) {
+            let (head, q) = (&x[..i], &x[i..]);
             let (f, c) = super::triggers::parse_spell_phrase(head)?;
             let (fs, c2, r) = spell_qualifier(q.trim_start(), &f)?;
             if !r.is_empty() {
@@ -784,6 +788,15 @@ fn activate_events(r: &str) -> Option<Parsed> {
         .strip_prefix("activates ")
         .or_else(|| rest.strip_prefix("activate "))?;
     let mut include_mana = true;
+    // "…, if it isn't a mana ability" (Harsh Mentor): a mana ability never stops being
+    // one, so it's part of the trigger event (CR 603.4).
+    let t = match t.strip_suffix(", if it isn't a mana ability") {
+        Some(x) => {
+            include_mana = false;
+            x
+        }
+        None => t,
+    };
     let mut conds: Vec<Condition> = Vec::new();
     let mut source = Filter::Any;
     // The kind of ability.
@@ -2231,6 +2244,12 @@ fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
         TriggerCond::Where { trigger, .. }
         | TriggerCond::FirstTimeEachTurn(trigger)
         | TriggerCond::Noncombat(trigger) => return named_referents(trigger),
+        // Once per source dealing damage ("Whenever a red creature or spell deals damage"):
+        // that source is one object. (A batch of several sources names none.)
+        TriggerCond::Batched {
+            trigger,
+            per: BatchPer::Other,
+        } => return named_referents(trigger),
         TriggerCond::DealsDamage { source, to, .. } => {
             let source_self = matches!(source, Filter::Source);
             if !source_self {
