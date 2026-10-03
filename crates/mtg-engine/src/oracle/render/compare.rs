@@ -1332,6 +1332,13 @@ fn sentence_rewrites(s: &str) -> String {
     // "When ~ enters, until end of turn, whenever another creature dies, ...": a
     // duration after a trigger condition moves to the end of its sentence too.
     static MID_DURATION: OnceLock<Option<Regex>> = OnceLock::new();
+    static MID_TRIGGER_DURATION: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = MID_TRIGGER_DURATION.get_or_init(|| {
+        Regex::new(r#"(, )(until end of turn|this turn), (whenever|when) ([^,."]+), "#).ok()
+    }) {
+        // A delayed trigger for the duration: "whenever another creature dies this turn".
+        s = re.replace_all(&s, "$1$3 $4 $2, ").to_string();
+    }
     if let Some(re) = MID_DURATION
         .get_or_init(|| Regex::new(r#"(, )(until end of turn|this turn), ([^."]+)\."#).ok())
     {

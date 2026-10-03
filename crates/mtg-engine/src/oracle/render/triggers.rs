@@ -971,7 +971,7 @@ impl Renderer<'_> {
                     return Ev::new("", self.gap("attacks with others"));
                 };
                 let o = obj(self, f);
-                let rest: Vec<Filter> = g
+                let mut rest: Vec<Filter> = g
                     .iter()
                     .filter(|x| {
                         !matches!(x, Filter::Attacking)
@@ -979,6 +979,10 @@ impl Renderer<'_> {
                     })
                     .cloned()
                     .collect();
+                // Only creatures attack: "at least two Zombies".
+                if rest.len() > 1 {
+                    rest.retain(|x| !matches!(x, Filter::Type(CardType::Creature)));
+                }
                 let num = if *n == 1 { Num::One } else { Num::Many };
                 let noun = self.noun(&Filter::and(rest), num);
                 Ev::new(
