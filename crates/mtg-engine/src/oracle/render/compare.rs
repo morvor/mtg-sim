@@ -199,6 +199,35 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               a Berserker\".",
     },
     Equivalence {
+        pattern: r"\bwith no ((?:[a-z+/0-9-]+ )?)counters on\b",
+        replacement: "without $1counters on",
+        why: "\"With no counters on it\" and \"without counters on it\" are the same.",
+    },
+    Equivalence {
+        pattern: r"\bprevent all (combat )?damage that would be dealt to and dealt by ([^.]+)\.",
+        replacement: "prevent all ${1}damage that would be dealt to $2. prevent all ${1}damage that would be dealt by $2.",
+        why: "Damage dealt to an object and damage dealt by it are prevented alike (CR \
+              615.1a): the same as two prevention effects.",
+    },
+    Equivalence {
+        pattern: r"\bprevent all (combat )?damage (?:that )?((?:~|target [^.{}|]+?|[a-z][^.{}|]*?)) would deal to ([^.{}|]+?)((?: this turn)?)\.",
+        replacement: "prevent all ${1}damage that would be dealt to $3 by $2$4.",
+        why: "\"Prevent all damage X would deal to Y\" is the damage that would be dealt to Y \
+              by X (CR 615.1a).",
+    },
+    Equivalence {
+        pattern: r"\bprevent all (combat )?damage (?:that )?((?:~|target [^.{}|]+?|[a-z][^.{}|]*?)) would deal\b",
+        replacement: "prevent all ${1}damage that would be dealt by $2",
+        why: "\"Prevent all damage X would deal\" is the damage that would be dealt by X (CR \
+              615.1a).",
+    },
+    Equivalence {
+        pattern: r"\bas long as it's your turn\b",
+        replacement: "during your turn",
+        why: "A static ability that applies \"as long as it's your turn\" applies during \
+              your turn.",
+    },
+    Equivalence {
         pattern: r"\byour life total is less than (\d+|[a-z]+)\b",
         replacement: "you have less than $1 life",
         why: "A player's life total is the amount of life they have (CR 119.1).",
@@ -867,6 +896,11 @@ fn number_words() -> &'static [(&'static str, &'static str)] {
         ("eighteen", "18"),
         ("nineteen", "19"),
         ("twenty", "20"),
+        ("thirty", "30"),
+        ("forty", "40"),
+        ("fifty", "50"),
+        ("ninety-nine", "99"),
+        ("hundred", "100"),
         ("once", "1 time"),
         ("twice", "2 times"),
     ]

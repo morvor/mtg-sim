@@ -55,6 +55,9 @@ pub struct FaceInfo {
     pub reveal_card: Option<crate::ability::Filter>,
     /// The face has spree (CR 702.172): its modes are written "+ [cost] — [effect]".
     pub spree: bool,
+    /// The face has tiered (CR 702.183): its modes are written "• [cost] — [effect]"
+    /// after the keyword.
+    pub tiered: bool,
 }
 
 impl FaceInfo {
@@ -69,6 +72,10 @@ impl FaceInfo {
             spree: face.chars.abilities.iter().any(|a| {
                 matches!(&a.kind, AbilityKind::Keyword(k)
                     if k.kind == crate::keywords::KeywordKind::Spree)
+            }),
+            tiered: face.chars.abilities.iter().any(|a| {
+                matches!(&a.kind, AbilityKind::Keyword(k)
+                    if k.kind == crate::keywords::KeywordKind::Tiered)
             }),
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
@@ -169,6 +176,12 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
     if let Some(m) = &mut out.merged {
         merge_chapters(m);
     }
+    // "{3}, {T} or {R}, {T}: ~ deals 1 damage to any target": one ability printed with
+    // two costs, compiled as one ability for each.
+    let base = out.merged.clone().unwrap_or_else(|| out.lines.clone());
+    if let Some(m) = merge_alternative_costs(&base) {
+        out.merged = Some(m);
+    }
     merge_chapters(&mut out.lines);
     merge_shared_as_though(&mut out.lines);
     merge_copy_exceptions(&mut out.lines);
@@ -229,6 +242,36 @@ fn off_battlefield_group(abilities: &[Ability]) -> Option<(usize, Ability)> {
 }
 
 /// See [`RenderedFace::merged`]: "When A, X." + "When B, X." = "When A or B, X."
+/// Consecutive activated abilities that do the same with different costs, written as one
+/// ability with either cost: "{3}, {T} or {R}, {T}: [effect]".
+fn merge_alternative_costs(lines: &[String]) -> Option<Vec<String>> {
+    let split = |l: &str| -> Option<(String, String)> {
+        let (c, b) = l.split_once(": ")?;
+        if c.is_empty() || c.contains(['"', '\n']) || c.contains("{alt:") {
+            return None;
+        }
+        Some((c.to_string(), b.to_string()))
+    };
+    let mut out: Vec<String> = Vec::new();
+    let mut any = false;
+    let mut i = 0;
+    while i < lines.len() {
+        if let (Some((c1, b1)), Some((c2, b2))) =
+            (split(&lines[i]), lines.get(i + 1).and_then(|l| split(l)))
+        {
+            if b1 == b2 {
+                out.push(format!("{c1} or {c2}: {b1}"));
+                any = true;
+                i += 2;
+                continue;
+            }
+        }
+        out.push(lines[i].clone());
+        i += 1;
+    }
+    any.then_some(out)
+}
+
 fn merge_same_triggers(lines: &[String], bodies: &[Option<String>]) -> Option<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     let mut merged_any = false;
@@ -1093,6 +1136,25 @@ impl<'a> Renderer<'a> {
                 let cost = mode.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
                 let text = self.with_targets(&mode.targets, |r| r.effect_sentences(&mode.effect));
                 lines.push(format!("+ {cost} — {text}"));
+            }
+            return lines.join("\n");
+        }
+        // CR 702.183a: tiered means "choose one mode; as an additional cost, pay the cost
+        // of the chosen mode", which its "• [cost] — [effect]" bullets say.
+        if self.info.tiered
+            && m.per_mode_cost
+            && matches!(m.chooser, ModeChooser::Controller)
+            && m.min.as_const() == Some(1)
+            && m.max.as_const() == Some(1)
+            && !m.optional
+            && !m.allow_repeat
+            && m.modes.iter().all(|x| x.cost.is_some())
+        {
+            let mut lines = Vec::new();
+            for mode in &m.modes {
+                let cost = mode.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
+                let text = self.with_targets(&mode.targets, |r| r.effect_sentences(&mode.effect));
+                lines.push(format!("• {cost} — {text}"));
             }
             return lines.join("\n");
         }

@@ -65,6 +65,23 @@ impl Renderer<'_> {
     /// The first mention of target slot `i` ("target creature", "up to two target
     /// creatures"); later mentions are pronouns.
     pub(crate) fn target_phrase(&mut self, i: u8) -> String {
+        let mut s = self.target_phrase_core(i);
+        let Some(t) = self.targets.get(i as usize).cloned() else {
+            return s;
+        };
+        // "target creature of their choice": another player chooses it (CR 601.2c).
+        if let Some(p) = &t.chosen_by {
+            let poss = self.player(p, Case::Poss);
+            s.push_str(&format!(" of {poss} choice"));
+        }
+        // "any target chosen at random".
+        if t.random {
+            s.push_str(" chosen at random");
+        }
+        s
+    }
+
+    fn target_phrase_core(&mut self, i: u8) -> String {
         let Some(t) = self.targets.get(i as usize).cloned() else {
             return self.gap(format!("target slot {i} out of range"));
         };
@@ -224,6 +241,7 @@ impl Renderer<'_> {
         if t.chosen_by_opponent {
             s.push_str(" of an opponent's choice");
         }
+
         // A requirement on the targets taken together (CR 115.3).
         let one = matches!(t.max, Value::Const(1));
         match &t.together {

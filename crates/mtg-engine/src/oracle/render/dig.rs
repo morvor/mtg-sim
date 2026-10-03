@@ -112,6 +112,23 @@ impl Renderer<'_> {
                 };
                 let verb = if *reveal { "reveal" } else { "put" };
                 let d = self.dig_destination(to, many);
+                // "You may reveal a land card" / "reveal up to one land card".
+                if *reveal
+                    && *up_to
+                    && each_of.is_empty()
+                    && !*random
+                    && matches!(count, Some(Value::Const(1)))
+                {
+                    let noun = self.card_noun(filter);
+                    let head = format!(
+                        "{{alt:you may reveal {what}|reveal up to one {noun}}} from among them"
+                    );
+                    // Kept among them for the next instruction (`dig_steps.rs`).
+                    if d.is_empty() {
+                        return head;
+                    }
+                    return format!("{head} and put {{alt:it|the revealed card}} {d}");
+                }
                 if *reveal && !d.is_empty() {
                     let it = if many {
                         "{alt:them|the revealed cards}"

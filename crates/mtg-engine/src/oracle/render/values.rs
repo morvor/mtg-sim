@@ -702,6 +702,20 @@ impl Renderer<'_> {
                 let subj = self.sel(s, Case::Subj);
                 format!("{subj} entered this turn")
             }
+            // "If it's blue or black": colors only, as adjectives.
+            Condition::SelMatches(s, Filter::Or(v))
+                if v.len() > 1 && v.iter().all(|f| matches!(f, Filter::Color(_))) =>
+            {
+                let words: Vec<String> = v
+                    .iter()
+                    .filter_map(|f| match f {
+                        Filter::Color(c) => Some(c.word().to_string()),
+                        _ => None,
+                    })
+                    .collect();
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} is {}", join_list(&words, "or"))
+            }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, false) {
                     return c;

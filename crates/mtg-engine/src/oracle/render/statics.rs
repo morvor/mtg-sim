@@ -482,6 +482,12 @@ impl Renderer<'_> {
                             format!("{x} entering {{opt:the battlefield}}")
                         } else if let Some(x) = t.strip_suffix(" dies") {
                             format!("{x} dying")
+                        } else if let Some(x) = t.strip_suffix(" attacks") {
+                            format!("{x} attacking")
+                        } else if let Some((x, y)) = t.split_once(" deals ") {
+                            format!("{x} dealing {y}")
+                        } else if let Some((x, y)) = t.split_once(" draws ") {
+                            format!("{x} drawing {y}")
                         } else {
                             t
                         };

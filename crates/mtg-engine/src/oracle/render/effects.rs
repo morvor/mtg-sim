@@ -4072,7 +4072,11 @@ impl Renderer<'_> {
             && !(rest_to.zone == ZoneKind::Library
                 && rest_to.position == LibraryPosition::Top
                 && !matches!(n, Value::Const(1)));
-        let p = if only_look {
+        // The cards are another player's, but the ability's controller looks at them and
+        // chooses (`library::dig`): "look at the top four cards of target opponent's
+        // library, exile one of them".
+        let others_cards = !matches!(who, PlayerRef::You) && !self.in_as_player && !only_look;
+        let p = if only_look || others_cards {
             self.player(who, Case::Poss)
         } else {
             self.possessive_for(who)
@@ -4090,7 +4094,11 @@ impl Renderer<'_> {
         if only_look {
             return format!("look at {top}");
         }
-        let mut s = self.with_subject(who, &format!("{look} {top}"), false);
+        let mut s = if others_cards {
+            format!("{look} {top}")
+        } else {
+            self.with_subject(who, &format!("{look} {top}"), false)
+        };
         // Only looking ("Look at the top card of your library."), or looking and
         // putting them back ("then put them back in any order").
         if matches!(take, Value::Const(0)) {

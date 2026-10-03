@@ -953,6 +953,25 @@ impl Renderer<'_> {
                     format!("draw {p} {} card each turn", ordinal_word(*n as u32)),
                 )
             }
+            // "Whenever an opponent sacrifices a nontoken permanent": the player who
+            // sacrificed it is the trigger's player.
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::PlayerMatches(PlayerRef::TriggerPlayer, pf),
+            } if matches!(trigger.as_ref(), TriggerCond::Sacrificed(_))
+                && matches!(pf, PlayerFilter::Any | PlayerFilter::Opponent) =>
+            {
+                let TriggerCond::Sacrificed(f) = trigger.as_ref() else {
+                    return Ev::new("", self.gap("sacrifices"));
+                };
+                let w = if matches!(pf, PlayerFilter::Opponent) {
+                    "an opponent"
+                } else {
+                    "a player"
+                };
+                let o = self.noun_det(&super::effects::strip_controller(f), det);
+                Ev::new(w, format!("sacrifice {o}"))
+            }
             // "At the beginning of your second main phase".
             TriggerCond::Where { trigger, cond } if matches!(cond, Condition::Custom(n) if n.starts_with("main_phase:")) =>
             {
