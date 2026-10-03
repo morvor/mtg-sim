@@ -908,3 +908,145 @@ fn any_number_additional_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ab
 }
 
 inventory::submit! { AbilityPattern { name: "spell cost grammar: additional cost paid any number of times", priority: 79, parse: any_number_additional_cost } }
+
+// ---------------------------------------------------------------------------
+// Other additional costs
+// ---------------------------------------------------------------------------
+
+/// "As an additional cost to cast ~, you may sacrifice an artifact." / "... you may pay
+/// {2}{R}." / "... you may exile a creature card from your graveyard.": an optional
+/// additional cost announced as the spell is cast (CR 601.2b) and paid with the rest of
+/// the total cost (CR 601.2f–h); "if this spell's additional cost was paid" checks it.
+fn optional_plain_additional_cost(text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let r = end(&lower).strip_prefix("as an additional cost to cast ~, you may ")?;
+    if r.contains(". ") || r.contains(" or ") {
+        return None;
+    }
+    let cost = super::costs_casting_alt::plain_cost(r)?;
+    Some(vec![super::costs_casting_self::this_spell_cost_ability(
+        CostChange::OptionalAdditionalCost {
+            name: smol_str::SmolStr::new(r),
+            cost,
+        },
+        None,
+        text,
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "spell cost grammar: you may [cost] as an additional cost", priority: 95, parse: optional_plain_additional_cost } }
+
+/// "As an additional cost to cast ~, sacrifice half the lands you control, rounded up."
+/// (Tectonic Split): as many as half of them, rounded up, counted as the cost is paid.
+fn sacrifice_half(text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let r = end(&lower).strip_prefix("as an additional cost to cast ~, sacrifice half the ")?;
+    let (what, up) = if let Some(w) = r.strip_suffix(", rounded up") {
+        (w, true)
+    } else {
+        (r.strip_suffix(", rounded down")?, false)
+    };
+    let (f, true, tail) = parse_object_phrase(what)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let count = Value::Div(Box::new(Value::Count(f.clone())), 2, up);
+    Some(vec![super::costs_casting_self::this_spell_cost_ability(
+        CostChange::AdditionalCost(Cost::free().with(CostPart::Sacrifice { filter: f, count })),
+        None,
+        text,
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "spell cost grammar: sacrifice half as an additional cost", priority: 80, parse: sacrifice_half } }
+
+/// "As an additional cost to cast ~, you may collect evidence 6. ~ costs {2} less to cast
+/// if evidence was collected.": two sentences, each a cost rule of the spell.
+fn additional_cost_then_own_change(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') || !text.to_lowercase().starts_with("as an additional cost to cast ~") {
+        return None;
+    }
+    let (a, b) = text.split_once(". ~ costs ")?;
+    let first = format!("{a}.");
+    let second = format!("~ costs {b}");
+    let mut out = crate::oracle::parse_ability(&first, ctx)?;
+    out.extend(super::costs_casting_self::own_cost_change(&second, ctx)?);
+    let own_cost = |x: &Ability| {
+        matches!(
+            &x.kind,
+            AbilityKind::Static(StaticAbility {
+                effect: StaticEffect::CostModifier(CostModifier {
+                    applies_to: CostTarget::ThisSpell,
+                    ..
+                }),
+                ..
+            })
+        )
+    };
+    if !out.iter().all(own_cost) {
+        return None;
+    }
+    for x in out.iter_mut() {
+        *x = AbilityDef::new(x.kind.clone(), text);
+    }
+    Some(out)
+}
+
+inventory::submit! { AbilityPattern { name: "spell cost grammar: additional cost, then a cost change", priority: 81, parse: additional_cost_then_own_change } }
+
+/// "You may cast ~ as though it had flash if you behold a Dragon as an additional cost to
+/// cast it." (Molten Exhale, CR 601.3c, 701.4a).
+fn flash_if_additional_cost(text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = text.to_lowercase();
+    let r = end(&lower)
+        .strip_prefix("you may cast ~ as though it had flash if you ")?
+        .strip_suffix(" as an additional cost to cast it")?;
+    let cost = match super::a701_behold::behold_cost_part(r) {
+        Some(p) => Cost::free().with(p),
+        None => super::costs_casting_alt::plain_cost(r)?,
+    };
+    Some(vec![super::costs_casting_self::this_spell_cost_ability(
+        CostChange::FlashForAdditionalCost(cost),
+        None,
+        text,
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "spell cost grammar: flash if you [cost] as an additional cost", priority: 80, parse: flash_if_additional_cost } }
+
+/// "As an additional cost to cast ~, you may reveal a Dragon card from your hand or choose a
+/// Dragon you control.": beholding a Dragon, spelled out (CR 701.4a).
+fn spelled_out_behold(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let r = end(&lower).strip_prefix("as an additional cost to cast ~, you may reveal ")?;
+    let (card, rest) = r.split_once(" card from your hand or choose ")?;
+    let quality = card.strip_prefix("a ").or_else(|| card.strip_prefix("an "))?;
+    let chosen = rest.strip_suffix(" you control")?;
+    let chosen = chosen
+        .strip_prefix("a ")
+        .or_else(|| chosen.strip_prefix("an "))?;
+    if chosen != quality {
+        return None;
+    }
+    let article = if card.starts_with("an ") { "an" } else { "a" };
+    let as_behold = format!("As an additional cost to cast ~, you may behold {article} {quality}.");
+    let out = crate::oracle::parse_ability(&as_behold, ctx)?;
+    Some(
+        out.into_iter()
+            .map(|a| AbilityDef::new(a.kind.clone(), text))
+            .collect(),
+    )
+}
+
+inventory::submit! { AbilityPattern { name: "spell cost grammar: reveal a [quality] card or choose a [quality] (behold)", priority: 80, parse: spelled_out_behold } }
