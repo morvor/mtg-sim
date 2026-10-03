@@ -501,3 +501,23 @@ fn devouring_tendrils_gains_life_when_the_permanent_you_dont_control_dies() {
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert_eq!(t.life(P0), 22);
 }
+
+#[test]
+fn venomous_breath_destroys_what_blocked_it_at_this_turns_end_of_combat() {
+    cr!("603.7b", "509.1");
+    assert_supported("Venomous Breath");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 4);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    let vb = t.hand(P0, "Venomous Breath");
+    t.cast(P0, vb).target(giant).go();
+    t.resolve_all();
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(giant, Entity::Player(P1))], &[(wall, giant)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Wall of Stone"));
+    assert!(t.on_battlefield(other));
+    assert!(t.on_battlefield(giant));
+}

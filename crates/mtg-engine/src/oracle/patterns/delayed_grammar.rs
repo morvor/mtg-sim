@@ -375,6 +375,28 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
             b.named.push((p.to_string(), referent.clone()));
         }
     }
+    // "destroy all creatures that blocked or were blocked by it this turn": the referent,
+    // remembered as the delayed ability is created.
+    let mut blocks_of_referent = false;
+    let mut rewritten = inner.to_string();
+    for (who, marker) in [
+        ("that blocked or were blocked by", BLOCKED_OR_BLOCKED_BY_MARK),
+        ("that were blocked by", BLOCKED_BY_MARK),
+        ("that was blocked by", BLOCKED_BY_MARK),
+    ] {
+        for r in ["it", "that creature", "one of those creatures"] {
+            let phrase = format!(" {who} {r} this turn");
+            if rewritten.contains(&phrase) {
+                rewritten = rewritten.replace(&phrase, &format!(" {marker}"));
+                blocks_of_referent = true;
+            }
+        }
+    }
+    if blocks_of_referent && (matches!(referent, Sel::This) || refs::is_no_referent(&referent)) {
+        restore(b, saved);
+        return None;
+    }
+    let inner: &str = &rewritten;
     let mut parsed = parse_sentence(inner, b);
     // "return those cards to the battlefield ... and those creatures gain haste until end
     // of turn": the second instruction is about what the first returned.
@@ -413,6 +435,15 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
         b.named.push((DELAYED_RESULT.to_string(), result_it));
     }
     let (mut stores, effect) = capture_refs(&effect, n0 as u8, Capture::All)?;
+    if blocks_of_referent {
+        stores.insert(
+            0,
+            Effect::Store {
+                var: REFERENT,
+                sel: referent,
+            },
+        );
+    }
     if let Some(p) = whose {
         stores.push(Effect::Store {
             var: WHOSE,
@@ -716,6 +747,23 @@ fn f_delayed_after_move(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "delayed grammar: return the moved source at the beginning of the next [step]", priority: 44, apply: f_delayed_after_move } }
+
+/// Stand-ins for "that (blocked or) were blocked by [the referent] this turn" while the
+/// instruction is parsed (see `blocked_by_referent`).
+const BLOCKED_BY_MARK: &str = "\u{2}blocked-by-referent";
+const BLOCKED_OR_BLOCKED_BY_MARK: &str = "\u{2}blocked-or-blocked-by-referent";
+
+/// The qualifier the stand-ins above stand for (`kw::blocked_this_turn`).
+fn blocked_by_referent<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    use crate::kw::blocked_this_turn as bt;
+    if let Some(r) = s.strip_prefix(BLOCKED_OR_BLOCKED_BY_MARK) {
+        return Some((Filter::Custom(bt::BLOCKED_OR_BLOCKED_BY_REFERENT.into()), r));
+    }
+    let r = s.strip_prefix(BLOCKED_BY_MARK)?;
+    Some((Filter::Custom(bt::BLOCKED_BY_REFERENT.into()), r))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "delayed grammar: that blocked or were blocked by it this turn", priority: 100, parse: blocked_by_referent } }
 
 // ---------------------------------------------------------------------------------------
 // "When that creature dies this turn, ..."
