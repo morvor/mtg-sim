@@ -1,44 +1,15 @@
 //! Milling (CR 701.17):
 //!
-//! * "If an opponent would mill one or more cards, they mill twice that many cards
-//!   instead." (a replacement effect, CR 701.17d);
+//! * ("If an opponent would mill one or more cards, they mill twice that many cards
+//!   instead." is compiled by `replacement_grammar_events.rs`, CR 701.17d);
 //! * "You may put a land card milled this way into your hand." (the milled card is found
 //!   where it went, CR 701.17c).
 
-use super::{EffectPattern, StaticPattern};
+use super::EffectPattern;
 use crate::ability::*;
-use crate::mill_rules::MILL_MULTIPLIER;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
-use crate::oracle::CompileContext;
 use smol_str::SmolStr;
-
-/// "if an opponent would mill one or more cards, they mill twice that many cards instead".
-fn mill_multiplier(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let l = end(l);
-    let (who, r) = if let Some(r) = l.strip_prefix("if an opponent would mill one or more cards, they mill ") {
-        ("opponents", r)
-    } else if let Some(r) = l.strip_prefix("if you would mill one or more cards, you mill ") {
-        ("you", r)
-    } else if let Some(r) = l.strip_prefix("if a player would mill one or more cards, they mill ")
-    {
-        ("each", r)
-    } else {
-        return None;
-    };
-    let k = match r {
-        "twice that many cards instead" => 2,
-        "three times that many cards instead" => 3,
-        _ => return None,
-    };
-    let name = SmolStr::new(format!("{MILL_MULTIPLIER}{k}:{who}"));
-    Some(vec![AbilityDef::new(
-        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(name))),
-        text,
-    )])
-}
-
-inventory::submit! { StaticPattern { name: "a701 mill multiplier", priority: 100, parse: mill_multiplier } }
 
 /// "[you may] put a land card milled this way into your hand": one of the milled cards
 /// (as they are where they went), put into your hand.

@@ -386,6 +386,14 @@ impl Game {
                         Entity::Player(p) => Some(p),
                     })
                     .collect();
+                // "~'s controller sacrifices it and draws a card" in an ability granted by
+                // ~ (Hold for Ransom): once the named object has left the battlefield, its
+                // last known controller (CR 608.2h).
+                if v.is_empty() {
+                    if let Sel::All(Filter::Objects(ids)) = &**sel {
+                        v = ids.iter().map(|o| self.obj(*o).controller).collect();
+                    }
+                }
                 v.dedup();
                 v
             }

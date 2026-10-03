@@ -363,6 +363,11 @@ fn repl_event_entities(g: &Game, ev: &crate::replacement::ReplEvent) -> Vec<Enti
         ReplEvent::AddCounters { target, .. } => vec![*target],
         ReplEvent::CreateTokens { controller, .. } => vec![Entity::Player(*controller)],
         ReplEvent::Destroy { obj, .. } => vec![Entity::Object(*obj)],
+        ReplEvent::Action { player, object, .. } => {
+            let mut v = vec![Entity::Player(*player)];
+            v.extend(object.map(Entity::Object));
+            v
+        }
     }
     .into_iter()
     .filter(|e| match e {

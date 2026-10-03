@@ -144,6 +144,14 @@ pub enum ReplEvent {
     LoseGame {
         player: PlayerId,
     },
+    /// A player would perform a keyword action (CR 701; see
+    /// [`ReplacementEvent::Action`]).
+    Action {
+        kind: ReplaceableAction,
+        player: PlayerId,
+        object: Option<ObjectId>,
+        amount: u32,
+    },
 }
 
 /// Identifies a replacement effect for the "only once per event" rule (CR 614.5).
@@ -388,6 +396,7 @@ impl Game {
             },
             ReplEvent::CreateTokens { controller, .. } => *controller,
             ReplEvent::Destroy { obj, .. } => self.obj(*obj).controller,
+            ReplEvent::Action { player, .. } => *player,
         }
     }
 
@@ -920,6 +929,17 @@ impl Game {
                     && self.player_filter_matches(pf, m.by.unwrap_or(o.owner), ctx)
                     && self.matches(m.obj, f, ctx)
             }
+            (ReplacementEvent::DiscardCausedBy { who, filter, by }, ReplEvent::Move(m)) => {
+                let o = self.obj(m.obj);
+                m.cause == MoveCause::Discard
+                    && matches!(o.zone, Zone::Hand(_))
+                    && self.special.casting == 0
+                    && locked_ok(m.obj)
+                    && self.player_filter_matches(who, m.by.unwrap_or(o.owner), ctx)
+                    && self.matches(m.obj, filter, ctx)
+                    && m.source
+                        .is_some_and(|s| self.player_rel_matches(*by, self.obj(s).controller, ctx))
+            }
             (ReplacementEvent::Dies(f), ReplEvent::Move(m)) => {
                 let o = self.obj(m.obj);
                 o.zone == Zone::Battlefield
@@ -1097,6 +1117,32 @@ impl Game {
             (ReplacementEvent::LoseGame(pf), ReplEvent::LoseGame { player }) => {
                 self.player_filter_matches(pf, *player, ctx)
             }
+            (
+                ReplacementEvent::Action { kind, who, objects },
+                ReplEvent::Action {
+                    kind: k,
+                    player,
+                    object,
+                    ..
+                },
+            ) => {
+                kind == k
+                    && self.player_filter_matches(who, *player, ctx)
+                    && match (objects, object) {
+                        (None, _) => true,
+                        (Some(f), Some(o)) => self.matches(*o, f, ctx),
+                        (Some(_), None) => false,
+                    }
+            }
+            // CR 614.1a: an event pattern with a condition on the event ("3 or more
+            // damage", "during your turn").
+            (ReplacementEvent::Where { event, cond }, ev) => {
+                self.repl_event_matches(event, ctx, ev, locked) && {
+                    let mut c = ctx.clone();
+                    c.event = Some(event_info_of(ev));
+                    self.eval_cond(cond, &c)
+                }
+            }
             _ => false,
         }
     }
@@ -1139,9 +1185,9 @@ impl Game {
         // nothing (their other effects still happen), and a shield that prevents nothing
         // isn't used up (CR 609.7b).
         let unpreventable = match &ev {
-            ReplEvent::Damage { source, .. } => {
+            ReplEvent::Damage { source, combat, .. } => {
                 crate::prevention::is_prevention(&cand.def.action)
-                    && crate::prevention::damage_from_cant_be_prevented(self, *source)
+                    && crate::prevention::damage_event_cant_be_prevented(self, *source, *combat)
             }
             _ => false,
         };
@@ -1165,6 +1211,7 @@ impl Game {
             (
                 ReplacementAction::Prevent
                 | ReplacementAction::PreventAmount(_)
+                | ReplacementAction::PreventPortion(_)
                 | ReplacementAction::PreventAndThen(..),
                 ReplEvent::Damage {
                     source,
@@ -1190,8 +1237,24 @@ impl Game {
                         None => self.eval_value(v, &ctx).max(0) as u32,
                     }),
                 };
+                // "Prevent half that damage": part of each damage event, not a shield.
+                let portion = match &cand.def.action {
+                    ReplacementAction::PreventPortion(v) => {
+                        let mut c = ctx.clone();
+                        c.event = Some(event_info_of(&ReplEvent::Damage {
+                            source,
+                            target,
+                            amount,
+                            combat,
+                        }));
+                        Some(self.eval_value(v, &c).max(0) as u32)
+                    }
+                    _ => None,
+                };
                 let prevented = if unpreventable {
                     0
+                } else if let Some(p) = portion {
+                    p.min(amount)
                 } else {
                     shield.map_or(amount, |s| s.min(amount))
                 };
@@ -1271,6 +1334,10 @@ impl Game {
             }
             (ReplacementAction::EnterTapped, ReplEvent::Move(mut m)) => {
                 m.etb.tapped = true;
+                vec![ReplEvent::Move(m)]
+            }
+            (ReplacementAction::EnterUntapped, ReplEvent::Move(mut m)) => {
+                m.etb.tapped = false;
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::EnterWithCounters(k, v), ReplEvent::Move(mut m)) => {
@@ -1365,7 +1432,26 @@ impl Game {
                 vec![ReplEvent::Move(m)]
             }
             (ReplacementAction::EnterUnderControl(r), ReplEvent::Move(mut m)) => {
-                if let Some(p) = self.eval_player(&r, &ctx) {
+                // "enters under the control of an opponent of your choice": the player
+                // who would control it chooses among them (CR 614.12a).
+                let choice = match &r {
+                    PlayerRef::Each(_) => {
+                        let cands: Vec<Entity> = self
+                            .eval_players(&r, &ctx)
+                            .into_iter()
+                            .map(Entity::Player)
+                            .collect();
+                        let chooser = self.entering_controller(&m);
+                        self.ask_entities(chooser, Some(m.obj), "Choose a player", cands, 1, 1)
+                            .into_iter()
+                            .find_map(|e| match e {
+                                Entity::Player(p) => Some(p),
+                                _ => None,
+                            })
+                    }
+                    _ => self.eval_player(&r, &ctx),
+                };
+                if let Some(p) = choice {
                     m.etb.controller = Some(p);
                 }
                 vec![ReplEvent::Move(m)]
@@ -1511,7 +1597,16 @@ impl Game {
                     combat,
                 },
             ) => {
-                let new_target = self.eval_sel(&sel, &ctx).into_iter().next();
+                // The new recipient may be relative to the damage event ("that damage is
+                // dealt to that source's controller instead").
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ReplEvent::Damage {
+                    source,
+                    target,
+                    amount,
+                    combat,
+                }));
+                let new_target = self.eval_sel(&sel, &c).into_iter().next();
                 match new_target {
                     // CR 614.9: redirection to something no longer valid does nothing.
                     Some(t) if self.valid_damage_recipient(t) => {
@@ -1603,8 +1698,12 @@ impl Game {
                     });
                 }
                 // CR 121.7: card draws resulting from a replacement or prevention effect
-                // happen after the parts of the original event that weren't replaced.
-                if !matches!(ev, ReplEvent::Draw { .. }) && crate::draw_rules::draws_cards(&effect)
+                // happen after the parts of the original event that weren't replaced. A
+                // keyword action replaced entirely leaves no such part, and its instructions
+                // must run while this effect is known to have applied (CR 614.5: "instead
+                // you draw a card, then that creature connives").
+                if !matches!(ev, ReplEvent::Draw { .. } | ReplEvent::Action { .. })
+                    && crate::draw_rules::draws_cards(&effect)
                 {
                     self.post_replacement_effects.push((c, *effect));
                     return vec![];
@@ -1731,6 +1830,17 @@ fn scale_event(ev: ReplEvent, f: impl Fn(u32) -> u32) -> ReplEvent {
             count: f(count),
             source,
         },
+        ReplEvent::Action {
+            kind,
+            player,
+            object,
+            amount,
+        } => ReplEvent::Action {
+            kind,
+            player,
+            object,
+            amount: f(amount),
+        },
         other => other,
     }
 }
@@ -1742,6 +1852,7 @@ fn event_amount(ev: &ReplEvent) -> Option<u32> {
         | ReplEvent::LoseLife { amount, .. } => Some(*amount),
         ReplEvent::AddCounters { n, .. } => Some(*n),
         ReplEvent::CreateTokens { count, .. } => Some(*count),
+        ReplEvent::Action { amount, .. } => Some(*amount),
         _ => None,
     }
 }
@@ -1751,6 +1862,8 @@ pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
     match ev {
         ReplEvent::Move(m) => {
             e.object = Some(m.obj);
+            // Why it would move ("creatures played by your opponents", CR 305.1).
+            e.cause = Some(m.cause);
         }
         ReplEvent::Damage {
             source,
@@ -1784,6 +1897,68 @@ pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
             e.amount = *count as i32;
         }
         ReplEvent::Destroy { obj, .. } => e.object = Some(*obj),
+        ReplEvent::Action {
+            player,
+            object,
+            amount,
+            ..
+        } => {
+            e.player = Some(*player);
+            e.object = *object;
+            e.amount = *amount as i32;
+        }
     }
     e
+}
+
+impl Game {
+    /// Proposes a keyword action to replacement effects (CR 614.1a, 701): returns the
+    /// amount to perform it with ("that many cards plus four"), or `None` if it was
+    /// replaced by something else ("proliferate twice instead" performs its own
+    /// instructions, during which this effect doesn't apply again, CR 614.5).
+    pub fn replace_action(
+        &mut self,
+        kind: ReplaceableAction,
+        player: PlayerId,
+        object: Option<ObjectId>,
+        amount: u32,
+    ) -> Option<u32> {
+        let applicable = self.statics_or_instances_have_action(kind);
+        if !applicable {
+            return Some(amount);
+        }
+        let evs = self.replace(ReplEvent::Action {
+            kind,
+            player,
+            object,
+            amount,
+        });
+        self.run_post_replacement_effects();
+        match evs.into_iter().next() {
+            Some(ReplEvent::Action { amount, .. }) => Some(amount),
+            _ => None,
+        }
+    }
+
+    /// Whether any replacement effect watches that keyword action (a fast path).
+    fn statics_or_instances_have_action(&mut self, kind: ReplaceableAction) -> bool {
+        if self.dirty {
+            self.recompute();
+        }
+        fn watches(e: &ReplacementEvent, kind: ReplaceableAction) -> bool {
+            match e {
+                ReplacementEvent::Action { kind: k, .. } => *k == kind,
+                ReplacementEvent::Where { event, .. } => watches(event, kind),
+                _ => false,
+            }
+        }
+        self.statics
+            .replacements
+            .iter()
+            .any(|(_, _, _, _, d)| watches(&d.event, kind))
+            || self
+                .replacements
+                .iter()
+                .any(|r| watches(&r.def.event, kind))
+    }
 }

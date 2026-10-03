@@ -2322,6 +2322,48 @@ pub enum ReplacementEvent {
     /// [`ReplacementAction::AsEnters`] while the permanent transforms into the face that
     /// has it, not afterward.
     Transforms,
+    /// The event matches `event` and the condition holds as it would happen, evaluated
+    /// with the event as the triggering event ("if a source would deal 3 or more damage
+    /// to ...", "if an opponent would lose life during your turn", "if damage would be
+    /// dealt to ~ while it has a +1/+1 counter on it"): `Value::EventAmount` is the
+    /// event's amount, `Sel::TriggerObject` / `PlayerRef::TriggerPlayer` what it would
+    /// happen to, `Sel::TriggerOtherObject` the source of damage (CR 614.1a).
+    Where {
+        event: Box<ReplacementEvent>,
+        cond: Condition,
+    },
+    /// A spell or ability controlled by a player matching `by` would cause a player
+    /// matching `who` to discard a card matching `filter` (CR 701.9): "If a spell or
+    /// ability an opponent controls causes you to discard ~, ...". A discard to pay a cost
+    /// isn't caused by a spell's or ability's effect.
+    DiscardCausedBy {
+        who: PlayerFilter,
+        filter: Filter,
+        by: PlayerRel,
+    },
+    /// A player matching `who` would perform a keyword action (CR 701), with the object
+    /// matching `objects` for an action an object performs ("if a creature you control
+    /// would explore"): "If you would proliferate, proliferate twice instead.", "If an
+    /// opponent would mill one or more cards, they mill that many cards plus four
+    /// instead." (CR 614.1a, 701.17d).
+    Action {
+        kind: ReplaceableAction,
+        who: PlayerFilter,
+        objects: Option<Filter>,
+    },
+}
+
+/// Keyword actions that replacement effects can modify (see
+/// [`ReplacementEvent::Action`]). The amount of the event is the number of cards milled
+/// or scried, or the N of "connives N"; 1 for the others.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReplaceableAction {
+    Mill,
+    Scry,
+    Proliferate,
+    Explore,
+    Connive,
+    Learn,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -2339,6 +2381,10 @@ pub enum StepKind {
 pub enum ReplacementAction {
     /// Enters tapped (CR 614.1c).
     EnterTapped,
+    /// "[Permanents] enter untapped": undoes "enters tapped" replacement effects applied
+    /// before it (the affected player chooses the order, CR 616.1), and an instruction
+    /// putting it onto the battlefield tapped (Spelunking's rulings).
+    EnterUntapped,
     /// Enters with counters.
     EnterWithCounters(CounterKind, Value),
     /// "As this enters, ..." — the effect is performed while the replacement applies,
@@ -2395,6 +2441,12 @@ pub enum ReplacementAction {
     /// "[A permanent tapped for mana] produces [type] instead of any other type"
     /// (CR 106.12b): each mana it would produce is of that type; the amount is unchanged.
     ManaTypeInstead(crate::mana::ManaType),
+    /// Prevent part of each damage event (CR 615.1a), evaluated for that event
+    /// (`Value::EventAmount` is the damage): "prevent half that damage, rounded up",
+    /// "prevent all but 1 of that damage", "you may prevent X of that damage, where X is
+    /// ...". Unlike [`ReplacementAction::PreventAmount`] in a one-shot effect, it isn't a
+    /// shield that is used up.
+    PreventPortion(Value),
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.
@@ -2605,6 +2657,9 @@ pub enum Restriction {
     DamageCantBePrevented,
     /// "Damage [sources matching the filter] would deal can't be prevented" (CR 615.12).
     SourceDamageCantBePrevented(Filter),
+    /// "Combat damage [that would be dealt by sources matching the filter] can't be
+    /// prevented" (CR 615.12): only combat damage (CR 120.2a).
+    CombatDamageCantBePrevented(Filter),
     /// "can't transform".
     CantTransform(Filter),
     /// "[permanents] can't be turned face up" (CR 708.7): not by a special action
@@ -4072,6 +4127,11 @@ pub enum Effect {
         body: Box<Body>,
         #[serde(default)]
         abilities: bool,
+        /// "If that mana is spent to cast [a spell], [effect]": an additional effect that
+        /// affects the spell the mana is spent on (CR 106.6), applied as the mana is spent
+        /// rather than by a delayed triggered ability.
+        #[serde(default)]
+        additional: bool,
     },
     /// "[Add mana]. Until end of turn, you don't lose this mana as steps and phases end."
     /// (CR 500.4): the mana the inner effect adds stays in its pool until the turn's cleanup

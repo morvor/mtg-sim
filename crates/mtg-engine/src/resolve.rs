@@ -1529,12 +1529,13 @@ impl Game {
                 spell_filter,
                 body,
                 abilities,
+                additional,
             } => {
                 crate::mana_abilities::resolve_add_mana_with_rider(
                     self,
                     add,
                     spell_filter,
-                    *abilities,
+                    (*abilities, *additional),
                     body,
                     ctx,
                 );
@@ -2716,6 +2717,13 @@ impl Game {
     }
 
     fn lock_replacement_objects(&self, d: &ReplacementDef, ctx: &Ctx) -> Option<Vec<ObjectId>> {
+        if let ReplacementEvent::Where { event, .. } = &d.event {
+            let inner = ReplacementDef {
+                event: (**event).clone(),
+                ..d.clone()
+            };
+            return self.lock_replacement_objects(&inner, ctx);
+        }
         let f = match &d.event {
             ReplacementEvent::Destroy(f)
             | ReplacementEvent::Dies(f)
@@ -3092,6 +3100,15 @@ fn unlock_replacement_def(d: &ReplacementDef) -> ReplacementDef {
         | ReplacementEvent::Dies(f)
         | ReplacementEvent::EntersBattlefield(f) => *f = unlock(f),
         ReplacementEvent::ZoneChange { filter, .. } => *filter = unlock(filter),
+        ReplacementEvent::Where { event, .. } => {
+            let inner = ReplacementDef {
+                event: (**event).clone(),
+                action: ReplacementAction::Prevent,
+                self_replacement: false,
+                optional: false,
+            };
+            **event = unlock_replacement_def(&inner).event;
+        }
         _ => {}
     }
     d

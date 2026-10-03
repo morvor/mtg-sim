@@ -2039,6 +2039,14 @@ impl Renderer<'_> {
                 format!("{} can't be regenerated", subj(self, f))
             }
             Restriction::DamageCantBePrevented => "damage can't be prevented".into(),
+            Restriction::CombatDamageCantBePrevented(f) => {
+                if matches!(f, Filter::Any) {
+                    "combat damage can't be prevented".into()
+                } else {
+                    let n = self.noun(f, Num::Many);
+                    format!("combat damage that would be dealt by {n} can't be prevented")
+                }
+            }
             Restriction::SourceDamageCantBePrevented(f) => {
                 if matches!(f, Filter::Source) {
                     "damage that would be dealt by ~ can't be prevented".into()
@@ -2241,6 +2249,10 @@ impl Renderer<'_> {
                         format!("{subj} enter tapped")
                     }
                     A::EnterTapped => format!("{subj} enters tapped"),
+                    A::EnterUntapped if subj != "~" && subj != "~it" => {
+                        format!("{subj} enter untapped")
+                    }
+                    A::EnterUntapped => format!("{subj} enters untapped"),
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
                         format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default())
@@ -2315,6 +2327,7 @@ impl Renderer<'_> {
                     }
                     A::Prevent => format!("{subj} can't enter the battlefield"),
                     other @ (A::PreventAmount(_)
+                    | A::PreventPortion(_)
                     | A::Multiply(_)
                     | A::Add(_)
                     | A::PlusTokens { .. }
@@ -2449,6 +2462,49 @@ impl Renderer<'_> {
                     " except the first one they draw in each of their draw steps".into()
                 };
                 format!("if {w} would draw a card{except}, {then}")
+            }
+            // Keyword actions (CR 701): "If an opponent would mill one or more cards, they
+            // mill twice that many cards instead.", "If you would proliferate, ...", "If a
+            // creature you control would explore, ...".
+            (E::Action { kind, who, objects }, action) => {
+                use crate::ability::ReplaceableAction as K;
+                let (verb, counted) = match kind {
+                    K::Mill => ("mill", Some("one or more cards")),
+                    K::Scry => ("scry", Some("a number of cards")),
+                    K::Proliferate => ("proliferate", None),
+                    K::Explore => ("explore", None),
+                    K::Connive => ("connive", None),
+                    K::Learn => ("learn", None),
+                };
+                let w = match objects {
+                    Some(f) => self.noun_det(f, Det::A),
+                    None => {
+                        let w = self.player_filter_subject(who);
+                        match w.as_str() {
+                            "players" => "a player".into(),
+                            "your opponents" => "an opponent".into(),
+                            _ => w,
+                        }
+                    }
+                };
+                let they = if w == "you" { "you" } else { "they" };
+                let then = match (action, counted) {
+                    (A::Multiply(k), Some(_)) => {
+                        let k = match k {
+                            2 => "twice".to_string(),
+                            3 => "three times".to_string(),
+                            k => format!("{k} times"),
+                        };
+                        format!("{they} {verb} {k} that many cards instead")
+                    }
+                    (A::Add(v), Some(_)) => {
+                        let v = self.value(v);
+                        format!("{they} {verb} that many cards plus {v} instead")
+                    }
+                    (other, _) => self.replacement_then(other, ""),
+                };
+                let what = counted.map(|c| format!(" {c}")).unwrap_or_default();
+                format!("if {w} would {verb}{what}, {then}")
             }
             (E::DrawCards { who, min }, action) => {
                 let w = self.player_filter_subject(who);
@@ -2989,7 +3045,7 @@ impl Renderer<'_> {
                 format!("{e} as well")
             }
             A::Prevent => "prevent that event".into(),
-            A::PreventAmount(v) => {
+            A::PreventAmount(v) | A::PreventPortion(v) => {
                 let v = self.value(v);
                 format!("prevent {v} of that damage")
             }
@@ -3046,6 +3102,7 @@ impl Renderer<'_> {
             // Enters-the-battlefield replacements are worded with their event
             // (`as_enters`); here they have no event to go with.
             A::EnterTapped
+            | A::EnterUntapped
             | A::EnterWithCounters(..)
             | A::AsEnters(_)
             | A::EnterAsCopy { .. }

@@ -62,9 +62,26 @@ pub fn perform(g: &mut Game, players: &[PlayerId], n: u32, kind: Look, source: O
         .into_iter()
         .filter(|p| players.contains(p))
         .collect();
+    // Replacement effects that modify scrying ("If you would scry a number of cards, draw
+    // that many cards instead.", CR 614.1a): a player whose scry is replaced doesn't scry.
+    let mut players = players;
+    let mut base: Vec<u32> = Vec::new();
+    if kind == Look::Scry {
+        players.retain(
+            |p| match g.replace_action(ReplaceableAction::Scry, *p, None, n) {
+                Some(k) if k > 0 => {
+                    base.push(k);
+                    true
+                }
+                _ => false,
+            },
+        );
+    } else {
+        base = vec![n; players.len()];
+    }
     // How many cards each looks at.
     let mut counts: Vec<u32> = Vec::new();
-    for p in &players {
+    for (p, n) in players.iter().zip(base) {
         let mut k = n;
         if kind == Look::Surveil {
             let extra = surveil_extra(g, *p);

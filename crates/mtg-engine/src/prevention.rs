@@ -61,6 +61,57 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
                 .collect();
             Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
         }
+        // "permanents that player controls" in a triggered ability: the player the
+        // trigger was about (CR 611.2c-like locking of the event's player).
+        Filter::ControlledBy(rel @ (PlayerRel::TriggerPlayer | PlayerRel::Var(_))) => {
+            let ps = g
+                .player_ids()
+                .into_iter()
+                .filter(|p| g.player_rel_matches(*rel, *p, ctx))
+                .map(PlayerFilter::Is)
+                .collect();
+            Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+        }
+        // "Sources of the color of your choice": the color chosen as the effect was
+        // created (CR 609.7b).
+        Filter::ChosenColor => match g.source_choices(ctx).and_then(|c| c.color) {
+            Some(c) => Filter::Color(c),
+            None => Filter::ChosenColor,
+        },
+        other => other.clone(),
+    }
+}
+
+/// Locks a player filter naming chosen players ("target player", "that player") onto those
+/// players (see [`lock_filter`]). Only players among the chosen entities count: "any
+/// target" that is a creature names no player.
+pub fn lock_players(g: &Game, f: &PlayerFilter, ctx: &Ctx) -> PlayerFilter {
+    match f {
+        PlayerFilter::Ref(r) => {
+            let ps: Vec<PlayerId> = match &**r {
+                PlayerRef::Target(k) => ctx
+                    .targets
+                    .get(*k as usize)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| match e {
+                        Entity::Player(p) => Some(*p),
+                        _ => None,
+                    })
+                    .collect(),
+                // "that planeswalker's controller", "that player": the players they are as
+                // the effect is created.
+                PlayerRef::TriggerPlayer
+                | PlayerRef::Iterated
+                | PlayerRef::ControllerOf(_)
+                | PlayerRef::OwnerOf(_) => g.eval_players(r, ctx).into_iter().collect(),
+                _ => return f.clone(),
+            };
+            PlayerFilter::Or(ps.into_iter().map(PlayerFilter::Is).collect())
+        }
+        PlayerFilter::Or(v) => {
+            PlayerFilter::Or(v.iter().map(|x| lock_players(g, x, ctx)).collect())
+        }
         other => other.clone(),
     }
 }
@@ -83,7 +134,7 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             combat_only,
         } => ReplacementEvent::Damage {
             source: lf(source),
-            to_players: to_players.clone(),
+            to_players: to_players.as_ref().map(|p| lock_players(g, p, ctx)),
             to_objects: to_objects.as_ref().map(lf),
             combat_only: *combat_only,
         },
@@ -93,9 +144,19 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             to_objects,
         } => ReplacementEvent::NoncombatDamage {
             source: lf(source),
-            to_players: to_players.clone(),
+            to_players: to_players.as_ref().map(|p| lock_players(g, p, ctx)),
             to_objects: to_objects.as_ref().map(lf),
         },
+        ReplacementEvent::Where { event, cond } => {
+            let inner = ReplacementDef {
+                event: (**event).clone(),
+                ..d.clone()
+            };
+            ReplacementEvent::Where {
+                event: Box::new(lock_def(g, &inner, ctx).event),
+                cond: cond.clone(),
+            }
+        }
         ReplacementEvent::PutCounters {
             on_objects,
             on_players,
@@ -119,6 +180,8 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             effect_only: *effect_only,
         },
         ReplacementEvent::Destroy(f) => ReplacementEvent::Destroy(lf(f)),
+        ReplacementEvent::GainLife(pf) => ReplacementEvent::GainLife(lock_players(g, pf, ctx)),
+        ReplacementEvent::LoseLife(pf) => ReplacementEvent::LoseLife(lock_players(g, pf, ctx)),
         // "If target player would draw a card": the player is locked in too.
         ReplacementEvent::Draw(PlayerFilter::Ref(r)) => match g.eval_player(r, ctx) {
             Some(p) => ReplacementEvent::Draw(PlayerFilter::Is(p)),
@@ -128,6 +191,11 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
     };
     // The object or player damage is redirected to is locked in too.
     let lock_to = |sel: &Sel| {
+        // A recipient relative to the damage event ("that source's controller") is
+        // determined as the damage would be dealt.
+        if serde_json::to_string(sel).is_ok_and(|s| s.contains("\"Trigger")) {
+            return sel.clone();
+        }
         let to = g.eval_sel(sel, ctx);
         match to.first() {
             Some(Entity::Player(p)) => Sel::Players(PlayerRef::Player(*p)),
@@ -138,6 +206,12 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
         }
     };
     let action = match &d.action {
+        // The instructions after a prevention can refer to the targets of the spell or
+        // ability that created the effect ("If damage is prevented this way, ~ deals that
+        // much damage to any target."): they're locked in as the effect is created.
+        ReplacementAction::PreventAndThen(n, e) => {
+            ReplacementAction::PreventAndThen(n.clone(), Box::new(lock_targets(e, ctx)))
+        }
         ReplacementAction::Redirect(sel) => ReplacementAction::Redirect(lock_to(sel)),
         ReplacementAction::RedirectNext(sel, n) => {
             ReplacementAction::RedirectNext(lock_to(sel), n.clone())
@@ -159,6 +233,66 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
         self_replacement: d.self_replacement,
         optional: d.optional,
     }
+}
+
+/// Variables holding the targets of the spell or ability that created a replacement
+/// effect, for its instructions (see [`lock_targets`]).
+const LOCKED_TARGETS: Var = vars::USER + 6150;
+
+/// Replaces references to the targets of the resolving spell or ability in an effect's
+/// instructions with variables set to those targets when the instructions run.
+fn lock_targets(e: &Effect, ctx: &Ctx) -> Effect {
+    use serde_json::Value as J;
+    fn walk(v: J, used: &mut Vec<u8>) -> J {
+        match v {
+            J::Object(m) => {
+                if m.len() == 1 {
+                    if let Some(J::Number(n)) = m.get("Target") {
+                        if let Some(k) = n.as_u64() {
+                            used.push(k as u8);
+                            let mut o = serde_json::Map::new();
+                            o.insert("Var".into(), J::from(LOCKED_TARGETS + k as Var));
+                            return J::Object(o);
+                        }
+                    }
+                }
+                J::Object(m.into_iter().map(|(k, v)| (k, walk(v, used))).collect())
+            }
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, used)).collect()),
+            other => other,
+        }
+    }
+    let Ok(json) = serde_json::to_value(e) else {
+        return e.clone();
+    };
+    let mut used = Vec::new();
+    let Ok(body) = serde_json::from_value::<Effect>(walk(json, &mut used)) else {
+        return e.clone();
+    };
+    if used.is_empty() {
+        return e.clone();
+    }
+    used.sort();
+    used.dedup();
+    let mut seq: Vec<Effect> = used
+        .into_iter()
+        .map(|k| {
+            let ents = ctx.targets.get(k as usize).cloned().unwrap_or_default();
+            let objs: Vec<ObjectId> = ents.iter().filter_map(|x| x.object()).collect();
+            let mut sels = vec![Sel::All(Filter::Objects(objs))];
+            for x in &ents {
+                if let Entity::Player(p) = x {
+                    sels.push(Sel::Players(PlayerRef::Player(*p)));
+                }
+            }
+            Effect::Store {
+                var: LOCKED_TARGETS + k as Var,
+                sel: Sel::Union(sels),
+            }
+        })
+        .collect();
+    seq.push(body);
+    Effect::Seq(seq)
 }
 
 /// Whether a value can only be determined while the ability that creates an effect
@@ -279,12 +413,24 @@ pub fn damage_from_cant_be_prevented(g: &Game, source: ObjectId) -> bool {
         })
 }
 
+/// Whether a damage event from `source` can't be prevented (CR 615.12): all damage, damage
+/// from that source, or combat damage ("combat damage can't be prevented").
+pub fn damage_event_cant_be_prevented(g: &Game, source: ObjectId, combat: bool) -> bool {
+    damage_from_cant_be_prevented(g, source)
+        || (combat
+            && g.restricted_obj(source, |r| match r {
+                Restriction::CombatDamageCantBePrevented(f) => Some(f),
+                _ => None,
+            }))
+}
+
 /// Whether a replacement action is a prevention effect (CR 615.1a).
 pub fn is_prevention(a: &ReplacementAction) -> bool {
     matches!(
         a,
         ReplacementAction::Prevent
             | ReplacementAction::PreventAmount(_)
+            | ReplacementAction::PreventPortion(_)
             | ReplacementAction::PreventAndThen(..)
     )
 }
