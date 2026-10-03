@@ -754,3 +754,27 @@ fn reyav_triggers_once_for_an_enchanted_and_equipped_attacker() {
     t.resolve_all();
     assert!(has_kw(&t, bears, KeywordKind::DoubleStrike));
 }
+
+#[test]
+fn lunarch_inquisitors_exiled_card_returns_when_its_owner_leaves() {
+    cr!("800.4a", "610.3a");
+    ruling!(
+        "Avacynian Missionaries // Lunarch Inquisitors",
+        "In a multiplayer game, if Lunarch Inquisitors's owner leaves the game, the exiled card will return to the battlefield. Because the one-shot effect that returns the card isn't an ability that goes on the stack, it won't cease to exist along with the leaving player's spells and abilities on the stack."
+    );
+    let mut t = TestGame::new(3);
+    let missionaries = t.battlefield(P0, "Avacynian Missionaries // Lunarch Inquisitors");
+    attach_new(&mut t, P0, "Short Sword", missionaries);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.in_exile("Grizzly Bears"));
+    t.g.perform_action(P0, mtg_engine::decision::Action::Concede)
+        .expect("concede");
+    t.settle();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
