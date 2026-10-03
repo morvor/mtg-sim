@@ -1182,7 +1182,7 @@ pub fn equivalence_regexes() -> &'static [Option<Regex>] {
 fn sentence_rewrites(s: &str) -> String {
     static LEAD: OnceLock<Option<Regex>> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
-        Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."]|"[^"]*")*?"[^"]*\."|(?:[^."]|"[^"]*")+?\.)"#)
+        Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+ remains? exiled|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."]|"[^"]*")*?"[^"]*\."|(?:[^."]|"[^"]*")+?\.)"#)
             .ok()
     });
     let mut s = s.to_string();

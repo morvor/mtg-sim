@@ -1725,6 +1725,21 @@ impl Renderer<'_> {
                 cost,
             } => {
                 let a = subj(self, attackers);
+                // Attacking anything (a player, a planeswalker, or a battle, `combat.rs`):
+                // "Leviathan can't attack unless you sacrifice two Islands", "Green
+                // creatures can't attack unless their controller sacrifices a land for
+                // each green creature they control that's attacking".
+                if matches!(defender, PlayerFilter::Any) && *planeswalkers {
+                    let pay = self.cost_as_payment(cost);
+                    if matches!(attackers, Filter::Source) {
+                        return format!("{a} can't attack unless you {pay}");
+                    }
+                    let pays = super::effects::third_person(&pay);
+                    let n = self.noun(&super::effects::strip_controller(attackers), Num::One);
+                    return format!(
+                        "{a} can't attack unless their controller {pays} for each {{alt:{n} they control that's attacking|of those creatures}}"
+                    );
+                }
                 let d = self.player_filter_object(defender);
                 let pw = if *planeswalkers {
                     " or planeswalkers you control"

@@ -3880,7 +3880,8 @@ impl Renderer<'_> {
             return s;
         }
         if to.zone == ZoneKind::Exile {
-            s.push_str(&format!(", exile {pron}"));
+            let fd = if to.face_down { " face down" } else { "" };
+            s.push_str(&format!(", exile {pron}{fd}"));
         } else {
             s.push_str(&format!(", put {pron} {dest}"));
         }
@@ -4218,6 +4219,12 @@ impl Renderer<'_> {
                 format!("{may}put {what} from among them {d}")
             }
         };
+        // "exile one of them face down": an exile destination is the verb.
+        let take_s = if take_to.zone == ZoneKind::Exile {
+            take_s.replacen("put ", "exile ", 1)
+        } else {
+            take_s
+        };
         let mut rest = self.destination_phrase(rest_to, true, true);
         if rest_to.zone == ZoneKind::Library {
             rest = rest.replace("their owners' library", &format!("{p} library"));
@@ -4241,7 +4248,7 @@ impl Renderer<'_> {
             s.push_str(&format!(". {}", capitalize(&take_s)));
             return s;
         }
-        if matches!(filter, Filter::Any) || take_all {
+        if (matches!(filter, Filter::Any) || take_all) && take_to.zone != ZoneKind::Exile {
             s.push_str(&format!(". {} and {left} {rest}", capitalize(&take_s)));
         } else {
             s.push_str(&format!(". {}. Put {left} {rest}", capitalize(&take_s)));
