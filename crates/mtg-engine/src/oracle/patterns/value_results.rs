@@ -1337,8 +1337,11 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
         // until one was found (that one included), or
         // the cards a player chose to reveal from their hand.
         Sel::Union(vec![
-            Sel::Var(vars::REVEALED),
-            Sel::Var(vars::DUG_FOUND),
+            Sel::Var(vars::DUG),
+            Sel::Matching(
+                Box::new(Sel::Var(vars::REVEALED)),
+                Filter::not(Filter::In(Box::new(Sel::Var(vars::DUG)))),
+            ),
             Sel::Var(crate::kw::reveal_from_hand::REVEALED),
         ])
     } else {
