@@ -130,26 +130,54 @@ fn coward_cant_block_and_is_a_coward_until_end_of_turn() {
 
 #[test]
 fn phantasmal_form_sets_base_pt_and_adds_blue_illusion() {
-    cr!("613.4b", "105.3", "205.1b");
+    cr!("613.4b", "613.4c", "613.7", "105.3", "205.1b");
     ruling!("Phantasmal Form", "overwrites all previous effects");
     assert_supported("Phantasmal Form");
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Craw Wurm");
+    // Earlier: a base power and toughness setting effect (7b) on the Wurm, and a pump
+    // (7c) and a +1/+1 counter on the Bears.
+    t.lands(P0, "Island", 5);
+    t.lands(P0, "Forest", 1);
+    let fractal = t.hand(P0, "Fractalize");
+    t.cast(P0, fractal).x(0).target(b).go();
+    t.resolve();
+    assert_eq!(t.pt(b), (1, 1));
+    t.g.add_counters(Entity::Object(a), "+1/+1", 1, None);
+    let growth = t.hand(P0, "Giant Growth");
+    t.cast(P0, growth).target(a).go();
+    t.resolve();
     let form = t.hand(P0, "Phantasmal Form");
-    t.lands(P0, "Island", 3);
     t.cast(P0, form)
         .targets(&[Entity::Object(a), Entity::Object(b)])
         .go();
     t.resolve();
+    // 3/3 overwrites the earlier 1/1 (later timestamp in 7b); the pump and the counter
+    // still apply on top of it (7c after 7b).
+    assert_eq!(t.pt(a), (7, 7));
+    assert_eq!(t.pt(b), (3, 3));
     for x in [a, b] {
-        assert_eq!(t.pt(x), (3, 3));
         assert!(chars(&t, x).has_keyword(KeywordKind::Flying));
         assert!(chars(&t, x).has_subtype("Illusion"));
         assert!(chars(&t, x).colors.contains(Color::Blue));
         assert!(chars(&t, x).colors.contains(Color::Green));
     }
     assert!(chars(&t, a).has_subtype("Bear"));
+    // A setting effect that starts to apply later overwrites it.
+    let mut t2 = TestGame::new(2);
+    let c = t2.battlefield(P0, "Grizzly Bears");
+    t2.lands(P0, "Island", 5);
+    let form = t2.hand(P0, "Phantasmal Form");
+    t2.cast(P0, form).targets(&[Entity::Object(c)]).go();
+    t2.resolve();
+    let fractal = t2.hand(P0, "Fractalize");
+    t2.cast(P0, fractal).x(0).target(c).go();
+    t2.resolve();
+    assert_eq!(t2.pt(c), (1, 1));
+    // Fractalize sets the colors (green and blue) and creature types (Fractal only)
+    // after Phantasmal Form added blue and Illusion.
+    assert!(!chars(&t2, c).has_subtype("Illusion") && chars(&t2, c).has_subtype("Fractal"));
 }
 
 #[test]
@@ -434,4 +462,35 @@ fn biorhythm_sets_each_life_total_to_that_players_creature_count() {
     t.resolve();
     assert_eq!(t.life(P0), 3);
     assert!(t.has_lost(P1));
+}
+
+#[test]
+fn secret_arcade_makes_your_permanent_spells_and_nonland_permanents_enchantments() {
+    cr!("611.3a", "205.1b");
+    assert_supported("Secret Arcade // Dusty Parlor");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let room = t.hand(P0, "Secret Arcade // Dusty Parlor");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let land = t.battlefield(P0, "Forest");
+    t.lands(P0, "Plains", 7);
+    // Secret Arcade's door is what has the ability: before it's on the battlefield
+    // unlocked, nothing is an enchantment.
+    assert!(!chars(&t, mine).card_types.contains(CardType::Enchantment));
+    t.cast(P0, room).method(object::CastMethod::Half(0)).go();
+    t.resolve();
+    assert!(chars(&t, mine).card_types.contains(CardType::Enchantment));
+    assert!(chars(&t, mine).is_creature());
+    assert!(!chars(&t, theirs).card_types.contains(CardType::Enchantment));
+    assert!(!chars(&t, land).card_types.contains(CardType::Enchantment));
+    // A permanent spell you control on the stack is one too, but a card in hand isn't.
+    let bear = t.hand(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 2);
+    t.g.recompute();
+    assert!(!chars(&t, bear).card_types.contains(CardType::Enchantment));
+    let spell = t.cast(P0, bear).go();
+    t.g.recompute();
+    assert!(chars(&t, spell).card_types.contains(CardType::Enchantment));
+    assert!(chars(&t, spell).is_creature());
 }

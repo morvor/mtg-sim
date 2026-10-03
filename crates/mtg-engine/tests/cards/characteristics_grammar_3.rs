@@ -1,6 +1,6 @@
 //! Characteristic-changing grammar, the "other" family: life paid as a permanent entered
 //! (CR 607.2g, 614.12a), {X} defined by an activated ability's text (CR 107.3c),
-//! conditional characteristic-defining power and toughness (CR 604.3), counting an
+//! conditional power and toughness setting (not a CDA, CR 604.3a), counting an
 //! object's types, and "you lose all but 1 life".
 
 use crate::basic_effects_common::*;
@@ -91,6 +91,14 @@ fn soul_foundrys_x_is_the_mana_value_of_the_exiled_card() {
     t.lands(P0, "Forest", 1);
     t.answer(P0, DecisionKind::X, Answer::Number(0));
     t.activate(P0, foundry, 0, &[]).unwrap();
+    // The announced X was 6, not the 0 the player asked for: all six lands paid it.
+    let untapped = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.obj_now(**o).chars.has_subtype("Forest") && !t.obj_now(**o).tapped)
+        .count();
+    assert_eq!(untapped, 0);
     t.resolve();
     let tokens = t.named_on_battlefield("Craw Wurm");
     assert_eq!(tokens.len(), 1);
@@ -99,15 +107,22 @@ fn soul_foundrys_x_is_the_mana_value_of_the_exiled_card() {
 
 #[test]
 fn gaeas_liege_counts_forests_of_the_defending_player_while_attacking() {
-    cr!("604.3", "613.4a");
+    cr!("604.3a", "613.4b", "113.6");
     ruling!("Gaea's Liege", "use the \"not attacking\" power and toughness");
     assert_supported("Gaea's Liege");
     let mut t = TestGame::new(2);
     let liege = t.battlefield(P0, "Gaea's Liege");
     t.lands(P0, "Forest", 3);
     t.lands(P1, "Forest", 5);
+    // Abilities that set power and toughness only if a condition is met aren't
+    // characteristic-defining abilities (CR 604.3a(5)): they don't function off the
+    // battlefield, where the card is 0/0.
+    let in_hand = t.hand(P0, "Gaea's Liege");
+    let dead = t.graveyard(P0, "Gaea's Liege");
     t.g.recompute();
     assert_eq!(t.pt(liege), (3, 3));
+    assert_eq!(t.pt(in_hand), (0, 0));
+    assert_eq!(t.pt(dead), (0, 0));
     t.advance_to(P0, Step::BeginningOfCombat);
     t.answer(
         P0,
@@ -195,7 +210,7 @@ fn brine_hag_shrinks_the_creatures_that_dealt_damage_to_it() {
 
 #[test]
 fn xathrid_gorgon_petrifies_a_creature() {
-    cr!("602.5a", "205.1b", "105.3");
+    cr!("602.5", "205.1b", "105.3");
     assert_supported("Xathrid Gorgon");
     let mut t = TestGame::new(2);
     let gorgon = t.battlefield(P0, "Xathrid Gorgon");
