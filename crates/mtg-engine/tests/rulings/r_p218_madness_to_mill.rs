@@ -125,11 +125,9 @@ fn extus_magecraft_must_target_a_nonlegendary_creature_card() {
         "Extus, Oriq Overlord // Awaken the Blood Avatar",
         "Returning a nonlegendary creature card is not optional. If there is at least one in your graveyard, you must target it with the magecraft ability."
     );
-    // Only the back face's additional cost doesn't compile; the magecraft ability does.
-    crate::r_p190_mana_costs::only_unsupported(
-        "Extus, Oriq Overlord // Awaken the Blood Avatar",
-        "sacrifice any number of creatures",
-    );
+    // Both faces compile (the back face's "sacrifice any number of creatures" additional
+    // cost: see `tests/cards/spell_cost_grammar.rs`).
+    supported("Extus, Oriq Overlord // Awaken the Blood Avatar");
     // P0 doesn't name a target: the only legal one is chosen anyway.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Extus, Oriq Overlord // Awaken the Blood Avatar");

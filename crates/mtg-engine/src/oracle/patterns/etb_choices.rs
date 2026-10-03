@@ -1049,6 +1049,7 @@ fn choose_clause(l: &str) -> Option<Effect> {
 fn choice_kind(s: &str) -> Option<ChoiceKind> {
     Some(match s {
         "a color" => ChoiceKind::Color,
+        "two colors" => ChoiceKind::ColorsExactly(2),
         "a creature type" => ChoiceKind::CreatureType,
         "a card name" | "any card name" => ChoiceKind::CardName,
         "a nonland card name" => ChoiceKind::CardNameFiltered("nonland".into()),

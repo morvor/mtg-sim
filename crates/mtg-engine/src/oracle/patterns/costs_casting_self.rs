@@ -53,10 +53,8 @@ fn targets_condition(c: &str) -> Option<Condition> {
 /// the compiler understands.
 pub(crate) fn cost_condition(c: &str, ctx: &CompileContext) -> Option<Condition> {
     let c = end(c);
-    match c {
-        "during your turn" => return Some(Condition::YourTurn),
-        "during turns other than yours" => return Some(Condition::NotYourTurn),
-        _ => {}
+    if let Some(cond) = super::statics::turn_condition(c) {
+        return Some(cond);
     }
     if let Some(cond) = targets_condition(c) {
         return Some(cond);
@@ -118,6 +116,10 @@ pub(crate) fn for_each_value(s: &str) -> Option<Value> {
     if let Some(v) = super::value_results::whole_history_count(s) {
         return Some(v);
     }
+    // "card you own in exile and in your graveyard that's an instant card, ...".
+    if let Some(v) = super::spell_cost_grammar::cards_in_exile_and_graveyard(s) {
+        return Some(v);
+    }
     // Things that happened this turn, or other qualities the object phrase parser would
     // read loosely, aren't counted here.
     if s.contains(" this turn")
@@ -175,7 +177,7 @@ pub(crate) fn cost_change(mana: ManaCost, more: bool, times: Option<Value>) -> O
 /// "~ costs {1} less to cast [for each ... | if ... | as long as ... | during your turn |
 /// , where X is ...]", "If [condition], ~ costs {1} less to cast.", "During your turn,
 /// ~ costs {1} less to cast."
-fn own_cost_change(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+pub(crate) fn own_cost_change(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if text.contains('\n') {
         return None;
     }

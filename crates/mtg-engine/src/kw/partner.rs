@@ -173,12 +173,15 @@ fn pair_allowed(a: &Characteristics, pa: &PartnerAbility, b: &Characteristics) -
 
 /// Why the cards can't be designated as a player's commander together, or `None` if they
 /// can (CR 702.124, 903.3). One card is always allowed as far as partner abilities go,
-/// except a Background, which needs a commander with "choose a Background" (CR 702.124k).
+/// except a Background that can't be a commander on its own, which needs a commander with
+/// "choose a Background" (CR 702.124k).
 pub fn commanders_problem(commanders: &[&CardDef]) -> Option<String> {
     let chars: Vec<&Characteristics> = commanders.iter().map(|c| &c.front().chars).collect();
     match chars.as_slice() {
         [] => Some("no commander".into()),
-        [one] => is_background(one).then(|| {
+        // A Background that can be a commander on its own terms, such as the legendary
+        // enchantment creature Faceless One, may lead alone (CR 903.3).
+        [one] => (is_background(one) && !can_be_commander(commanders[0], false)).then(|| {
             format!(
                 "{}: a Background can be a commander only alongside a commander with choose a Background",
                 one.name

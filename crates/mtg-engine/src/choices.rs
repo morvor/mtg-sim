@@ -25,6 +25,21 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             let i = g.ask_option(p, Some(src), "Choose a color or colors", opts);
             g.objects[src.0 as usize].choices.colors = Some(sets[i.min(sets.len() - 1)]);
         }
+        ChoiceKind::ColorsExactly(n) => {
+            let sets: Vec<ColorSet> = (1..32u8)
+                .map(ColorSet)
+                .filter(|s| s.iter().count() == *n as usize)
+                .collect();
+            if sets.is_empty() {
+                return;
+            }
+            let opts: Vec<String> = sets
+                .iter()
+                .map(|s| s.iter().map(|c| c.word()).collect::<Vec<_>>().join(" and "))
+                .collect();
+            let i = g.ask_option(p, Some(src), "Choose colors", opts);
+            g.objects[src.0 as usize].choices.colors = Some(sets[i.min(sets.len() - 1)]);
+        }
         ChoiceKind::ColorOtherThan(except) => {
             let cols: Vec<Color> = Color::ALL.iter().copied().filter(|c| c != except).collect();
             let opts: Vec<String> = cols.iter().map(|c| c.word().to_string()).collect();
@@ -150,7 +165,7 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
         .or_default();
     match kind {
         ChoiceKind::Color | ChoiceKind::ColorOtherThan(_) => entry.color = made.color,
-        ChoiceKind::Colors => entry.colors = made.colors,
+        ChoiceKind::Colors | ChoiceKind::ColorsExactly(_) => entry.colors = made.colors,
         // A word choice may also name a color or type (see above).
         ChoiceKind::OneOf(_) => {
             if let Some(w) = made.text.clone() {

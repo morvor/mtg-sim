@@ -279,6 +279,12 @@ fn unlock_cost(g: &Game, id: ObjectId, half: usize) -> Option<crate::ability::Co
         .mana_cost
         .clone()
         .unwrap_or_default();
+    // "Unlock costs you pay cost {1} less" (CR 601.2f, 118.7a).
+    let mut m = m;
+    m.reduce_generic(crate::kw::spell_cost_grammar::unlock_cost_reduction(
+        g,
+        g.obj(id).controller,
+    ));
     Some(crate::ability::Cost::mana(m))
 }
 

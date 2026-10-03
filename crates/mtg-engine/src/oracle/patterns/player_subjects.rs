@@ -1007,6 +1007,12 @@ fn records_whether_done(e: &Effect) -> bool {
     match e {
         Effect::Seq(v) => v.last().is_some_and(records_whether_done),
         Effect::AsPlayer { effect, .. } => records_whether_done(effect),
+        // "may pay [cost] or [cost]": the next cost is offered if one wasn't paid.
+        Effect::If {
+            cond: Condition::Not(c),
+            then,
+            ..
+        } if matches!(**c, Condition::PrevHappened) => records_whether_done(then),
         Effect::May { .. }
         | Effect::PayOptional { .. }
         | Effect::Exile { .. }
@@ -1043,6 +1049,15 @@ fn if_they_do(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     {
         return false;
     }
+    // "If the player does, they may copy ~": "they" is that player.
+    let that_player;
+    let r = match r.strip_prefix("they may ") {
+        Some(x) => {
+            that_player = format!("that player may {x}");
+            that_player.as_str()
+        }
+        None => r,
+    };
     let Some(e) = parse_sentence(r, b) else {
         return false;
     };

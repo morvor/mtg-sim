@@ -20,6 +20,12 @@ use crate::oracle::CompileContext;
 /// hand", "tap an untapped creature you control", "discard a Forest card").
 fn cost_action(s: &str) -> Option<Cost> {
     let s = end(s);
+    // "reveal your hand" (Land Grant): revealing is the whole cost (CR 701.20).
+    if s == "reveal your hand" {
+        return Some(Cost::free().with(CostPart::Effect(Box::new(Effect::RevealHand {
+            who: PlayerRef::You,
+        }))));
+    }
     if let Some(m) = s.strip_prefix("pay {") {
         let m = ManaCost::parse(&format!("{{{m}"))?;
         if m.has_x() || format!("{m}").to_lowercase() != format!("{{{}", &s[5..]) {
@@ -27,6 +33,15 @@ fn cost_action(s: &str) -> Option<Cost> {
         }
         return Some(Cost::mana(m));
     }
+    // "discard another card" after "discard an Island card": one more card.
+    let another;
+    let s = match s.strip_prefix("discard another ") {
+        Some(r) => {
+            another = format!("discard a {r}");
+            another.as_str()
+        }
+        None => s,
+    };
     let (c, false) = parse_cost(s)? else {
         return None;
     };
@@ -58,7 +73,19 @@ pub(crate) fn plain_cost(s: &str) -> Option<Cost> {
         return None;
     }
     let mut cost = Cost::free();
+    let mut verb = String::new();
     for part in s.split(" and ") {
+        // "discard an Island card and another card": the verb carries over.
+        let carried;
+        let part = match cost_action(part) {
+            Some(_) => part,
+            None if !verb.is_empty() => {
+                carried = format!("{verb} {part}");
+                carried.as_str()
+            }
+            None => return None,
+        };
+        verb = part.split(' ').next().unwrap_or("").to_string();
         let c = cost_action(part)?;
         if let Some(m) = c.mana {
             match cost.mana.as_mut() {
@@ -92,10 +119,11 @@ fn own_alternative_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     // nothing.
     let (cost, tail) = match body.strip_prefix("cast ~ without paying its mana cost") {
         Some(tail) => (Cost::free(), tail),
-        None => {
-            let (cost_s, tail) = body.split_once(" rather than pay ~'s mana cost")?;
-            (plain_cost(cost_s)?, tail)
-        }
+        None => match body.split_once(" rather than pay ~'s mana cost") {
+            Some((cost_s, tail)) => (plain_cost(cost_s)?, tail),
+            // "you may pay {B/R} to cast ~" (an alternative cost, CR 118.9).
+            None => (plain_cost(body.strip_suffix(" to cast ~")?)?, ""),
+        },
     };
     let post = match tail.trim() {
         "" => None,

@@ -98,7 +98,7 @@ pub fn own_change_applies(
 /// choices made as it's proposed (CR 601.2b–c).
 fn filter_has_targets(f: &Filter) -> bool {
     match f {
-        Filter::Targets(_) => true,
+        Filter::Targets(_) | Filter::StackTargets(_) => true,
         Filter::Custom(n) => n.starts_with(crate::kw::offered_costs::PAID_OFFERED_COST),
         Filter::And(v) | Filter::Or(v) => v.iter().any(filter_has_targets),
         Filter::Not(x) => filter_has_targets(x),
@@ -109,8 +109,8 @@ fn filter_has_targets(f: &Filter) -> bool {
 /// `f` with its target requirements assumed to be met (`met`) or not.
 fn assume_targets(f: &Filter, met: bool) -> Filter {
     match f {
-        Filter::Targets(_) if met => Filter::Any,
-        Filter::Targets(_) => Filter::Not(Box::new(Filter::Any)),
+        Filter::Targets(_) | Filter::StackTargets(_) if met => Filter::Any,
+        Filter::Targets(_) | Filter::StackTargets(_) => Filter::Not(Box::new(Filter::Any)),
         Filter::Custom(_) if filter_has_targets(f) && met => Filter::Any,
         Filter::Custom(_) if filter_has_targets(f) => Filter::Not(Box::new(Filter::Any)),
         Filter::And(v) => Filter::And(v.iter().map(|x| assume_targets(x, met)).collect()),
