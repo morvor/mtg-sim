@@ -290,7 +290,7 @@ fn anafenza_exiles_opponents_creature_cards_from_anywhere() {
 
 #[test]
 fn hallowed_moonlight_exiles_the_token_a_copied_creature_spell_becomes() {
-    cr!("614.1c", "601.1", "707.10");
+    cr!("614.1a", "707.10");
     ruling!(
         "Hallowed Moonlight",
         "won’t affect any creature that was cast, no matter which zone it was cast from"

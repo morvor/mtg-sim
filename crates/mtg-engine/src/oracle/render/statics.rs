@@ -2333,6 +2333,49 @@ impl Renderer<'_> {
                 };
                 format!("if {w} would draw a card{except}, {then}")
             }
+            // Keyword actions (CR 701): "If an opponent would mill one or more cards, they
+            // mill twice that many cards instead.", "If you would proliferate, ...", "If a
+            // creature you control would explore, ...".
+            (E::Action { kind, who, objects }, action) => {
+                use crate::ability::ReplaceableAction as K;
+                let (verb, counted) = match kind {
+                    K::Mill => ("mill", Some("one or more cards")),
+                    K::Scry => ("scry", Some("a number of cards")),
+                    K::Proliferate => ("proliferate", None),
+                    K::Explore => ("explore", None),
+                    K::Connive => ("connive", None),
+                    K::Learn => ("learn", None),
+                };
+                let w = match objects {
+                    Some(f) => self.noun_det(f, Det::A),
+                    None => {
+                        let w = self.player_filter_subject(who);
+                        match w.as_str() {
+                            "players" => "a player".into(),
+                            "your opponents" => "an opponent".into(),
+                            _ => w,
+                        }
+                    }
+                };
+                let they = if w == "you" { "you" } else { "they" };
+                let then = match (action, counted) {
+                    (A::Multiply(k), Some(_)) => {
+                        let k = match k {
+                            2 => "twice".to_string(),
+                            3 => "three times".to_string(),
+                            k => format!("{k} times"),
+                        };
+                        format!("{they} {verb} {k} that many cards instead")
+                    }
+                    (A::Add(v), Some(_)) => {
+                        let v = self.value(v);
+                        format!("{they} {verb} that many cards plus {v} instead")
+                    }
+                    (other, _) => self.replacement_then(other, ""),
+                };
+                let what = counted.map(|c| format!(" {c}")).unwrap_or_default();
+                format!("if {w} would {verb}{what}, {then}")
+            }
             (E::DrawCards { who, min }, action) => {
                 let w = self.player_filter_subject(who);
                 let then = self.replacement_then(action, "");
