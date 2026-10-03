@@ -210,7 +210,7 @@ fn solid_footing_changes_only_combat_damage_assignment() {
 
 #[test]
 fn cartouche_of_strengths_trample_doesnt_apply_in_a_fight() {
-    cr!("701.14b", "702.19a");
+    cr!("701.14d", "702.19a");
     ruling!(
         "Cartouche of Strength",
         "The enchanted creature has +1/+1 and trample while it's fighting. However, trample doesn't apply during a fight."
@@ -314,7 +314,7 @@ fn weakstones_subjugation_stops_untapping_whether_or_not_you_paid() {
 
 #[test]
 fn urban_burgeoning_land_untaps_in_other_players_untap_steps() {
-    cr!("502.3", "502.2");
+    cr!("502.3");
     ruling!(
         "Urban Burgeoning",
         "The enchanted land untaps at the same time as the active player’s permanents. You can’t choose to not untap it at that time."
@@ -361,7 +361,7 @@ fn apathy_may_discard_even_if_the_creature_is_untapped() {
 
 #[test]
 fn counters_put_by_an_aura_stay_after_it_leaves_or_moves() {
-    cr!("122.1", "122.2");
+    cr!("122.1");
     ruling!(
         "Daily Regimen",
         "The +1/+1 counters that are put on the enchanted creature are independent of Daily Regimen. If Daily Regimen leaves the battlefield or is moved to another creature, the counters will stay put."
@@ -433,7 +433,7 @@ fn blossombind_doesnt_remove_counters_already_there() {
 
 #[test]
 fn grievous_wound_life_gain_spells_still_do_everything_else() {
-    cr!("119.7", "608.2b");
+    cr!("119.7", "608.2c");
     ruling!(
         "Grievous Wound",
         "Spells and abilities that cause the enchanted player to gain life still resolve while Grievous Wound is on the battlefield. The enchanted player won't gain life, but any other effects of that spell or ability will still happen."
@@ -544,7 +544,7 @@ fn prison_term_moves_from_its_creature_to_the_new_one() {
 
 #[test]
 fn in_too_deep_split_second_doesnt_change_when_it_can_be_cast() {
-    cr!("702.61a", "307.1");
+    cr!("702.61a", "303.1");
     ruling!(
         "In Too Deep",
         "Split second doesn't allow players to cast the spell it's on at times when they otherwise wouldn't be able to cast it. An enchantment with split second may still be cast only during its controller's main phase when the stack is empty."

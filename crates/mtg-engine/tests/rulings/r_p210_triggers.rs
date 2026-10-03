@@ -534,7 +534,7 @@ fn aura_enters_abilities_can_target_beyond_the_enchanted_creature() {
 
 #[test]
 fn faith_unbroken_returns_the_card_when_it_leaves_and_waits_for_sbas_otherwise() {
-    cr!("610.3c", "704.5m", "603.6c");
+    cr!("610.3", "610.3c", "704.5m", "603.6c");
     ruling!(
         "Faith Unbroken",
         "The exiled card returns to the battlefield immediately after Faith Unbroken leaves the battlefield. Nothing happens between the two events, including state-based actions. However, if the creature Faith Unbroken enchants leaves the battlefield, Faith Unbroken won't leave itself until state-based actions are checked."
@@ -564,7 +564,9 @@ fn faith_unbroken_returns_the_card_when_it_leaves_and_waits_for_sbas_otherwise()
     let f = t.g.current(faith);
     t.g.destroy(f, None);
     t.g.flush_events();
-    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    let back = t.named_on_battlefield("Hill Giant");
+    assert_eq!(back.len(), 1);
+    assert_eq!(t.obj_now(back[0]).controller, P1);
 }
 
 #[test]
