@@ -673,6 +673,43 @@ pub(crate) fn exiled_with_source(r: &str, b: &mut Builder) -> Option<(Sel, Strin
     }
 }
 
+/// "their power is half that creature's power and their toughness is half that
+/// creature's toughness" (Saw in Half): the copied creature's power and toughness as it
+/// last existed, halved (CR 608.2h); the next sentence says how to round ("Round up each
+/// time.", CR 107.1a). Returns whether to round up.
+fn half_pt(e: &str) -> Option<bool> {
+    let ok = [
+        "their power is half that creature's power and their toughness is half that creature's toughness",
+        "its power is half that creature's power and its toughness is half that creature's toughness",
+    ]
+    .contains(&e.trim());
+    if !ok {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if raw.contains("round up each time") {
+        Some(true)
+    } else if raw.contains("round down each time") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// "Round up each time." after halving a token copy's power and toughness.
+fn f_round_each_time(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let up = match l {
+        "round up each time" => true,
+        "round down each time" => false,
+        _ => return false,
+    };
+    let needle = format!(",2,{up}]");
+    serde_json::to_string(prev).is_ok_and(|s| s.contains("\"Div\"") && s.contains(&needle))
+}
+
+inventory::submit! { super::FollowupPattern { name: "tokens_copies: round up each time", priority: 50, apply: f_round_each_time } }
+
 /// "create a token that's a copy of target creature you control, except it isn't
 /// legendary", "create a tapped and attacking token that's a copy of it", "create two
 /// tokens that are copies of ~, except they're not legendary".
@@ -738,6 +775,13 @@ pub(crate) fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Eff
         return None;
     }
     let mods = match exc_part {
+        Some(e) if half_pt(&e).is_some() => {
+            let up = half_pt(&e)?;
+            vec![Modification::SetPT(
+                Some(Value::Div(Box::new(Value::PowerOf(Box::new(of.clone()))), 2, up)),
+                Some(Value::Div(Box::new(Value::ToughnessOf(Box::new(of.clone()))), 2, up)),
+            )]
+        }
         Some(e) => copy_exceptions(&e, &quotes, b.ctx)?,
         None => {
             if !quotes.is_empty() {

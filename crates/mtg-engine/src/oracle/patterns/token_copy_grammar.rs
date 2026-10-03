@@ -944,3 +944,186 @@ fn attacking_you<'a>(t: &'a str, f: &Filter) -> Option<(Filter, &'a str)> {
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "token grammar: attacking you", priority: 100, parse: attacking_you } }
+
+// ---------------------------------------------------------------------------
+// More subjects and follow-ups
+// ---------------------------------------------------------------------------
+
+/// The creations in `e` made by `who` (each creation's controller).
+fn set_creator(e: &mut Effect, who: &PlayerRef) -> bool {
+    match e {
+        Effect::CreateToken { controller, .. }
+        | Effect::CreateTokenWithPT { controller, .. }
+        | Effect::CreateTokenCopy { controller, .. } => {
+            if !matches!(controller, PlayerRef::You) {
+                return false;
+            }
+            *controller = who.clone();
+            true
+        }
+        Effect::Seq(v) => !v.is_empty() && v.iter_mut().all(|x| set_creator(x, who)),
+        Effect::SetX { .. } => true,
+        _ => false,
+    }
+}
+
+/// "the exiled card's owner creates an X/X blue Illusion creature token, where X is the
+/// mana value of the exiled card" (Skyclave Apparition): the owner of the card the
+/// source's linked ability exiled creates the token (CR 111.2, 607.2a).
+fn other_creator(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (who, rest) = if let Some(r) = l.strip_prefix("the exiled card's owner creates ") {
+        if b.ctx.is_spell() {
+            return None;
+        }
+        let exiled = super::imprint::exiled_card_ref("the exiled card")?;
+        (PlayerRef::OwnerOf(Box::new(exiled)), r)
+    } else {
+        return None;
+    };
+    // "an X/X ... token, where X is the mana value of the exiled card" (determined as the
+    // token is created, CR 608.2h).
+    let (rest, mv) = match rest.strip_suffix(", where x is the mana value of the exiled card") {
+        Some(r) if r.contains(" x/x ") => (r.replacen(" x/x ", " 0/0 ", 1), true),
+        Some(_) => return None,
+        None => (rest.to_string(), false),
+    };
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let mut e = match crate::oracle::effects::parse_clause(&format!("create {rest}"), b) {
+        Some(e) if b.targets.len() == saved.0 => e,
+        _ => {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            b.it_player = saved.2;
+            return None;
+        }
+    };
+    let mut ok = set_creator(&mut e, &who);
+    if mv {
+        let exiled = super::imprint::exiled_card_ref("the exiled card")?;
+        let v = Value::ManaValueOf(Box::new(exiled));
+        ok &= match &mut e {
+            Effect::CreateToken { spec, .. }
+                if spec.power == Some(0) && spec.toughness == Some(0) && spec.pt_values.is_none() =>
+            {
+                spec.pt_values = Some(Box::new((v.clone(), v)));
+                true
+            }
+            _ => false,
+        };
+    }
+    if !ok {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        b.it_player = saved.2;
+        return None;
+    }
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "token grammar: the exiled card's owner creates", priority: 98, parse: other_creator } }
+
+/// "The token created this way gains haste." after populating (Determined Iteration):
+/// the token the previous instruction created.
+fn f_token_created_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l
+        .strip_prefix("the token created this way ")
+        .or_else(|| l.strip_prefix("the tokens created this way "))
+    else {
+        return false;
+    };
+    if super::tokens_copies_create::last_create(prev).is_none() {
+        return false;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    b.it = Sel::Var(vars::CREATED);
+    let e = crate::oracle::effects::parse_simple(&format!("it {r}"), b);
+    match e {
+        Some(e @ Effect::Modify { .. }) if b.targets.len() == saved.0 => {
+            super::tokens_copies_create::append_after_create(prev, e)
+        }
+        _ => {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            false
+        }
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "token grammar: the token created this way", priority: 40, apply: f_token_created_this_way } }
+
+/// "If that enchantment is an Aura, you may attach it to the token." (Ajani's Chosen):
+/// the object the trigger names, attached to the token just created.
+fn f_attach_it_to_the_token(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, x)) = r.split_once(", ") else {
+        return false;
+    };
+    let (optional, x) = match x.strip_prefix("you may ") {
+        Some(y) => (true, y),
+        None => (false, x),
+    };
+    if !matches!(x, "attach it to the token" | "attach it to that token") {
+        return false;
+    }
+    if super::tokens_copies_create::last_create(prev).is_none() || !b.in_trigger {
+        return false;
+    }
+    // "That enchantment": the object the trigger names.
+    let what = Sel::TriggerObject;
+    let saved = b.it.clone();
+    b.it = what.clone();
+    // "that enchantment is an Aura": the trigger's object, "it".
+    let c = match c.strip_prefix("that ").and_then(|x| x.split_once(" is ")) {
+        Some((noun, rest)) if !noun.contains(' ') => format!("it's {rest}"),
+        _ => c.to_string(),
+    };
+    let cond = super::conditions_referents::parse_condition_with(&c, b);
+    b.it = saved;
+    let Some(cond) = cond else {
+        return false;
+    };
+    let mut e = Effect::Attach {
+        what,
+        to: Sel::Var(vars::CREATED),
+    };
+    if optional {
+        e = Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(e),
+        };
+    }
+    super::tokens_copies_create::append_after_create(
+        prev,
+        Effect::If {
+            cond,
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    )
+}
+
+inventory::submit! { FollowupPattern { name: "token grammar: attach it to the token", priority: 40, apply: f_attach_it_to_the_token } }
+
+/// "You create a Treasure token for each opponent who was dealt damage this turn." (You've
+/// Been Caught Stealing).
+fn create_for_each_damaged_opponent(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let body = l.strip_suffix(" for each opponent who was dealt damage this turn")?;
+    let body = body.strip_prefix("you ").unwrap_or(body);
+    let e = creation(body, b)?;
+    with_count(
+        &e,
+        Value::CountPlayers(PlayerFilter::And(vec![
+            PlayerFilter::Opponent,
+            PlayerFilter::DealtDamageThisTurn,
+        ])),
+        false,
+    )
+}
+
+inventory::submit! { EffectPattern { name: "token grammar: create a token for each opponent dealt damage", priority: 97, parse: create_for_each_damaged_opponent } }

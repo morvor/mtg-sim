@@ -369,12 +369,13 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
     let mut tapped = false;
     let mut rest = rest.trim().to_string();
     // Tail parts, in any order.
-    const BOUNDS: [&str; 5] = [
+    const BOUNDS: [&str; 6] = [
         " with ",
         " named ",
         " that's ",
         " that are ",
         " and that's ",
+        " that is ",
     ];
     let next_bound = |s: &str| -> usize {
         BOUNDS
@@ -407,6 +408,21 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             }
             name = SmolStr::new(original_name(n, ctx)?);
             rest = r[i..].trim().to_string();
+        } else if let Some(r) = ["that is every basic land type", "that's every basic land type"]
+            .iter()
+            .find_map(|p| rest.strip_prefix(p))
+            .filter(|_| types.contains(&CardType::Land))
+        {
+            // "a tapped colorless land token named Everywhere that is every basic land
+            // type" (Overlord of the Hauntwoods): it has each basic land type, and so
+            // their mana abilities (CR 305.6).
+            for t in ["Plains", "Island", "Swamp", "Mountain", "Forest"] {
+                let st = SmolStr::new(t);
+                if !subtypes.contains(&st) {
+                    subtypes.push(st);
+                }
+            }
+            rest = r.trim().to_string();
         } else if let Some(r) = ["that's all colors", "that are all colors"]
             .iter()
             .find_map(|p| rest.strip_prefix(p))
@@ -569,7 +585,9 @@ inventory::submit! { EffectPattern { name: "tokens_copies: create described toke
 pub(crate) fn last_create(e: &mut Effect) -> Option<&mut Effect> {
     match e {
         Effect::Seq(v) => v.last_mut().and_then(last_create),
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. } => Some(e),
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. }
+            // Populate creates a token copy (CR 701.36a); "the token created this way".
+            | Effect::KeywordAction { action: KeywordAction::Populate, .. } => Some(e),
         Effect::If {
             then, otherwise, ..
         }
@@ -590,6 +608,8 @@ fn is_create(e: &Effect) -> bool {
     matches!(
         e,
         Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. }
+            // Populate creates a token copy (CR 701.36a); "the token created this way".
+            | Effect::KeywordAction { action: KeywordAction::Populate, .. }
     )
 }
 
@@ -611,7 +631,9 @@ fn several_kinds(e: &Effect) -> bool {
 /// Whether `e` creates tokens anywhere.
 fn has_create(e: &Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. } => true,
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. }
+            // Populate creates a token copy (CR 701.36a); "the token created this way".
+            | Effect::KeywordAction { action: KeywordAction::Populate, .. } => true,
         Effect::Seq(v) => v.iter().any(has_create),
         Effect::If { then, .. } | Effect::PayOptional { then, .. } => has_create(then),
         Effect::May { effect, .. } => has_create(effect),
@@ -623,7 +645,9 @@ fn has_create(e: &Effect) -> bool {
 /// "if you do" / "you may" branch.
 pub(crate) fn append_after_create(e: &mut Effect, new: Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. } => {
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. }
+            // Populate creates a token copy (CR 701.36a); "the token created this way".
+            | Effect::KeywordAction { action: KeywordAction::Populate, .. } => {
             let c = std::mem::take(e);
             *e = Effect::Seq(vec![c, new]);
             true

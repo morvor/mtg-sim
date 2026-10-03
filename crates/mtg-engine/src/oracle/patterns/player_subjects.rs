@@ -312,7 +312,7 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
             let players_only = matches!(
                 split_word(r).0,
                 "discard" | "draw" | "mill" | "search" | "shuffle" | "sacrifice" | "pay"
-                    | "investigate" | "scry" | "surveil"
+                    | "investigate" | "scry" | "surveil" | "create"
             );
             if p == "they "
                 && !players_only
