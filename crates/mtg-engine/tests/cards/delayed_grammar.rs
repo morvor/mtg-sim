@@ -449,3 +449,55 @@ fn dalkovan_encampment_sacrifices_each_attacks_tokens_at_the_end_step() {
     t.resolve_all();
     assert!(t.named_on_battlefield("Warrior Token").is_empty());
 }
+
+#[test]
+fn fire_giants_fury_exiles_that_many_cards_and_lets_you_play_them() {
+    cr!("603.7b", "603.7c");
+    assert_supported("Fire Giant's Fury");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let f = t.hand(P0, "Fire Giant's Fury");
+    t.cast(P0, f).target(giant).go();
+    t.resolve_all();
+    let before = t.library_size(P0);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(giant, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    // 3 + 2 = 5 combat damage: five cards exiled.
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.library_size(P0), before - 5);
+}
+
+#[test]
+fn touch_of_moonglove_punishes_the_controller_of_each_creature_it_killed() {
+    cr!("603.7b", "702.2b");
+    assert_supported("Touch of Moonglove");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 1);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let tm = t.hand(P0, "Touch of Moonglove");
+    t.cast(P0, tm).target(bears).go();
+    t.resolve_all();
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P1))], &[(giant, bears)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn devouring_tendrils_gains_life_when_the_permanent_you_dont_control_dies() {
+    cr!("603.7a");
+    assert_supported("Devouring Tendrils");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let dt = t.hand(P0, "Devouring Tendrils");
+    t.cast(P0, dt).targets(&objs(&[giant, bears])).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.life(P0), 22);
+}
