@@ -35,6 +35,22 @@ const TARGETS_PREFIX: &str = "spell cost:targets of type:";
 const PAID_TIMES: &str = "spell cost:times paid:";
 const MANA_COST_IS: &str = "spell cost:mana cost is:";
 const PAY_ANY: &str = "spell cost:pay any amount:";
+const UNLOCK_LESS: &str = "spell cost:unlock costs less:";
+
+/// `StaticEffect::Custom` name: "Unlock costs you pay cost {n} less."
+pub fn unlock_costs_less(n: u32) -> String {
+    format!("{UNLOCK_LESS}{n}")
+}
+
+/// How much less the unlock costs `p` pays cost (CR 709.5e, 118.7a: generic mana only).
+pub fn unlock_cost_reduction(g: &Game, p: PlayerId) -> u32 {
+    g.statics
+        .customs
+        .iter()
+        .filter(|(_, ctl, _)| *ctl == p)
+        .filter_map(|(_, _, n)| n.strip_prefix(UNLOCK_LESS)?.parse::<u32>().ok())
+        .sum()
+}
 
 /// `Effect::Custom` name: the player chooses an amount of `kind` ("life", "mana", or a mana
 /// symbol such as "{r}") and pays it (`may`: they may choose not to). The amount paid is

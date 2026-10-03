@@ -825,3 +825,33 @@ fn gavi_cycles_the_first_card_each_turn_for_free() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand);
 }
+
+#[test]
+fn inquisitive_glimmer_makes_unlock_costs_cheaper() {
+    cr!("709.5e", "118.7a");
+    // "Unlock costs you pay cost {1} less."
+    use mtg_engine::decision::{Action, SpecialAction};
+    use mtg_engine::mana::ManaType;
+    assert_compiles(&["Inquisitive Glimmer"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Inquisitive Glimmer");
+    let ogre = t.battlefield(P1, "Gray Ogre");
+    let card = t.hand(P0, "Glassworks // Shattered Yard");
+    // (Glassworks {2}{R} is an enchantment spell: it costs {1}{R}.)
+    t.g.players[0].mana_pool.add_type(ManaType::R, 1);
+    t.g.players[0].mana_pool.add_type(ManaType::C, 1);
+    t.cast(P0, card).method(CastMethod::Half(0)).go();
+    t.answer_targets(P0, &[Entity::Object(ogre)]);
+    t.resolve_all();
+    let room = t.named_on_battlefield("Glassworks")[0];
+    // Shattered Yard's {4}{R} costs {3}{R}.
+    t.g.players[0].mana_pool.add_type(ManaType::R, 1);
+    t.g.players[0].mana_pool.add_type(ManaType::C, 3);
+    t.g.turn.priority = Some(P0);
+    let unlock = t.g.legal_actions(P0).into_iter().find(|a| {
+        matches!(a, Action::Special(SpecialAction::Other { obj: Some(o), .. }) if *o == room)
+    });
+    let unlock = unlock.expect("the door can be unlocked for {3}{R}");
+    t.g.perform_action(P0, unlock).unwrap();
+    assert_eq!(t.player(P0).mana_pool.total(), 0);
+}

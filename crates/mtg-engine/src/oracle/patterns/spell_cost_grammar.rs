@@ -1391,3 +1391,18 @@ fn keyword_cost_alternative(l: &str, text: &str, _ctx: &CompileContext) -> Optio
 }
 
 inventory::submit! { StaticPattern { name: "spell cost grammar: pay rather than pay a keyword ability's cost", priority: 100, parse: keyword_cost_alternative } }
+
+/// "Unlock costs you pay cost {1} less." (Inquisitive Glimmer): the costs of unlocking
+/// doors (CR 709.5e) that you pay.
+fn unlock_costs_less(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("unlock costs you pay cost {")?;
+    let n: u32 = r.strip_suffix("} less")?.parse().ok()?;
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(
+            rules::unlock_costs_less(n).into(),
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "spell cost grammar: unlock costs you pay cost {N} less", priority: 100, parse: unlock_costs_less } }
