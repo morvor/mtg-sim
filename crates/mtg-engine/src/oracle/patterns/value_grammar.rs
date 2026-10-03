@@ -264,7 +264,7 @@ fn split_possessive(s: &str) -> Option<(&str, &str)> {
     Some((&s[..i], &s[i + 3..]))
 }
 
-fn stat_word(s: &str) -> Option<(Stat, &str)> {
+pub(crate) fn stat_word(s: &str) -> Option<(Stat, &str)> {
     for (p, st) in [
         ("power and/or toughness", Stat::PowerOrToughness),
         ("power", Stat::Power),
@@ -280,7 +280,7 @@ fn stat_word(s: &str) -> Option<(Stat, &str)> {
     None
 }
 
-fn of_referent(stat: Stat, sel: Sel) -> Value {
+pub(crate) fn of_referent(stat: Stat, sel: Sel) -> Value {
     let sel = Box::new(sel);
     match stat {
         Stat::Power => Value::PowerOf(sel),

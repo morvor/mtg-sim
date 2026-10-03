@@ -677,6 +677,11 @@ impl Renderer<'_> {
             }
             Sel::Linked => decline("each card exiled with ~it".into(), case),
             Sel::LinkedNoted => decline("the last chosen card".into(), case),
+            Sel::Matching(inner, f) => {
+                let f = Filter::and(vec![f.clone(), Filter::In(inner.clone())]);
+                let n = self.noun(&f, Num::Many);
+                decline(format!("the {n}"), case)
+            }
             Sel::CreatorLinked => decline("the exiled card".into(), case),
             Sel::ExiledWithCardsNamed(n) => {
                 decline(format!("a card you exiled with cards named {n}"), case)

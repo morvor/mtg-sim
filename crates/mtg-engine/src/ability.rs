@@ -1028,6 +1028,11 @@ pub enum Sel {
     /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
     /// has since changed zones is a new object the note doesn't find (CR 400.7).
     LinkedNoted,
+    /// The selected objects that match the filter, each judged as it is now or, if it has
+    /// left the zone it was in, as it last existed there (CR 608.2h): "the creatures you
+    /// controlled that were destroyed this way", "the creature cards sacrificed this
+    /// way".
+    Matching(Box<Sel>, Filter),
 }
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].

@@ -13,6 +13,11 @@ use crate::eval::Ctx;
 use crate::game::Game;
 use std::collections::BTreeSet;
 
+/// The permanents the latest destroy instruction destroyed, as they last existed on the
+/// battlefield ("the number of creatures they controlled that were destroyed this way",
+/// CR 608.2h); `vars::IT` holds the cards they became.
+pub const DESTROYED: crate::ability::Var = crate::ability::vars::USER + 7520;
+
 pub fn events_this_turn(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -> i64 {
     let mut n = 0i64;
     let mut players = BTreeSet::new();

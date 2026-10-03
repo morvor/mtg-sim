@@ -924,6 +924,14 @@ impl Game {
             Sel::Var(v) => {
                 crate::merge::with_components_of(self, ctx.vars.get(v).cloned().unwrap_or_default())
             }
+            Sel::Matching(inner, f) => self
+                .eval_sel(inner, ctx)
+                .into_iter()
+                .filter(|e| match e {
+                    Entity::Object(o) => self.matches(*o, f, ctx),
+                    Entity::Player(_) => false,
+                })
+                .collect(),
             // CR 603.6: an ability can't find an object that went to a zone hidden from its
             // controller (a library, or another player's hand).
             Sel::TriggerObject => ctx
