@@ -30,6 +30,13 @@ fn lessons(g: &Game, p: PlayerId) -> Vec<ObjectId> {
 
 /// `p` learns (CR 701.48a).
 pub fn learn(g: &mut Game, p: PlayerId, source: Option<ObjectId>) -> Learned {
+    // "If you would learn, you may instead ..." (CR 614.1a)
+    if g
+        .replace_action(crate::ability::ReplaceableAction::Learn, p, None, 1)
+        .is_none()
+    {
+        return Learned::Nothing;
+    }
     let can_discard = !g.player(p).hand.is_empty();
     let lessons = lessons(g, p);
     let mut options = vec!["Do nothing".to_string()];

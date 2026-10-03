@@ -353,6 +353,9 @@ fn counters(s: &str, ctx: &CompileContext) -> Option<Effect> {
         (Value::Mul(Box::new(Value::c(2)), Box::new(Value::X)), r)
     } else if additional && (s.starts_with('+') || s.starts_with('-')) {
         (Value::c(1), s)
+    } else if additional && parse_number(s).is_none() {
+        // "an additional loyalty counter on him"
+        (Value::c(1), s)
     } else {
         parse_number(s)?
     };
@@ -495,6 +498,23 @@ fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
 
 fn for_each_value_inner(s: &str, ctx: &CompileContext) -> Option<Value> {
     let s = end(s);
+    // "instant and sorcery spell you've cast this turn" (CR 601.2i)
+    if let Some(kind) = s.strip_suffix(" spell you've cast this turn") {
+        let f = match kind {
+            "instant and sorcery" | "instant or sorcery" => {
+                Filter::Or(vec![Filter::Type(CardType::Instant), Filter::Type(CardType::Sorcery)])
+            }
+            _ => {
+                let (f, plural, tail) = parse_object_phrase(&format!("{kind} spell"))
+                    .map(|(f, p, t)| (f, p, t.to_string()))?;
+                if plural || !tail.trim().is_empty() {
+                    return None;
+                }
+                f
+            }
+        };
+        return Some(Value::SpellsCastThisTurn(PlayerRef::You, f));
+    }
     // "{G}{G} spent to cast it": each two green mana spent
     if let Some(v) = s
         .strip_suffix(" spent to cast it")
@@ -697,6 +717,9 @@ fn etb_value(s: &str, ctx: &CompileContext) -> Option<Value> {
 
 /// Parses the sentences of an "as this enters" ability.
 fn parse_as_enters_body(s: &str, ctx: &CompileContext) -> Option<Effect> {
+    if let Some(e) = as_enters_this_way(s, ctx) {
+        return Some(e);
+    }
     let mut out = Vec::new();
     for sent in split_sentences(s) {
         let lower = sent.to_lowercase();
@@ -878,7 +901,120 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
         );
         return (chosen && b.targets.is_empty()).then_some(e);
     }
-    None
+    as_enters_instruction(l, ctx)
+}
+
+/// The variable holding a number an "as enters" instruction counted ("for each counter
+/// removed this way").
+const AS_ENTERS_COUNT: Var = vars::USER + 6160;
+
+/// "[instruction]. ~ enters with a +1/+1 counter on it for each counter removed this
+/// way." (Thief of Blood), "sacrifice any number of permanents. ~ enters with that many
+/// +1/+1 counters on it." (Shimatsu), "you may sacrifice any number of creatures. If you
+/// do, it enters with twice that many +1/+1 counters on it." (Devouring Hellion): the
+/// number of objects the instruction acted on, or of counters it removed.
+fn as_enters_this_way(s: &str, ctx: &CompileContext) -> Option<Effect> {
+    let sents = split_sentences(s);
+    let [s1, s2] = sents.as_slice() else {
+        return None;
+    };
+    let l1 = s1.to_lowercase();
+    let l2 = s2.to_lowercase();
+    let l2 = end(&l2);
+    let (if_you_do, l2) = match l2.strip_prefix("if you do, ") {
+        Some(r) => (true, r),
+        None => (false, l2),
+    };
+    let r = SELF_PRONOUNS
+        .iter()
+        .find_map(|p| l2.strip_prefix(&format!("{p} enters with ")))?;
+    // The count of the instruction's objects (or removed counters).
+    let e1 = as_enters_sentence(end(&l1), ctx).or_else(|| as_enters_instruction(end(&l1), ctx))?;
+    fn stored_var(e: &Effect) -> Option<Var> {
+        match e {
+            Effect::Store { var, .. } => Some(*var),
+            Effect::Seq(v) => v.iter().find_map(stored_var),
+            Effect::May { effect, .. } => stored_var(effect),
+            _ => None,
+        }
+    }
+    let (pre, count) = match &e1 {
+        Effect::RemoveCounters { n, .. } => (
+            Some(Effect::StoreValue {
+                var: AS_ENTERS_COUNT,
+                value: n.clone(),
+            }),
+            Value::Var(AS_ENTERS_COUNT),
+        ),
+        other => (None, Value::CountSel(Box::new(Sel::Var(stored_var(other)?)))),
+    };
+    let (mult, rest) = if let Some(x) = r.strip_prefix("that many ") {
+        (1, x)
+    } else if let Some(x) = r.strip_prefix("twice that many ") {
+        (2, x)
+    } else {
+        let (n, x) = parse_number(r)?;
+        let Value::Const(k) = n else {
+            return None;
+        };
+        // "... for each [thing] [verb]ed this way"
+        let x = x.trim_start();
+        let (kind_part, each) = x.split_once(" for each ")?;
+        if !each.ends_with(" this way") {
+            return None;
+        }
+        let kind_part = kind_part.to_string();
+        let (kind, tail) = crate::oracle::costs::counter_kind(&kind_part)?;
+        let tail = strip(tail, "counters").or_else(|| strip(tail, "counter"))?;
+        on_self(tail)?;
+        let n = if k == 1 {
+            count
+        } else {
+            Value::Mul(Box::new(Value::c(k)), Box::new(count))
+        };
+        let entry = Effect::EnterWithCounters { kind, n };
+        let mut v: Vec<Effect> = pre.into_iter().collect();
+        v.push(e1);
+        v.push(entry);
+        return Some(Effect::seq(v));
+    };
+    let (kind, tail) = crate::oracle::costs::counter_kind(rest)?;
+    let tail = strip(tail, "counters").or_else(|| strip(tail, "counter"))?;
+    if !on_self(tail)?.trim().is_empty() {
+        return None;
+    }
+    let n = if mult == 1 {
+        count
+    } else {
+        Value::Mul(Box::new(Value::c(mult)), Box::new(count))
+    };
+    let entry = Effect::EnterWithCounters { kind, n };
+    // "If you do": only if the optional instruction was performed (with none sacrificed,
+    // that many is 0 anyway).
+    let _ = if_you_do;
+    let mut v: Vec<Effect> = pre.into_iter().collect();
+    v.push(e1);
+    v.push(entry);
+    Some(Effect::seq(v))
+}
+
+/// Any other instruction performed as the permanent enters ("discard your hand",
+/// "sacrifice all lands you control", "if it was kicked, mill four cards"): performed
+/// while the replacement effect applies, with the entering permanent as its source
+/// (CR 614.12a, 614.1c). It can't have targets (an "as enters" ability isn't put on the
+/// stack, CR 115.1) and can't refer to cards it exiles later (CR 607.2a would link them to
+/// the object that becomes the permanent).
+fn as_enters_instruction(l: &str, ctx: &CompileContext) -> Option<Effect> {
+    if l.contains("exile") || l.contains("target") {
+        return None;
+    }
+    let mut b = Builder::new(ctx);
+    b.it = Sel::This;
+    let e = crate::oracle::effects::parse_effect_text(&format!("{l}."), &mut b)?;
+    if !b.targets.is_empty() {
+        return None;
+    }
+    Some(e)
 }
 
 /// "it enters tapped", "~ enters tapped".

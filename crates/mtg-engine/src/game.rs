@@ -426,6 +426,10 @@ pub struct TurnHistory {
     #[serde(default)]
     pub permanents_entered: Vec<EnteredPermanent>,
     pub cards_drawn: BTreeMap<PlayerId, u32>,
+    /// Draws each player would have performed this turn, whether or not a replacement
+    /// effect replaced them ("the first time you would draw a card each turn").
+    #[serde(default)]
+    pub draws_proposed: BTreeMap<PlayerId, u32>,
     pub life_gained: BTreeMap<PlayerId, u32>,
     pub life_lost: BTreeMap<PlayerId, u32>,
     pub damage_dealt_to_players: BTreeMap<PlayerId, u32>,

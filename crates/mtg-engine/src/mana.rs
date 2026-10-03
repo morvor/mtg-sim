@@ -565,6 +565,10 @@ pub struct ManaRider {
     /// this mana to cast a spell or activate an ability", CR 106.6).
     #[serde(default)]
     pub abilities: bool,
+    /// An additional effect of the mana (CR 106.6: "if that mana is spent to cast ..."),
+    /// applied as it's spent instead of triggering.
+    #[serde(default)]
+    pub additional: bool,
     /// The triggered ability's effect ("that spell" is the spell the mana was spent on).
     pub body: crate::ability::Body,
     pub controller: crate::types::PlayerId,
