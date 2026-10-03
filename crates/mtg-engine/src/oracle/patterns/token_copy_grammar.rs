@@ -1248,7 +1248,10 @@ inventory::submit! { FollowupPattern { name: "token grammar: create a token for 
 fn then_same_player_creates(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (a, c) = l.split_once(", then creates ")?;
-    if a.starts_with("you ") || a.starts_with("~ ") || !a.contains(' ') {
+    // One player named by the first instruction ("each player discards ..., then creates
+    // that many ..." is each of them in turn, `hand_graveyard_grammar`).
+    if a.starts_with("you ") || a.starts_with("~ ") || a.starts_with("each ") || !a.contains(' ')
+    {
         return None;
     }
     let rewritten = format!("{a}, then that player creates {c}");
@@ -1262,4 +1265,4 @@ fn then_same_player_creates(l: &str, b: &mut Builder) -> Option<Effect> {
     e
 }
 
-inventory::submit! { EffectPattern { name: "token grammar: [player] ..., then creates", priority: 99, parse: then_same_player_creates } }
+inventory::submit! { EffectPattern { name: "token grammar: [player] ..., then creates", priority: 990, parse: then_same_player_creates } }
