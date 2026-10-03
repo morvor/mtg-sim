@@ -286,12 +286,13 @@ pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
                 matches!(c, TriggerCond::Dies(f) | TriggerCond::LeavesBattlefield(f)
                     if mentions_source(f))
             };
-            if zones.contains(&FunctionZone::Anywhere)
-                && conds
-                    .iter()
-                    .zip(&zones)
-                    .all(|(c, z)| *z == FunctionZone::Anywhere || own_ltb(c))
-            {
+            if zones.contains(&FunctionZone::Anywhere) && conds.iter().zip(&zones).all(|(c, z)| {
+                *z == FunctionZone::Anywhere
+                    || own_ltb(c)
+                    || super::patterns::trigger_grammar_combat_cast::requires_source_on_battlefield(
+                        c,
+                    )
+            }) {
                 return FunctionZone::Anywhere;
             }
             // "When you cast this spell and whenever this creature attacks" / "... and when

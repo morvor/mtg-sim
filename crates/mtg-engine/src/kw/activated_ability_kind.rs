@@ -25,6 +25,8 @@ use crate::types::{Entity, ObjectId, PlayerId};
 pub const TAP_IN_COST: &str = "activated ability: {T} in its activation cost";
 /// `Condition::Custom`: the activated ability is a ninjutsu ability (CR 702.49a).
 pub const NINJUTSU: &str = "activated ability: ninjutsu";
+/// `Condition::Custom`: the activated ability is a power-up ability (CR 702.191a).
+pub const POWER_UP: &str = "activated ability: power-up";
 
 /// The activated ability of the trigger event being evaluated.
 fn event_ability(g: &Game, ctx: &Ctx) -> Option<ActivatedAbility> {
@@ -52,18 +54,21 @@ fn event_ability(g: &Game, ctx: &Ctx) -> Option<ActivatedAbility> {
         })
 }
 
-/// Whether the event's activated ability is a ninjutsu ability (its keyword's expansion).
-fn is_ninjutsu(g: &Game, ctx: &Ctx) -> bool {
+/// Whether the event's activated ability is the expansion of keyword `k`.
+fn is_keyword_ability(g: &Game, ctx: &Ctx, k: KeywordKind) -> bool {
     let Some(info) = ctx.event.as_ref() else {
         return false;
     };
     let Some(ab) = info.spell else {
         return false;
     };
-    matches!(
-        g.obj(ab).stack.as_deref().map(|s| &s.kind),
-        Some(StackKind::Activated { ability, .. }) if ability.text == KeywordKind::Ninjutsu.name()
-    )
+    match g.obj(ab).stack.as_deref().map(|s| &s.kind) {
+        Some(StackKind::Activated { ability, .. }) => {
+            ability.text == k.name()
+                || crate::keyword_impls::ability_from_keyword(ability) == Some(k)
+        }
+        _ => false,
+    }
 }
 
 /// `Filter::Custom`: a permanent with a mana ability (CR 605.1a): "each creature you control
@@ -117,7 +122,8 @@ impl KeywordRules for ActivatedAbilityKind {
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         match name {
             TAP_IN_COST => Some(event_ability(g, ctx).is_some_and(|a| a.cost.has_tap())),
-            NINJUTSU => Some(is_ninjutsu(g, ctx)),
+            NINJUTSU => Some(is_keyword_ability(g, ctx, KeywordKind::Ninjutsu)),
+            POWER_UP => Some(is_keyword_ability(g, ctx, KeywordKind::PowerUp)),
             _ => None,
         }
     }

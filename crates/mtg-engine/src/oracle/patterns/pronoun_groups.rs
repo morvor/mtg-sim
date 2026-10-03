@@ -391,7 +391,15 @@ pub fn them_player(s: &str, b: &Builder) -> Option<PlayerRef> {
     if !(r.is_empty() || r.starts_with(' ') || r.starts_with(',')) {
         return None;
     }
-    if plural_referent(&b.it, b.ctx) || matches!(b.it, Sel::TriggerSpell) {
+    if plural_referent(&b.it, b.ctx) {
+        return None;
+    }
+    // A cast trigger's "them" is the caster ("Whenever enchanted player casts a spell, ~
+    // deals 2 damage to them"), unless the spell's targets are a group "them" could mean.
+    if matches!(b.it, Sel::TriggerSpell)
+        && (!matches!(b.it_player, PlayerRef::TriggerPlayer)
+            || crate::oracle::raw_text().to_lowercase().contains("targets one or more"))
+    {
         return None;
     }
     match &b.it_player {

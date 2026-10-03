@@ -347,6 +347,9 @@ fn has_event_amount(t: &TriggerCond) -> bool {
         | TriggerCond::CountersRemoved { .. }
         | TriggerCond::Mills(_)
         | TriggerCond::PlayerAttacks(_)
+        | TriggerCond::PlayerAttacksWith { .. }
+        | TriggerCond::PlayerAttacked { .. }
+        | TriggerCond::BlockedByN { .. }
         | TriggerCond::Batched { .. } => true,
         TriggerCond::Where { trigger, .. } | TriggerCond::FirstTimeEachTurn(trigger) => {
             has_event_amount(trigger)

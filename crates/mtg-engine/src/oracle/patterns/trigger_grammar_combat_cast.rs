@@ -141,7 +141,43 @@ fn cast_events(r: &str) -> Option<Parsed> {
         let b = reparse(&format!("{} cycle {x}", subj.word))?;
         return Some(any_of(vec![a, b]));
     }
+    // "a player kicks a spell": casts a kicked spell (CR 702.33d).
+    if let Some(x) = rest
+        .strip_prefix("kicks ")
+        .or_else(|| rest.strip_prefix("kick "))
+    {
+        let x = x.strip_prefix("a ").or_else(|| x.strip_prefix("an "))?;
+        let (f, c) = super::triggers::parse_spell_phrase(&format!("kicked {x}"))?;
+        let c0 = TriggerCond::CastSpell {
+            who: subj.rel,
+            filter: f,
+        };
+        let c0 = match c {
+            Some(cond) => TriggerCond::Where {
+                trigger: Box::new(c0),
+                cond,
+            },
+            None => c0,
+        };
+        return Some((
+            only_player(c0, &subj.only),
+            Sel::TriggerSpell,
+            PlayerRef::TriggerPlayer,
+        ));
+    }
     let t = cast_verb(rest)?;
+    // "a player casts a card": a spell that's a card, not a copy (CR 707.12).
+    if end(t) == "a card" {
+        let c = TriggerCond::CastSpell {
+            who: subj.rel,
+            filter: Filter::Card,
+        };
+        return Some((
+            only_player(c, &subj.only),
+            Sel::TriggerSpell,
+            PlayerRef::TriggerPlayer,
+        ));
+    }
     // "[cast …] or [another verb] …": either event.
     for v in SECOND_VERBS {
         if v.contains("cast ") {
@@ -465,6 +501,25 @@ pub(crate) fn spell_qualifier<'a>(
         let _ = so_far;
         return cond(not_first(spell_type(&f)), r);
     }
+    // "that doesn't share a creature type with a creature you control or a creature card
+    // in your graveyard" (CR 205.3).
+    if let Some(x) = t.strip_prefix("that doesn't share a creature type with ") {
+        let mut sels = Vec::new();
+        for part in x.split(" or ") {
+            let y = part.strip_prefix("a ").or_else(|| part.strip_prefix("an "))?;
+            let (f, plural, tail) = parse_object_phrase(y)?;
+            if plural || !end(tail).is_empty() {
+                return None;
+            }
+            sels.push(Sel::All(f));
+        }
+        let sel = if sels.len() == 1 {
+            sels.pop()?
+        } else {
+            Sel::Union(sels)
+        };
+        return filter(Filter::not(Filter::SharesCreatureType(Box::new(sel))), "");
+    }
     if let Some(r) = t
         .strip_prefix("that has flash")
         .or_else(|| t.strip_prefix("that have flash"))
@@ -568,6 +623,12 @@ fn creature_qualities<'a>(t: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> 
             "that are enchanted or equipped",
             Filter::Or(vec![Filter::Enchanted, Filter::Equipped]),
         ),
+        (
+            "that are enchanted by an aura you control",
+            Filter::Custom(crate::attach::ENCHANTED_BY_YOUR_AURA.into()),
+        ),
+        ("that has been dealt damage this turn", Filter::DealtDamageThisTurn),
+        ("that was dealt damage this turn", Filter::DealtDamageThisTurn),
         ("that's enchanted", Filter::Enchanted),
         ("that are enchanted", Filter::Enchanted),
         ("that's equipped", Filter::Equipped),
@@ -736,11 +797,15 @@ fn activate_events(r: &str) -> Option<Parsed> {
             Filter::Custom(crate::stack_ability_filters::LOYALTY_ABILITY.into()),
         ));
         x
-    } else if let Some(x) = t.strip_prefix("a ninjutsu ability") {
+    } else if let Some((x, name)) = [
+        ("a ninjutsu ability", crate::kw::activated_ability_kind::NINJUTSU),
+        ("a power-up ability", crate::kw::activated_ability_kind::POWER_UP),
+    ]
+    .into_iter()
+    .find_map(|(p, n)| t.strip_prefix(p).map(|x| (x, n)))
+    {
         include_mana = false;
-        conds.push(Condition::Custom(
-            crate::kw::activated_ability_kind::NINJUTSU.into(),
-        ));
+        conds.push(Condition::Custom(name.into()));
         x
     } else if let Some((obj, x)) = t
         .strip_prefix("an ")
@@ -1682,6 +1747,15 @@ fn deals_damage(r: &str) -> Option<Parsed> {
             }
         }
     }
+    // "to a creature equal to that creature's toughness": the amount dealt (Taii Wakeen).
+    if let Some(x) = rest.strip_suffix(" equal to that creature's toughness") {
+        rest = x;
+        conds.push(Condition::Compare(
+            Value::EventAmount,
+            Cmp::Eq,
+            Value::ToughnessOf(Box::new(Sel::TriggerObject)),
+        ));
+    }
     let (recipients, many) = if rest.is_empty() {
         (vec![(DamageRecipient::Any, None)], false)
     } else {
@@ -2064,7 +2138,7 @@ fn either_condition(r: &str) -> Option<Parsed> {
                 continue;
             }
             format!("{subj} {b}")
-        } else if ["enchanted ", "equipped ", "~ "]
+        } else if ["enchanted ", "equipped ", "~ ", "you "]
             .iter()
             .any(|p| b.starts_with(p))
         {
@@ -2161,6 +2235,16 @@ fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
             let source_self = matches!(source, Filter::Source);
             if !source_self {
                 push("that source", Sel::TriggerOtherObject);
+                // "a red creature or spell deals damage, ... that creature's or spell's
+                // controller" (Justice).
+                if let Filter::And(v) | Filter::Or(v) = source {
+                    if v.iter().any(|g| matches!(g, Filter::Or(w) if w.len() == 2
+                        && mentions(&w[0], CardType::Creature)
+                        && matches!(&w[1], Filter::Spell)))
+                    {
+                        push("that creature's or spell", Sel::TriggerOtherObject);
+                    }
+                }
                 for s in subtypes(source) {
                     push(&format!("that {s}"), Sel::TriggerOtherObject);
                 }
@@ -2177,6 +2261,11 @@ fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
                         }
                     }
                     push("that permanent", Sel::TriggerObject);
+                    // "Whenever a creature deals damage to enchanted planeswalker, destroy
+                    // that creature": the source, when the recipient isn't a creature.
+                    if !mentions(f, CardType::Creature) && mentions(source, CardType::Creature) {
+                        push("that creature", Sel::TriggerOtherObject);
+                    }
                 }
                 // Damage dealt to ~: the source is the only other object.
                 DamageRecipient::Object(_) if !source_self => {
@@ -2242,6 +2331,115 @@ fn strip(c: &TriggerCond) -> &TriggerCond {
     }
 }
 
+/// "[permanent] enters from anywhere other than your hand": a permanent whose previous
+/// object (CR 400.7) wasn't in a hand (The Lost and the Damned).
+fn enters_not_from_hand(r: &str) -> Option<Parsed> {
+    let s = r.strip_suffix(" enters from anywhere other than your hand")?;
+    let subj = super::triggers::parse_subject(s)?;
+    if subj.one_or_more || subj.self_only {
+        return None;
+    }
+    let f = Filter::and(vec![
+        subj.filter,
+        Filter::not(Filter::Custom(
+            crate::kw::played_from_zone::came_from(ZoneKind::Hand).into(),
+        )),
+    ]);
+    Some((
+        TriggerCond::EntersBattlefield(f),
+        Sel::TriggerObject,
+        PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+    ))
+}
+
+/// The source is on the battlefield: "… while ~ is on the battlefield" on a condition of an
+/// ability that also functions from other zones.
+fn source_on_battlefield() -> Condition {
+    Condition::SelMatches(Sel::This, Filter::Permanent)
+}
+
+/// Whether a trigger alternative only triggers while its source is on the battlefield
+/// ("cycle another card while ~ is on the battlefield"), so the ability may function from
+/// anywhere for its other alternatives (CR 113.6).
+pub(crate) fn requires_source_on_battlefield(t: &TriggerCond) -> bool {
+    matches!(t, TriggerCond::Where { cond, .. }
+        if format!("{cond:?}") == format!("{:?}", source_on_battlefield()))
+}
+
+/// "you cycle ~ or cycle another card while ~ is on the battlefield" (Astral Drift,
+/// CR 702.29c-d).
+fn cycle_this_or_another(r: &str) -> Option<Parsed> {
+    if r != "you cycle ~ or cycle another card while ~ is on the battlefield" {
+        return None;
+    }
+    Some((
+        TriggerCond::AnyOf(vec![
+            TriggerCond::Cycled {
+                who: PlayerRel::You,
+                filter: Filter::Source,
+            },
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::Cycled {
+                    who: PlayerRel::You,
+                    filter: Filter::Other,
+                }),
+                cond: source_on_battlefield(),
+            },
+        ]),
+        Sel::TriggerObject,
+        PlayerRef::You,
+    ))
+}
+
+/// "~ attacks while you have the most life or are tied for most life" (Preacher of the
+/// Schism).
+fn attacks_while_most_life(r: &str) -> Option<Parsed> {
+    let s = r.strip_suffix(" attacks while you have the most life or are tied for most life")?;
+    let subj = super::triggers::parse_subject(s)?;
+    if subj.one_or_more {
+        return None;
+    }
+    let most = Value::OverPlayers(
+        AggOp::Max,
+        PlayerFilter::Any,
+        Box::new(Value::LifeTotal(PlayerRef::Iterated)),
+    );
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::Attacks(subj.filter)),
+            cond: Condition::Compare(Value::LifeTotal(PlayerRef::You), Cmp::Ge, most),
+        },
+        if subj.self_only {
+            Sel::This
+        } else {
+            Sel::TriggerObject
+        },
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+/// "At the beginning of each combat this turn, [effect]" in a spell (Full Throttle): a
+/// delayed triggered ability that lasts until end of turn (CR 603.7b).
+fn each_combat_this_turn(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("at the beginning of each combat this turn, ")?;
+    let body = crate::oracle::effects::parse_trigger_body(
+        r,
+        b.ctx,
+        super::oracle_hardening_referents::no_referent(),
+        PlayerRef::ActivePlayer,
+    )?;
+    Some(Effect::DelayedTrigger {
+        trigger: TriggerCond::ThisTurn(Box::new(TriggerCond::BeginningOf {
+            step: TriggerStep::BeginningOfCombat,
+            whose: PlayerRel::Any,
+        })),
+        body: Box::new(body),
+        once: false,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "at the beginning of each combat this turn, …", priority: 100, parse: each_combat_this_turn } }
+
 /// "When ~ dies during combat" and other events qualified by a combat timing.
 fn during_combat(r: &str) -> Option<Parsed> {
     let head = r.strip_suffix(" during combat")?;
@@ -2274,6 +2472,9 @@ fn parse(r: &str) -> Option<Parsed> {
         .or_else(|| becomes_target(r))
         .or_else(|| and_whenever_batched(r))
         .or_else(|| either_condition(r))
+        .or_else(|| enters_not_from_hand(r))
+        .or_else(|| cycle_this_or_another(r))
+        .or_else(|| attacks_while_most_life(r))
         .or_else(|| during_combat(r))
 }
 
