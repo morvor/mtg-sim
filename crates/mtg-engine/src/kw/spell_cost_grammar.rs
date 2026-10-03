@@ -33,6 +33,12 @@ pub const CASTER_NOT_ACTIVE: &str = "spell cost:caster isn't the active player";
 pub const CASTER_ENCHANTED: &str = "spell cost:caster is enchanted player";
 const TARGETS_PREFIX: &str = "spell cost:targets of type:";
 const PAID_TIMES: &str = "spell cost:times paid:";
+const MANA_COST_IS: &str = "spell cost:mana cost is:";
+
+/// `Filter::Custom` name: the object's mana cost is exactly `m` ("with mana cost {0}").
+pub fn mana_cost_is(m: &crate::mana::ManaCost) -> String {
+    format!("{MANA_COST_IS}{m}")
+}
 
 /// `Value::Custom` name: how many times the spell `ctx.source`'s controller announced
 /// they'd pay its repeatable additional cost `name` (CR 601.2b).
@@ -181,6 +187,10 @@ impl KeywordRules for SpellCostGrammar {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if let Some(m) = name.strip_prefix(MANA_COST_IS) {
+            let o = g.obj(id);
+            return Some(o.chars.mana_cost.as_ref().is_some_and(|c| format!("{c}") == m));
+        }
         match name {
             CASTER_NOT_ACTIVE => {
                 let (_, caster) = spell_and_caster(ctx);

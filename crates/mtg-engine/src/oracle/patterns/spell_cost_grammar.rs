@@ -27,7 +27,10 @@
 //! that are black and/or red cost {X} less to cast, where X is ..." (player effects whose
 //! amounts are locked in as the effect begins, CR 611.2c).
 
-use super::{AbilityPattern, EffectPattern, StaticPattern};
+use super::{
+    AbilityPattern, ConditionPattern, EffectPattern, FilterSuffixPattern, FollowupPattern,
+    StaticPattern,
+};
 use crate::ability::*;
 use crate::kw::spell_cost_grammar as rules;
 use crate::mana::{ManaCost, ManaSymbol};
@@ -1097,3 +1100,154 @@ fn may_pay_compound(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "spell cost grammar: you may pay [cost] and [cost]", priority: 99, parse: may_pay_compound } }
+
+/// "This cost is reduced by {2} for each basic land type among lands you control." after
+/// "[effect] unless you pay {10}" (Draco): the payment is {10} less {2} for each, never
+/// less than nothing (CR 118.7).
+fn this_cost_is_reduced(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("this cost is reduced by ") else {
+        return false;
+    };
+    let Some((mana, rest)) = super::costs_casting_self::leading_mana(r) else {
+        return false;
+    };
+    let Some(fe) = rest.trim_start().strip_prefix("for each ") else {
+        return false;
+    };
+    if !mana.symbols.iter().all(|s| matches!(s, ManaSymbol::Generic(_))) {
+        return false;
+    }
+    let Some(count) = super::statics::parse_for_each(fe, None) else {
+        return false;
+    };
+    fn payment(e: &mut Effect) -> Option<&mut Cost> {
+        match e {
+            Effect::PayOptional { cost, .. } => Some(cost),
+            Effect::Seq(v) => v.last_mut().and_then(payment),
+            Effect::AsPlayer { effect, .. } => payment(effect),
+            _ => None,
+        }
+    }
+    let Some(cost) = payment(prev) else {
+        return false;
+    };
+    let Some(m) = &cost.mana else {
+        return false;
+    };
+    if !cost.parts.is_empty() || !m.symbols.iter().all(|s| matches!(s, ManaSymbol::Generic(_))) {
+        return false;
+    }
+    let total = m.generic_amount() as i32;
+    let less = Value::Mul(
+        Box::new(Value::c(mana.generic_amount() as i32)),
+        Box::new(count),
+    );
+    let times = Value::Max(
+        Box::new(Value::c(0)),
+        Box::new(Value::Diff(Box::new(Value::c(total)), Box::new(less))),
+    );
+    *cost = Cost::free().with(CostPart::Repeated {
+        cost: Box::new(Cost::mana(ManaCost::generic(1))),
+        times,
+    });
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "spell cost grammar: this cost is reduced by {N} for each", priority: 100, apply: this_cost_is_reduced } }
+
+/// "Each player starting with you may pay any amount of mana." (Mana-Charged Dragon): join
+/// forces, worded the other way around.
+fn join_forces_reworded(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "each player starting with you may pay any amount of mana" {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(
+        "starting with you, each player may pay any amount of mana",
+        b,
+    )
+}
+
+inventory::submit! { EffectPattern { name: "spell cost grammar: each player starting with you may pay any amount of mana", priority: 100, parse: join_forces_reworded } }
+
+/// "with mana cost {0} or {1}" (Urza's Saga): exactly that mana cost (CR 202.1); an object
+/// with no mana cost has none of them.
+fn with_mana_cost<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = s.strip_prefix("with mana cost ")?;
+    let mut options = Vec::new();
+    let mut rest = r;
+    loop {
+        let close = rest.find('}')?;
+        let mut j = close + 1;
+        while rest[j..].starts_with('{') {
+            j += rest[j..].find('}')? + 1;
+        }
+        let m = ManaCost::parse(&rest[..j].to_uppercase())?;
+        options.push(Filter::Custom(rules::mana_cost_is(&m).into()));
+        rest = &rest[j..];
+        match rest.strip_prefix(" or ").filter(|x| x.starts_with('{')) {
+            Some(x) => rest = x,
+            None => break,
+        }
+    }
+    let f = match options.len() {
+        1 => options.pop()?,
+        _ => Filter::Or(options),
+    };
+    Some((f, rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "spell cost grammar: with mana cost {N} or {N}", priority: 100, parse: with_mana_cost } }
+
+/// "the creature tapped to pay ~'s additional cost" (Swallow Whole): the creature the
+/// spell's cost tapped.
+fn tapped_to_pay(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains(" the creature tapped to pay ~'s additional cost") {
+        return None;
+    }
+    let reworded = l.replace(
+        " the creature tapped to pay ~'s additional cost",
+        " the tapped creature",
+    );
+    crate::oracle::effects::parse_clause(&reworded, b)
+}
+
+inventory::submit! { EffectPattern { name: "spell cost grammar: the creature tapped to pay ~'s additional cost", priority: 100, parse: tapped_to_pay } }
+
+/// "you have no land cards in hand": none of those cards in your hand.
+fn no_cards_in_hand(c: &str) -> Option<Condition> {
+    let r = end(c)
+        .strip_prefix("you have no ")?
+        .strip_suffix(" in hand")?;
+    let (f, true, tail) = parse_object_phrase(r)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![
+            f,
+            Filter::InZone(ZoneKind::Hand),
+            Filter::OwnedBy(PlayerRel::You),
+        ])),
+        Cmp::Eq,
+        Value::c(0),
+    ))
+}
+
+inventory::submit! { ConditionPattern { name: "spell cost grammar: you have no [cards] in hand", priority: 100, parse: no_cards_in_hand } }
+
+/// "you've discarded a card this turn", "you've sacrificed an artifact this turn": one or
+/// more such events this turn (read by the history grammar).
+fn youve_done_this_turn(c: &str) -> Option<Condition> {
+    let r = end(c).strip_prefix("you've ")?.strip_suffix(" this turn")?;
+    let (verb, noun) = r.split_once(' ')?;
+    let noun = noun
+        .strip_prefix("a ")
+        .or_else(|| noun.strip_prefix("an "))?;
+    let v = super::value_results::whole_history_count(&format!("{noun} you've {verb} this turn"))?;
+    Some(Condition::Compare(v, Cmp::Ge, Value::c(1)))
+}
+
+inventory::submit! { ConditionPattern { name: "spell cost grammar: you've [done something] this turn", priority: 100, parse: youve_done_this_turn } }
