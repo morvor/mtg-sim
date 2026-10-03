@@ -211,7 +211,12 @@ impl Renderer<'_> {
 
     /// What an object shares a quality with: any one of a group ("a creature you
     /// control", see `eval.rs`), or a selected object.
-    fn shared_with(&mut self, s: &Sel) -> String {
+    pub(crate) fn shared_with(&mut self, s: &Sel) -> String {
+        if let Sel::All(f) = s {
+            if !format!("{f:?}").contains("Linked") {
+                return self.noun_det(f, Det::A);
+            }
+        }
         let r = self.sel(s, Case::Obj);
         if !matches!(s, Sel::All(_)) {
             return r;
@@ -647,7 +652,7 @@ impl Renderer<'_> {
             Filter::Named(n) => np.post.push(format!("named {n}")),
             // "with the same name as a card exiled with ~": as any of them.
             Filter::SameNameAs(s) => {
-                let s = self.sel(s, Case::Obj);
+                let s = self.shared_with(s);
                 let s = s.replace("|each card exiled with ~it}", "|a card exiled with ~it}");
                 np.with.push(format!("the same name as {s}"));
             }
