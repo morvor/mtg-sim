@@ -1354,7 +1354,9 @@ impl Renderer<'_> {
                     (a_value, rest.split_once(" on "))
                 {
                     let subj = self.sel(sel, Case::Subj);
-                    return format!("{{alt:there is a {rest}|{subj} has a {counters} on it}}");
+                    return format!(
+                        "{{alt:there is a {rest}|{subj} has a {counters} on it|{subj} has one or more {counters} on it|{subj} has {counters} on it}}"
+                    );
                 }
                 return format!("there is a {rest}");
             }
