@@ -1044,6 +1044,15 @@ pub enum Sel {
     ThisTurn(Box<TriggerCond>),
 }
 
+/// Where an [`Effect::InTurnOrder`] instruction starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TurnOrderStart {
+    /// "starting with you".
+    You,
+    /// "starting with the next opponent in turn order".
+    NextOpponent,
+}
+
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
 pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
 
@@ -3625,6 +3634,16 @@ pub enum Effect {
     /// For each player (APNAP order), binding `PlayerRef::Iterated`.
     ForEachPlayer {
         who: PlayerRef,
+        effect: Box<Effect>,
+    },
+    /// "Starting with you, each player chooses a creature", "starting with the next opponent
+    /// in turn order, each opponent chooses ...": each of the players matching `who`, one
+    /// at a time in turn order beginning with `first` (CR 101.4c), performs the whole
+    /// instruction, knowing what those before did; `PlayerRef::Iterated` is that player.
+    /// See `turn_order_choices.rs`.
+    InTurnOrder {
+        first: TurnOrderStart,
+        who: PlayerFilter,
         effect: Box<Effect>,
     },
     /// "[player] does the same": the player performs the effect in place of its

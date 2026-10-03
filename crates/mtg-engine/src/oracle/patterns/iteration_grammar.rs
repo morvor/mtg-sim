@@ -197,17 +197,7 @@ fn choose_for_each(who: PlayerRef, y: &str, b: &mut Builder) -> Option<Effect> {
             },
         ]),
     };
-    for name in [
-        format!("the chosen {noun}s"),
-        format!("those {noun}s"),
-        format!("{noun}s chosen this way"),
-        "the chosen permanents".to_string(),
-        "permanents chosen this way".to_string(),
-    ] {
-        b.named.push((name, Sel::Var(CHOSEN)));
-    }
-    b.it = Sel::Var(CHOSEN);
-    CHOSEN_TEXT.with(|t| *t.borrow_mut() = crate::oracle::raw_text());
+    name_chosen(b, noun);
     Some(Effect::seq(vec![
         Effect::Store {
             var: CHOSEN,
@@ -218,6 +208,129 @@ fn choose_for_each(who: PlayerRef, y: &str, b: &mut Builder) -> Option<Effect> {
             effect: Box::new(choose),
         },
     ]))
+}
+
+/// "starting with you, each player chooses a creature", "starting with you, each player
+/// may choose an artifact or enchantment you don't control", "starting with the next
+/// opponent in turn order, each opponent chooses a creature card in your graveyard that
+/// hasn't been chosen", "... chooses a different nonland card from among them": the players
+/// choose one at a time in turn order (CR 101.4c), each knowing the earlier choices (not
+/// targeted, CR 115.10); later sentences name all the chosen objects.
+fn starting_with_choose(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (first, r) = if let Some(r) = l.strip_prefix("starting with you, ") {
+        (TurnOrderStart::You, r)
+    } else {
+        (
+            TurnOrderStart::NextOpponent,
+            l.strip_prefix("starting with the next opponent in turn order, ")?,
+        )
+    };
+    let (who, r) = if let Some(r) = r.strip_prefix("each player ") {
+        (PlayerFilter::Any, r)
+    } else {
+        (PlayerFilter::Opponent, r.strip_prefix("each opponent ")?)
+    };
+    let (may, r) = match r.strip_prefix("may choose ") {
+        Some(r) => (true, r),
+        None => (false, r.strip_prefix("chooses ")?),
+    };
+    let (count, up_to, r) = if let Some(r) = r.strip_prefix("up to ") {
+        let (n, r) = parse_number(r)?;
+        (n.as_const()?, true, r.trim_start())
+    } else if let Some(r) = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")) {
+        (1, may, r)
+    } else {
+        return None;
+    };
+    // "a different nonland card", "a creature card ... that hasn't been chosen".
+    let (different, r) = match r.strip_prefix("different ") {
+        Some(r) => (true, r),
+        None => (false, r),
+    };
+    let (r, unchosen) = match r.strip_suffix(" that hasn't been chosen") {
+        Some(r) => (r, true),
+        None => (r, false),
+    };
+    let (f, _, tail) = parse_object_phrase(r)?;
+    let mut parts = vec![f.clone()];
+    match tail.trim() {
+        "" => {}
+        "they control" => parts.push(Filter::ControlledBy(PlayerRel::Iterated)),
+        "from among permanents your opponents control" => {
+            parts.push(Filter::ControlledBy(PlayerRel::Opponent))
+        }
+        "from among them" => {
+            let Some(Some((them, rest))) = super::pronoun_groups::plural_object_ref("them", b)
+            else {
+                return None;
+            };
+            if !rest.is_empty() {
+                return None;
+            }
+            parts.push(Filter::In(Box::new(them)));
+        }
+        _ => return None,
+    }
+    // Permanents, unless the phrase names cards ("a nonland card from among them").
+    let cards = serde_json::to_string(&f).is_ok_and(|j| j.contains("\"Card\""));
+    let zone = f.zone().unwrap_or(if cards { ZoneKind::Library } else { ZoneKind::Battlefield });
+    if f.zone().is_none() && !cards {
+        parts.push(Filter::InZone(ZoneKind::Battlefield));
+    }
+    if cards && f.zone().is_none() && !parts.iter().any(|p| matches!(p, Filter::In(_))) {
+        return None;
+    }
+    if different || unchosen {
+        parts.push(Filter::not(Filter::In(Box::new(Sel::Var(CHOSEN)))));
+    }
+    let noun = r.split([' ', ',']).find(|w| head_noun(w).is_some())?;
+    let noun = if zone == ZoneKind::Battlefield { noun } else { "card" };
+    let choose = Effect::Store {
+        var: CHOSEN,
+        sel: Sel::Union(vec![
+            Sel::Var(CHOSEN),
+            Sel::Choose {
+                chooser: PlayerRef::Iterated,
+                filter: Filter::and(parts),
+                count: Value::c(count),
+                up_to,
+                store: None,
+            },
+        ]),
+    };
+    name_chosen(b, noun);
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: CHOSEN,
+            sel: Sel::Union(vec![]),
+        },
+        Effect::InTurnOrder {
+            first,
+            who,
+            effect: Box::new(choose),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "iteration: starting with [player], each player chooses [objects]", priority: 100, parse: starting_with_choose } }
+
+/// Later sentences' names for the objects in [`CHOSEN`] ("the chosen creatures", "each
+/// permanent chosen this way", "creatures they control not chosen this way").
+fn name_chosen(b: &mut Builder, noun: &str) {
+    for name in [
+        format!("the chosen {noun}s"),
+        format!("those {noun}s"),
+        format!("{noun}s chosen this way"),
+        format!("each {noun} chosen this way"),
+        "the chosen permanents".to_string(),
+        "permanents chosen this way".to_string(),
+        "each permanent chosen this way".to_string(),
+    ] {
+        b.named.push((name, Sel::Var(CHOSEN)));
+    }
+    b.it = Sel::Var(CHOSEN);
+    CHOSEN_TEXT.with(|t| *t.borrow_mut() = crate::oracle::raw_text());
 }
 
 /// "not chosen this way" / "that weren't chosen this way" after an object phrase, in a

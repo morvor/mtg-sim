@@ -504,6 +504,44 @@ impl Renderer<'_> {
                 let inner = self.effect(effect);
                 format!("for each {s}, {inner}")
             }
+            // "Starting with you, each player chooses a creature."
+            Effect::InTurnOrder { first, who, effect } => {
+                let start = match first {
+                    TurnOrderStart::You => "you",
+                    TurnOrderStart::NextOpponent => "the next opponent in turn order",
+                };
+                let w = self.player_filter_noun(who, Num::One);
+                // "each player chooses a creature" / "each player may choose an artifact".
+                if let Effect::Store {
+                    var,
+                    sel: Sel::Union(v),
+                } = effect.as_ref()
+                {
+                    if let [Sel::Var(a), Sel::Choose {
+                        chooser: PlayerRef::Iterated,
+                        filter,
+                        count: Value::Const(n),
+                        up_to,
+                        ..
+                    }] = v.as_slice()
+                    {
+                        if a == var {
+                            let (verb, det) = match (*n, *up_to) {
+                                (1, false) => ("chooses", Det::A),
+                                (1, true) => ("may choose", Det::A),
+                                (n, true) => ("chooses", Det::UpTo(number_word(n as i32))),
+                                (n, false) => ("chooses", Det::Count(number_word(n as i32))),
+                            };
+                            let saved = std::mem::replace(&mut self.in_as_player, true);
+                            let o = self.noun_det(filter, det);
+                            self.in_as_player = saved;
+                            return format!("starting with {start}, each {w} {verb} {o}");
+                        }
+                    }
+                }
+                let inner = self.effect(effect);
+                format!("starting with {start}, each {w}: {inner}")
+            }
             // "Each player who controls a multicolored creature draws a card."
             Effect::ForEachPlayer { who, effect }
                 if matches!(effect.as_ref(), Effect::AsPlayer { who: PlayerRef::Iterated, effect: inner }

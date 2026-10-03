@@ -162,6 +162,9 @@ impl Game {
                 // CR 101.4, 608.2e–f: what several players do at the same time.
                 crate::simultaneous::for_each_player(self, players, effect, ctx);
             }
+            Effect::InTurnOrder { first, who, effect } => {
+                crate::turn_order_choices::run(self, *first, who, effect, ctx)
+            }
             Effect::AsPlayer { who, effect } => {
                 if let Some(p) = self.eval_player(who, ctx) {
                     let saved = ctx.controller;
