@@ -104,8 +104,6 @@ fn mindlink_mech_copying_a_noncreature_permanent_is_a_0_0() {
     t.answer_targets(P0, &[Entity::Object(vault)]);
     assert!(crew(&mut t, P0, mech, &[vault]));
     t.resolve_all();
-    eprintln!("{:?} {:?} {:?} {:?}", t.obj_now(mech).chars.name, t.obj_now(mech).chars.card_types, t.pt(mech), t.obj_now(mech).chars.power);
-    eprintln!("{}", t.dump_log());
     assert!(!t.on_battlefield(mech));
     assert!(t.in_graveyard(P0, "Mindlink Mech"));
 }
@@ -136,7 +134,6 @@ fn unlicensed_hearse_crewed_with_nothing_exiled_is_a_0_0() {
     assert!(crew(&mut t, P0, hearse, &[bears]));
     t.resolve_all();
     assert!(t.on_battlefield(hearse));
-    eprintln!("{}", t.dump_log());
     assert_eq!(t.pt(hearse), (2, 2));
 }
 
@@ -162,7 +159,6 @@ fn burner_rocket_cant_be_crewed_in_time_to_target_itself() {
     let offered = crate::r_s02_common::target_candidates(&t, P0, from);
     assert_eq!(offered, vec![vec![Entity::Object(bears)]]);
     assert!(!offered[0].contains(&Entity::Object(rocket)));
-    // Crewing it now, in response, doesn't change the chosen target.
     t.resolve_all();
     assert_eq!(t.pt(bears), (4, 2));
 }
@@ -189,7 +185,7 @@ fn harvesttide_sentrys_restriction_is_checked_only_as_blockers_are_declared() {
     assert_eq!(t.stack_len(), 1, "the coven trigger");
     t.resolve_all();
     attack_with(&mut t, &[(sentry, Entity::Player(P1))]);
-    // The 2-power Bears can't block it; the Hill Giant (3) blocks it.
+    // The 2-power Bears can't block it (P1's attempt is rejected and nothing blocks).
     t.answer(
         P1,
         DecisionKind::Blockers,

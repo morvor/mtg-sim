@@ -419,3 +419,26 @@ fn shark_typhoon_cycled_for_x_0_makes_a_0_0_shark_that_dies() {
         }
     }
 }
+
+#[test]
+fn valors_flagship_cycled_for_x_creates_x_pilots() {
+    cr!("107.3e", "702.29c");
+    supported("Valor's Flagship");
+    // "Cycling {X}{2}{W}. When you cycle this card, create X 1/1 colorless Pilot creature
+    // tokens with ..." X is the X paid for the cycling cost.
+    for x in [0i64, 2] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Plains", 5);
+        let card = t.hand(P0, "Valor's Flagship");
+        t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(x));
+        cycle(&mut t, P0, card, 0).unwrap();
+        t.settle();
+        assert_eq!(kinds_on_stack(&t), "AT");
+        t.resolve_all();
+        let pilots = with_subtype(&t, P0, "Pilot");
+        assert_eq!(pilots.len(), x as usize, "{x}");
+        for p in pilots {
+            assert_eq!(t.pt(p), (1, 1));
+        }
+    }
+}

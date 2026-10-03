@@ -389,3 +389,33 @@ fn lethal_scheme_can_be_convoked_by_at_most_four_creatures_which_connive() {
         4
     );
 }
+
+#[test]
+fn lethal_scheme_destroying_its_own_convoker_still_has_it_connive() {
+    cr!("702.51c", "701.50a", "701.50b");
+    ruling!(
+        "Lethal Scheme",
+        "If a resolving spell or ability instructs a specific creature to connive but that creature has left the battlefield, the creature still connives."
+    );
+    // Four creatures convoke Lethal Scheme, which destroys one of them: all four connive
+    // (the destroyed one too, by its last known information). The discards are nonland
+    // cards (Shock): the three still on the battlefield get a +1/+1 counter each.
+    let mut t = TestGame::new(2);
+    let mut c = n_creatures(&mut t, P0, "Vampire Interloper", 2);
+    c.extend(n_creatures(&mut t, P0, "Grizzly Bears", 2));
+    for _ in 0..4 {
+        t.library_top(P0, "Shock");
+    }
+    let card = t.hand(P0, "Lethal Scheme");
+    convoke_with(&mut t, P0, &c);
+    t.cast(P0, card).target(c[2]).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(c[2]));
+    assert_eq!(
+        graveyard_names(&t, P0).iter().filter(|n| *n == "Shock").count(),
+        4
+    );
+    for x in [c[0], c[1], c[3]] {
+        assert_eq!(t.counters(x, counters::PLUS1), 1);
+    }
+}
