@@ -1567,8 +1567,16 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(e) = to_effect(&p, zone, b.ctx) else {
         return false;
     };
-    let Some(e) = super::choice_grammar_objects::permission_for_chosen(e, Some(prev), b) else {
-        return false;
+    // Only when the earlier instructions left the chosen card where it is: a target card
+    // the previous instruction moved is a new object (CR 400.7) that "it" now means.
+    let e = if matches!(moved(prev), Moved::Unchanged) {
+        let Some(e) = super::choice_grammar_objects::permission_for_chosen(e, Some(prev), b)
+        else {
+            return false;
+        };
+        e
+    } else {
+        e
     };
     // "Put the rest on the bottom of your library in a random order.": the cards chosen
     // among that are still where they were (see `r406_exile_until`).

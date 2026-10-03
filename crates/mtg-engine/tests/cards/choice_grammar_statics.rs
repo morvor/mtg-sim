@@ -92,11 +92,12 @@ fn painters_servant_everything_is_the_chosen_color_too() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     let card = t.hand(P1, "Lightning Bolt");
     let gy = t.graveyard(P0, "Hill Giant");
+    let lib = t.library_top(P1, "Llanowar Elves");
     let i = Color::ALL.iter().position(|c| *c == Color::Blue).unwrap();
     t.answer(P0, DecisionKind::Option, Answer::Index(i));
     let servant = t.enter(P0, "Painter's Servant");
     t.g.recompute();
-    for id in [bears, card, gy, servant] {
+    for id in [bears, card, gy, lib, servant] {
         assert!(t.obj_now(id).chars.colors.contains(Color::Blue), "{id:?}");
     }
     assert!(t.obj_now(bears).chars.colors.contains(Color::Green));
