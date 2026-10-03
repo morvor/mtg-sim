@@ -16,7 +16,9 @@ fn draw_cards_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (head, value) = l.split_once(" cards equal to ")?;
     let verb_ok = head == "draw" || head.ends_with(" draws") || head.ends_with(" draw");
-    if !verb_ok || value.contains(" this way") {
+    if !verb_ok
+        || (value.contains(" this way") && !super::value_results::reads_result_value(value, b))
+    {
         return None;
     }
     let it = b.it.clone();

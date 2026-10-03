@@ -316,10 +316,15 @@ fn trigger_with_event_body(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
         }
         let with_x = el.replacen("that many", "x", 1);
         let mut body = parse_trigger_body(&with_x, ctx, it, it_player)?;
-        if body.modal.is_some() || !body.targets.is_empty() {
+        if body.modal.is_some() {
             return None;
         }
         body.effect = replace_x_with_event_amount(&body.effect)?;
+        // "Return up to that many target permanents ...": the number of targets too
+        // (chosen as the ability is put on the stack, when the event's amount is known).
+        for t in body.targets.iter_mut() {
+            *t = super::r107_numbers::substitute_x_in_target(t, &Value::EventAmount)?;
+        }
         body
     } else {
         return None;
@@ -354,9 +359,9 @@ fn has_event_amount(t: &TriggerCond) -> bool {
         | TriggerCond::PlayerAttacked { .. }
         | TriggerCond::BlockedByN { .. }
         | TriggerCond::Batched { .. } => true,
-        TriggerCond::Where { trigger, .. } | TriggerCond::FirstTimeEachTurn(trigger) => {
-            has_event_amount(trigger)
-        }
+        TriggerCond::Where { trigger, .. }
+        | TriggerCond::FirstTimeEachTurn(trigger)
+        | TriggerCond::Noncombat(trigger) => has_event_amount(trigger),
         _ => false,
     }
 }

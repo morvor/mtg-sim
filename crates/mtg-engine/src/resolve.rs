@@ -219,6 +219,13 @@ impl Game {
                     *no_regen,
                 );
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
+                // "The creatures you controlled that were destroyed this way": the
+                // destroyed permanents as they last existed on the battlefield.
+                let lki = res
+                    .iter()
+                    .filter_map(|o| self.obj(*o).prev)
+                    .map(Entity::Object);
+                ctx.set_var(crate::kw::value_results::DESTROYED, lki.collect());
                 ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
             Effect::Exile {
@@ -3147,7 +3154,7 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::MaxSpellsPerTurn(f, _)
         | Restriction::MaxSpellsOfKindPerTurn { who: f, .. }
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
-        Restriction::CantCast { who, .. } => Some(who),
+        Restriction::CantCast { who, .. } | Restriction::CantActivate { who, .. } => Some(who),
         Restriction::MustAttackPlayer { defender, .. }
         | Restriction::CantAttackPlayer { defender, .. }
         | Restriction::AttackCost { defender, .. }

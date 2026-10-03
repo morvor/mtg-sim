@@ -114,6 +114,10 @@ pub(crate) fn for_each_value(s: &str) -> Option<Value> {
         "card you've drawn this turn" => return Some(Value::CardsDrawnThisTurn(PlayerRef::You)),
         _ => {}
     }
+    // Things that happened this turn, read strictly by the history grammar.
+    if let Some(v) = super::value_results::whole_history_count(s) {
+        return Some(v);
+    }
     // Things that happened this turn, or other qualities the object phrase parser would
     // read loosely, aren't counted here.
     if s.contains(" this turn")

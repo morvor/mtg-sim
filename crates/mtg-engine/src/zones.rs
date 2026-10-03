@@ -140,6 +140,9 @@ pub const COST_MOVED: Var = vars::USER + 130;
 /// objects they became in exile ("the exiled card", CR 400.7j). Other objects the cost
 /// moved (sacrificed permanents, discarded cards) aren't among them.
 pub const COST_EXILED: Var = vars::USER + 131;
+/// The cards revealed from a hand to pay the cost of the spell or ability being resolved
+/// ("the revealed card"): as they are in the hand, or as they last existed there.
+pub const COST_REVEALED: Var = vars::USER + 7522;
 
 /// CR 400.7j: if the cost of a spell or ability causes an object to move to a public zone,
 /// the spell or ability's effects can find that object. Records, for the objects used to
@@ -172,6 +175,25 @@ pub fn record_cost_moved(
         .collect();
     if !discarded.is_empty() {
         vars.insert(crate::discard_rules::DISCARDED, discarded);
+    }
+    // Cards revealed from a hand to pay the cost ("the revealed card", CR 701.20a), as
+    // they are (they stay in the hand).
+    let revealed: Vec<Entity> = paid
+        .objects
+        .iter()
+        .filter(|o| g.is_live(**o) && matches!(g.obj(**o).zone, Zone::Hand(_)))
+        .map(|o| Entity::Object(*o))
+        .collect();
+    if !revealed.is_empty() {
+        vars.insert(COST_REVEALED, revealed);
+    }
+    // Permanents a "tap an untapped [permanent]" cost tapped ("the power of the creature
+    // tapped this way").
+    if !paid.tapped.is_empty() {
+        vars.insert(
+            vars::TAPPED,
+            paid.tapped.iter().map(|o| Entity::Object(*o)).collect(),
+        );
     }
     let exiled: Vec<Entity> = paid
         .exiled
