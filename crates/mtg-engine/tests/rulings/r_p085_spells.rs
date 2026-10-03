@@ -731,3 +731,46 @@ fn abeyance_stops_spells_and_non_mana_abilities() {
     pool(&mut t, P0, &[(ManaType::R, 1)]);
     t.cast(P0, b0).target(P1).go();
 }
+
+// ---------------------------------------------------------------------------------------
+// Cornered Market
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn cornered_market_only_casting_and_playing() {
+    cr!("601.3", "305.1", "201.2");
+    ruling!(
+        "Cornered Market",
+        "Cornered Market does not prevent effects which put a card onto the battlefield. It only stops people from casting."
+    );
+    ruling!(
+        "Cornered Market",
+        "This card only looks at permanents, not spells on the stack. So it is possible to cast two instances of a spell onto the stack."
+    );
+    supported("Cornered Market");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Cornered Market");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Tundra");
+    t.battlefield(P1, "Forest");
+    // Casting a Grizzly Bears and playing a Tundra are prohibited; a Forest isn't.
+    let bears = t.hand(P0, "Grizzly Bears");
+    pool(&mut t, P0, &[(ManaType::G, 2)]);
+    assert!(t.cast(P0, bears).try_go().is_err());
+    let tundra = t.hand(P0, "Tundra");
+    assert!(t.play_land(P0, tundra).is_err());
+    let forest = t.hand(P0, "Forest");
+    t.play_land(P0, forest).unwrap();
+    // Putting one onto the battlefield works.
+    let other = t.enter(P0, "Grizzly Bears");
+    assert!(t.on_battlefield(other));
+    // Two Lightning Bolts on the stack at once.
+    let b1 = t.hand(P0, "Lightning Bolt");
+    let b2 = t.hand(P0, "Lightning Bolt");
+    pool(&mut t, P0, &[(ManaType::R, 2)]);
+    t.cast(P0, b1).target(P1).go();
+    t.cast(P0, b2).target(P1).go();
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+}

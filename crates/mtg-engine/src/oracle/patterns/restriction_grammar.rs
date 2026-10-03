@@ -92,9 +92,7 @@ pub(crate) fn object_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> 
         // CR 708.7 (see `rule_statics::face_up`).
         "can't be turned face up" => return Some(vec![Restriction::CantTurnFaceUp(fc)]),
         "can't transform" => return Some(vec![Restriction::CantTransform(fc)]),
-        "must be blocked each combat if able" => {
-            return Some(vec![Restriction::MustBeBlocked(fc)])
-        }
+        "must be blocked each combat if able" => return Some(vec![Restriction::MustBeBlocked(fc)]),
         // "Enchanted creature gets +1/+1 and has first strike, and all creatures able to
         // block it do so": each creature able to block the subject blocks it (CR 509.1c).
         "all creatures able to block it do so" | "all creatures able to block them do so" => {
@@ -123,11 +121,7 @@ pub(crate) fn object_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> 
     // "can block an additional [N] creature(s) [each combat]".
     if let Some(r) = p.strip_prefix("can block an additional ") {
         let r = r.strip_suffix(" each combat").unwrap_or(r);
-        let (n, noun) = if creatures_word(r) {
-            (1, r)
-        } else {
-            count(r)?
-        };
+        let (n, noun) = if creatures_word(r) { (1, r) } else { count(r)? };
         if !creatures_word(noun) {
             return None;
         }
@@ -360,6 +354,18 @@ fn players_cant_use(who: &PlayerFilter, p: &str) -> Option<Vec<Restriction>> {
             what: Filter::InZone(zone),
         }]);
     }
+    // "Players can't play nonbasic lands with the same name as a nontoken permanent."
+    // (Cornered Market): land cards matching the description can't be played.
+    if let Some(r) = p.strip_prefix("can't play ") {
+        let (f, plural) = whole_object_phrase(r)?;
+        if !plural || !filter_mentions(&f, &|x| matches!(x, Filter::Type(CardType::Land))) {
+            return None;
+        }
+        return Some(vec![Restriction::CantPlayLandCards {
+            who: who.clone(),
+            what: f,
+        }]);
+    }
     for (prefix, attack) in [("can't block with ", false), ("can't attack with ", true)] {
         if let Some(r) = p.strip_prefix(prefix) {
             let (f, plural) = whole_object_phrase(r)?;
@@ -377,7 +383,10 @@ fn players_cant_use(who: &PlayerFilter, p: &str) -> Option<Vec<Restriction>> {
     None
 }
 
-fn put_counters_prevented(on_objects: Option<Filter>, on_players: Option<PlayerFilter>) -> StaticEffect {
+fn put_counters_prevented(
+    on_objects: Option<Filter>,
+    on_players: Option<PlayerFilter>,
+) -> StaticEffect {
     StaticEffect::Replacement(ReplacementDef {
         event: ReplacementEvent::PutCounters {
             on_objects,
@@ -415,10 +424,7 @@ fn restriction_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<A
         return Some(static_restrictions(rs, text));
     }
     // "Players can't get counters." (CR 122.1).
-    if let Some(who) = l
-        .strip_suffix(" can't get counters")
-        .and_then(player_group)
-    {
+    if let Some(who) = l.strip_suffix(" can't get counters").and_then(player_group) {
         return Some(vec![AbilityDef::new(
             AbilityKind::Static(StaticAbility::new(put_counters_prevented(None, Some(who)))),
             text,
@@ -532,7 +538,9 @@ fn cost_and_cant_be_countered(l: &str, text: &str, ctx: &CompileContext) -> Opti
         _ => return None,
     };
     let what = Filter::and(vec![f.clone(), Filter::Spell, Filter::ControlledBy(rel)]);
-    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBeCountered(what)));
+    let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBeCountered(
+        what,
+    )));
     s.condition = st.condition.clone();
     abilities.push(AbilityDef::new(AbilityKind::Static(s), text));
     Some(abilities)
@@ -590,7 +598,10 @@ fn leading_duration(l: &str) -> (Option<Duration>, &str) {
     for (p, d) in [
         ("until your next turn, ", Duration::UntilYourNextTurn),
         ("until end of turn, ", Duration::EndOfTurn),
-        ("until the end of your next turn, ", Duration::UntilEndOfYourNextTurn),
+        (
+            "until the end of your next turn, ",
+            Duration::UntilEndOfYourNextTurn,
+        ),
     ] {
         if let Some(r) = l.strip_prefix(p) {
             return (Some(d), r);
@@ -833,7 +844,10 @@ fn objects_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
             main.strip_prefix("their activated abilities ")
                 .map(|r| ("they", "their", r))
         }) {
-        Some((pronoun, poss, r)) => (pronoun.to_string(), Some(format!("{poss} activated abilities {r}"))),
+        Some((pronoun, poss, r)) => (
+            pronoun.to_string(),
+            Some(format!("{poss} activated abilities {r}")),
+        ),
         None => (main.to_string(), None),
     };
     // "~ and up to one other target creature can't be blocked this turn": both.
@@ -972,7 +986,10 @@ fn requirement_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     } else if matches!(rest, "must be blocked" | "must be blocked each combat") {
         vec![Restriction::MustBeBlocked(f)]
     } else if matches!(rest, "attacks or blocks" | "attack or block") {
-        vec![Restriction::MustAttack(f.clone()), Restriction::MustBlock(f)]
+        vec![
+            Restriction::MustAttack(f.clone()),
+            Restriction::MustBlock(f),
+        ]
     } else if let Some(p) = rest
         .strip_prefix("attacks ")
         .or_else(|| rest.strip_prefix("attack "))
@@ -987,9 +1004,9 @@ fn requirement_effect(l: &str, b: &mut Builder) -> Option<Effect> {
                 }
                 match r {
                     PlayerRef::You => PlayerFilter::You,
-                    PlayerRef::Target(_) | PlayerRef::TriggerPlayer | PlayerRef::ControllerOf(_) => {
-                        PlayerFilter::Ref(Box::new(r))
-                    }
+                    PlayerRef::Target(_)
+                    | PlayerRef::TriggerPlayer
+                    | PlayerRef::ControllerOf(_) => PlayerFilter::Ref(Box::new(r)),
                     _ => return None,
                 }
             }
@@ -1130,7 +1147,9 @@ fn attack_together(l: &str) -> Option<Restriction> {
     let triggers = match trigger {
         "~" => Filter::Source,
         _ => {
-            let t = trigger.strip_prefix("a ").or_else(|| trigger.strip_prefix("an "))?;
+            let t = trigger
+                .strip_prefix("a ")
+                .or_else(|| trigger.strip_prefix("an "))?;
             let (f, plural) = whole_object_phrase(t)?;
             if plural {
                 return None;
@@ -1202,9 +1221,9 @@ fn attack_tax_effect(l: &str, _b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim());
     let (lead, l) = leading_duration(l);
     let dur = lead?;
-    let (planeswalkers, rest) = if let Some(r) =
-        l.strip_prefix("creatures can't attack you or planeswalkers you control unless their controller pays ")
-    {
+    let (planeswalkers, rest) = if let Some(r) = l.strip_prefix(
+        "creatures can't attack you or planeswalkers you control unless their controller pays ",
+    ) {
         (true, r)
     } else {
         (
@@ -1240,7 +1259,13 @@ fn gains_and_doesnt_untap(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let modify = crate::oracle::effects::parse_simple(head, b)?;
-    if !matches!(&modify, Effect::Modify { what: Sel::This, .. }) {
+    if !matches!(
+        &modify,
+        Effect::Modify {
+            what: Sel::This,
+            ..
+        }
+    ) {
         return None;
     }
     Some(Effect::seq(vec![
@@ -1338,10 +1363,22 @@ inventory::submit! { EffectPattern { name: "restriction grammar: named and liste
 /// "with even mana values", "with an odd mana value" (CR 202.3).
 fn even_odd_mana_value<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
     for (p, name) in [
-        ("with even mana values", crate::kw::combat_limits::EVEN_MANA_VALUE),
-        ("with an even mana value", crate::kw::combat_limits::EVEN_MANA_VALUE),
-        ("with odd mana values", crate::kw::combat_limits::ODD_MANA_VALUE),
-        ("with an odd mana value", crate::kw::combat_limits::ODD_MANA_VALUE),
+        (
+            "with even mana values",
+            crate::kw::combat_limits::EVEN_MANA_VALUE,
+        ),
+        (
+            "with an even mana value",
+            crate::kw::combat_limits::EVEN_MANA_VALUE,
+        ),
+        (
+            "with odd mana values",
+            crate::kw::combat_limits::ODD_MANA_VALUE,
+        ),
+        (
+            "with an odd mana value",
+            crate::kw::combat_limits::ODD_MANA_VALUE,
+        ),
     ] {
         if let Some(rest) = r.strip_prefix(p) {
             if rest.is_empty() || rest.starts_with(' ') {
@@ -1382,8 +1419,7 @@ fn pump_and_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
         Duration::EndOfTurn => "until end of turn",
         _ => return None,
     };
-    let modify =
-        crate::oracle::effects::parse_simple(&format!("{first} {dur_text}"), b)?;
+    let modify = crate::oracle::effects::parse_simple(&format!("{first} {dur_text}"), b)?;
     let Effect::Modify { what, .. } = &modify else {
         return None;
     };
@@ -1436,7 +1472,10 @@ fn without_keywords<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
     loop {
         // The longest keyword name at the start.
         let mut best: Option<(crate::keywords::KeywordKind, usize)> = None;
-        for (i, _) in rest.char_indices().chain(std::iter::once((rest.len(), ' '))) {
+        for (i, _) in rest
+            .char_indices()
+            .chain(std::iter::once((rest.len(), ' ')))
+        {
             if i == 0 || (i < rest.len() && !rest[i..].starts_with([' ', ','])) {
                 continue;
             }
@@ -1495,16 +1534,34 @@ mod tests {
         let f = Filter::Source;
         let one = |p: &str| object_predicate(p, &f).map(|v| v.len());
         assert_eq!(one("can only attack alone"), Some(1));
-        assert_eq!(one("can block an additional seven creatures each combat"), Some(1));
+        assert_eq!(
+            one("can block an additional seven creatures each combat"),
+            Some(1)
+        );
         assert_eq!(
             one("can block an additional ninety-nine creatures each combat"),
             Some(1)
         );
-        assert_eq!(one("can't be blocked except by six or more creatures"), Some(1));
-        assert_eq!(one("must be blocked by two or more creatures if able"), Some(1));
-        assert_eq!(one("must be blocked by exactly one creature if able"), Some(1));
-        assert_eq!(one("can't block or be blocked by non-spirit creatures"), Some(2));
-        assert_eq!(one("can't be the target of abilities your opponents control"), Some(1));
+        assert_eq!(
+            one("can't be blocked except by six or more creatures"),
+            Some(1)
+        );
+        assert_eq!(
+            one("must be blocked by two or more creatures if able"),
+            Some(1)
+        );
+        assert_eq!(
+            one("must be blocked by exactly one creature if able"),
+            Some(1)
+        );
+        assert_eq!(
+            one("can't block or be blocked by non-spirit creatures"),
+            Some(2)
+        );
+        assert_eq!(
+            one("can't be the target of abilities your opponents control"),
+            Some(1)
+        );
         assert_eq!(
             one("can't be the target of black or red spells your opponents control"),
             Some(1)
