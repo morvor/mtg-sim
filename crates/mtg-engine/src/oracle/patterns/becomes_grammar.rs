@@ -593,6 +593,11 @@ pub(crate) fn predicate_mods(
     if let Some(r) = p.strip_prefix("loses ").or_else(|| p.strip_prefix("lose ")) {
         return match r {
             "all abilities" => Some(vec![Modification::RemoveAllAbilities]),
+            // The ability whose text this is (the Licids).
+            "this ability" => Some(vec![Modification::Custom {
+                name: crate::kw::end_this_effect::LOSE_THIS_ABILITY.into(),
+                layer: Layer::L6Ability,
+            }]),
             "all creature types" => Some(vec![Modification::RemoveAllCreatureTypes]),
             _ => lose_keyword_mods(r),
         };
@@ -1541,8 +1546,48 @@ fn last_modify(e: &mut Effect) -> Option<&mut Vec<Modification>> {
 
 inventory::submit! { FollowupPattern { name: "becomes grammar: it's still an enchantment", priority: 1100, apply: still_a_card_type } }
 
-#[cfg(test)]
+/// "You may pay {W} to end this effect." after an instruction that created a continuous
+/// effect (the Licids): its controller may take a special action any time they have
+/// priority, for as long as the effect lasts, that ends it (CR 116.2c).
+fn pay_to_end_this_effect(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(cost) = end(l)
+        .strip_prefix("you may pay ")
+        .and_then(|r| r.strip_suffix(" to end this effect"))
+    else {
+        return false;
+    };
+    let Some(mana) = crate::mana::ManaCost::parse(cost) else {
+        return false;
+    };
+    // The effect it ends: the earlier instruction of this ability that made the source
+    // lose this ability (which marks the effect, see `kw::end_this_effect`).
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw
+        .lines()
+        .any(|x| x.contains("loses this ability and becomes ") && x.contains(" to end this effect"))
+    {
+        return false;
+    }
+    let offer = Effect::OfferSpecialAction {
+        def: Box::new(SpecialActionDef {
+            who: PlayerFilter::You,
+            cost: Cost::mana(mana),
+            action: SpecialActionEffect::Effect(Effect::Custom(
+                crate::kw::end_this_effect::END_THIS_EFFECT.into(),
+            )),
+            mana_timing: false,
+        }),
+        duration: Duration::WhileSourceOnBattlefield,
+        repeatable: false,
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![old, offer]);
+    true
+}
 
+inventory::submit! { FollowupPattern { name: "becomes grammar: you may pay [cost] to end this effect", priority: 1100, apply: pay_to_end_this_effect } }
+
+#[cfg(test)]
 mod tests {
     use super::split_predicates;
 
