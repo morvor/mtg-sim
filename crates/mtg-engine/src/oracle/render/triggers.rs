@@ -735,7 +735,18 @@ impl Renderer<'_> {
             }
             TriggerCond::Sacrificed(f) => Ev::new(obj(self, f), "is sacrificed"),
             TriggerCond::TokenCreated(f) => {
-                let o = self.noun_det(f, Det::A);
+                // The player who creates a token owns it (CR 111.2): "you create" is "you
+                // own".
+                let f = match f {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::OwnedBy(PlayerRel::You)))
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let o = self.noun_det(&f, Det::A);
                 Ev::new("you", format!("create {o}"))
             }
             TriggerCond::LandPlayed { who, filter } => {

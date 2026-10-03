@@ -357,7 +357,31 @@ impl Renderer<'_> {
             }
             Value::Sum(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.value(x)).collect();
-                parts.join(" plus ")
+                let plain = parts.join(" plus ");
+                // "the number of lands you control and land cards in your graveyard":
+                // objects in different zones, never counted twice.
+                let zones: Option<Vec<ZoneKind>> = v
+                    .iter()
+                    .map(|x| match x {
+                        Value::Count(f) => Some(f.zone().unwrap_or(ZoneKind::Battlefield)),
+                        _ => None,
+                    })
+                    .collect();
+                let distinct = zones.is_some_and(|z| {
+                    z.iter()
+                        .enumerate()
+                        .all(|(i, a)| z[..i].iter().all(|b| b != a))
+                });
+                let nouns: Option<Vec<String>> = parts
+                    .iter()
+                    .map(|p| p.strip_prefix("the number of ").map(str::to_string))
+                    .collect();
+                match nouns {
+                    Some(n) if distinct && v.len() == 2 && !plain.contains('{') => {
+                        format!("{{alt:{plain}|the number of {}}}", join_list(&n, "and"))
+                    }
+                    _ => plain,
+                }
             }
             Value::Diff(a, b) => {
                 // "If you have fewer than seven cards in hand, draw cards equal to the

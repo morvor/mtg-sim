@@ -221,6 +221,18 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               destroyed names the Equipment attached to it then.",
     },
     Equivalence {
+        pattern: r"\b(whenever|when) you play a card( from exile| from your graveyard)?,",
+        replacement: "$1 you cast a spell$2 or play a land$2,",
+        why: "Playing a card is playing it as a land or casting it as a spell (CR 601.1a, \
+              701.18b).",
+    },
+    Equivalence {
+        pattern: r"\byour life total can't change\b",
+        replacement: "you can't gain life and you can't lose life",
+        why: "A life total changes only by gaining or losing life, also when an effect sets \
+              it to a number (CR 119.5).",
+    },
+    Equivalence {
         pattern: r"\b(put [^.]*?),? and the rest\b",
         replacement: "$1. put the rest",
         why: "\"Put that card into your hand and the rest on the bottom of your library\": \
@@ -1366,10 +1378,12 @@ fn sentence_rewrites(s: &str) -> String {
         s = out;
     }
     // "You may pay {3}{B}. If you don't, return it ..." and "Return it ... unless you pay
-    // {3}{B}" are the same choice (CR 118.12).
+    // {3}{B}" are the same choice (CR 118.12, 118.12a); "Pay {4}{R}. If you don't, ..."
+    // too: the payment is a cost, which the player may choose not to pay (CR 118.12).
     static MAY_PAY: OnceLock<Option<Regex>> = OnceLock::new();
     if let Some(re) = MAY_PAY.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n|, )(?:then )?you may pay ([^.]+)\. if you don't, ([^.]+)\.").ok()
+        Regex::new(r"(^|[.:—•] |\n|, )(?:then )?(?:you may )?pay ([^.]+)\. if you don't, ([^.]+)\.")
+            .ok()
     }) {
         s = re.replace_all(&s, "${1}$3 unless you pay $2.").to_string();
     }
