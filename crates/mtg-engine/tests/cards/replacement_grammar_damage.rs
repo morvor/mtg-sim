@@ -628,3 +628,22 @@ fn comeuppance_reflects_prevented_damage_to_the_creature_or_the_sources_controll
     assert_eq!(t.life(P0), 20);
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn pollen_remedy_kicked_divides_six_prevention() {
+    cr!("601.2d", "615.7");
+    compiles(&["Pollen Remedy", "Serra's Hymn"]);
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Plains", 4);
+    let p = t.hand(P0, "Pollen Remedy");
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![6]));
+    t.cast(P0, p)
+        .kicked(true)
+        .targets(&[Entity::Player(P0)])
+        .go();
+    t.resolve();
+    t.g.deal_damage(giant, Entity::Player(P0), 7, true);
+    t.settle();
+    assert_eq!(t.life(P0), 19);
+}
