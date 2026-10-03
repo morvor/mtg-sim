@@ -4,6 +4,7 @@
 //! mana as though it were mana of any color to cast that spell" (CR 609.4b), "A spell cast
 //! this way costs {2} more to cast" (CR 601.2f), "Each land played this way enters tapped".
 
+use super::nouns::Det;
 use super::*;
 
 /// `If { [x] isn't a land, [cast-only permission for x] }`: a land can't be cast (CR
@@ -161,7 +162,69 @@ impl Renderer<'_> {
         if terms.lands_enter_tapped {
             s.push_str(". Each land played this way enters tapped");
         }
+        // "you may play that card if you control a Kavu".
+        if let Some(c) = &terms.condition {
+            let c = self.condition(c);
+            s.push_str(&format!(" {{alt:if|as long as|during any turn}} {c}"));
+        }
+        if terms.later_turn {
+            s = format!("during your next turn, {s}");
+        }
+        if terms.until_another {
+            s.push_str(&format!(" until you exile another card with {}", self.me()));
+        }
+        // "If that spell would be put into a graveyard, exile it instead."
+        if terms.exile_instead {
+            s.push_str(
+                ". If {alt:that spell|that card|it} would be put into {alt:a|your} graveyard, exile it instead",
+            );
+        }
         s
+    }
+
+    /// What a permission is for, given the cards it's about (`w`): "an instant or
+    /// sorcery spell from among them", "one of them", or the cards themselves.
+    pub(crate) fn permission_object(&mut self, w: &str) -> String {
+        let Some(terms) = self.play_terms.clone() else {
+            return w.to_string();
+        };
+        let among = if w.starts_with("them") || w == "it" {
+            "{alt:them|those cards|those exiled cards}".to_string()
+        } else {
+            w.to_string()
+        };
+        match (&terms.what, terms.limit) {
+            (Some(f), limit) => {
+                // A spell isn't a land, and it's the card that's cast (CR 305.9).
+                let f = match f {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| {
+                                !matches!(x, Filter::Card)
+                                    && !matches!(x, Filter::Not(l) if matches!(l.as_ref(), Filter::Type(CardType::Land)))
+                            })
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let one = self.spell_noun(&f, Det::A);
+                match limit {
+                    Some(1) => format!("{one} from among {among}"),
+                    Some(n) => {
+                        let many = self.spell_noun(&f, Det::Plural);
+                        format!("up to {} {many} from among {among}", number_word(n as i32))
+                    }
+                    None => {
+                        let many = self.spell_noun(&f, Det::Plural);
+                        format!("{many} from among {among}")
+                    }
+                }
+            }
+            (None, Some(1)) => format!("one of {among}"),
+            (None, Some(n)) => format!("up to {} of {among}", number_word(n as i32)),
+            (None, None) => w.to_string(),
+        }
     }
 
     /// The terms recorded on permissions an effect just gave

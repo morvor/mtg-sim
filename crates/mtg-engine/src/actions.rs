@@ -518,6 +518,9 @@ impl Game {
             for (link, c) in linked {
                 n.linked_choices.entry(link).or_insert(c);
             }
+            // So are the objects noted as it entered ("As this creature enters, choose
+            // another creature you control", see `linked_notes`).
+            crate::linked_notes::carry(self, old_id, new_id);
         }
         {
             let face = m.etb.face;

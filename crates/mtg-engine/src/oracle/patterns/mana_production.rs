@@ -102,6 +102,27 @@ fn add_amount(l: &str, b: &mut Builder) -> Option<Effect> {
     if r.starts_with("that much ") && (!b.in_trigger || b.sentences != 0) {
         return None;
     }
+    // "Add X {G} or X {W}": one amount or the other (CR 106.1).
+    if let Some((x, y)) = end(r).split_once(" or ") {
+        let mut options = Vec::new();
+        for part in [x, y] {
+            let mana @ ManaProduction::Amount(..) = production(part)? else {
+                return None;
+            };
+            options.push((
+                format!("Add {}", part.to_uppercase()),
+                Effect::AddMana {
+                    who: PlayerRef::You,
+                    mana,
+                    restriction: None,
+                },
+            ));
+        }
+        return Some(Effect::ChooseOne {
+            who: PlayerRef::You,
+            options,
+        });
+    }
     Some(Effect::AddMana {
         who: PlayerRef::You,
         mana: production(r)?,

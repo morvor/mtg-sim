@@ -2503,11 +2503,6 @@ inventory::submit! { TriggerPattern { name: "trigger grammar II: cast, play, com
 mod tests {
     use super::*;
 
-    fn p(s: &str) -> Parsed {
-        crate::oracle::triggers::parse_trigger_condition(s)
-            .unwrap_or_else(|| panic!("failed to parse {s:?}"))
-    }
-
     /// Every condition parses (all failures reported at once).
     fn all(v: &[&str]) {
         let failed: Vec<&&str> = v

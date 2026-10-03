@@ -50,6 +50,16 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
                 ch.creature_type = Some(SmolStr::new(w));
             }
         }
+        ChoiceKind::CreatureTypeOtherThan(except) => {
+            let list: Vec<String> = subtype_lists()
+                .creature
+                .iter()
+                .filter(|t| !except.contains(t))
+                .cloned()
+                .collect();
+            let i = g.ask_option(p, Some(src), "Choose a creature type", list.clone());
+            g.objects[src.0 as usize].choices.creature_type = list.get(i).map(SmolStr::new);
+        }
         ChoiceKind::CreatureType => {
             let list: Vec<String> = subtype_lists().creature.clone();
             let i = g.ask_option(p, Some(src), "Choose a creature type", list.clone());
@@ -156,7 +166,9 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
                 entry.text = Some(w);
             }
         }
-        ChoiceKind::CreatureType => entry.creature_type = made.creature_type,
+        ChoiceKind::CreatureType | ChoiceKind::CreatureTypeOtherThan(_) => {
+            entry.creature_type = made.creature_type
+        }
         ChoiceKind::BasicLandType => entry.basic_land_type = made.basic_land_type,
         ChoiceKind::CardType => entry.card_type = made.card_type,
         ChoiceKind::CardName | ChoiceKind::CardNameFiltered(_) => entry.card_name = made.card_name,
@@ -275,4 +287,25 @@ pub fn valid_card_name(name: &str, filter: Option<&str>) -> bool {
         Some(inner) => !matches(inner),
         None => matches(f),
     })
+}
+
+/// Objects matching `filter` chosen at random ([`crate::ability::Sel::AtRandom`]): `count`
+/// different ones (all of them if there are fewer), each equally likely; nobody chooses.
+pub fn pick_at_random(
+    g: &mut Game,
+    filter: &crate::ability::Filter,
+    count: &crate::ability::Value,
+    ctx: &Ctx,
+) -> Vec<ObjectId> {
+    use rand::seq::SliceRandom;
+    let n = g.eval_value(count, ctx).max(0) as usize;
+    // CR 614.13a: objects entering the battlefield right now can't be chosen.
+    let mut cands: Vec<ObjectId> = g
+        .objects_matching(filter, ctx)
+        .into_iter()
+        .filter(|o| !g.entering.contains(o))
+        .collect();
+    cands.shuffle(&mut g.rng);
+    cands.truncate(n);
+    cands
 }

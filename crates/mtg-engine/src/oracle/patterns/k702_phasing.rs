@@ -40,6 +40,14 @@ fn phase_out(l: &str, b: &mut Builder) -> Option<Effect> {
             }
             Sel::All(f)
         }
+        // "those creatures", "the chosen permanents": objects the text named earlier.
+        _ if subject.starts_with("those ") || subject.starts_with("the chosen ") => {
+            let (sel, rest) = crate::oracle::effects::object_ref(subject, b)?;
+            if !end(&rest).is_empty() {
+                return None;
+            }
+            sel
+        }
         _ => {
             if subject.contains("target") {
                 let (spec, tail) = parse_target(subject)?;

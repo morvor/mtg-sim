@@ -185,6 +185,15 @@ impl Game {
         v.extend(self.exile.iter().copied());
         v.extend(self.command.iter().copied());
         v.extend(self.ante.iter().copied());
+        // A static ability of a permanent that affects cards in libraries ("creature cards
+        // you own that aren't on the battlefield", CR 611.3a): libraries are recomputed.
+        let reaches_library = self.battlefield.iter().any(|id| {
+            self.obj(*id).chars.abilities.iter().any(|a| {
+                matches!(&a.kind, AbilityKind::Static(s)
+                    if matches!(&s.effect, StaticEffect::Continuous { affected, .. }
+                        if mentions_library(affected)))
+            })
+        });
         for p in &self.players {
             v.extend(p.hand.iter().copied());
             v.extend(p.graveyard.iter().copied());
@@ -194,6 +203,9 @@ impl Game {
             // a graveyard from anywhere").
             // Likewise the abilities keywords stand for (devoid's).
             v.extend(p.library.iter().copied().filter(|id| {
+                if reaches_library {
+                    return true;
+                }
                 let base = &self.obj(*id).base.abilities;
                 base.iter().any(|a| {
                     matches!(&a.kind, AbilityKind::Static(s)
@@ -1003,13 +1015,20 @@ impl Game {
         // is when the ability functions there (e.g. characteristic-defining abilities,
         // CR 604.3; "this spell has flash as long as ...", CR 601.3d).
         let self_only = filter_is_self(affected);
+        // Alternatives in several zones ("creatures you control and creature cards you own
+        // that aren't on the battlefield"): each alternative's zone.
+        let zones = match zone {
+            None => crate::eval::alternative_zones(affected),
+            Some(_) => None,
+        };
         live.iter()
             .copied()
             .filter(|o| {
                 let obj = self.obj(*o);
-                let in_zone = match zone {
-                    Some(z) => obj.zone.kind() == Some(z),
-                    None => obj.zone == Zone::Battlefield || (self_only && *o == src),
+                let in_zone = match (zone, &zones) {
+                    (Some(z), _) => obj.zone.kind() == Some(z),
+                    (None, Some(zs)) => obj.zone.kind().is_some_and(|k| zs.contains(&k)),
+                    (None, None) => obj.zone == Zone::Battlefield || (self_only && *o == src),
                 };
                 in_zone && !obj.phased_out && self.matches(*o, affected, ctx)
             })
@@ -1777,6 +1796,11 @@ pub fn apply_mod(
             }
         }
         Modification::AddColors(cs) => c.colors = c.colors.union(*cs),
+        Modification::AddChosenColor => {
+            if let Some(col) = g.source_choices(ctx).and_then(|ch| ch.color) {
+                c.colors = c.colors.union(ColorSet::single(col));
+            }
+        }
         Modification::AddAbility(a) => c.abilities.push(acquired_ability(a, ctx.source, _target)),
         // Replaced by the ability itself as the effect is created (`Game::fix_mods`).
         Modification::AddThisAbility => {}
@@ -2050,4 +2074,13 @@ pub fn as_enters_copiable(g: &mut Game, obj: ObjectId, from: usize) {
         }
     }
     g.dirty = true;
+}
+
+/// Whether a filter describes objects in a library.
+fn mentions_library(f: &Filter) -> bool {
+    match f {
+        Filter::InZone(ZoneKind::Library) => true,
+        Filter::And(v) | Filter::Or(v) => v.iter().any(mentions_library),
+        _ => false,
+    }
 }

@@ -318,6 +318,11 @@ impl Game {
             PlayerFilter::LessThanHalfStartingLife => {
                 2 * self.player(p).life < crate::life_totals::starting_life(self, p)
             }
+            PlayerFilter::AsChosen(f) => self.player_filter_matches(f, p, ctx),
+            PlayerFilter::OpponentOf(r) => self
+                .eval_players(r, ctx)
+                .into_iter()
+                .any(|q| self.are_opponents(q, p)),
             PlayerFilter::FirstDrawInDrawStep => {
                 crate::draw_rules::next_draw_is_first_in_draw_step(self, p)
             }
@@ -1006,7 +1011,7 @@ impl Game {
                 .into_iter()
                 .map(Entity::Player)
                 .collect(),
-            Sel::Choose { store, .. } => store
+            Sel::Choose { store, .. } | Sel::AtRandom { store, .. } => store
                 .and_then(|v| ctx.vars.get(&v).cloned())
                 .unwrap_or_default(),
             Sel::ExiledWithCardsNamed(name) => self
@@ -1496,15 +1501,11 @@ impl Game {
 
 /// The zones of a filter that requires one of several zones (`Or` of `InZone`s, possibly
 /// inside an `And`).
-fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
+pub(crate) fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
     match f {
-        Filter::Or(v) if !v.is_empty() => v
-            .iter()
-            .map(|x| match x {
-                Filter::InZone(z) => Some(*z),
-                _ => None,
-            })
-            .collect(),
+        // "a nonland card from their hand or a card from their graveyard": each
+        // alternative's zone.
+        Filter::Or(v) if !v.is_empty() => v.iter().map(|x| x.zone()).collect(),
         Filter::And(v) => v.iter().find_map(alternative_zones),
         _ => None,
     }
