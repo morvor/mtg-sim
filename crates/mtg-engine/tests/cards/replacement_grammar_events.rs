@@ -192,3 +192,30 @@ fn flames_of_the_blood_hand_stops_that_player_gaining_life_this_turn() {
     t.settle();
     assert_eq!(t.life(P0), 22);
 }
+
+#[test]
+fn scion_of_halaster_replaces_only_the_first_draw_each_turn() {
+    cr!("614.11", "903.3");
+    compiles(&["Scion of Halaster"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Scion of Halaster");
+    let cmdr = t.battlefield(P0, "Grizzly Bears");
+    t.g.objects[cmdr.0 as usize].is_commander = true;
+    t.g.dirty = true;
+    let a = t.library_top(P0, "Island");
+    let b = t.library_top(P0, "Forest");
+    // Look at the top two (Forest, Island): put the Forest into the graveyard, then draw
+    // the Island.
+    t.answer_choose(P0, &[Entity::Object(b)]);
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Forest"));
+    assert!(t.in_hand(P0, "Island"));
+    let _ = a;
+    // The second draw this turn is a normal draw.
+    let gy = t.graveyard_size(P0);
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert_eq!(t.graveyard_size(P0), gy);
+    assert_eq!(t.hand_size(P0), 2);
+}
