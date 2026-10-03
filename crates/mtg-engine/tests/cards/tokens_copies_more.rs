@@ -29,6 +29,8 @@ fn more_token_wordings_compile() {
         "Overlord of the Hauntwoods",
         "You've Been Caught Stealing",
         "Saw in Half",
+        "Frontline Heroism",
+        "Urza's Saga",
     ]);
 }
 
@@ -206,5 +208,51 @@ fn saw_in_half_copies_have_half_the_power_and_toughness_rounded_up() {
     for c in copies {
         assert_eq!(t.obj_now(c).controller, P1);
         assert_eq!(t.pt(c), (3, 2));
+    }
+}
+
+#[test]
+fn frontline_heroism_copy_targets_the_new_soldier() {
+    cr!("707.10e");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Frontline Heroism");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 1);
+    let gg = t.hand(P0, "Giant Growth");
+    t.cast(P0, gg).target(bears).go();
+    t.resolve_all();
+    let soldiers = tokens(&t, P0, "Soldier");
+    assert_eq!(soldiers.len(), 1, "{}", t.dump_log());
+    assert_eq!(t.pt(soldiers[0]), (4, 4));
+    assert_eq!(t.pt(bears), (5, 5));
+}
+
+#[test]
+fn grist_puts_deathtouch_on_the_insect_if_a_black_card_was_milled() {
+    cr!("701.17a", "122.1b");
+    for black in [false, true] {
+        let mut t = TestGame::new(2);
+        let grist = t.battlefield(P0, "Grist, Voracious Larva // Grist, the Plague Swarm");
+        mtg_engine::dfc::transform(&mut t.g, grist);
+        let grist = t.g.current(grist);
+        t.g.add_counters(Entity::Object(grist), "loyalty", 3, None);
+        t.library_top(P0, "Grizzly Bears");
+        t.library_top(P0, if black { "Vampire Nighthawk" } else { "Llanowar Elves" });
+        t.g.recompute();
+        let uid = t
+            .g
+            .obj(grist)
+            .chars
+            .abilities
+            .iter()
+            .find(|a| a.text.contains("Insect"))
+            .map(|a| a.uid)
+            .expect("ability");
+        t.g.turn.priority = Some(P0);
+        t.g.activate_ability(P0, grist, uid).expect("activate");
+        t.resolve_all();
+        let insect = tokens(&t, P0, "Insect");
+        assert_eq!(insect.len(), 1, "{}", t.dump_log());
+        assert_eq!(t.counters(insect[0], "deathtouch"), u32::from(black));
     }
 }

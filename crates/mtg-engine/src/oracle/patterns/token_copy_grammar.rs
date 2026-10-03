@@ -1127,3 +1127,59 @@ fn create_for_each_damaged_opponent(l: &str, b: &mut Builder) -> Option<Effect> 
 }
 
 inventory::submit! { EffectPattern { name: "token grammar: create a token for each opponent dealt damage", priority: 97, parse: create_for_each_damaged_opponent } }
+
+/// "Put a deathtouch counter on the token if a black card was milled this way." (Grist,
+/// the Plague Swarm: "Create a 1/1 ... Insect creature token, then mill two cards."): the
+/// token just created gets the counters if one of the cards the previous instruction
+/// milled matches.
+fn f_counter_on_token_if_milled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some((put, cond)) = l.split_once(" on the token if ") else {
+        return false;
+    };
+    let Some(phrase) = cond
+        .strip_prefix("a ")
+        .or_else(|| cond.strip_prefix("an "))
+        .and_then(|c| c.strip_suffix(" was milled this way"))
+    else {
+        return false;
+    };
+    // The mill is the last instruction; the token was created before it.
+    let Effect::Seq(v) = &*prev else {
+        return false;
+    };
+    let milled_last = matches!(v.last(), Some(Effect::Mill { .. }));
+    let created = v.iter().any(is_create);
+    if !milled_last || !created {
+        return false;
+    }
+    let Some((f, plural, tail)) = parse_object_phrase(phrase) else {
+        return false;
+    };
+    if plural || !end(tail).is_empty() {
+        return false;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    b.it = Sel::Var(vars::CREATED);
+    let e = crate::oracle::effects::parse_simple(&format!("{put} on it"), b);
+    let Some(e @ Effect::AddCounters { .. }) = e else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    };
+    let cond = Condition::SelNonEmpty(Sel::All(Filter::and(vec![
+        f,
+        Filter::In(Box::new(Sel::Var(vars::IT))),
+    ])));
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    v.push(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    });
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "token grammar: counter on the token if a card was milled this way", priority: 40, apply: f_counter_on_token_if_milled } }
