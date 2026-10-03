@@ -66,6 +66,10 @@ fn is_ninjutsu(g: &Game, ctx: &Ctx) -> bool {
     )
 }
 
+/// `Filter::Custom`: a permanent with a mana ability (CR 605.1a): "each creature you control
+/// with a mana ability".
+pub const HAS_MANA_ABILITY: &str = "object: has a mana ability";
+
 /// `Filter::Custom`: an activated ability on the stack (CR 602.2a).
 pub const ACTIVATED_ABILITY: &str = "stack object: activated ability";
 
@@ -114,6 +118,15 @@ impl KeywordRules for ActivatedAbilityKind {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+        if name == HAS_MANA_ABILITY {
+            return Some(
+                g.obj(id)
+                    .chars
+                    .abilities
+                    .iter()
+                    .any(|a| matches!(&a.kind, AbilityKind::Activated(act) if act.is_mana_ability)),
+            );
+        }
         if name != ACTIVATED_ABILITY {
             return None;
         }

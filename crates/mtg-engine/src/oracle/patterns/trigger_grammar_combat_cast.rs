@@ -555,6 +555,42 @@ fn exactly_two_colors<'a>(t: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> 
 
 inventory::submit! { FilterSuffixPattern { name: "that's exactly two colors", priority: 100, parse: exactly_two_colors } }
 
+/// "[creature] that's enchanted or equipped", "that's enchanted", "that's equipped"
+/// (CR 303.4, 301.5), "[creature] with a mana ability" (CR 605.1a), "[creature] you own
+/// but don't control" (CR 108.3).
+fn creature_qualities<'a>(t: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    for (p, f) in [
+        (
+            "that's enchanted or equipped",
+            Filter::Or(vec![Filter::Enchanted, Filter::Equipped]),
+        ),
+        (
+            "that are enchanted or equipped",
+            Filter::Or(vec![Filter::Enchanted, Filter::Equipped]),
+        ),
+        ("that's enchanted", Filter::Enchanted),
+        ("that are enchanted", Filter::Enchanted),
+        ("that's equipped", Filter::Equipped),
+        ("that are equipped", Filter::Equipped),
+        (
+            "with a mana ability",
+            Filter::Custom(crate::kw::activated_ability_kind::HAS_MANA_ABILITY.into()),
+        ),
+        (
+            "with mana abilities",
+            Filter::Custom(crate::kw::activated_ability_kind::HAS_MANA_ABILITY.into()),
+        ),
+        ("but don't control", Filter::not(Filter::ControlledBy(PlayerRel::You))),
+    ] {
+        if let Some(r) = t.strip_prefix(p).filter(|r| word_end(r)) {
+            return Some((f, r));
+        }
+    }
+    None
+}
+
+inventory::submit! { FilterSuffixPattern { name: "that's enchanted or equipped, with a mana ability", priority: 100, parse: creature_qualities } }
+
 /// Passive cast triggers: "an instant or sorcery spell is cast during your turn", "the
 /// first noncreature spell of a turn is cast", "the fourth spell of a turn is cast".
 fn spell_is_cast(r: &str) -> Option<Parsed> {

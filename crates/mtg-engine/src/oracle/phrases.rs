@@ -299,6 +299,8 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "prepared" => Filter::Prepared,
         // CR 701.60b: a suspected permanent.
         "suspected" => Filter::Custom(crate::kwa::suspect_detain::SUSPECTED.into()),
+        // CR 701.15: a goaded creature.
+        "goaded" => Filter::Custom(crate::kw::combat_limits::GOADED.into()),
         // CR 702.171b: a saddled permanent.
         "saddled" => Filter::Custom(crate::kw::saddle::SADDLED.into()),
         _ => return None,
