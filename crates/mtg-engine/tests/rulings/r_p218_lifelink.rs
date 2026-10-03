@@ -23,6 +23,8 @@ fn a_spell_with_lifelink_gains_life_only_for_damage_it_deals() {
         "Soulfire Grand Master",
         "An instant or sorcery spell with lifelink causes its controller to gain life only if it’s the source of any damage that’s dealt. An instant or sorcery spell with lifelink that causes another source to deal damage won’t cause its controller to gain life."
     );
+    // Only its last ability doesn't compile; the lifelink grant does.
+    crate::r_p190_mana_costs::only_unsupported("Soulfire Grand Master", "The next time you cast");
     // "Instant and sorcery spells you control have lifelink." Lightning Bolt deals the
     // damage itself: P0 gains 3.
     let mut t = TestGame::new(2);
@@ -250,7 +252,10 @@ fn ocelot_pride_counts_life_gained_before_it_entered() {
     enter(&mut t, P0, "Ocelot Pride");
     t.advance_to(P0, Step::End);
     t.resolve_all();
-    assert_eq!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Cat").len(), 1);
+    assert_eq!(
+        crate::r_s05_common::tokens_with_subtype(&t, P0, "Cat").len(),
+        1
+    );
     // Without life gained this turn, no token.
     let mut t = TestGame::new(2);
     enter(&mut t, P0, "Ocelot Pride");

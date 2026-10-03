@@ -161,7 +161,10 @@ fn hexdrinker_level_abilities_count_level_counters() {
         t.g.recompute();
         assert_eq!(t.pt(hex), pt, "level {n}");
         let h = Entity::Object(hex);
-        assert_eq!(spell_targets(&mut t, P0, "Lightning Bolt").contains(&h), bolt);
+        assert_eq!(
+            spell_targets(&mut t, P0, "Lightning Bolt").contains(&h),
+            bolt
+        );
         assert_eq!(spell_targets(&mut t, P0, "Flame Slash").contains(&h), slash);
         // It always has level up {1}.
         t.set_step(P1, Step::PrecombatMain);
@@ -174,7 +177,7 @@ fn hexdrinker_level_abilities_count_level_counters() {
 
 #[test]
 fn retriever_phoenix_must_be_in_the_graveyard_as_you_are_told_to_learn() {
-    cr!("614.1a", "701.48a", "614.12");
+    cr!("614.1a", "701.48a");
     ruling!(
         "Retriever Phoenix",
         "Retriever Phoenix must be in your graveyard at the moment you're instructed to learn if you want to use the last ability to return it to the battlefield."

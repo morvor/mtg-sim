@@ -86,6 +86,8 @@ fn emrakul_discarded_goes_to_exile_then_cast_or_graveyard() {
         "Emrakul, the World Anew",
         "If you discard a card with madness, you discard it into exile instead of into your graveyard. When you do, you can either cast it from exile for its madness cost or put it into your graveyard."
     );
+    // Only its flying/protection line doesn't compile; madness does.
+    crate::r_p190_mana_costs::only_unsupported("Emrakul, the World Anew", "protection from spells");
     // Declining: it goes to the graveyard.
     let mut t = TestGame::new(2);
     let emrakul = t.hand(P0, "Emrakul, the World Anew");
@@ -106,8 +108,13 @@ fn emrakul_discarded_goes_to_exile_then_cast_or_graveyard() {
     let on_stack = t.g.find_in_zone(Zone::Stack, "Emrakul, the World Anew");
     assert_eq!(on_stack.len(), 1);
     assert_eq!(
-        t.g.obj(on_stack[0]).stack.as_ref().map(|s| s.cast.method.clone()),
-        Some(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Madness))
+        t.g.obj(on_stack[0])
+            .stack
+            .as_ref()
+            .map(|s| s.cast.method.clone()),
+        Some(CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Madness
+        ))
     );
 }
 
@@ -117,6 +124,11 @@ fn extus_magecraft_must_target_a_nonlegendary_creature_card() {
     ruling!(
         "Extus, Oriq Overlord // Awaken the Blood Avatar",
         "Returning a nonlegendary creature card is not optional. If there is at least one in your graveyard, you must target it with the magecraft ability."
+    );
+    // Only the back face's additional cost doesn't compile; the magecraft ability does.
+    crate::r_p190_mana_costs::only_unsupported(
+        "Extus, Oriq Overlord // Awaken the Blood Avatar",
+        "sacrifice any number of creatures",
     );
     // P0 doesn't name a target: the only legal one is chosen anyway.
     let mut t = TestGame::new(2);
@@ -162,6 +174,8 @@ fn tifa_melee_counts_only_opponents_attacked() {
         "Tifa, Martial Artist",
         "Melee will trigger if the creature with melee attacks a planeswalker or battle. However, the effect counts only opponents (and not planeswalkers or battles) that you attacked with a creature when determining the bonus."
     );
+    // Only its untap / additional combat trigger doesn't compile; melee does.
+    crate::r_p190_mana_costs::only_unsupported("Tifa, Martial Artist", "additional combat phase");
     // Tifa attacks P1's planeswalker: melee triggers, but no opponent was attacked.
     let mut t = TestGame::new(2);
     let tifa = t.battlefield(P0, "Tifa, Martial Artist");
@@ -266,10 +280,7 @@ fn labyrinth_raptor_abilities_apply_to_itself_while_it_has_menace() {
     t.settle();
     assert_eq!(triggered_from(&t, raptor), 1);
     t.resolve_all();
-    assert_eq!(
-        [b1, b2].iter().filter(|b| t.on_battlefield(**b)).count(),
-        1
-    );
+    assert_eq!([b1, b2].iter().filter(|b| t.on_battlefield(**b)).count(), 1);
 }
 
 #[test]
@@ -341,7 +352,7 @@ fn blade_tribe_berserkers_keeps_its_bonus_without_the_artifacts() {
 
 #[test]
 fn stoic_rebuttal_cost_reduction_works_on_the_stack() {
-    cr!("601.2f", "113.6a");
+    cr!("601.2f", "113.6d");
     ruling!(
         "Stoic Rebuttal",
         "Stoic Rebuttal’s metalcraft ability functions while Stoic Rebuttal is on the stack."
@@ -400,7 +411,12 @@ fn free_the_fae_adventurer_cards_are_creature_cards_in_the_graveyard() {
     // (milled cards, which one P0 may put into their hand)
     for (milled, expected) in [
         (
-            ["Bonecrusher Giant // Stomp", "Grizzly Bears", "Forest", "Forest"],
+            [
+                "Bonecrusher Giant // Stomp",
+                "Grizzly Bears",
+                "Forest",
+                "Forest",
+            ],
             None,
         ),
         (
@@ -439,8 +455,13 @@ fn colossal_grave_reaver_mills_at_once_and_triggers_once() {
     stack_library(&mut t, P0, &["Grizzly Bears", "Hill Giant", "Forest"]);
     let reaver = enter(&mut t, P0, "Colossal Grave-Reaver");
     t.resolve_all();
-    assert_eq!(triggered_from(&t, reaver), 2, "the mill and one put-onto trigger");
-    let back = t.named_on_battlefield("Grizzly Bears").len() + t.named_on_battlefield("Hill Giant").len();
+    assert_eq!(
+        triggered_from(&t, reaver),
+        2,
+        "the mill and one put-onto trigger"
+    );
+    let back =
+        t.named_on_battlefield("Grizzly Bears").len() + t.named_on_battlefield("Hill Giant").len();
     assert_eq!(back, 1);
 }
 
@@ -452,13 +473,21 @@ fn locke_creates_one_treasure_however_many_lands_are_milled() {
         "As long as one or more lands were milled this way, you'll create a Treasure token. Additional land cards milled beyond the first won't cause you to create additional Treasures."
     );
     supported("Locke, Treasure Hunter");
-    for (tops, treasures) in [(["Forest", "Island"], 1), (["Forest", "Grizzly Bears"], 1), (["Grizzly Bears", "Hill Giant"], 0)] {
+    for (tops, treasures) in [
+        (["Forest", "Island"], 1),
+        (["Forest", "Grizzly Bears"], 1),
+        (["Grizzly Bears", "Hill Giant"], 0),
+    ] {
         let mut t = TestGame::new(2);
         let locke = t.battlefield(P0, "Locke, Treasure Hunter");
         t.library_top(P0, tops[0]);
         t.library_top(P1, tops[1]);
         attack_with(&mut t, &[(locke, Entity::Player(P1))]);
         t.resolve_all();
-        assert_eq!(tokens_with_subtype(&t, P0, "Treasure").len(), treasures, "{tops:?}");
+        assert_eq!(
+            tokens_with_subtype(&t, P0, "Treasure").len(),
+            treasures,
+            "{tops:?}"
+        );
     }
 }

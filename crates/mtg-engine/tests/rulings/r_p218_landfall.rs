@@ -1,11 +1,11 @@
 //! Rulings batch P218 — landfall ("Whenever a land you control enters, ..."; an ability
 //! word, CR 207.2c) and landwalk (CR 702.14).
 
+use crate::r_p214_common::pump as pump_until_eot;
 use crate::r_s01_common::{attack_with, supported, triggers_on_stack};
 use crate::r_s02_common::destroy;
 use crate::r_s05_common::enter;
 use crate::r_s06_common::attach_new;
-use crate::r_p214_common::pump as pump_until_eot;
 use crate::r_s21_common::{castable, legal_blocks};
 use mtg_engine::ability::{Duration, Effect, Modification, PlayerRef, Sel, Value};
 use mtg_engine::testing::*;
@@ -160,7 +160,7 @@ fn turntimber_basilisk_choice_is_made_as_the_ability_resolves() {
 
 #[test]
 fn roil_elemental_targeting_itself_overwrites_a_temporary_control_change() {
-    cr!("613.7", "613.2", "611.2b", "800.4a");
+    cr!("613.7", "613.2", "611.2b");
     ruling!(
         "Roil Elemental",
         "You may target a creature you already control with Roil Elemental's ability. This will usually have no visible effect, but it will overwrite any previous control-change effects."
@@ -235,12 +235,11 @@ fn territorial_bruntar_cards_follow_timing_rules_and_costs() {
     t.set_step(P0, Step::PostcombatMain);
     assert!(castable(&mut t, P0, spike));
     // Its mana cost must still be paid: with the Mountain tapped, it can't be cast.
-    let mountain = t
-        .g
-        .permanents()
-        .find(|o| o.controller == P0 && o.chars.name == "Mountain")
-        .map(|o| o.id)
-        .unwrap();
+    let mountain =
+        t.g.permanents()
+            .find(|o| o.controller == P0 && o.chars.name == "Mountain")
+            .map(|o| o.id)
+            .unwrap();
     t.g.tap(mountain);
     assert!(!castable(&mut t, P0, spike));
 }
@@ -255,14 +254,22 @@ fn nonbasic_landwalk_checks_for_lands_without_the_basic_supertype() {
     supported("Dryad Sophisticate");
     // The defending player's Tundra (Plains Island, not basic) makes the Dryad unblockable;
     // basic lands don't.
-    for (land, unblockable) in [("Tundra", true), ("Island", false), ("Snow-Covered Island", false)] {
+    for (land, unblockable) in [
+        ("Tundra", true),
+        ("Island", false),
+        ("Snow-Covered Island", false),
+    ] {
         let mut t = TestGame::new(2);
         let dryad = t.battlefield(P0, "Dryad Sophisticate");
         let bears = t.battlefield(P1, "Grizzly Bears");
         t.battlefield(P1, land);
         crate::r_s20_common::to_beginning_of_combat(&mut t, P0);
         attack_with(&mut t, &[(dryad, Entity::Player(P1))]);
-        assert_eq!(legal_blocks(&mut t, P1, &[(bears, dryad)]), !unblockable, "{land}");
+        assert_eq!(
+            legal_blocks(&mut t, P1, &[(bears, dryad)]),
+            !unblockable,
+            "{land}"
+        );
     }
 }
 

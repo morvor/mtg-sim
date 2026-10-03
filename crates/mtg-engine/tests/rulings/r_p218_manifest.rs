@@ -327,7 +327,12 @@ fn write_into_being_manifests_before_the_other_card_is_placed() {
     let seen = watch(
         &mut t,
         P0,
-        |d| !matches!(d, Decision::Priority { .. } | Decision::ChooseEntities { .. }),
+        |d| {
+            !matches!(
+                d,
+                Decision::Priority { .. } | Decision::ChooseEntities { .. }
+            )
+        },
         |g| g.permanents().filter(|o| o.face_down).count(),
     );
     cast_resolve(&mut t, "Write into Being", None, &[]);

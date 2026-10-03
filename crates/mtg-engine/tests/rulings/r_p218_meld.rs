@@ -37,14 +37,14 @@ fn a_melded_commander_is_the_commander_but_only_the_chosen_card_returns() {
     t.answer_yes(P0, true);
     destroy(&mut t, brisela);
     t.settle();
-    let in_command: Vec<String> = t
-        .g
-        .command
-        .iter()
-        .map(|id| t.obj(*id).chars.name.to_string())
-        .collect();
+    let in_command: Vec<String> =
+        t.g.command
+            .iter()
+            .map(|id| t.obj(*id).chars.name.to_string())
+            .collect();
     assert_eq!(in_command, vec!["Gisela, the Broken Blade".to_string()]);
     assert!(t.in_graveyard(P0, "Bruna, the Fading Light"));
-    let bruna = t.g.find_in_zone(Zone::Graveyard(P0), "Bruna, the Fading Light");
+    let bruna =
+        t.g.find_in_zone(Zone::Graveyard(P0), "Bruna, the Fading Light");
     assert!(!t.obj(bruna[0]).is_commander);
 }
