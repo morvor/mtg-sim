@@ -449,6 +449,8 @@ fn single_quality(s: &str) -> Option<Filter> {
         "colorless" => return Some(Filter::Colorless),
         // CR 607.2d: "protection from the chosen color" (linked to "choose a color").
         "the chosen color" => return Some(Filter::ChosenColor),
+        // "protection from the chosen card type" (linked to "choose a card type").
+        "the chosen card type" => return Some(Filter::ChosenCardType),
         // CR 702.16k: protection from a player is protection from each object that
         // player controls (or owns, outside the battlefield and stack).
         "the chosen player" => return Some(Filter::ControlledBy(PlayerRel::Chosen)),

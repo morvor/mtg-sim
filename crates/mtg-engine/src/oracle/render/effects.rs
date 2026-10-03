@@ -75,6 +75,14 @@ impl Renderer<'_> {
                 // "... for each card discarded this way".
                 self.it_done = Some("cards discarded this way".into());
                 let noun = self.card_noun(filter);
+                // "That player discards all cards with that name": as many as there are
+                // in their hand (each that matches).
+                if matches!(n, Value::HandSize(p) if same_player(p, who))
+                    && !matches!(filter, Filter::Any)
+                    && !*random
+                {
+                    return Some((who.clone(), format!("discard all {}", plural(&noun)), false));
+                }
                 let (c, w) = self.counted(n, &noun);
                 let r = if *random { " at random" } else { "" };
                 (
@@ -364,6 +372,13 @@ impl Renderer<'_> {
                 let s = self.sel(sel, Case::Obj);
                 format!("double the number of {k} on {s}")
             }
+            // "Double the power of each creature you control until end of turn" (CR
+            // 701.10b).
+            Effect::ForEach { sel, var, effect }
+                if tail_parts::double_pt_parts(*var, effect).is_some() =>
+            {
+                self.double_pt(sel, *var, effect).unwrap_or_default()
+            }
             // "If it doesn't have suspend, it gains suspend."
             Effect::ForEach { sel, .. }
                 if crate::oracle::patterns::r702_062_gains_suspend::is_gains_suspend(e) =>
@@ -393,8 +408,22 @@ impl Renderer<'_> {
                 s
             }
             // "Return the exiled card to the battlefield": each card linked to this object.
+            // "Put each card exiled with ~ into its owner's hand" (an object that exiles
+            // one card says "the exiled card").
             Effect::ForEach {
-                sel: Sel::Linked | Sel::CreatorLinked,
+                sel: Sel::Linked,
+                var,
+                effect,
+            } => {
+                let all = Sel::All(Filter::And(vec![
+                    Filter::In(Box::new(Sel::Linked)),
+                    Filter::InZone(ZoneKind::Exile),
+                ]));
+                self.var_defs.push((*var, all, false));
+                self.effect(effect)
+            }
+            Effect::ForEach {
+                sel: Sel::CreatorLinked,
                 var,
                 effect,
             } => {
@@ -747,11 +776,17 @@ impl Renderer<'_> {
                     format!("{w} chooses one —")
                 };
                 let mut s = head;
+                let mut texts = Vec::new();
                 for (_, eff) in options {
                     let t = self.effect_sentences(eff);
                     s.push_str(&format!("\n• {t}"));
+                    texts.push(t);
                 }
-                s
+                // A choice made as the effect happens (CR 608.2d): "X or Y".
+                match tail_parts::or_form(&texts) {
+                    Some(o) if w == "you" => format!("{{alt:{s}|{o}}}"),
+                    _ => s,
+                }
             }
             Effect::Store { sel, var } if matches!(sel, Sel::All(_)) => {
                 self.var_defs.push((*var, sel.clone(), false));
@@ -836,7 +871,12 @@ impl Renderer<'_> {
                         .map_or_else(|| value.clone(), |(_, v, _)| v.clone()),
                     other => other.clone(),
                 };
-                self.stored_values.push((*var, value, false));
+                // A variable stored again (a count set to 0, then to what an instruction
+                // did) holds the later value from here on.
+                match self.stored_values.iter_mut().find(|(x, _, _)| x == var) {
+                    Some(e) => e.1 = value,
+                    None => self.stored_values.push((*var, value, false)),
+                }
                 String::new()
             }
             Effect::Note { value } => {
@@ -852,7 +892,47 @@ impl Renderer<'_> {
                     self.it_done = Some(format!("{{alt:permanents|{n}}} destroyed this way"));
                 }
                 if *no_regen {
-                    let pron = if is_plural_sel(what) { "They" } else { "It" };
+                    let plural_sel = is_plural_sel(what);
+                    let pron = if plural_sel { "They" } else { "It" };
+                    // "Creatures destroyed this way can't be regenerated."
+                    let filter = match what {
+                        Sel::All(f) | Sel::Choose { filter: f, .. } => Some(f.clone()),
+                        Sel::Target(i) => {
+                            match self.targets.get(*i as usize).map(|t| t.what.clone()) {
+                                Some(TargetKind::Object(f)) => Some(f),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    };
+                    let types: Vec<CardType> = match &filter {
+                        Some(Filter::And(v)) => v
+                            .iter()
+                            .filter_map(|x| match x {
+                                Filter::Type(t) => Some(*t),
+                                _ => None,
+                            })
+                            .collect(),
+                        Some(Filter::Type(t)) => vec![*t],
+                        _ => Vec::new(),
+                    };
+                    let pron = match types.as_slice() {
+                        [t] => {
+                            let head = t.word().to_string();
+                            if plural_sel {
+                                format!(
+                                    "{{alt:{pron}|{} destroyed this way}}",
+                                    capitalize(&plural(&head))
+                                )
+                            } else {
+                                format!(
+                                    "{{alt:{pron}|{} destroyed this way}}",
+                                    capitalize(&with_article(&head))
+                                )
+                            }
+                        }
+                        _ => pron.to_string(),
+                    };
                     format!("destroy {w}. {pron} can't be regenerated")
                 } else {
                     format!("destroy {w}")
@@ -1257,7 +1337,12 @@ impl Renderer<'_> {
                 ) {
                     s = s.replacen(" have ", if s.starts_with("you ") || s.starts_with("{alt:your opponents") { " gain " } else { " gains " }, 1);
                 }
-                let d = self.duration(duration);
+                // A resolving effect with no duration lasts for the rest of the game (CR
+                // 611.2a); cards say so or not.
+                let d = match duration {
+                    Duration::Permanent => "{opt:for the rest of the game}".to_string(),
+                    d => self.duration(d),
+                };
                 join_words(&[s, d])
             }
             Effect::AddReplacement {
@@ -1828,6 +1913,11 @@ impl Renderer<'_> {
             }
             Effect::ExtraTurnWith { who, at_start } => {
                 let base = self.with_subject(who, "take an extra turn after this one", true);
+                // Effects created as that turn starts: "During that turn, damage can't be
+                // prevented. At the beginning of that turn's end step, you lose the game."
+                if let Some(a) = self.extra_turn_effects(at_start) {
+                    return format!("{base}. {a}");
+                }
                 let a = self.effect(at_start);
                 format!("{base}. {a}")
             }
@@ -2035,6 +2125,9 @@ impl Renderer<'_> {
                 free,
             } => {
                 let w = self.sel(what, Case::Obj);
+                // "You may cast an instant or sorcery spell from among them", "you may
+                // play one of those cards": what may be played, and how many.
+                let w = self.permission_object(&w);
                 let d = self.duration(duration);
                 let f = if *free {
                     " without paying its mana cost"
@@ -2460,11 +2553,19 @@ impl Renderer<'_> {
         })
     }
 
-    fn seq(&mut self, v: &[Effect]) -> String {
+    pub(crate) fn seq(&mut self, v: &[Effect]) -> String {
         let mut parts: Vec<String> = Vec::new();
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Roll a d20. Create X Treasure tokens, where X is the result.": the number
+            // X stands for is said where X is first used (CR 107.3).
+            if let Effect::SetX { value } = &v[i] {
+                if let Some(s) = self.x_defined_later(value, &v[i + 1..]) {
+                    parts.push(s);
+                    break;
+                }
+            }
             // "You and target opponent each draw a card."
             if let (Some(first), Some(Effect::AsPlayer { who: other, effect })) =
                 (v.get(i), v.get(i + 1))
@@ -3087,6 +3188,8 @@ impl Renderer<'_> {
             // Whether an earlier instruction exiled something (`after_exile`).
             let saved_exile = self.after_exile;
             self.after_exile |= v[..i].iter().any(exiles);
+            let saved_this_way = self.this_way.clone();
+            self.this_way.extend(tail_parts::this_way(&v[..i]));
             let saved_mandatory = std::mem::replace(
                 &mut self.prev_mandatory,
                 i > 0
@@ -3103,6 +3206,7 @@ impl Renderer<'_> {
             );
             let s = self.effect(&v[i]);
             self.prev_mandatory = saved_mandatory;
+            self.this_way = saved_this_way;
             self.after_exile = saved_exile;
             if !s.is_empty() {
                 parts.push(s);
@@ -3640,6 +3744,9 @@ impl Renderer<'_> {
             }
             if !to.with_mods.is_empty() {
                 let vp = self.mods_vp(&to.with_mods, true);
+                // It enters that way: "It's a 1/1 Spirit creature with flying in addition
+                // to its other types."
+                let vp = vp.replace("becomes ", "{alt:becomes|is} ");
                 s.push_str(&format!(". It {vp}"));
             }
         }
@@ -3695,7 +3802,7 @@ impl Renderer<'_> {
         // The searching player puts the card onto the battlefield under their own control
         // (CR 110.2a).
         let mut to2 = to.clone();
-        if to2.controller.as_ref().is_some_and(|c| same_player(c, who)) {
+        if to2.controller.as_ref().is_some_and(|c| same_player(c, who)) && same_player(who, whose) {
             to2.controller = None;
         }
         let mut dest = self.destination_phrase(&to2, many, same_player(who, whose));
@@ -3758,6 +3865,7 @@ impl Renderer<'_> {
             [init @ .., last] => format!("{} {joiner} {last}", init.join(", ")),
         };
         let mut many = false;
+        let mut where_x: Option<String> = None;
         let parts: Vec<String> = spec
             .parts
             .iter()
@@ -3770,7 +3878,15 @@ impl Renderer<'_> {
                     (Value::Const(n), true) => Det::UpTo(number_word(*n)),
                     (other, up_to) => {
                         let v = self.value(other);
-                        if up_to {
+                        // "up to X basic land cards, where X is ...".
+                        if v != "X" && !v.contains(['{', '|']) {
+                            where_x = Some(v);
+                            if up_to {
+                                Det::UpTo("X".into())
+                            } else {
+                                Det::Count("X".into())
+                            }
+                        } else if up_to {
                             Det::UpTo(v)
                         } else {
                             Det::Count(v)
@@ -3798,6 +3914,9 @@ impl Renderer<'_> {
         };
         let may = if spec.optional { "may " } else { "" };
         let mut s = format!("{may}search {whose} {zones} for {parts}");
+        if let Some(v) = where_x {
+            s.push_str(&format!(", where X is {v},"));
+        }
         if spec.distinct_names {
             s.push_str(" with different names");
         }
@@ -3855,10 +3974,21 @@ impl Renderer<'_> {
             s.push_str(&format!(", {}", dests.join(" and ")));
         }
         if spec.shuffle == SearchShuffle::After {
-            // "Search your library and/or graveyard ... If you search your library this
-            // way, shuffle." (only a searched library is shuffled, CR 701.24a).
-            if own && spec.zones.len() > 1 && spec.zones.contains(&ZoneKind::Library) {
-                s.push_str(". {alt:Then shuffle|If you search your library this way, shuffle}");
+            // "Search your library and/or graveyard": the library is shuffled only if it
+            // was searched.
+            if spec.zones_optional
+                && spec.zones.len() > 1
+                && spec.zones.contains(&ZoneKind::Library)
+            {
+                if matches!(spec.who, PlayerRef::You) {
+                    s.push_str(". If you search your library this way, shuffle");
+                } else {
+                    let w = self.player(&spec.who, Case::Subj);
+                    s.push_str(&format!(
+                        ". If {w} searches {} library this way, {w} shuffles",
+                        self.player(&spec.who, Case::Poss)
+                    ));
+                }
             } else if own || matches!(spec.whose, PlayerRef::Iterated) {
                 s.push_str(", then shuffle");
             } else {
@@ -3946,16 +4076,28 @@ impl Renderer<'_> {
             other => self.value(other),
         };
         let pron = if many { "them" } else { "it" };
-        // "Put all land cards revealed this way into your hand and the rest into your
-        // graveyard": every matching card.
-        let take_all = !take_up_to && matches!(take, Value::Const(k) if *k >= 99);
-        let take_s = if take_all && !matches!(filter, Filter::Any) {
-            let from = if reveal {
-                "{alt:revealed this way|from among them}"
+        // Every one of them that matches: "put all land cards revealed this way into your
+        // hand"; as many as you like: "you may put any number of ... from among them".
+        let every = matches!(take, Value::Const(k) if *k >= 99);
+        let take_all = every && !take_up_to;
+        let take_s = if every && !matches!(filter, Filter::Any) {
+            let what = plural(&noun);
+            if take_up_to {
+                // "any number of creature and/or land cards".
+                let what = if what.contains('{') {
+                    what
+                } else {
+                    what.replacen(" or ", " {alt:or|and/or} ", 1)
+                };
+                format!("you may put any number of {what} from among them {d}")
             } else {
-                "from among them"
-            };
-            format!("put all {} {from} {d}", plural(&noun))
+                let from = if reveal {
+                    "{alt:revealed this way|from among them}"
+                } else {
+                    "from among them"
+                };
+                format!("put all {what} {from} {d}")
+            }
         } else if matches!(filter, Filter::Any) {
             if take_up_to {
                 format!("put up to {count} of them {d}")
@@ -4073,6 +4215,10 @@ impl Renderer<'_> {
             Value::EventAmount | Value::Prev => (format!("that many {noun_many}"), None),
             other => {
                 let v = self.value(other);
+                // A number already called X ("where X is ..." said elsewhere).
+                if v == "X" {
+                    return format!("create X {noun_many}{tail}");
+                }
                 if v.starts_with("the number of ") {
                     return format!("create X {noun_many}{tail}, where X is {v}");
                 }
@@ -4193,7 +4339,7 @@ impl Renderer<'_> {
 
     fn emblem(&mut self, abilities: &[Ability]) -> String {
         // The emblem's own abilities call it "this emblem".
-        let saved = std::mem::replace(&mut self.in_emblem, true);
+        let saved = std::mem::replace(&mut self.in_emblem, Some(self.quote_depth + 1));
         let parts: Vec<String> = abilities
             .iter()
             .map(|a| format!("\"{}\"", self.nested_ability(a)))
@@ -4353,12 +4499,41 @@ impl Renderer<'_> {
         let mut becomes = Becomes::default();
         let mut where_clauses: Vec<String> = Vec::new();
         for m in mods {
+            // Where the "is a ..." part goes when the parts are written in the order of
+            // the modifications (see `BECOMES`).
+            let contributes = matches!(
+                m,
+                Modification::SetPT(..)
+                    | Modification::CdaPT(..)
+                    | Modification::SetName(_)
+                    | Modification::AddTypes(_)
+                    | Modification::AddSupertypes(_)
+                    | Modification::AddSubtypes(_)
+                    | Modification::SetTypes { .. }
+                    | Modification::SetBasicLandType(_)
+                    | Modification::SetColors(_)
+            );
+            if contributes && !parts.iter().any(|p| p == BECOMES) {
+                parts.push(BECOMES.into());
+            }
             match m {
                 Modification::ModifyPT(p, t) => {
                     let (ps, pw) = self.pt_amount(p);
-                    let (ts, tw) = self.pt_amount(t);
-                    if let Some(w) = pw.or(tw) {
-                        where_clauses.push(w);
+                    let (mut ts, tw) = self.pt_amount(t);
+                    match (pw, tw) {
+                        // "+X/+Y, where X is ... and Y is ...": two different numbers.
+                        (Some(a), Some(b))
+                            if format!("{p:?}") != format!("{t:?}") && ps == "X" && ts == "X" =>
+                        {
+                            ts = "Y".into();
+                            let y = b.trim_start_matches(", where X is ");
+                            where_clauses.push(format!("{a}, and Y is {y}"));
+                        }
+                        (pw, tw) => {
+                            if let Some(w) = pw.or(tw) {
+                                where_clauses.push(w);
+                            }
+                        }
                     }
                     let (mut a, mut b) = (signed(&ps), signed(&ts));
                     // "-2/-0": a zero next to a negative modifier is printed "-0".
@@ -4588,9 +4763,73 @@ impl Renderer<'_> {
                 Modification::SetChosenColors => {
                     parts.push("becomes the color or colors of your choice".into())
                 }
+                Modification::AddChosenColor => {
+                    parts.push("is the chosen color in addition to its other colors".into())
+                }
             }
         }
         let has = if gains { "gains" } else { "has" };
+        // The same modifications written in their order, the granted abilities apart and a
+        // set power and toughness as "with base power and toughness": "gets +2/+2, has
+        // flying, and is an Angel in addition to its other types", "becomes a blue Dragon
+        // with base power and toughness 4/4, loses all abilities, and gains flying".
+        // Cards print either form; the AST is the same.
+        let in_order = if becomes.is_empty() {
+            None
+        } else {
+            let saved_gaps = self.gaps.len();
+            let mut b2 = std::mem::take(&mut becomes);
+            b2.base_form = b2.pt.is_some()
+                && (!b2.subtypes.is_empty() || !b2.add_types.is_empty() || b2.colors.is_some());
+            let r2 = b2.render(self, &[], &[], gains);
+            becomes = b2;
+            becomes.base_form = false;
+            self.gaps.truncate(saved_gaps);
+            r2.map(|(b, still)| {
+                let mut ps = parts.clone();
+                let mut b = b;
+                // "is white in addition to its other colors" joins a type change with no
+                // color of its own: "is a white Angel in addition to its other colors and
+                // types".
+                if becomes.colors.is_none() && becomes.pt.is_none() && becomes.additive {
+                    if let Some(i) = ps.iter().position(|p| {
+                        p.starts_with("is ") && p.ends_with(" in addition to its other colors")
+                    }) {
+                        let colors = ps[i]
+                            .trim_start_matches("is ")
+                            .trim_end_matches(" in addition to its other colors")
+                            .to_string();
+                        if let Some(rest) = b
+                            .strip_prefix("is a ")
+                            .or_else(|| b.strip_prefix("is an "))
+                            .and_then(|r| r.strip_suffix(" in addition to its other types"))
+                        {
+                            b = format!(
+                                "is {} in addition to its other colors and types",
+                                with_article(&format!("{colors} {rest}"))
+                            );
+                            ps.remove(i);
+                        }
+                    }
+                }
+                if let Some(i) = ps.iter().position(|p| p == BECOMES) {
+                    ps[i] = b;
+                }
+                let mut grants = keywords.clone();
+                grants.extend(abilities.iter().cloned());
+                if !grants.is_empty() {
+                    let g = format!("{has} {}", join_list(&grants, "and"));
+                    match ps.iter().position(|p| p == GRANTS) {
+                        Some(i) => ps[i] = g,
+                        None => ps.push(g),
+                    }
+                }
+                ps.retain(|p| p != GRANTS && p != BECOMES);
+                ps.sort_by_key(|p| !p.starts_with("isn't"));
+                (join_list(&ps, "and"), still)
+            })
+        };
+        parts.retain(|p| p != BECOMES);
         if let Some((b, still)) = becomes.render(self, &keywords, &abilities, gains) {
             // Negations come first ("except it isn't legendary and is a 4/4 Hero").
             // "loses all abilities and has base power and toughness 0/1": as the
@@ -4612,6 +4851,13 @@ impl Renderer<'_> {
             if !still.is_empty() {
                 where_clauses.push(still);
             }
+            parts.retain(|p| p != GRANTS);
+            parts.sort_by_key(|p| !p.starts_with("isn't"));
+            let s = join_list(&parts, "and");
+            return match in_order {
+                Some((s2, _)) if s2 != s => (format!("{{alt:{s}|{s2}}}"), where_clauses.concat()),
+                _ => (s, where_clauses.concat()),
+            };
         } else {
             // "protection from each color" (CR 702.16h).
             let all_colors = ["white", "blue", "black", "red", "green"]
@@ -4717,6 +4963,9 @@ impl Renderer<'_> {
             ChoiceKind::OneOf(v) if *v == crate::types::land_types() => "a land type".into(),
             ChoiceKind::OneOf(v) => join_list(v, "or"),
             ChoiceKind::CreatureType => "a creature type".into(),
+            ChoiceKind::CreatureTypeOtherThan(v) => {
+                format!("a creature type other than {}", join_list(v, "or"))
+            }
             ChoiceKind::CardName => "a card name".into(),
             ChoiceKind::CardNameFiltered(f) => format!("a {f} card name"),
             ChoiceKind::Number { min, max } => format!("a number from {min} to {max}"),
@@ -4769,11 +5018,26 @@ impl Renderer<'_> {
                     other => self.amount(other),
                 };
                 let syms: Vec<String> = types.iter().map(|t| mana_symbol(*t)).collect();
-                format!(
+                let s = format!(
                     "{a} mana in any combination of {}{}",
                     join_list(&syms, "and/or"),
                     w.unwrap_or_default()
-                )
+                );
+                // "Add {R} or {G} for each Raccoon you control": one of them for each
+                // (each chosen separately).
+                let counted = match n {
+                    Value::Count(_) | Value::CountSel(_) => {
+                        let v = self.value(n);
+                        v.strip_prefix("the number of ").map(singular_head)
+                    }
+                    _ => None,
+                };
+                match counted {
+                    Some(c) if !s.contains(['|', '\n']) && !c.contains(['|', '\n']) => {
+                        format!("{{alt:{s}|{} for each {c}}}", join_list(&syms, "or"))
+                    }
+                    _ => s,
+                }
             }
             ManaProduction::OneOf(types) => {
                 let syms: Vec<String> = types.iter().map(|t| mana_symbol(*t)).collect();
@@ -4813,7 +5077,14 @@ impl Renderer<'_> {
                     }
                     other => {
                         let s = self.value(other);
-                        format!("an amount of {sym} equal to {s}")
+                        // "Add {B} for each charge counter on ~": a count of things.
+                        match s.strip_prefix("the number of ") {
+                            Some(rest) => format!(
+                                "{{alt:{sym} for each {}|an amount of {sym} equal to {s}}}",
+                                singular_head(rest)
+                            ),
+                            None => format!("an amount of {sym} equal to {s}"),
+                        }
                     }
                 }
             }
@@ -5232,6 +5503,9 @@ struct Becomes {
     replaces_creature_types: bool,
     land_type: bool,
     name: Option<String>,
+    /// Write a set power and toughness as "with base power and toughness 4/4" after the
+    /// types (newer Oracle wording) rather than as "a 4/4 ..." before them.
+    base_form: bool,
 }
 
 impl Becomes {
@@ -5291,8 +5565,13 @@ impl Becomes {
             }
         }
         let mut words: Vec<String> = Vec::new();
+        let mut base_pt = None;
         if let Some(pt) = pt {
-            words.push(pt);
+            if self.base_form {
+                base_pt = Some(pt);
+            } else {
+                words.push(pt);
+            }
         }
         words.extend(self.supertypes.iter().cloned());
         if let Some(c) = &self.colors {
@@ -5357,6 +5636,9 @@ impl Becomes {
         if let Some(n) = &self.name {
             s.push_str(&format!(" named {n}"));
         }
+        if let Some(pt) = base_pt {
+            s.push_str(&format!(" with base power and toughness {pt}"));
+        }
         s.push_str(&with);
         let mut still = String::new();
         // Adding a supertype ("is snow", "is legendary") never removes anything.
@@ -5410,6 +5692,10 @@ pub(crate) fn strip_controller(f: &Filter) -> Filter {
 
 /// Where the granted keywords and abilities go among the parts of a verb phrase.
 const GRANTS: &str = "\u{1}grants";
+
+/// Where the "is a [types]" part goes among the parts of a verb phrase written in the
+/// order of the modifications.
+const BECOMES: &str = "\u{1}becomes";
 
 fn unreachable_player() -> PlayerRef {
     PlayerRef::You
@@ -5581,4 +5867,31 @@ fn starts_by_sacrificing(e: &Effect, s: &Sel) -> bool {
         },
         e => sacrifices(e),
     }
+}
+
+/// A counted noun phrase in the singular: "charge counters on ~" -> "charge counter on
+/// ~", "creatures in your party" -> "creature in your party" (the head noun is the word
+/// before the first preposition or clause).
+fn singular_head(phrase: &str) -> String {
+    let words: Vec<&str> = phrase.split(' ').collect();
+    let preps = [
+        "on", "in", "you", "your", "among", "that", "with", "attached",
+    ];
+    let head = words
+        .iter()
+        .position(|w| preps.contains(w))
+        .unwrap_or(words.len())
+        .saturating_sub(1);
+    words
+        .iter()
+        .enumerate()
+        .map(|(i, w)| {
+            if i == head && w.ends_with('s') && !w.ends_with("ss") {
+                w[..w.len() - 1].to_string()
+            } else {
+                w.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }

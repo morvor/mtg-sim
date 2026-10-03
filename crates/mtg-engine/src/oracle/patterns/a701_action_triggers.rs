@@ -239,7 +239,10 @@ fn designation_condition(c: &str) -> Option<Condition> {
             (c.strip_suffix(&format!("'s not {word}")), false),
         ] {
             if let Some(s) = subj {
-                if s != "~" && s != "it" {
+                // "It" is whatever the instruction before names (a target chosen
+                // earlier: "choose up to one target creature. If it's suspected, ..."):
+                // the referent grammar's.
+                if s != "~" {
                     return None;
                 }
                 let f = Filter::Custom(SmolStr::new(name));
@@ -366,6 +369,8 @@ fn support_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
         together: None,
         related_to: None,
         per_player: None,
+        random: false,
+        chosen_by: None,
     };
     let slot = b.add_target(spec, text);
     Some(Effect::AddCounters {

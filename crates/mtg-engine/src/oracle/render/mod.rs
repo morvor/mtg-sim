@@ -28,6 +28,7 @@ mod outcomes;
 mod play_terms;
 mod players;
 mod statics;
+mod tail_parts;
 mod this_turn;
 mod trigger_causes;
 mod triggers;
@@ -698,8 +699,9 @@ pub struct Renderer<'a> {
     pub(crate) prev_mandatory: bool,
     /// An instruction of this ability milled cards ("from among the milled cards").
     pub(crate) milled: bool,
-    /// Rendering an emblem's abilities ("this emblem").
-    pub(crate) in_emblem: bool,
+    /// Rendering an emblem's own abilities ("this emblem"): the quote depth they're at (an
+    /// ability one of them grants to another object, quoted deeper, calls that object "~").
+    pub(crate) in_emblem: Option<u32>,
     /// The kind of counter an instruction of this ability removed ("for each charge
     /// counter removed this way").
     pub(crate) removed_kind: Option<String>,
@@ -728,6 +730,10 @@ pub struct Renderer<'a> {
     pub(crate) play_terms: Option<PlayTerms>,
     /// An earlier instruction of the sequence being rendered exiled objects.
     pub(crate) after_exile: bool,
+    /// Variables an earlier instruction of the sequence being rendered filled with the
+    /// objects it acted on, and what it did to them ("destroyed", "discarded"): "the
+    /// number of creatures destroyed this way" (see `tail_parts.rs`).
+    pub(crate) this_way: Vec<(Var, &'static str, Option<CardType>)>,
     /// The target an effect done "for each" target is about (a single target).
     pub(crate) each_target: Option<u8>,
     /// Targets remembered in variables, first mentioned through them: (variable, target
@@ -771,7 +777,7 @@ impl<'a> Renderer<'a> {
             batch_once: false,
             prev_mandatory: false,
             milled: false,
-            in_emblem: false,
+            in_emblem: None,
             removed_kind: None,
             trigger_player: None,
             revealed_hand: false,
@@ -781,6 +787,7 @@ impl<'a> Renderer<'a> {
             plural_vars: Vec::new(),
             play_terms: None,
             after_exile: false,
+            this_way: Vec::new(),
             each_target: None,
             target_vars: Vec::new(),
         }
@@ -825,7 +832,7 @@ impl<'a> Renderer<'a> {
     /// flying."), but not in the rest of the same clause ("~ deals 2 damage to it": "it"
     /// is the other object).
     pub(crate) fn me(&mut self) -> String {
-        if self.in_emblem {
+        if self.in_emblem == Some(self.quote_depth) {
             return "{alt:this emblem|~}".into();
         }
         if self.self_salient && !self.other_salient {

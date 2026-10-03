@@ -1672,6 +1672,8 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         together,
         related_to: None,
         per_player: None,
+        random: false,
+        chosen_by: None,
     };
     Some((spec, rest))
 }

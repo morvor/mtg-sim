@@ -762,6 +762,17 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         })
         .max_by_key(|(len, _, _)| *len);
     if let Some((_, sel, rest)) = named {
+        // "the chosen permanents you control" / "... you don't control": those of them.
+        for (q, mine) in [(" you control", true), (" you don't control", false)] {
+            if let Some(r) = rest.strip_prefix(q) {
+                if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
+                    let control = Filter::ControlledBy(PlayerRel::You);
+                    let control = if mine { control } else { Filter::not(control) };
+                    let f = Filter::and(vec![Filter::In(Box::new(sel)), control]);
+                    return Some((Sel::All(f), r.to_string()));
+                }
+            }
+        }
         if matches!(sel, Sel::Target(_)) {
             b.it = sel.clone();
         }
@@ -920,6 +931,11 @@ pub fn bind_target_player(f: Filter, rest: &str, b: &mut Builder) -> (Filter, St
 pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     use super::patterns::oracle_hardening_referents::{is_no_player_referent, is_no_referent};
     let s = s.trim();
+    // Players the text chose earlier ("the chosen player", "the first player"; see
+    // `patterns::choice_grammar`).
+    if let Some(r) = super::patterns::choice_grammar::player_phrase(s, b) {
+        return Some(r);
+    }
     if let Some(r) = s.strip_prefix("that player") {
         if is_no_player_referent(&b.it_player) {
             return None;
@@ -1317,7 +1333,7 @@ fn other_than_subject(to: Sel, subject: &Sel) -> Sel {
     }
 }
 
-fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
+pub(crate) fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim();
     let fixed: [(&str, Sel); 8] = [
         ("each opponent", Sel::Players(PlayerRef::EachOpponent)),
@@ -1361,6 +1377,10 @@ fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 return Some((sel, rest.to_string()));
             }
         }
+    }
+    // Players the text named earlier ("the chosen player"; see `choice_grammar`).
+    if let Some((who, rest)) = super::patterns::choice_grammar::player_phrase(s, b) {
+        return Some((Sel::Players(who), rest));
     }
     let (sel, rest) = object_ref(s, b)?;
     Some((sel, rest))
@@ -1620,7 +1640,14 @@ fn p_add_mana(l: &str, _b: &mut Builder) -> Option<Effect> {
             options,
         });
     } else if r.contains(" or ") {
-        // "{R} or {G}", "{W}, {U}, or {B}"
+        // "{R} or {G}", "{W}, {U}, or {B}": nothing but the symbols ("{B} or {G} for
+        // each permanent destroyed this way" and "X {G} or X {W}" say how many).
+        if r.split([',', ' '])
+            .map(|w| w.trim_end_matches('.'))
+            .any(|w| !w.is_empty() && w != "or" && !(w.starts_with('{') && w.ends_with('}')))
+        {
+            return None;
+        }
         let opts: Vec<ManaType> = r
             .split(|c| c == ',' || c == ' ')
             .filter(|w| w.starts_with('{'))
@@ -2058,8 +2085,23 @@ fn p_fight(l: &str, b: &mut Builder) -> Option<Effect> {
     let (c, tail) = if let Some(r2) = r.strip_prefix("another target ") {
         let (mut spec, t) =
             parse_target(&format!("target {r2}")).map(|(s, t)| (s, t.to_string()))?;
-        spec.distinct_from = vec![0];
-        let slot = b.add_target(spec, "another target");
+        match &a {
+            // Another than the first target ("target creature you control fights another
+            // target creature").
+            Sel::Target(first) => spec.distinct_from = vec![*first],
+            // Another than the fighting object itself ("~ fights another target creature").
+            _ => {
+                if let TargetKind::Object(f) = &mut spec.what {
+                    *f = Filter::and(vec![f.clone(), Filter::Other]);
+                }
+            }
+        }
+        let text = if matches!(a, Sel::Target(_)) {
+            "another target"
+        } else {
+            "target"
+        };
+        let slot = b.add_target(spec, text);
         (Sel::Target(slot), t)
     } else {
         object_ref(r, b)?

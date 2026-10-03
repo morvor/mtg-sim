@@ -482,6 +482,9 @@ impl Renderer<'_> {
             }
             Sel::Var(v) if self.plural_vars.contains(v) => them(case),
             Sel::Var(v) => match *v {
+                vars::SACRIFICED if self.sacrificed.as_deref() == Some("~") => {
+                    decline("~".into(), case)
+                }
                 vars::SACRIFICED => {
                     // "Target player sacrifices a creature. ... that creature's toughness".
                     let n = self.sacrificed.clone().unwrap_or_else(|| "creature".into());
@@ -640,6 +643,14 @@ impl Renderer<'_> {
                     if matches!(g.as_ref(), Sel::Var(v) if *v == vars::IT) {
                         return decline(format!("{} of them", number_word(*n)), case);
                     }
+                    // "Tap up to three target creatures. Put a stun counter on one of
+                    // them.": one of the targets.
+                    if let Sel::Target(i) = g.as_ref() {
+                        if self.slot_is_many(*i) && self.introduced.get(*i as usize) == Some(&true)
+                        {
+                            return decline(format!("{} of them", number_word(*n)), case);
+                        }
+                    }
                 }
                 let det = if *up_to && unbounded_choice(filter, count) {
                     Det::Count("any number of".into())
@@ -658,6 +669,11 @@ impl Renderer<'_> {
                     s = format!("{s} of {c} choice");
                 }
                 decline(s, case)
+            }
+            Sel::AtRandom { filter, count, .. } => {
+                let det = self.det_for(count);
+                let s = self.noun_det(filter, det);
+                decline(format!("{s} chosen at random"), case)
             }
             Sel::Linked => decline("each card exiled with ~it".into(), case),
             Sel::LinkedNoted => decline("the last chosen card".into(), case),
@@ -983,6 +999,15 @@ impl Renderer<'_> {
                 )
             }
             PlayerFilter::Monarch => "who is the monarch".into(),
+            // "Each opponent attacking that player": an opponent controlling a creature
+            // attacking that player (CR 506.4: the attacking player controls the
+            // attackers).
+            PlayerFilter::Controls(f, Cmp::Ge, v)
+                if matches!(f.as_ref(), Filter::Custom(n) if n == "attacking the event's player")
+                    && matches!(v.as_ref(), Value::Const(1)) =>
+            {
+                "{alt:who controls a permanent attacking that player|attacking that player}".into()
+            }
             PlayerFilter::Controls(f, c, v) => {
                 let n = self.count_phrase(f, *c, v);
                 format!("who controls {n}")
@@ -1014,6 +1039,14 @@ impl Renderer<'_> {
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);
                 format!("not {q}")
+            }
+            PlayerFilter::OpponentOf(r) => {
+                let p = self.player(r, Case::Obj);
+                format!("who is an opponent of {p}")
+            }
+            PlayerFilter::AsChosen(x) => {
+                let q = self.player_quality(x);
+                format!("{q} as you activate this ability")
             }
         }
     }

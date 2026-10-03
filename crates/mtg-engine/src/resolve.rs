@@ -2152,6 +2152,20 @@ impl Game {
                 }
                 picked
             }
+            Sel::AtRandom {
+                filter,
+                count,
+                store,
+            } => {
+                let picked: Vec<Entity> = crate::choices::pick_at_random(self, filter, count, ctx)
+                    .into_iter()
+                    .map(Entity::Object)
+                    .collect();
+                if let Some(v) = store {
+                    ctx.vars.insert(*v, picked.clone());
+                }
+                picked
+            }
             Sel::Union(v) => {
                 let mut out = Vec::new();
                 for s in v {
@@ -2395,6 +2409,12 @@ impl Game {
                         None => m.clone(),
                     }
                 }
+                Modification::AddChosenColor => {
+                    match ctx.source.and_then(|s| self.obj(s).choices.color) {
+                        Some(c) => Modification::AddColors(ColorSet::single(c)),
+                        None => m.clone(),
+                    }
+                }
                 Modification::SetChosenColors => {
                     match ctx.source.and_then(|s| self.obj(s).choices.colors) {
                         Some(cs) => Modification::SetColors(cs),
@@ -2483,6 +2503,9 @@ impl Game {
             for f in [blocker, attacker] {
                 if filter_references_specific(f) {
                     *f = Filter::Objects(self.named_objects(f, ctx));
+                } else {
+                    // "creatures that player controls": the players as the effect begins.
+                    *f = self.bind_target_players(f, ctx);
                 }
             }
         }

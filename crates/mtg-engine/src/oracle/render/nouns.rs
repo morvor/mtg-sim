@@ -101,8 +101,22 @@ pub(crate) fn supertype_word(s: Supertype) -> &'static str {
     }
 }
 
+/// A number written as such ("3", "X"), which "or less" can follow ("3 or less"); a
+/// number described in words ("the number of lands you control") is compared with "less
+/// than or equal to" instead. ("That much" and "that mana value" keep "or less".)
+pub(crate) fn is_plain_number(v: &str) -> bool {
+    v.parse::<i64>().is_ok() || v == "X" || v.starts_with("that ")
+}
+
 pub(crate) fn cmp_phrase(cmp: Cmp, v: &str) -> String {
     match cmp {
+        // "with mana value less than or equal to that damage": the event's amount.
+        Cmp::Le if v == "that much" || v == "{alt:that much|that many}" => {
+            "{alt:that much or less|less than or equal to that damage|less than or equal to that much}"
+                .into()
+        }
+        Cmp::Le if !is_plain_number(v) => format!("less than or equal to {v}"),
+        Cmp::Ge if !is_plain_number(v) => format!("greater than or equal to {v}"),
         // "with mana value 3" / "with mana value equal to the number of ...".
         Cmp::Eq if v.parse::<i64>().is_ok() || v == "X" => v.to_string(),
         Cmp::Eq => format!("{{opt:equal to}} {v}"),
@@ -327,6 +341,37 @@ impl Renderer<'_> {
             Filter::Or(v) if v.iter().any(|x| matches!(x, Filter::Or(_))) => {
                 let flat = flatten_or(f);
                 self.collect(&flat, np)
+            }
+            // "a card named Festering Newt or Bubbling Cauldron".
+            Filter::Or(v) if v.len() > 1 && v.iter().all(|x| matches!(x, Filter::Named(_))) => {
+                let names: Vec<String> = v
+                    .iter()
+                    .filter_map(|x| match x {
+                        Filter::Named(n) => Some(n.to_string()),
+                        _ => None,
+                    })
+                    .collect();
+                np.post.push(format!("named {}", join_list(&names, "or")));
+            }
+            // "artifact, enchantment, or legendary card": a supertype among card types,
+            // the alternatives sharing the noun.
+            Filter::Or(v)
+                if v.iter().any(|x| matches!(x, Filter::Supertype(_)))
+                    && v.iter().all(|x| {
+                        matches!(
+                            x,
+                            Filter::Supertype(_) | Filter::Type(_) | Filter::Subtype(_)
+                        )
+                    }) =>
+            {
+                for x in v {
+                    np.alts.push(match x {
+                        Filter::Supertype(t) => supertype_word(*t).to_string(),
+                        Filter::Type(t) => t.word().to_string(),
+                        Filter::Subtype(t) => t.to_string(),
+                        _ => String::new(),
+                    });
+                }
             }
             Filter::Or(v) => {
                 let status_word = |x: &Filter| -> Option<&'static str> {
@@ -659,6 +704,17 @@ impl Renderer<'_> {
                 np.post.push("revealed this way".into());
                 np.kind.get_or_insert("card");
             }
+            // "for each permanent destroyed this way".
+            Filter::In(s) if self.this_way_of(s).is_some() => {
+                let (verb, card, ty) = self.this_way_of(s).unwrap_or(("", false, None));
+                np.post.push(format!("{verb} this way"));
+                if let (Some(t), true) = (ty, np.types.is_empty()) {
+                    np.types.push(t);
+                }
+                if card {
+                    np.kind.get_or_insert("card");
+                }
+            }
             // "a permanent card from among the milled cards".
             Filter::In(s)
                 if self.milled
@@ -700,9 +756,9 @@ impl Renderer<'_> {
             Filter::Modified => np.status.push("modified".into()),
             Filter::DiedThisTurn => np.rel.push("that died this turn".into()),
             Filter::AttackedThisTurn => np.rel.push("that attacked this turn".into()),
-            Filter::ChosenColor | Filter::LinkedChosenColor => {
-                np.post.push("of the chosen color".into())
-            }
+            // "Choose a color. ... each card of that color": the color just chosen.
+            Filter::ChosenColor => np.post.push("of {alt:the chosen color|that color}".into()),
+            Filter::LinkedChosenColor => np.post.push("of the chosen color".into()),
             Filter::ChosenType | Filter::LinkedChosenCreatureType => {
                 np.post.push("of {alt:the chosen type|that type}".into())
             }
@@ -859,6 +915,11 @@ impl Renderer<'_> {
                     zone_word(z)
                 ))
             }
+            // "target permanent not named ~".
+            Filter::SameNameAs(s) if matches!(s.as_ref(), Sel::This) => {
+                np.post.push(format!("not named {}", self.me()))
+            }
+            Filter::Or(v) if is_outlaw(v) => np.nons.push("non-outlaw".into()),
             Filter::Or(v) => {
                 for x in v {
                     self.collect_not(x, np);
@@ -1010,9 +1071,35 @@ impl Renderer<'_> {
         }
         if let Some(f) = &np.fixed {
             let mut s = f.clone();
+            // The qualities the alternatives share: "artifact, enchantment, or nonbasic land
+            // an opponent controls", "artifact or non-Aura enchantment card in your
+            // graveyard".
+            let in_zone = np
+                .zone
+                .is_some_and(|z| !matches!(z, ZoneKind::Battlefield | ZoneKind::Stack));
+            if in_zone && np.kind == Some("card") && !s.contains("card") && !s.contains('~') {
+                s.push_str(match num {
+                    Num::One => " card",
+                    Num::Many => " cards",
+                });
+            }
+            if let (Some(z), true) = (np.zone, in_zone) {
+                if !s.contains(" in ") && !s.contains(" from ") {
+                    s.push(' ');
+                    s.push_str(&self.zone_phrase(z, np.owner, num));
+                }
+            }
+            if let Some(c) = np.controller {
+                s.push(' ');
+                s.push_str(&self.controls_phrase(c, num));
+            }
             for p in &np.post {
                 s.push(' ');
                 s.push_str(p);
+            }
+            for r in &np.rel {
+                s.push(' ');
+                s.push_str(r);
             }
             return s;
         }
@@ -1140,10 +1227,20 @@ impl Renderer<'_> {
                     None => "in exile".into(),
                 }
             }
-            ZoneKind::Command => return "in the command zone".into(),
-            ZoneKind::Outside => return "from outside the game".into(),
-            ZoneKind::Stack => return "on the stack".into(),
-            ZoneKind::Battlefield => return "on the battlefield".into(),
+            ZoneKind::Command | ZoneKind::Outside | ZoneKind::Stack | ZoneKind::Battlefield => {
+                let z = match z {
+                    ZoneKind::Command => "in the command zone",
+                    ZoneKind::Outside => "from outside the game",
+                    ZoneKind::Stack => "on the stack",
+                    _ => "on the battlefield",
+                };
+                // "a sorcery card you own from outside the game", "a commander you own in
+                // the command zone".
+                return match owner {
+                    Some(o) if o != PlayerRel::Any => format!("{} {z}", self.owns_phrase(o)),
+                    _ => z.into(),
+                };
+            }
             _ => {}
         }
         match owner {
@@ -1225,6 +1322,13 @@ impl Renderer<'_> {
             PlayerRel::Any => "a player controls".into(),
             PlayerRel::TargetOrController(i) => {
                 let p = self.target_player_mention(i);
+                // "each creature that player or that planeswalker's controller controls":
+                // the target, mentioned again, is a player or a planeswalker.
+                let p = if p == "it" {
+                    "that player".to_string()
+                } else {
+                    p
+                };
                 format!("{p} or that planeswalker's controller controls")
             }
             // "among creatures they control": the player each player is.
@@ -1261,7 +1365,8 @@ impl Renderer<'_> {
             if !matches!(
                 sel.as_ref(),
                 Sel::Var(crate::kw::reveal_from_hand::REVEALED)
-            ) {
+            ) && self.this_way_of(sel).is_none()
+            {
                 return self.sel(sel, Case::Obj);
             }
         }
@@ -1548,6 +1653,7 @@ fn distribute_or(f: &Filter) -> Filter {
     let complex = |x: &Filter| {
         matches!(x, Filter::Or(alts) if !alts.iter().all(Renderer::is_type_like)
             && !alts.iter().all(|a| matches!(a, Filter::Color(_)))
+            && !alts.iter().all(|a| matches!(a, Filter::Named(_)))
             && !alts.iter().all(|a| matches!(a, Filter::Attacking | Filter::Blocking | Filter::Tapped | Filter::Untapped | Filter::Blocked | Filter::Unblocked)))
     };
     let Some(pos) = v.iter().position(complex) else {

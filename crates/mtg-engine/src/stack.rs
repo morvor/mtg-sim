@@ -786,9 +786,10 @@ impl Game {
         let mut slot_max: Vec<u32> = vec![0; specs.len()];
         // CR 601.7b: when the controller and an opponent both choose targets, the
         // controller chooses first.
+        let by_other = |s: &TargetSpec| s.chosen_by_opponent || s.chosen_by.is_some();
         let order: Vec<usize> = (0..specs.len())
-            .filter(|i| !specs[*i].chosen_by_opponent)
-            .chain((0..specs.len()).filter(|i| specs[*i].chosen_by_opponent))
+            .filter(|i| !by_other(&specs[*i]))
+            .chain((0..specs.len()).filter(|i| by_other(&specs[*i])))
             .collect();
         for (pos, &i) in order.iter().enumerate() {
             let spec = &specs[i];
@@ -807,6 +808,9 @@ impl Game {
                     si.chosen_values.insert(CHOOSER_KEY, o.0 as i64);
                 }
                 o
+            } else if let Some(who) = &spec.chosen_by {
+                // "target ... of their choice": that player chooses (CR 601.2c).
+                self.eval_player(who, ctx).unwrap_or(ctx.controller)
             } else {
                 ctx.controller
             };
@@ -909,6 +913,13 @@ impl Game {
             slot_max[i] = max;
             let picked = if max == 0 {
                 vec![]
+            } else if spec.random {
+                // "target ... chosen at random": nobody chooses.
+                use rand::seq::SliceRandom;
+                let mut v = cands.clone();
+                v.shuffle(&mut self.rng);
+                v.truncate(max as usize);
+                v
             } else {
                 match self.ask(
                     chooser,
@@ -1149,6 +1160,9 @@ impl Game {
                     new_targets.push(slot.clone());
                     continue;
                 };
+                // Requirements that apply only as the target is chosen aren't rechecked.
+                let relaxed = crate::target_rules::relaxed_on_resolution(spec);
+                let spec = relaxed.as_ref().unwrap_or(spec);
                 let mut legal = Vec::new();
                 let mut legal_div = Vec::new();
                 for (j, t) in slot.iter().enumerate() {

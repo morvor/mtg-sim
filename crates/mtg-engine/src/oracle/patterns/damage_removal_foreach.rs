@@ -51,6 +51,17 @@ pub(crate) fn multiply(e: Effect, count: Value) -> Option<Effect> {
             mana: ManaProduction::Amount(syms[0], count),
             restriction,
         },
+        // "Add {R} or {G} for each Raccoon you control": each mana is one of them,
+        // chosen separately.
+        Effect::AddMana {
+            who,
+            mana: ManaProduction::OneOf(types),
+            restriction,
+        } => Effect::AddMana {
+            who,
+            mana: ManaProduction::CombinationOf(types, count),
+            restriction,
+        },
         Effect::DealDamage { source, amount, to } => Effect::DealDamage {
             source,
             amount: times(&amount)?,

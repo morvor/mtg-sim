@@ -194,7 +194,8 @@ impl Renderer<'_> {
         i: usize,
         known: &mut Vec<(Var, OutcomeVerb)>,
     ) -> Option<(usize, String)> {
-        self.look_then_exile_part(v, i)
+        self.tail_seq_part(v, i)
+            .or_else(|| self.look_then_exile_part(v, i))
             .or_else(|| self.named_group_part(v, i))
             .or_else(|| self.distribute_part(v, i))
             .or_else(|| self.each_chooses_part(v, i))

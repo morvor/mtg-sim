@@ -180,6 +180,14 @@ fn that_much_damage(l: &str, b: &mut Builder) -> Option<Effect> {
         "each player" => Sel::Players(PlayerRef::EachPlayer),
         "you" => Sel::Players(PlayerRef::You),
         "that player" => Sel::Players(b.it_player.clone()),
+        // "the chosen player" (see `choice_grammar::player_phrase`).
+        _ if rest.starts_with("the chosen player") => {
+            let (who, tail) = super::choice_grammar::player_phrase(rest, b)?;
+            if !end(&tail).is_empty() {
+                return None;
+            }
+            Sel::Players(who)
+        }
         _ => {
             let (spec, tail) = parse_any_target(rest)?;
             if !end(tail).is_empty() {

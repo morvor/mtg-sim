@@ -169,13 +169,6 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               says (CR 604.1).",
     },
     Equivalence {
-        pattern: r"\bif (it|thatit|~|~it) had\b",
-        replacement: "if $1 has",
-        why: "As \"if it was\" below: whether an object that left the battlefield had \
-              counters on it is judged by its last known information (CR 608.2h), which \
-              is what \"if it has\" asks of it.",
-    },
-    Equivalence {
         pattern: r"\b(opponents?) you have\b",
         replacement: "$1",
         why: "\"For each opponent you have\" counts your opponents (CR 102.2, 102.3).",
@@ -367,6 +360,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               discarded card was a land card, ...\" likewise.",
     },
     Equivalence {
+        pattern: r"\bif (it|thatit|that-object|~it|~) had\b",
+        replacement: "if $1 has",
+        why: "As \"if it was\" below (here after \"that creature\" is `thatit`): whether \
+              an object that left the battlefield had counters on it is judged by its last \
+              known information (CR 608.2h), which is what \"if it has\" asks of it.",
+    },
+    Equivalence {
         pattern: r"\b(those|the) (creatures|permanents|cards|spells|lands|artifacts|tokens|objects)\b",
         replacement: "them",
         why: "Anaphora (plural).",
@@ -378,6 +378,20 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               counter on each of them\" and \"put a +1/+1 counter on them\" put one counter on \
               every object of the group (a counter is put on an object, CR 122.1), and \"each \
               of them gets +1/+1\" is \"they get +1/+1\" (CR 611.2c: each affected object).",
+    },
+    Equivalence {
+        pattern: r"(^|[.:—•] |\n)it ([^.]*?) as long as (enchanted creature|enchanted permanent|equipped creature|enchanted land|enchanted artifact) is ",
+        replacement: "${1}$3 $2 as long as $3 is ",
+        why: "\"Enchanted permanent gets -1/-1 as long as it's a creature\" and \"As long as \
+              enchanted permanent is a creature, it gets -1/-1\": the noun and the pronoun \
+              name the same object, one way or the other.",
+    },
+    Equivalence {
+        pattern: r"\bat the beginning of the next upkeep\b",
+        replacement: "at the beginning of the next turn's upkeep",
+        why: "Each turn has one upkeep (CR 500.1), and an effect can't be created during \
+              a turn's untap step before its upkeep (no player gets priority then, CR \
+              502.4), so the next upkeep is the next turn's.",
     },
     Equivalence {
         pattern: r"\bat the beginning of each of your postcombat main phases\b",
@@ -528,6 +542,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               and the engine evaluates a moved object by its last known information.",
     },
     Equivalence {
+        pattern: r"\b(spells?) in your (hand|graveyard) ((?:with|that shares?) [^.,]+?) without paying\b",
+        replacement: "$1 $3 in your $2 without paying",
+        why: "\"Cast a spell in your hand with mana value 4 or less\" and \"... a spell with \
+              mana value 4 or less in your hand\": the same qualities, in either order.",
+    },
+    Equivalence {
         pattern: r"\b(adds?) an additional\b",
         replacement: "$1",
         why: "A triggered mana ability's mana is added in addition to the mana the \
@@ -638,6 +658,26 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
     (
         "\"N damage equal to V\", \"N life for each F\", \"+1/+1 for each F\", \"a card for each F\", ... -> \"X ..., where X is V\"",
         "CR 107.3: X is defined by the text; both describe the same number.",
+    ),
+    (
+        "\"+2/+2 for each F\", \"2 damage to P for each F\", \"two cards for each F\" -> \"X ..., where X is 2 times the number of F\"",
+        "CR 107.3: the same number, as above.",
+    ),
+    (
+        "\"When C, at end of combat, X.\" -> \"When C, X at end of combat.\" (a single instruction ending the ability)",
+        "A delayed trigger's time applies to the instruction wherever it's written (CR 603.7).",
+    ),
+    (
+        "\"Choose target T. [Instruction] it ...\" -> \"[Instruction] target T ...\" (an instruction acting on it, not a condition)",
+        "CR 601.2c, 602.2b: the target is chosen as the spell or ability is put on the stack either way.",
+    ),
+    (
+        "\"up to X target T ..., where X is V\" -> \"up to V target T ...\"",
+        "CR 107.3: the same number of targets.",
+    ),
+    (
+        "\"with mana value X or less ..., where X is V\" -> \"with mana value less than or equal to V ...\"",
+        "CR 107.3: the same comparison, with the number X stands for named in place.",
     ),
 ];
 
@@ -815,6 +855,14 @@ fn singular(w: &str) -> String {
         "wasn't" | "weren't" => return "wasn't".into(),
         _ => {}
     }
+    // "Zombies", "Faeries", "Pixies": nouns ending in "ie".
+    if [
+        "zombies", "faeries", "pixies", "cookies", "rookies", "zombie's",
+    ]
+    .contains(&w)
+    {
+        return w.trim_end_matches('s').trim_end_matches('\'').to_string();
+    }
     if let Some(stem) = w.strip_suffix("ies") {
         return format!("{stem}y");
     }
@@ -894,6 +942,14 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
             c if c.is_alphanumeric() || matches!(c, '\'' | '+' | '-' | '/' | '~' | '*') => {
                 cur.push(c)
             }
+            // A quotation mark: a quoted ability's "enchanted creature" is another
+            // object's (see [`attached_anaphora`]).
+            '"' => {
+                if !cur.is_empty() {
+                    tokens.push(std::mem::take(&mut cur));
+                }
+                tokens.push(QUOTE.into());
+            }
             _ => {
                 if !cur.is_empty() {
                     tokens.push(std::mem::take(&mut cur));
@@ -906,6 +962,10 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
     }
     let mut out = Vec::new();
     for t in tokens {
+        if t == QUOTE {
+            out.push(t);
+            continue;
+        }
         let t = t.trim_matches('\'').to_string();
         let t = t
             .strip_suffix("'s")
@@ -964,8 +1024,14 @@ fn expand_symbol_counts(tokens: Vec<String>) -> Vec<String> {
     out
 }
 
+/// A quotation mark among the tokens, for [`attached_anaphora`] only.
+const QUOTE: &str = "\"";
+
 /// After the first "enchanted creature" (or "equipped creature", ...) in a unit, later
-/// ones may be "it": both refer to the object the source is attached to (anaphora).
+/// ones may be "it": both refer to the object the source is attached to (anaphora). Not
+/// across a quotation mark: in "As long as enchanted permanent is an Equipment, it has
+/// \"Equipped creature has flying.\"" the quoted ability's equipped creature is the
+/// Equipment's.
 fn attached_anaphora(tokens: Vec<String>) -> Vec<String> {
     let heads = ["creature", "permanent", "land", "artifact", "planeswalker"];
     let mut out: Vec<String> = Vec::new();
@@ -973,6 +1039,11 @@ fn attached_anaphora(tokens: Vec<String>) -> Vec<String> {
     let mut i = 0;
     while i < tokens.len() {
         let t = &tokens[i];
+        if t == QUOTE {
+            seen = false;
+            i += 1;
+            continue;
+        }
         let is_attached = (t == "enchanted" || t == "equipped" || t == "fortified")
             && tokens
                 .get(i + 1)
@@ -1070,6 +1141,65 @@ fn sentence_rewrites(s: &str) -> String {
     for (re, rep) in where_x_rewrites() {
         s = re.replace_all(&s, *rep).to_string();
     }
+    s = scaled_for_each(&s);
+    s = compared_to_x(&s);
+    // "Choose target creature. Put a +1/+1 counter on it." / "Put a +1/+1 counter on
+    // target creature.": the target is chosen as the spell or ability is put on the stack
+    // either way (CR 601.2c, 602.2b); the instruction that first uses it names it.
+    static CHOOSE_TARGET: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = CHOOSE_TARGET.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )choose ((?:up to (?:one|1) |any number of )?target [^.,]+?)\. ((?:[a-z+/0-9{},-]+ ){1,8}?)(?:each of them|it|thatit|them|that creature|that permanent|that card|the chosen creature|the chosen card)\b").ok()
+    }) {
+        // Only an instruction that acts on it ("tap it", "put a +1/+1 counter on it"),
+        // not a condition about something else ("if you control a creature with a
+        // counter on it").
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                let lead = &c[3];
+                if lead.starts_with("if ") || lead.contains(" with ") || lead.starts_with("as ") {
+                    return c[0].to_string();
+                }
+                format!("{}{}{}", &c[1], lead, &c[2])
+            })
+            .to_string();
+    }
+    // "Tap up to X target creatures, where X is V." / "up to V target creatures": the
+    // number of targets X stands for, named in place (CR 107.3).
+    static TARGETS_X: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = TARGETS_X.get_or_init(|| {
+        Regex::new(r"\b(up to |)x ((?:other )?target [^.]*?), where x is ([^.]+?)(\.|$)").ok()
+    }) {
+        // Only when that X is the only one the definition is for ("tap X target
+        // creatures. They get -X/-0 ..." keeps its X).
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                if c[2]
+                    .split(|ch: char| !ch.is_alphanumeric())
+                    .any(|w| w == "x")
+                {
+                    return c[0].to_string();
+                }
+                format!("{}{} {}{}", &c[1], &c[3], &c[2], &c[4])
+            })
+            .to_string();
+    }
+    // "When ~ blocks, at end of combat, destroy it." / "..., destroy it at end of
+    // combat.": a delayed trigger's time after a trigger condition, too.
+    static DELAYED: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = DELAYED.get_or_init(|| {
+        Regex::new(r#"(, )(at the beginning of the next end step|at the beginning of the next turn's upkeep|at the beginning of the next upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\.(\n|$)"#).ok()
+    }) {
+        // Only a single instruction ending the ability: in "..., at end of combat, exile
+        // it, then return it" or "... exile it. Return it ..." the time applies to more.
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                if c[3].contains(" then ") || c[3].contains(", then") {
+                    return c[0].to_string();
+                }
+                format!("{}{} {}.{}", &c[1], &c[3], &c[2], &c[4])
+            })
+            .to_string();
+    }
     let Some(lead) = lead else {
         return s;
     };
@@ -1096,6 +1226,99 @@ fn sentence_rewrites(s: &str) -> String {
     s
 }
 
+/// "Gets +2/+2 for each F", "deals 2 damage to you for each F", "draw two cards for each
+/// F" -> "... X ..., where X is 2 times the number of F" (CR 107.3), as
+/// [`where_x_rewrites`] does for one of each.
+fn scaled_for_each(s: &str) -> String {
+    static R: OnceLock<[Option<Regex>; 3]> = OnceLock::new();
+    let [pt, damage, cards] = R.get_or_init(|| {
+        [
+            Regex::new(r"\b(gets?) ([+-])(\d+)/([+-])(\d+) ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)").ok(),
+            Regex::new(r"\b(deals?) (\d+) damage to ([^.]+?) for each ([^.]+?)(\.|$)").ok(),
+            Regex::new(r"\b(draws?|mills?|discards?) (\d+) cards for each ([^.]+?)(\.|$)").ok(),
+        ]
+    });
+    let mut s = s.to_string();
+    if let Some(re) = pt {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                let (p, t) = (&c[3], &c[5]);
+                // One number scales both (or one with the other 0): "+2/+2", "+2/+0".
+                let n = match (p, t) {
+                    (a, b) if a == b => a,
+                    (a, "0") => a,
+                    ("0", b) => b,
+                    _ => return c[0].to_string(),
+                };
+                if n == "1" || n == "0" {
+                    return c[0].to_string();
+                }
+                let x = |v: &str| if v == "0" { "0" } else { "x" };
+                format!(
+                    "{} {}{}/{}{} {}, where x is {n} times the number of {}{}",
+                    &c[1],
+                    &c[2],
+                    x(p),
+                    &c[4],
+                    x(t),
+                    c[6].trim_end(),
+                    &c[7],
+                    &c[8]
+                )
+            })
+            .to_string();
+    }
+    if let Some(re) = damage {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                if &c[2] == "1" {
+                    return c[0].to_string();
+                }
+                format!(
+                    "{} x damage to {}, where x is {} times the number of {}{}",
+                    &c[1], &c[3], &c[2], &c[4], &c[5]
+                )
+            })
+            .to_string();
+    }
+    if let Some(re) = cards {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                if &c[2] == "1" {
+                    return c[0].to_string();
+                }
+                format!(
+                    "{} x cards, where x is {} times the number of {}{}",
+                    &c[1], &c[2], &c[3], &c[4]
+                )
+            })
+            .to_string();
+    }
+    s
+}
+
+/// "With mana value X or less ..., where X is V" -> "with mana value less than or equal to
+/// V ...": the same comparison with the number named in place (CR 107.3).
+fn compared_to_x(s: &str) -> String {
+    static R: OnceLock<Option<(Regex, Regex)>> = OnceLock::new();
+    let Some((re, word)) = R.get_or_init(|| {
+        Some((
+            Regex::new(r"\bx or (less|greater)\b([^.]*?), where x is ([^.]+?)(\.|$)").ok()?,
+            Regex::new(r"\bx\b").ok()?,
+        ))
+    }) else {
+        return s.to_string();
+    };
+    re.replace_all(s, |c: &regex::Captures| {
+        // Only when that X is the only one the definition is for.
+        if word.is_match(&c[2]) {
+            return c[0].to_string();
+        }
+        format!("{} than or equal to {}{}{}", &c[1], &c[3], &c[2], &c[4])
+    })
+    .to_string()
+}
+
 /// Amounts stated as "equal to V" or "for each F" are rewritten to the "X ..., where X is
 /// V" form (CR 107.3: X is defined by the text): both describe the same number.
 fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
@@ -1117,11 +1340,12 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\benters? with (two|three|four|\d+) (\S+) counters on it for each ([^.]+?)(\.|$)", "enters with x $2 counters on it, where x is $1 times the number of $3$4"),
             (r"\b(enters?|puts?) (with )?a number of (\S+) counters on ([^.]+?) equal to ([^.]+?)(\.|$)", "$1 ${2}x $3 counters on $4, where x is $5$6"),
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
-            (r"\b(creates?) an? ([^.]+?) tokens? for each ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is the number of $3$4"),
+            (r"\b(creates?) an? ([^.]+?) tokens?((?: with [^.]+?)?) for each ([^.]+?)(\.|$)", "$1 x $2 tokens$3, where x is the number of $4$5"),
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
-            (r"\b(creates?) a number of ([^.]+?) tokens? equal to ([^.]+?)(\.|$)", "$1 x $2 tokens, where x is $3$4"),
+            (r"\b(creates?) a number of ([^.]+?) tokens?((?: with [^.]+?)?) equal to ([^.]+?)(\.|$)", "$1 x $2 tokens$3, where x is $4$5"),
+            (r"\b(discards?|draws?|mills?) a number of cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
+            (r"(^|[.:—•] |\n|, )for each ([^,.]+), (creates?) an? ([^.]+?) tokens?((?: with [^.]+?)?)(\.|$)", "${1}$3 x $4 tokens$5, where x is the number of $2$6"),
             (r"\bputs? a number of (\S+) counters equal to ([^.]+?) on ([^.]+?)(\.|$)", "put x $1 counters on $3, where x is $2$4"),
-            (r"\b(gets?) \+2/\+2 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 +x/+x $2, where x is 2 times the number of $3$4"),
         ]
         .into_iter()
         .filter_map(|(p, r)| Regex::new(p).ok().map(|re| (re, r)))
@@ -1263,7 +1487,14 @@ pub fn oracle_units(text: &str, names: &[String]) -> Vec<String> {
         if l.starts_with('•') || l.starts_with(|c: char| c.is_ascii_digit()) && l.contains('|') {
             if let Some(last) = lines.last_mut() {
                 last.push('\n');
-                last.push_str(l);
+                // A mode's flavor word ("• Cure Wounds — You gain 2 life.", CR 207.2d).
+                match l.strip_prefix("• ") {
+                    Some(m) => {
+                        last.push_str("• ");
+                        last.push_str(&strip_ability_word(m));
+                    }
+                    None => last.push_str(l),
+                }
                 continue;
             }
         }
