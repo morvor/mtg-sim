@@ -879,22 +879,26 @@ pub(crate) fn x_to_event_amount(e: &Effect) -> Option<Effect> {
 /// the rest of a prevention effect, performed right after the damage is prevented
 /// (CR 615.5), with "that much" / "the damage prevented this way" the damage prevented.
 pub(crate) fn prevented_followup(l: &str, ctx: &CompileContext, it: Sel) -> Option<Effect> {
-    prevented_followup_with(l, &mut |t| instructions(t, ctx, it.clone()))
+    prevented_followup_with(l, &it, &mut |t, it| instructions(t, ctx, it))
 }
 
-/// [`prevented_followup`] with the instructions parsed by `parse`.
+/// [`prevented_followup`] with the instructions parsed by `parse` (given what "it" and
+/// "that creature" refer to).
 fn prevented_followup_with(
     l: &str,
-    parse: &mut dyn FnMut(&str) -> Option<Effect>,
+    it: &Sel,
+    parse: &mut dyn FnMut(&str, Sel) -> Option<Effect>,
 ) -> Option<Effect> {
     let l = end(l.trim());
     if let Some(r) = l.strip_prefix("if damage is prevented this way, ") {
-        return parse(r);
+        return parse(r, it.clone());
     }
+    // "If damage from a creature source is prevented this way, ~ deals that much damage
+    // to that creature." (Comeuppance): "that creature" is the source.
     if let Some(r) = l.strip_prefix("if damage from a ") {
         let (q, r) = r.split_once(" source is prevented this way, ")?;
         let f = source_qualities(q)??;
-        let e = parse(r)?;
+        let e = parse(r, Sel::TriggerOtherObject)?;
         return Some(Effect::If {
             cond: Condition::SelMatches(Sel::TriggerOtherObject, f),
             then: Box::new(e),
@@ -906,13 +910,13 @@ fn prevented_followup_with(
     }
     // "Create a 3/1 ... token for each 1 damage prevented this way."
     if let Some(head) = l.strip_suffix(" for each 1 damage prevented this way") {
-        let e = parse(head)?;
+        let e = parse(head, it.clone())?;
         return Some(Effect::Repeat {
             times: Value::EventAmount,
             effect: Box::new(e),
         });
     }
-    parse(l)
+    parse(l, it.clone())
 }
 
 /// [`instructions`] parsed with the one-shot effect's own builder, so they can have
@@ -1846,7 +1850,9 @@ fn last_prevention(e: &mut Effect) -> Option<&mut ReplacementDef> {
                 ReplacementEvent::Damage { .. } | ReplacementEvent::NoncombatDamage { .. }
             ) && matches!(
                 def.action,
-                ReplacementAction::Prevent | ReplacementAction::PreventAmount(_)
+                ReplacementAction::Prevent
+                    | ReplacementAction::PreventAmount(_)
+                    | ReplacementAction::PreventAndThen(..)
             ) =>
         {
             Some(def)
@@ -1871,7 +1877,9 @@ fn has_prevention(e: &Effect) -> bool {
                 ReplacementEvent::Damage { .. } | ReplacementEvent::NoncombatDamage { .. }
             ) && matches!(
                 def.action,
-                ReplacementAction::Prevent | ReplacementAction::PreventAmount(_)
+                ReplacementAction::Prevent
+                    | ReplacementAction::PreventAmount(_)
+                    | ReplacementAction::PreventAndThen(..)
             )
         }
         _ => false,
@@ -1885,8 +1893,9 @@ fn f_prevented_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     }
     let saved = b.targets.len();
-    let Some(e) = prevented_followup_with(l, &mut |t| instructions_in(t, b, Sel::TriggerObject))
-    else {
+    let Some(e) = prevented_followup_with(l, &Sel::TriggerObject, &mut |t, it| {
+        instructions_in(t, b, it)
+    }) else {
         b.targets.truncate(saved);
         return false;
     };
@@ -1897,6 +1906,11 @@ fn f_prevented_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         ReplacementAction::PreventAmount(n) => {
             ReplacementAction::PreventAndThen(Some(n.clone()), Box::new(e))
         }
+        // A second follow-up sentence (Comeuppance).
+        ReplacementAction::PreventAndThen(n, first) => ReplacementAction::PreventAndThen(
+            n.clone(),
+            Box::new(Effect::seq(vec![(**first).clone(), e])),
+        ),
         _ => ReplacementAction::PreventAndThen(None, Box::new(e)),
     };
     true
