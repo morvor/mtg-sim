@@ -72,8 +72,10 @@ fn transforming_doesnt_change_blocks_already_declared() {
     activate_containing(&mut t, P0, tormentor, "Transform").unwrap();
     t.resolve_all();
     assert_eq!(name_of(&t, tormentor), "Insidious Mist");
-    t.advance_to(P0, Step::EndOfCombat);
-    assert_eq!(t.life(P1), 20);
+    // (Insidious Mist is a 0/1, so P1's life total can't tell; check the block itself.)
+    assert!(crate::r_p076_common::is_blocked(&t, tormentor));
+    t.advance_to(P0, Step::CombatDamage);
+    assert!(crate::r_p076_common::is_blocked(&t, tormentor));
     // (Voltaic Visionary's last ability doesn't compile; it isn't involved.) It blocks,
     // then becomes Volt-Charged Berserker ("can't block"), and is still blocking.
     let mut t = TestGame::new(2);
