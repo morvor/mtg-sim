@@ -902,7 +902,7 @@ fn put_this_way(c: &str) -> Option<Condition> {
 
 /// Marks (in `Builder::named`) that the text has dug cards ("from among them" has an
 /// antecedent).
-const DIG_MARK: &str = "\u{1}dig";
+pub(crate) const DIG_MARK: &str = "\u{1}dig";
 const UNTIL_MARK: &str = "\u{1}dig until";
 /// Marks that cards were chosen (and revealed) from among them and left where they are
 /// ("the revealed cards").

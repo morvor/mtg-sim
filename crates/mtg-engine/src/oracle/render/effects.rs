@@ -482,6 +482,8 @@ impl Renderer<'_> {
                     }
                     // "for each of them", "for each of those creatures", "for each of up to
                     // three target creatures".
+                    // "Look at the top five cards of your library. For each card, ..."
+                    Sel::Var(vars::DUG) => "card".into(),
                     other => {
                         let s = self.sel(other, Case::Obj);
                         if s == "them" {

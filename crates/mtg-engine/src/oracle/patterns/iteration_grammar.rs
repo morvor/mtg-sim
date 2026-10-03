@@ -138,6 +138,9 @@ fn for_each_player(l: &str, b: &mut Builder) -> Option<Effect> {
         if let Some(e) = choose_for_each(who.clone(), y, b) {
             return Some(e);
         }
+        if let Some(e) = act_on_one_for_each(who.clone(), y, b) {
+            return Some(e);
+        }
         let saved = (b.it_player.clone(), b.targets.len(), b.it.clone());
         b.it_player = PlayerRef::Iterated;
         let body = parse_clause(&they_as_that_player(y), b);
@@ -459,6 +462,44 @@ fn last_prevent_damage(e: &mut Effect) -> Option<&mut Option<Box<Effect>>> {
 
 inventory::submit! { super::FollowupPattern { name: "iteration: for each 1 damage prevented this way, [instruction]", priority: 50, apply: f_for_each_damage_prevented } }
 
+/// "For each land destroyed this way, its controller may search their library for a basic
+/// land card and put it onto the battlefield. Then each player who searched their library
+/// this way shuffles." (From the Ashes): each search is followed by its player's shuffle.
+fn f_searchers_shuffle(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if l.strip_prefix("then ").unwrap_or(l) != "each player who searched their library this way shuffles" {
+        return false;
+    }
+    fn search_in(e: &mut Effect) -> Option<&mut bool> {
+        match e {
+            Effect::Seq(v) => v.last_mut().and_then(search_in),
+            Effect::ForEach { effect, var, .. } if *var == EACH => search_in(effect),
+            Effect::May { effect, .. } => search_in(effect),
+            Effect::Search { shuffle, .. } if !*shuffle => Some(shuffle),
+            _ => None,
+        }
+    }
+    if !matches!(last_of(prev), Effect::ForEach { var, .. } if *var == EACH) {
+        return false;
+    }
+    match search_in(prev) {
+        Some(shuffle) => {
+            *shuffle = true;
+            true
+        }
+        None => false,
+    }
+}
+
+/// The last instruction of a sequence.
+fn last_of(e: &Effect) -> &Effect {
+    match e {
+        Effect::Seq(v) => v.last().map_or(e, last_of),
+        e => e,
+    }
+}
+
+inventory::submit! { super::FollowupPattern { name: "iteration: then each player who searched this way shuffles", priority: 50, apply: f_searchers_shuffle } }
+
 /// Later sentences' names for the objects in [`CHOSEN`] ("the chosen creatures", "each
 /// permanent chosen this way", "creatures they control not chosen this way").
 fn name_chosen(b: &mut Builder, noun: &str) {
@@ -475,6 +516,28 @@ fn name_chosen(b: &mut Builder, noun: &str) {
     }
     b.it = Sel::Var(CHOSEN);
     CHOSEN_TEXT.with(|t| *t.borrow_mut() = crate::oracle::raw_text());
+}
+
+/// "for each player, destroy up to one nonbasic land that player controls" (Krenko's
+/// Buzzcrusher): the controller chooses that object for each player (not targeted), then
+/// the instruction is performed on all of them at once.
+fn act_on_one_for_each(who: PlayerRef, y: &str, b: &mut Builder) -> Option<Effect> {
+    let (verb, det, rest) = ["up to one ", "a ", "an "].iter().find_map(|d| {
+        let i = y.find(&format!(" {d}"))?;
+        Some((&y[..i], *d, &y[i + 1 + d.len()..]))
+    })?;
+    if !matches!(verb, "destroy" | "exile" | "tap" | "untap") {
+        return None;
+    }
+    let saved = (b.named.len(), b.it.clone());
+    let choose = choose_for_each(who, &format!("choose {det}{rest}"), b)?;
+    let act = parse_clause(&format!("{verb} the chosen permanents"), b);
+    let Some(act) = act else {
+        b.named.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    Some(Effect::seq(vec![choose, act]))
 }
 
 /// "not chosen this way" / "that weren't chosen this way" after an object phrase, in a
@@ -523,6 +586,26 @@ fn iterated_objects(x: &str, b: &mut Builder) -> Option<(Sel, Vec<String>)> {
             .map(|w| w.to_string())
             .collect()
     };
+    // "Look at the top five cards of your library. For each card, ...": each of those cards.
+    if x == "card" {
+        let dug = b
+            .named
+            .iter()
+            .rev()
+            .find(|(p, _)| p == super::dig_grammar::DIG_MARK)
+            .map(|(_, s)| s.clone())?;
+        return Some((dug, vec!["card".to_string()]));
+    }
+    // "for each of X target permanents", "for each of up to X target creatures".
+    if let Some(r) = x.strip_prefix("of ").filter(|r| r.contains("target ")) {
+        let saved = b.targets.len();
+        let (sel, rest) = object_ref(r, b)?;
+        if !rest.trim().is_empty() || !matches!(sel, Sel::Target(_)) {
+            b.targets.truncate(saved);
+            return None;
+        }
+        return Some((sel, nouns(r)));
+    }
     // "for each of them", "for each of those creatures".
     if let Some(r) = x.strip_prefix("of ") {
         if let Some(Some((sel, rest))) = super::pronoun_groups::plural_object_ref(r, b) {
@@ -534,6 +617,23 @@ fn iterated_objects(x: &str, b: &mut Builder) -> Option<(Sel, Vec<String>)> {
             }
         }
         return None;
+    }
+    // "for each permanent chosen this way": objects an earlier sentence chose.
+    if let Some(noun) = x.strip_suffix(" chosen this way") {
+        let (f, false, tail) = parse_object_phrase(noun)? else {
+            return None;
+        };
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        let chosen = b
+            .named
+            .iter()
+            .rev()
+            .find(|(p, _)| p == "the chosen permanents" || p == &format!("the chosen {noun}s"))
+            .map(|(_, s)| s.clone())?;
+        let sel = Sel::All(Filter::and(vec![f, Filter::In(Box::new(chosen))]));
+        return Some((sel, nouns(noun)));
     }
     // "for each creature destroyed this way".
     if let Some((sel, rest)) = super::value_results::this_way_sel(x, b) {
