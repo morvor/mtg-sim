@@ -1480,3 +1480,17 @@ fn may_pay_one_of(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "spell cost grammar: you may pay [cost] or [cost]", priority: 99, parse: may_pay_one_of } }
+
+/// "it's at least one of the chosen colors" (Tablet of the Guilds): the spell or
+/// triggering object is one or more of the source's chosen colors.
+fn at_least_one_chosen_color(c: &str) -> Option<Condition> {
+    (end(c) == "it's at least one of the chosen colors").then(|| {
+        Condition::Compare(
+            Value::Custom(rules::CHOSEN_COLORS_IT_IS.into()),
+            Cmp::Ge,
+            Value::c(1),
+        )
+    })
+}
+
+inventory::submit! { ConditionPattern { name: "spell cost grammar: it's at least one of the chosen colors", priority: 100, parse: at_least_one_chosen_color } }

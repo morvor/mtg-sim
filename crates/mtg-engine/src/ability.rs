@@ -4538,6 +4538,9 @@ pub enum ChoiceKind {
     /// "the color or colors of your choice": one or more of the five colors, never
     /// colorless (CR 105.4).
     Colors,
+    /// "choose two colors": exactly that many different colors (stored as the chosen
+    /// colors).
+    ColorsExactly(u8),
     /// "choose A, B, or C": one of the listed words — creature types, land types, card
     /// types, colors, or anchor words (CR 614.12c, 607.2f). Stored as the chosen text
     /// (and as the chosen type/color when the word is one).

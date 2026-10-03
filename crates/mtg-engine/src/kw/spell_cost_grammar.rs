@@ -37,6 +37,10 @@ const MANA_COST_IS: &str = "spell cost:mana cost is:";
 const PAY_ANY: &str = "spell cost:pay any amount:";
 const UNLOCK_LESS: &str = "spell cost:unlock costs less:";
 
+/// `Value::Custom`: how many of the source's chosen colors ("As ~ enters, choose two
+/// colors") the spell being cast or the triggering object is.
+pub const CHOSEN_COLORS_IT_IS: &str = "spell cost:chosen colors it is";
+
 /// `StaticEffect::Custom` name: "Unlock costs you pay cost {n} less."
 pub fn unlock_costs_less(n: u32) -> String {
     format!("{UNLOCK_LESS}{n}")
@@ -312,6 +316,16 @@ impl KeywordRules for SpellCostGrammar {
     }
 
     fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name == CHOSEN_COLORS_IT_IS {
+            let Some(chosen) = g.source_choices(ctx).and_then(|c| c.colors) else {
+                return Some(0);
+            };
+            let Some(obj) = ctx.event.as_ref().and_then(|e| e.spell.or(e.object)) else {
+                return Some(0);
+            };
+            let colors = g.obj(obj).chars.colors;
+            return Some(chosen.iter().filter(|c| colors.contains(*c)).count() as i64);
+        }
         if let Some(n) = name.strip_prefix(PAID_TIMES) {
             let times = ctx
                 .source

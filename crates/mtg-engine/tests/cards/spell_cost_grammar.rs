@@ -5,7 +5,7 @@
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::CastMethod;
 use mtg_engine::object::Zone;
-use mtg_engine::types::CardType;
+use mtg_engine::types::{CardType, Color};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -920,4 +920,28 @@ fn overencumbered_asks_for_one_mana_per_artifact_or_no_attacks() {
     t.advance_to(P1, Step::BeginningOfCombat);
     t.resolve_all();
     assert_eq!(tapped_lands(&t, P1), 2);
+}
+
+#[test]
+fn seal_of_the_guildpact_counts_the_chosen_colors_a_spell_is() {
+    cr!("601.2f", "105.2");
+    // "As this artifact enters, choose two colors. Each spell you cast costs {1} less to
+    // cast for each of the chosen colors it is."
+    assert_compiles(&["Seal of the Guildpact"]);
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    let seal = t.enter(P0, "Seal of the Guildpact");
+    let chosen = t.obj_now(seal).choices.colors.expect("two colors chosen");
+    assert_eq!(chosen.iter().count(), 2);
+    assert!(chosen.contains(Color::White) && chosen.contains(Color::Blue));
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Plains", 3);
+    t.lands(P0, "Island", 3);
+    // Detention Sphere ({1}{W}{U}) is both: {2} less, but only its {1} can be reduced.
+    let sphere = t.hand(P0, "Detention Sphere");
+    assert_eq!(paid(&mut t, P0, sphere, &[Entity::Object(bears)]), 2);
+    t.resolve_all();
+    // Divination ({2}{U}) is one of them: {1} less.
+    let div = t.hand(P0, "Divination");
+    assert_eq!(paid(&mut t, P0, div, &[]), 2);
 }

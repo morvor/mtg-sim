@@ -1028,6 +1028,13 @@ fn parse_for_each_inner(s: &str, it: Option<&Sel>) -> Option<Value> {
             return Some(Value::Sum(vec![va, vb]));
         }
     }
+    // "of the chosen colors it is" (Seal of the Guildpact): how many of the source's chosen
+    // colors the spell (or triggering object) is.
+    if s == "of the chosen colors it is" {
+        return Some(Value::Custom(
+            crate::kw::spell_cost_grammar::CHOSEN_COLORS_IT_IS.into(),
+        ));
+    }
     // "of its colors": how many colors it has.
     if s == "of its colors" {
         let which = match it? {
