@@ -362,11 +362,13 @@ mod tests {
         assert_eq!(stores.len(), 3);
         let s = format!("{out:?}");
         assert!(s.contains("Var(210)") && s.contains("Var(206)") && s.contains("Var(200)"));
-        // Player relations in filters can't be captured.
+        // A player relation in a filter is captured as the players stored then.
         let e = Effect::Destroy {
             what: Sel::All(Filter::ControlledBy(PlayerRel::TriggerPlayer)),
             no_regen: false,
         };
-        assert!(capture(&e).is_none());
+        let (stores, out) = capture(&e).unwrap();
+        assert_eq!(stores.len(), 1);
+        assert!(format!("{out:?}").contains("ControlledBy(Var(205))"));
     }
 }
