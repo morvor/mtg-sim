@@ -45,4 +45,6 @@ fn pay_any_amount_of_life(block: &str, ctx: &CompileContext) -> Option<Vec<Abili
     Some(vec![AbilityDef::new(AbilityKind::Static(s), block.trim())])
 }
 
-inventory::submit! { AbilityPattern { name: "r119 as ~ enters, pay any amount of life", priority: 1100, parse: pay_any_amount_of_life } }
+// Before the generic "as ~ enters, [instruction]" pattern (priority 50): the amount paid
+// is noted on the permanent for "the life paid as it entered" (CR 607.2g).
+inventory::submit! { AbilityPattern { name: "r119 as ~ enters, pay any amount of life", priority: 40, parse: pay_any_amount_of_life } }

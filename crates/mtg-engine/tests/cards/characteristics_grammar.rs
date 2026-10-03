@@ -494,3 +494,30 @@ fn secret_arcade_makes_your_permanent_spells_and_nonland_permanents_enchantments
     assert!(chars(&t, spell).card_types.contains(CardType::Enchantment));
     assert!(chars(&t, spell).is_creature());
 }
+
+#[test]
+fn curious_colossus_creatures_keep_abilities_and_pt_settings_gained_later() {
+    cr!("613.1f", "613.4b", "613.7");
+    ruling!("Curious Colossus", "If one of the affected creatures gains an ability after");
+    ruling!(
+        "Curious Colossus",
+        "Any power- or toughness-setting effects that start to apply after the ability resolves will overwrite this effect"
+    );
+    let mut t = TestGame::new(2);
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    let colossus = t.hand(P0, "Curious Colossus");
+    t.lands(P0, "Plains", 7);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, colossus).go();
+    t.resolve_all();
+    assert_eq!(t.pt(bear), (1, 1));
+    // Later effects in the same layers: an ability gained (layer 6) and a base power and
+    // toughness set (layer 7b) apply after the Colossus's, so they stick.
+    t.lands(P0, "Island", 5);
+    let form = t.hand(P0, "Phantasmal Form");
+    t.cast(P0, form).targets(&[Entity::Object(bear)]).go();
+    t.resolve();
+    assert_eq!(t.pt(bear), (3, 3));
+    assert!(chars(&t, bear).has_keyword(KeywordKind::Flying));
+    assert!(chars(&t, bear).has_subtype("Coward"));
+}
