@@ -466,6 +466,12 @@ pub struct SpendContext {
     /// No mana may be spent ("You can't spend mana to cast this spell"): only life may pay
     /// symbols that can be paid with it (see `payment_rules`).
     pub no_mana: bool,
+    /// The object reserved from the payment (see `mana_abilities::plan_payment`) isn't
+    /// tapped by the cost, only sacrificed, exiled, returned or untapped by it: its own
+    /// mana abilities that don't sacrifice it may still pay, since mana abilities are
+    /// activated before the costs are paid (CR 601.2g-h, 602.2b; Heart Warden's "{T}: Add
+    /// {G}" helps pay its "{2}, Sacrifice this creature").
+    pub reserve_may_tap: bool,
 }
 
 /// The part of a cost's generic mana that X represents, which only mana of `colors` may pay
