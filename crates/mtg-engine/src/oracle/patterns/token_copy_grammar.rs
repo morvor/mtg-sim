@@ -190,6 +190,7 @@ fn pending_pt() -> Box<(Value, Value)> {
 
 /// Whether a token's power and toughness are still to be defined by a later sentence.
 pub(crate) fn is_pt_pending(spec: &TokenSpec) -> bool {
+    // (An Aura token's pending enchant ability uses the same placeholder.)
     spec.pt_values
         .as_ref()
         .is_some_and(|pt| format!("{:?}", pt.0) == format!("{:?}", pending_pt().0))
@@ -458,7 +459,7 @@ fn create_and_put_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     match where_x {
         Some(v) => {
             let Some((v, tail)) = super::r107_numbers::value_phrase(v, b)
-                .or_else(|| crate::oracle::statics::parse_value_phrase(v, b))
+                .or_else(|| super::statics::parse_amount(v, None).map(|x| (x, String::new())))
             else {
                 restore(b);
                 return None;
@@ -508,3 +509,71 @@ fn f_create_that_many(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "token grammar: then create that many tokens", priority: 50, apply: f_create_that_many } }
+
+/// Whether `abilities`, given to a token whose definition is pending, complete it: a
+/// creature token's power and toughness (a characteristic-defining ability), an Aura
+/// token's enchant ability (CR 303.4a, 702.5).
+pub(crate) fn completes_pending(
+    spec: &TokenSpec,
+    abilities: &[Ability],
+    sets_pt: fn(&Ability) -> bool,
+) -> bool {
+    if spec.card_types.contains(&crate::types::CardType::Creature) {
+        abilities.iter().any(sets_pt)
+    } else {
+        abilities.iter().any(|a| {
+            matches!(&a.kind, AbilityKind::Keyword(k)
+                if k.kind == crate::keywords::KeywordKind::Enchant)
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Aura tokens created attached
+// ---------------------------------------------------------------------------
+
+/// "create a white Aura enchantment token named Mask attached to another target
+/// permanent. The token has enchant permanent and umbra armor." (Estrid, the Masked), "...
+/// named Mark of the Rani attached to another target creature. That token has enchant
+/// creature and "..."" (The Rani): an Aura token entering attached (CR 303.4f-i). Its
+/// enchant ability is in the next sentence; until then the definition is pending.
+fn create_aura_attached(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("create a ").or_else(|| l.strip_prefix("create an "))?;
+    let (desc, to_s) = r.split_once(" attached to ")?;
+    if !desc.contains(" aura enchantment token") || desc.contains('"') {
+        return None;
+    }
+    let d = super::tokens_copies_create::token_desc(desc, b.ctx)?;
+    if d.attacking
+        || d.tapped
+        || !d.spec.subtypes.iter().any(|s| s.as_str() == "Aura")
+        || d.spec
+            .abilities
+            .iter()
+            .any(|a| matches!(&a.kind, AbilityKind::Keyword(k) if k.kind == crate::keywords::KeywordKind::Enchant))
+    {
+        return None;
+    }
+    let (to, tail) = if let Some(t) = to_s.strip_prefix('~') {
+        (Sel::This, t)
+    } else {
+        let (spec, tail) = parse_target(to_s)?;
+        let text = to_s[..to_s.len() - tail.len()].trim().to_string();
+        let slot = b.add_target(spec, &text);
+        (Sel::Target(slot), tail)
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let mut spec = d.spec;
+    spec.pt_values = Some(pending_pt());
+    Some(Effect::CreateTokenAttached {
+        spec,
+        count: Value::c(1),
+        controller: PlayerRef::You,
+        to,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "token grammar: Aura token created attached", priority: 94, parse: create_aura_attached } }

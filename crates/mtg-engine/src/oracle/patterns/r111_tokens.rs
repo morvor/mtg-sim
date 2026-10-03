@@ -107,7 +107,14 @@ fn legendary_named_token(l: &str, b: &mut Builder) -> Option<Effect> {
             let short = b.ctx.card_name.split(", ").next()?;
             format!("{}'s {}", short.to_lowercase(), rest)
         }
-        _ => name.to_string(),
+        // "Create Stangg Twin, ..." on Stangg (normalized to "~ twin").
+        _ => match name.strip_prefix("~ ") {
+            Some(rest) if !rest.contains('~') => {
+                let short = b.ctx.card_name.split(", ").next()?;
+                format!("{} {}", short.to_lowercase(), rest)
+            }
+            _ => name.to_string(),
+        },
     };
     if name.is_empty() || name.contains('~') || name.split(' ').count() > 5 {
         return None;

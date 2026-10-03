@@ -500,7 +500,7 @@ inventory::submit! { EffectPattern { name: "tokens_copies: create described toke
 pub(crate) fn last_create(e: &mut Effect) -> Option<&mut Effect> {
     match e {
         Effect::Seq(v) => v.last_mut().and_then(last_create),
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => Some(e),
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. } => Some(e),
         Effect::If {
             then, otherwise, ..
         }
@@ -520,7 +520,7 @@ pub(crate) fn last_create(e: &mut Effect) -> Option<&mut Effect> {
 fn is_create(e: &Effect) -> bool {
     matches!(
         e,
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. }
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. }
     )
 }
 
@@ -542,7 +542,7 @@ fn several_kinds(e: &Effect) -> bool {
 /// Whether `e` creates tokens anywhere.
 fn has_create(e: &Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => true,
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. } => true,
         Effect::Seq(v) => v.iter().any(has_create),
         Effect::If { then, .. } | Effect::PayOptional { then, .. } => has_create(then),
         Effect::May { effect, .. } => has_create(effect),
@@ -554,7 +554,7 @@ fn has_create(e: &Effect) -> bool {
 /// "if you do" / "you may" branch.
 pub(crate) fn append_after_create(e: &mut Effect, new: Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => {
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } | Effect::CreateTokenAttached { .. } => {
             let c = std::mem::take(e);
             *e = Effect::Seq(vec![c, new]);
             true
@@ -603,8 +603,11 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if several_kinds(prev) {
         return false;
     }
-    let Some(Effect::CreateToken { spec, .. } | Effect::CreateTokenWithPT { spec, .. }) =
-        last_create(prev)
+    let Some(
+        Effect::CreateToken { spec, .. }
+        | Effect::CreateTokenWithPT { spec, .. }
+        | Effect::CreateTokenAttached { spec, .. },
+    ) = last_create(prev)
     else {
         return false;
     };
@@ -618,7 +621,7 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // A creature token described without a power and toughness gets them from the
     // characteristic-defining ability this sentence gives it (`token_copy_grammar`).
     if super::token_copy_grammar::is_pt_pending(spec) {
-        if !abilities.iter().any(sets_pt) {
+        if !super::token_copy_grammar::completes_pending(spec, &abilities, sets_pt) {
             return false;
         }
         spec.pt_values = None;
