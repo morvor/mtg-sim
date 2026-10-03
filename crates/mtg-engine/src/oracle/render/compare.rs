@@ -209,8 +209,8 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Ordinal written in words.",
     },
     Equivalence {
-        pattern: r"\b(you|they|that player) (?:have|has) not (cast|attacked|gained|lost)\b",
-        replacement: "$1 didn't $2",
+        pattern: r"\b(?:have not|has not|haven't|hasn't) (cast|attacked|gained|lost)\b",
+        replacement: "didn't $1",
         why: "\"If you haven't cast a spell this turn\" and \"if you didn't cast a spell this \
               turn\" ask the same thing about this turn.",
     },
@@ -242,6 +242,22 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "control a creature named $1 and a creature named $2,",
         why: "Controlling creatures named A and B is controlling a creature named A and a \
               creature named B.",
+    },
+    Equivalence {
+        pattern: r"(^|\n|[.:] )(~|it) can't attack or block unless ([^.]+)(\.|$)",
+        replacement: "$1$2 can't attack unless $3. $2 can't block unless $3$4",
+        why: "A cost to attack and a cost to block (CR 508.1d, 509.1d), stated together.",
+    },
+    Equivalence {
+        pattern: r"\bcontrolled by different players\b",
+        replacement: "with different controllers",
+        why: "Targets controlled by different players are targets with different \
+              controllers.",
+    },
+    Equivalence {
+        pattern: r"\bis equal to\b",
+        replacement: "is",
+        why: "\"Your maximum hand size is equal to X\" is \"is X\".",
     },
     Equivalence {
         pattern: r"\byour life total can't change\b",
@@ -1748,6 +1764,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
     static R: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     R.get_or_init(|| {
         [
+            (r"\b(cards?) revealed this way\b", "$1 from among them"),
             (r"\bdeals? damage equal to ([^.]+?) divided as you choose among ([^.]+?)(\.|$)", "deals x damage divided as you choose among $2, where x is $1$3"),
             (r"\bdeals? damage equal to ([^.]+?) to ([^.]+?)(\.|$)", "deals x damage to $2, where x is $1$3"),
             (r"\bdeals? damage to ([^.]+?) equal to ([^.]+?)(\.|$)", "deals x damage to $1, where x is $2$3"),

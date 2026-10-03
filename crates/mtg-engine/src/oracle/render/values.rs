@@ -705,6 +705,21 @@ impl Renderer<'_> {
             {
                 self.condition(&v[1])
             }
+            // "If this spell was cast from anywhere other than your hand".
+            Condition::And(v)
+                if v.len() == 2
+                    && matches!(v[0], Condition::WasCast)
+                    && matches!(&v[1], Condition::Not(x) if matches!(x.as_ref(), Condition::CastFrom(_))) =>
+            {
+                let Condition::Not(x) = &v[1] else {
+                    return String::new();
+                };
+                let z = match x.as_ref() {
+                    Condition::CastFrom(z) => zone_word(*z),
+                    _ => "zone",
+                };
+                format!("~ {{alt:was|is}} cast from anywhere other than your {z}")
+            }
             // "It's your first, second, or third turn of the game".
             Condition::And(_) if crate::rule_statics::turns_taken::early_turns_n(c).is_some() => {
                 let n = crate::rule_statics::turns_taken::early_turns_n(c).unwrap_or(1);
@@ -915,11 +930,28 @@ impl Renderer<'_> {
                 s.replace(" was ", " wasn't ")
             }
             Condition::WasCast => "you didn't cast it".into(),
+            // "If you didn't cast it from your hand" / "if ~ was cast from anywhere other
+            // than your hand".
+            Condition::CastFrom(z) => {
+                let z = zone_word(*z);
+                format!("{{alt:you didn't cast it from your {z}|~ {{alt:was|is}} cast from anywhere other than your {z}}}")
+            }
+            // "If you didn't cast it from your hand": not cast, or cast from elsewhere.
+            Condition::And(v)
+                if v.len() == 2
+                    && matches!(v[0], Condition::WasCast)
+                    && matches!(v[1], Condition::CastFrom(_)) =>
+            {
+                self.negated_condition(&v[1])
+            }
             // "you haven't cast a spell this turn"
             Condition::Compare(Value::SpellsCastThisTurn(..), Cmp::Ge, Value::Const(1)) => {
                 let s = self.condition(c);
                 match s.strip_prefix("you've ") {
                     Some(r) => format!("you haven't {r}"),
+                    None if s.contains(" has cast ") => {
+                        s.replacen(" has cast ", " hasn't cast ", 1)
+                    }
                     None => format!("it's not true that {s}"),
                 }
             }

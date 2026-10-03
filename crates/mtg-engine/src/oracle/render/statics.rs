@@ -1789,6 +1789,12 @@ impl Renderer<'_> {
                     if matches!(attackers, Filter::Source) {
                         return format!("{a} can't attack unless you {pay}");
                     }
+                    // One creature: "enchanted creature can't attack unless its controller
+                    // pays {3}".
+                    if matches!(attackers, Filter::AttachedToSource) {
+                        let pays = super::effects::third_person(&pay);
+                        return format!("{a} can't attack unless its controller {pays}");
+                    }
                     let pays = super::effects::third_person(&pay);
                     let n = self.noun(&super::effects::strip_controller(attackers), Num::One);
                     return format!(
@@ -1808,6 +1814,15 @@ impl Renderer<'_> {
             }
             Restriction::BlockCost { blockers, cost } => {
                 let b = subj(self, blockers);
+                // One creature: "~ can't block unless you pay {2}".
+                if matches!(blockers, Filter::Source | Filter::AttachedToSource) {
+                    let pay = self.cost_as_payment(cost);
+                    if matches!(blockers, Filter::Source) {
+                        return format!("{b} can't block unless you {pay}");
+                    }
+                    let pays = super::effects::third_person(&pay);
+                    return format!("{b} can't block unless its controller {pays}");
+                }
                 let c = self.cost(cost);
                 format!("{b} can't block unless their controller pays {c} for each blocking creature they control")
             }

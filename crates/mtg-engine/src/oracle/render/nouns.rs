@@ -476,7 +476,11 @@ impl Renderer<'_> {
                     np.fixed = Some(s);
                 } else {
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::One)).collect();
-                    np.fixed = Some(join_list(&alts, "or"));
+                    let plain = join_list(&alts, "or");
+                    np.fixed = Some(match merged_alternatives(&alts) {
+                        Some(m) => format!("{{alt:{m}|{plain}}}"),
+                        None => plain,
+                    });
                 }
             }
             Filter::Not(inner) => self.collect_not(inner, np),
@@ -1846,7 +1850,7 @@ fn merged_alternatives(parts: &[String]) -> Option<String> {
         matches!(
             a.as_str(),
             "hand" | "graveyard" | "library" | "power" | "toughness"
-        )
+        ) || is_combat_keyword(a)
     });
     if !ok || all[0].iter().any(|w| w.contains('{')) {
         return None;
