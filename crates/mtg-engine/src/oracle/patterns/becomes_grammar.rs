@@ -28,6 +28,12 @@ use crate::oracle::effects::{keyword_mods, object_ref, parse_pt_mod, Builder};
 use crate::oracle::phrases::end;
 use crate::types::*;
 
+thread_local! {
+    /// Set while the predicates of a static ability are parsed (see
+    /// [`special_quality_keyword`]).
+    static STATIC_CONTEXT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// The verbs that start a predicate, in their singular and plural forms.
 const VERBS: &[&str] = &[
     "gets ", "get ", "gains ", "gain ", "has ", "have ", "loses ", "lose ", "becomes ",
@@ -78,7 +84,7 @@ fn gets_x_y(l: &str, b: &mut Builder) -> Option<Effect> {
     result
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: gets +X/+Y, where X is ... and Y is ...", priority: 150, parse: gets_x_y } }
+inventory::submit! { EffectPattern { name: "becomes grammar: gets +X/+Y, where X is ... and Y is ...", priority: 1100, parse: gets_x_y } }
 
 /// "It deals X plus 1 damage instead if that target is a creature or planeswalker.":
 /// "that target" is what "it" names in the condition.
@@ -117,7 +123,7 @@ fn last_damage_target(e: &Effect) -> Option<u8> {
     }
 }
 
-inventory::submit! { FollowupPattern { name: "becomes grammar: ... instead if that target is ...", priority: 50, apply: that_target_instead } }
+inventory::submit! { FollowupPattern { name: "becomes grammar: ... instead if that target is ...", priority: 1100, apply: that_target_instead } }
 
 /// "creatures that are green and/or white": of any of those colors.
 fn that_are_colors<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
@@ -137,7 +143,7 @@ fn that_are_colors<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
     ))
 }
 
-inventory::submit! { super::FilterSuffixPattern { name: "becomes grammar: that are [color] and/or [color]", priority: 150, parse: that_are_colors } }
+inventory::submit! { super::FilterSuffixPattern { name: "becomes grammar: that are [color] and/or [color]", priority: 1100, parse: that_are_colors } }
 
 /// "~ gets +X/+Y, where X is the exiled creature card's power and Y is its toughness."
 /// (Phyrexian Ingester): values that follow the game as the static ability applies.
@@ -220,7 +226,7 @@ fn as_objects_enter_becomes(l: &str, text: &str, _ctx: &CompileContext) -> Optio
     )])
 }
 
-inventory::submit! { StaticPattern { name: "becomes grammar: as [objects] enter, it becomes ...", priority: 150, parse: as_objects_enter_becomes } }
+inventory::submit! { StaticPattern { name: "becomes grammar: as [objects] enter, it becomes ...", priority: 1100, parse: as_objects_enter_becomes } }
 
 /// "Until end of turn, that permanent becomes saddled if it's a Mount and becomes an
 /// artifact creature if it's a Vehicle." (Alacrian Armory): each predicate applies if the
@@ -274,7 +280,7 @@ fn predicates_if_its(l: &str, b: &mut Builder) -> Option<Effect> {
     result
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: [predicate] if it's a [kind] and [predicate] if it's a [kind]", priority: 150, parse: predicates_if_its } }
+inventory::submit! { EffectPattern { name: "becomes grammar: [predicate] if it's a [kind] and [predicate] if it's a [kind]", priority: 1100, parse: predicates_if_its } }
 
 
 fn split_predicates(s: &str) -> Vec<&str> {
@@ -407,6 +413,21 @@ fn special_quality_keyword(part: &str, own: bool, b: &mut Builder) -> Option<Mod
     };
     let filter = match q {
         "that color" => Filter::ChosenColor,
+        // "Each creature has protection from each of its colors": one ability per color
+        // the object that has it has (CR 702.16g), i.e. from each object that shares a
+        // color with it. In a resolving effect, "its" is what the sentence is about, and
+        // its colors are those it has as the effect begins (CR 608.2h).
+        "each of its colors" => {
+            let sel = if STATIC_CONTEXT.with(|c| c.get()) {
+                Sel::This
+            } else {
+                b.it.clone()
+            };
+            if matches!(sel, Sel::All(_) | Sel::None) {
+                return None;
+            }
+            Filter::SharesColor(Box::new(sel))
+        }
         "each color among permanents you control" if own && kind == Protection => {
             Filter::SharesColor(Box::new(Sel::All(Filter::and(vec![
                 Filter::Permanent,
@@ -659,6 +680,21 @@ fn creature_has_pt(mods: &[Modification], what: &Sel, subj: &Subject, text: &str
         || has_printed_pt(what, text, b)
 }
 
+/// Whether `mods` change more than abilities and P/T modifications: types, colors, base
+/// power and toughness, or the loss of abilities.
+fn changes_characteristics(mods: &[Modification]) -> bool {
+    mods.iter().any(|m| match m {
+        // Qualities this grammar reads from the game ("protection from each of that
+        // permanent's colors").
+        Modification::AddKeyword(k) => matches!(
+            k.filter,
+            Some(Filter::SharesColor(_) | Filter::SharesCardType(_) | Filter::ChosenColor)
+        ),
+        Modification::ModifyPT(..) | Modification::AddAbility(_) => false,
+        _ => true,
+    })
+}
+
 /// Where the chosen option's modifications go among the others while parsing.
 const CHOICE_SLOT: &str = "becomes grammar: chosen option";
 
@@ -737,12 +773,14 @@ fn subject_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
     let subj_text = subj_text.strip_suffix(" each").unwrap_or(subj_text);
     let preds = split_predicates_with(rest, OTHER_VERBS);
     let saved = (b.targets.clone(), b.it.clone());
+    let mut listed_subject = false;
     let result = (|| {
         let (what, r) = match subj_text {
             // A card named for two characters ("Moon Girl and Devil Dinosaur") is "they".
             "they" if b.ctx.card_name.contains(" and ") => (Sel::This, String::new()),
             // "each Advisor, Artificer, and Monk you control"
             s if s.starts_with("each ") && s.contains(", and ") => {
+                listed_subject = true;
                 object_ref(&super::statics::union_nouns(s), b)?
             }
             _ => object_ref(subj_text, b)?,
@@ -764,9 +802,15 @@ fn subject_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
         if matches!(what, Sel::TriggerObject) && trigger_object_is_creature(b, rest) {
             subj.creatures = true;
         }
+        // "its" in the predicates is what the sentence is about (unless the text
+        // rewrote "that permanent's" as "its", which keeps meaning that object).
+        if !b.its_is_it {
+            b.it = what.clone();
+        }
         let mut mods = Vec::new();
         let mut others = Vec::new();
         let mut choice: Option<Vec<(String, Vec<Modification>)>> = None;
+        let mut pending = Vec::new();
         for p in &preds {
             if let Some(m) = predicate_mods(p, &subj, b) {
                 mods.extend(m);
@@ -785,15 +829,25 @@ fn subject_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
                     continue;
                 }
             }
-            // Another instruction about the same single object, with its own duration.
+            // Another instruction about the same single object, with its own duration
+            // (parsed below, once a characteristic predicate made this sentence ours).
             if !OTHER_VERBS.iter().any(|v| p.starts_with(v)) || matches!(what, Sel::All(_)) {
                 return None;
             }
-            b.it = what.clone();
-            others.push(crate::oracle::effects::parse_clause(&format!("it {p}"), b)?);
+            pending.push(*p);
         }
         if mods.is_empty() || !creature_has_pt(&mods, &what, &subj, subj_text, b) {
             return None;
+        }
+        // Only sentences that change what the object is: plain grants and pumps ("the
+        // token has enchant creature", "it gets +1/+1 and gains flying") are other
+        // patterns'.
+        if !changes_characteristics(&mods) && !listed_subject {
+            return None;
+        }
+        for p in pending {
+            b.it = what.clone();
+            others.push(crate::oracle::effects::parse_clause(&format!("it {p}"), b)?);
         }
         b.it = what.clone();
         match choice {
@@ -838,7 +892,7 @@ fn subject_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
     result
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: [subject] [characteristic predicates]", priority: 150, parse: subject_predicates } }
+inventory::submit! { EffectPattern { name: "becomes grammar: [subject] [characteristic predicates]", priority: 1100, parse: subject_predicates } }
 
 // ---------------------------------------------------------------------------
 // "is [characteristic]": static abilities, and the objects an effect puts onto the
@@ -936,8 +990,14 @@ fn static_predicates(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ab
         .or_else(|| either_adjective(subj_text, ctx))?;
     let mut b = Builder::new(ctx);
     let mut mods = Vec::new();
-    for p in &preds {
-        mods.extend(static_predicate_mods(p, &subj, &mut b)?);
+    STATIC_CONTEXT.with(|c| c.set(true));
+    let parsed: Option<Vec<Vec<Modification>>> = preds
+        .iter()
+        .map(|p| static_predicate_mods(p, &subj, &mut b))
+        .collect();
+    STATIC_CONTEXT.with(|c| c.set(false));
+    for m in parsed? {
+        mods.extend(m);
     }
     if mods.is_empty() || !b.targets.is_empty() {
         return None;
@@ -961,7 +1021,7 @@ fn static_predicates(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ab
     Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
 }
 
-inventory::submit! { StaticPattern { name: "becomes grammar: [objects] [characteristic predicates]", priority: 150, parse: static_predicates } }
+inventory::submit! { StaticPattern { name: "becomes grammar: [objects] [characteristic predicates]", priority: 1100, parse: static_predicates } }
 
 /// The zones of cards that aren't on the battlefield (or the stack).
 const OFF_BATTLEFIELD: [ZoneKind; 5] = [
@@ -1066,7 +1126,7 @@ fn zone_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
 }
 
-inventory::submit! { StaticPattern { name: "becomes grammar: [objects in several zones] are [type words]", priority: 140, parse: zone_static } }
+inventory::submit! { StaticPattern { name: "becomes grammar: [objects in several zones] are [type words]", priority: 1100, parse: zone_static } }
 
 /// The subjects that name what an earlier instruction of the effect is about.
 fn is_referent_subject(s: &str) -> Option<&str> {
@@ -1155,7 +1215,7 @@ fn its_a_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     true
 }
 
-inventory::submit! { FollowupPattern { name: "becomes grammar: it's [type words] (as it enters)", priority: 95, apply: its_a_followup } }
+inventory::submit! { FollowupPattern { name: "becomes grammar: it's [type words] (as it enters)", priority: 1100, apply: its_a_followup } }
 
 /// "It's a Spirit in addition to its other types." after an instruction that put the
 /// object onto the battlefield and another one about it ("Put a flying counter on it."):
@@ -1200,7 +1260,7 @@ fn its_a_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: it's [type words]", priority: 150, parse: its_a_effect } }
+inventory::submit! { EffectPattern { name: "becomes grammar: it's [type words]", priority: 1100, parse: its_a_effect } }
 
 /// "Attacking creatures become blocked.", "X target attacking creatures become blocked."
 /// (CR 509.1h).
@@ -1221,7 +1281,7 @@ fn objects_become_blocked(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: [objects] become blocked", priority: 150, parse: objects_become_blocked } }
+inventory::submit! { EffectPattern { name: "becomes grammar: [objects] become blocked", priority: 1100, parse: objects_become_blocked } }
 
 /// "switch its power and toughness until end of turn" (CR 613.4d).
 fn switch_its_pt(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -1235,7 +1295,7 @@ fn switch_its_pt(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: switch its power and toughness", priority: 150, parse: switch_its_pt } }
+inventory::submit! { EffectPattern { name: "becomes grammar: switch its power and toughness", priority: 1100, parse: switch_its_pt } }
 
 /// "Each player's life total becomes the number of creatures they control." (CR 119.5):
 /// each player's own number.
@@ -1264,7 +1324,7 @@ fn mentions_iterated(v: &Value) -> bool {
     format!("{v:?}").contains("Iterated")
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: each player's life total becomes [their number]", priority: 150, parse: each_life_becomes } }
+inventory::submit! { EffectPattern { name: "becomes grammar: each player's life total becomes [their number]", priority: 1100, parse: each_life_becomes } }
 
 /// "you may have the base power and toughness of [object] become [N/N | X/X | equal to
 /// ~'s power [and toughness]] until end of turn[, where X is ~'s power]", "the base power
@@ -1329,7 +1389,7 @@ fn base_pt_of_become(l: &str, b: &mut Builder) -> Option<Effect> {
     result
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: the base power and toughness of [objects] become ...", priority: 150, parse: base_pt_of_become } }
+inventory::submit! { EffectPattern { name: "becomes grammar: the base power and toughness of [objects] become ...", priority: 1100, parse: base_pt_of_become } }
 
 /// "Until your next turn, ~'s base power becomes twice that card's power and its base
 /// toughness becomes twice that card's toughness." (Amplifire)
@@ -1362,7 +1422,7 @@ fn base_power_and_its_toughness(l: &str, b: &mut Builder) -> Option<Effect> {
     result
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: base power becomes ... and its base toughness becomes ...", priority: 150, parse: base_power_and_its_toughness } }
+inventory::submit! { EffectPattern { name: "becomes grammar: base power becomes ... and its base toughness becomes ...", priority: 1100, parse: base_power_and_its_toughness } }
 
 /// "[A] and they gain trample", "[A] and it gains flying", where [A] names power and
 /// toughness ("~'s base power and toughness become 6/6"): split at the last "and".
@@ -1391,7 +1451,7 @@ fn and_pronoun_predicate(l: &str, b: &mut Builder) -> Option<Effect> {
     }
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: [power and toughness] and they gain ...", priority: 150, parse: and_pronoun_predicate } }
+inventory::submit! { EffectPattern { name: "becomes grammar: [power and toughness] and they gain ...", priority: 1100, parse: and_pronoun_predicate } }
 
 /// "Creatures that are green and/or white get an additional -2/-2 until end of turn.":
 /// "additional" only says it's another effect.
@@ -1406,7 +1466,7 @@ fn get_an_additional(l: &str, b: &mut Builder) -> Option<Effect> {
     crate::oracle::effects::parse_clause(&t, b)
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: get an additional +N/+N", priority: 150, parse: get_an_additional } }
+inventory::submit! { EffectPattern { name: "becomes grammar: get an additional +N/+N", priority: 1100, parse: get_an_additional } }
 
 /// "Target creature gains protection from the color of its controller's choice until end
 /// of turn." (CR 608.2d: that player chooses as the ability resolves).
@@ -1438,7 +1498,7 @@ fn color_of_controllers_choice(l: &str, b: &mut Builder) -> Option<Effect> {
     ]))
 }
 
-inventory::submit! { EffectPattern { name: "becomes grammar: the color of its controller's choice", priority: 40, parse: color_of_controllers_choice } }
+inventory::submit! { EffectPattern { name: "becomes grammar: the color of its controller's choice", priority: 1100, parse: color_of_controllers_choice } }
 
 /// "It's still an enchantment." after a sentence that made the object a creature
 /// (CR 205.1b): it keeps its other types.
@@ -1479,7 +1539,7 @@ fn last_modify(e: &mut Effect) -> Option<&mut Vec<Modification>> {
     }
 }
 
-inventory::submit! { FollowupPattern { name: "becomes grammar: it's still an enchantment", priority: 100, apply: still_a_card_type } }
+inventory::submit! { FollowupPattern { name: "becomes grammar: it's still an enchantment", priority: 1100, apply: still_a_card_type } }
 
 #[cfg(test)]
 

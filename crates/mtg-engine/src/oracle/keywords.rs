@@ -462,9 +462,6 @@ fn single_quality(s: &str) -> Option<Filter> {
         "each of your opponents" | "your opponents" => {
             return Some(Filter::ControlledBy(PlayerRel::Opponent))
         }
-        // "protection from each of its colors": one ability per color the object that
-        // has it has (CR 702.16g), i.e. from each object that shares a color with it.
-        "each of its colors" => return Some(Filter::SharesColor(Box::new(Sel::This))),
         // CR 702.16a: a supertype quality applies to sources with that supertype.
         "snow" => return Some(Filter::Supertype(Supertype::Snow)),
         "spells that are one or more colors" => {
