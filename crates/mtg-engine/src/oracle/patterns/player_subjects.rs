@@ -51,7 +51,7 @@ enum Subject {
 /// Base verbs a third-person form may be turned into (the whitelist keeps nouns and
 /// other words ending in "s" from being "conjugated").
 const VERBS: &[&str] = &[
-    "ante", "attach", "become", "bid", "cast", "choose", "control", "create", "discard",
+    "ante", "attach", "become", "bid", "cast", "choose", "control", "copy", "create", "discard",
     "discover", "draw", "exile", "gain", "get", "have", "investigate", "look", "lose",
     "mill", "own", "pay", "play", "proliferate", "put", "reveal", "return", "sacrifice",
     "scry", "search", "separate", "shuffle", "surveil", "take", "tap", "untap", "do",
@@ -342,7 +342,11 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
         }
     }
     // "that creature's controller", "that spell's controller"
-    for p in ["that creature's controller ", "that spell's controller "] {
+    for p in [
+        "that creature's controller ",
+        "that spell's controller ",
+        "that permanent's controller ",
+    ] {
         if let Some(r) = l.strip_prefix(p) {
             if super::oracle_hardening_referents::is_no_referent(&b.it) {
                 return None;

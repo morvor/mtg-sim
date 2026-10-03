@@ -1067,6 +1067,27 @@ impl Game {
                 // their controller chooses.
                 crate::copy::order_copies(self, ctx.controller, &copies);
             }
+            Effect::CopySpellExcept {
+                what,
+                count,
+                new_targets,
+                mods,
+            } => {
+                let n = self.eval_value(count, ctx).max(0) as u32;
+                let fixed = self.fix_mods(mods, ctx);
+                let mut copies = vec![];
+                for o in self.resolve_objects(what, ctx) {
+                    for _ in 0..n {
+                        if let Some(c) =
+                            crate::copy::copy_spell(self, o, ctx.controller, *new_targets)
+                        {
+                            crate::copy::add_copy_exceptions(self, c, ctx.controller, &fixed);
+                            copies.push(c);
+                        }
+                    }
+                }
+                crate::copy::order_copies(self, ctx.controller, &copies);
+            }
             Effect::OfferSpecialAction {
                 def,
                 duration,

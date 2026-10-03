@@ -1500,6 +1500,34 @@ impl Renderer<'_> {
                 }
                 s
             }
+            Effect::CopySpellExcept {
+                what,
+                count,
+                new_targets,
+                mods,
+            } => {
+                let w = self.sel(what, Case::Obj);
+                let ex = self.exceptions(mods);
+                let ex = ex
+                    .replacen("it isn't", "the copy isn't", 1)
+                    .replacen("it's", "the copy is", 1);
+                let mut s = match count {
+                    Value::Const(1) => format!("copy {w}, except {ex}"),
+                    other => {
+                        let t = self.times(other);
+                        format!("copy {w} {t}, except {ex}")
+                    }
+                };
+                if *new_targets {
+                    let c = if matches!(count, Value::Const(1)) {
+                        "the copy"
+                    } else {
+                        "the copies"
+                    };
+                    s.push_str(&format!(". You may choose new targets for {c}"));
+                }
+                s
+            }
             Effect::OfferSpecialAction {
                 def,
                 duration,
