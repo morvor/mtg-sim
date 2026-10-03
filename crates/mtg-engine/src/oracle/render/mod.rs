@@ -49,6 +49,10 @@ pub struct FaceInfo {
     /// For half of a meld pair: (the partner's noun, "a creature named Hanweir Garrison";
     /// the meld result's name), from the card's related cards.
     pub meld: Option<(String, String)>,
+    /// The card an optional "you may reveal a [quality] card from your hand" additional
+    /// cost reveals (Dragons of Tarkir), for "if you revealed a Dragon card or controlled
+    /// a Dragon as you cast this spell".
+    pub reveal_card: Option<crate::ability::Filter>,
 }
 
 impl FaceInfo {
@@ -59,8 +63,10 @@ impl FaceInfo {
             subtypes: face.chars.subtypes.iter().cloned().collect(),
             enchant: None,
             meld: None,
+            reveal_card: None,
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
+        info.reveal_card = reveal_card(&face.chars.abilities);
         info
     }
     fn has_subtype(&self, s: &str) -> bool {
@@ -159,6 +165,7 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
     }
     merge_chapters(&mut out.lines);
     merge_shared_as_though(&mut out.lines);
+    merge_copy_exceptions(&mut out.lines);
     out.gaps = std::mem::take(&mut r.gaps);
     out
 }
@@ -368,12 +375,66 @@ fn meld_info(def: &CardDef) -> Option<(String, String)> {
 }
 
 /// The noun an Aura's enchant keyword names ("creature", "land", "player").
+/// The card an optional reveal additional cost of the spell reveals (see
+/// [`FaceInfo::reveal_card`]).
+fn reveal_card(abilities: &[Ability]) -> Option<crate::ability::Filter> {
+    use crate::ability::*;
+    abilities.iter().find_map(|a| {
+        let AbilityKind::Static(s) = &a.kind else {
+            return None;
+        };
+        let StaticEffect::CostModifier(CostModifier {
+            applies_to: CostTarget::ThisSpell,
+            change: CostChange::OptionalAdditionalCost { name, cost },
+            ..
+        }) = &s.effect
+        else {
+            return None;
+        };
+        if name.as_str() != crate::kw::revealed_or_controlled::REVEAL {
+            return None;
+        }
+        cost.parts.iter().find_map(|p| match p {
+            CostPart::RevealFromHand { filter, .. } => Some(filter.clone()),
+            _ => None,
+        })
+    })
+}
+
 pub fn enchant_noun(abilities: &[Ability], info: &FaceInfo) -> Option<String> {
     for a in abilities {
         if let AbilityKind::Keyword(k) = &a.kind {
             if k.kind == crate::keywords::KeywordKind::Enchant {
                 // "enchanted creature" for "Enchant creature you control".
                 let mut k = k.clone();
+                k.filter = k.filter.map(|f| effects::strip_controller(&f));
+                let mut r = Renderer::new(info);
+                let s = r.keyword_lower(&k);
+                return s.strip_prefix("enchant ").map(|x| x.to_string());
+            }
+        }
+    }
+    // "When ~ enters, it becomes an Aura with enchant creature" (Rageform): the enchant
+    // ability it gains.
+    fn gained_enchant(e: &Effect) -> Option<crate::keywords::Keyword> {
+        match e {
+            Effect::Seq(v) => v.iter().find_map(gained_enchant),
+            Effect::Modify {
+                what: Sel::This,
+                mods,
+                ..
+            } => mods.iter().find_map(|m| match m {
+                Modification::AddKeyword(k) if k.kind == crate::keywords::KeywordKind::Enchant => {
+                    Some(k.clone())
+                }
+                _ => None,
+            }),
+            _ => None,
+        }
+    }
+    for a in abilities {
+        if let AbilityKind::Triggered(t) = &a.kind {
+            if let Some(mut k) = gained_enchant(&t.body.effect) {
                 k.filter = k.filter.map(|f| effects::strip_controller(&f));
                 let mut r = Renderer::new(info);
                 let s = r.keyword_lower(&k);
@@ -430,6 +491,27 @@ fn is_changeling_cda(a: &Ability) -> bool {
 /// "~ saddles Mounts and crews Vehicles as though its power were two greater.": one
 /// sentence for two static abilities of the object that differ only in what it does
 /// ("~ saddles Mounts as though ..." and "~ crews Vehicles as though ...").
+/// "You may have ~ enter as a copy of any creature on the battlefield, except it has
+/// haste": the exceptions (CR 707.9b) are part of the copy effect's sentence.
+fn merge_copy_exceptions(lines: &mut Vec<String>) {
+    let mut i = 0;
+    while i + 1 < lines.len() {
+        let next = lines[i + 1].clone();
+        let rest = ["As ~it enters, except ", "As ~ enters, except "]
+            .iter()
+            .find_map(|p| next.strip_prefix(p));
+        if let Some(rest) = rest {
+            if lines[i].contains(" as a copy of ") && lines[i].ends_with('.') {
+                let head = lines[i].trim_end_matches('.').to_string();
+                lines[i] = format!("{head}, except {rest}");
+                lines.remove(i + 1);
+                continue;
+            }
+        }
+        i += 1;
+    }
+}
+
 pub(crate) fn merge_shared_as_though(lines: &mut Vec<String>) {
     let mut out: Vec<String> = Vec::new();
     for l in lines.drain(..) {
@@ -445,6 +527,25 @@ pub(crate) fn merge_shared_as_though(lines: &mut Vec<String>) {
 }
 
 fn join_as_though(a: &str, b: &str) -> Option<String> {
+    // "~ can't block or be blocked by non-Spirit creatures."
+    if let (Some((sa, oa)), Some((sb, ob))) = (
+        a.trim_end_matches('.').split_once(" can't block "),
+        b.trim_end_matches('.').split_once(" can't be blocked by "),
+    ) {
+        if sa == sb && oa == ob {
+            return Some(format!("{sa} can't block or be blocked by {oa}."));
+        }
+    }
+    // "~ can't attack or block alone." (two restrictions, one sentence).
+    let (a0, b0) = (a.trim_end_matches('.'), b.trim_end_matches('.'));
+    if let (Some(sa), Some(sb)) = (
+        a0.strip_suffix(" can't attack alone"),
+        b0.strip_suffix(" can't block alone"),
+    ) {
+        if sa == sb {
+            return Some(format!("{sa} can't attack or block alone."));
+        }
+    }
     let (pa, ta) = a.split_once(" as though ")?;
     let (pb, tb) = b.split_once(" as though ")?;
     let (sa, va) = pa.split_once(' ')?;
@@ -561,6 +662,10 @@ pub struct Renderer<'a> {
     /// The trigger condition is about the object itself ("Whenever ~ attacks"), so the
     /// triggering object is the object itself.
     pub(crate) trigger_is_self: bool,
+    /// The trigger condition names the object itself and another object ("Whenever ~
+    /// becomes blocked by a creature"): "it" is the object itself, "that creature" the
+    /// other.
+    pub(crate) trigger_self_and_other: bool,
     /// Numbers remembered by `Effect::StoreValue` ("X ..., where X is ..."): the value,
     /// and whether a later mention (rendered "X") needs its definition.
     pub(crate) stored_values: Vec<(Var, Value, bool)>,
@@ -580,6 +685,26 @@ pub struct Renderer<'a> {
     /// Selections stored in variables by the ability being rendered ("other creatures
     /// you control gain ..." stored, then modified): the first mention is the phrase.
     pub(crate) var_defs: Vec<(Var, Sel, bool)>,
+    /// Variables stored by the ability's controller outside an instruction performed as
+    /// another player: "you" in them stays the controller.
+    pub(crate) outer_vars: Vec<Var>,
+    /// What the last instruction did to a group of objects ("permanents destroyed this
+    /// way"), for counting them.
+    pub(crate) it_done: Option<String>,
+    /// Rendering a trigger event that triggers once for a whole batch of events
+    /// (`BatchPer::Batch`): "one or more players", "one or more Humans".
+    pub(crate) batch_once: bool,
+    /// The instruction before is one the player must follow if able ("Sacrifice a
+    /// creature. If you can't, ...").
+    pub(crate) prev_mandatory: bool,
+    /// An instruction of this ability milled cards ("from among the milled cards").
+    pub(crate) milled: bool,
+    /// Rendering an emblem's own abilities ("this emblem"): the quote depth they're at (an
+    /// ability one of them grants to another object, quoted deeper, calls that object "~").
+    pub(crate) in_emblem: Option<u32>,
+    /// The kind of counter an instruction of this ability removed ("for each charge
+    /// counter removed this way").
+    pub(crate) removed_kind: Option<String>,
     /// How the trigger's player is called in the ability being rendered ("that spell's
     /// controller" for a targeting trigger).
     pub(crate) trigger_player: Option<&'static str>,
@@ -596,6 +721,9 @@ pub struct Renderer<'a> {
     pub(crate) sacrificed: Option<String>,
     /// The last group of objects named ("all creatures you control"), for "them".
     pub(crate) last_group: Option<String>,
+    /// What the last search did with the cards it found ("exiled", "put"), for "the
+    /// cards exiled from their hand this way".
+    pub(crate) search_verb: Option<&'static str>,
     /// Variables holding groups of objects (several), which later mentions call "them".
     pub(crate) plural_vars: Vec<Var>,
     /// The terms of the permissions to play cards being rendered.
@@ -632,6 +760,7 @@ impl<'a> Renderer<'a> {
             attached_left: false,
             event_scope: false,
             trigger_is_self: false,
+            trigger_self_and_other: false,
             stored_values: Vec::new(),
             subject_types: Vec::new(),
             each_mode: false,
@@ -640,8 +769,16 @@ impl<'a> Renderer<'a> {
             default_head: None,
             after_clash: false,
             sacrificed: None,
+            search_verb: None,
             last_group: None,
             var_defs: Vec::new(),
+            outer_vars: Vec::new(),
+            it_done: None,
+            batch_once: false,
+            prev_mandatory: false,
+            milled: false,
+            in_emblem: None,
+            removed_kind: None,
             trigger_player: None,
             revealed_hand: false,
             x_for_each: None,
@@ -695,6 +832,9 @@ impl<'a> Renderer<'a> {
     /// flying."), but not in the rest of the same clause ("~ deals 2 damage to it": "it"
     /// is the other object).
     pub(crate) fn me(&mut self) -> String {
+        if self.in_emblem == Some(self.quote_depth) {
+            return "{alt:this emblem|~}".into();
+        }
         if self.self_salient && !self.other_salient {
             "~it".to_string()
         } else {
@@ -725,11 +865,13 @@ impl<'a> Renderer<'a> {
         let saved_n = std::mem::replace(&mut self.self_named_in_clause, false);
         let saved_ts = std::mem::replace(&mut self.trigger_is_self, false);
         let saved_v = std::mem::take(&mut self.var_defs);
+        let saved_ov = std::mem::take(&mut self.outer_vars);
         let saved_p = std::mem::take(&mut self.plural_vars);
         self.quote_depth += 1;
         let s = self.ability(a);
         self.quote_depth -= 1;
         self.var_defs = saved_v;
+        self.outer_vars = saved_ov;
         self.plural_vars = saved_p;
         self.targets = saved_t;
         self.introduced = saved_i;
@@ -744,6 +886,10 @@ impl<'a> Renderer<'a> {
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
         self.var_defs.clear();
+        self.outer_vars.clear();
+        self.it_done = None;
+        self.milled = false;
+        self.removed_kind = None;
         self.plural_vars.clear();
         self.target_vars.clear();
         self.stored_values.clear();
@@ -900,7 +1046,9 @@ impl<'a> Renderer<'a> {
                     let Value::If(c, yes, no) = &m.max else {
                         return self.gap("modal max");
                     };
-                    let c = self.condition(c);
+                    // The modes are chosen as the spell is cast (CR 601.2b), so that's
+                    // when the condition is checked; cards may say so.
+                    let c = format!("{} {{opt:as you cast ~}}", self.condition(c));
                     let no_s = match no.as_ref() {
                         Value::Const(n) if *n == a => self.count_word(*n),
                         other => self.value(other),
@@ -913,7 +1061,15 @@ impl<'a> Renderer<'a> {
                         Value::Const(n) => self.count_word(*n),
                         other => self.value(other),
                     };
-                    format!("{no_s}. If {c}, choose {yes_s} instead")
+                    // The minimum stays: "you may choose both instead" (CR 700.2).
+                    if min.is_some()
+                        && !matches!(no.as_ref(), Value::Const(n) if *n != a)
+                        && !yes_s.contains(" or ")
+                    {
+                        format!("{no_s}. If {c}, you may choose {yes_s} instead")
+                    } else {
+                        format!("{no_s}. If {c}, choose {yes_s} instead")
+                    }
                 }
                 _ => {
                     let v = self.value(&m.max);
@@ -1048,6 +1204,32 @@ pub fn plural(phrase: &str) -> String {
     format!("{head}{p}")
 }
 
+/// The singular of a plural phrase made by [`plural`] ("Heroes" → "Hero", "sorceries"
+/// → "sorcery").
+pub fn singular(phrase: &str) -> String {
+    let (head, last) = match phrase.rsplit_once(' ') {
+        Some((h, l)) => (format!("{h} "), l),
+        None => (String::new(), phrase),
+    };
+    let mut cands: Vec<String> = Vec::new();
+    if let Some(r) = last.strip_suffix("ies") {
+        cands.push(format!("{r}y"));
+    }
+    if let Some(r) = last.strip_suffix("es") {
+        cands.push(r.to_string());
+    }
+    if let Some(r) = last.strip_suffix('s') {
+        cands.push(r.to_string());
+    }
+    cands.push(last.to_string());
+    let one = cands
+        .iter()
+        .find(|c| plural_word(c) == last)
+        .cloned()
+        .unwrap_or_else(|| last.trim_end_matches('s').to_string());
+    format!("{head}{one}")
+}
+
 fn plural_word(w: &str) -> String {
     let irregular = [
         ("Elf", "Elves"),
@@ -1073,9 +1255,14 @@ fn plural_word(w: &str) -> String {
         ("Merfolk", "Merfolk"),
         ("Kor", "Kor"),
         ("Samurai", "Samurai"),
+        ("Eldrazi", "Eldrazi"),
+        ("Ainur", "Ainur"),
+        ("Jackal", "Jackals"),
         ("Ninja", "Ninjas"),
         ("Thopter", "Thopters"),
         ("Homunculus", "Homunculi"),
+        ("Aurochs", "Aurochs"),
+        ("Hero", "Heroes"),
     ];
     for (s, p) in irregular {
         if w == s {

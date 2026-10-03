@@ -443,61 +443,6 @@ pub(crate) fn or_form(options: &[String]) -> Option<String> {
 }
 
 impl Renderer<'_> {
-    /// "{3}{W}: Level 2": a Class's level ability (CR 716.2a: activate only as a sorcery
-    /// and only if the Class's level is one less).
-    pub(crate) fn class_level_up(&mut self, a: &ActivatedAbility) -> Option<String> {
-        let Effect::SetClassLevel { level } = &a.body.effect else {
-            return None;
-        };
-        let one_less = matches!(&a.condition,
-            Some(Condition::Compare(Value::ClassLevel, Cmp::Eq, Value::Const(n))) if *n + 1 == *level as i32);
-        if !matches!(a.timing, ActivationTiming::Sorcery)
-            || !one_less
-            || a.max_per_turn.is_some()
-            || !a.body.targets.is_empty()
-        {
-            return None;
-        }
-        let cost = self.cost(&a.cost);
-        Some(format!("{cost}: Level {level}"))
-    }
-
-    /// A Class's level section: the abilities it has while its level is that level or
-    /// greater (CR 716.2a), written after its level ability.
-    pub(crate) fn class_level_abilities(&mut self, s: &StaticAbility) -> Option<String> {
-        if !matches!(
-            &s.condition,
-            Some(Condition::Compare(
-                Value::ClassLevel,
-                Cmp::Ge,
-                Value::Const(_)
-            ))
-        ) {
-            return None;
-        }
-        let StaticEffect::Continuous {
-            affected: Filter::Source,
-            mods,
-        } = &s.effect
-        else {
-            return None;
-        };
-        let abilities: Vec<&Ability> = mods
-            .iter()
-            .map(|m| match m {
-                Modification::AddAbility(a) => Some(a),
-                _ => None,
-            })
-            .collect::<Option<_>>()?;
-        if abilities.is_empty() {
-            return None;
-        }
-        let texts: Vec<String> = abilities.iter().map(|a| self.nested_ability(a)).collect();
-        Some(texts.join("\n"))
-    }
-}
-
-impl Renderer<'_> {
     /// A leveler's level symbol: "LEVEL 2-3 / 3/3 / Flying" (CR 711.2a: as long as it has
     /// at least 2 and no more than 3 level counters, it has base power and toughness 3/3
     /// and has flying; CR 711.2b: "LEVEL 4+").

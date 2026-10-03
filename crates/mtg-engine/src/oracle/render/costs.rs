@@ -130,7 +130,13 @@ impl Renderer<'_> {
                 zone,
                 count,
             } => {
-                let f = filter.clone().in_zone(*zone).and_owner_you();
+                // A card in your graveyard or hand is yours; a permanent you control may
+                // not be.
+                let f = if matches!(zone, ZoneKind::Battlefield | ZoneKind::Stack) {
+                    filter.clone()
+                } else {
+                    filter.clone().in_zone(*zone).and_owner_you()
+                };
                 let det = self.det_for(count);
                 let n = self.noun_det(&f, det);
                 format!("exile {n}")
@@ -159,7 +165,9 @@ impl Renderer<'_> {
                         Some(format!("for each {} removed this way", counter_name(kind)));
                 }
                 let (c, w) = self.counted(count, &counter_name(kind));
-                format!("remove {c} from ~{}", w.unwrap_or_default())
+                // "sacrifice ~ unless you remove a +1/+1 counter from it".
+                let me = self.me();
+                format!("remove {c} from {me}{}", w.unwrap_or_default())
             }
             CostPart::RemoveCountersFromAmong {
                 kind,
@@ -277,6 +285,15 @@ impl Renderer<'_> {
                         let n = self.for_each_noun(f);
                         format!("for each {n}")
                     }
+                    // "{X}, where X is ~'s power": X generic mana is {1} X times.
+                    other if c == "{1}" => {
+                        let v = self.value(other);
+                        // "{1} for each card in your graveyard".
+                        if let Some(each) = v.strip_prefix("the number of ") {
+                            return format!("{c} for each {each}");
+                        }
+                        return format!("{{X}}, where X is {v}");
+                    }
                     other => {
                         let v = self.value(other);
                         format!("X times, where X is {v}")
@@ -341,21 +358,30 @@ impl Renderer<'_> {
 
     /// An activated ability: "{cost}: {effect} {restrictions}".
     pub(crate) fn activated(&mut self, a: &ActivatedAbility) -> String {
-        if let Some(t) = self.class_level_up(a) {
-            return t;
-        }
         let saved = self.zone;
         self.zone = a.zone;
-        // "−X: ..." (CR 606.4: a loyalty cost of −X removes X loyalty counters).
-        let minus_x = a.is_loyalty
+        let mut cost = self.cost(&a.cost);
+        // CR 606.4: a loyalty ability's "−X" cost removes X loyalty counters.
+        if a.is_loyalty
             && a.cost.mana.is_none()
             && matches!(a.cost.parts.as_slice(), [CostPart::RemoveCounters { kind, count: Value::X }]
-                if kind.as_str() == "loyalty");
-        let cost = if minus_x {
-            "−X".to_string()
-        } else {
-            self.cost(&a.cost)
-        };
+                if kind == crate::types::counters::LOYALTY)
+        {
+            cost = "−X".to_string();
+        }
+        // CR 716.2a: "[Cost]: Level N" is "[Cost]: This Class's level becomes N. Activate
+        // only if this Class is level N-1 and only as a sorcery."
+        if let Effect::SetClassLevel { level } = &a.body.effect {
+            if matches!(a.timing, ActivationTiming::Sorcery)
+                && matches!(&a.condition, Some(Condition::Compare(Value::ClassLevel, Cmp::Eq, Value::Const(n))) if *n as i64 + 1 == *level as i64)
+                && a.max_per_turn.is_none()
+                && a.max_total.is_none()
+                && a.own_cost_changes.is_empty()
+            {
+                self.zone = saved;
+                return format!("{cost}: Level {level}");
+            }
+        }
         let saved_salient = self.self_salient;
         // "Sacrifice ~: It deals 2 damage to any target."
         self.self_salient = cost.contains('~');
@@ -378,8 +404,14 @@ impl Renderer<'_> {
         // CR 702.142a: a boast ability can be activated only if the creature attacked this
         // turn and only once each turn; that's what "Boast —" says.
         let boast = self.keyword_ability == Some(crate::keywords::KeywordKind::Boast);
+        // CR 702.57b: a forecast ability may be activated only during its owner's upkeep
+        // and only once each turn; that's what "Forecast —" says.
+        let forecast = self.keyword_ability == Some(crate::keywords::KeywordKind::Forecast);
+        if forecast && matches!(a.timing, ActivationTiming::YourUpkeep) {
+            restr.retain(|r| r != "during your upkeep");
+        }
         match a.max_per_turn {
-            Some(1) if boast => {}
+            Some(1) if boast || forecast => {}
             None => {}
             Some(1) => restr.push("once each turn".into()),
             Some(2) => restr.push("twice each turn".into()),
@@ -431,6 +463,9 @@ impl Renderer<'_> {
                 };
                 restr.push(format!("during {whose} upkeep"));
             }
+            // CR 702.178a: "Max speed — [ability]": the object has the ability as long as
+            // your speed is 4.
+            Some(Condition::MaxSpeed) => {}
             Some(c) => {
                 let c = self.condition(c);
                 restr.push(format!("if {c}"));
@@ -438,6 +473,9 @@ impl Renderer<'_> {
             None => {}
         }
         let mut s = format!("{cost}: {body}");
+        if matches!(a.condition, Some(Condition::MaxSpeed)) && !solved && !boast {
+            s = format!("Max speed — {s}");
+        }
         for oc in &a.own_cost_changes {
             // Payment rules ("Spend only black mana on X") are written below.
             if matches!(oc.change, CostChange::Rule(_)) && oc.condition.is_none() {

@@ -35,6 +35,9 @@ impl Det {
 }
 
 /// The parts of a noun phrase, before a determiner is chosen.
+/// Where "cast from a [zone]" goes among a noun's relative phrases (see `np_text`).
+const CAST_FROM: &str = "\u{0}cast-from";
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Np {
     other: bool,
@@ -65,6 +68,8 @@ pub(crate) struct Np {
     without: Vec<String>,
     rel: Vec<String>,
     post: Vec<String>,
+    /// "cast from a graveyard" (CR 601.2a: the zone the spell was cast from).
+    cast_from: Option<ZoneKind>,
     /// A quality already says where the object is ("exiled with it").
     zone_said: bool,
 }
@@ -106,7 +111,7 @@ pub(crate) fn is_plain_number(v: &str) -> bool {
 pub(crate) fn cmp_phrase(cmp: Cmp, v: &str) -> String {
     match cmp {
         // "with mana value less than or equal to that damage": the event's amount.
-        Cmp::Le if v == "that much" => {
+        Cmp::Le if v == "that much" || v == "{alt:that much|that many}" => {
             "{alt:that much or less|less than or equal to that damage|less than or equal to that much}"
                 .into()
         }
@@ -117,13 +122,93 @@ pub(crate) fn cmp_phrase(cmp: Cmp, v: &str) -> String {
         Cmp::Eq => format!("{{opt:equal to}} {v}"),
         Cmp::Ne => format!("other than {v}"),
         Cmp::Lt => format!("less than {v}"),
+        // "with mana value less than or equal to ~'s power".
+        Cmp::Le if v.parse::<i64>().is_err() && v != "X" => {
+            format!("{{alt:{v} or less|less than or equal to {v}}}")
+        }
         Cmp::Le => format!("{v} or less"),
         Cmp::Gt => format!("greater than {v}"),
+        Cmp::Ge if v.parse::<i64>().is_err() && v != "X" => {
+            format!("{{alt:{v} or greater|greater than or equal to {v}}}")
+        }
         Cmp::Ge => format!("{v} or greater"),
     }
 }
 
 impl Renderer<'_> {
+    /// `[A and Q, B and Q]` where Q is who controls or owns them: "A or B [Q]".
+    fn shared_tail_union(&mut self, v: &[Filter], det: Det) -> Option<String> {
+        if v.len() < 2 || !matches!(det.num(), Num::One) {
+            return None;
+        }
+        let is_q = |f: &Filter| matches!(f, Filter::ControlledBy(_) | Filter::OwnedBy(_));
+        let mut shared: Option<String> = None;
+        let mut rests = Vec::new();
+        for x in v {
+            let Filter::And(parts) = x else { return None };
+            let (q, rest): (Vec<&Filter>, Vec<&Filter>) = parts.iter().partition(|p| is_q(p));
+            if q.is_empty() || rest.is_empty() {
+                return None;
+            }
+            let key = format!("{q:?}");
+            match &shared {
+                None => shared = Some(key),
+                Some(k) if *k == key => {}
+                Some(_) => return None,
+            }
+            rests.push((Filter::and(rest.into_iter().cloned().collect()), x.clone()));
+        }
+        let (r0, full0) = rests.first()?.clone();
+        let with = self.noun_det(&full0, det.clone());
+        let without = self.noun_det(&r0, det.clone());
+        let tail = with.strip_prefix(without.as_str())?.to_string();
+        if tail.is_empty() || tail.contains('{') {
+            return None;
+        }
+        let parts: Vec<String> = rests
+            .iter()
+            .map(|(r, _)| self.noun_det(r, det.clone()))
+            .collect();
+        let full: Vec<String> = rests
+            .iter()
+            .map(|(_, f)| self.noun_det(f, det.clone()))
+            .collect();
+        // Cards say it once or for each.
+        Some(format!(
+            "{{alt:{}{tail}|{}}}",
+            join_list(&parts, "or"),
+            join_list(&full, "or")
+        ))
+    }
+
+    /// "with lesser mana value", "with greater power": compared with the same quality of
+    /// the object the ability is about (itself, or the object or spell that triggered
+    /// it), which the card leaves unsaid.
+    fn lesser_greater(&mut self, c: Cmp, v: &Value, quality: &str) -> Option<String> {
+        let s = match (quality, v) {
+            ("power", Value::PowerOf(s))
+            | ("toughness", Value::ToughnessOf(s))
+            | ("mana value", Value::ManaValueOf(s)) => s,
+            _ => return None,
+        };
+        if !matches!(
+            s.as_ref(),
+            Sel::This | Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell
+        ) {
+            return None;
+        }
+        let word = match c {
+            Cmp::Lt => "lesser",
+            Cmp::Gt => "greater",
+            _ => return None,
+        };
+        let v = self.value(v);
+        Some(format!(
+            "{{alt:{quality} {}|{word} {quality}}}",
+            cmp_phrase(c, &v)
+        ))
+    }
+
     /// The noun used for "enchanted [thing]" / "equipped creature" on this face.
     pub(crate) fn attached_noun(&mut self) -> String {
         if self.info.has_subtype("Equipment") {
@@ -209,9 +294,27 @@ impl Renderer<'_> {
         match f {
             Filter::Any => {}
             Filter::And(v) => {
+                // "a 1/1 creature": power and toughness both exactly given.
+                let pt = v.iter().find_map(|x| match x {
+                    Filter::Power(Cmp::Eq, p) => p.as_const(),
+                    _ => None,
+                });
+                let tt = v.iter().find_map(|x| match x {
+                    Filter::Toughness(Cmp::Eq, t) => t.as_const(),
+                    _ => None,
+                });
+                let both = pt.is_some() && tt.is_some();
+                if let (Some(p), Some(t)) = (pt, tt) {
+                    np.status.push(format!("{p}/{t}"));
+                }
                 // The same quality twice says it once.
                 let mut seen: Vec<String> = Vec::new();
                 for x in v {
+                    if both
+                        && matches!(x, Filter::Power(Cmp::Eq, _) | Filter::Toughness(Cmp::Eq, _))
+                    {
+                        continue;
+                    }
                     let k = format!("{x:?}");
                     if seen.contains(&k) {
                         continue;
@@ -227,8 +330,18 @@ impl Renderer<'_> {
                     self.collect(x, np);
                 }
             }
-            // "outlaw": an Assassin, Mercenary, Pirate, Rogue, or Warlock (CR 700.12).
+            // CR 700.12: an outlaw is an object with the Assassin, Mercenary, Pirate,
+            // Rogue, and/or Warlock creature types.
             Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),
+            // "a land card with a basic land type" (CR 305.6: the five basic land types).
+            Filter::Or(v) if is_basic_land_types(v) && np.types.contains(&CardType::Land) => {
+                np.post.push("with a basic land type".into())
+            }
+            // "artifact, enchantment, or tapped creature": one list.
+            Filter::Or(v) if v.iter().any(|x| matches!(x, Filter::Or(_))) => {
+                let flat = flatten_or(f);
+                self.collect(&flat, np)
+            }
             // "a card named Festering Newt or Bubbling Cauldron".
             Filter::Or(v) if v.len() > 1 && v.iter().all(|x| matches!(x, Filter::Named(_))) => {
                 let names: Vec<String> = v
@@ -316,6 +429,8 @@ impl Renderer<'_> {
                     // "Red spells and white spells you cast cost {1} less to cast."
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::Many)).collect();
                     np.fixed = Some(join_list(&alts, "and"));
+                } else if let Some(s) = self.shared_tail_union(v, Det::Bare) {
+                    np.fixed = Some(s);
                 } else {
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::One)).collect();
                     np.fixed = Some(join_list(&alts, "or"));
@@ -474,20 +589,38 @@ impl Renderer<'_> {
             Filter::AttackingPlayerAlone => np.post.push("attacking a player alone".into()),
             Filter::HadToAttack => np.rel.push("that had to attack".into()),
             Filter::Power(c, v) => {
-                let v = self.value(v);
-                np.with.push(format!("power {}", cmp_phrase(*c, &v)));
+                let q = match self.lesser_greater(*c, v, "power") {
+                    Some(q) => q,
+                    None => {
+                        let v = self.value(v);
+                        format!("power {}", cmp_phrase(*c, &v))
+                    }
+                };
+                np.with.push(q);
             }
             Filter::Toughness(c, v) => {
-                let v = self.value(v);
-                np.with.push(format!("toughness {}", cmp_phrase(*c, &v)));
+                let q = match self.lesser_greater(*c, v, "toughness") {
+                    Some(q) => q,
+                    None => {
+                        let v = self.value(v);
+                        format!("toughness {}", cmp_phrase(*c, &v))
+                    }
+                };
+                np.with.push(q);
             }
             Filter::PowerVsBase(c) => {
                 np.with
                     .push(format!("power {}", cmp_phrase(*c, "its base power")));
             }
             Filter::ManaValue(c, v) => {
-                let v = self.value(v);
-                np.with.push(format!("mana value {}", cmp_phrase(*c, &v)));
+                let q = match self.lesser_greater(*c, v, "mana value") {
+                    Some(q) => q,
+                    None => {
+                        let v = self.value(v);
+                        format!("mana value {}", cmp_phrase(*c, &v))
+                    }
+                };
+                np.with.push(q);
             }
             Filter::Loyalty(c, v) => {
                 let v = self.value(v);
@@ -497,7 +630,7 @@ impl Renderer<'_> {
             // "with the same name as a card exiled with ~": as any of them.
             Filter::SameNameAs(s) => {
                 let s = self.sel(s, Case::Obj);
-                let s = s.replace("|each card exiled with ~}", "|a card exiled with ~}");
+                let s = s.replace("|each card exiled with ~it}", "|a card exiled with ~it}");
                 np.with.push(format!("the same name as {s}"));
             }
             Filter::DifferentNameFrom(s) => {
@@ -548,6 +681,12 @@ impl Renderer<'_> {
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
                 np.post.push("dealt damage this way".into())
             }
+            // "a card exiled with ~": the cards an ability of this object exiled
+            // (CR 607.2a).
+            Filter::In(s) if matches!(s.as_ref(), Sel::Linked) => {
+                np.zone_said = true;
+                np.post.push("exiled with ~it".into());
+            }
             // "for each creature card exiled this way": the cards the instruction before
             // exiled.
             Filter::In(s)
@@ -575,6 +714,20 @@ impl Renderer<'_> {
                 if card {
                     np.kind.get_or_insert("card");
                 }
+            }
+            // "a permanent card from among the milled cards".
+            Filter::In(s)
+                if self.milled
+                    && matches!(s.as_ref(), Sel::Var(v) if *v == crate::ability::vars::IT) =>
+            {
+                np.post.push(
+                    "{alt:among them|from among them|from among the milled cards|from among them milled this way}"
+                        .into(),
+                );
+            }
+            // "for each Aura attached to it".
+            Filter::In(s) if matches!(s.as_ref(), Sel::AttachedToThis) => {
+                np.post.push("attached to {alt:~|~it}".into());
             }
             Filter::In(s) => {
                 let s = self.sel(s, Case::Obj);
@@ -616,6 +769,8 @@ impl Renderer<'_> {
                 let t = self.noun_det(f, Det::A);
                 np.rel.push(format!("that targets {t}"));
             }
+            // CR 123.4: an object with any kind of sticker on it is "stickered".
+            Filter::HasSticker(None) => np.status.push("stickered".into()),
             Filter::HasSticker(k) => np.with_on.push(match k {
                 None => "sticker".into(),
                 Some(StickerType::Name) => "name sticker".into(),
@@ -627,9 +782,10 @@ impl Renderer<'_> {
                 let s = self.targets_filter(tf);
                 np.rel.push(s);
             }
+            // Worded in `np_text`, where the owner is known.
             Filter::CastFrom(z) => {
-                let z = zone_word(*z);
-                np.rel.push(format!("cast from a {z}"));
+                np.cast_from = Some(*z);
+                np.rel.push(CAST_FROM.into());
             }
             Filter::CastWithCost(name) => np.status.push(name.to_string()),
             Filter::DealtDamageThisTurnBy(s) => {
@@ -639,10 +795,12 @@ impl Renderer<'_> {
             Filter::ManaValueOfChosenQuality => {
                 np.with.push("mana value of the chosen quality".into())
             }
+            // "activated ability from an artifact source".
             Filter::AbilityFrom(f) => {
-                let s = self.noun(f, Num::One);
-                np.post.push(format!("from {} source", article(&s)));
-                np.post.push(s);
+                let saved = self.default_head.replace("source");
+                let s = self.noun_det(f, Det::A);
+                self.default_head = saved;
+                np.post.push(format!("from {s}"));
             }
             Filter::Custom(name)
                 if crate::kw::basic_effects::same_name_as_another_sel(name).is_some() =>
@@ -778,6 +936,10 @@ impl Renderer<'_> {
                 };
                 self.collect(&Filter::Power(neg, v.clone()), np);
             }
+            // "each creature that isn't of the chosen type".
+            Filter::ChosenType => np
+                .rel
+                .push("that {alt:isn't|aren't} of {alt:the chosen type|that type}".into()),
             other => {
                 let s = self.noun(other, Num::One);
                 np.rel.push(format!("that isn't {}", with_article(&s)));
@@ -799,7 +961,9 @@ impl Renderer<'_> {
         types.sort_by_key(|t| type_order(*t));
         words.extend(types.iter().map(|t| t.word().to_string()));
         if !np.alts.is_empty() {
-            let conj = if self.alt_and { "and" } else { "or" };
+            // "each Frog, Rabbit, Raccoon, or Squirrel" / "Knights and Walls": the same
+            // kinds either way.
+            let conj = if self.alt_and { "{alt:and|or}" } else { "or" };
             words.push(join_list(&np.alts, conj));
         }
         if np.permanent_card {
@@ -835,7 +999,8 @@ impl Renderer<'_> {
                 .collect();
             let list = join_list(&alts, "and");
             if suffix.is_empty() {
-                return list;
+                // "Knights and Walls" / "Knights or Walls".
+                return join_list(&alts, "{alt:and|or}");
             }
             // "Elemental spells and Warrior spells" / "instant and sorcery spells".
             if suffix == " spell" && alts.len() == 2 {
@@ -1005,8 +1170,31 @@ impl Renderer<'_> {
             s.push_str(" without ");
             s.push_str(&join_list(&np.without, "or"));
         }
+        // "a spell from your graveyard": a card in your graveyard is yours (CR 400.3).
+        if let Some(z) = np.cast_from {
+            let z = zone_word(z);
+            let w = if np.owner == Some(PlayerRel::You) {
+                np.owner = None;
+                format!("from your {z}")
+            } else if z == "exile" {
+                // "Whenever you cast a spell from exile", "spells cast from exile".
+                "{opt:cast} from exile".to_string()
+            } else if z == "hand" || z == "library" {
+                // A spell cast from a hand or library is cast from its caster's (CR 601.2a:
+                // a player casts the cards they may).
+                format!("{{alt:{{opt:cast}} from your {z}|cast from a {z}}}")
+            } else {
+                format!("cast from a {z}")
+            };
+            for r in np.rel.iter_mut().filter(|r| *r == CAST_FROM) {
+                *r = w.clone();
+            }
+        }
         match (np.zone, np.owner) {
             (Some(ZoneKind::Exile), None) if np.zone_said => {}
+            // "a nonlegendary creature on the battlefield": a permanent is on the
+            // battlefield anyway (CR 110.1), so cards may leave it out.
+            (Some(ZoneKind::Battlefield), None) => s.push_str(" {opt:on the battlefield}"),
             (Some(z), owner) if !matches!(z, ZoneKind::Battlefield | ZoneKind::Stack) => {
                 s.push(' ');
                 s.push_str(&self.zone_phrase(z, owner, num));
@@ -1192,12 +1380,50 @@ impl Renderer<'_> {
         }
         // A complex union inside a conjunction: "basic land card or Gate card in your
         // library" is "basic land card in your library or Gate card in your library".
-        let f = &distribute_or(f);
+        let f = &flatten_or(&distribute_or(f));
         // A complex union: each alternative gets the determiner ("~ or another creature");
         // a count applies to all of them ("up to two basic land cards and/or Gate cards").
         if let Filter::Or(v) = f {
+            // "a card named Festering Newt or Bubbling Cauldron".
+            let named = |x: &Filter| -> Option<String> {
+                match x {
+                    Filter::Named(n) => Some(n.to_string()),
+                    Filter::And(p) => {
+                        let names: Vec<String> = p
+                            .iter()
+                            .filter_map(|q| match q {
+                                Filter::Named(n) => Some(n.to_string()),
+                                _ => None,
+                            })
+                            .collect();
+                        let others_plain = p.iter().all(|q| {
+                            matches!(q, Filter::Named(_) | Filter::Card | Filter::InZone(_))
+                        });
+                        (names.len() == 1 && others_plain).then(|| names[0].clone())
+                    }
+                    _ => None,
+                }
+            };
+            let names: Option<Vec<String>> = v.iter().map(named).collect();
+            if let Some(names) = names.filter(|n| n.len() > 1) {
+                let first = self.noun_det(&v[0], det.clone());
+                if let Some(head) = first.strip_suffix(names[0].as_str()) {
+                    return format!("{head}{}", join_list(&names, "or"));
+                }
+            }
+            // "creatures with flying or reach": alternatives that differ only in a keyword.
+            if let Some((shared, kws)) = keyword_alternatives(v) {
+                let n = self.noun_det(&shared, det.clone());
+                let k: Vec<String> = kws.iter().map(|k| self.keyword_kind_word(*k)).collect();
+                return format!("{n} with {}", join_list(&k, "or"));
+            }
             if !v.iter().all(Self::is_type_like) && !v.iter().all(|x| matches!(x, Filter::Color(_)))
             {
+                // "enchanted creature or enchantment creature you control": a quality all
+                // the alternatives share, said once after them.
+                if let Some(s) = self.shared_tail_union(v, det.clone()) {
+                    return s;
+                }
                 return match det.num() {
                     Num::One => {
                         let parts: Vec<String> =
@@ -1351,6 +1577,75 @@ impl Renderer<'_> {
 
 /// `And([Or([a, b]), c])` → `Or([And([a, c]), And([b, c])])` when the union isn't a
 /// simple list of types or colors.
+/// "artifact, enchantment, or tapped creature": an alternative between alternatives is
+/// one list.
+fn flatten_or(f: &Filter) -> Filter {
+    match f {
+        Filter::Or(v) if v.iter().any(|x| matches!(x, Filter::Or(_))) => {
+            let mut out = Vec::new();
+            for x in v {
+                match flatten_or(x) {
+                    Filter::Or(w) => out.extend(w),
+                    y => out.push(y),
+                }
+            }
+            Filter::Or(out)
+        }
+        other => other.clone(),
+    }
+}
+
+/// `[A and has K1, A and has K2, ...]`: (A, [K1, K2, ...]).
+fn keyword_alternatives(v: &[Filter]) -> Option<(Filter, Vec<crate::keywords::KeywordKind>)> {
+    if v.len() < 2 {
+        return None;
+    }
+    let mut shared: Option<Vec<Filter>> = None;
+    let mut kws = Vec::new();
+    for x in v {
+        let Filter::And(parts) = x else { return None };
+        let (k, rest): (Vec<&Filter>, Vec<&Filter>) = parts
+            .iter()
+            .partition(|p| matches!(p, Filter::HasKeyword(_)));
+        let [Filter::HasKeyword(k)] = k.as_slice() else {
+            return None;
+        };
+        kws.push(*k);
+        let rest: Vec<Filter> = rest.into_iter().cloned().collect();
+        match &shared {
+            None => shared = Some(rest),
+            Some(s) if format!("{s:?}") == format!("{rest:?}") => {}
+            Some(_) => return None,
+        }
+    }
+    Some((Filter::and(shared?), kws))
+}
+
+/// The creature types an outlaw has one of (CR 700.12).
+fn is_basic_land_types(v: &[Filter]) -> bool {
+    let mut names: Vec<&str> = v
+        .iter()
+        .filter_map(|x| match x {
+            Filter::Subtype(s) => Some(s.as_ref()),
+            _ => None,
+        })
+        .collect();
+    names.sort();
+    v.len() == 5 && names == ["Forest", "Island", "Mountain", "Plains", "Swamp"]
+}
+
+fn is_outlaw(v: &[Filter]) -> bool {
+    let mut names: Vec<&str> = v
+        .iter()
+        .filter_map(|x| match x {
+            Filter::Subtype(s) => Some(s.as_ref()),
+            _ => None,
+        })
+        .collect();
+    names.sort();
+    v.len() == 5 && names == ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]
+}
+
 fn distribute_or(f: &Filter) -> Filter {
     let Filter::And(v) = f else {
         return f.clone();
@@ -1417,17 +1712,4 @@ pub fn possessive(s: &str) -> String {
         _ if s.ends_with('s') && !s.ends_with("ss") && s != "~" => format!("{s}'"),
         _ => format!("{s}'s"),
     }
-}
-
-/// The creature types an outlaw has one of (CR 700.12).
-fn is_outlaw(v: &[Filter]) -> bool {
-    let mut names: Vec<&str> = v
-        .iter()
-        .filter_map(|f| match f {
-            Filter::Subtype(s) => Some(s.as_str()),
-            _ => None,
-        })
-        .collect();
-    names.sort_unstable();
-    v.len() == 5 && names == ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]
 }

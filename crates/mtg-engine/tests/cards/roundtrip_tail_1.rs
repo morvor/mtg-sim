@@ -102,3 +102,39 @@ fn x_mana_of_one_type_or_x_of_another() {
     t.resolve_all();
     assert_eq!(t.g.player(P0).mana_pool.total(), 3);
 }
+
+#[test]
+fn what_a_destroyed_creature_had_is_its_last_known_information() {
+    cr!("608.2h");
+    // Rite of the Serpent: "Destroy target creature. If that creature had a +1/+1 counter
+    // on it, create a 1/1 green Snake creature token." The round trip reads "had" as "has"
+    // of the destroyed creature's last known information; this shows the engine does.
+    supported("Rite of the Serpent");
+    for (counters, snakes) in [(1, 1), (0, 0)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+        let target = t.battlefield(P1, "Hill Giant");
+        if counters > 0 {
+            t.g.add_counters(
+                Entity::Object(target),
+                mtg_engine::types::counters::PLUS1,
+                counters,
+                None,
+            );
+            t.g.flush_events();
+            t.settle();
+        }
+        t.lands(P0, "Swamp", 6);
+        let spell = t.hand(P0, "Rite of the Serpent");
+        t.answer_targets(P0, &[Entity::Object(target)]);
+        t.cast(P0, spell).go();
+        t.resolve_all();
+        assert_eq!(t.zone(target), Zone::Graveyard(P1));
+        let made = t
+            .g
+            .permanents()
+            .filter(|o| o.is_token() && o.chars.has_subtype("Snake"))
+            .count();
+        assert_eq!(made, snakes, "{counters} counter(s)");
+    }
+}

@@ -43,7 +43,14 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"Whenever a creature enters from your graveyard\" triggered for creatures entering from any graveyard (also \"from your hand\") | Dredging Claw, Flayer of the Hatebound | `patterns/triggers.rs` (owned by you) |\n\
 | \"As long as you have 30 or more life and an opponent has 10 or less life\" was read as one condition, \"you have 30 or less life\" (tests for this and the rows below in `tests/cards/roundtrip_tail_1.rs`) | Blood Baron of Vizkopa | `statics::parse_condition_core` (the whole rest) |\n\
 | \"Choose up to one target creature. If it's suspected, exile it.\": \"it\" was the source | Agrus Kos, Spirit of Justice | `a701_action_triggers::designation_condition` (only \"~\"; \"it\" is the referent grammar's) |\n\
-| \"Add {B} or {G} for each permanent destroyed this way\", \"Add X {G} or X {W}\": the count was dropped (one mana) | Culling Ritual, Muerra, Trash Tactician, Brigid, Doun's Mind | `effects::p_add_mana` (only symbols), `damage_removal_foreach::multiply`, `mana_production::add_amount` |\n\n\
+| \"Add {B} or {G} for each permanent destroyed this way\", \"Add X {G} or X {W}\": the count was dropped (one mana) | Culling Ritual, Muerra, Trash Tactician, Brigid, Doun's Mind | `effects::p_add_mana` (only symbols), `damage_removal_foreach::multiply`, `mana_production::add_amount` |\n\
+| \"Search your library for up to X cards\" (quantity only) had to find exactly X (tests for this and the rows below in `tests/cards/roundtrip_clusters_2.rs`) | Diabolic Revelation | `patterns/card_flow_search.rs`: the search grammar |\n\
+| \"Put a creature card exiled with ~ onto the battlefield. It gains haste\": \"it\" was the source | Yggdrasil, Rebirth Engine | `r600_linked.rs` |\n\
+| \"Whenever ~ becomes blocked by a creature, it deals 2 damage to that creature\": \"it\" was the blocker | Acolyte of the Inferno | object resolver in `oracle/effects.rs` |\n\
+| \"Each player mills cards equal to your Ring-bearer's power\" used each player's own Ring-bearer | One Ring to Rule Them All | `a701_actions::with_action_referent` |\n\
+| \"during turns other than yours\" was \"during an opponent's turn\" (a teammate's turn didn't count) | Mesa Lynx | `patterns/statics.rs` `turn_condition` |\n\
+| \"spells you cast from your graveyard cost less\" also reduced spells cast from another player's graveyard | Patrician Geist | `r601_cost_by_cast_zone.rs` |\n\
+| \"enchanted creature or enchantment creature\" kept only the first phrase | Feast of Dreams | `phrases::two_phrases_same_head` |\n\n\
 Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
 triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
 cycled card (CR 702.29d), so the two are the same.\n\n";
@@ -217,6 +224,13 @@ fn print_card(r: &CardCheck) {
 }
 
 pub fn run(args: &[String]) {
+    // "--norm TEXT...": the normalized tokens of each text, as the comparison sees them.
+    if args.first().is_some_and(|a| a == "--norm") {
+        for t in &args[1..] {
+            println!("{}", normalize_unit(t).join(" "));
+        }
+        return;
+    }
     let o = parse(args);
     if o.ast {
         for c in mtg_data::cards().iter() {
