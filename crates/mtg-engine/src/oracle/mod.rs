@@ -421,7 +421,21 @@ pub fn strip_ability_word(text: &str) -> &str {
         // Other creatures you control ...", "Top of the Food Chain — ~'s power is ...").
         let title_cased = head.split_whitespace().all(|w| {
             w.starts_with(|c: char| c.is_uppercase())
-                || matches!(w, "of" | "the" | "a" | "an" | "and" | "to" | "in" | "on" | "for" | "with" | "from" | "at" | "by")
+                || matches!(
+                    w,
+                    "of" | "the"
+                        | "a"
+                        | "an"
+                        | "and"
+                        | "to"
+                        | "in"
+                        | "on"
+                        | "for"
+                        | "with"
+                        | "from"
+                        | "at"
+                        | "by"
+                )
         });
         let long_flavor_word = !head.contains(',')
             && ((words <= 6 && (rest.starts_with("When") || rest.starts_with("At ")))

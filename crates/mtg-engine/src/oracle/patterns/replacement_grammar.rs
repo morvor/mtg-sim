@@ -1490,6 +1490,7 @@ fn p_prevent_next(l: &str, b: &mut Builder) -> Option<Effect> {
                 amount: Some(n),
                 duration: Duration::EndOfTurn,
                 combat_only: false,
+                then: None,
             });
         }
     }
@@ -1815,6 +1816,7 @@ fn last_prevention(e: &mut Effect) -> Option<&mut ReplacementDef> {
         amount: Some(n),
         duration,
         combat_only: false,
+        then: None,
     } = e
     {
         let (players, objects) = match to {
