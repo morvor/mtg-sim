@@ -389,7 +389,13 @@ impl Game {
                 }
                 info.objects = Vec::new();
                 for i in &g {
-                    if let Some(o) = i.object.or(i.other) {
+                    // An event about several objects at once (the creatures attacking a
+                    // player) contributes all of them.
+                    let own = match i.object.or(i.other) {
+                        Some(o) => vec![o],
+                        None => i.objects.clone(),
+                    };
+                    for o in own {
                         if !info.objects.contains(&o) {
                             info.objects.push(o);
                         }

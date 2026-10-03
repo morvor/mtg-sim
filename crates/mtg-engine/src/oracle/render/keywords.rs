@@ -189,6 +189,27 @@ impl Renderer<'_> {
                 let c = k.cost.as_ref().map(|c| cost(self, c)).unwrap_or_default();
                 format!("{ty}cycling{c}")
             }
+            // "Cumulative upkeep {R} or {G}": a choice made separately for each age
+            // counter (CR 702.24a), which is paying a hybrid {R/G} for each (CR 107.4e).
+            KeywordKind::CumulativeUpkeep
+                if k.cost
+                    .as_ref()
+                    .is_some_and(|c| c.parts.is_empty() && c.mana.is_some()) =>
+            {
+                let c = k.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
+                let two = c
+                    .strip_prefix('{')
+                    .and_then(|x| x.strip_suffix('}'))
+                    .and_then(|x| x.split_once('/'))
+                    .filter(|(a, b)| {
+                        let colored = |x: &str| matches!(x, "W" | "U" | "B" | "R" | "G");
+                        colored(a) && colored(b)
+                    });
+                match two {
+                    Some((a, b)) => format!("{name} {{alt:{c}|{{{a}}} or {{{b}}}}}"),
+                    None => format!("{name} {c}"),
+                }
+            }
             KeywordKind::Equip => {
                 let q = match &k.filter {
                     Some(f) => format!(" {}", self.noun_det(f, Det::Bare)),

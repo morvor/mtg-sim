@@ -16,11 +16,11 @@ impl Renderer<'_> {
                 LibraryPosition::Top if many => "on top of your library in any order".into(),
                 LibraryPosition::Top => "on top of your library".into(),
                 LibraryPosition::Bottom if many => {
-                    "on the bottom of your library in any order".into()
+                    "{alt:on the bottom of your library|on the bottom} in any order".into()
                 }
                 LibraryPosition::Bottom => "on the bottom of your library".into(),
                 LibraryPosition::BottomRandom => {
-                    "on the bottom of your library in a random order".into()
+                    "{alt:on the bottom of your library|on the bottom} in a random order".into()
                 }
                 LibraryPosition::FromTop(_) => String::new(),
                 LibraryPosition::Shuffled => "into your library".into(),
@@ -39,6 +39,10 @@ impl Renderer<'_> {
                 if !matches!(c, PlayerRef::You) {
                     let p = self.player(c, super::players::Case::Poss);
                     d.push_str(&format!(" under {p} control"));
+                } else {
+                    // The player putting it there controls it (CR 110.2a): cards may say
+                    // so.
+                    d.push_str(" {opt:under your control}");
                 }
             }
             for (k, n) in &to.with_counters {
@@ -100,13 +104,37 @@ impl Renderer<'_> {
                     || (!each_of.is_empty() && *up_to)
                 {
                     "you may "
+                } else if matches!(count, Some(Value::Const(k)) if *k >= 999) {
+                    // Any number includes none: "you may reveal any number of ...".
+                    "{opt:you may} "
                 } else {
                     ""
                 };
                 let verb = if *reveal { "reveal" } else { "put" };
                 let d = self.dig_destination(to, many);
+                // "You may reveal a land card" / "reveal up to one land card".
+                if *reveal
+                    && *up_to
+                    && each_of.is_empty()
+                    && !*random
+                    && matches!(count, Some(Value::Const(1)))
+                {
+                    let noun = self.card_noun(filter);
+                    let head = format!(
+                        "{{alt:you may reveal {what}|reveal up to one {noun}}} from among them"
+                    );
+                    // Kept among them for the next instruction (`dig_steps.rs`).
+                    if d.is_empty() {
+                        return head;
+                    }
+                    return format!("{head} and put {{alt:it|the revealed card}} {d}");
+                }
                 if *reveal && !d.is_empty() {
-                    let it = if many { "them" } else { "it" };
+                    let it = if many {
+                        "{alt:them|the revealed cards}"
+                    } else {
+                        "{alt:it|the revealed card}"
+                    };
                     format!("{may}reveal {what} from among them and put {it} {d}")
                 } else if d.is_empty() {
                     format!("{may}{verb} {what} from among them")

@@ -29,7 +29,51 @@ impl Ev {
 }
 
 impl Renderer<'_> {
+    /// The players of a trigger event that triggers once for a whole batch of events
+    /// ("one or more opponents"), or of one event ("an opponent").
+    fn batch_players(&mut self, who: PlayerRel) -> String {
+        match who {
+            PlayerRel::Any if self.batch_once => "one or more players".into(),
+            PlayerRel::Opponent if self.batch_once => "one or more opponents".into(),
+            other => self.rel_subject(other),
+        }
+    }
+
     pub(crate) fn triggered(&mut self, t: &TriggeredAbility) -> String {
+        // CR 702.178a: "Max speed — [triggered ability]": it triggers only while you have
+        // max speed (the object has the ability only then).
+        if let TriggerCond::Where {
+            trigger,
+            cond: Condition::MaxSpeed,
+        } = &t.trigger
+        {
+            let mut inner = t.clone();
+            inner.trigger = trigger.as_ref().clone();
+            let (i, c) = self.two_ways(|r| r.triggered(&inner), |r| r.triggered_plain(t));
+            return format!("{{alt:Max speed — {i}|{c}}}");
+        }
+        let pushed = t
+            .intervening_if
+            .as_ref()
+            .and_then(super::compared_values)
+            .map(|p| self.compared.push(p))
+            .is_some();
+        let s = self.triggered_plain(t);
+        if pushed {
+            self.compared.pop();
+        }
+        s
+    }
+
+    fn triggered_plain(&mut self, t: &TriggeredAbility) -> String {
+        let attack = format!("{:?}", t.trigger).contains("PlayerAttack");
+        let saved = std::mem::replace(&mut self.attack_trigger, attack);
+        let s = self.triggered_plain_inner(t);
+        self.attack_trigger = saved;
+        s
+    }
+
+    fn triggered_plain_inner(&mut self, t: &TriggeredAbility) -> String {
         // Saga chapters (CR 714.2b): "I — effect".
         if let TriggerCond::Custom(name) = &t.trigger {
             if let Some(nums) = chapter_numbers(name) {
@@ -123,7 +167,15 @@ impl Renderer<'_> {
             let c = self.condition(c);
             s.push_str(&format!(", if {c}"));
         }
+        // (Only the first instruction can be read as the intervening clause.)
+        let first = match &t.body.effect {
+            Effect::Seq(v) => v.first(),
+            e => Some(e),
+        };
+        self.trigger_body_if =
+            t.intervening_if.is_none() && matches!(first, Some(Effect::If { .. }));
         let body = self.body(&t.body);
+        self.trigger_body_if = false;
         self.self_salient = saved_salient;
         self.other_salient = saved_other;
         self.self_named_in_clause = saved_named;
@@ -463,7 +515,12 @@ impl Renderer<'_> {
             }
             TriggerCond::PlayerAttacksPlayer { attacker, defender } => {
                 let a = self.rel_subject(*attacker);
-                let d = self.rel_object(*defender);
+                // Once for the whole attack: "attacks one or more of your opponents".
+                let d = if self.batch_once && matches!(defender, PlayerRel::Opponent) {
+                    "one or more of your opponents".to_string()
+                } else {
+                    self.rel_object(*defender)
+                };
                 Ev::new(a, format!("attack {d}"))
             }
             // Only creatures attack and block (CR 506.1): a filter with no type is a
@@ -567,6 +624,10 @@ impl Renderer<'_> {
                     (TriggerStep::Turn, PlayerRel::You) => "the beginning of your turn".into(),
                     (TriggerStep::Turn, PlayerRel::Any) => "the beginning of each turn".into(),
                     (_, PlayerRel::You) => format!("the beginning of your {s}"),
+                    // "At the beginning of each player's first main phase".
+                    (_, PlayerRel::Any) if s.contains("main phase") => {
+                        format!("the beginning of each player's {s}")
+                    }
                     (_, PlayerRel::Any) => format!("the beginning of each {s}"),
                     (_, PlayerRel::Opponent) => format!("the beginning of each opponent's {s}"),
                     (_, r) => {
@@ -600,15 +661,18 @@ impl Renderer<'_> {
                     }
                 };
                 // "Whenever one or more players discard one or more cards" (once for all).
-                let w = if self.batch_once && matches!(who, PlayerRel::Any) {
-                    "one or more players".to_string()
-                } else {
-                    self.rel_subject(*who)
-                };
+                let w = self.batch_players(*who);
                 Ev::new(w, format!("discard {n}"))
             }
-            TriggerCond::GainsLife { who } => Ev::new(self.rel_subject(*who), "gain life"),
-            TriggerCond::LosesLife { who } => Ev::new(self.rel_subject(*who), "lose life"),
+            // "Whenever one or more opponents lose life" (once for all).
+            TriggerCond::GainsLife { who } => {
+                let w = self.batch_players(*who);
+                Ev::new(w, "gain life")
+            }
+            TriggerCond::LosesLife { who } => {
+                let w = self.batch_players(*who);
+                Ev::new(w, "lose life")
+            }
             TriggerCond::CountersPut { filter, kind, each } => {
                 let k = match kind {
                     Some(k) => counter_name(k),
@@ -910,6 +974,131 @@ impl Renderer<'_> {
                     format!("draw {p} {} card each turn", ordinal_word(*n as u32)),
                 )
             }
+            // "Whenever ~ and at least two Zombies attack": the others attacking with it
+            // (CR 508.3a).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::Count(Filter::And(g)), Cmp::Ge, Value::Const(n)),
+            } if matches!(trigger.as_ref(), TriggerCond::Attacks(f) if matches!(f, Filter::Source | Filter::AttachedToSource))
+                && g.iter().any(|x| matches!(x, Filter::Attacking))
+                && g.iter().any(|x| matches!(x, Filter::Not(y) if matches!(y.as_ref(), Filter::Source | Filter::AttachedToSource))) =>
+            {
+                let TriggerCond::Attacks(f) = trigger.as_ref() else {
+                    return Ev::new("", self.gap("attacks with others"));
+                };
+                let o = obj(self, f);
+                let mut rest: Vec<Filter> = g
+                    .iter()
+                    .filter(|x| {
+                        !matches!(x, Filter::Attacking)
+                            && !matches!(x, Filter::Not(y) if matches!(y.as_ref(), Filter::Source | Filter::AttachedToSource))
+                    })
+                    .cloned()
+                    .collect();
+                // Only creatures attack: "at least two Zombies".
+                if rest.len() > 1 {
+                    rest.retain(|x| !matches!(x, Filter::Type(CardType::Creature)));
+                }
+                let num = if *n == 1 { Num::One } else { Num::Many };
+                let noun = self.noun(&Filter::and(rest), num);
+                Ev::new(
+                    format!("{o} and at least {} {{opt:other}} {noun}", number_word(*n)),
+                    "attack",
+                )
+            }
+            // "Whenever a creature you control explores", "... connives": the object that
+            // performed the keyword action (CR 701.44, 701.50).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(Sel::TriggerObject, f),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, who: PlayerRel::Any }
+                if matches!(name.as_str(), "explore" | "connive")) =>
+            {
+                let TriggerCond::PlayerAction { name, .. } = trigger.as_ref() else {
+                    return Ev::new("", self.gap("an object's keyword action"));
+                };
+                let o = self.noun_det(f, det.clone());
+                Ev::new(o, name.to_string())
+            }
+            // "Whenever ~ becomes crewed", "When ~ becomes plotted": an event about the
+            // object itself (`kw/crew.rs`, `kw/plot.rs`).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, who: PlayerRel::Any }
+                if name == crate::kw::crew::CREWED || name == crate::kw::plot::BECAME_PLOTTED) =>
+            {
+                let TriggerCond::PlayerAction { name, .. } = trigger.as_ref() else {
+                    return Ev::new("", self.gap("an event about the object"));
+                };
+                let vp = if name == crate::kw::crew::CREWED {
+                    "becomes crewed"
+                } else {
+                    "becomes plotted"
+                };
+                Ev::new(self.me(), vp)
+            }
+            // "Whenever you win a coin flip" / "lose a coin flip": the flip's result, 1 for
+            // a win (CR 705.2).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(k @ (0 | 1))),
+            } if matches!(trigger.as_ref(), TriggerCond::FlipCoin(_)) => {
+                let TriggerCond::FlipCoin(r) = trigger.as_ref() else {
+                    return Ev::new("", self.gap("coin flip"));
+                };
+                let w = self.rel_subject(*r);
+                let vp = if *k == 1 {
+                    "win a coin flip"
+                } else {
+                    "lose a coin flip"
+                };
+                Ev::new(w, vp)
+            }
+            // "Whenever ~ is dealt 3 or more damage", "Whenever ~ deals 4 or more damage":
+            // the event's amount (CR 120.1).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::EventAmount, Cmp::Ge, Value::Const(n)),
+            } if {
+                let inner = match trigger.as_ref() {
+                    TriggerCond::Batched { trigger, .. } => trigger.as_ref(),
+                    t => t,
+                };
+                matches!(
+                    inner,
+                    TriggerCond::IsDealtDamage { .. } | TriggerCond::DealsDamage { .. }
+                )
+            } =>
+            {
+                let e = self.trigger_event(trigger, det);
+                let k = number_word(*n);
+                let vp = if e.vp.contains("combat damage") {
+                    e.vp.replacen("combat damage", &format!("{k} or more combat damage"), 1)
+                } else {
+                    e.vp.replacen("damage", &format!("{k} or more damage"), 1)
+                };
+                Ev::new(e.subj, vp)
+            }
+            // "Whenever an opponent sacrifices a nontoken permanent": the player who
+            // sacrificed it is the trigger's player.
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::PlayerMatches(PlayerRef::TriggerPlayer, pf),
+            } if matches!(trigger.as_ref(), TriggerCond::Sacrificed(_))
+                && matches!(pf, PlayerFilter::Any | PlayerFilter::Opponent) =>
+            {
+                let TriggerCond::Sacrificed(f) = trigger.as_ref() else {
+                    return Ev::new("", self.gap("sacrifices"));
+                };
+                let w = if matches!(pf, PlayerFilter::Opponent) {
+                    "an opponent"
+                } else {
+                    "a player"
+                };
+                let o = self.noun_det(&super::effects::strip_controller(f), det);
+                Ev::new(w, format!("sacrifice {o}"))
+            }
             // "At the beginning of your second main phase".
             TriggerCond::Where { trigger, cond } if matches!(cond, Condition::Custom(n) if n.starts_with("main_phase:")) =>
             {
@@ -919,7 +1108,12 @@ impl Renderer<'_> {
                     return Ev::new("", self.gap("main phase trigger"));
                 };
                 let k: u32 = n["main_phase:".len()..].parse().unwrap_or(1);
-                let p = self.rel_possessive(*whose, Num::One);
+                // "At the beginning of each player's first main phase".
+                let p = if matches!(whose, PlayerRel::Any) {
+                    "each player's".to_string()
+                } else {
+                    self.rel_possessive(*whose, Num::One)
+                };
                 Ev::new(
                     "",
                     format!("the beginning of {p} {} main phase", ordinal_word(k)),
@@ -1152,6 +1346,22 @@ impl Renderer<'_> {
                     return Ev::new(
                         "",
                         format!("{{alt:a player attacks {d}{w}|{d} is attacked}}"),
+                    );
+                }
+                // Only creatures attack (CR 508.1a): "whenever you attack a player" is
+                // with one or more creatures.
+                if w == " with one or more creatures" {
+                    return Ev::new(a, format!("attack {d} {{opt:with one or more creatures}}"));
+                }
+                // "Whenever two or more creatures you control attack a player".
+                if a == "you" && *min >= 2 && !w.contains('{') {
+                    let n = self.noun(with, Num::Many);
+                    return Ev::new(
+                        "",
+                        format!(
+                            "{{alt:you attack {d}{w}|{} or more {n} attack {d}}}",
+                            number_word(*min as i32)
+                        ),
                     );
                 }
                 Ev::new(a, format!("attack {d}{w}"))
