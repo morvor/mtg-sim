@@ -1056,10 +1056,21 @@ inventory::submit! { AbilityPattern { name: "spell cost grammar: reveal a [quali
 // Payments while an ability resolves
 // ---------------------------------------------------------------------------
 
-/// One resource of a payment: "{1}", "2 life", "life equal to its power".
+/// One resource of a payment: "{1}", "2 life", "life equal to its power", "{1} for each
+/// artifact they control" (counted as it's paid, CR 702.24a-style repetition).
 fn payment_part(s: &str, b: &mut Builder) -> Option<Cost> {
     if let Some(c) = super::counters_resources_pay::resolution_cost(s) {
         return Some(c);
+    }
+    if let Some((m, fe)) = s.split_once(" for each ") {
+        let one = super::counters_resources_pay::resolution_cost(m)?;
+        // The paying player's own permanents ("they control" after "that player may pay").
+        let fe = fe.replace(" they control", " you control");
+        let times = super::statics::parse_for_each(&fe, None)?;
+        return Some(Cost::free().with(CostPart::Repeated {
+            cost: Box::new(one),
+            times,
+        }));
     }
     let v = s.strip_prefix("life equal to ")?;
     let (v, rest) = crate::oracle::statics::parse_value_phrase(v, b)?;
@@ -1076,7 +1087,7 @@ fn may_pay_compound(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("you may pay ")?;
     let mut cost = Cost::free();
     let pieces: Vec<&str> = r.split(" and ").collect();
-    if pieces.len() == 1 && !r.starts_with("life equal to ") {
+    if pieces.len() == 1 && !r.starts_with("life equal to ") && !r.contains(" for each ") {
         return None;
     }
     for piece in pieces {

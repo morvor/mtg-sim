@@ -902,3 +902,22 @@ fn madame_null_puts_counters_equal_to_the_life_paid() {
     assert_eq!(t.life(P0), 17);
     assert_eq!(t.counters(giant, "+1/+1"), 3);
 }
+
+#[test]
+fn overencumbered_asks_for_one_mana_per_artifact_or_no_attacks() {
+    cr!("118.12", "508.1d");
+    // "At the beginning of combat on enchanted opponent's turn, that player may pay {1} for
+    // each artifact they control. If they don't, creatures can't attack this combat."
+    assert_compiles(&["Overencumbered"]);
+    let mut t = TestGame::new(2);
+    let aura = t.battlefield(P0, "Overencumbered");
+    t.g.attach(aura, Entity::Player(P1));
+    t.battlefield(P1, "Ornithopter");
+    t.battlefield(P1, "Ornithopter");
+    t.lands(P1, "Island", 3);
+    // P1 pays {2} (two artifacts).
+    t.answer_yes(P1, true);
+    t.advance_to(P1, Step::BeginningOfCombat);
+    t.resolve_all();
+    assert_eq!(tapped_lands(&t, P1), 2);
+}
