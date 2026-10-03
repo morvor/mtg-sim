@@ -623,3 +623,48 @@ fn mega_flare_damages_the_creature_chosen_for_each_opponent() {
     assert!(!t.on_battlefield(a));
     assert!(!t.on_battlefield(b));
 }
+
+#[test]
+fn divergent_transformations_each_controller_reveals_until_a_creature() {
+    cr!("608.2c", "701.20a");
+    ruling!(
+        "Divergent Transformations",
+        "If one player's creatures are exiled this way, that player repeats this process twice."
+    );
+    compiles("Divergent Transformations");
+    // "Exile two target creatures. For each of those creatures, its controller reveals
+    // cards from the top of their library until they reveal a creature card, puts that card
+    // onto the battlefield, then shuffles the rest into their library."
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.library_top(P1, "Hill Giant");
+    t.library_top(P1, "Forest");
+    t.library_top(P1, "Hill Giant");
+    t.lands(P0, "Mountain", 6);
+    let spell = t.hand(P0, "Divergent Transformations");
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(a), Entity::Object(b)])
+        .go();
+    t.resolve();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    // P1 repeated the process twice: both Hill Giants.
+    assert_eq!(controlled(&t, P1, "Hill Giant"), 2);
+}
+
+#[test]
+fn winged_hive_tyrant_long_flavor_word_before_a_static_ability() {
+    cr!("207.2d");
+    compiles("Winged Hive Tyrant");
+    // "The Will of the Hive Mind — Other creatures you control with counters on them have
+    // flying and haste."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Winged Hive Tyrant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let plain = t.battlefield(P0, "Hill Giant");
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 1, None);
+    t.g.recompute();
+    use mtg_engine::keywords::KeywordKind;
+    assert!(t.obj(bears).chars.has_keyword(KeywordKind::Flying));
+    assert!(!t.obj(plain).chars.has_keyword(KeywordKind::Flying));
+}

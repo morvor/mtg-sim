@@ -417,9 +417,18 @@ pub fn strip_ability_word(text: &str) -> &str {
         // up to six words before a triggered ability (not a list of Saga chapters).
         // So can one before an activated ability with a mana cost ("I've Come Up with a
         // New Recipe! — {1}{G}{U}, {T}: ...").
+        // So can a title-cased one before any other ability ("The Will of the Hive Mind —
+        // Other creatures you control ...", "Top of the Food Chain — ~'s power is ...").
+        let title_cased = head.split_whitespace().all(|w| {
+            w.starts_with(|c: char| c.is_uppercase())
+                || matches!(w, "of" | "the" | "a" | "an" | "and" | "to" | "in" | "on" | "for" | "with" | "from" | "at" | "by")
+        });
         let long_flavor_word = !head.contains(',')
             && ((words <= 6 && (rest.starts_with("When") || rest.starts_with("At ")))
-                || (words <= 8 && rest.starts_with('{')));
+                || (words <= 8 && rest.starts_with('{'))
+                || (words <= 7
+                    && title_cased
+                    && rest.starts_with(|c: char| c.is_uppercase() || c == '~')));
         let looks_like_word = (words <= 4 || long_flavor_word)
             // An ability word starts its line: not a mode's name on a later line
             // ("Tiered\n• Thunder — {0} — ...", CR 702.183a).
