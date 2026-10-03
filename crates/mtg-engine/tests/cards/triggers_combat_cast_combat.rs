@@ -509,3 +509,39 @@ fn loot_dispute_rewards_attacking_the_player_with_the_initiative() {
     combat(&mut t, &at_p1(&[bears]), &[]);
     assert_eq!(treasures(&t), 1);
 }
+
+#[test]
+fn tomik_counts_the_attackers_coming_at_you_and_your_planeswalkers() {
+    cr!("506.2", "603.4");
+    assert_supported("Tomik, Wielder of Law");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tomik, Wielder of Law");
+    let pw = t.battlefield(P0, "Ajani Goldmane");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P1, Step::BeginningOfCombat);
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(a, Entity::Player(P0)), (b, Entity::Object(pw))]),
+    );
+    let hand = t.hand_size(P0);
+    t.advance_to(P1, Step::DeclareBlockers);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn tomik_ignores_a_single_attacker() {
+    cr!("603.4");
+    assert_supported("Tomik, Wielder of Law");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tomik, Wielder of Law");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P1, Step::BeginningOfCombat);
+    t.answer(P1, DecisionKind::Attackers, Answer::Attackers(vec![(a, Entity::Player(P0))]));
+    t.advance_to(P1, Step::DeclareBlockers);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+}

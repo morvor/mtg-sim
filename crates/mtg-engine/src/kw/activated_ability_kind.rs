@@ -85,6 +85,11 @@ pub const HAS_MANA_ABILITY: &str = "object: has a mana ability";
 /// target of a backup ability".
 pub const BACKUP_ABILITY: &str = "stack object: backup ability";
 
+/// `Filter::Custom`: a creature attacking the ability's controller or a planeswalker they
+/// control (CR 506.2): "if two or more of those creatures are attacking you and/or
+/// planeswalkers you control".
+pub const ATTACKING_YOU_OR_YOUR_PLANESWALKER: &str = "attacking you or a planeswalker you control";
+
 /// `Filter::Custom`: an activated ability on the stack (CR 602.2a).
 pub const ACTIVATED_ABILITY: &str = "stack object: activated ability";
 
@@ -145,7 +150,22 @@ impl KeywordRules for ActivatedAbilityKind {
         }
     }
 
-    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == ATTACKING_YOU_OR_YOUR_PLANESWALKER {
+            let you = ctx.controller;
+            return Some(
+                g.combat
+                    .as_ref()
+                    .and_then(|c| c.attack_target(id))
+                    .is_some_and(|t| match t {
+                        Entity::Player(p) => p == you,
+                        Entity::Object(o) => {
+                            g.obj(o).is(crate::types::CardType::Planeswalker)
+                                && g.obj(o).controller == you
+                        }
+                    }),
+            );
+        }
         if name == HAS_MANA_ABILITY {
             return Some(
                 g.obj(id)

@@ -23,7 +23,7 @@
 //! Players: `you`, `an opponent`, `a player`, `another player`, `the chosen player`,
 //! `enchanted player`.
 
-use super::{FilterSuffixPattern, TriggerPattern};
+use super::{ConditionPattern, FilterSuffixPattern, TriggerPattern};
 use crate::ability::*;
 use crate::oracle::phrases::*;
 use crate::keywords::KeywordKind;
@@ -2567,6 +2567,24 @@ fn attack_player_or_planeswalker_with(r: &str) -> Option<Parsed> {
         PlayerRef::TriggerPlayer,
     ))
 }
+
+/// "if two or more of those creatures are attacking you and/or planeswalkers you control"
+/// after "Whenever an opponent attacks with creatures" (Mangara, the Diplomat): the
+/// creatures that attacker declared (CR 506.2).
+fn those_attacking_you(c: &str) -> Option<Condition> {
+    let x = c.strip_suffix(" of those creatures are attacking you and/or planeswalkers you control")?;
+    let (n, tail) = parse_number(x.strip_suffix(" or more").unwrap_or(x))?;
+    if !tail.trim().is_empty() || !x.ends_with(" or more") {
+        return None;
+    }
+    let those = Filter::and(vec![
+        Filter::In(Box::new(Sel::TriggerObjects)),
+        Filter::Custom(crate::kw::activated_ability_kind::ATTACKING_YOU_OR_YOUR_PLANESWALKER.into()),
+    ]);
+    Some(Condition::Compare(Value::Count(those), Cmp::Ge, n))
+}
+
+inventory::submit! { ConditionPattern { name: "N or more of those creatures are attacking you and/or planeswalkers you control", priority: 100, parse: those_attacking_you } }
 
 /// "When ~ dies during combat" and other events qualified by a combat timing.
 fn during_combat(r: &str) -> Option<Parsed> {
