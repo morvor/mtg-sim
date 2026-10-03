@@ -626,7 +626,9 @@ impl Game {
                     }
                 }
                 if let Some((source, ctl, mods)) = m.etb.with_mods.clone() {
-                    // CR 611.2e, 613.7n.
+                    // CR 611.2e, 613.7n. Characteristics listed for a permanent put onto
+                    // the battlefield face down are its face-down characteristics: they
+                    // stop applying as it's turned face up (CR 708.2a, 708.8).
                     let id = self.new_effect_id();
                     let ts = self.new_timestamp();
                     self.effects.push(ContinuousEffect {
@@ -634,7 +636,11 @@ impl Game {
                         source,
                         controller: ctl,
                         timestamp: ts,
-                        duration: Duration::Permanent,
+                        duration: if m.etb.face_down.is_some() {
+                            Duration::WhileFaceDown
+                        } else {
+                            Duration::Permanent
+                        },
                         affected: Affected::Objects(vec![new_id]),
                         mods,
                         layer1: None,
@@ -2025,6 +2031,7 @@ impl Game {
         let ts = self.new_timestamp();
         let o = &mut self.objects[obj.0 as usize];
         o.attached_to = Some(to);
+        o.last_attached_to = None;
         // CR 613.7e: new timestamp when attached.
         o.timestamp = ts;
         self.dirty = true;
@@ -2034,7 +2041,13 @@ impl Game {
 
     pub fn unattach(&mut self, obj: ObjectId) {
         if let Some(prev) = self.obj(obj).attached_to {
+            // Remembered only when it became unattached because what it was attached to
+            // left the battlefield (CR 704.5n): "Equipment attached to that creature" then
+            // means those attached to it as it last existed there (CR 608.2h). One
+            // unattached earlier wasn't attached to it then.
+            let host_left = matches!(prev, Entity::Object(h) if !self.is_live(h));
             self.objects[obj.0 as usize].attached_to = None;
+            self.objects[obj.0 as usize].last_attached_to = host_left.then_some(prev);
             self.dirty = true;
             self.emit(Event::Unattached { obj, from: prev });
         }

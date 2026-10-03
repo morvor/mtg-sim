@@ -55,7 +55,18 @@ pub fn cond_subject(c: &Condition) -> Option<Sel> {
         Condition::And(v) | Condition::Or(v) => v.iter().find_map(cond_subject),
         _ => None,
     }?;
-    matches!(s, Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject | Sel::TriggerLki).then_some(s)
+    // "The exiled card": the cards exiled with the source (CR 607.2a).
+    fn linked(f: &Filter) -> bool {
+        match f {
+            Filter::In(s) => matches!(**s, Sel::Linked),
+            Filter::And(v) => v.iter().any(linked),
+            _ => false,
+        }
+    }
+    let exiled_with_source = matches!(&s, Sel::All(f) if linked(f));
+    (exiled_with_source
+        || matches!(s, Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject | Sel::TriggerLki))
+    .then_some(s)
 }
 
 /// "You may put it onto the battlefield if it's a creature card" parses as an optional

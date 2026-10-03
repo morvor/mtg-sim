@@ -173,6 +173,8 @@ fn player_actions(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     if let Some((who, rest)) = player_verb(l, "clash", b) {
         if rest == "with an opponent" {
+            // "Otherwise, that player gains control of enchanted creature": the opponent.
+            b.it_player = PlayerRef::Var(crate::kwa::kvars::CLASHED_WITH);
             return Some(keyword_action(
                 KeywordAction::Clash,
                 who,

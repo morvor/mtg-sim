@@ -504,9 +504,16 @@ impl Game {
                 .eval_players(r, ctx)
                 .contains(&self.filter_controller(view, id)),
             Filter::OwnedByPlayer(r) => self.eval_players(r, ctx).contains(&o.owner),
-            Filter::AttachedToAnyOf(sel) => o
-                .attached_to
-                .is_some_and(|e| self.eval_sel(sel, ctx).contains(&e)),
+            Filter::AttachedToAnyOf(sel) => {
+                let hosts = self.eval_sel(sel, ctx);
+                // CR 608.2h: attached to an object that has left the battlefield means
+                // attached to it as it last existed there (it became unattached then).
+                let left = |e: &Entity| matches!(e, Entity::Object(h) if !self.is_live(*h));
+                o.attached_to.is_some_and(|e| hosts.contains(&e))
+                    || (o.attached_to.is_none()
+                        && o.last_attached_to
+                            .is_some_and(|e| left(&e) && hosts.contains(&e)))
+            }
             Filter::InZone(z) => o.zone.kind() == Some(*z),
             // Only permanents have status (CR 110.5d).
             Filter::Tapped => o.zone == Zone::Battlefield && o.tapped,

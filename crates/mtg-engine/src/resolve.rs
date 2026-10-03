@@ -817,6 +817,8 @@ impl Game {
                 who,
                 duration,
             } => {
+                // "If they do, ...": whether a player gained control of something.
+                ctx.prev_happened = false;
                 // CR 611.2b (Master Thief).
                 if self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
@@ -832,6 +834,14 @@ impl Game {
                 if objs.is_empty() {
                     return;
                 }
+                // "Draw a card for each one they gained control of this way".
+                let changed: Vec<ObjectId> = objs
+                    .iter()
+                    .copied()
+                    .filter(|o| self.obj(*o).controller != p)
+                    .collect();
+                ctx.prev_happened = !changed.is_empty();
+                ctx.prev_value = changed.len() as _;
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 self.effects.push(ContinuousEffect {
@@ -914,6 +924,8 @@ impl Game {
                 }
                 self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
+                // "Create a ... token. When you do, ...": whether one was created.
+                ctx.prev_happened = !created.is_empty();
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),
@@ -973,6 +985,8 @@ impl Game {
                 }
                 self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
+                // "Create a ... token. When you do, ...": whether one was created.
+                ctx.prev_happened = !created.is_empty();
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),
@@ -1185,7 +1199,11 @@ impl Game {
             }
             Effect::TurnFaceUp { what } => {
                 for o in self.resolve_objects(what, ctx) {
-                    crate::facedown::turn_face_up(self, o, false);
+                    if self.obj(o).zone == Zone::Exile {
+                        crate::facedown::turn_exiled_face_up(self, o);
+                    } else {
+                        crate::facedown::turn_face_up(self, o, false);
+                    }
                 }
             }
             Effect::TurnFaceDown { what } => {
@@ -1553,6 +1571,8 @@ impl Game {
                             crate::reveal::reveal_in(self, p, &found, Some(&c));
                         }
                         let res = self.move_to_destination(found, to, &mut c);
+                        // "Search your library for a card, exile it face down".
+                        crate::zones::looked_then_exiled(self, p, &res);
                         if *shuffle {
                             self.shuffle_library(owner);
                         }

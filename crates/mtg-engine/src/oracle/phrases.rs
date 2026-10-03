@@ -1646,7 +1646,18 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
                     r,
                 ),
                 None if rest.trim_start().starts_with("from ") => return None,
-                None => (TargetKind::Object(f), rest),
+                // "target creature of an opponent's choice they control" (Evangelize): one
+                // the opponent who chooses controls (CR 601.2c).
+                None => match rest.trim_start().strip_prefix("they control") {
+                    Some(r) => (
+                        TargetKind::Object(Filter::and(vec![
+                            f,
+                            Filter::ControlledBy(PlayerRel::Chosen),
+                        ])),
+                        r,
+                    ),
+                    None => (TargetKind::Object(f), rest),
+                },
             }
         }
         (_, w) => (w, rest),

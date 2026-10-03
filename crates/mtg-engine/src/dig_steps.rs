@@ -298,6 +298,11 @@ fn take(
     }
     let n = chosen.len();
     let placed = place(g, chosen, to, ctx);
+    // "Look at the top three cards of your library. Exile one face down ...": the player
+    // who looked at it may go on looking at it (CR 406.3).
+    if !reveal {
+        crate::zones::looked_then_exiled(g, p, &placed);
+    }
     // Not part of "the rest" (`DigStep::Rest`), even if they stay in the library.
     let mut taken = ctx.vars.get(&vars::DUG_TAKEN).cloned().unwrap_or_default();
     taken.extend(entities(&placed));
