@@ -1050,3 +1050,50 @@ fn spelled_out_behold(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
 }
 
 inventory::submit! { AbilityPattern { name: "spell cost grammar: reveal a [quality] card or choose a [quality] (behold)", priority: 80, parse: spelled_out_behold } }
+
+// ---------------------------------------------------------------------------
+// Payments while an ability resolves
+// ---------------------------------------------------------------------------
+
+/// One resource of a payment: "{1}", "2 life", "life equal to its power".
+fn payment_part(s: &str, b: &mut Builder) -> Option<Cost> {
+    if let Some(c) = super::counters_resources_pay::resolution_cost(s) {
+        return Some(c);
+    }
+    let v = s.strip_prefix("life equal to ")?;
+    let (v, rest) = crate::oracle::statics::parse_value_phrase(v, b)?;
+    if !end(&rest).is_empty() {
+        return None;
+    }
+    Some(Cost::free().with(CostPart::PayLife(v)))
+}
+
+/// "you may pay {1} and 1 life", "you may pay {W}{B} and 2 life", "you may pay life equal
+/// to its power": an optional payment of all of them (CR 118.12); "If you do" / "When you
+/// do" reads whether it was paid.
+fn may_pay_compound(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you may pay ")?;
+    let mut cost = Cost::free();
+    let pieces: Vec<&str> = r.split(" and ").collect();
+    if pieces.len() == 1 && !r.starts_with("life equal to ") {
+        return None;
+    }
+    for piece in pieces {
+        let c = payment_part(piece, b)?;
+        if let Some(m) = c.mana {
+            match cost.mana.as_mut() {
+                Some(t) => t.add(&m),
+                None => cost.mana = Some(m),
+            }
+        }
+        cost.parts.extend(c.parts);
+    }
+    Some(Effect::PayOptional {
+        who: PlayerRef::You,
+        cost,
+        then: Box::new(Effect::Noop),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "spell cost grammar: you may pay [cost] and [cost]", priority: 99, parse: may_pay_compound } }
