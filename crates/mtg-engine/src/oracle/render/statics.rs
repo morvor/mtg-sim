@@ -2202,9 +2202,13 @@ impl Renderer<'_> {
                         if let Some((head, rest)) = noun.split_once(" with ") {
                             alts.push(format!("any {head} on the battlefield with {rest}"));
                         }
-                        if ["you control", "an opponent controls", "your opponents control"]
-                            .iter()
-                            .any(|c| noun.contains(c))
+                        if [
+                            "you control",
+                            "an opponent controls",
+                            "your opponents control",
+                        ]
+                        .iter()
+                        .any(|c| noun.contains(c))
                         {
                             alts.push(with_article(&noun));
                         }

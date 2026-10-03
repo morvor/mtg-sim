@@ -463,12 +463,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (`thatit` matches \"it\", see [`token_eq`]).",
     },
     Equivalence {
-        pattern: r"\bthe (?:exiled|discarded) (card|creature|permanent|artifact)s?\b",
+        pattern: r"\bthe (?:exiled|discarded|revealed) (card|creature|permanent|artifact)s?\b",
         replacement: "thatit",
         why: "Anaphora: \"Exile target creature. Return the exiled card ...\": \"the exiled \
               card\" and \"it\" refer back to the object the exile instruction just moved \
               (CR 400.7: that object is the card in exile); \"Discard a card. If the \
-              discarded card was a land card, ...\" likewise.",
+              discarded card was a land card, ...\" and \"Reveal a card at random from \
+              your hand. ... where X is the revealed card's mana value\" likewise.",
     },
     Equivalence {
         pattern: r"\bif (it|thatit|that-object|~it|~) had\b",
@@ -1465,9 +1466,9 @@ fn sentence_rewrites(s: &str) -> String {
 /// pay ...", performed once for each).
 fn leading_for_each(s: &str) -> String {
     static R: OnceLock<Option<Regex>> = OnceLock::new();
-    let Some(re) = R.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n|, )for each ([^,.]+), ([^.]+)\.").ok()
-    }) else {
+    let Some(re) =
+        R.get_or_init(|| Regex::new(r"(^|[.:—•] |\n|, )for each ([^,.]+), ([^.]+)\.").ok())
+    else {
         return s.to_string();
     };
     re.replace_all(s, |c: &regex::Captures| {
@@ -1600,7 +1601,7 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(gets?) ([+-])0/([+-])1 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}0/${3}x $4, where x is the number of $5$6"),
             (r"\b(draws?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\b(mills?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
-            (r"\bputs? an? (\S+) counter on ([^.]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
+            (r"\bputs? an? (\S+) counter on ([^.,]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
             (r"\benters? with an? (\S+) counter on (?:~it|it) for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
             (r"\benters? with (two|three|four|\d+) (\S+) counters on it for each ([^.]+?)(\.|$)", "enters with x $2 counters on it, where x is $1 times the number of $3$4"),
             (r"\b(enters?|puts?) (with )?a number of (\S+) counters on ([^.]+?) equal to ([^.]+?)(\.|$)", "$1 ${2}x $3 counters on $4, where x is $5$6"),
@@ -1719,15 +1720,29 @@ fn strip_ability_word(line: &str) -> String {
         return rest.to_string();
     }
     let words: Vec<&str> = head.split_whitespace().collect();
+    // A keyword's own label is the keyword, or the keyword and its number ("Suspend 17
+    // — "); a flavor word only starts like one ("Scavenge the Dead", "Unearthly Power").
+    let keyword_label = |n: &str| {
+        h == n
+            || h.strip_prefix(n).is_some_and(|r| {
+                r.trim_start()
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_digit() || c == 'x' || c == '{')
+            })
+    };
+    // "Blade of ~ — ...": a flavor word may name the card (not "~ — ...").
+    let self_named = head.contains('~') && words.len() > 1 && words[0] != "~";
     let flavor = !words.is_empty()
         && words.len() <= 7
         && head.chars().next().is_some_and(|c| c.is_uppercase())
-        && !head.contains(['{', ':', '"', ',', '~', '\n', '•', '|'])
+        && !head.contains(['{', ':', '"', ',', '\n', '•', '|'])
+        && (!head.contains('~') || self_named)
         && !head.chars().any(|c| c.is_ascii_digit())
         && !NOT_FLAVOR.iter().any(|n| h.starts_with(n))
         && !KeywordKind::ALL
             .iter()
-            .any(|k| h.starts_with(&k.name().to_lowercase()))
+            .any(|k| keyword_label(&k.name().to_lowercase()))
         && !head
             .split(", ")
             .all(|n| n.chars().all(|c| matches!(c, 'I' | 'V' | 'X')));

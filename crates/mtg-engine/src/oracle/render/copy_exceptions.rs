@@ -27,14 +27,12 @@ impl Renderer<'_> {
         for m in mods {
             match m {
                 Modification::SetName(n) => name = Some(n.to_string()),
-                Modification::RemoveSupertypes(s) => not_super.extend(
-                    s.iter()
-                        .map(|x| nouns::supertype_word(*x).to_string()),
-                ),
-                Modification::AddSupertypes(s) => supers.extend(
-                    s.iter()
-                        .map(|x| nouns::supertype_word(*x).to_string()),
-                ),
+                Modification::RemoveSupertypes(s) => {
+                    not_super.extend(s.iter().map(|x| nouns::supertype_word(*x).to_string()))
+                }
+                Modification::AddSupertypes(s) => {
+                    supers.extend(s.iter().map(|x| nouns::supertype_word(*x).to_string()))
+                }
                 Modification::SetPT(Some(Value::Const(p)), Some(Value::Const(t))) => {
                     pt = Some(format!("{p}/{t}"))
                 }
@@ -43,10 +41,11 @@ impl Renderer<'_> {
                     added_colors = true;
                 }
                 Modification::AddSubtypes(s) => subtypes.extend(s.iter().map(|x| x.to_string())),
-                Modification::AddTypes(t) => {
-                    types.extend(t.iter().map(|x| x.word().to_string()))
-                }
-                Modification::SetTypes { types: t, subtypes: s } => {
+                Modification::AddTypes(t) => types.extend(t.iter().map(|x| x.word().to_string())),
+                Modification::SetTypes {
+                    types: t,
+                    subtypes: s,
+                } => {
                     set_types = true;
                     types.extend(t.iter().map(|x| x.word().to_string()));
                     subtypes.extend(s.iter().map(|x| x.to_string()));
@@ -100,7 +99,10 @@ impl Renderer<'_> {
         if typed || added_colors {
             forms.push(vec![format!("it's {}{tail}", kind(pt.as_ref()))]);
             if let Some(pt) = &pt {
-                forms.push(vec![format!("it's {pt}"), format!("it's {}{tail}", kind(None))]);
+                forms.push(vec![
+                    format!("it's {pt}"),
+                    format!("it's {}{tail}", kind(None)),
+                ]);
             }
         } else if !colors.is_empty() {
             return None;
