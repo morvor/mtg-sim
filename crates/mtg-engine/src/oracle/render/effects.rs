@@ -185,6 +185,27 @@ impl Renderer<'_> {
                 self.revealed_hand = true;
                 (who.clone(), format!("reveal {p} hand"), false)
             }
+            // "Each opponent sacrifices a creature for each card discarded this way",
+            // "sacrifice half the non-Demon permanents you control, rounded up".
+            Effect::Sacrifice { who, filter, count }
+                if !matches!(
+                    count,
+                    Value::Const(_) | Value::X | Value::EventAmount | Value::Prev | Value::Var(_)
+                ) && self.stored_x(count).is_none() =>
+            {
+                let f = strip_controller(filter);
+                let v = self.value(count);
+                let s = if let Some(rest) = v.strip_prefix("the number of ") {
+                    let one = self.noun_det(&f, Det::A);
+                    format!("sacrifice {one} for each {rest}")
+                } else if let Some(rest) = v.strip_prefix("half the number of ") {
+                    format!("sacrifice half the {rest}")
+                } else {
+                    let many = self.noun(&f, Num::Many);
+                    format!("sacrifice X {many}, where X is {v}")
+                };
+                (who.clone(), s, false)
+            }
             Effect::Sacrifice { who, filter, count } => {
                 let det = self.det_for(count);
                 let n = self.noun_det(&strip_controller(filter), det);
@@ -1062,6 +1083,35 @@ impl Renderer<'_> {
                     to,
                 );
                 format!("{{alt:{b}|you may {a}}}")
+            }
+            // "Return an enchantment card from your graveyard to your hand for each card
+            // revealed this way": that many chosen.
+            Effect::Move {
+                what:
+                    what @ Sel::Choose {
+                        chooser,
+                        filter,
+                        count: count @ (Value::Count(_) | Value::CountSel(_)),
+                        up_to: false,
+                        store,
+                    },
+                to,
+            } => {
+                let v = self.value(count);
+                match v.strip_prefix("the number of ") {
+                    Some(rest) => {
+                        let one = Sel::Choose {
+                            chooser: chooser.clone(),
+                            filter: filter.clone(),
+                            count: Value::Const(1),
+                            up_to: false,
+                            store: *store,
+                        };
+                        let m = self.move_effect(&one, to);
+                        format!("{m} for each {rest}")
+                    }
+                    None => self.move_effect(what, to),
+                }
             }
             Effect::Move { what, to } => self.move_effect(what, to),
             Effect::Tap { what } => {

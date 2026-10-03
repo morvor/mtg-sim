@@ -398,6 +398,17 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               \"unless you pay {1} for each card in your hand\".",
     },
     Equivalence {
+        pattern: r"\bx cards?,? where x is that many plus (\d+|one|two|three)\b",
+        replacement: "that many cards plus $1",
+        why: "\"Draw that many cards plus one\": X cards, where X is that many plus 1.",
+    },
+    Equivalence {
+        pattern: r"\b(for each|the number of) ([^.;]*?) in (?:each|all) graveyards\b",
+        replacement: "$1 $2 in a graveyard",
+        why: "Counting the cards in each graveyard, in all graveyards, or in a graveyard \
+              counts the same cards (CR 404.1: each player has a graveyard).",
+    },
+    Equivalence {
         pattern: r"\bfrom graveyards\b",
         replacement: "in graveyards",
         why: "See \"from your graveyard\".",
@@ -1310,6 +1321,7 @@ fn sentence_rewrites(s: &str) -> String {
             format!("{lead}if {cond}, {body}.")
         })
         .to_string();
+    s = leading_for_each(&s);
     for (re, rep) in where_x_rewrites() {
         s = re.replace_all(&s, *rep).to_string();
     }
@@ -1445,6 +1457,40 @@ fn sentence_rewrites(s: &str) -> String {
     s
 }
 
+/// "For each card discarded this way, creatures you control get +1/+0 until end of turn."
+/// -> "Creatures you control get +1/+0 until end of turn for each card discarded this
+/// way.": one instruction scaled by a count, wherever the count is named (CR 608.2h: it's
+/// counted once). Not an instruction that refers to each of the counted things ("for
+/// each creature, its controller ..."), nor one with a choice to repeat ("... unless you
+/// pay ...", performed once for each).
+fn leading_for_each(s: &str) -> String {
+    static R: OnceLock<Option<Regex>> = OnceLock::new();
+    let Some(re) = R.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )for each ([^,.]+), ([^.]+)\.").ok()
+    }) else {
+        return s.to_string();
+    };
+    re.replace_all(s, |c: &regex::Captures| {
+        let (thing, clause) = (&c[2], &c[3]);
+        let words: Vec<&str> = clause.split(' ').collect();
+        let refers = words.iter().any(|w| {
+            matches!(
+                *w,
+                "it" | "its" | "it's" | "that" | "those" | "them" | "they" | "their" | "thatit"
+            )
+        });
+        if refers
+            || clause.contains(" unless ")
+            || clause.contains(" for each ")
+            || matches!(thing, "opponent" | "player")
+        {
+            return c[0].to_string();
+        }
+        format!("{}{clause} for each {thing}.", &c[1])
+    })
+    .to_string()
+}
+
 /// "Gets +2/+2 for each F", "deals 2 damage to you for each F", "draw two cards for each
 /// F" -> "... X ..., where X is 2 times the number of F" (CR 107.3), as
 /// [`where_x_rewrites`] does for one of each.
@@ -1555,11 +1601,11 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(draws?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\b(mills?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\bputs? an? (\S+) counter on ([^.]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
-            (r"\benters? with an? (\S+) counter on it for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
+            (r"\benters? with an? (\S+) counter on (?:~it|it) for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
             (r"\benters? with (two|three|four|\d+) (\S+) counters on it for each ([^.]+?)(\.|$)", "enters with x $2 counters on it, where x is $1 times the number of $3$4"),
             (r"\b(enters?|puts?) (with )?a number of (\S+) counters on ([^.]+?) equal to ([^.]+?)(\.|$)", "$1 ${2}x $3 counters on $4, where x is $5$6"),
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
-            (r"\b(creates?) an? ([^.]+?) tokens?((?: with [^.]+?)?) for each ([^.]+?)(\.|$)", "$1 x $2 tokens$3, where x is the number of $4$5"),
+            (r"\b(creates?) an? ([^.]+?) tokens?((?: with [^.]+?| that is tapped and attacking)?) for each ([^.]+?)(\.|$)", "$1 x $2 tokens$3, where x is the number of $4$5"),
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
             (r"\b(creates?) a number of ([^.]+?) tokens?((?: with [^.]+?)?) equal to ([^.]+?)(\.|$)", "$1 x $2 tokens$3, where x is $4$5"),
             (r"\b(discards?|draws?|mills?) a number of cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),

@@ -115,6 +115,11 @@ impl Renderer<'_> {
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
             Value::Var(vars::EXCESS) => "the excess damage".into(),
+            // The flips of the last coin flip (CR 705.2).
+            Value::Var(crate::dice::WINS) => "the number of flips you won".into(),
+            Value::Var(crate::dice::LOSSES) => "the number of flips you lost".into(),
+            Value::Var(crate::dice::HEADS) => "the number of coins that come up heads".into(),
+            Value::Var(crate::dice::TAILS) => "the number of coins that come up tails".into(),
             // "the number of grace votes" (CR 701.38a).
             Value::Var(x)
                 if self
