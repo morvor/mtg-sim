@@ -209,6 +209,21 @@ impl Renderer<'_> {
         ))
     }
 
+    /// What an object shares a quality with: any one of a group ("a creature you
+    /// control", see `eval.rs`), or a selected object.
+    fn shared_with(&mut self, s: &Sel) -> String {
+        let r = self.sel(s, Case::Obj);
+        if !matches!(s, Sel::All(_)) {
+            return r;
+        }
+        // Any one of them: "each creature you control" is "a creature you control".
+        let r = r.replace("{alt:each ", "{alt:a ").replace("|each ", "|a ");
+        match r.strip_prefix("each ") {
+            Some(rest) => with_article(rest),
+            None => r,
+        }
+    }
+
     /// The noun used for "enchanted [thing]" / "equipped creature" on this face.
     pub(crate) fn attached_noun(&mut self) -> String {
         if self.equipment_holder_depth == Some(self.quote_depth) {
@@ -643,16 +658,18 @@ impl Renderer<'_> {
             Filter::NameOriginallyPrintedIn(set) => np
                 .with
                 .push(format!("a name originally printed in the {set} expansion")),
+            // Sharing a quality with any of a group of objects: "that shares a color with a
+            // creature you control".
             Filter::SharesCreatureType(s) => {
-                let s = self.sel(s, Case::Obj);
+                let s = self.shared_with(s);
                 np.rel.push(format!("that shares a creature type with {s}"));
             }
             Filter::SharesCardType(s) => {
-                let s = self.sel(s, Case::Obj);
+                let s = self.shared_with(s);
                 np.rel.push(format!("that shares a card type with {s}"));
             }
             Filter::SharesColor(s) => {
-                let s = self.sel(s, Case::Obj);
+                let s = self.shared_with(s);
                 np.rel.push(format!("that shares a color with {s}"));
             }
             Filter::HasKeyword(k) => np.with.push(self.keyword_kind_word(*k)),
@@ -943,6 +960,16 @@ impl Renderer<'_> {
             Filter::ChosenType => np
                 .rel
                 .push("that {alt:isn't|aren't} of {alt:the chosen type|that type}".into()),
+            // "a creature spell that doesn't share a color with a creature you control".
+            Filter::SharesColor(x) | Filter::SharesCardType(x) | Filter::SharesCreatureType(x) => {
+                let what = match other_kind(inner) {
+                    Some(k) => k,
+                    None => "a color",
+                };
+                let w = self.shared_with(x);
+                np.rel
+                    .push(format!("that {{alt:doesn't|don't}} share {what} with {w}"));
+            }
             other => {
                 let s = self.noun(other, Num::One);
                 np.rel.push(format!("that isn't {}", with_article(&s)));
@@ -1718,5 +1745,15 @@ pub fn possessive(s: &str) -> String {
         "they" | "them" => "their".into(),
         _ if s.ends_with('s') && !s.ends_with("ss") && s != "~" => format!("{s}'"),
         _ => format!("{s}'s"),
+    }
+}
+
+/// The quality a "shares a ... with" filter is about.
+fn other_kind(f: &Filter) -> Option<&'static str> {
+    match f {
+        Filter::SharesColor(_) => Some("a color"),
+        Filter::SharesCardType(_) => Some("a card type"),
+        Filter::SharesCreatureType(_) => Some("a creature type"),
+        _ => None,
     }
 }

@@ -953,6 +953,24 @@ impl Renderer<'_> {
                     format!("draw {p} {} card each turn", ordinal_word(*n as u32)),
                 )
             }
+            // "Whenever ~ becomes crewed", "When ~ becomes plotted": an event about the
+            // object itself (`kw/crew.rs`, `kw/plot.rs`).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, who: PlayerRel::Any }
+                if name == crate::kw::crew::CREWED || name == crate::kw::plot::BECAME_PLOTTED) =>
+            {
+                let TriggerCond::PlayerAction { name, .. } = trigger.as_ref() else {
+                    return Ev::new("", self.gap("an event about the object"));
+                };
+                let vp = if name == crate::kw::crew::CREWED {
+                    "becomes crewed"
+                } else {
+                    "becomes plotted"
+                };
+                Ev::new(self.me(), vp)
+            }
             // "Whenever you win a coin flip" / "lose a coin flip": the flip's result, 1 for
             // a win (CR 705.2).
             TriggerCond::Where {
