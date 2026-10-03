@@ -69,6 +69,9 @@ impl Renderer<'_> {
         let Some(t) = self.targets.get(i as usize).cloned() else {
             return s;
         };
+        if t.chosen_by_opponent {
+            s.push_str(" of an opponent's choice");
+        }
         // "target creature of their choice": another player chooses it (CR 601.2c).
         if let Some(p) = &t.chosen_by {
             let poss = self.player(p, Case::Poss);
@@ -238,9 +241,6 @@ impl Renderer<'_> {
             Some(c) if other => format!("{c} other target {core}"),
             Some(c) => format!("{c} target {core}"),
         };
-        if t.chosen_by_opponent {
-            s.push_str(" of an opponent's choice");
-        }
 
         // A requirement on the targets taken together (CR 115.3).
         let one = matches!(t.max, Value::Const(1));

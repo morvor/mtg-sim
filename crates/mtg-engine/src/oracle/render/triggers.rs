@@ -953,6 +953,23 @@ impl Renderer<'_> {
                     format!("draw {p} {} card each turn", ordinal_word(*n as u32)),
                 )
             }
+            // "Whenever you win a coin flip" / "lose a coin flip": the flip's result, 1 for
+            // a win (CR 705.2).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(k @ (0 | 1))),
+            } if matches!(trigger.as_ref(), TriggerCond::FlipCoin(_)) => {
+                let TriggerCond::FlipCoin(r) = trigger.as_ref() else {
+                    return Ev::new("", self.gap("coin flip"));
+                };
+                let w = self.rel_subject(*r);
+                let vp = if *k == 1 {
+                    "win a coin flip"
+                } else {
+                    "lose a coin flip"
+                };
+                Ev::new(w, vp)
+            }
             // "Whenever ~ is dealt 3 or more damage", "Whenever ~ deals 4 or more damage":
             // the event's amount (CR 120.1).
             TriggerCond::Where {

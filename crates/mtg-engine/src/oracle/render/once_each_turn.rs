@@ -14,8 +14,10 @@ impl Renderer<'_> {
         conds: &[Condition],
         effect: &StaticEffect,
     ) -> Option<String> {
-        let [Condition::YourTurn, Condition::Custom(c)] = conds else {
-            return None;
+        let (yours, c) = match conds {
+            [Condition::YourTurn, Condition::Custom(c)] => (true, c),
+            [Condition::Custom(c)] => (false, c),
+            _ => return None,
         };
         if !c.starts_with(ONCE_UNUSED) {
             return None;
@@ -51,11 +53,15 @@ impl Renderer<'_> {
             ZoneKind::Graveyard => "from your graveyard",
             ZoneKind::Exile => "from exile",
             ZoneKind::Hand => "from your hand",
+            ZoneKind::Library if pp.top_only => "from the top of your library",
             _ => return None,
         };
         let terms = self.static_permission_terms(pp);
-        Some(format!(
-            "once during each of your turns, you may {thing} {zone}{terms}"
-        ))
+        let when = if yours {
+            "once during each of your turns"
+        } else {
+            "once each turn"
+        };
+        Some(format!("{when}, you may {thing} {zone}{terms}"))
     }
 }

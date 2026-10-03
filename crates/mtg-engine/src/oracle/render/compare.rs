@@ -199,6 +199,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               a Berserker\".",
     },
     Equivalence {
+        pattern: r"(^|\s)(~|it) attacks or blocks each combat if able\b",
+        replacement: "$1$2 attacks each combat if able. $2 blocks each combat if able",
+        why: "A requirement to attack each combat and one to block each combat (CR 508.1d, \
+              509.1c), stated together.",
+    },
+    Equivalence {
         pattern: r"\bactivate only (once each turn|as a sorcery|during your turn) and only if ([^.]+?)(\.|$)",
         replacement: "activate only if $2 and only $1$3",
         why: "Restrictions on activating an ability all apply, in whatever order they're \

@@ -470,11 +470,16 @@ impl Renderer<'_> {
                 self.each_target = saved;
                 s
             }
-            Effect::ForEach { sel, effect, .. } => {
+            Effect::ForEach { sel, var, effect } => {
                 let s = match sel {
                     Sel::All(f) => self.for_each_noun(f),
                     other => self.sel(other, Case::Obj),
                 };
+                // "If you do, it becomes plotted": done for the one object named "it".
+                if matches!(s.as_str(), "it" | "~it" | "~") {
+                    self.var_defs.push((*var, sel.clone(), false));
+                    return self.effect(effect);
+                }
                 let inner = self.effect(effect);
                 format!("for each {s}, {inner}")
             }
@@ -3352,6 +3357,12 @@ impl Renderer<'_> {
             {
                 self.effect(then)
             }
+            // "Sacrifice it unless it escaped": nothing happens if C.
+            _ if then_empty && !else_empty => {
+                let o = self.effect(otherwise);
+                let c = self.condition(cond);
+                format!("{o} unless {c}")
+            }
             // "X. If C, Y instead." (the comparison treats "If C, Y. Otherwise, X." the
             // same): the default effect comes first, so it names the targets.
             _ if !else_empty => {
@@ -3473,7 +3484,11 @@ impl Renderer<'_> {
                 | Effect::AddRestriction { .. }
         ) || matches!(effect, Effect::KeywordAction { action, .. }
             if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure));
-        if has_subject && !inner.starts_with("gain control") && !inner.starts_with("switch") {
+        if has_subject
+            && !inner.starts_with("gain control")
+            && !inner.starts_with("switch")
+            && !inner.starts_with("{alt:switch")
+        {
             return format!("{p} may have {inner}");
         }
         format!("{p} may {inner}")
@@ -4452,9 +4467,27 @@ impl Renderer<'_> {
     ) -> String {
         if mods.len() == 1 {
             if let Modification::SwitchPT = mods[0] {
-                let w = self.sel(what, Case::Poss);
+                // "switch target creature's power and toughness" / "switch the power and
+                // toughness of each of up to two target creatures".
+                let (a, b) = self.two_ways(
+                    |r| {
+                        let w = r.sel(what, Case::Poss);
+                        format!("switch {w} power and toughness")
+                    },
+                    |r| {
+                        let o = r.sel(what, Case::Obj);
+                        let many = o.contains(" creatures") || o.contains(" permanents");
+                        let each = if many { "each of " } else { "" };
+                        format!("switch the power and toughness of {each}{o}")
+                    },
+                );
                 let d = self.duration(d);
-                return join_words(&[format!("switch {w} power and toughness"), d]);
+                let s = if a.contains(['{', '|']) || b.contains(['{', '|']) {
+                    a
+                } else {
+                    format!("{{alt:{a}|{b}}}")
+                };
+                return join_words(&[s, d]);
             }
             if let Modification::SetController(p) = &mods[0] {
                 let w = self.sel(what, Case::Obj);

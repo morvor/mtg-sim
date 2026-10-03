@@ -810,10 +810,18 @@ impl Renderer<'_> {
             n if n.starts_with("alternative cost ") => {
                 format!("the {} cost was paid", &n["alternative cost ".len()..])
             }
+            // "If it escaped" (CR 702.138c).
+            "escape" => {
+                let m = self.me();
+                format!(
+                    "{{alt:{m} escaped|{} escape cost was paid}}",
+                    nouns::possessive(&m)
+                )
+            }
             "sneak" | "surge" | "prowl" | "spectacle" | "mayhem" | "freerunning" | "madness"
-            | "dash" | "blitz" | "evoke" | "escape" | "emerge" | "plot" | "disturb"
-            | "overload" | "harmonize" | "impending" | "flashback" | "awaken" | "jump-start"
-            | "prototype" | "squad" | "offspring" | "bestow" => {
+            | "dash" | "blitz" | "evoke" | "emerge" | "plot" | "disturb" | "overload"
+            | "harmonize" | "impending" | "flashback" | "awaken" | "jump-start" | "prototype"
+            | "squad" | "offspring" | "bestow" => {
                 let m = self.me();
                 format!("{} {name} cost was paid", nouns::possessive(&m))
             }

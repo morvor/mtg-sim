@@ -221,6 +221,14 @@ impl Renderer<'_> {
                 self.once_each_turn_permission(v, &s.effect)
                     .unwrap_or_default()
             }
+            Some(c @ Condition::Custom(_))
+                if self
+                    .once_each_turn_permission(std::slice::from_ref(c), &s.effect)
+                    .is_some() =>
+            {
+                self.once_each_turn_permission(std::slice::from_ref(c), &s.effect)
+                    .unwrap_or_default()
+            }
             // A once-each-turn permission or alternative cost ("Once during each of your
             // turns, you may cast a creature spell from your graveyard", see
             // `kw/once_each_turn_cast.rs`).

@@ -104,6 +104,12 @@ impl Renderer<'_> {
             CostPart::Loyalty(n) => format!("{n}"),
             CostPart::SacrificeSelf => "sacrifice ~".into(),
             CostPart::Sacrifice { filter, count } => {
+                // "Sacrifice all permanents you control": as many as there are.
+                if matches!(count, Value::Count(g) if format!("{g:?}") == format!("{filter:?}")) {
+                    let f = super::effects::strip_controller(filter);
+                    let n = self.noun(&f, Num::Many);
+                    return format!("sacrifice all {n} you control");
+                }
                 let det = self.det_for(count);
                 let f = super::effects::strip_controller(filter);
                 // "Sacrifice Blazing Torch" in an ability it grants: the object itself.
