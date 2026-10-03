@@ -13,7 +13,7 @@ use crate::oracle::phrases::end;
 
 fn becomes_copy(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    if !l.contains(" a copy of ") {
+    if !l.contains(" a copy of ") && !l.contains(" copies of ") {
         return None;
     }
     // "..., except those creatures aren't legendary" (Echoing Equation).
@@ -28,11 +28,15 @@ fn becomes_copy(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         None => (l, vec![]),
     };
-    let (duration, l) = match l.strip_prefix("until end of turn, ") {
-        Some(r) => (Duration::EndOfTurn, r),
-        None => duration_suffix(l),
+    let (duration, l) = if let Some(r) = l.strip_prefix("until end of turn, ") {
+        (Duration::EndOfTurn, r)
+    } else if let Some(r) = l.strip_prefix("until your next turn, ") {
+        // "until your next turn, ~ becomes a copy of ..." (Absorbing Man).
+        (Duration::UntilYourNextTurn, r)
+    } else {
+        duration_suffix(l)
     };
-    if !l.contains(" a copy of ") {
+    if !l.contains(" a copy of ") && !l.contains(" copies of ") {
         return None;
     }
     // "that creature" after the verb refers to what an earlier sentence mentioned
@@ -42,11 +46,49 @@ fn becomes_copy(l: &str, b: &mut Builder) -> Option<Effect> {
     let (what, rest) = object_ref(l, b)?;
     let subject = b.it.clone();
     let rest = rest.trim_start();
-    let r = ["becomes a copy of ", "become a copy of ", "each become a copy of "]
-        .iter()
-        .find_map(|p| rest.strip_prefix(p))?;
-    b.it = before;
-    let parsed = object_ref(r, b);
+    // "Shards you control become copies of it" (Niko, Light of Hope).
+    let r = [
+        "becomes a copy of ",
+        "become a copy of ",
+        "each become a copy of ",
+        "become copies of ",
+        "becomes copies of ",
+    ]
+    .iter()
+    .find_map(|p| rest.strip_prefix(p))?;
+    // "becomes a copy of a second target artifact you control" (Shuri, Wakandan
+    // Inventor).
+    let second;
+    let r = match r.strip_prefix("a second target ") {
+        Some(x) => {
+            second = format!("target {x}");
+            second.as_str()
+        }
+        None => r,
+    };
+    // "~ becomes a copy of a creature card exiled with it": "it" is the subject, ~.
+    b.it = if matches!(what, Sel::This) && rest.contains(" exiled with it") {
+        Sel::This
+    } else {
+        before
+    };
+    let n = b.targets.len();
+    let parsed = super::tokens_copies_copy::exiled_with_source(r, b)
+        .or_else(|| object_ref(r, b).filter(|(_, t)| end(t).is_empty()))
+        .or_else(|| {
+        // "the exiled card", "the sacrificed creature", "another creature you control"
+        // (one chosen as the effect happens): the objects a token copy can copy.
+        b.targets.truncate(n);
+        // "up to one target artifact, non-Aura enchantment, or land" (Absorbing Man).
+        if let Some((spec, tail)) = super::basic_effects_targets::target_alternatives(r)
+            .filter(|(_, t)| end(t).is_empty())
+        {
+            let text = spec.text.clone();
+            let slot = b.add_target(spec, &text);
+            return Some((Sel::Target(slot), tail.to_string()));
+        }
+        super::tokens_copies_copy::copied_object(r, b)
+    });
     b.it = subject;
     let (of, tail) = parsed?;
     if !end(&tail).is_empty() {

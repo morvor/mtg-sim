@@ -23,15 +23,17 @@ use crate::types::*;
 use smol_str::SmolStr;
 
 /// The subjects an exception clause can start with ("it", "the token", "they").
-const SUBJECTS: [&str; 16] = [
+const SUBJECTS: [&str; 18] = [
     "it's ",
     "it isn't ",
     "it is ",
     "it has ",
     "its ",
     "she has ",
+    "she's ",
     "her ",
     "he has ",
+    "he's ",
     "his ",
     "they're ",
     "they aren't ",
@@ -52,7 +54,9 @@ fn exception_clauses(masked: &str) -> Vec<String> {
         // "it isn't legendary and is a Mutant in addition to its other types" (The
         // Cloning of Shredder).
         .replace(" and is a ", "|it's a ")
-        .replace(" and is an ", "|it's an ");
+        .replace(" and is an ", "|it's an ")
+        // "except it's 0/0 and has this ability" (Mimeoplasm, Revered One).
+        .replace(" and has this ability", "|it has this ability");
     for subj in SUBJECTS {
         for sep in [", and ", " and ", ", "] {
             s = s.replace(&format!("{sep}{subj}"), &format!("|{subj}"));
@@ -111,6 +115,45 @@ fn with_abilities(s: &str, quotes: &[String], ctx: &CompileContext) -> Option<Ve
     Some(out)
 }
 
+/// "a legendary Human Mercenary Villain creature": a creature with these supertypes and
+/// only these creature types (CR 205.1a; the supertypes are added, CR 205.1b).
+fn type_line_exception(s: &str) -> Option<Vec<Modification>> {
+    let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    let words: Vec<&str> = s.split_whitespace().collect();
+    let (last, rest) = words.split_last()?;
+    if *last != "creature" {
+        return None;
+    }
+    let mut supertypes = Vec::new();
+    let mut subtypes = Vec::new();
+    for w in rest {
+        if let Some(st) = Supertype::from_word(w) {
+            if !subtypes.is_empty() {
+                return None;
+            }
+            supertypes.push(st);
+        } else {
+            let sub = subtype_word(w)?;
+            if subtype_kind(sub.as_str()) != Some(SubtypeKind::Creature) {
+                return None;
+            }
+            subtypes.push(sub);
+        }
+    }
+    if subtypes.is_empty() {
+        return None;
+    }
+    let mut out = Vec::new();
+    if !supertypes.is_empty() {
+        out.push(Modification::AddSupertypes(supertypes));
+    }
+    out.push(Modification::SetTypes {
+        types: vec![CardType::Creature],
+        subtypes,
+    });
+    Some(out)
+}
+
 /// "4/4" → (4, 4).
 fn pt(w: &str) -> Option<(i32, i32)> {
     let (p, t) = w.split_once('/')?;
@@ -153,8 +196,10 @@ fn added_types(s: &str) -> Option<Vec<Modification>> {
     let mut card_types = Vec::new();
     let mut subtypes = Vec::new();
     let mut supertypes = Vec::new();
-    for (i, w) in s.split_whitespace().enumerate() {
-        if i == 0 {
+    for w in s.split_whitespace() {
+        // "a 1/1 Fractal creature", "a legendary 4/4 Human Villain creature" (Absorbing
+        // Man): the P/T comes before the types.
+        if card_types.is_empty() && subtypes.is_empty() && out.is_empty() {
             if let Some((p, t)) = pt(w) {
                 out.push(Modification::SetPT(Some(Value::c(p)), Some(Value::c(t))));
                 continue;
@@ -313,10 +358,24 @@ pub(crate) fn copy_exceptions(
                     _ => out.push(Modification::AddAbility(a)),
                 }
             }
-        } else if let Some(r) = ["it's ", "it is ", "they're ", "the token is ", "the tokens are "]
-            .iter()
-            .find_map(|p| c.strip_prefix(p))
+        } else if let Some(r) = [
+            "it's ",
+            "it is ",
+            "they're ",
+            "the token is ",
+            "the tokens are ",
+            "he's ",
+            "she's ",
+        ]
+        .iter()
+        .find_map(|p| c.strip_prefix(p))
         {
+            // "he's a legendary 4/4 Human Villain creature in addition to his other types"
+            // (Absorbing Man).
+            let owned = r
+                .replace(" in addition to his other ", " in addition to its other ")
+                .replace(" in addition to her other ", " in addition to its other ");
+            let r = owned.as_str();
             if let Some(types) = r
                 .strip_suffix(" in addition to its other types")
                 .or_else(|| r.strip_suffix(" in addition to their other types"))
@@ -376,6 +435,9 @@ pub(crate) fn copy_exceptions(
             } else if let Some(colors) = only_colors(r) {
                 // "except the token is black" (Penumbra Umbra).
                 out.push(Modification::SetColors(colors));
+            } else if let Some(mods) = type_line_exception(r) {
+                // "he's a legendary Human Mercenary Villain creature" (Taskmaster).
+                out.extend(mods);
             } else {
                 // "it's a 3/3 black Wraith with menace" (Sauron, the Necromancer).
                 let (r, with) = match r.split_once(" with ") {
@@ -452,7 +514,7 @@ fn exiled_by() -> ExiledBy {
 }
 
 /// The object a token copies: "~", "it", "that creature", "enchanted creature", a target.
-fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
+pub(crate) fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
     if let Some(rest) = r.strip_prefix('~') {
         return Some((Sel::This, rest.to_string()));
     }
@@ -512,6 +574,13 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
             return Some((b.it.clone(), rest.to_string()));
         }
     }
+    // "target creature card exiled with ~" (Dino DNA), "a creature card exiled with it"
+    // (Lazav, Wearer of Faces), "a card exiled with ~" (The Cloning of Shredder): one of
+    // the cards the source's abilities exiled (CR 607.2a), targeted or chosen as the
+    // effect happens.
+    if let Some(e) = exiled_with_source(r, b) {
+        return Some(e);
+    }
     // "Sacrifice another Zombie: Create two tokens that are copies of the sacrificed
     // creature." (Cleaver Skaab): as it last existed on the battlefield (CR 608.2h).
     if let Some(rest) = r.strip_prefix("the sacrificed creature") {
@@ -561,6 +630,47 @@ fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
         },
         rest.to_string(),
     ))
+}
+
+/// "[target] creature card exiled with ~/it" → the selection and the rest.
+pub(crate) fn exiled_with_source(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
+    let (targeted, x) = if let Some(x) = r.strip_prefix("target ") {
+        (true, x)
+    } else {
+        (false, r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?)
+    };
+    let (i, len) = [" exiled with ~", " exiled with it"]
+        .iter()
+        .find_map(|p| x.find(p).map(|i| (i, p.len())))?;
+    if x.ends_with(" exiled with it") && !matches!(b.it, Sel::This) {
+        return None;
+    }
+    let (f, plural, tail) = parse_object_phrase(&x[..i])?;
+    if plural || !end(tail).is_empty() {
+        return None;
+    }
+    let rest = &x[i + len..];
+    let f = Filter::and(vec![
+        f,
+        Filter::InZone(ZoneKind::Exile),
+        Filter::In(Box::new(Sel::Linked)),
+    ]);
+    if targeted {
+        let text = r[..r.len() - rest.len()].trim().to_string();
+        let slot = b.add_target(TargetSpec::object(f, text.clone()), &text);
+        Some((Sel::Target(slot), rest.to_string()))
+    } else {
+        Some((
+            Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: f,
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+            rest.to_string(),
+        ))
+    }
 }
 
 /// "create a token that's a copy of target creature you control, except it isn't
