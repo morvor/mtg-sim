@@ -209,7 +209,7 @@ fn lazotep_plating_gives_the_new_army_hexproof() {
 
 #[test]
 fn several_armies_you_choose_which_one_becomes_a_sliver_or_orc() {
-    cr!("701.47a", "205.3d");
+    cr!("701.47a");
     ruling!(
         "Lazotep Sliver",
         "In the rare case that you control multiple Army creatures (perhaps because you played a creature with changeling) while you amass Slivers, you choose which of your Army creatures to put the +1/+1 counters on."
@@ -392,7 +392,7 @@ fn shagrat_amasses_without_a_target_but_not_with_an_illegal_one() {
 
 #[test]
 fn azog_with_no_target_amasses_nothing() {
-    cr!("701.47a", "115.10");
+    cr!("701.47a", "603.3d");
     ruling!(
         "Azog, Moria's Ruin",
         "If no target is chosen for Azog's ability, \"its controller\" is undefined and no player amasses Goblins."
@@ -411,5 +411,8 @@ fn azog_with_no_target_amasses_nothing() {
     t.answer_targets(P0, &[Entity::Object(bears)]);
     t.enter(P0, "Azog, Moria's Ruin");
     t.resolve_all();
-    assert_eq!(armies(&t, P1).len(), 1);
+    let a = armies(&t, P1);
+    assert_eq!(a.len(), 1);
+    assert_eq!(t.pt(a[0]), (2, 2));
+    assert!(armies(&t, P0).is_empty());
 }

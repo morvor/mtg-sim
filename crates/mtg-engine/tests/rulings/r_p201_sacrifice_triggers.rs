@@ -493,7 +493,7 @@ fn each_player_sacrifices_choices_are_made_in_apnap_order_then_sacrificed_togeth
 
 #[test]
 fn ashad_gives_the_first_nonlegendary_artifact_spell_casualty_2() {
-    cr!("702.153a", "707.10", "111.1");
+    cr!("702.153a", "707.10f", "111.1");
     ruling!(
         "Ashad, the Lone Cyberman",
         "Casualty 2 means \"As an additional cost to cast this spell, you may sacrifice a creature with power 2 or greater.\""

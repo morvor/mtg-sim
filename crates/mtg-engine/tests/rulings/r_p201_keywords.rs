@@ -270,7 +270,7 @@ fn a_bestowed_indebted_spirit_has_afterlife_as_an_aura() {
 
 #[test]
 fn aang_counts_all_experience_counters_which_stay_with_the_player() {
-    cr!("122.1", "122.8", "503.1a");
+    cr!("122.1", "503.1a");
     ruling!(
         "Aang, Airbending Master",
         "All experience counters are identical, no matter how you got them."
@@ -625,7 +625,7 @@ fn cast_triggers_resolve_first_even_if_the_spell_is_countered() {
 
 #[test]
 fn lattice_library_cast_as_the_first_x_spell_doesnt_trigger_for_the_second() {
-    cr!("603.2", "603.4");
+    cr!("603.2");
     ruling!(
         "Lattice Library",
         "If you cast your first spell with {X} in its mana cost during a turn before Lattice Library is on the battlefield (including Lattice Library itself), casting another spell with {X} in its mana cost later in the turn won't cause its last ability to trigger."

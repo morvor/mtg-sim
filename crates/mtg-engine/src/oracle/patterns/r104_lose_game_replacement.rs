@@ -1,5 +1,6 @@
-//! "If you would lose the game, instead [effect]." (Lich's Mirror, Exquisite Archangel,
-//! The Golden Throne): a replacement effect on the game-loss event (CR 104.3, 614.1a).
+//! "If you would lose the game, instead [effect]." (Lich's Mirror, The Golden Throne): a
+//! replacement effect on the game-loss event (CR 104.3, 614.1a). The effect must compile
+//! (Exquisite Archangel's "becomes equal to your starting life total" doesn't yet).
 //! It replaces losing for any reason except conceding (CR 104.3a); a player who wins
 //! ends the game without anyone "losing" through this event (CR 104.2).
 
