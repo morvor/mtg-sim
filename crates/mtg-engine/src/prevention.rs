@@ -201,6 +201,12 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
         }
     };
     let action = match &d.action {
+        // The instructions after a prevention can refer to the targets of the spell or
+        // ability that created the effect ("If damage is prevented this way, ~ deals that
+        // much damage to any target."): they're locked in as the effect is created.
+        ReplacementAction::PreventAndThen(n, e) => {
+            ReplacementAction::PreventAndThen(n.clone(), Box::new(lock_targets(e, ctx)))
+        }
         ReplacementAction::Redirect(sel) => ReplacementAction::Redirect(lock_to(sel)),
         ReplacementAction::RedirectNext(sel, n) => {
             ReplacementAction::RedirectNext(lock_to(sel), n.clone())
@@ -213,6 +219,66 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
         self_replacement: d.self_replacement,
         optional: d.optional,
     }
+}
+
+/// Variables holding the targets of the spell or ability that created a replacement
+/// effect, for its instructions (see [`lock_targets`]).
+const LOCKED_TARGETS: Var = vars::USER + 6150;
+
+/// Replaces references to the targets of the resolving spell or ability in an effect's
+/// instructions with variables set to those targets when the instructions run.
+fn lock_targets(e: &Effect, ctx: &Ctx) -> Effect {
+    use serde_json::Value as J;
+    fn walk(v: J, used: &mut Vec<u8>) -> J {
+        match v {
+            J::Object(m) => {
+                if m.len() == 1 {
+                    if let Some(J::Number(n)) = m.get("Target") {
+                        if let Some(k) = n.as_u64() {
+                            used.push(k as u8);
+                            let mut o = serde_json::Map::new();
+                            o.insert("Var".into(), J::from(LOCKED_TARGETS + k as Var));
+                            return J::Object(o);
+                        }
+                    }
+                }
+                J::Object(m.into_iter().map(|(k, v)| (k, walk(v, used))).collect())
+            }
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, used)).collect()),
+            other => other,
+        }
+    }
+    let Ok(json) = serde_json::to_value(e) else {
+        return e.clone();
+    };
+    let mut used = Vec::new();
+    let Ok(body) = serde_json::from_value::<Effect>(walk(json, &mut used)) else {
+        return e.clone();
+    };
+    if used.is_empty() {
+        return e.clone();
+    }
+    used.sort();
+    used.dedup();
+    let mut seq: Vec<Effect> = used
+        .into_iter()
+        .map(|k| {
+            let ents = ctx.targets.get(k as usize).cloned().unwrap_or_default();
+            let objs: Vec<ObjectId> = ents.iter().filter_map(|x| x.object()).collect();
+            let mut sels = vec![Sel::All(Filter::Objects(objs))];
+            for x in &ents {
+                if let Entity::Player(p) = x {
+                    sels.push(Sel::Players(PlayerRef::Player(*p)));
+                }
+            }
+            Effect::Store {
+                var: LOCKED_TARGETS + k as Var,
+                sel: Sel::Union(sels),
+            }
+        })
+        .collect();
+    seq.push(body);
+    Effect::Seq(seq)
 }
 
 /// The objects a player may choose as a source of damage (CR 609.7a): permanents,

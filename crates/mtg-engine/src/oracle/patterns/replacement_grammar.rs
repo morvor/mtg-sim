@@ -120,8 +120,9 @@ pub(crate) type OneShot<'a, 'c> = Option<&'a mut Builder<'c>>;
 fn to_item<'s>(s: &'s str, b: &mut OneShot) -> Option<(To, &'s str)> {
     let s = s.trim_start();
     let mut to = To::default();
-    let fixed_players: [(&str, PlayerFilter); 9] = [
+    let fixed_players: [(&str, PlayerFilter); 10] = [
         ("you", PlayerFilter::You),
+        ("one or more players", PlayerFilter::Any),
         ("each player", PlayerFilter::Any),
         ("a player", PlayerFilter::Any),
         ("players", PlayerFilter::Any),
@@ -182,7 +183,9 @@ fn to_item<'s>(s: &'s str, b: &mut OneShot) -> Option<(To, &'s str)> {
             || s.starts_with("another target ")
             || s.starts_with("any other target")
         {
-            let (spec, r) = parse_any_target(s)?;
+            let (spec, r) = compound_target(s)
+                .filter(|(_, r)| !r.starts_with(','))
+                .or_else(|| parse_any_target(s))?;
             if !matches!(spec.max, Value::Const(1)) {
                 return None;
             }
@@ -209,6 +212,8 @@ fn to_item<'s>(s: &'s str, b: &mut OneShot) -> Option<(To, &'s str)> {
         (Some(false), r)
     } else if let Some(r) = word(s, "each") {
         (Some(false), r)
+    } else if word(s, "another").is_some() {
+        (Some(false), s)
     } else {
         (None, s)
     };
@@ -221,6 +226,79 @@ fn to_item<'s>(s: &'s str, b: &mut OneShot) -> Option<(To, &'s str)> {
     }
     to.add_object(f);
     Some((to, rest))
+}
+
+/// "target creature, planeswalker, or player", "another target player, planeswalker, or
+/// Sliver creature": one target that is an object of one of the listed kinds or a player
+/// (CR 115.1). Returns the target and the rest of the text.
+fn compound_target(s: &str) -> Option<(TargetSpec, &str)> {
+    let (another, r) = match s.trim_start().strip_prefix("another target ") {
+        Some(r) => (true, r),
+        None => (false, s.trim_start().strip_prefix("target ")?),
+    };
+    let mut objects = Vec::new();
+    let mut players = None;
+    let mut rest = r;
+    loop {
+        let (item, next) = match rest.find(", ") {
+            Some(i) => (&rest[..i], Some(&rest[i + 2..])),
+            None => (rest, None),
+        };
+        let item = item.strip_prefix("or ").unwrap_or(item);
+        // The last item ends the phrase: it's followed by the rest of the text.
+        let (item, tail) = if next.is_none() {
+            let (w1, t1) = split_word(item);
+            match w1 {
+                "player" | "opponent" => (w1, t1),
+                _ => {
+                    let (f, plural, t) = parse_object_phrase(item)?;
+                    if plural {
+                        return None;
+                    }
+                    objects.push(f);
+                    let _ = t1;
+                    if objects.len() + players.iter().count() < 2 {
+                        return None;
+                    }
+                    let mut spec = TargetSpec::any_target();
+                    spec.what = TargetKind::ObjectOrPlayer(
+                        Filter::Or(objects),
+                        players.unwrap_or(PlayerFilter::Not(Box::new(PlayerFilter::Any))),
+                    );
+                    let _ = another;
+                    return Some((spec, t));
+                }
+            }
+        } else {
+            (item, "")
+        };
+        match item {
+            "player" => players = Some(PlayerFilter::Any),
+            "opponent" => players = Some(PlayerFilter::Opponent),
+            _ => {
+                let (f, plural, t) = parse_object_phrase(item)?;
+                if plural || !t.trim().is_empty() {
+                    return None;
+                }
+                objects.push(f);
+            }
+        }
+        match next {
+            Some(n) => rest = n,
+            None => {
+                if objects.is_empty() {
+                    return None;
+                }
+                let mut spec = TargetSpec::any_target();
+                spec.what = TargetKind::ObjectOrPlayer(
+                    Filter::Or(objects),
+                    players.unwrap_or(PlayerFilter::Not(Box::new(PlayerFilter::Any))),
+                );
+                let _ = another;
+                return Some((spec, tail));
+            }
+        }
+    }
 }
 
 /// A list of recipients. Returns it and the rest of the text.
@@ -431,6 +509,12 @@ pub(crate) fn source(s: &str, b: &mut OneShot) -> Option<Src> {
             });
         }
     }
+    if let Some(f) = sources_noun(s, &mut pre) {
+        if !pre.is_empty() && b.is_none() {
+            return None;
+        }
+        return Some(Src { filter: f, pre });
+    }
     // "a [red] source of your choice", "a creature of your choice with shadow" (CR 609.7a).
     if let Some(i) = s.find(" of your choice") {
         b.as_ref()?;
@@ -546,12 +630,17 @@ fn damage_kind(s: &str) -> Option<(Option<bool>, &str)> {
 
 /// Strips " this turn" (or " this combat") from the start or end of `s`.
 fn this_turn(s: &str) -> (bool, &str) {
-    for p in [" this turn", " this combat"] {
-        if let Some(r) = s.strip_suffix(p) {
-            return (true, r);
+    let t = s.trim();
+    for p in ["this turn", "this combat"] {
+        if let Some(r) = t.strip_suffix(p) {
+            if r.is_empty() || r.ends_with(' ') {
+                return (true, r.trim_end());
+            }
         }
-        if let Some(r) = s.strip_prefix(p) {
-            return (true, r);
+        if let Some(r) = t.strip_prefix(p) {
+            if r.is_empty() || r.starts_with(' ') {
+                return (true, r.trim_start());
+            }
         }
     }
     (false, s)
@@ -703,7 +792,24 @@ pub(crate) fn instructions(text: &str, ctx: &CompileContext, it: Sel) -> Option<
     let t = text
         .replace("that many", "x")
         .replace("that much", "x")
-        .replace("the damage prevented this way", "x");
+        .replace("the damage prevented this way", "x")
+        .replace(
+            "exile cards from the top of your library equal to x",
+            "exile the top x cards of your library",
+        );
+    // "exile that many cards from the top of your library"
+    let t = ["your", "their", "his or her", "its owner's"]
+        .iter()
+        .fold(t, |t, w| {
+            t.replace(
+                &format!("exile x cards from the top of {w} library"),
+                &format!("exile the top x cards of {w} library"),
+            )
+            .replace(
+                &format!("exiles x cards from the top of {w} library"),
+                &format!("exiles the top x cards of {w} library"),
+            )
+        });
     let uses_amount = t != text;
     if has_x && uses_amount {
         return None;
@@ -747,14 +853,22 @@ pub(crate) fn x_to_event_amount(e: &Effect) -> Option<Effect> {
 /// the rest of a prevention effect, performed right after the damage is prevented
 /// (CR 615.5), with "that much" / "the damage prevented this way" the damage prevented.
 pub(crate) fn prevented_followup(l: &str, ctx: &CompileContext, it: Sel) -> Option<Effect> {
+    prevented_followup_with(l, &mut |t| instructions(t, ctx, it.clone()))
+}
+
+/// [`prevented_followup`] with the instructions parsed by `parse`.
+fn prevented_followup_with(
+    l: &str,
+    parse: &mut dyn FnMut(&str) -> Option<Effect>,
+) -> Option<Effect> {
     let l = end(l.trim());
     if let Some(r) = l.strip_prefix("if damage is prevented this way, ") {
-        return instructions(r, ctx, it);
+        return parse(r);
     }
     if let Some(r) = l.strip_prefix("if damage from a ") {
         let (q, r) = r.split_once(" source is prevented this way, ")?;
         let f = source_qualities(q)??;
-        let e = instructions(r, ctx, it)?;
+        let e = parse(r)?;
         return Some(Effect::If {
             cond: Condition::SelMatches(Sel::TriggerOtherObject, f),
             then: Box::new(e),
@@ -764,7 +878,51 @@ pub(crate) fn prevented_followup(l: &str, ctx: &CompileContext, it: Sel) -> Opti
     if !l.contains("prevented this way") {
         return None;
     }
-    instructions(l, ctx, it)
+    // "Create a 3/1 ... token for each 1 damage prevented this way."
+    if let Some(head) = l.strip_suffix(" for each 1 damage prevented this way") {
+        let e = parse(head)?;
+        return Some(Effect::Repeat {
+            times: Value::EventAmount,
+            effect: Box::new(e),
+        });
+    }
+    parse(l)
+}
+
+/// [`instructions`] parsed with the one-shot effect's own builder, so they can have
+/// targets (chosen as the spell or ability is put on the stack, and remembered by the
+/// effect it creates).
+fn instructions_in(text: &str, b: &mut Builder, it: Sel) -> Option<Effect> {
+    let has_x = text.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x");
+    let t = text
+        .replace("that many", "x")
+        .replace("that much", "x")
+        .replace("the damage prevented this way", "x")
+        .replace(
+            "exile cards from the top of your library equal to x",
+            "exile the top x cards of your library",
+        );
+    let uses_amount = t != text;
+    if has_x && uses_amount {
+        return None;
+    }
+    let saved = (b.it.clone(), b.it_player.clone(), b.in_trigger, b.named.len());
+    b.it = it;
+    b.it_player = PlayerRef::TriggerPlayer;
+    b.in_trigger = true;
+    for p in ["that source", "the source"] {
+        b.named.push((p.into(), Sel::TriggerOtherObject));
+    }
+    let e = crate::oracle::effects::parse_effect_text(&format!("{t}."), b);
+    b.it = saved.0;
+    b.it_player = saved.1;
+    b.in_trigger = saved.2;
+    b.named.truncate(saved.3);
+    let e = e?;
+    if !uses_amount {
+        return Some(e);
+    }
+    x_to_event_amount(&e)
 }
 
 /// What the restated recipient at the end of an amount change may be.
@@ -820,6 +978,10 @@ pub(crate) fn damage_action(
 ) -> Option<(ReplacementAction, bool)> {
     let s = end(s.trim());
     let it = ev.to.it();
+    if let Some(r) = s.strip_prefix("you may have that damage dealt to ") {
+        let sel = redirect_to(r.strip_suffix(" instead")?, b)?;
+        return Some((ReplacementAction::Redirect(sel), true));
+    }
     // "you may prevent X of that damage, where X is ..."
     if let Some(r) = s.strip_prefix("you may ") {
         let (a, _) = damage_action(r, ev, b, ctx)?;
@@ -849,6 +1011,17 @@ pub(crate) fn damage_action(
                 Box::new(Value::Diff(Box::new(Value::EventAmount), Box::new(n))),
             );
             return Some((ReplacementAction::PreventPortion(v), false));
+        }
+        // "prevent 1 damage that spell would deal to that permanent or player"
+        if let Some((n, r)) = parse_number(r) {
+            if let Some(t) = r
+                .strip_prefix("damage that spell would deal")
+                .or_else(|| r.strip_prefix("damage that source would deal"))
+            {
+                if matches!(n, Value::Const(_)) && restated(t) {
+                    return Some((ReplacementAction::PreventPortion(n), false));
+                }
+            }
         }
         // "prevent X of that damage, where X is the number of Clerics you control"
         if let Some(r) = r.strip_prefix("x of that damage, where x is ") {
@@ -954,11 +1127,20 @@ pub(crate) fn damage_action(
         return None;
     }
     // "put that many -1/-1 counters on that creature instead", "instead that player mills
-    // that many cards".
-    let inner = s
+    // that many cards", "exile that many cards from your graveyard instead. If you can't,
+    // you lose the game."
+    let (first, more) = match s.split_once(". ") {
+        Some((a, r)) => (a, Some(r)),
+        None => (s, None),
+    };
+    let inner = first
         .strip_prefix("instead ")
-        .or_else(|| s.strip_suffix(" instead"))?;
-    let e = instructions(inner, ctx, it)?;
+        .or_else(|| first.strip_suffix(" instead"))?;
+    let text = match more {
+        Some(r) => format!("{inner}. {r}"),
+        None => inner.to_string(),
+    };
+    let e = instructions(&text, ctx, it)?;
     Some((ReplacementAction::Instead(Box::new(e)), false))
 }
 
@@ -977,7 +1159,9 @@ fn redirect_to(s: &str, b: &mut OneShot) -> Option<Sel> {
         _ => {}
     }
     let bb = b.as_deref_mut()?;
-    let (spec, r) = parse_any_target(s)?;
+    let (spec, r) = compound_target(s)
+        .filter(|(_, r)| r.trim().is_empty())
+        .or_else(|| parse_any_target(s))?;
     if !r.trim().is_empty() || spec.fixed_min() != Some(1) || !matches!(spec.max, Value::Const(1))
     {
         return None;
@@ -1001,6 +1185,9 @@ fn s_if_damage(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>
 
 fn static_if_damage(l: &str, ctx: &CompileContext) -> Option<StaticAbility> {
     let l = end(l.trim());
+    if let Some(st) = static_if_damage_one(l, ctx) {
+        return Some(st);
+    }
     // "If damage would be dealt to ~, prevent that damage. [The rest of the effect.]"
     if let Some((first, second)) = l.split_once(". ") {
         let mut st = static_if_damage(first, ctx)?;
@@ -1022,6 +1209,10 @@ fn static_if_damage(l: &str, ctx: &CompileContext) -> Option<StaticAbility> {
         def.action = ReplacementAction::PreventAndThen(None, Box::new(e));
         return Some(st);
     }
+    None
+}
+
+fn static_if_damage_one(l: &str, ctx: &CompileContext) -> Option<StaticAbility> {
     let r = l.strip_prefix("if ")?;
     for (ev, act) in split_if(r) {
         let mut none: OneShot = None;
@@ -1213,6 +1404,39 @@ fn next_n_damage(r: &str, b: &mut Builder) -> Option<(Value, DamageEvent)> {
 fn p_prevent_next(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim());
     let r = l.strip_prefix("prevent the next ")?;
+    // "... to each creature and each player this turn": a shield for each of them.
+    if let Some((n, x)) = parse_number(r) {
+        if let Some(each) = x
+            .trim_start()
+            .strip_prefix("damage that would be dealt to each ")
+            .and_then(|e| e.strip_suffix(" this turn"))
+        {
+            let mut sels = Vec::new();
+            for item in each.split(" and each ") {
+                sels.push(match item {
+                    "player" => Sel::Players(PlayerRef::EachPlayer),
+                    "opponent" => Sel::Players(PlayerRef::EachOpponent),
+                    _ => {
+                        let (f, plural, rest) = parse_object_phrase(item)?;
+                        if plural || !rest.trim().is_empty() {
+                            return None;
+                        }
+                        Sel::All(f)
+                    }
+                });
+            }
+            return Some(Effect::PreventDamage {
+                to: if sels.len() == 1 {
+                    sels.pop()?
+                } else {
+                    Sel::Union(sels)
+                },
+                amount: Some(n),
+                duration: Duration::EndOfTurn,
+                combat_only: false,
+            });
+        }
+    }
     attempt(b, |b| {
         let (n, dev) = next_n_damage(r, b)?;
         if !dev.this_turn || dev.while_cond.is_some() {
@@ -1472,15 +1696,51 @@ fn p_redirect_all(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "replacement grammar: all damage is dealt to X instead", priority: 150, parse: p_redirect_all } }
 
-/// The last prevention replacement an effect creates.
+/// The last prevention replacement an effect creates. A shield on one recipient
+/// ([`Effect::PreventDamage`]) becomes the equivalent replacement effect.
 fn last_prevention(e: &mut Effect) -> Option<&mut ReplacementDef> {
+    if let Effect::PreventDamage {
+        to,
+        amount: Some(n),
+        duration,
+        combat_only: false,
+    } = e
+    {
+        let (players, objects) = match to {
+            Sel::Players(PlayerRef::You) => (Some(PlayerFilter::You), None),
+            Sel::This => (None, Some(Filter::Source)),
+            Sel::Target(k) => (
+                Some(PlayerFilter::Ref(Box::new(PlayerRef::Target(*k)))),
+                Some(Filter::In(Box::new(Sel::Target(*k)))),
+            ),
+            _ => return None,
+        };
+        *e = Effect::AddReplacement {
+            def: ReplacementDef {
+                event: ReplacementEvent::Damage {
+                    source: Filter::Any,
+                    to_players: players,
+                    to_objects: objects,
+                    combat_only: false,
+                },
+                action: ReplacementAction::PreventAmount(n.clone()),
+                self_replacement: false,
+                optional: false,
+            },
+            duration: duration.clone(),
+            uses: None,
+        };
+    }
     match e {
         Effect::Seq(v) => v.iter_mut().rev().find_map(last_prevention),
         Effect::AddReplacement { def, .. }
             if matches!(
                 def.event,
                 ReplacementEvent::Damage { .. } | ReplacementEvent::NoncombatDamage { .. }
-            ) && matches!(def.action, ReplacementAction::Prevent) =>
+            ) && matches!(
+                def.action,
+                ReplacementAction::Prevent | ReplacementAction::PreventAmount(_)
+            ) =>
         {
             Some(def)
         }
@@ -1488,17 +1748,50 @@ fn last_prevention(e: &mut Effect) -> Option<&mut ReplacementDef> {
     }
 }
 
+/// Whether `e` creates a prevention effect a follow-up can refer to.
+fn has_prevention(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.iter().any(has_prevention),
+        Effect::PreventDamage {
+            amount: Some(_),
+            combat_only: false,
+            to: Sel::Players(PlayerRef::You) | Sel::This | Sel::Target(_),
+            ..
+        } => true,
+        Effect::AddReplacement { def, .. } => {
+            matches!(
+                def.event,
+                ReplacementEvent::Damage { .. } | ReplacementEvent::NoncombatDamage { .. }
+            ) && matches!(
+                def.action,
+                ReplacementAction::Prevent | ReplacementAction::PreventAmount(_)
+            )
+        }
+        _ => false,
+    }
+}
+
 /// "If damage is prevented this way, [instructions]." after a one-shot prevention effect
 /// (CR 615.5). The instructions can't have targets of their own.
 fn f_prevented_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    let ctx = b.ctx;
+    if !has_prevention(prev) {
+        return false;
+    }
+    let saved = b.targets.len();
+    let Some(e) = prevented_followup_with(l, &mut |t| instructions_in(t, b, Sel::TriggerObject))
+    else {
+        b.targets.truncate(saved);
+        return false;
+    };
     let Some(def) = last_prevention(prev) else {
         return false;
     };
-    let Some(e) = prevented_followup(l, ctx, Sel::TriggerObject) else {
-        return false;
+    def.action = match &def.action {
+        ReplacementAction::PreventAmount(n) => {
+            ReplacementAction::PreventAndThen(Some(n.clone()), Box::new(e))
+        }
+        _ => ReplacementAction::PreventAndThen(None, Box::new(e)),
     };
-    def.action = ReplacementAction::PreventAndThen(None, Box::new(e));
     true
 }
 

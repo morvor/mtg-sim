@@ -483,3 +483,108 @@ fn reverberation_deals_sorcery_damage_to_its_controller() {
     assert_eq!(t.life(P1), 20);
     assert_eq!(t.life(P0), 15);
 }
+
+#[test]
+fn refraction_trap_deals_the_prevented_damage_to_the_target_chosen_on_cast() {
+    cr!("615.5", "615.7", "609.7a", "601.2c");
+    compiles(&["Refraction Trap"]);
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Plains", 4);
+    let trap = t.hand(P0, "Refraction Trap");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, trap).target(Entity::Object(bears)).go();
+    t.resolve();
+    t.g.deal_damage(giant, Entity::Player(P0), 3, true);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert!(!t.on_battlefield(bears), "{}", t.dump_log());
+}
+
+#[test]
+fn kitsune_palliator_shields_each_creature_and_each_player_separately() {
+    cr!("615.7");
+    compiles(&["Kitsune Palliator"]);
+    let mut t = TestGame::new(2);
+    let fox = t.battlefield(P0, "Kitsune Palliator");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.activate(P0, fox, 0, &[]).unwrap();
+    t.resolve();
+    t.g.deal_damage(giant, Entity::Player(P0), 2, false);
+    t.g.deal_damage(giant, Entity::Player(P1), 2, false);
+    t.g.deal_damage(giant, Entity::Object(fox), 1, false);
+    t.settle();
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.obj_now(fox).damage, 0);
+}
+
+#[test]
+fn captains_maneuver_redirects_the_next_x_damage_to_another_target() {
+    cr!("614.9", "115.3");
+    compiles(&["Captain's Maneuver"]);
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Mountain", 2);
+    let m = t.hand(P0, "Captain's Maneuver");
+    t.cast(P0, m)
+        .x(2)
+        .target(P0)
+        .target(P1)
+        .go();
+    t.resolve();
+    t.g.deal_damage(giant, Entity::Player(P0), 3, true);
+    t.settle();
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn crumbling_sanctuary_mills_to_exile_instead_of_damage() {
+    cr!("614.1a");
+    compiles(&["Crumbling Sanctuary", "Gloom Surgeon"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Crumbling Sanctuary");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let lib = t.library_size(P0);
+    t.g.deal_damage(giant, Entity::Player(P0), 3, true);
+    t.settle();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.library_size(P0), lib - 3);
+}
+
+#[test]
+fn temple_altisaur_prevents_all_but_one_damage_to_other_dinosaurs() {
+    cr!("615.1a");
+    compiles(&["Temple Altisaur"]);
+    let mut t = TestGame::new(2);
+    let altisaur = t.battlefield(P0, "Temple Altisaur");
+    let dino = t.battlefield(P0, "Colossal Dreadmaw");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.deal_damage(giant, Entity::Object(dino), 5, false);
+    t.g.deal_damage(giant, Entity::Object(altisaur), 2, false);
+    t.settle();
+    assert_eq!(t.obj_now(dino).damage, 1);
+    assert_eq!(t.obj_now(altisaur).damage, 2);
+}
+
+#[test]
+fn blood_of_the_martyr_may_redirect_damage_to_creatures_to_you() {
+    cr!("614.9");
+    compiles(&["Blood of the Martyr"]);
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Plains", 3);
+    let s = t.hand(P0, "Blood of the Martyr");
+    t.cast(P0, s).go();
+    t.resolve();
+    t.answer_yes(P0, true);
+    t.g.deal_damage(giant, Entity::Object(bears), 2, false);
+    t.settle();
+    assert_eq!(t.obj_now(bears).damage, 0);
+    assert_eq!(t.life(P0), 18);
+}
