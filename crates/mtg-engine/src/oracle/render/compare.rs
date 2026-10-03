@@ -631,7 +631,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               first, see above.)",
     },
     Equivalence {
-        pattern: r"(sacrifices [^.]*?) of (?:their|his or her) choice\b|(sacrifice [^.]*?) of your choice\b",
+        pattern: r"(sacrifices? [^.]*?) of (?:their|his or her) choice\b|(sacrifice [^.]*?) of your choice\b",
         replacement: "$1$2",
         why: "The player who sacrifices chooses what to sacrifice (CR 701.21a); \"of their \
               choice\" restates it (another player's sacrifice \"of your choice\" doesn't, \
