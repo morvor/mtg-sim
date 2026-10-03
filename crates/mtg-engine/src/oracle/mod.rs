@@ -480,8 +480,16 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
     let amount_x = patterns::cost_parts::amount_as_x(cost_s);
     let cost_s = amount_x.as_ref().map_or(cost_s, |(c, _)| c.as_str());
     let (cost, loyalty) = costs::parse_cost(cost_s)?;
-    // Activation restrictions at the end of the effect text.
-    let (eff_text, timing, max_per_turn, any_player) = costs::split_activation_restrictions(eff_s);
+    // Activation restrictions at the end of the effect text — or, for a modal ability,
+    // at the end of its header line ("{G}: Choose one. Activate only once each turn.").
+    let modal_restricted = eff_s.split_once('\n').and_then(|(head, modes)| {
+        let (h, timing, max, any) = costs::split_activation_restrictions(head);
+        (h.len() < head.trim().len()).then(|| (format!("{h}\n{modes}"), timing, max, any))
+    });
+    let (eff_text, timing, max_per_turn, any_player) = match &modal_restricted {
+        Some((t, timing, max, any)) => (t.as_str(), *timing, *max, *any),
+        None => costs::split_activation_restrictions(eff_s),
+    };
     // "This ability costs {1} less to activate for each ..." (CR 602.2b, 601.2f).
     let (eff_text, own_cost) =
         match patterns::activation_cost_modifiers::split_own_cost_sentence(eff_text) {
