@@ -113,10 +113,10 @@ fn tephraderm_strikes_back_at_creatures_and_spells_controllers() {
     assert_supported("Tephraderm");
     let mut t = TestGame::new(2);
     let teph = t.battlefield(P1, "Tephraderm");
-    let wurm = t.battlefield(P0, "Craw Wurm");
-    combat(&mut t, &[(wurm, Entity::Player(P1))], &[(teph, wurm)]);
-    // The Wurm took 4 from combat and 4 from the trigger.
-    assert!(!t.on_battlefield(wurm));
+    let baloth = t.battlefield(P0, "Enormous Baloth");
+    combat(&mut t, &[(baloth, Entity::Player(P1))], &[(teph, baloth)]);
+    // The 7/7 Baloth took 4 combat damage (not lethal) and 7 from the trigger.
+    assert!(!t.on_battlefield(baloth), "{}", t.dump_log());
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Tephraderm");
     let teph = t.named_on_battlefield("Tephraderm")[0];
@@ -203,6 +203,10 @@ fn briarbridge_patrol_investigates_once_per_damage_event() {
     let a = t.battlefield(P1, "Grizzly Bears");
     let b = t.battlefield(P1, "Grizzly Bears");
     combat(&mut t, &[(patrol, Entity::Player(P1))], &[(a, patrol), (b, patrol)]);
+    // Both blockers were dealt damage at once (2 + 1, or destroyed).
+    for x in [a, b] {
+        assert!(!t.on_battlefield(x) || t.obj_now(x).damage > 0, "{}", t.dump_log());
+    }
     let clues = t
         .g
         .battlefield
@@ -239,6 +243,21 @@ fn unsettled_mariner_triggers_for_you_and_for_your_permanents() {
     t.resolve_all();
     // P1 paid {1} this time.
     assert!(!t.on_battlefield(mariner), "{}", t.dump_log());
+    // A spell targeting you and a permanent you control: two triggers, {1} each.
+    let mut t = TestGame::new(2);
+    let mariner = t.battlefield(P0, "Unsettled Mariner");
+    let lands = t.lands(P1, "Mountain", 5);
+    let flames = t.hand(P1, "Hungry Flames");
+    t.answer_yes(P1, true);
+    t.answer_yes(P1, true);
+    t.cast(P1, flames)
+        .targets(&[Entity::Object(mariner), Entity::Player(P0)])
+        .go();
+    t.resolve_all();
+    let untapped = lands.iter().filter(|l| !t.obj_now(**l).tapped).count();
+    assert_eq!(untapped, 0, "paid {{1}} twice: {}", t.dump_log());
+    assert_eq!(t.life(P0), 18);
+    assert!(!t.on_battlefield(mariner));
 }
 
 #[test]
@@ -285,6 +304,16 @@ fn leyline_of_combustion_triggers_once_per_spell() {
     t.cast(P1, shock).target(Entity::Player(P0)).go();
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
+    // A spell targeting you and a permanent you control: still one trigger.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P1, "Mountain", 3);
+    let flames = t.hand(P1, "Hungry Flames");
+    t.cast(P1, flames)
+        .targets(&[Entity::Object(bears), Entity::Player(P0)])
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16, "{}", t.dump_log());
+    assert_eq!(t.life(P0), 18 - 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +339,7 @@ fn burning_tree_shaman_ignores_mana_abilities() {
 
 #[test]
 fn ajani_unrelenting_and_gideon_the_oathless_see_loyalty_abilities() {
-    cr!("606.3");
+    cr!("606.2");
     assert_supported("Ajani Unrelenting");
     assert_supported("Gideon the Oathless");
     let mut t = TestGame::new(2);
@@ -344,7 +373,14 @@ fn haunting_wind_triggers_on_tapping_or_tapless_artifact_abilities() {
     t.activate(P1, lute, 0, &[Entity::Object(bears)]).unwrap();
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
-    let _ = CardType::Artifact;
+    // An artifact's ability without {T} in its cost: one trigger, and its lands tapping
+    // for mana aren't artifacts.
+    let sphere = t.battlefield(P1, "Chimeric Sphere");
+    t.lands(P1, "Island", 2);
+    t.activate(P1, sphere, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.obj_now(sphere).is(CardType::Creature));
+    assert_eq!(t.life(P1), 17);
 }
 
 #[test]

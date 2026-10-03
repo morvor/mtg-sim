@@ -266,20 +266,44 @@ fn hidden_herd_wakes_up_when_an_opponent_plays_a_nonbasic_land() {
     assert_supported("Hidden Herd");
     let mut t = TestGame::new(2);
     let herd = t.battlefield(P0, "Hidden Herd");
-    let other = t.battlefield(P0, "Hidden Herd");
-    t.set_step(P1, Step::PrecombatMain);
-    // A basic land played by you doesn't count either.
-    let forest = t.hand(P0, "Forest");
+    // You playing a nonbasic land doesn't count.
     t.set_step(P0, Step::PrecombatMain);
-    t.play_land(P0, forest).unwrap();
+    let mine = t.hand(P0, "Ghost Quarter");
+    t.play_land(P0, mine).unwrap();
     t.resolve_all();
-    assert!(!t.obj_now(other).is(CardType::Creature));
+    assert!(!t.obj_now(herd).is(CardType::Creature));
+    // An opponent playing a basic land doesn't either.
     t.set_step(P1, Step::PrecombatMain);
+    let forest = t.hand(P1, "Forest");
+    t.play_land(P1, forest).unwrap();
+    t.resolve_all();
+    assert!(!t.obj_now(herd).is(CardType::Creature));
+    t.g.players[1].lands_played_this_turn = 0;
     let land = t.hand(P1, "Ghost Quarter");
     t.play_land(P1, land).unwrap();
     t.resolve_all();
     assert!(t.obj_now(herd).is(CardType::Creature));
     assert_eq!(t.pt(herd), (3, 3));
+}
+
+#[test]
+fn hidden_herd_checks_that_it_is_still_an_enchantment() {
+    cr!("603.4");
+    let mut t = TestGame::new(2);
+    let herd = t.battlefield(P0, "Hidden Herd");
+    // Already a creature (not an enchantment): the intervening "if" fails, so it doesn't
+    // trigger and stays as it is.
+    t.set_step(P1, Step::PrecombatMain);
+    let land = t.hand(P1, "Ghost Quarter");
+    t.play_land(P1, land).unwrap();
+    t.resolve_all();
+    assert_eq!(t.pt(herd), (3, 3));
+    let stack_before = t.stack_len();
+    t.g.players[1].lands_played_this_turn = 0;
+    let land = t.hand(P1, "Ghost Quarter");
+    t.play_land(P1, land).unwrap();
+    t.settle();
+    assert_eq!(t.stack_len(), stack_before, "no trigger: it isn't an enchantment");
 }
 
 #[test]
@@ -338,7 +362,7 @@ fn the_lost_and_the_damned_counts_lands_not_from_your_hand() {
 
 #[test]
 fn full_throttle_untaps_attackers_at_each_combat() {
-    cr!("603.7b", "505.1a");
+    cr!("603.7b", "500.8");
     assert_supported("Full Throttle");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");

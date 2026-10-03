@@ -117,6 +117,25 @@ fn gideon_the_oathsworn_counts_only_other_attackers() {
     combat(&mut t, &at_p1(&[a, b]), &[]);
     assert_eq!(t.counters(a, "+1/+1"), 1);
     assert_eq!(t.counters(b, "+1/+1"), 1);
+    // One attacker isn't two or more.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Gideon, the Oathsworn");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    combat(&mut t, &at_p1(&[a]), &[]);
+    assert_eq!(t.counters(a, "+1/+1"), 0);
+    // A Gideon that's a creature (another Gideon planeswalker animated) isn't a
+    // non-Gideon creature: it doesn't count and gets no counter.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Gideon, the Oathsworn");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let g = t.battlefield(P0, "Gideon, Ally of Zendikar");
+    t.g.objects[g.0 as usize].counters.insert("loyalty".into(), 4);
+    t.activate(P0, g, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.obj_now(g).is(CardType::Creature));
+    combat(&mut t, &at_p1(&[a, g]), &[]);
+    assert_eq!(t.counters(a, "+1/+1"), 0, "only one non-Gideon creature attacked");
+    assert_eq!(t.counters(g, "+1/+1"), 0);
 }
 
 #[test]
@@ -138,22 +157,24 @@ fn argent_dais_and_flummoxed_cyclops_need_two_or_more_attackers() {
     cr!("508.1");
     assert_supported("Argent Dais");
     assert_supported("Flummoxed Cyclops");
+    // One attacker: no oil counter, and the Cyclops can still block.
+    let mut t = TestGame::new(2);
+    let dais = t.battlefield(P1, "Argent Dais");
+    let cyclops = t.battlefield(P1, "Flummoxed Cyclops");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    combat(&mut t, &at_p1(&[a]), &[(cyclops, a)]);
+    assert_eq!(t.counters(dais, "oil"), 0);
+    assert!(t.g.is_blocking(cyclops), "one attacker doesn't stop the Cyclops");
+    // Two attackers: an oil counter, and the Cyclops can't block this combat.
     let mut t = TestGame::new(2);
     let dais = t.battlefield(P1, "Argent Dais");
     let cyclops = t.battlefield(P1, "Flummoxed Cyclops");
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Grizzly Bears");
-    combat(&mut t, &at_p1(&[a]), &[(cyclops, a)]);
-    assert_eq!(t.counters(dais, "oil"), 0);
-    assert!(t.obj_now(cyclops).tapped || t.on_battlefield(cyclops));
-    let mut t = TestGame::new(2);
-    let dais = t.battlefield(P1, "Argent Dais");
-    t.battlefield(P1, "Flummoxed Cyclops");
-    let a = t.battlefield(P0, "Grizzly Bears");
-    let b2 = t.battlefield(P0, "Grizzly Bears");
-    combat(&mut t, &at_p1(&[a, b2]), &[]);
+    combat(&mut t, &at_p1(&[a, b]), &[(cyclops, a)]);
     assert_eq!(t.counters(dais, "oil"), 1);
-    let _ = b;
+    assert!(!t.g.is_blocking(cyclops), "two or more attackers: it can't block");
+    assert!(!t.g.can_block_at_all(cyclops));
 }
 
 #[test]
@@ -297,6 +318,13 @@ fn righteous_indignation_pumps_the_blocker_of_a_red_creature() {
     combat(&mut t, &at_p1(&[red]), &[(blocker, red)]);
     assert_eq!(t.pt(blocker), (3, 3));
     assert_eq!(t.pt(red), (1, 1));
+    // Blocking a green creature: nothing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Righteous Indignation");
+    let green = t.battlefield(P0, "Grizzly Bears");
+    let blocker = t.battlefield(P1, "Grizzly Bears");
+    combat(&mut t, &at_p1(&[green]), &[(blocker, green)]);
+    assert_eq!(t.pt(blocker), (2, 2));
 }
 
 #[test]
@@ -315,19 +343,32 @@ fn seifer_gives_a_double_blocked_attacker_deathtouch() {
 
 #[test]
 fn rashka_and_lairwatch_giant_count_the_creatures_they_block() {
-    cr!("509.3a");
+    cr!("509.3a", "509.3e");
     assert_supported("Rashka the Slayer");
+    assert_supported("Lairwatch Giant");
     let mut t = TestGame::new(2);
     let rashka = t.battlefield(P1, "Rashka the Slayer");
-    let black = t.battlefield(P0, "Vampire Interloper");
-    t.g.objects[black.0 as usize].summoning_sick = false;
-    combat(&mut t, &at_p1(&[black]), &[]);
-    assert_eq!(t.pt(rashka), (3, 3), "didn't block");
+    let green = t.battlefield(P0, "Grizzly Bears");
+    combat(&mut t, &at_p1(&[green]), &[(rashka, green)]);
+    assert_eq!(t.pt(rashka), (3, 3), "blocked a creature that isn't black");
     let mut t = TestGame::new(2);
     let rashka = t.battlefield(P1, "Rashka the Slayer");
     let black = t.battlefield(P0, "Hypnotic Specter");
     combat(&mut t, &at_p1(&[black]), &[(rashka, black)]);
     assert_eq!(t.pt(rashka), (4, 5));
+    // Lairwatch Giant: first strike only when blocking two or more creatures.
+    use mtg_engine::keywords::KeywordKind::FirstStrike;
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Lairwatch Giant");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    combat(&mut t, &at_p1(&[a]), &[(giant, a)]);
+    assert!(!t.obj_now(giant).has_keyword(FirstStrike));
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Lairwatch Giant");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    combat(&mut t, &at_p1(&[a, b]), &[(giant, a), (giant, b)]);
+    assert!(t.obj_now(giant).has_keyword(FirstStrike));
 }
 
 #[test]
@@ -415,7 +456,7 @@ fn killian_draws_when_creatures_enchanted_by_your_auras_attack() {
 
 #[test]
 fn zariels_emblem_triggers_only_after_the_first_combat_phase() {
-    cr!("511.2", "505.1a");
+    cr!("511.2", "500.8");
     assert_supported("Zariel, Archduke of Avernus");
     let mut t = TestGame::new(2);
     let zariel = t.battlefield(P0, "Zariel, Archduke of Avernus");
@@ -488,7 +529,7 @@ fn rigo_draws_for_each_player_or_planeswalker_attacked_by_a_small_creature() {
 
 #[test]
 fn loot_dispute_rewards_attacking_the_player_with_the_initiative() {
-    cr!("725.1", "508.3e");
+    cr!("726.1", "508.3e");
     assert_compiled("Loot Dispute", "the player who has the initiative");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Loot Dispute");

@@ -86,10 +86,16 @@ fn ability_of_permanent_activated(r: &str) -> Option<(TriggerCond, Sel, PlayerRe
     if plural || !end(tail).is_empty() {
         return None;
     }
+    // "of a card in your graveyard" names its zone: not a permanent.
+    let source = if f.zone().is_some() {
+        f
+    } else {
+        Filter::and(vec![Filter::Permanent, f])
+    };
     Some((
         TriggerCond::AbilityActivated {
             who: PlayerRel::You,
-            source: Filter::and(vec![Filter::Permanent, f]),
+            source,
             include_mana: true,
         },
         Sel::TriggerSpell,

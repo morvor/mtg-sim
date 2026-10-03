@@ -721,11 +721,12 @@ fn play_land(subj: &PlayerSubject, t: &str) -> Option<Parsed> {
         return None;
     }
     let tail = end(tail);
+    let came_from = |z| Filter::Custom(crate::kw::played_from_zone::came_from(z).into());
     let tail = if let Some(r) = tail.strip_prefix("from exile") {
-        f = Filter::and(vec![
-            f,
-            Filter::Custom(crate::kw::played_from_zone::came_from(ZoneKind::Exile).into()),
-        ]);
+        f = Filter::and(vec![f, came_from(ZoneKind::Exile)]);
+        r
+    } else if let Some(r) = tail.strip_prefix("from anywhere other than your hand") {
+        f = Filter::and(vec![f, Filter::not(came_from(ZoneKind::Hand))]);
         r
     } else {
         tail
@@ -760,7 +761,15 @@ fn play_events(r: &str) -> Option<Parsed> {
     // a legendary spell": either event; "it" is the land or the spell.
     for sep in [" or cast ", " or casts "] {
         if let Some((a, b)) = t.split_once(sep) {
-            let land = play_land(&subj, a)?;
+            // "play a land or cast a spell from anywhere other than your hand" (Shadow of
+            // the Goblin): a qualifier after both verbs restricts both.
+            let shared = [" from anywhere other than your hand", " from exile"]
+                .into_iter()
+                .find(|q| b.ends_with(q) && !a.contains(" from "));
+            let land = match shared {
+                Some(q) => play_land(&subj, &format!("{a}{q}"))?,
+                None => play_land(&subj, a)?,
+            };
             let (cast, _, _) = cast_spell(&subj, b).or_else(|| {
                 if subj.only.is_some() {
                     return None;
@@ -1123,17 +1132,29 @@ fn count_phrase(s: &str) -> Option<(u32, Filter, &str)> {
         let (n, x) = parse_number(s)?;
         (n.as_const()?, x.trim_start().strip_prefix("or more ")?)
     };
-    // "non-~ creatures": creatures other than this one.
-    let (rest, not_self) = match rest.strip_prefix("non-~ ") {
-        Some(x) => (x, true),
-        None => (rest, false),
+    // "non-Gideon creatures" (normalized to "non-~"): creatures that aren't Gideons — the
+    // planeswalker type the card's short name is (CR 205.3j), not just this object.
+    let (rest, not_type) = match rest.strip_prefix("non-~ ") {
+        Some(x) => {
+            let name = crate::oracle::card_name();
+            let short = name.split(',').next().unwrap_or("").trim().to_string();
+            if short.is_empty()
+                || !crate::oracle::raw_text().contains(&format!("non-{short} "))
+                || !crate::types::subtype_kinds(&short)
+                    .contains(&crate::types::SubtypeKind::Planeswalker)
+            {
+                return None;
+            }
+            (x, Some(short))
+        }
+        None => (rest, None),
     };
     let (mut f, plural, tail) = parse_object_phrase(rest)?;
     if !plural && n != 1 {
         return None;
     }
-    if not_self {
-        f = Filter::and(vec![f, Filter::not(Filter::Source)]);
+    if let Some(t) = not_type {
+        f = Filter::and(vec![f, Filter::not(Filter::Subtype(t.into()))]);
     }
     Some((n.max(1) as u32, f, tail))
 }
@@ -2711,7 +2732,6 @@ mod tests {
             "whenever a creature attacks one of your opponents or a planeswalker an opponent controls",
             "when you attack with exactly two creatures",
             "whenever you attack with at least two creatures that have first strike",
-            "whenever you attack with two or more non-~ creatures",
             "whenever you attack with your commander",
             "whenever you attack with a creature an opponent owns",
             "whenever an opponent attacks with creatures",
@@ -2881,102 +2901,3 @@ mod tests {
     }
 }
 
-#[cfg(test)]
-mod probe {
-    /// Development aid: `PROBE_CONDS=<file>` parses each line as a trigger condition
-    /// ("obj …" / "spell …" lines as object or spell phrases); `PROBE_CARDS=<file with card
-    /// names>` reports, for each unsupported text of the cards, whether its trigger
-    /// condition parses. Run with `cargo test -p mtg-engine --lib probe_ -- --nocapture`.
-    #[test]
-    fn probe_conditions() {
-        let Ok(list) = std::env::var("PROBE_CONDS") else {
-            return;
-        };
-        for l in std::fs::read_to_string(list).unwrap().lines() {
-            let raw = l.trim();
-            if let Some(x) = raw.strip_prefix("text ") {
-                let tl = crate::types::TypeLine::parse("Creature — Human");
-                let ctx = crate::oracle::CompileContext {
-                    card_name: "Probe",
-                    full_name: "Probe",
-                    type_line: &tl,
-                    layout: crate::card::Layout::Normal,
-                    face_index: 0,
-                    keywords: &[],
-                    power: None,
-                    toughness: None,
-                };
-                let r = crate::oracle::parse_ability(x, &ctx);
-                println!("PROBE TEXT {x}\n   {}", if r.is_some() { "OK" } else { "FAIL" });
-                continue;
-            }
-            let l = raw.to_lowercase();
-            if l.is_empty() {
-                continue;
-            }
-            if let Some(x) = l.strip_prefix("text ") {
-                // A whole ability of a creature card named "Probe".
-                let tl = crate::types::TypeLine::parse("Creature — Human");
-                let ctx = crate::oracle::CompileContext {
-                    card_name: "Probe",
-                    full_name: "Probe",
-                    type_line: &tl,
-                    layout: crate::card::Layout::Normal,
-                    face_index: 0,
-                    keywords: &[],
-                    power: None,
-                    toughness: None,
-                };
-                let r = crate::oracle::parse_ability(x, &ctx);
-                println!("PROBE TEXT {x}\n   {}", if r.is_some() { "OK" } else { "FAIL" });
-                continue;
-            }
-            if let Some(x) = l.strip_prefix("obj ") {
-                println!("PROBE OBJ {x}\n   {:?}", crate::oracle::phrases::parse_object_phrase(x));
-                continue;
-            }
-            if let Some(x) = l.strip_prefix("spell ") {
-                println!("PROBE SPELL {x}\n   {:?}", super::super::triggers::parse_spell_phrase(x));
-                continue;
-            }
-            match crate::oracle::triggers::parse_trigger_condition(&l) {
-                Some(p) => println!("PROBE OK {l}\n   {p:?}"),
-                None => println!("PROBE FAIL {l}"),
-            }
-        }
-    }
-
-    #[test]
-    fn probe_cards() {
-        let Ok(list) = std::env::var("PROBE_CARDS") else {
-            return;
-        };
-        for name in std::fs::read_to_string(list).unwrap().lines() {
-            let def = crate::card::card(name.trim());
-            for u in def.unsupported_text() {
-                // Quoted abilities: probe the quoted text.
-                let inner: Vec<&str> = u.split('"').collect();
-                let texts: Vec<&str> = if inner.len() >= 3 {
-                    inner.iter().skip(1).step_by(2).copied().collect()
-                } else {
-                    vec![u]
-                };
-                for t in texts {
-                    let t = t.split_once(" — ").map_or(t, |(_, b)| b);
-                    let l = t.to_lowercase();
-                    let mut ok = None;
-                    for (i, _) in l.match_indices(',') {
-                        if crate::oracle::triggers::parse_trigger_condition(&l[..i]).is_some() {
-                            ok = Some(i);
-                            break;
-                        }
-                    }
-                    match ok {
-                        Some(i) => println!("PROBE BODY {name} || {} || {}", &t[..i], &t[i + 1..]),
-                        None => println!("PROBE TRIG {name} || {t}"),
-                    }
-                }
-            }
-        }
-    }
-}
