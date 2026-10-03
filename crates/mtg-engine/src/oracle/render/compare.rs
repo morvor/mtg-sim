@@ -199,6 +199,17 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               a Berserker\".",
     },
     Equivalence {
+        pattern: r"\bactivate only (once each turn|as a sorcery|during your turn) and only if ([^.]+?)(\.|$)",
+        replacement: "activate only if $2 and only $1$3",
+        why: "Restrictions on activating an ability all apply, in whatever order they're \
+              listed (CR 602.5).",
+    },
+    Equivalence {
+        pattern: r"\byou have an? card in (your )?hand\b",
+        replacement: "you have one or more cards in ${1}hand",
+        why: "Having a card in hand is having one or more.",
+    },
+    Equivalence {
         pattern: r"\bwith no ((?:[a-z+/0-9-]+ )?)counters on\b",
         replacement: "without $1counters on",
         why: "\"With no counters on it\" and \"without counters on it\" are the same.",

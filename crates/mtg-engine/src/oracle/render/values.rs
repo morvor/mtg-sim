@@ -460,6 +460,22 @@ impl Renderer<'_> {
         if let Some(x) = self.stored_x(v) {
             return (format!("{x} {}", plural(noun)), None);
         }
+        // "Exile your hand, then draw that many cards": the number of objects the
+        // instruction just before acted on.
+        if let Value::CountSel(sel) = v {
+            if let Sel::Var(x) = sel.as_ref() {
+                if noun == "card" && self.this_way.last().is_some_and(|(y, _, _)| y == x) {
+                    let s = self.value(v);
+                    let p = plural(noun);
+                    // "a card for each permanent destroyed this way".
+                    let each = match s.strip_prefix("the number of ") {
+                        Some(r) => format!("{} for each {r}", with_article(noun)),
+                        None => format!("X {p}, where X is {s}"),
+                    };
+                    return (format!("{{alt:that many {p}|{each}}}"), None);
+                }
+            }
+        }
         // "for each grace vote" (CR 701.38a).
         if let Value::Var(x) = v {
             if self

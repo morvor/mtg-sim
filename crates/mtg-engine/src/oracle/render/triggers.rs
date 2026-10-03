@@ -953,6 +953,31 @@ impl Renderer<'_> {
                     format!("draw {p} {} card each turn", ordinal_word(*n as u32)),
                 )
             }
+            // "Whenever ~ is dealt 3 or more damage", "Whenever ~ deals 4 or more damage":
+            // the event's amount (CR 120.1).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::EventAmount, Cmp::Ge, Value::Const(n)),
+            } if {
+                let inner = match trigger.as_ref() {
+                    TriggerCond::Batched { trigger, .. } => trigger.as_ref(),
+                    t => t,
+                };
+                matches!(
+                    inner,
+                    TriggerCond::IsDealtDamage { .. } | TriggerCond::DealsDamage { .. }
+                )
+            } =>
+            {
+                let e = self.trigger_event(trigger, det);
+                let k = number_word(*n);
+                let vp = if e.vp.contains("combat damage") {
+                    e.vp.replacen("combat damage", &format!("{k} or more combat damage"), 1)
+                } else {
+                    e.vp.replacen("damage", &format!("{k} or more damage"), 1)
+                };
+                Ev::new(e.subj, vp)
+            }
             // "Whenever an opponent sacrifices a nontoken permanent": the player who
             // sacrificed it is the trigger's player.
             TriggerCond::Where {
