@@ -726,10 +726,15 @@ fn abeyance_stops_spells_and_non_mana_abilities() {
     assert_eq!(t.life(P1), 21);
     t.attack(&[(bears, Entity::Player(P0))], &[]);
     assert_eq!(t.life(P0), 18);
-    // P0 isn't affected.
+    // P0 isn't affected: it can cast instants and activate abilities.
     let b0 = t.hand(P0, "Lightning Bolt");
     pool(&mut t, P0, &[(ManaType::R, 1)]);
     t.cast(P0, b0).target(P1).go();
+    t.resolve_all();
+    let pyro0 = t.battlefield(P0, "Prodigal Pyromancer");
+    t.activate(P0, pyro0, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 21 - 3 - 1);
 }
 
 // ---------------------------------------------------------------------------------------

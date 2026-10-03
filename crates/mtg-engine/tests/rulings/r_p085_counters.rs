@@ -187,3 +187,30 @@ fn water_wurm_bonus_once() {
     t.settle();
     assert_eq!(t.pt(wurm), (1, 2));
 }
+
+#[test]
+fn other_kinds_of_counters_prevented_dont_matter() {
+    cr!("614.17b", "702.136a");
+    // Melira stops only -1/-1 counters: riot's +1/+1 counter can still be chosen, and a
+    // cost of putting a +1/+1 counter can still be paid.
+    supported("Melira, Sylvok Outcast");
+    supported("Gruul Spellbreaker");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Melira, Sylvok Outcast");
+    t.answer_yes(P0, true);
+    let sb = t.enter(P0, "Gruul Spellbreaker");
+    assert_eq!(t.counters(sb, "+1/+1"), 1);
+    assert!(!t.obj_now(sb).has_keyword(keywords::KeywordKind::Haste));
+    let def = custom_card(
+        "Counter Eater",
+        "Creature — Beast",
+        "{1}",
+        Some((1, 1)),
+        "Put a +1/+1 counter on Counter Eater: You gain 1 life.",
+    );
+    let eater = t.custom(P0, def, Zone::Battlefield);
+    t.activate(P0, eater, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+    assert_eq!(t.counters(eater, "+1/+1"), 1);
+}

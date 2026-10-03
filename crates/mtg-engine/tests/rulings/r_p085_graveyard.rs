@@ -410,12 +410,16 @@ fn cremate_and_crypt_creeper_need_a_graveyard_target() {
     let bears = t.graveyard(P1, "Grizzly Bears");
     t.activate(P0, creeper, 0, &[Entity::Object(bears)])
         .unwrap();
-    // The Creeper itself (now in the graveyard) wasn't a possible target.
-    assert!(t.asked().iter().all(|(_, d)| match d {
-        decision::Decision::ChooseTargets { candidates, .. } =>
-            !candidates.contains(&Entity::Object(creeper)),
-        _ => true,
-    }));
+    // Only the Bears were a possible target: not the Creeper itself.
+    let candidates: Vec<Vec<Entity>> = t
+        .asked()
+        .iter()
+        .filter_map(|(_, d)| match d {
+            decision::Decision::ChooseTargets { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(candidates, vec![vec![Entity::Object(bears)]]);
     t.resolve_all();
     assert_eq!(t.zone(bears), Zone::Exile);
 }
