@@ -1355,10 +1355,16 @@ impl Renderer<'_> {
                     (Det::A, BatchPer::Batch | BatchPer::Player) => Det::OneOrMore,
                     (other, _) => other,
                 };
+                let many = matches!(d, Det::OneOrMore);
                 let saved = std::mem::replace(&mut self.batch_once, matches!(per, BatchPer::Batch));
                 let e = self.trigger_event(trigger, d);
                 self.batch_once = saved;
-                Ev::new(e.subj, plural_verb(&e.vp))
+                // "Whenever one or more creatures attack" / "Whenever ~ deals damage".
+                if many || e.subj.contains("one or more") {
+                    Ev::new(e.subj, plural_verb(&e.vp))
+                } else {
+                    Ev::new(e.subj, e.vp)
+                }
             }
             TriggerCond::SpellCopied { who, filter } => {
                 let w = self.rel_subject(*who);

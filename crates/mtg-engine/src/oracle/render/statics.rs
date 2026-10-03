@@ -2924,15 +2924,20 @@ impl Renderer<'_> {
             // has from the moment it enters.
             Effect::OnEntry(inner)
                 if matches!(inner.as_ref(), Effect::Modify { what: Sel::This, mods, duration: Duration::Permanent }
-                    if !mods.is_empty() && mods.iter().all(|m| matches!(m, Modification::AddKeyword(_)))) =>
+                    if !mods.is_empty() && mods.iter().all(|m| matches!(m, Modification::AddKeyword(_) | Modification::AddAbility(_)))) =>
             {
                 let Effect::Modify { mods, .. } = inner.as_ref() else {
                     return self.gap("enters with keywords");
                 };
+                // ... "and with "Whenever ~ deals damage, you gain that much life."".
                 let k: Vec<String> = mods
                     .iter()
                     .filter_map(|m| match m {
                         Modification::AddKeyword(k) => Some(self.keyword_lower(k)),
+                        Modification::AddAbility(a) => {
+                            let s = self.nested_ability(a);
+                            Some(format!("\"{s}\""))
+                        }
                         _ => None,
                     })
                     .collect();
