@@ -436,6 +436,31 @@ fn more_history_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             ));
         }
     }
+    // "the number of times it was kicked" in its own triggered ability ("When ~ enters,
+    // it deals damage ... equal to twice the number of times it was kicked").
+    for p in [
+        "times it was kicked",
+        "time it was kicked",
+        "times he was kicked",
+        "times she was kicked",
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if word_end(rest) && triggers_on(b, &["~ enters", "~ attacks"]) {
+                return Some((Value::TimesKicked, rest.to_string()));
+            }
+        }
+    }
+    // "for each {S} spent to cast ~" (CR 107.4h).
+    for p in ["{s} spent to cast ~", "{S} spent to cast ~"] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if word_end(rest) {
+                return Some((
+                    Value::Custom(crate::kw::snow_mana::SNOW_MANA_SPENT.into()),
+                    rest.to_string(),
+                ));
+            }
+        }
+    }
     // "for each time it has attacked this turn" (the object "it" names: in a static
     // ability, each affected object).
     for p in [
@@ -979,13 +1004,27 @@ fn rel_code(r: PlayerRel) -> Option<&'static str> {
     })
 }
 
+/// The raw text of the face being compiled, lowercased, with its name (or the part of it
+/// before a comma, "Shanna" for "Shanna, Purifying Blade") and "this creature" as "~".
+fn raw_text_named() -> String {
+    let mut raw = crate::oracle::raw_text().to_lowercase();
+    let name = crate::oracle::card_name().to_lowercase();
+    if !name.is_empty() {
+        raw = raw.replace(&name, "~");
+        if let Some((short, _)) = name.split_once(", ") {
+            raw = raw.replace(short, "~");
+        }
+    }
+    raw.replace("this creature", "~")
+}
+
 /// Whether the ability being compiled triggers on an event of this kind ("damage",
 /// "gain life", "lose life"), judged by its text.
 fn triggers_on(b: &Builder, what: &[&str]) -> bool {
     if !b.in_trigger {
         return false;
     }
-    let raw = crate::oracle::raw_text().to_lowercase();
+    let raw = raw_text_named();
     // The trigger condition: the text before the first comma of a "when"/"whenever"
     // ability (granted abilities in quotes included).
     raw.split(['"', '\n'])
@@ -1203,7 +1242,7 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     let head = &r[..i];
     let yours = Some(Filter::OwnedBy(PlayerRel::You));
     let theirs = their_rel(b).map(Filter::OwnedBy);
-    let verbs: [(&str, Var, Option<Filter>); 17] = [
+    let verbs: [(&str, Var, Option<Filter>); 18] = [
         (" destroyed", DESTROYED, None),
         (" sacrificed", vars::SACRIFICED, None),
         (" exiled", vars::IT, None),
@@ -1221,6 +1260,7 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
         (" countered", vars::IT, None),
         (" tapped", vars::TAPPED, None),
         (" drawn", vars::REVEALED, None),
+        (" revealed", vars::REVEALED, None),
     ];
     // "for each card discarded this way" in a "whenever you discard one or more cards"
     // trigger, "the number of nonland cards milled this way" in a "whenever one or more
@@ -1285,6 +1325,10 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     // 608.2h). The destroyed, sacrificed or tapped permanents are kept as they were.
     let from = if [vars::IT, DISCARDED].contains(&var) {
         Sel::Before(Box::new(Sel::Var(var)))
+    } else if head.ends_with(" revealed") {
+        // The cards a reveal instruction revealed: a whole hand, or the cards revealed
+        // until one was found (that one included).
+        Sel::Union(vec![Sel::Var(vars::REVEALED), Sel::Var(vars::DUG_FOUND)])
     } else {
         Sel::Var(var)
     };
@@ -1326,7 +1370,7 @@ pub fn reads_result_value(s: &str, b: &mut Builder) -> bool {
 fn this_way_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     for p in ["card types among ", "card type among "] {
         if let Some(x) = r.strip_prefix(p) {
-            let (sel, rest) = this_way_sel(x, b)?;
+            let (sel, rest) = this_way_sel(x, b).or_else(|| result_ref(x, b))?;
             return Some((Value::DistinctAmong(Among::CardTypes, Box::new(sel)), rest));
         }
     }
@@ -1424,6 +1468,42 @@ fn result_ref(s: &str, b: &Builder) -> Option<(Sel, String)> {
 /// the larger), "the number of creatures you control in excess of the number of
 /// creatures target opponent controls".
 fn stat_extras(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "the amount of {E} you have" (CR 107.14, 122.1).
+    for p in ["the amount of {e} you have", "the amount of {E} you have"] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if word_end(rest) {
+                return Some((
+                    Value::PlayerCounters(PlayerRef::You, "energy".into()),
+                    rest.to_string(),
+                ));
+            }
+        }
+    }
+    // "the amount of mana spent to cast her" (a character's pronoun: the card itself).
+    for p in [
+        "the amount of mana spent to cast her",
+        "the amount of mana spent to cast him",
+    ] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if word_end(rest) && !b.ctx.is_spell() {
+                return Some((Value::ManaSpent, rest.to_string()));
+            }
+        }
+    }
+    // "the mana value of a commander you own on the battlefield or in the command zone"
+    // (CR 903.3): the greatest, if there are several.
+    if let Some(rest) = s.strip_prefix(
+        "the mana value of a commander you own on the battlefield or in the command zone",
+    ) {
+        if word_end(rest) {
+            return super::value_grammar::parse_value(
+                &format!(
+                    "the greatest mana value of a commander you own on the battlefield or in the command zone{rest}"
+                ),
+                b,
+            );
+        }
+    }
     if let Some(rest) = s.strip_prefix("~'s loyalty") {
         if word_end(rest) {
             return Some((Value::LoyaltyOf(Box::new(Sel::This)), rest.to_string()));
@@ -1747,14 +1827,43 @@ fn named_amount(e: &mut Effect) -> Option<&mut Value> {
     }
 }
 
+/// Whether the last instruction of `e` moves objects ("exile all creatures you control",
+/// "return up to three target land cards ..."), recording them as `vars::IT`.
+fn ends_with_move(e: &Effect) -> bool {
+    match e {
+        Effect::Exile { .. } | Effect::Move { .. } | Effect::Search { .. } => true,
+        Effect::Seq(v) => v
+            .iter()
+            .rev()
+            .find(|x| !matches!(x, Effect::Store { .. }))
+            .is_some_and(ends_with_move),
+        _ => false,
+    }
+}
+
 /// `e`'s named amount kept in [`NAMED_AMOUNT`] (determined once, CR 608.2h), and `then`
-/// read with "that many" as that amount.
+/// read with "that many" as that amount. After a move, "that many" is the number of
+/// objects it moved.
 fn with_that_many(mut e: Effect, then_text: &str, b: &mut Builder) -> Option<(Effect, Effect)> {
     if then_text
         .split(|c: char| !c.is_alphanumeric())
         .any(|w| w == "x")
     {
         return None;
+    }
+    if ends_with_move(&e) {
+        let moved = Value::CountSel(Box::new(Sel::Var(vars::IT)));
+        let then =
+            crate::oracle::effects::parse_clause(&then_text.replacen("that many", "x", 1), b)?;
+        let then = super::r107_numbers::substitute_x(&then, &Value::Var(NAMED_AMOUNT))?;
+        let e = Effect::seq(vec![
+            e,
+            Effect::StoreValue {
+                var: NAMED_AMOUNT,
+                value: moved,
+            },
+        ]);
+        return Some((e, then));
     }
     let n = named_amount(&mut e)?;
     let amount = std::mem::replace(n, Value::Var(NAMED_AMOUNT));
@@ -1791,7 +1900,7 @@ fn then_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
     .iter()
     .find(|p| first.starts_with(**p));
     let e = crate::oracle::effects::parse_clause(first, b)?;
-    if !matches!(named_amount(&mut e.clone()), Some(_)) {
+    if named_amount(&mut e.clone()).is_none() && !ends_with_move(&e) {
         return None;
     }
     let second = match subject {
@@ -1813,6 +1922,10 @@ fn that_many_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         (r, true)
     } else if let Some(r) = l.strip_prefix("then ") {
         (r, false)
+    } else if ends_with_move(prev) {
+        // "Create that many ...", "That player may search their library for that many
+        // basic land cards ...".
+        (l, false)
     } else {
         return false;
     };
