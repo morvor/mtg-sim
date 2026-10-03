@@ -2933,7 +2933,10 @@ impl Game {
                     .sum();
                 total >= n
             }
-            CostPart::AddCounters { .. } => so.is_some(),
+            // CR 614.17b: counters that can't be put on the source can't be a cost.
+            CostPart::AddCounters { kind, .. } => {
+                so.is_some_and(|o| !crate::counter_rules::counters_prevented(self, o.id, kind))
+            }
             // Summoning sickness doesn't matter: this isn't {T} (CR 302.6).
             CostPart::TapUntapped { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
