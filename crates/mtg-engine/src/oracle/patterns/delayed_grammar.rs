@@ -439,6 +439,39 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let inner: &str = &rewritten;
+    // "exile ~ and return it to the battlefield ... at the beginning of the next end step":
+    // two instructions, of which only the last waits (the older pattern's).
+    const VERBS: [&str; 12] = [
+        "exile",
+        "return",
+        "sacrifice",
+        "destroy",
+        "draw",
+        "put",
+        "create",
+        "tap",
+        "untap",
+        "discard",
+        "shuffle",
+        "you",
+    ];
+    for (i, _) in inner.match_indices(" and ") {
+        let second = &inner[i + 5..];
+        let verb = second.split(' ').next().unwrap_or("");
+        if !VERBS.contains(&verb) {
+            continue;
+        }
+        let n = b.targets.len();
+        let s = save(b);
+        let first_alone = parse_sentence(&inner[..i], b).is_some();
+        b.targets.truncate(n);
+        restore(b, s);
+        if first_alone {
+            b.targets.truncate(n0);
+            restore(b, saved);
+            return None;
+        }
+    }
     let mut parsed = parse_sentence(inner, b);
     // "return those cards to the battlefield ... and those creatures gain haste until end
     // of turn": the second instruction is about what the first returned.
