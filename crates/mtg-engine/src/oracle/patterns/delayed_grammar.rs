@@ -607,15 +607,6 @@ fn with_subject(t: &TriggerCond, subject: &Filter) -> Option<TriggerCond> {
     serde_json::from_value(json).ok()
 }
 
-/// Whether the trigger is about an object changing zones (its "it" is then the new
-/// object, CR 400.7).
-fn zone_change(t: &TriggerCond) -> bool {
-    matches!(
-        t,
-        TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_) | TriggerCond::ZoneChange { .. }
-    )
-}
-
 /// The subject of a referent trigger: what to capture and the filter its events must
 /// match. "that creature", "it", "target creature", "~", "a creature you control dealt
 /// damage this way".
@@ -637,6 +628,17 @@ fn referent_subject(s: &str, b: &mut Builder) -> Option<(Sel, Filter)> {
     if s.starts_with("a ") || s.starts_with("an ") || s.starts_with("each ") {
         return None;
     }
+    // "When the creature an opponent controls dies this turn" after "target creature an
+    // opponent controls": that target.
+    if let Some(r) = s.strip_prefix("the ") {
+        let wanted = format!("target {r}");
+        let slots: Vec<u8> = (0..b.targets.len() as u8)
+            .filter(|i| b.targets[*i as usize].text == wanted)
+            .collect();
+        if let [slot] = slots[..] {
+            return Some((Sel::Target(slot), Filter::In(Box::new(Sel::Var(REFERENT)))));
+        }
+    }
     let (sel, rest) = object_ref(s, b)?;
     if !rest.trim().is_empty() || refs::is_no_referent(&sel) {
         return None;
@@ -651,6 +653,68 @@ fn referent_subject(s: &str, b: &mut Builder) -> Option<(Sel, Filter)> {
         _ => return None,
     }
     Some((sel, Filter::In(Box::new(Sel::Var(REFERENT)))))
+}
+
+/// Trigger events the core trigger grammar doesn't word for a single object: "is put into
+/// a graveyard" (from the battlefield: once it's anywhere else it's a new object, CR
+/// 400.7), "is put into your graveyard", "dies under your control".
+fn object_event(rest: &str, subject: &Filter) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let dies = |extra: Option<Filter>| {
+        let f = match extra {
+            Some(x) => Filter::and(vec![subject.clone(), x]),
+            None => subject.clone(),
+        };
+        (TriggerCond::Dies(f), Sel::TriggerObject, PlayerRef::You)
+    };
+    Some(match rest {
+        " is put into a graveyard" | " is put into a graveyard from the battlefield" => dies(None),
+        " is put into your graveyard" => dies(Some(Filter::OwnedBy(PlayerRel::You))),
+        " dies under your control" => dies(Some(Filter::ControlledBy(PlayerRel::You))),
+        _ => return None,
+    })
+}
+
+/// Whether the trigger is about damage the subject deals (its event object is what was
+/// dealt damage).
+fn deals_damage(t: &TriggerCond) -> bool {
+    match t {
+        TriggerCond::DealsDamage { .. } => true,
+        TriggerCond::Batched { trigger, .. } => deals_damage(trigger),
+        _ => false,
+    }
+}
+
+/// "draw that many cards", "you gain life equal to that damage": the amount of the
+/// delayed ability's own event (as "x", replaced by the event amount after parsing).
+fn event_amount_text(eff: &str, t: &TriggerCond) -> Option<String> {
+    let uses = eff.contains("that many") || eff.contains("life equal to that damage");
+    if !uses {
+        return Some(eff.to_string());
+    }
+    if !deals_damage(t) && !matches!(t, TriggerCond::IsDealtDamage { .. } | TriggerCond::Batched { .. }) {
+        return None;
+    }
+    if eff.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") {
+        return None;
+    }
+    Some(
+        eff.replace("that many", "x")
+            .replace("gain life equal to that damage", "gain x life"),
+    )
+}
+
+/// Replaces X with the event's amount.
+fn x_is_event_amount(e: &Effect) -> Option<Effect> {
+    use serde_json::Value as J;
+    fn walk(v: J) -> J {
+        match v {
+            J::String(s) if s == "X" => J::String("EventAmount".into()),
+            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(walk).collect()),
+            other => other,
+        }
+    }
+    serde_json::from_value(walk(serde_json::to_value(e).ok()?)).ok()
 }
 
 fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -675,36 +739,45 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     if !this_turn && !when {
         return None;
     }
+    let cond = cond.replacen("it's put into ", "it is put into ", 1);
     let words: Vec<(usize, &str)> = cond.match_indices(' ').collect();
     for (i, _) in words {
         let (subject_s, rest) = (&cond[..i], &cond[i..]);
         let saved = save(b);
         let n0 = b.targets.len();
         let parsed = referent_subject(subject_s, b).and_then(|(sel, filter)| {
+            if let Some((t, it, p)) = object_event(rest, &filter) {
+                return Some((sel, t, it, p));
+            }
             let (t, it, it_player) =
                 crate::oracle::triggers::parse_trigger_condition(&format!("when ~{rest}"))?;
-            if !matches!(it, Sel::This) {
-                return None;
-            }
-            Some((sel, with_subject(&t, &filter)?, it_player))
+            Some((sel, with_subject(&t, &filter)?, it, it_player))
         });
-        let Some((sel, trigger, it_player)) = parsed else {
+        let Some((sel, trigger, it, it_player)) = parsed else {
             b.targets.truncate(n0);
             restore(b, saved);
             continue;
         };
+        let Some(amount_eff) = event_amount_text(eff, &trigger) else {
+            b.targets.truncate(n0);
+            restore(b, saved);
+            return None;
+        };
+        let uses_x = amount_eff != eff;
+        let eff = amount_eff;
         // The subject's own targets ("whenever target creature deals damage this turn")
         // are the creating ability's.
         let n1 = b.targets.len();
         let source_subject = matches!(sel, Sel::This);
         // "When ~ leaves the battlefield this turn, destroy that creature.": the effect's
         // referents are the creating ability's. Otherwise they're the delayed ability's
-        // own event: "it" is the object (the new object after a zone change).
+        // own event: "it" is the object (the new object after a zone change), or what the
+        // trigger condition names ("deals combat damage to a non-Wall creature").
         if !source_subject {
-            b.it = if zone_change(&trigger) {
-                Sel::TriggerObject
-            } else {
-                Sel::Var(REFERENT)
+            b.it = match it {
+                Sel::This if deals_damage(&trigger) => Sel::Var(REFERENT),
+                Sel::This => Sel::TriggerObject,
+                other => other,
             };
             b.it_player = match it_player {
                 PlayerRef::You => refs::no_player_referent(),
@@ -715,9 +788,13 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
             b.group = None;
             b.in_trigger = true;
         }
-        let effect = parse_effect_text(eff, b);
+        let effect = parse_effect_text(&eff, b);
         let targets = own_targets(b, n1);
         restore(b, saved);
+        let effect = match effect {
+            Some(e) if uses_x => x_is_event_amount(&e),
+            other => other,
+        };
         let (Some(effect), Some(targets)) = (effect, targets) else {
             b.targets.truncate(n0);
             return None;
@@ -749,6 +826,159 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar: when that creature [event] this turn, [effect]", priority: 990, parse: referent_trigger } }
+
+// ---------------------------------------------------------------------------------------
+// Instructions the delayed abilities above need
+// ---------------------------------------------------------------------------------------
+
+/// "Sacrifice those creatures", "sacrifice them", "sacrifice that token": the objects the
+/// text named before, those of them you control (CR 701.21a).
+fn sacrifice_referent(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("sacrifice ")?;
+    let what = if let Some(found) = super::pronoun_groups::plural_object_ref(r, b) {
+        let (sel, rest) = found?;
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        sel
+    } else {
+        let r = ["that token", "that creature", "that permanent"]
+            .iter()
+            .find_map(|p| r.strip_prefix(p).filter(|x| x.trim().is_empty()))?;
+        let _ = r;
+        let it = super::pronoun_groups::singular_it(b);
+        if matches!(it, Sel::This) || refs::is_no_referent(&it) {
+            return None;
+        }
+        it
+    };
+    Some(Effect::SacrificeObjects {
+        what: Sel::All(Filter::and(vec![
+            Filter::In(Box::new(what)),
+            Filter::ControlledBy(PlayerRel::You),
+        ])),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar: sacrifice those creatures / that token", priority: 985, parse: sacrifice_referent } }
+
+/// "If it would leave the battlefield, exile it instead of putting it anywhere else."
+/// (Gruesome Encore, Whip of Erebos): a replacement effect for that permanent (CR 614.1a);
+/// once it has left the battlefield it's a new object the effect doesn't apply to
+/// (CR 400.7).
+fn exile_if_it_would_leave(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if ")?;
+    let (who, rest) = r.split_once(" would leave the battlefield, ")?;
+    if rest != "exile it instead of putting it anywhere else" {
+        return None;
+    }
+    if !matches!(who, "it" | "that creature" | "that permanent") {
+        return None;
+    }
+    let it = super::pronoun_groups::singular_it(b);
+    if matches!(it, Sel::This) || refs::is_no_referent(&it) {
+        return None;
+    }
+    Some(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::ZoneChange {
+                filter: Filter::In(Box::new(it)),
+                from: Some(ZoneKind::Battlefield),
+                to: None,
+            },
+            action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+            self_replacement: false,
+            optional: false,
+        },
+        duration: Duration::Permanent,
+        uses: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar: if it would leave the battlefield, exile it instead", priority: 60, parse: exile_if_it_would_leave } }
+
+/// "When ~ leaves the battlefield this turn, destroy that creature. A creature destroyed
+/// this way can't be regenerated." / "... It can't be regenerated.": the delayed
+/// ability's destruction can't be regenerated (CR 701.19c).
+fn f_delayed_no_regen(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if !matches!(
+        end(l),
+        "it can't be regenerated"
+            | "that creature can't be regenerated"
+            | "a creature destroyed this way can't be regenerated"
+    ) {
+        return false;
+    }
+    let Some(Effect::DelayedTrigger { body, .. }) = last_delayed(prev) else {
+        return false;
+    };
+    fn last_destroy(e: &mut Effect) -> Option<&mut bool> {
+        match e {
+            Effect::Destroy { no_regen, .. } => Some(no_regen),
+            Effect::Seq(v) => last_destroy(v.last_mut()?),
+            _ => None,
+        }
+    }
+    match last_destroy(&mut body.effect) {
+        Some(n) => {
+            *n = true;
+            true
+        }
+        None => false,
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "delayed grammar: the delayed destruction can't be regenerated", priority: 45, apply: f_delayed_no_regen } }
+
+/// "Exile that card until ~ leaves the battlefield.", "each opponent exiles a card from
+/// their hand until ~ leaves the battlefield", "exile any number of other nonland
+/// permanents you control until ~ leaves the battlefield": the exile instruction (any the
+/// exile grammar reads), whose objects return to the zones they came from immediately
+/// after ~ leaves the battlefield (CR 610.3).
+fn exile_until_leaves(l: &str, b: &mut Builder) -> Option<Effect> {
+    use serde_json::Value as J;
+    let head = end(l).strip_suffix(" until ~ leaves the battlefield")?;
+    if !head.contains("exile") {
+        return None;
+    }
+    let saved = save(b);
+    let n0 = b.targets.len();
+    let Some(e) = parse_sentence(head, b) else {
+        b.targets.truncate(n0);
+        restore(b, saved);
+        return None;
+    };
+    fn walk(v: J, n: &mut usize) -> J {
+        match v {
+            J::Object(m) => {
+                if let Some(J::Object(ex)) = m.get("Exile") {
+                    if m.len() == 1 && ex.get("face_down") == Some(&J::Bool(false)) {
+                        *n += 1;
+                        let mut inner = serde_json::Map::new();
+                        inner.insert("what".into(), ex.get("what").cloned().unwrap_or(J::Null));
+                        inner.insert("until".into(), J::String("SourceLeavesBattlefield".into()));
+                        let mut o = serde_json::Map::new();
+                        o.insert("ExileUntil".into(), J::Object(inner));
+                        return J::Object(o);
+                    }
+                }
+                J::Object(m.into_iter().map(|(k, v)| (k, walk(v, n))).collect())
+            }
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, n)).collect()),
+            other => other,
+        }
+    }
+    let mut n = 0;
+    let json = walk(serde_json::to_value(&e).ok()?, &mut n);
+    let converted = (n == 1).then(|| serde_json::from_value::<Effect>(json).ok()).flatten();
+    if converted.is_none() {
+        b.targets.truncate(n0);
+        restore(b, saved);
+    }
+    converted
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar: exile [objects] until ~ leaves the battlefield", priority: 995, parse: exile_until_leaves } }
 
 #[cfg(test)]
 mod tests {
