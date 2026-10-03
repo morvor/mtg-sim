@@ -2194,11 +2194,29 @@ impl Renderer<'_> {
                     }
                     A::AsEnters(e) => self.as_enters(&subj, e),
                     A::EnterAsCopy { filter, optional } => {
-                        let n = format!("any {}", self.noun(filter, Num::One));
-                        if *optional {
-                            format!("you may have {subj} enter as a copy of {n} on the battlefield")
+                        // A copy of a permanent (CR 707.5): "any creature on the
+                        // battlefield", "any creature on the battlefield with mana value 3
+                        // or less", "a creature you control".
+                        let noun = self.noun(filter, Num::One);
+                        let mut alts = vec![format!("any {noun} on the battlefield")];
+                        if let Some((head, rest)) = noun.split_once(" with ") {
+                            alts.push(format!("any {head} on the battlefield with {rest}"));
+                        }
+                        if ["you control", "an opponent controls", "your opponents control"]
+                            .iter()
+                            .any(|c| noun.contains(c))
+                        {
+                            alts.push(with_article(&noun));
+                        }
+                        let n = if alts.len() == 1 {
+                            alts.remove(0)
                         } else {
-                            format!("{subj} enters as a copy of {n} on the battlefield")
+                            format!("{{alt:{}}}", alts.join("|"))
+                        };
+                        if *optional {
+                            format!("you may have {subj} enter as a copy of {n}")
+                        } else {
+                            format!("{subj} enters as a copy of {n}")
                         }
                     }
                     A::EnterUnderControl(p) => {

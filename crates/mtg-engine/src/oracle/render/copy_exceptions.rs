@@ -53,6 +53,7 @@ impl Renderer<'_> {
                 }
                 // CR 702.73a: changeling is "is every creature type".
                 Modification::AllCreatureTypes if changeling => {}
+                Modification::AddAbility(a) if changeling && is_changeling_cda(a) => {}
                 Modification::AddKeyword(k) => {
                     let saved = std::mem::replace(&mut self.granted_keyword, true);
                     grants.push(self.keyword_lower(k));

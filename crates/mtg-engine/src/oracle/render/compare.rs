@@ -79,6 +79,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 113.6).",
     },
     Equivalence {
+        pattern: r#"\b(~|creatures?|permanents?) with the same name( (?:deals?|enters?|dies|die|attacks?|blocks?|gets?|has|have)\b|[.,"])"#,
+        replacement: "$1 named ~$2",
+        why: "\"~ or another creature with the same name deals damage\": the same name as \
+              ~, which the sentence names (as below).",
+    },
+    Equivalence {
         pattern: r"\bwith the same name as ~(?:it\b)?",
         replacement: "named ~",
         why: "An object \"named ~\" is one with the same name as this object: a name used \
