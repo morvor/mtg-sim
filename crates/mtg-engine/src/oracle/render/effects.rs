@@ -618,6 +618,18 @@ impl Renderer<'_> {
             Effect::RepeatProcess { body } => self.effect(body),
             Effect::RepeatThisProcess => "repeat this process".into(),
             Effect::Repeat { times, effect } => {
+                // "For each card drawn this way, discard a card unless you sacrifice a
+                // permanent": a choice made once for each (what's counted is named
+                // before the instruction that's repeated).
+                if matches!(effect.as_ref(), Effect::PayOptional { .. })
+                    && matches!(times, Value::Count(_))
+                {
+                    let v = self.value(times);
+                    if let Some(rest) = v.strip_prefix("the number of ") {
+                        let inner = self.effect(effect);
+                        return format!("for each {rest}, {inner}");
+                    }
+                }
                 let inner = self.effect(effect);
                 let t = self.times(times);
                 format!("{inner} {t}")
