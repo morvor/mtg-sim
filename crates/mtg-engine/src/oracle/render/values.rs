@@ -114,7 +114,12 @@ impl Renderer<'_> {
             }
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
-            Value::Var(vars::EXCESS) => "the excess damage".into(),
+            Value::Var(vars::EXCESS) => "{alt:the excess damage|the amount of excess damage dealt this way|the excess damage dealt this way}".into(),
+            // The flips of the last coin flip (CR 705.2).
+            Value::Var(crate::dice::WINS) => "the number of flips you won".into(),
+            Value::Var(crate::dice::LOSSES) => "the number of flips you lost".into(),
+            Value::Var(crate::dice::HEADS) => "the number of coins that come up heads".into(),
+            Value::Var(crate::dice::TAILS) => "the number of coins that come up tails".into(),
             Value::Var(crate::oracle::patterns::iteration_grammar::MANA_PAID) => {
                 "the total amount of mana paid this way".into()
             }
@@ -177,6 +182,11 @@ impl Renderer<'_> {
                 } else {
                     format!("{n} spells")
                 };
+                let n = n.replace("permanent spell", "spell");
+                // All players' spells together: "the number of spells cast this turn".
+                if matches!(p, PlayerRef::EachPlayer) {
+                    return format!("the number of {n} cast this turn");
+                }
                 let p = self.player(p, Case::Subj);
                 let have = if p == "you" {
                     "you've"
@@ -267,7 +277,7 @@ impl Renderer<'_> {
                 };
                 // "for each of its colors".
                 if s == "it" && matches!(among, Among::Colors) {
-                    return "{alt:the number of colors among it|the number of its colors}".into();
+                    return "{alt:the number of colors among it|the number of its colors|the number of colors it is}".into();
                 }
                 format!("the number of {what} among {s}")
             }
@@ -350,7 +360,31 @@ impl Renderer<'_> {
             }
             Value::Sum(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.value(x)).collect();
-                parts.join(" plus ")
+                let plain = parts.join(" plus ");
+                // "the number of lands you control and land cards in your graveyard":
+                // objects in different zones, never counted twice.
+                let zones: Option<Vec<ZoneKind>> = v
+                    .iter()
+                    .map(|x| match x {
+                        Value::Count(f) => Some(f.zone().unwrap_or(ZoneKind::Battlefield)),
+                        _ => None,
+                    })
+                    .collect();
+                let distinct = zones.is_some_and(|z| {
+                    z.iter()
+                        .enumerate()
+                        .all(|(i, a)| z[..i].iter().all(|b| b != a))
+                });
+                let nouns: Option<Vec<String>> = parts
+                    .iter()
+                    .map(|p| p.strip_prefix("the number of ").map(str::to_string))
+                    .collect();
+                match nouns {
+                    Some(n) if distinct && v.len() == 2 && !plain.contains('{') => {
+                        format!("{{alt:{plain}|the number of {}}}", join_list(&n, "and"))
+                    }
+                    _ => plain,
+                }
             }
             Value::Diff(a, b) => {
                 // "If you have fewer than seven cards in hand, draw cards equal to the
@@ -674,6 +708,21 @@ impl Renderer<'_> {
             {
                 self.condition(&v[1])
             }
+            // "If this spell was cast from anywhere other than your hand".
+            Condition::And(v)
+                if v.len() == 2
+                    && matches!(v[0], Condition::WasCast)
+                    && matches!(&v[1], Condition::Not(x) if matches!(x.as_ref(), Condition::CastFrom(_))) =>
+            {
+                let Condition::Not(x) = &v[1] else {
+                    return String::new();
+                };
+                let z = match x.as_ref() {
+                    Condition::CastFrom(z) => zone_word(*z),
+                    _ => "zone",
+                };
+                format!("~ {{alt:was|is}} cast from anywhere other than your {z}")
+            }
             // "It's your first, second, or third turn of the game".
             Condition::And(_) if crate::rule_statics::turns_taken::early_turns_n(c).is_some() => {
                 let n = crate::rule_statics::turns_taken::early_turns_n(c).unwrap_or(1);
@@ -687,6 +736,24 @@ impl Renderer<'_> {
                     && v.iter().any(|x| matches!(x, Condition::Not(c) if matches!(c.as_ref(), Condition::IsNight))) =>
             {
                 "it's neither day nor night".into()
+            }
+            // "If {W}{U} was spent to cast this spell": mana of each of those colors.
+            Condition::And(v)
+                if v.len() >= 2
+                    && v.iter().all(|x| matches!(x,
+                        Condition::Compare(Value::Custom(n), Cmp::Ge, Value::Const(1))
+                            if n.starts_with("mana_spent_of:"))) =>
+            {
+                let syms: String = v
+                    .iter()
+                    .filter_map(|x| match x {
+                        Condition::Compare(Value::Custom(n), ..) => {
+                            n.strip_prefix("mana_spent_of:").map(|l| format!("{{{l}}}"))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                format!("{syms} was spent to cast {}", self.me())
             }
             Condition::And(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
@@ -865,12 +932,39 @@ impl Renderer<'_> {
                 let s = self.cost_paid(name);
                 s.replace(" was ", " wasn't ")
             }
+            // "If it's not their turn" (the active player's turn, CR 102.1).
+            Condition::PlayerMatches(p, PlayerFilter::Active) if !matches!(p, PlayerRef::You) => {
+                let poss = self.player(p, Case::Poss);
+                let poss = if poss.starts_with("{alt:") {
+                    "their".to_string()
+                } else {
+                    poss
+                };
+                format!("it's not {poss} turn")
+            }
             Condition::WasCast => "you didn't cast it".into(),
+            // "If you didn't cast it from your hand" / "if ~ was cast from anywhere other
+            // than your hand".
+            Condition::CastFrom(z) => {
+                let z = zone_word(*z);
+                format!("{{alt:you didn't cast it from your {z}|~ {{alt:was|is}} cast from anywhere other than your {z}}}")
+            }
+            // "If you didn't cast it from your hand": not cast, or cast from elsewhere.
+            Condition::And(v)
+                if v.len() == 2
+                    && matches!(v[0], Condition::WasCast)
+                    && matches!(v[1], Condition::CastFrom(_)) =>
+            {
+                self.negated_condition(&v[1])
+            }
             // "you haven't cast a spell this turn"
             Condition::Compare(Value::SpellsCastThisTurn(..), Cmp::Ge, Value::Const(1)) => {
                 let s = self.condition(c);
                 match s.strip_prefix("you've ") {
                     Some(r) => format!("you haven't {r}"),
+                    None if s.contains(" has cast ") => {
+                        s.replacen(" has cast ", " hasn't cast ", 1)
+                    }
                     None => format!("it's not true that {s}"),
                 }
             }
@@ -1216,6 +1310,15 @@ impl Renderer<'_> {
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
         if let Some(s) = self.this_turn_compare(a, cmp, b) {
             return s;
+        }
+        // "If excess damage was dealt this way" (CR 120.10).
+        if matches!(a, Value::Var(vars::EXCESS))
+            && matches!(
+                (cmp, b),
+                (Cmp::Gt, Value::Const(0)) | (Cmp::Ge, Value::Const(1))
+            )
+        {
+            return "excess damage was dealt this way".into();
         }
         // "if you have more life than an opponent": more than the lowest life total among
         // your opponents.

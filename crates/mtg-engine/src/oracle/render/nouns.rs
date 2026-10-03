@@ -141,7 +141,12 @@ impl Renderer<'_> {
         if v.len() < 2 || !matches!(det.num(), Num::One) {
             return None;
         }
-        let is_q = |f: &Filter| matches!(f, Filter::ControlledBy(_) | Filter::OwnedBy(_));
+        let is_q = |f: &Filter| {
+            matches!(
+                f,
+                Filter::ControlledBy(_) | Filter::OwnedBy(_) | Filter::InZone(_)
+            )
+        };
         let mut shared: Option<String> = None;
         let mut rests = Vec::new();
         for x in v {
@@ -174,6 +179,13 @@ impl Renderer<'_> {
             .map(|(_, f)| self.noun_det(f, det.clone()))
             .collect();
         // Cards say it once or for each.
+        if let Some(m) = merged_alternatives(&full) {
+            return Some(format!(
+                "{{alt:{}{tail}|{}|{m}}}",
+                join_list(&parts, "or"),
+                join_list(&full, "or")
+            ));
+        }
         Some(format!(
             "{{alt:{}{tail}|{}}}",
             join_list(&parts, "or"),
@@ -240,7 +252,15 @@ impl Renderer<'_> {
         if self.info.has_subtype("Fortification") {
             return "fortified land".into();
         }
-        match &self.info.enchant {
+        // "Enchant creature without flying", "Enchant creature with power 3 or less":
+        // "enchanted creature" (the qualities after the noun aren't part of it).
+        let enchant = self.info.enchant.as_ref().map(|n| {
+            [" without ", " with "]
+                .iter()
+                .fold(n.as_str(), |s, w| s.split(w).next().unwrap_or(s))
+                .to_string()
+        });
+        match &enchant {
             // "Enchant creature card in a graveyard": "enchanted creature" (and "enchanted
             // creature card" for the card itself, see `move_effect`).
             Some(n) if n.contains(" card") => {
@@ -456,7 +476,11 @@ impl Renderer<'_> {
                     np.fixed = Some(s);
                 } else {
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::One)).collect();
-                    np.fixed = Some(join_list(&alts, "or"));
+                    let plain = join_list(&alts, "or");
+                    np.fixed = Some(match merged_alternatives(&alts) {
+                        Some(m) => format!("{{alt:{m}|{plain}}}"),
+                        None => plain,
+                    });
                 }
             }
             Filter::Not(inner) => self.collect_not(inner, np),
@@ -1225,17 +1249,40 @@ impl Renderer<'_> {
         };
         words.push(head);
         let mut s = words.join(" ");
+        // "permanents of the chosen color that player controls" or "permanents that
+        // player controls of the chosen color": a chosen quality said either side.
+        let chosen: Vec<&String> = np
+            .post
+            .iter()
+            .filter(|p| p.starts_with("of {alt:the chosen"))
+            .collect();
+        let mut ctrl = String::new();
         if let Some(c) = np.controller {
-            s.push(' ');
-            s.push_str(&self.controls_phrase(c, num));
+            ctrl.push(' ');
+            ctrl.push_str(&self.controls_phrase(c, num));
         }
         if let Some(c) = &np.controller_matches {
-            s.push(' ');
-            s.push_str(c);
+            ctrl.push(' ');
+            ctrl.push_str(c);
         }
-        for p in &np.post {
-            s.push(' ');
-            s.push_str(p);
+        if chosen.len() == 1 && !ctrl.is_empty() && ctrl != " you control" {
+            let ch = chosen[0];
+            let c = ctrl.trim_start();
+            s.push_str(&format!(" {{alt:{c} {ch}|{ch} {c}}}"));
+            for p in np
+                .post
+                .iter()
+                .filter(|p| !p.starts_with("of {alt:the chosen"))
+            {
+                s.push(' ');
+                s.push_str(p);
+            }
+        } else {
+            s.push_str(&ctrl);
+            for p in &np.post {
+                s.push(' ');
+                s.push_str(p);
+            }
         }
         let mut with: Vec<String> = np.with.clone();
         for w in &np.with_on {
@@ -1511,7 +1558,11 @@ impl Renderer<'_> {
                     Num::One => {
                         let parts: Vec<String> =
                             v.iter().map(|x| self.noun_det(x, det.clone())).collect();
-                        join_list(&parts, "or")
+                        let plain = join_list(&parts, "or");
+                        match merged_alternatives(&parts) {
+                            Some(m) => format!("{{alt:{m}|{plain}}}"),
+                            None => plain,
+                        }
                     }
                     Num::Many => {
                         let parts: Vec<String> =
@@ -1805,4 +1856,40 @@ fn other_kind(f: &Filter) -> Option<&'static str> {
         Filter::SharesCreatureType(_) => Some("a creature type"),
         _ => None,
     }
+}
+
+/// Alternatives that differ in one word, said once: "a creature card in your hand or a
+/// creature card in your graveyard" is "a creature card in your hand or graveyard", "a
+/// creature card with power 6 or greater or a creature card with toughness 6 or greater"
+/// is "a creature card with power or toughness 6 or greater".
+fn merged_alternatives(parts: &[String]) -> Option<String> {
+    if parts.len() < 2 {
+        return None;
+    }
+    let all: Vec<Vec<&str>> = parts.iter().map(|p| p.split(' ').collect()).collect();
+    // Aligned at the end: the first alternative may say more before ("target creature
+    // with power 4 or greater or creature with toughness 4 or greater").
+    let n = all.iter().map(|w| w.len()).min()?;
+    let words: Vec<&[&str]> = all.iter().map(|w| &w[w.len() - n..]).collect();
+    if all.iter().skip(1).any(|w| w.len() != n) {
+        return None;
+    }
+    let differ: Vec<usize> = (0..n)
+        .filter(|i| words.iter().any(|w| w[*i] != words[0][*i]))
+        .collect();
+    let [i] = differ.as_slice() else { return None };
+    let alts: Vec<String> = words.iter().map(|w| w[*i].to_string()).collect();
+    let ok = alts.iter().all(|a| {
+        matches!(
+            a.as_str(),
+            "hand" | "graveyard" | "library" | "power" | "toughness"
+        ) || is_combat_keyword(a)
+    });
+    if !ok || all[0].iter().any(|w| w.contains('{')) {
+        return None;
+    }
+    let mut out: Vec<String> = all[0].iter().map(|w| w.to_string()).collect();
+    let k = all[0].len() - n + i;
+    out[k] = join_list(&alts, "or");
+    Some(out.join(" "))
 }

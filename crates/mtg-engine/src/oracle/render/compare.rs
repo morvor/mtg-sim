@@ -79,11 +79,25 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 113.6).",
     },
     Equivalence {
+        pattern: r#"\b(or (?:an)?other (?:creature|permanent)) with the same name( (?:deals?|enters?|dies|die|attacks?|blocks?|gets?|has|have)\b|[.,"])"#,
+        replacement: "$1 named ~$2",
+        why: "\"~ or another creature with the same name deals damage\": the same name as \
+              ~, which the sentence names (as below). Not \"two creatures with the same \
+              name\" (as each other).",
+    },
+    Equivalence {
         pattern: r"\bwith the same name as ~(?:it\b)?",
         replacement: "named ~",
         why: "An object \"named ~\" is one with the same name as this object: a name used \
               in an ability refers to the object that has it, whatever its name is \
               (CR 201.5b), and objects share a name per CR 201.2a.",
+    },
+    Equivalence {
+        pattern: r"\bthe player ([a-z]+s)\b",
+        replacement: "that player $1",
+        why: "Anaphora: \"Its controller reveals cards ... The player puts that card onto \
+              the battlefield\": \"the player\" and \"that player\" are the player just \
+              named.",
     },
     Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(target player|target opponent) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
@@ -93,13 +107,195 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               life\" (the same player, CR 115.1).",
     },
     Equivalence {
-        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|defending player|its controller|its owner|an opponent|a player|\{alt:[^}]*player[^}]*\}) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
+        pattern: r#"(^|[.:—•,] |\n|\bthen |\band |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|the player|defending player|its controller|its owner|an opponent|a player|\{alt:[^}]*player[^}]*\}) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
         replacement: "$1$2 $3$4$5 $2 $6",
         why: "A clause without a subject after \"and\", \"then\", or a comma shares the \
               subject of the clause before it: \"each opponent sacrifices a creature and loses 3 life\" is \
               \"each opponent sacrifices a creature and each opponent loses 3 life\". \
               Written out, so that the subject isn't mistaken for the controller's \
               (see the next entry).",
+    },
+    Equivalence {
+        pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|they|defending player|its controller|its owner|that [a-z]+'s (?:controller|owner)|an opponent|a player|\{alt:[^}]*player[^}]*\}) may ([^.;"{]*?),? and may\b"#,
+        replacement: "$1$2 may $3 and $2 may",
+        why: "As above, for \"may\": in \"that player may copy ~ and may choose new targets \
+              for the copy\", the player who may choose is that player, not the \
+              ability's controller (so \"may\" without a subject, which is the \
+              controller's after the next entry, isn't confused with it).",
+    },
+    Equivalence {
+        pattern: r"\b(?:each|all) ([a-z-]+?)s? (?:other than|except for) ~(?:it\b)?",
+        replacement: "each other $1",
+        why: "\"Other\" in an ability is other than the object it's on: \"all \
+              creatures other than ~\" and \"all creatures except for ~\" are \"each other \
+              creature\".",
+    },
+    Equivalence {
+        pattern: r"\bwith an? (morph|megamorph|kicker|multikicker|cycling|flashback|suspend|ninjutsu|disguise|madness|evoke|echo|buyback|unearth|embalm|eternalize|escape|dash|blitz|bestow|prowl|outlast|equip|crew) ability\b",
+        replacement: "with $1",
+        why: "A card \"with a morph ability\" is a card with morph: the keyword is the \
+              ability (CR 702.1).",
+    },
+    Equivalence {
+        pattern: r"\ba spell that's both (white|blue|black|red|green) and (white|blue|black|red|green)\b",
+        replacement: "a $1 and $2 spell",
+        why: "A spell that's both white and black is a white and black spell (CR 105.2).",
+    },
+    Equivalence {
+        pattern: r"\ba spell that's ((?:(?:white|blue|black|red|green), )+)or (white|blue|black|red|green)\b",
+        replacement: "a ${1}or $2 spell",
+        why: "A clause saying what a spell is describes it as the adjectives do: \"a spell \
+              that's white, blue, black, or red\" is \"a white, blue, black, or red spell\".",
+    },
+    Equivalence {
+        pattern: r"\b(creatures? or planeswalkers?) that's (white|blue|black|red|green) or (white|blue|black|red|green)\b",
+        replacement: "$2 or $3 $1",
+        why: "The same for colors: \"target creature or planeswalker that's green or blue\" \
+              is \"target green or blue creature or planeswalker\".",
+    },
+    Equivalence {
+        pattern: r"\b(target (?:face-up )?)exiled card((?: with [a-z]+)?(?: you own)?)",
+        replacement: "${1}card$2 in exile",
+        why: "An exiled card is a card in exile (CR 406.1).",
+    },
+    Equivalence {
+        pattern: r"\bthe (owner|controller) of (target (?:[a-z-]+ ){0,3}?(?:creature|permanent|spell|artifact|land|enchantment|card)(?: you control| an opponent controls)?)\b",
+        replacement: "$2's $1",
+        why: "\"The owner of target creature\" is \"target creature's owner\" (as \"the owner \
+              of ~\").",
+    },
+    Equivalence {
+        pattern: r"\bif (\S+ or more) ([a-z ]+?cards?) (?:are|is) in (your|their|a) graveyard\b",
+        replacement: "if there are $1 $2 in $3 graveyard",
+        why: "\"If twenty or more creature cards are in your graveyard\" and \"if there are \
+              twenty or more creature cards in your graveyard\" are the same condition.",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?) that(?:'s| is| are) attacking\b",
+        replacement: "$1 attacking",
+        why: "\"A creature that's attacking that player\" is \"a creature attacking that \
+              player\".",
+    },
+    Equivalence {
+        pattern: r"\bin addition to (its|their) other creature types\b",
+        replacement: "in addition to $1 other types",
+        why: "Adding a creature type changes only creature types (CR 205.1a, 205.1b): \
+              \"in addition to its other creature types\" and \"in addition to its other \
+              types\" keep the same types.",
+    },
+    Equivalence {
+        pattern: r"\b(white|blue|black|red|green|colorless) legendary\b",
+        replacement: "legendary $1",
+        why: "Adjective order: \"red legendary creatures\" are \"legendary red creatures\".",
+    },
+    Equivalence {
+        pattern: r"\bthe blocking creature\b",
+        replacement: "thatit",
+        why: "Anaphora: \"Whenever ~ becomes blocked by a creature, the blocking creature \
+              gets -1/-1\": the creature the trigger event named.",
+    },
+    Equivalence {
+        pattern: r"\bany other target\b",
+        replacement: "another target",
+        why: "\"Another target\" is any target other than the earlier ones (CR 115.3).",
+    },
+    Equivalence {
+        pattern: r"\b(\d+)-(\d+)\b",
+        replacement: "$1 $2",
+        why: "A range of die results in a table, \"1-9\" or \"1—9\" (CR 706).",
+    },
+    Equivalence {
+        pattern: r"\b(?:have not|has not|haven't|hasn't) (cast|attacked|gained|lost)\b",
+        replacement: "didn't $1",
+        why: "\"If you haven't cast a spell this turn\" and \"if you didn't cast a spell this \
+              turn\" ask the same thing about this turn.",
+    },
+    Equivalence {
+        pattern: r"\bthat (?:was|were) attached to\b",
+        replacement: "attached to",
+        why: "Tense: \"gain control of all Equipment that were attached to it\" after it was \
+              destroyed names the Equipment attached to it then.",
+    },
+    Equivalence {
+        pattern: r"\b(whenever|when) you play a card( from exile| from your graveyard)?,",
+        replacement: "$1 you cast a spell$2 or play a land$2,",
+        why: "Playing a card is playing it as a land or casting it as a spell (CR 601.1a, \
+              701.18b).",
+    },
+    Equivalence {
+        pattern: r"\ba graveyard has (\S+ or (?:more|fewer)) cards in it\b",
+        replacement: "a player has $1 cards in their graveyard",
+        why: "Each player has one graveyard (CR 404.1): a graveyard with twenty or more cards \
+              in it is a player's graveyard with twenty or more cards in it.",
+    },
+    Equivalence {
+        pattern: r"\bcontrol creatures named ([^,.]+?) and ([^,.]+?),",
+        replacement: "control a creature named $1 and a creature named $2,",
+        why: "Controlling creatures named A and B is controlling a creature named A and a \
+              creature named B.",
+    },
+    Equivalence {
+        pattern: r"(^|\n|[.:] )(~|it) can't attack or block unless ([^.]+)(\.|$)",
+        replacement: "$1$2 can't attack unless $3. $2 can't block unless $3$4",
+        why: "A cost to attack and a cost to block (CR 508.1d, 509.1d), stated together.",
+    },
+    Equivalence {
+        pattern: r"\bcontrolled by different players\b",
+        replacement: "with different controllers",
+        why: "Targets controlled by different players are targets with different \
+              controllers.",
+    },
+    Equivalence {
+        pattern: r"\bis equal to\b",
+        replacement: "is",
+        why: "\"Your maximum hand size is equal to X\" is \"is X\".",
+    },
+    Equivalence {
+        pattern: r"\bin a command zone\b",
+        replacement: "in the command zone",
+        why: "There's one command zone (CR 408.1).",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?|permanents?) on the battlefield ((?:with|named) \S+)",
+        replacement: "$1 $2 on the battlefield",
+        why: "The order of a noun's qualities: \"other creatures on the battlefield with \
+              flying\".",
+    },
+    Equivalence {
+        pattern: r"\b(gets?) an additional poison counter\b",
+        replacement: "$1 a poison counter",
+        why: "A player who gets an additional poison counter gets a poison counter \
+              (CR 122.1).",
+    },
+    Equivalence {
+        pattern: r"\bif your opponents would\b",
+        replacement: "if an opponent would",
+        why: "A replacement effect for \"your opponents\" applies to each of them, as \"an \
+              opponent\" does.",
+    },
+    Equivalence {
+        pattern: r"\bcreature that's one or more colors\b",
+        replacement: "colored creature",
+        why: "A colored object is one that's one or more colors (CR 105.2).",
+    },
+    Equivalence {
+        pattern: r"\byour life total can't change\b",
+        replacement: "you can't gain life and you can't lose life",
+        why: "A life total changes only by gaining or losing life, also when an effect sets \
+              it to a number (CR 119.5).",
+    },
+    Equivalence {
+        pattern: r"\b(put [^.]*?),? and the rest\b",
+        replacement: "$1. put the rest",
+        why: "\"Put that card into your hand and the rest on the bottom of your library\": \
+              the verb is said once for both groups of cards.",
+    },
+    Equivalence {
+        pattern: r"\b(?:all )?other cards revealed this way\b|\bthe rest of the revealed cards\b",
+        replacement: "the rest",
+        why: "Anaphora: after an instruction that takes some of the cards revealed, \
+              \"all other cards revealed this way\" and \"the rest of the revealed \
+              cards\" are the rest of them.",
     },
     Equivalence {
         pattern: r"\b(?:is|are) put into your graveyard from the battlefield\b",
@@ -223,7 +419,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     },
     Equivalence {
         pattern: r"\bwith no ((?:[a-z+/0-9-]+ )?)counters on\b",
-        replacement: "without $1counters on",
+        replacement: "without ${1}counters on",
         why: "\"With no counters on it\" and \"without counters on it\" are the same.",
     },
     Equivalence {
@@ -392,6 +588,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               \"unless you pay {1} for each card in your hand\".",
     },
     Equivalence {
+        pattern: r"\bx cards?,? where x is that many plus (\d+|one|two|three)\b",
+        replacement: "that many cards plus $1",
+        why: "\"Draw that many cards plus one\": X cards, where X is that many plus 1.",
+    },
+    Equivalence {
         pattern: r"\bfrom graveyards\b",
         replacement: "in graveyards",
         why: "See \"from your graveyard\".",
@@ -410,10 +611,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               first, see above.)",
     },
     Equivalence {
-        pattern: r"(sacrifices? [^.]*?) of (their|his or her|your) choice\b",
-        replacement: "$1",
+        pattern: r"(sacrifices? [^.]*?) of (?:their|his or her) choice\b|(sacrifice [^.]*?) of your choice\b",
+        replacement: "$1$2",
         why: "The player who sacrifices chooses what to sacrifice (CR 701.21a); \"of their \
-              choice\" restates it.",
+              choice\" restates it (another player's sacrifice \"of your choice\" doesn't, \
+              and stays).",
     },
     Equivalence {
         pattern: r"\bthat spell or ability\b",
@@ -446,12 +648,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (`thatit` matches \"it\", see [`token_eq`]).",
     },
     Equivalence {
-        pattern: r"\bthe (?:exiled|discarded) (card|creature|permanent|artifact)s?\b",
+        pattern: r"\bthe (?:exiled|discarded|revealed) (card|creature|permanent|artifact)s?\b",
         replacement: "thatit",
         why: "Anaphora: \"Exile target creature. Return the exiled card ...\": \"the exiled \
               card\" and \"it\" refer back to the object the exile instruction just moved \
               (CR 400.7: that object is the card in exile); \"Discard a card. If the \
-              discarded card was a land card, ...\" likewise.",
+              discarded card was a land card, ...\" and \"Reveal a card at random from \
+              your hand. ... where X is the revealed card's mana value\" likewise.",
     },
     Equivalence {
         pattern: r"\bif (it|thatit|that-object|~it|~) had\b",
@@ -495,7 +698,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               phase triggers at each of them.",
     },
     Equivalence {
-        pattern: r"\b(until end of turn|this turn)\. (?:it's|it is) still an? (?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)\b",
+        pattern: r"\b(until end of turn|this turn)\. (?:it's|it is|they're|they are) still (?:an? )?(?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)s?\b",
         replacement: "in addition to its other types $1",
         why: "CR 205.1b: an effect that says the object is \"still a [type]\" and one that \
               gives types \"in addition to its other types\" both keep all its prior card \
@@ -503,7 +706,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               that duration.)",
     },
     Equivalence {
-        pattern: r"(?:\. (?:it's|it is)| (?:that's|that is)) still an? (?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)\b",
+        pattern: r"(?:\. (?:it's|it is|they're|they are)| (?:that's|that is|that are)) still (?:an? )?(?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)s?\b",
         replacement: " in addition to its other types",
         why: "CR 205.1b, as above.",
     },
@@ -514,7 +717,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 514.2).",
     },
     Equivalence {
-        pattern: r#"\. (it has|thatit has|they have|it gains|thatit gains|they gain) ""#,
+        pattern: r#"\. (it has|thatit has|they have|it gains|thatit gains|they gain|it \{alt:gains\|has\}) ""#,
         replacement: " with \"",
         why: "A token created \"with\" an ability and one that \"has\" it (a following \
               sentence) are the same token (CR 111.1).",
@@ -620,6 +823,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "and",
         why: "In a list of object kinds, \"artifacts and/or enchantments\" and \"artifacts \
               and enchantments\" both mean objects that are either.",
+    },
+    Equivalence {
+        pattern: r"\b(they|you|we)'re\b",
+        replacement: "$1 are",
+        why: "Contraction.",
     },
     Equivalence {
         pattern: r"(^|[^~\w])(it|that|there|what|he|she)'s\b",
@@ -738,7 +946,11 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
         "A leading duration, condition or delayed time applies to the whole sentence wherever it's written.",
     ),
     (
-        "\"If C, Y. Otherwise, X.\" -> \"X. If C, Y instead.\"",
+        "\"Choose a creature type. [Instruction] ... the chosen type.\" -> \"[Instruction] ... the creature type of your choice.\" (also colors, card types, basic land types; when the next instruction uses the choice and nothing later does)",
+        "The same choice, made as the instruction that uses it is followed (CR 608.2c).",
+    ),
+    (
+        "\"If C, Y. Otherwise, X.\" and \"Y if C. Otherwise, X.\" -> \"X. If C, Y instead.\" (not after \"If you do\", whose \"Otherwise\" is \"If you don't\")",
         "Both state the same choice between two instructions.",
     ),
     (
@@ -1182,15 +1394,52 @@ pub fn equivalence_regexes() -> &'static [Option<Regex>] {
 fn sentence_rewrites(s: &str) -> String {
     static LEAD: OnceLock<Option<Regex>> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
-        Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+ remains? exiled|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."]|"[^"]*")*?"[^"]*\."|(?:[^."]|"[^"]*")+?\.)"#)
+        // A rendering's `{alt:...}` / `{opt:...}` (braces nest three deep) is one piece of
+        // the sentence, periods inside it included.
+        let brace = r"\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}";
+        Regex::new(&format!(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+|at the beginning of the next end step|until the end of your next turn|until your next end step|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."{{]|"[^"]*"|{brace})*?"[^"]*\.""?|(?:[^."{{]|"[^"]*"|{brace})+?\.)"#))
             .ok()
     });
     let mut s = s.to_string();
+    // "Choose a creature type. Untap all creatures of the chosen type." / "Untap all
+    // creatures of the creature type of your choice.": the same choice, made as the
+    // instruction that uses it is followed (CR 608.2c), when nothing later uses it.
+    static CHOSEN: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = CHOSEN.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )choose an? (color|card type|creature type|basic land type)(?:\.|,) (?:then )?([^.\n]*?)(?:\bthe chosen (?:type|color|card type|creature type|basic land type)\b|\bthat (?:type|color)\b|\{alt:the chosen (?:type|color)\|that (?:type|color)\})").ok()
+    }) {
+        let mut out = String::new();
+        let mut last = 0;
+        for c in re.captures_iter(&s) {
+            let m = c.get(0).map_or(0..0, |m| m.range());
+            let later = &s[m.end..];
+            let next_line = later.find('\n').map_or(later, |i| &later[..i]);
+            // Only when the choice is used by the very next instruction: anything done in
+            // between (revealing a hand, drawing) could inform the choice, so moving the
+            // choice past it would hide a misordered compilation (Persecute: the color
+            // is chosen before the hand is revealed).
+            let between = &c[3];
+            if next_line.contains("chosen")
+                || next_line.contains("that type")
+                || between.contains(" and ")
+                || between.contains(" then ")
+            {
+                continue;
+            }
+            out.push_str(&s[last..m.start]);
+            out.push_str(&format!("{}{}the {} of your choice", &c[1], &c[3], &c[2]));
+            last = m.end;
+        }
+        out.push_str(&s[last..]);
+        s = out;
+    }
     // "You may pay {3}{B}. If you don't, return it ..." and "Return it ... unless you pay
-    // {3}{B}" are the same choice (CR 118.12).
+    // {3}{B}" are the same choice (CR 118.12, 118.12a); "Pay {4}{R}. If you don't, ..."
+    // too: the payment is a cost, which the player may choose not to pay (CR 118.12).
     static MAY_PAY: OnceLock<Option<Regex>> = OnceLock::new();
     if let Some(re) = MAY_PAY.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n|, )(?:then )?you may pay ([^.]+)\. if you don't, ([^.]+)\.").ok()
+        Regex::new(r"(^|[.:—•] |\n|, )(?:then )?(?:you may )?pay ([^.]+)\. if you don't, ([^.]+)\.")
+            .ok()
     }) {
         s = re.replace_all(&s, "${1}$3 unless you pay $2.").to_string();
     }
@@ -1209,7 +1458,33 @@ fn sentence_rewrites(s: &str) -> String {
     }
     if let Some(otherwise) = otherwise {
         s = otherwise
-            .replace_all(&s, "$1$4. if $2, $3 instead.")
+            .replace_all(&s, |c: &regex::Captures| {
+                // "If you do, Y. Otherwise, X.": "otherwise" is "if you don't", which the
+                // rendering may say either way (the instruction it's about comes before).
+                if matches!(&c[2], "you do" | "they do" | "that player does") {
+                    return c[0].to_string();
+                }
+                format!("{}{}. if {}, {} instead.", &c[1], &c[4], &c[2], &c[3])
+            })
+            .to_string();
+    }
+    // "Draw a card if C. Otherwise, X." (the condition after its instruction): the same.
+    static TRAILING_OTHERWISE: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = TRAILING_OTHERWISE.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )([^.,:]+?) if ([^,.]+)\. otherwise, ([^.]+)\.").ok()
+    }) {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                let (body, cond) = (&c[2], &c[3]);
+                if body.starts_with("if ")
+                    || body.ends_with(" only")
+                    || cond == "able"
+                    || body.contains(" unless ")
+                {
+                    return c[0].to_string();
+                }
+                format!("{}{}. if {cond}, {body} instead.", &c[1], &c[4])
+            })
             .to_string();
     }
     // "X if C." and "If C, X." state the same condition (a trailing "if able" or "only
@@ -1243,6 +1518,7 @@ fn sentence_rewrites(s: &str) -> String {
             format!("{lead}if {cond}, {body}.")
         })
         .to_string();
+    s = leading_for_each(&s);
     for (re, rep) in where_x_rewrites() {
         s = re.replace_all(&s, *rep).to_string();
     }
@@ -1282,7 +1558,23 @@ fn sentence_rewrites(s: &str) -> String {
                 let noun = &c[4];
                 let fits = c[2].contains(noun)
                     || (noun == "player" && (head == "opponent" || head == "player"));
-                if !fits || c[3].contains("choose ") {
+                // Not into the effect of a delayed trigger ("Choose target creature.
+                // Whenever you attack this turn, ~ deals damage to that creature"): a
+                // target named there is chosen each time it triggers (CR 603.3d), not once
+                // as the ability is activated. (In its trigger condition, "When target
+                // creature dies this turn", it can only be the ability's.)
+                let mid = &c[3];
+                let delayed = ["when ", "whenever ", "at the beginning ", "at end of "]
+                    .iter()
+                    .filter_map(|w| {
+                        mid.match_indices(w)
+                            .filter(|(i, _)| *i == 0 || mid[..*i].ends_with(". ") || mid[..*i].ends_with(", "))
+                            .map(|(i, _)| i)
+                            .last()
+                    })
+                    .max()
+                    .is_some_and(|i| mid[i..].contains(", "));
+                if !fits || c[3].contains("choose ") || delayed {
                     return c[0].to_string();
                 }
                 format!("{}{}{}", &c[1], &c[3], &c[2])
@@ -1350,6 +1642,15 @@ fn sentence_rewrites(s: &str) -> String {
         let n = lead
             .replace_all(&s, |c: &regex::Captures| {
                 let (start, clause) = (&c[1], &c[2]);
+                // A sentence ending with a quoted ability ('has "X."'): the clause goes
+                // after the quotation, which is part of the sentence ('has "X" as long as
+                // ...'), unless the clause itself is quoted.
+                if let Some(head) = c[3].strip_suffix(".\"") {
+                    if start != "\"" {
+                        return format!("{start}{head}.\" {clause}.");
+                    }
+                    return format!("{start}{head} {clause}.\"");
+                }
                 // The sentence ends with its last period, or with a quoted ability's.
                 let body = c[3].strip_suffix('.').unwrap_or(&c[3]);
                 let duration = clause == "until end of turn" || clause == "this turn";
@@ -1367,6 +1668,40 @@ fn sentence_rewrites(s: &str) -> String {
         s = n;
     }
     s
+}
+
+/// "For each card discarded this way, creatures you control get +1/+0 until end of turn."
+/// -> "Creatures you control get +1/+0 until end of turn for each card discarded this
+/// way.": one instruction scaled by a count, wherever the count is named (CR 608.2h: it's
+/// counted once). Not an instruction that refers to each of the counted things ("for
+/// each creature, its controller ..."), nor one with a choice to repeat ("... unless you
+/// pay ...", performed once for each).
+fn leading_for_each(s: &str) -> String {
+    static R: OnceLock<Option<Regex>> = OnceLock::new();
+    let Some(re) =
+        R.get_or_init(|| Regex::new(r"(^|[.:—•] |\n|, )for each ([^,.]+), ([^.]+)\.").ok())
+    else {
+        return s.to_string();
+    };
+    re.replace_all(s, |c: &regex::Captures| {
+        let (thing, clause) = (&c[2], &c[3]);
+        let words: Vec<&str> = clause.split(' ').collect();
+        let refers = words.iter().any(|w| {
+            matches!(
+                *w,
+                "it" | "its" | "it's" | "that" | "those" | "them" | "they" | "their" | "thatit"
+            )
+        });
+        if refers
+            || clause.contains(" unless ")
+            || clause.contains(" for each ")
+            || matches!(thing, "opponent" | "player")
+        {
+            return c[0].to_string();
+        }
+        format!("{}{clause} for each {thing}.", &c[1])
+    })
+    .to_string()
 }
 
 /// "Gets +2/+2 for each F", "deals 2 damage to you for each F", "draw two cards for each
@@ -1468,22 +1803,28 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
     static R: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     R.get_or_init(|| {
         [
+            (r"\b(cards?) revealed this way\b", "$1 from among them"),
+            (r"\bdeals? damage equal to ([^.]+?) divided as you choose among ([^.]+?)(\.|$)", "deals x damage divided as you choose among $2, where x is $1$3"),
             (r"\bdeals? damage equal to ([^.]+?) to ([^.]+?)(\.|$)", "deals x damage to $2, where x is $1$3"),
             (r"\bdeals? damage to ([^.]+?) equal to ([^.]+?)(\.|$)", "deals x damage to $1, where x is $2$3"),
             (r"\b(gains?|loses?) life equal to ([^.]+?)(\.|$)", "$1 x life, where x is $2$3"),
             (r"\b(gains?|loses?) 1 life for each ([^.]+?)(\.|$)", "$1 x life, where x is the number of $2$3"),
             (r"\b(gains?|loses?) (\d+|two|three|four|five) life for each ([^.]+?)(\.|$)", "$1 x life, where x is $2 times the number of $3$4"),
+            (r"\b(gets? [+-]x/[+-][x0]), where x is ([^,.]+), and (has|have|is|are|gains?) ([^.]+?)(\.|$)", "$1 and $3 $4, where x is $2$5"),
+            (r"\b(gets?) ([+-])1/([+-])1 for each ([^.]+?) and (has|have|is|are|gains?) ([^.]+?)(\.|$)", "$1 ${2}x/${3}x and $5 $6, where x is the number of $4$7"),
+            (r"\b(gets?) ([+-])1/([+-])0 for each ([^.]+?) and (has|have|is|are|gains?) ([^.]+?)(\.|$)", "$1 ${2}x/${3}0 and $5 $6, where x is the number of $4$7"),
+            (r"\b(gets?) ([+-])2/([+-])2 for each ([^.]+?) and (has|have|is|are|gains?) ([^.]+?)(\.|$)", "$1 ${2}x/${3}x and $5 $6, where x is 2 times the number of $4$7"),
             (r"\b(gets?) ([+-])1/([+-])1 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}x $4, where x is the number of $5$6"),
             (r"\b(gets?) ([+-])1/([+-])0 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}x/${3}0 $4, where x is the number of $5$6"),
             (r"\b(gets?) ([+-])0/([+-])1 ((?:until end of turn |this turn )?)for each ([^.]+?)(\.|$)", "$1 ${2}0/${3}x $4, where x is the number of $5$6"),
             (r"\b(draws?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\b(mills?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
-            (r"\bputs? an? (\S+) counter on ([^.]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
-            (r"\benters? with an? (\S+) counter on it for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
+            (r"\bputs? an? (\S+) counter on ([^.,]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
+            (r"\benters? with an? (\S+) counter on (?:~it|it) for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
             (r"\benters? with (two|three|four|\d+) (\S+) counters on it for each ([^.]+?)(\.|$)", "enters with x $2 counters on it, where x is $1 times the number of $3$4"),
             (r"\b(enters?|puts?) (with )?a number of (\S+) counters on ([^.]+?) equal to ([^.]+?)(\.|$)", "$1 ${2}x $3 counters on $4, where x is $5$6"),
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
-            (r"\b(creates?) an? ([^.]+?) tokens?((?: with [^.]+?)?) for each ([^.]+?)(\.|$)", "$1 x $2 tokens$3, where x is the number of $4$5"),
+            (r"\b(creates?) an? ([^.]+?) tokens?((?: with [^.]+?| that is tapped and attacking)?) for each ([^.]+?)(\.|$)", "$1 x $2 tokens$3, where x is the number of $4$5"),
             (r"\b(mills?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),
             (r"\b(creates?) a number of ([^.]+?) tokens?((?: with [^.]+?)?) equal to ([^.]+?)(\.|$)", "$1 x $2 tokens$3, where x is $4$5"),
             (r"\b(discards?|draws?|mills?) a number of cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
@@ -1597,15 +1938,29 @@ fn strip_ability_word(line: &str) -> String {
         return rest.to_string();
     }
     let words: Vec<&str> = head.split_whitespace().collect();
+    // A keyword's own label is the keyword, or the keyword and its number ("Suspend 17
+    // — "); a flavor word only starts like one ("Scavenge the Dead", "Unearthly Power").
+    let keyword_label = |n: &str| {
+        h == n
+            || h.strip_prefix(n).is_some_and(|r| {
+                r.trim_start()
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_digit() || c == 'x' || c == '{')
+            })
+    };
+    // "Blade of ~ — ...": a flavor word may name the card (not "~ — ...").
+    let self_named = head.contains('~') && words.len() > 1 && words[0] != "~";
     let flavor = !words.is_empty()
         && words.len() <= 7
         && head.chars().next().is_some_and(|c| c.is_uppercase())
-        && !head.contains(['{', ':', '"', ',', '~', '\n', '•', '|'])
+        && !head.contains(['{', ':', '"', ',', '\n', '•', '|'])
+        && (!head.contains('~') || self_named)
         && !head.chars().any(|c| c.is_ascii_digit())
         && !NOT_FLAVOR.iter().any(|n| h.starts_with(n))
         && !KeywordKind::ALL
             .iter()
-            .any(|k| h.starts_with(&k.name().to_lowercase()))
+            .any(|k| keyword_label(&k.name().to_lowercase()))
         && !head
             .split(", ")
             .all(|n| n.chars().all(|c| matches!(c, 'I' | 'V' | 'X')));
@@ -1797,10 +2152,11 @@ pub fn check_card(def: &CardDef) -> CardCheck {
         let oracle = oracle_units(&face.chars.rules_text, &names);
         let mut c = compare_face(&r.lines, &oracle, &names);
         if !c.0.is_empty() || !c.1.is_empty() {
-            if let Some(m) = &r.merged {
+            for m in [&r.merged, &r.static_if].into_iter().flatten() {
                 let c2 = compare_face(m, &oracle, &names);
                 if c2.0.is_empty() && c2.1.is_empty() {
                     c = c2;
+                    break;
                 }
             }
         }

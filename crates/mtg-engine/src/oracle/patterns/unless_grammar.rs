@@ -535,7 +535,7 @@ fn unless_player_does(l: &str, b: &mut Builder) -> Option<Effect> {
     let splits: Vec<usize> = l.match_indices(" unless ").map(|(i, _)| i).collect();
     for i in splits.into_iter().rev() {
         let (eff, rest) = (&l[..i], &l[i + " unless ".len()..]);
-        if eff.contains(" unless ") || eff.ends_with(',') {
+        if eff.contains(" unless ") || eff.ends_with(',') || leading_for_each_this_way(eff) {
             continue;
         }
         let saved = (
@@ -553,6 +553,15 @@ fn unless_player_does(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "unless grammar: [effect] unless [player] [action]", priority: 850, parse: unless_player_does } }
+
+/// "For each card drawn this way, discard a card unless you sacrifice a permanent": the
+/// choice is offered once for each of them (`hand_graveyard_grammar`), so the sentence
+/// isn't one instruction with one choice.
+pub(crate) fn leading_for_each_this_way(eff: &str) -> bool {
+    eff.strip_prefix("for each ")
+        .and_then(|r| r.split_once(", "))
+        .is_some_and(|(thing, _)| thing.ends_with(" this way"))
+}
 
 /// "If they do, ~ deals 2 damage to the permanent or player." after "~ deals 4 damage to
 /// any target unless that permanent's controller or that player pays {1}": what happens
@@ -656,7 +665,12 @@ fn they_as_that_player(c: &str) -> String {
 fn unless_state(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (eff, c) = l.rsplit_once(" unless ")?;
-    if eff.contains(" unless ") || eff.ends_with(',') || eff.is_empty() || joins_steps(eff) {
+    if eff.contains(" unless ")
+        || eff.ends_with(',')
+        || eff.is_empty()
+        || joins_steps(eff)
+        || leading_for_each_this_way(eff)
+    {
         return None;
     }
     // "Each opponent loses 1 life unless they control an Island": "they" is each of

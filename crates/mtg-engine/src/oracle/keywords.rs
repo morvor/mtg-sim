@@ -350,6 +350,19 @@ pub fn quality_phrase(s: &str) -> Option<Filter> {
     if first.contains(' ') {
         return None;
     }
+    // "artifact or non-Aura enchantment": a noun before "or" is an alternative of its own,
+    // not an adjective of the noun after it.
+    if head_noun(first).is_some() && adjective(first).is_none() {
+        let mut fs = Vec::new();
+        for phrase in [first, rest] {
+            let (f, _, tail) = parse_object_phrase(phrase)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            fs.push(f);
+        }
+        return Some(Filter::Or(fs));
+    }
     let mut fs = Vec::new();
     for adj in [first, second] {
         let phrase = format!("{adj} {noun}");

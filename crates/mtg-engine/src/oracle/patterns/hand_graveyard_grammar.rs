@@ -972,6 +972,13 @@ fn scale(e: Effect, count: Value) -> Option<Effect> {
             },
             to,
         }),
+        // "For each card drawn this way, discard a card unless you sacrifice a
+        // permanent": the instruction with its choice, once for each (CR 118.12a: each
+        // time, the player chooses whether to pay).
+        e @ Effect::PayOptional { .. } => Some(Effect::Repeat {
+            times: count,
+            effect: Box::new(e),
+        }),
         Effect::AsPlayer { who, effect } => Some(Effect::AsPlayer {
             who,
             effect: Box::new(scale(*effect, count)?),

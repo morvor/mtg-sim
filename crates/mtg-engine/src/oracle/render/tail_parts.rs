@@ -265,8 +265,16 @@ impl Renderer<'_> {
             Filter::Any => "a source of your choice".to_string(),
             f => {
                 let n = self.noun(f, Num::One);
-                let adj = n.strip_suffix("permanent")?.trim_end();
-                format!("{} source of your choice", with_article(adj))
+                match (n.strip_suffix("permanent"), n.strip_prefix("permanent ")) {
+                    // "a red source of your choice".
+                    (Some(adj), _) => {
+                        format!("{} source of your choice", with_article(adj.trim_end()))
+                    }
+                    // "a source of your choice of the chosen color".
+                    (None, Some(rest)) => format!("a source of your choice {rest}"),
+                    // "an artifact source of your choice".
+                    (None, None) => format!("{} source of your choice", with_article(&n)),
+                }
             }
         };
         let when = match duration {

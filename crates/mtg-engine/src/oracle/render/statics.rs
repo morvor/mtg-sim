@@ -258,7 +258,14 @@ impl Renderer<'_> {
             Some(c) if matches!(s.effect, StaticEffect::CostModifier(_)) => {
                 let e = self.static_effect(&s.effect);
                 let c = self.condition(c);
-                format!("{} if {c}", e.trim_end_matches('.'))
+                let e = e.trim_end_matches('.');
+                // Or "As long as ..." (a static ability's condition, CR 611.3a; see
+                // `RenderedFace::static_if`).
+                if self.static_if {
+                    format!("as long as {c}, {}", lower_first(e))
+                } else {
+                    format!("{e} if {c}")
+                }
             }
             Some(Condition::YourTurn) => {
                 let e = self.static_effect(&s.effect);
@@ -280,6 +287,18 @@ impl Renderer<'_> {
                 let c = self.condition(c);
                 format!("{} unless {c}", e.trim_end_matches('.'))
             }
+            // "If you would draw a card while you have no cards in hand, draw two cards
+            // instead": a replacement effect that applies while the condition is true.
+            Some(c) if matches!(s.effect, StaticEffect::Replacement(_)) && self.static_if => {
+                let c = self.condition(c);
+                let e = self.static_effect(&s.effect);
+                match e.split_once(", ") {
+                    Some((head, rest)) if head.starts_with("if ") || head.starts_with("If ") => {
+                        format!("{head} while {c}, {rest}")
+                    }
+                    _ => format!("as long as {c}, {}", lower_first(&e)),
+                }
+            }
             Some(c) => {
                 // "As long as ~ is enchanted, it has ..." / "~ has ... as long as it's
                 // enchanted": the condition comes first or last, so the object itself is
@@ -296,7 +315,15 @@ impl Renderer<'_> {
                     c = format!("{} is in your graveyard and {c}", self.me());
                 }
                 let e = self.static_effect(&s.effect);
-                format!("as long as {c}, {}", lower_first(&e))
+                // A static ability's effect applies whenever its condition is true (CR
+                // 604.2, 611.3a): "~ can't attack if defending player controls an
+                // untapped creature" says the same as "as long as" (the face's other
+                // rendering, `RenderedFace::static_if`).
+                if self.static_if {
+                    format!("if {c}, {}", lower_first(&e))
+                } else {
+                    format!("as long as {c}, {}", lower_first(&e))
+                }
             }
             // "As long as ~ isn't on the battlefield, it's a 1/1 Insect creature in
             // addition to its other types." (CR 113.6c)
@@ -913,15 +940,22 @@ impl Renderer<'_> {
                 } else {
                     self.spell_noun_plural(&w)
                 };
-                format!("cast {s}")
+                // "cast spells from among cards exiled with ~".
+                match s.strip_prefix("spells exiled with ") {
+                    Some(r) => format!("cast {{alt:{s}|spells from among cards exiled with {r}}}"),
+                    None => format!("cast {s}"),
+                }
             }
         };
+        // Cards "exiled with ~" are in exile (CR 607.2a): the quality says where they are.
+        let linked = format!("{:?}", pp.what).contains("In(Linked)");
         let zone = match pp.zone {
             ZoneKind::Library if pp.top_only => format!("from the top of {p} library"),
+            ZoneKind::Exile if linked => String::new(),
             ZoneKind::Exile => "from exile".into(),
             z => format!("from {p} {}", zone_word(z)),
         };
-        let mut s = format!("{who} may {verb} {zone}");
+        let mut s = format!("{who} may {verb} {zone}").trim_end().to_string();
         if let Some(c) = &pp.cost {
             if c.is_free() {
                 s.push_str(" without paying their mana costs");
@@ -1331,6 +1365,27 @@ impl Renderer<'_> {
             {
                 super::tail_parts::first_ability_alt_cost(self, cm, false).unwrap_or_default()
             }
+            // "You may pay {0} rather than pay cycling costs": an alternative cost for a
+            // keyword's activated abilities (CR 118.9).
+            CostChange::AlternativeCost(c)
+                if matches!(&cm.applies_to, CostTarget::ActivatedAbilities(sc)
+                    if matches!(sc.class, AbilityClass::Keyword(_)) && matches!(sc.sources, Filter::Any)) =>
+            {
+                let CostTarget::ActivatedAbilities(sc) = &cm.applies_to else {
+                    return self.gap("an alternative activation cost");
+                };
+                let AbilityClass::Keyword(k) = sc.class else {
+                    return self.gap("an alternative activation cost");
+                };
+                let pay = match &c.mana {
+                    Some(m) if c.parts.is_empty() => format!("pay {m}"),
+                    _ => self.cost_as_payment(c),
+                };
+                format!(
+                    "you may {pay} rather than pay {} costs",
+                    k.name().to_lowercase()
+                )
+            }
             CostChange::AlternativeCost(c) if c.is_free() => {
                 let m = self.me();
                 format!("you may cast {m} without paying its mana cost")
@@ -1734,6 +1789,12 @@ impl Renderer<'_> {
                     if matches!(attackers, Filter::Source) {
                         return format!("{a} can't attack unless you {pay}");
                     }
+                    // One creature: "enchanted creature can't attack unless its controller
+                    // pays {3}".
+                    if matches!(attackers, Filter::AttachedToSource) {
+                        let pays = super::effects::third_person(&pay);
+                        return format!("{a} can't attack unless its controller {pays}");
+                    }
                     let pays = super::effects::third_person(&pay);
                     let n = self.noun(&super::effects::strip_controller(attackers), Num::One);
                     return format!(
@@ -1753,6 +1814,15 @@ impl Renderer<'_> {
             }
             Restriction::BlockCost { blockers, cost } => {
                 let b = subj(self, blockers);
+                // One creature: "~ can't block unless you pay {2}".
+                if matches!(blockers, Filter::Source | Filter::AttachedToSource) {
+                    let pay = self.cost_as_payment(cost);
+                    if matches!(blockers, Filter::Source) {
+                        return format!("{b} can't block unless you {pay}");
+                    }
+                    let pays = super::effects::third_person(&pay);
+                    return format!("{b} can't block unless its controller {pays}");
+                }
                 let c = self.cost(cost);
                 format!("{b} can't block unless their controller pays {c} for each blocking creature they control")
             }
@@ -1935,7 +2005,11 @@ impl Renderer<'_> {
                 format!("{} can't win the game", self.player_filter_subject(p))
             }
             Restriction::MaxDrawsPerTurn(p, n) => {
-                let w = self.player_filter_subject(p);
+                if *n == 0 {
+                    let w = self.player_filter_subject(p);
+                    return format!("{w} can't draw cards");
+                }
+                let w = self.per_player_subject(p);
                 let c = if *n == 1 {
                     "one card".to_string()
                 } else {
@@ -1944,14 +2018,14 @@ impl Renderer<'_> {
                 format!("{w} can't draw more than {c} each turn")
             }
             Restriction::MaxSpellsOfKindPerTurn { who, what, n } => {
-                let w = self.player_filter_subject(who);
+                let w = self.per_player_subject(who);
                 let s = self.spell_noun_plural(what);
                 let s = s.trim_end_matches('s');
                 let c = number_word(*n as i32);
                 format!("{w} can't cast more than {c} {s} each turn")
             }
             Restriction::MaxSpellsPerTurn(p, n) => {
-                let w = self.player_filter_subject(p);
+                let w = self.per_player_subject(p);
                 let c = if *n == 1 {
                     "one spell".to_string()
                 } else {
@@ -2076,7 +2150,7 @@ impl Renderer<'_> {
                 format!("{a} must be blocked by {n} {noun} if able")
             }
             Restriction::MaxBlockersOf { who, n } => {
-                let w = self.player_filter_subject(who);
+                let w = self.per_player_subject(who);
                 let noun = if *n == 1 { "creature" } else { "creatures" };
                 format!(
                     "{w} can't block with more than {} {noun}",
@@ -2084,6 +2158,17 @@ impl Renderer<'_> {
                 )
             }
             Restriction::Custom(name) => self.custom_restriction(name),
+        }
+    }
+
+    /// The subject of a limit each player has of their own ("each opponent can't draw
+    /// more than one card each turn", "each player can't cast more than one spell each
+    /// turn"): counted per player, which "your opponents" or "players" leaves unsaid.
+    fn per_player_subject(&mut self, pf: &PlayerFilter) -> String {
+        match pf {
+            PlayerFilter::Opponent => "each opponent".into(),
+            PlayerFilter::Any => "each player".into(),
+            other => self.player_filter_subject(other),
         }
     }
 
@@ -2098,6 +2183,22 @@ impl Renderer<'_> {
         }
     }
 
+    /// A filter that names no object type, as spells and as sources ("black spells",
+    /// "black sources"); `None` when it names a type.
+    fn spells_and_sources(&mut self, f: &Filter) -> (Option<String>, Option<String>) {
+        let saved = self.default_head;
+        self.default_head = Some("spell");
+        let sp = self.noun(f, Num::Many);
+        self.default_head = Some("source");
+        let so = self.noun(f, Num::Many);
+        self.default_head = saved;
+        if sp.ends_with("spells") && so.ends_with("sources") {
+            (Some(sp), Some(so))
+        } else {
+            (None, None)
+        }
+    }
+
     fn target_restriction(&mut self, by: &TargetRestriction) -> String {
         match by {
             TargetRestriction::Opponents => "spells or abilities your opponents control".into(),
@@ -2107,7 +2208,13 @@ impl Renderer<'_> {
                 if n.contains("spell") || n.contains("abilit") {
                     n
                 } else {
-                    format!("{n} spells or abilities from {n} sources")
+                    // A quality alone ("black"): "black spells or abilities from black
+                    // sources".
+                    let (sp, so) = self.spells_and_sources(f);
+                    match (sp, so) {
+                        (Some(sp), Some(so)) => format!("{sp} or abilities from {so}"),
+                        _ => format!("{n} spells or abilities from {n} sources"),
+                    }
                 }
             }
             TargetRestriction::OpponentsSources(f) => {
@@ -2184,11 +2291,33 @@ impl Renderer<'_> {
                     }
                     A::AsEnters(e) => self.as_enters(&subj, e),
                     A::EnterAsCopy { filter, optional } => {
-                        let n = format!("any {}", self.noun(filter, Num::One));
-                        if *optional {
-                            format!("you may have {subj} enter as a copy of {n} on the battlefield")
+                        // A copy of a permanent (CR 707.5): "any creature on the
+                        // battlefield", "any creature on the battlefield with mana value 3
+                        // or less", "a creature you control".
+                        let noun = self.noun(filter, Num::One);
+                        let mut alts = vec![format!("any {noun} on the battlefield")];
+                        if let Some((head, rest)) = noun.split_once(" with ") {
+                            alts.push(format!("any {head} on the battlefield with {rest}"));
+                        }
+                        if [
+                            "you control",
+                            "an opponent controls",
+                            "your opponents control",
+                        ]
+                        .iter()
+                        .any(|c| noun.contains(c))
+                        {
+                            alts.push(with_article(&noun));
+                        }
+                        let n = if alts.len() == 1 {
+                            alts.remove(0)
                         } else {
-                            format!("{subj} enters as a copy of {n} on the battlefield")
+                            format!("{{alt:{}}}", alts.join("|"))
+                        };
+                        if *optional {
+                            format!("you may have {subj} enter as a copy of {n}")
+                        } else {
+                            format!("{subj} enters as a copy of {n}")
                         }
                     }
                     A::EnterUnderControl(p) => {
@@ -2323,7 +2452,20 @@ impl Renderer<'_> {
                     "your opponents" if except => "an opponent".into(),
                     _ => w,
                 };
-                let then = self.replacement_then(action, "");
+                // The draw doesn't happen (CR 614.6): "that player skips that draw
+                // instead", "that player skips that draw and you draw a card instead".
+                let then = match action {
+                    ReplacementAction::Instead(e)
+                        if matches!(e.as_ref(), Effect::Noop) && w != "you" =>
+                    {
+                        "that player skips that draw instead".to_string()
+                    }
+                    ReplacementAction::Instead(_) if w != "you" => {
+                        let t = self.replacement_then(action, "");
+                        format!("{{opt:that player skips that draw and}} {t}")
+                    }
+                    _ => self.replacement_then(action, ""),
+                };
                 let except = if !except {
                     String::new()
                 } else if w == "you" {
@@ -2850,15 +2992,20 @@ impl Renderer<'_> {
             // has from the moment it enters.
             Effect::OnEntry(inner)
                 if matches!(inner.as_ref(), Effect::Modify { what: Sel::This, mods, duration: Duration::Permanent }
-                    if !mods.is_empty() && mods.iter().all(|m| matches!(m, Modification::AddKeyword(_)))) =>
+                    if !mods.is_empty() && mods.iter().all(|m| matches!(m, Modification::AddKeyword(_) | Modification::AddAbility(_)))) =>
             {
                 let Effect::Modify { mods, .. } = inner.as_ref() else {
                     return self.gap("enters with keywords");
                 };
+                // ... "and with "Whenever ~ deals damage, you gain that much life."".
                 let k: Vec<String> = mods
                     .iter()
                     .filter_map(|m| match m {
                         Modification::AddKeyword(k) => Some(self.keyword_lower(k)),
+                        Modification::AddAbility(a) => {
+                            let s = self.nested_ability(a);
+                            Some(format!("\"{s}\""))
+                        }
                         _ => None,
                     })
                     .collect();
@@ -3212,14 +3359,53 @@ impl Renderer<'_> {
                 let w = self.rel_subject(*who);
                 format!("the first time {w} flip one or more coins each turn, those coins come up heads and {w} win those flips")
             }
+            // A die roll a player may modify (CR 706.2a): which rolls, at what cost, how
+            // often.
             D::Modifier(m) => {
-                let c = self.cost_as_payment(&m.cost);
-                let what = match m.kind {
-                    crate::dice::ModifierKind::Reroll => "reroll it".to_string(),
-                    crate::dice::ModifierKind::Add(n) if n >= 0 => format!("add {n} to the result"),
-                    crate::dice::ModifierKind::Add(n) => format!("subtract {} from the result", -n),
+                let free = m.cost.mana.is_none() && m.cost.parts.is_empty();
+                let pay = if free {
+                    String::new()
+                } else {
+                    format!("{} to ", self.cost_as_payment(&m.cost))
                 };
-                format!("whenever you roll a die, you may {c}. If you do, {what}")
+                let rolled = match m.whose {
+                    PlayerRel::You => "you rolled",
+                    PlayerRel::Any => "any player rolled",
+                    _ => return self.gap("die modifier for another player's rolls"),
+                };
+                let once = if m.once_per_turn {
+                    "once each turn, "
+                } else {
+                    ""
+                };
+                let die = match m.sides {
+                    Some(s) => format!("a d{s}"),
+                    None => "a die".to_string(),
+                };
+                match (m.natural, m.kind) {
+                    // "If you roll a 3 on a six-sided die, you may reroll that die."
+                    (Some(n), crate::dice::ModifierKind::Reroll)
+                        if matches!(m.whose, PlayerRel::You) =>
+                    {
+                        format!("{once}if you roll a {n} on {die}, you may {pay}reroll that die")
+                    }
+                    (Some(_), _) => self.gap("die modifier for one natural result"),
+                    (None, crate::dice::ModifierKind::Reroll) => {
+                        let dice = match m.sides {
+                            Some(s) => format!("d{s}s"),
+                            None => "dice".to_string(),
+                        };
+                        format!("{once}you may {pay}reroll one or more {dice} {rolled}")
+                    }
+                    (None, crate::dice::ModifierKind::Add(n)) => {
+                        let (verb, n) = if n >= 0 {
+                            ("increase", n)
+                        } else {
+                            ("decrease", -n)
+                        };
+                        format!("{once}you may {pay}{verb} the result of {die} {rolled} by {n}")
+                    }
+                }
             }
         }
     }

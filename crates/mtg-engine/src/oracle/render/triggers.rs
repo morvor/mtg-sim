@@ -223,7 +223,8 @@ impl Renderer<'_> {
                 if e == "player" {
                     format!("at the beginning of enchanted player's {step}")
                 } else {
-                    format!("at the beginning of the {step} of enchanted {e}'s controller")
+                    let n = self.attached_noun();
+                    format!("at the beginning of the {step} of {n}'s controller")
                 }
             }
             TriggerCond::Where { trigger, .. } | TriggerCond::FirstTimeEachTurn(trigger)
@@ -602,6 +603,11 @@ impl Renderer<'_> {
                     // "Whenever you're dealt damage".
                     return Ev::new("", format!("you're dealt {c}"));
                 }
+                // "Whenever one or more opponents are dealt noncombat damage" (once for
+                // the players dealt damage at once).
+                if self.batch_once && matches!(det, Det::OneOrMore) && w == "an opponent" {
+                    return Ev::new("one or more opponents", format!("are dealt {c}"));
+                }
                 Ev::new(w, format!("is dealt {c}"))
             }
             TriggerCond::BeginningOf { step, whose } => {
@@ -729,7 +735,18 @@ impl Renderer<'_> {
             }
             TriggerCond::Sacrificed(f) => Ev::new(obj(self, f), "is sacrificed"),
             TriggerCond::TokenCreated(f) => {
-                let o = self.noun_det(f, Det::A);
+                // The player who creates a token owns it (CR 111.2): "you create" is "you
+                // own".
+                let f = match f {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::OwnedBy(PlayerRel::You)))
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let o = self.noun_det(&f, Det::A);
                 Ev::new("you", format!("create {o}"))
             }
             TriggerCond::LandPlayed { who, filter } => {
@@ -1038,6 +1055,33 @@ impl Renderer<'_> {
                 };
                 Ev::new(self.me(), vp)
             }
+            // "Whenever you win a clash": the clash's result, 1 for a win (CR 701.30).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(1)),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, .. } if name == "clash") => {
+                let TriggerCond::PlayerAction { who, .. } = trigger.as_ref() else {
+                    return Ev::new("", self.gap("clash"));
+                };
+                Ev::new(self.rel_subject(*who), "win a clash")
+            }
+            // "Whenever the first noncreature spell of a turn is cast": a spell cast while
+            // it's the only such spell any player has cast this turn.
+            TriggerCond::Where {
+                trigger,
+                cond:
+                    Condition::Compare(
+                        Value::SpellsCastThisTurn(PlayerRef::EachPlayer, counted),
+                        Cmp::Eq,
+                        Value::Const(1),
+                    ),
+            } if matches!(trigger.as_ref(), TriggerCond::CastSpell { who: PlayerRel::Any, filter }
+                if format!("{filter:?}") == format!("{:?}", Filter::and(vec![counted.clone(), Filter::Spell]))) =>
+            {
+                let s = self.spell_noun(counted, Det::A);
+                let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an ")).unwrap_or(&s);
+                Ev::new(format!("the first {s} of a turn"), "is cast")
+            }
             // "Whenever you win a coin flip" / "lose a coin flip": the flip's result, 1 for
             // a win (CR 705.2).
             TriggerCond::Where {
@@ -1311,10 +1355,16 @@ impl Renderer<'_> {
                     (Det::A, BatchPer::Batch | BatchPer::Player) => Det::OneOrMore,
                     (other, _) => other,
                 };
+                let many = matches!(d, Det::OneOrMore);
                 let saved = std::mem::replace(&mut self.batch_once, matches!(per, BatchPer::Batch));
                 let e = self.trigger_event(trigger, d);
                 self.batch_once = saved;
-                Ev::new(e.subj, plural_verb(&e.vp))
+                // "Whenever one or more creatures attack" / "Whenever ~ deals damage".
+                if many || e.subj.contains("one or more") {
+                    Ev::new(e.subj, plural_verb(&e.vp))
+                } else {
+                    Ev::new(e.subj, e.vp)
+                }
             }
             TriggerCond::SpellCopied { who, filter } => {
                 let w = self.rel_subject(*who);

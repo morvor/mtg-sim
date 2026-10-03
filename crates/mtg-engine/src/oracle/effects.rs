@@ -1313,13 +1313,18 @@ fn p_damage(l: &str, b: &mut Builder) -> Option<Effect> {
                 return None;
             }
             // "Any number of targets" may be zero targets (CR 107.1c); otherwise each
-            // target gets at least 1 (CR 601.2d).
-            spec.min = Value::c(if r2.starts_with("any number of ") {
-                0
-            } else {
-                1
-            });
-            spec.max = n.clone();
+            // target gets at least 1 (CR 601.2d). A counted phrase keeps its count: "among
+            // X target creatures" is exactly X of them (CR 601.2c).
+            let counted = !r2.starts_with("any number of ")
+                && !(matches!(spec.min, Value::Const(1)) && matches!(spec.max, Value::Const(1)));
+            if !counted {
+                spec.min = Value::c(if r2.starts_with("any number of ") {
+                    0
+                } else {
+                    1
+                });
+                spec.max = n.clone();
+            }
             spec.divide = Some(n);
             let slot = b.add_target(spec, "targets (divided)");
             return Some(Effect::DealDividedDamage { source: src, slot });

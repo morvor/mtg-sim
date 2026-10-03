@@ -10,6 +10,11 @@ use crate::oracle::phrases::end;
 
 fn unless_you_sacrifice(l: &str, b: &mut Builder) -> Option<Effect> {
     let (effect, cost) = end(l).rsplit_once(" unless you sacrifice ")?;
+    // "For each card drawn this way, discard a card unless you sacrifice a permanent": a
+    // choice for each of them (`hand_graveyard_grammar::scale`), not one for all.
+    if super::unless_grammar::leading_for_each_this_way(effect) {
+        return None;
+    }
     let cost = crate::oracle::keywords::parse_keyword_cost(&format!("sacrifice {cost}"))?;
     let otherwise = parse_clause(effect, b)?;
     Some(Effect::PayOptional {
