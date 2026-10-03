@@ -197,3 +197,37 @@ fn a_batched_attack_trigger_refers_to_all_the_attacking_creatures() {
         assert_eq!(t.counters(t.g.current(x), "+1/+1"), 1);
     }
 }
+
+#[test]
+fn a_conditional_trigger_effect_isnt_an_intervening_if_clause() {
+    cr!("603.4");
+    // "When ~ enters, draw a card if you have 25 or more life" checks the life total as
+    // the ability resolves; "When ~ enters, if you have 25 or more life, draw a card" is
+    // an intervening "if" clause, checked as it triggers too. The comparison mustn't
+    // take one for the other.
+    let cond = Condition::Compare(Value::LifeTotal(PlayerRef::You), Cmp::Ge, Value::c(25));
+    let draw = Effect::Draw {
+        who: PlayerRef::You,
+        n: Value::Const(1),
+    };
+    let resolution = TriggeredAbility::new(
+        TriggerCond::EntersBattlefield(Filter::Source),
+        Body::effect(Effect::If {
+            cond: cond.clone(),
+            then: Box::new(draw.clone()),
+            otherwise: Box::new(Effect::Noop),
+        }),
+    );
+    let mut intervening =
+        TriggeredAbility::new(TriggerCond::EntersBattlefield(Filter::Source), Body::effect(draw));
+    intervening.intervening_if = Some(cond);
+    let render = |t: TriggeredAbility| {
+        let a = AbilityDef::new(AbilityKind::Triggered(t), "");
+        render_ability(&a, &FaceInfo::default()).expect("renders")
+    };
+    let (r, i) = (render(resolution), render(intervening));
+    let trailing = "When ~ enters, draw a card if you have 25 or more life.";
+    let leading = "When ~ enters, if you have 25 or more life, draw a card.";
+    assert!(same(trailing, &r) && !same(leading, &r), "{r}");
+    assert!(same(leading, &i) && !same(trailing, &i), "{i}");
+}

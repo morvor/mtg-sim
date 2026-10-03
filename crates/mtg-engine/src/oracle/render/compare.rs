@@ -1230,20 +1230,17 @@ fn sentence_rewrites(s: &str) -> String {
                 || cond.starts_with("able ")
                 || body.contains(" unless ")
                 || body.contains("\"");
-            if keep {
-                return c[0].to_string();
-            }
-            // After a trigger condition: "When ~ enters, draw a card if a creature died
-            // this turn." is "When ~ enters, if a creature died this turn, draw a card."
+            // After a trigger condition, "When ~ enters, draw a card if C" is checked only
+            // as the ability resolves; "When ~ enters, if C, draw a card" is an
+            // intervening "if" clause (CR 603.4), checked when it triggers too: the two
+            // aren't the same, so the sentence stays as it is.
             let trigger = body.starts_with("when ")
                 || body.starts_with("whenever ")
                 || body.starts_with("at the beginning ");
-            match body.split_once(", ") {
-                Some((t, rest)) if trigger && !rest.is_empty() => {
-                    format!("{lead}{t}, if {cond}, {rest}.")
-                }
-                _ => format!("{lead}if {cond}, {body}."),
+            if keep || trigger {
+                return c[0].to_string();
             }
+            format!("{lead}if {cond}, {body}.")
         })
         .to_string();
     for (re, rep) in where_x_rewrites() {

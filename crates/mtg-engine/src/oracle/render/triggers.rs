@@ -167,7 +167,15 @@ impl Renderer<'_> {
             let c = self.condition(c);
             s.push_str(&format!(", if {c}"));
         }
+        // (Only the first instruction can be read as the intervening clause.)
+        let first = match &t.body.effect {
+            Effect::Seq(v) => v.first(),
+            e => Some(e),
+        };
+        self.trigger_body_if =
+            t.intervening_if.is_none() && matches!(first, Some(Effect::If { .. }));
         let body = self.body(&t.body);
+        self.trigger_body_if = false;
         self.self_salient = saved_salient;
         self.other_salient = saved_other;
         self.self_named_in_clause = saved_named;

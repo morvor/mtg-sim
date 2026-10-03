@@ -742,6 +742,11 @@ pub struct Renderer<'a> {
     pub(crate) default_head: Option<&'static str>,
     /// The previous instruction was a clash ("If you win, ...", CR 701.30).
     pub(crate) after_clash: bool,
+    /// The body of a triggered ability without an intervening "if" is a conditional
+    /// effect: its condition is checked only as the ability resolves, so it's worded
+    /// "[effect] if [condition]", not "if [condition], [effect]", which after a trigger
+    /// condition is an intervening "if" clause (CR 603.4).
+    pub(crate) trigger_body_if: bool,
     /// Selections stored in variables by the ability being rendered ("other creatures
     /// you control gain ..." stored, then modified): the first mention is the phrase.
     pub(crate) var_defs: Vec<(Var, Sel, bool)>,
@@ -874,6 +879,7 @@ impl<'a> Renderer<'a> {
             plural_alts: false,
             default_head: None,
             after_clash: false,
+            trigger_body_if: false,
             sacrificed: None,
             search_verb: None,
             last_group: None,

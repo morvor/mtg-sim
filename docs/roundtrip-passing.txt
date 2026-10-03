@@ -942,6 +942,7 @@ Arctic Aven
 Arctic Flats
 Arctic Foxes
 Arctic Merfolk
+Arctic Nishoba
 Arctic Treeline
 Arctic Wolves
 Arcum's Astrolabe
@@ -6015,6 +6016,7 @@ Earthbrawn
 Earthcraft
 Earthen Ally
 Earthen Arms
+Earthen Goo
 Earthquake
 Earthquake Dragon
 Earthrumbler
@@ -11101,6 +11103,7 @@ Jwari Disruption // Jwari Ruins
 Jwari Scuttler
 Jwari Shapeshifter
 Jyoti, Moag Ancient
+Jötun Owl Keeper
 K'rrik, Son of Yawgmoth
 K'un-Lun Warrior
 K-9, Mark I
@@ -11687,6 +11690,7 @@ Krovikan Elementalist
 Krovikan Mist
 Krovikan Rot
 Krovikan Scoundrel
+Krovikan Whispers
 Krovod Haunch
 Kroxa and Kunoros
 Kruin Outlaw // Terror of Kruin Pass
@@ -13033,6 +13037,7 @@ Mental Misstep
 Mental Note
 Mental Vapors
 Mentor of the Meek
+Mentor's Guidance
 Mephitic Draught
 Mephitic Vapors
 Mer-Ek Nightblade
@@ -16995,8 +17000,13 @@ Rimewind Taskmage
 Rimewood Falls
 Rimrock Knight // Boulder Rush
 Rin and Seri, Inseparable
+Ring of Evos Isle
 Ring of Immortals
+Ring of Kalonia
 Ring of Three Wishes
+Ring of Thune
+Ring of Valkas
+Ring of Xathrid
 Ring of the Lucii
 Ringing Strike Mastery
 Ringsight

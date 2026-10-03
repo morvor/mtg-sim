@@ -3320,14 +3320,21 @@ impl Renderer<'_> {
         let pushed = super::compared_values(cond)
             .map(|p| self.compared.push(p))
             .is_some();
-        let s = self.if_effect_inner(cond, then, otherwise);
+        let top = std::mem::take(&mut self.trigger_body_if);
+        let s = self.if_effect_inner(cond, then, otherwise, top);
         if pushed {
             self.compared.pop();
         }
         s
     }
 
-    fn if_effect_inner(&mut self, cond: &Condition, then: &Effect, otherwise: &Effect) -> String {
+    fn if_effect_inner(
+        &mut self,
+        cond: &Condition,
+        then: &Effect,
+        otherwise: &Effect,
+        trigger_body: bool,
+    ) -> String {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
         // "Exile that card from your graveyard": only if it's still there (CR 400.7).
@@ -3439,6 +3446,9 @@ impl Renderer<'_> {
                 // "Discard a card unless you attacked this turn."
                 if let Some(inner) = c.strip_prefix("it's not true that ") {
                     return format!("{t} unless {inner}");
+                }
+                if trigger_body {
+                    return format!("{t} if {c}");
                 }
                 format!("if {c}, {t}")
             }
