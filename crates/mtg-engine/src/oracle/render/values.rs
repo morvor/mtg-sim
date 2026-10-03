@@ -114,7 +114,7 @@ impl Renderer<'_> {
             }
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
-            Value::Var(vars::EXCESS) => "the excess damage".into(),
+            Value::Var(vars::EXCESS) => "{alt:the excess damage|the amount of excess damage dealt this way|the excess damage dealt this way}".into(),
             // The flips of the last coin flip (CR 705.2).
             Value::Var(crate::dice::WINS) => "the number of flips you won".into(),
             Value::Var(crate::dice::LOSSES) => "the number of flips you lost".into(),
@@ -274,7 +274,7 @@ impl Renderer<'_> {
                 };
                 // "for each of its colors".
                 if s == "it" && matches!(among, Among::Colors) {
-                    return "{alt:the number of colors among it|the number of its colors}".into();
+                    return "{alt:the number of colors among it|the number of its colors|the number of colors it is}".into();
                 }
                 format!("the number of {what} among {s}")
             }
@@ -1297,6 +1297,15 @@ impl Renderer<'_> {
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
         if let Some(s) = self.this_turn_compare(a, cmp, b) {
             return s;
+        }
+        // "If excess damage was dealt this way" (CR 120.10).
+        if matches!(a, Value::Var(vars::EXCESS))
+            && matches!(
+                (cmp, b),
+                (Cmp::Gt, Value::Const(0)) | (Cmp::Ge, Value::Const(1))
+            )
+        {
+            return "excess damage was dealt this way".into();
         }
         // "if you have more life than an opponent": more than the lowest life total among
         // your opponents.

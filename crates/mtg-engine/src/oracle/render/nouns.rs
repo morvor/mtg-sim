@@ -1239,17 +1239,40 @@ impl Renderer<'_> {
         };
         words.push(head);
         let mut s = words.join(" ");
+        // "permanents of the chosen color that player controls" or "permanents that
+        // player controls of the chosen color": a chosen quality said either side.
+        let chosen: Vec<&String> = np
+            .post
+            .iter()
+            .filter(|p| p.starts_with("of {alt:the chosen"))
+            .collect();
+        let mut ctrl = String::new();
         if let Some(c) = np.controller {
-            s.push(' ');
-            s.push_str(&self.controls_phrase(c, num));
+            ctrl.push(' ');
+            ctrl.push_str(&self.controls_phrase(c, num));
         }
         if let Some(c) = &np.controller_matches {
-            s.push(' ');
-            s.push_str(c);
+            ctrl.push(' ');
+            ctrl.push_str(c);
         }
-        for p in &np.post {
-            s.push(' ');
-            s.push_str(p);
+        if chosen.len() == 1 && !ctrl.is_empty() && ctrl != " you control" {
+            let ch = chosen[0];
+            let c = ctrl.trim_start();
+            s.push_str(&format!(" {{alt:{c} {ch}|{ch} {c}}}"));
+            for p in np
+                .post
+                .iter()
+                .filter(|p| !p.starts_with("of {alt:the chosen"))
+            {
+                s.push(' ');
+                s.push_str(p);
+            }
+        } else {
+            s.push_str(&ctrl);
+            for p in &np.post {
+                s.push(' ');
+                s.push_str(p);
+            }
         }
         let mut with: Vec<String> = np.with.clone();
         for w in &np.with_on {

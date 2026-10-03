@@ -699,7 +699,17 @@ impl Renderer<'_> {
                     _ => Sel::None,
                 };
                 let t = self.sel(&what, Case::Obj);
-                format!("put your choice of {} on {t}", join_list(&kinds, "or"))
+                let list = join_list(&kinds, "or");
+                // "a +1/+1, first strike, vigilance, or menace counter": one noun.
+                let bare: Vec<String> = kinds
+                    .iter()
+                    .map(|k| {
+                        let k = k.strip_suffix(" counter").unwrap_or(k);
+                        k.strip_prefix("a ").or_else(|| k.strip_prefix("an ")).unwrap_or(k).to_string()
+                    })
+                    .collect();
+                let compact = with_article(&format!("{} counter", join_list(&bare, "or")));
+                format!("put {{alt:your choice of {list}|your choice of {compact}|{compact}}} on {t}")
             }
             // "Target creature's owner puts it on their choice of the top or bottom of their
             // library."
@@ -1071,6 +1081,16 @@ impl Renderer<'_> {
                 }
             }
             Effect::Sacrifice { .. } => unreachable_text(),
+            // "Target creature's controller sacrifices it": a player sacrifices only a
+            // permanent they control (CR 701.21a).
+            Effect::SacrificeObjects { what: Sel::Target(i) }
+                if self.targets.get(*i as usize).is_some_and(|t| {
+                    matches!(&t.what, TargetKind::Object(f) if !format!("{f:?}").contains("ControlledBy(You)"))
+                }) && !self.introduced.get(*i as usize).copied().unwrap_or(false) =>
+            {
+                let w = self.sel(&Sel::Target(*i), Case::Obj);
+                format!("{w}'s controller sacrifices it")
+            }
             Effect::SacrificeObjects { what } => {
                 let w = self.sel(what, Case::Obj);
                 // A player sacrifices only permanents they control (CR 701.21a): "you
@@ -3470,6 +3490,15 @@ impl Renderer<'_> {
             {
                 let n = parts[k].len() - " until end of turn".len();
                 parts[k] = format!("{} {{opt:until end of turn}}", &parts[k][..n]);
+            }
+        }
+        // "It connives. When it connives this way, ...": the reflexive trigger refers to
+        // the keyword action an object performed (CR 603.12).
+        for k in 1..parts.len() {
+            if parts[k - 1].ends_with(" connives") {
+                if let Some(rest) = parts[k].strip_prefix("when you do, ") {
+                    parts[k] = format!("{{alt:when you do|when it connives this way}}, {rest}");
+                }
             }
         }
         dedupe_where(&parts.join(". "))

@@ -158,7 +158,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "An exiled card is a card in exile (CR 406.1).",
     },
     Equivalence {
-        pattern: r"\bthe (owner|controller) of (target (?:[a-z-]+ ){0,3}?(?:creature|permanent|spell|artifact|land|enchantment|card))\b",
+        pattern: r"\bthe (owner|controller) of (target (?:[a-z-]+ ){0,3}?(?:creature|permanent|spell|artifact|land|enchantment|card)(?: you control| an opponent controls)?)\b",
         replacement: "$2's $1",
         why: "\"The owner of target creature\" is \"target creature's owner\" (as \"the owner \
               of ~\").",
@@ -258,6 +258,34 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         pattern: r"\bis equal to\b",
         replacement: "is",
         why: "\"Your maximum hand size is equal to X\" is \"is X\".",
+    },
+    Equivalence {
+        pattern: r"\beach opponent can't\b",
+        replacement: "your opponents can't",
+        why: "A restriction on each opponent is one on your opponents.",
+    },
+    Equivalence {
+        pattern: r"\bin a command zone\b",
+        replacement: "in the command zone",
+        why: "There's one command zone (CR 408.1).",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?|permanents?) on the battlefield ((?:with|named) \S+)",
+        replacement: "$1 $2 on the battlefield",
+        why: "The order of a noun's qualities: \"other creatures on the battlefield with \
+              flying\".",
+    },
+    Equivalence {
+        pattern: r"\b(gets?) an additional poison counter\b",
+        replacement: "$1 a poison counter",
+        why: "A player who gets an additional poison counter gets a poison counter \
+              (CR 122.1).",
+    },
+    Equivalence {
+        pattern: r"\bif your opponents would\b",
+        replacement: "if an opponent would",
+        why: "A replacement effect for \"your opponents\" applies to each of them, as \"an \
+              opponent\" does.",
     },
     Equivalence {
         pattern: r"\byour life total can't change\b",
