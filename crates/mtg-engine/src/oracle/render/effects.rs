@@ -1500,6 +1500,22 @@ impl Renderer<'_> {
                 }
                 s
             }
+            Effect::TokensJoinCombat {
+                effect,
+                attacking,
+                blocking,
+            } => {
+                let mut s = self.effect(effect);
+                if let Some(p) = attacking {
+                    let p = self.player(p, Case::Obj);
+                    s.push_str(&format!(" {p}"));
+                }
+                if let Some(a) = blocking {
+                    let a = self.sel(a, Case::Obj);
+                    s.push_str(&format!(" that's blocking {a}"));
+                }
+                s
+            }
             Effect::CopySpellExcept {
                 what,
                 count,

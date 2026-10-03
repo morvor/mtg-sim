@@ -3825,6 +3825,14 @@ pub enum Effect {
         count: Value,
         new_targets: bool,
     },
+    /// "Create a 1/1 ... token that's tapped and attacking that player" (`attacking`: the
+    /// tokens attack that player, CR 508.4), "create a 1/1 ... token that's blocking that
+    /// creature" (`blocking`: the tokens `effect` creates block that creature, CR 509.4).
+    TokensJoinCombat {
+        effect: Box<Effect>,
+        attacking: Option<PlayerRef>,
+        blocking: Option<Sel>,
+    },
     /// "Copy it, except the copy isn't legendary" (CR 707.9, 707.10): `CopySpell` whose
     /// exceptions become part of each copy's copiable values (CR 707.9b), and so of the
     /// token a copy of a permanent spell becomes (CR 608.3f).

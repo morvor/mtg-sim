@@ -1069,6 +1069,42 @@ impl Game {
                 // their controller chooses.
                 crate::copy::order_copies(self, ctx.controller, &copies);
             }
+            Effect::TokensJoinCombat {
+                effect,
+                attacking,
+                blocking,
+            } => {
+                let saved = ctx.vars.get(&crate::tokens::TOKEN_DEFENDER).cloned();
+                if let Some(p) = attacking {
+                    let d: Vec<Entity> = self
+                        .eval_player(p, ctx)
+                        .map(Entity::Player)
+                        .into_iter()
+                        .collect();
+                    ctx.set_var(crate::tokens::TOKEN_DEFENDER, d);
+                }
+                self.exec(effect, ctx);
+                match saved {
+                    Some(v) => ctx.set_var(crate::tokens::TOKEN_DEFENDER, v),
+                    None => {
+                        ctx.vars.remove(&crate::tokens::TOKEN_DEFENDER);
+                    }
+                }
+                if let Some(a) = blocking {
+                    if let Some(attacker) = self.resolve_objects(a, ctx).first().copied() {
+                        let created: Vec<ObjectId> = ctx
+                            .vars
+                            .get(&vars::CREATED)
+                            .map(|v| v.iter().filter_map(|e| e.object()).collect())
+                            .unwrap_or_default();
+                        for t in created {
+                            if self.is_live(t) {
+                                crate::combat::put_onto_battlefield_blocking(self, t, attacker);
+                            }
+                        }
+                    }
+                }
+            }
             Effect::CopySpellExcept {
                 what,
                 count,
@@ -2752,7 +2788,11 @@ impl Game {
             .combat
             .as_ref()
             .and_then(|c| ctx.source.and_then(|src| c.attack_target(src)));
-        let options = crate::combat::attack_target_options(self, preferred);
+        let mut options = crate::combat::attack_target_options(self, preferred);
+        // "... that's tapped and attacking that player" (`Effect::TokensJoinCombat`).
+        if let Some(d) = crate::tokens::forced_defender(ctx) {
+            options.retain(|t| Some(*t) == d);
+        }
         spec.attacking = options.first().copied();
         let prev = std::mem::replace(&mut self.token_attack_options, options);
         let out = self.create_tokens(p, spec, n, ctx.source);

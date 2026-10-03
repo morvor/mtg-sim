@@ -825,3 +825,122 @@ fn transform_one_chosen(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "token grammar: transform a chosen permanent", priority: 100, parse: transform_one_chosen } }
+
+// ---------------------------------------------------------------------------
+// Tokens created attacking a given player, or blocking
+// ---------------------------------------------------------------------------
+
+/// Whether `e` creates tokens attacking (`attacking`) or not attacking.
+fn creates_attacking(e: &Effect, attacking: bool) -> bool {
+    match e {
+        Effect::CreateToken { attacking: a, .. }
+        | Effect::CreateTokenWithPT { attacking: a, .. }
+        | Effect::CreateTokenCopy { attacking: a, .. } => *a == attacking,
+        Effect::Seq(v) => v.iter().any(|x| creates_attacking(x, attacking)),
+        Effect::AsPlayer { effect, .. }
+        | Effect::ForEachPlayer { effect, .. }
+        | Effect::May { effect, .. } => creates_attacking(effect, attacking),
+        _ => false,
+    }
+}
+
+/// "create a 1/1 white Glimmer enchantment creature token that's tapped and attacking that
+/// player" (Soaring Lightbringer), "that attacking player creates a tapped 2/1 ... token
+/// with flying that's attacking that opponent" (Combat Calligrapher): the tokens attack
+/// that player (CR 508.4). "create a 1/1 ... token with vigilance that's blocking that
+/// creature" (Brimaz), "... that's blocking target creature attacking you" (Flash
+/// Foliage): the tokens block that creature (CR 509.4).
+fn create_join_combat(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains("create") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+        b.it_player = saved.2.clone();
+    };
+    if let Some((base, who)) = [" attacking that player", " attacking that opponent"]
+        .iter()
+        .find_map(|p| l.strip_suffix(p).map(|x| (x, &p[" attacking ".len()..])))
+    {
+        let defender = if who == "that opponent"
+            && b.in_trigger
+            && crate::oracle::raw_text()
+                .to_lowercase()
+                .contains("attacks one of your opponents")
+        {
+            PlayerRef::TriggerPlayer
+        } else {
+            let p = b.it_player.clone();
+            if super::oracle_hardening_referents::is_no_player_referent(&p)
+                || matches!(p, PlayerRef::You)
+            {
+                return None;
+            }
+            p
+        };
+        let base = format!("{base} attacking");
+        let e = crate::oracle::effects::parse_clause(&base, b);
+        let Some(e) = e.filter(|e| creates_attacking(e, true)) else {
+            restore(b);
+            return None;
+        };
+        return Some(Effect::TokensJoinCombat {
+            effect: Box::new(e),
+            attacking: Some(defender),
+            blocking: None,
+        });
+    }
+    let (base, blocked) = l.split_once(" that's blocking ")?;
+    let e = crate::oracle::effects::parse_clause(base, b);
+    let Some(e) = e.filter(|e| creates_attacking(e, false)) else {
+        restore(b);
+        return None;
+    };
+    let (attacker, tail) = if let Some(t) = blocked.strip_prefix("that creature") {
+        if !b.in_trigger || super::oracle_hardening_referents::is_no_referent(&b.it) {
+            restore(b);
+            return None;
+        }
+        (b.it.clone(), t)
+    } else {
+        let Some((spec, tail)) = parse_target(blocked)
+            .filter(|(_, t)| end(t).is_empty())
+            .or_else(|| super::basic_effects_targets::target_alternatives(blocked))
+        else {
+            restore(b);
+            return None;
+        };
+        let text = blocked[..blocked.len() - tail.len()].trim().to_string();
+        let slot = b.add_target(spec, &text);
+        (Sel::Target(slot), tail)
+    };
+    if !end(tail).is_empty() {
+        restore(b);
+        return None;
+    }
+    Some(Effect::TokensJoinCombat {
+        effect: Box::new(e),
+        attacking: None,
+        blocking: Some(attacker),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "token grammar: tokens attacking that player / blocking", priority: 89, parse: create_join_combat } }
+
+/// "[creature] attacking you" (Flash Foliage: "target creature attacking you"):
+/// attacking you rather than a planeswalker or battle (CR 506.3, 508.1b).
+fn attacking_you<'a>(t: &'a str, f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("attacking you")?;
+    if !(r.is_empty() || r.starts_with([' ', ',', '.'])) || r.starts_with(" or ") {
+        return None;
+    }
+    if !serde_json::to_string(f).is_ok_and(|s| s.contains("\"Creature\"")) {
+        return None;
+    }
+    Some((Filter::AttackingPlayer(PlayerRel::You), r))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "token grammar: attacking you", priority: 100, parse: attacking_you } }

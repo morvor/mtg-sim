@@ -102,6 +102,16 @@ pub fn predefined(name: &str) -> Option<TokenSpec> {
     crate::tokens_predefined::predefined(name)
 }
 
+/// The player tokens created attacking must attack ("a 1/1 ... token that's tapped and
+/// attacking that player", `Effect::TokensJoinCombat`; empty: no such player).
+pub const TOKEN_DEFENDER: Var = vars::USER + 7356;
+
+/// The player tokens created attacking now must attack, if an effect says which (`None`
+/// inside: it names no player, so they can't attack).
+pub fn forced_defender(ctx: &crate::eval::Ctx) -> Option<Option<Entity>> {
+    ctx.vars.get(&TOKEN_DEFENDER).map(|v| v.first().copied())
+}
+
 /// Creates tokens by name ("create a Tarmogoyf token", CR 111.11): the characteristics
 /// come from the card with that name in the Oracle card reference. `spec` is "N:Name".
 pub fn create_named_tokens(g: &mut Game, spec: &str, ctx: &mut crate::eval::Ctx) {
