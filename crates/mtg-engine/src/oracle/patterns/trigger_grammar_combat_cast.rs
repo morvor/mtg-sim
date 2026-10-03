@@ -258,6 +258,21 @@ fn cast_spell(subj: &PlayerSubject, t: &str) -> Option<Parsed> {
     Some(spell(f, cond))
 }
 
+/// Whether a trigger is on casting this very spell, with qualifiers ("when you cast ~
+/// from your hand", "when you cast ~ while you control a creature"): it functions from the
+/// stack (CR 113.6).
+pub(crate) fn casts_this_spell(t: &TriggerCond) -> bool {
+    match t {
+        TriggerCond::Where { trigger, .. } => casts_this_spell(trigger),
+        TriggerCond::CastSpell { filter, .. } => match filter {
+            Filter::Source => true,
+            Filter::And(v) => v.iter().any(|f| matches!(f, Filter::Source)),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 /// The card types of a spell description, for counting earlier spells of the turn (which
 /// may have left the stack since): "noncreature spell" → noncreature.
 fn spell_type(f: &Filter) -> Filter {

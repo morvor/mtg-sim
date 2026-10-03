@@ -313,8 +313,9 @@ pub fn plural_pronoun(s: &str) -> Option<&str> {
 pub fn singular_it(b: &Builder) -> Sel {
     match (&b.it, &b.group) {
         (Sel::Var(v), Some(g)) if *v == GROUP => g.it_before.clone(),
-        // The objects of a "one or more" trigger are "they", never "it".
-        (Sel::TriggerObjects, _) => Sel::None,
+        // The objects of a "one or more" trigger are "they", never "it": "it" has no
+        // antecedent there (unless the text gives it one).
+        (Sel::TriggerObjects, _) => super::oracle_hardening_referents::no_referent(),
         (it, _) => it.clone(),
     }
 }

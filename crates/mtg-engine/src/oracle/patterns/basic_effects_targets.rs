@@ -879,8 +879,15 @@ fn both_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
     if matches!(other, Sel::This) {
         return None;
     }
+    // "Whenever equipped creature blocks or becomes blocked by a creature, destroy both
+    // creatures." (Dead-Iron Sledge): an Equipment's or Aura's creature, not itself.
+    let mine = if b.ctx.type_line.card_types.contains(crate::types::CardType::Creature) {
+        Sel::This
+    } else {
+        Sel::AttachedTo
+    };
     Some(Effect::Destroy {
-        what: Sel::Union(vec![Sel::This, other]),
+        what: Sel::Union(vec![mine, other]),
         no_regen: false,
     })
 }

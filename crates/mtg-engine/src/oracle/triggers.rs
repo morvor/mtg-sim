@@ -244,6 +244,12 @@ pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
             filter: Filter::Source,
             ..
         } => return FunctionZone::Stack,
+        // "When you cast ~ from your hand", "when you cast ~ while you control a creature".
+        TriggerCond::CastSpell { .. } | TriggerCond::Where { .. }
+            if super::patterns::trigger_grammar_combat_cast::casts_this_spell(trigger) =>
+        {
+            return FunctionZone::Stack
+        }
         TriggerCond::ZoneChange {
             filter,
             from,
@@ -299,6 +305,14 @@ pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
                     .iter()
                     .zip(&zones)
                     .all(|(c, z)| *z == FunctionZone::Stack || own_permanent(c))
+            {
+                return FunctionZone::Anywhere;
+            }
+            // "When you cast or cycle ~": from the stack and from wherever the cycled card
+            // went.
+            if zones
+                .iter()
+                .all(|z| matches!(z, FunctionZone::Stack | FunctionZone::Anywhere))
             {
                 return FunctionZone::Anywhere;
             }
