@@ -441,8 +441,23 @@ fn sources_noun(s: &str, pre: &mut Vec<Effect>) -> Option<Filter> {
     if let Some(q) = source_qualities(before)? {
         parts.push(q);
     }
-    match after.trim() {
+    let mut after = after.trim().to_string();
+    // "sources you control of the chosen type": a controller, then a quality.
+    for (q, f) in [
+        (" of the chosen type", Filter::ChosenType),
+        (" of the chosen color", Filter::ChosenColor),
+    ] {
+        if let Some(x) = after.strip_suffix(q) {
+            if !x.is_empty() {
+                parts.push(f);
+                after = x.to_string();
+                break;
+            }
+        }
+    }
+    match after.as_str() {
         "" => {}
+        "of the chosen type" => parts.push(Filter::ChosenType),
         "you control" => parts.push(Filter::ControlledBy(PlayerRel::You)),
         "you don't control" => parts.push(Filter::not(Filter::ControlledBy(PlayerRel::You))),
         "an opponent controls" | "your opponents control" => {
@@ -1564,6 +1579,52 @@ fn prevent_all(
 }
 
 fn p_prevent_all(l: &str, b: &mut Builder) -> Option<Effect> {
+    // "[Until your next turn, ] prevent all [combat] damage that would be dealt to and
+    // dealt by [object] [this turn]": two prevention effects.
+    if let Some(e) = attempt(b, |b| {
+        let (dur, r) = duration_prefix(end(l.trim()));
+        let r = r.strip_prefix("prevent all ")?;
+        let (combat, r) = damage_kind(r)?;
+        let r = r.trim_start().strip_prefix("that would be dealt to and dealt by ")?;
+        let (tt, r) = this_turn(r);
+        let duration = match (dur, tt) {
+            (Some(d), false) => d,
+            (None, true) => Duration::EndOfTurn,
+            _ => return None,
+        };
+        let mut ob: OneShot = Some(b);
+        let src = source(r, &mut ob)?;
+        if !src.pre.is_empty() {
+            return None;
+        }
+        let make = |event| Effect::AddReplacement {
+            def: ReplacementDef {
+                event,
+                action: ReplacementAction::Prevent,
+                self_replacement: false,
+                optional: false,
+            },
+            duration: duration.clone(),
+            uses: None,
+        };
+        let c = combat == Some(true);
+        Some(Effect::seq(vec![
+            make(ReplacementEvent::Damage {
+                source: Filter::Any,
+                to_players: None,
+                to_objects: Some(src.filter.clone()),
+                combat_only: c,
+            }),
+            make(ReplacementEvent::Damage {
+                source: src.filter,
+                to_players: Some(PlayerFilter::Any),
+                to_objects: Some(Filter::Any),
+                combat_only: c,
+            }),
+        ]))
+    }) {
+        return Some(e);
+    }
     attempt(b, |b| {
         let ctx = b.ctx;
         let mut ob: OneShot = Some(b);

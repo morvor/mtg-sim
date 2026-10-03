@@ -351,6 +351,15 @@ fn produce_mana_replacements(
             _ => None,
         })
         .collect();
+    // One-shot effects ("Until end of turn, if a player taps a nonbasic land for mana, it
+    // produces colorless mana instead of any other type.").
+    for inst in &g.replacements {
+        if let (ReplacementEvent::ProduceMana(f), Some(s)) = (&inst.def.event, inst.source) {
+            if g.matches(perm, f, &Ctx::new(Some(s), inst.controller)) {
+                v.push((inst.timestamp, s, inst.controller, inst.def.clone()));
+            }
+        }
+    }
     v.sort_by_key(|x| x.0);
     v.into_iter().map(|(_, s, c, d)| (s, c, d)).collect()
 }
