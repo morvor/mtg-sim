@@ -44,7 +44,12 @@ fn comma_splits(r: &str) -> Vec<(&str, &str)> {
 /// Words that refer to the iterated player inside the instruction.
 fn mentions_player_pronoun(y: &str) -> bool {
     y.split(|c: char| !c.is_alphanumeric() && c != '\'')
-        .any(|w| matches!(w, "they" | "their" | "them" | "that" | "player" | "opponent"))
+        .any(|w| {
+            matches!(
+                w,
+                "they" | "their" | "them" | "that" | "player" | "opponent"
+            )
+        })
 }
 
 /// The players a "for each [players]" phrase names: "opponent", "player", "other
@@ -78,13 +83,20 @@ fn player_condition(c: &str, _b: &Builder) -> Option<PlayerFilter> {
     // discarded nothing (the discard instruction records what each player discarded).
     if c == "can't" {
         let raw = crate::oracle::raw_text().to_lowercase();
-        let after_discard = ["each opponent discards a card. ", "each player discards a card. "]
+        let after_discard = [
+            "each opponent discards a card. ",
+            "each player discards a card. ",
+        ]
+        .iter()
+        .any(|p| {
+            [
+                "for each opponent who can't",
+                "for each player who can't",
+                "each opponent who can't",
+            ]
             .iter()
-            .any(|p| {
-                ["for each opponent who can't", "for each player who can't", "each opponent who can't"]
-                    .iter()
-                    .any(|w| raw.contains(&format!("{p}{w}")))
-            });
+            .any(|w| raw.contains(&format!("{p}{w}")))
+        });
         if !after_discard {
             return None;
         }
@@ -183,7 +195,9 @@ thread_local! {
 /// sentences name all the chosen objects ("those creatures", "the chosen cards",
 /// "creatures chosen this way", "all creatures they control not chosen this way").
 fn choose_for_each(who: PlayerRef, y: &str, b: &mut Builder) -> Option<Effect> {
-    let r = y.strip_prefix("you choose ").or_else(|| y.strip_prefix("choose "))?;
+    let r = y
+        .strip_prefix("you choose ")
+        .or_else(|| y.strip_prefix("choose "))?;
     let (count, up_to, r) = if let Some(r) = r.strip_prefix("up to one ") {
         (1, true, r)
     } else if let Some(r) = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")) {
@@ -197,15 +211,24 @@ fn choose_for_each(who: PlayerRef, y: &str, b: &mut Builder) -> Option<Effect> {
     }
     let tail = tail.trim();
     let (zone, rel) = match tail {
-        "that player controls" | "they control" => (ZoneKind::Battlefield, Filter::ControlledBy(PlayerRel::Iterated)),
-        "in that player's graveyard" | "in their graveyard" => (ZoneKind::Graveyard, Filter::OwnedBy(PlayerRel::Iterated)),
+        "that player controls" | "they control" => (
+            ZoneKind::Battlefield,
+            Filter::ControlledBy(PlayerRel::Iterated),
+        ),
+        "in that player's graveyard" | "in their graveyard" => {
+            (ZoneKind::Graveyard, Filter::OwnedBy(PlayerRel::Iterated))
+        }
         _ => return None,
     };
     if f.zone().is_some_and(|z| z != zone) {
         return None;
     }
     let noun = r.split([' ', ',']).find(|w| head_noun(w).is_some())?;
-    let noun = if zone == ZoneKind::Graveyard { "card" } else { noun };
+    let noun = if zone == ZoneKind::Graveyard {
+        "card"
+    } else {
+        noun
+    };
     let choose = Effect::Store {
         var: CHOSEN,
         sel: Sel::Union(vec![
@@ -296,7 +319,11 @@ fn starting_with_choose(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     // Permanents, unless the phrase names cards ("a nonland card from among them").
     let cards = serde_json::to_string(&f).is_ok_and(|j| j.contains("\"Card\""));
-    let zone = f.zone().unwrap_or(if cards { ZoneKind::Library } else { ZoneKind::Battlefield });
+    let zone = f.zone().unwrap_or(if cards {
+        ZoneKind::Library
+    } else {
+        ZoneKind::Battlefield
+    });
     if f.zone().is_none() && !cards {
         parts.push(Filter::InZone(ZoneKind::Battlefield));
     }
@@ -307,7 +334,11 @@ fn starting_with_choose(l: &str, b: &mut Builder) -> Option<Effect> {
         parts.push(Filter::not(Filter::In(Box::new(Sel::Var(CHOSEN)))));
     }
     let noun = r.split([' ', ',']).find(|w| head_noun(w).is_some())?;
-    let noun = if zone == ZoneKind::Battlefield { noun } else { "card" };
+    let noun = if zone == ZoneKind::Battlefield {
+        noun
+    } else {
+        "card"
+    };
     let choose = Effect::Store {
         var: CHOSEN,
         sel: Sel::Union(vec![
@@ -361,7 +392,10 @@ fn each_counter_kind(l: &str, b: &mut Builder) -> Option<Effect> {
         let mut t = y.to_string();
         // "put another counter of that kind on it or remove one from it".
         if let Some(head) = t.strip_suffix(" or remove one from it") {
-            let add = head.replace("another counter of that kind", &format!("another {k} counter"));
+            let add = head.replace(
+                "another counter of that kind",
+                &format!("another {k} counter"),
+            );
             let add = crate::oracle::effects::parse_clause(&add, b)?;
             let Effect::AddCounters { what, .. } = &add else {
                 return None;
@@ -383,7 +417,10 @@ fn each_counter_kind(l: &str, b: &mut Builder) -> Option<Effect> {
             });
         }
         for (a, c) in [
-            ("another counter of that kind", format!("another {k} counter")),
+            (
+                "another counter of that kind",
+                format!("another {k} counter"),
+            ),
             ("a counter of that kind", format!("a {k} counter")),
         ] {
             t = t.replace(a, &c);
@@ -436,22 +473,7 @@ fn f_for_each_damage_prevented(l: &str, prev: &mut Effect, b: &mut Builder) -> b
     let Some(e) = e.filter(|_| ok) else {
         return false;
     };
-    let e = match e {
-        Effect::AddCounters {
-            what,
-            kind,
-            n: Value::Const(1),
-        } => Effect::AddCounters {
-            what,
-            kind,
-            n: Value::EventAmount,
-        },
-        e => Effect::Repeat {
-            times: Value::EventAmount,
-            effect: Box::new(e),
-        },
-    };
-    *slot = Some(Box::new(e));
+    *slot = Some(Box::new(times_over(e, Value::EventAmount)));
     true
 }
 
@@ -466,40 +488,82 @@ fn last_prevent_damage(e: &mut Effect) -> Option<&mut Option<Box<Effect>>> {
 
 inventory::submit! { super::FollowupPattern { name: "iteration: for each 1 damage prevented this way, [instruction]", priority: 50, apply: f_for_each_damage_prevented } }
 
+/// The players who searched their library in a "for each [object], its controller may
+/// search ..." instruction.
+pub const SEARCHERS: Var = vars::USER + 7704;
+
 /// "For each land destroyed this way, its controller may search their library for a basic
 /// land card and put it onto the battlefield. Then each player who searched their library
-/// this way shuffles." (From the Ashes): each search is followed by its player's shuffle.
+/// this way shuffles." (From the Ashes): every search is made first; then each player who
+/// searched (who chose to, even if they found nothing) shuffles their library once, however
+/// many times they searched.
 fn f_searchers_shuffle(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    if l.strip_prefix("then ").unwrap_or(l) != "each player who searched their library this way shuffles" {
+    if l.strip_prefix("then ").unwrap_or(l)
+        != "each player who searched their library this way shuffles"
+    {
         return false;
     }
-    fn search_in(e: &mut Effect) -> Option<&mut bool> {
+    /// The unshuffled search in the loop body, and the slot holding it.
+    fn search_in(e: &mut Effect) -> Option<&mut Effect> {
         match e {
-            Effect::Seq(v) => v.last_mut().and_then(search_in),
-            Effect::ForEach { effect, var, .. } if *var == EACH => search_in(effect),
             Effect::May { effect, .. } => search_in(effect),
-            Effect::Search { shuffle, .. } if !*shuffle => Some(shuffle),
+            Effect::Search { shuffle, .. } if !*shuffle => Some(e),
             _ => None,
         }
     }
-    if !matches!(last_of(prev), Effect::ForEach { var, .. } if *var == EACH) {
+    fn has_search(e: &Effect) -> bool {
+        match e {
+            Effect::May { effect, .. } => has_search(effect),
+            Effect::Search { shuffle, .. } => !*shuffle,
+            _ => false,
+        }
+    }
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        e => Some(e),
+    };
+    match last {
+        Some(Effect::ForEach { var, effect, .. }) if *var == EACH && has_search(effect) => {}
+        _ => return false,
+    }
+    if !matches!(prev, Effect::Seq(_)) {
+        *prev = Effect::Seq(vec![std::mem::replace(prev, Effect::Noop)]);
+    }
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    let Some(Effect::ForEach { var, effect, .. }) = v.last_mut() else {
+        return false;
+    };
+    if *var != EACH {
         return false;
     }
-    match search_in(prev) {
-        Some(shuffle) => {
-            *shuffle = true;
-            true
-        }
-        None => false,
-    }
-}
-
-/// The last instruction of a sequence.
-fn last_of(e: &Effect) -> &Effect {
-    match e {
-        Effect::Seq(v) => v.last().map_or(e, last_of),
-        e => e,
-    }
+    let Some(slot) = search_in(effect) else {
+        return false;
+    };
+    let Effect::Search { who, .. } = &*slot else {
+        return false;
+    };
+    let record = Effect::Store {
+        var: SEARCHERS,
+        sel: Sel::Union(vec![Sel::Var(SEARCHERS), Sel::Players(who.clone())]),
+    };
+    *slot = Effect::Seq(vec![slot.clone(), record]);
+    let n = v.len();
+    v.insert(
+        n - 1,
+        Effect::Store {
+            var: SEARCHERS,
+            sel: Sel::Union(vec![]),
+        },
+    );
+    v.push(Effect::ForEachPlayer {
+        who: PlayerRef::Var(SEARCHERS),
+        effect: Box::new(Effect::Shuffle {
+            who: PlayerRef::Iterated,
+        }),
+    });
+    true
 }
 
 inventory::submit! { super::FollowupPattern { name: "iteration: then each player who searched this way shuffles", priority: 50, apply: f_searchers_shuffle } }
@@ -507,13 +571,20 @@ inventory::submit! { super::FollowupPattern { name: "iteration: then each player
 /// "{u}{u} spent to cast it" → how many times that much mana of that color was spent to
 /// cast the object (CR 601.2h; a copy or a permanent that wasn't cast saw none spent).
 fn spent_symbols(x: &str) -> Option<Value> {
-    let body = [" spent to cast it", " spent to cast ~", " spent to cast this spell"]
-        .iter()
-        .find_map(|s| x.strip_suffix(s))?;
+    let body = [
+        " spent to cast it",
+        " spent to cast ~",
+        " spent to cast this spell",
+    ]
+    .iter()
+    .find_map(|s| x.strip_suffix(s))?;
     let inner = body.strip_prefix('{')?.strip_suffix('}')?;
     let syms: Vec<&str> = inner.split("}{").collect();
     let letter = syms.first()?.to_ascii_uppercase();
-    if letter.len() != 1 || !"WUBRGC".contains(letter.as_str()) || syms.iter().any(|s| s.to_ascii_uppercase() != letter) {
+    if letter.len() != 1
+        || !"WUBRGC".contains(letter.as_str())
+        || syms.iter().any(|s| s.to_ascii_uppercase() != letter)
+    {
         return None;
     }
     let spent = Value::Custom(format!("mana_spent_of:{letter}").into());
@@ -530,10 +601,36 @@ fn for_each_spent(l: &str, b: &mut Builder) -> Option<Effect> {
     let (x, y) = r.split_once(", ")?;
     let times = spent_symbols(x)?;
     let effect = parse_clause(y, b)?;
-    Some(Effect::Repeat {
-        times,
-        effect: Box::new(effect),
-    })
+    Some(times_over(effect, times))
+}
+
+/// An instruction performed `times` times: a counted action is one action on that many
+/// ("for each {B}{B} spent, each opponent discards a card": each opponent discards that
+/// many cards at once, CR 701.9; creating that many tokens is one event, CR 111.1); anything
+/// else is repeated (drawing is one card at a time anyway, CR 121.2).
+fn times_over(e: Effect, times: Value) -> Effect {
+    let scale = |n: &mut Value| {
+        *n = match std::mem::replace(n, Value::c(0)) {
+            Value::Const(1) => times.clone(),
+            other => Value::Mul(Box::new(times.clone()), Box::new(other)),
+        }
+    };
+    let mut e = e;
+    match &mut e {
+        Effect::Discard { n, .. }
+        | Effect::Mill { n, .. }
+        | Effect::GainLife { n, .. }
+        | Effect::LoseLife { n, .. }
+        | Effect::AddCounters { n, .. } => scale(n),
+        Effect::CreateToken { count, .. } => scale(count),
+        _ => {
+            return Effect::Repeat {
+                times,
+                effect: Box::new(e),
+            }
+        }
+    }
+    e
 }
 
 inventory::submit! { EffectPattern { name: "iteration: for each {C}{C} spent to cast it, [instruction]", priority: 100, parse: for_each_spent } }
@@ -546,18 +643,28 @@ inventory::submit! { EffectPattern { name: "iteration: for each {C}{C} spent to 
 /// object of that quality; objects moved to the same place move together.
 fn for_each_quality(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("for each ")?;
-    let (qualities, marker, y): (&[&str], &str, &str) =
-        if let Some(y) = r.strip_prefix("color, ") {
-            (&["white", "blue", "black", "red", "green"], " of that color", y)
-        } else if let Some(y) = r.strip_prefix("permanent type, ") {
-            (
-                &["artifact", "battle", "creature", "enchantment", "land", "planeswalker"],
-                " of that type",
-                y,
-            )
-        } else {
-            return None;
-        };
+    let (qualities, marker, y): (&[&str], &str, &str) = if let Some(y) = r.strip_prefix("color, ") {
+        (
+            &["white", "blue", "black", "red", "green"],
+            " of that color",
+            y,
+        )
+    } else if let Some(y) = r.strip_prefix("permanent type, ") {
+        (
+            &[
+                "artifact",
+                "battle",
+                "creature",
+                "enchantment",
+                "land",
+                "planeswalker",
+            ],
+            " of that type",
+            y,
+        )
+    } else {
+        return None;
+    };
     let i = y.find(marker)?;
     if y[i + marker.len()..].contains(marker) {
         return None;
@@ -708,9 +815,13 @@ fn act_on_one_for_each(who: PlayerRef, y: &str, b: &mut Builder) -> Option<Effec
 /// "not chosen this way" / "that weren't chosen this way" after an object phrase, in a
 /// text where "for each player, choose ..." chose them: the objects other than those.
 fn not_chosen_suffix<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
-    let rest = ["not chosen this way", "that weren't chosen this way", "that wasn't chosen this way"]
-        .iter()
-        .find_map(|p| s.strip_prefix(p))?;
+    let rest = [
+        "not chosen this way",
+        "that weren't chosen this way",
+        "that wasn't chosen this way",
+    ]
+    .iter()
+    .find_map(|p| s.strip_prefix(p))?;
     let ours = CHOSEN_TEXT.with(|t| *t.borrow() == crate::oracle::raw_text());
     if !ours {
         return None;
@@ -846,7 +957,12 @@ fn for_each_object(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     for (x, y) in comma_splits(r) {
-        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.named.len());
+        let saved = (
+            b.targets.len(),
+            b.it.clone(),
+            b.it_player.clone(),
+            b.named.len(),
+        );
         let Some((sel, nouns)) = iterated_objects(x, b) else {
             b.targets.truncate(saved.0);
             continue;
@@ -887,9 +1003,13 @@ fn mentions_var(e: &Effect, v: Var) -> bool {
 /// Whether the effect creates tokens (and so records them in `vars::CREATED`).
 fn creates_tokens(e: &Effect) -> bool {
     serde_json::to_string(e).is_ok_and(|j| {
-        ["\"CreateToken\"", "\"CreateTokenCopy\"", "\"CreateTokenWithPT\""]
-            .iter()
-            .any(|k| j.contains(k))
+        [
+            "\"CreateToken\"",
+            "\"CreateTokenCopy\"",
+            "\"CreateTokenWithPT\"",
+        ]
+        .iter()
+        .any(|k| j.contains(k))
     })
 }
 
@@ -900,7 +1020,10 @@ const ALL_CREATED: Var = vars::USER + 7701;
 fn each_object(sel: Sel, body: Effect) -> Effect {
     // "For each of them, create a token that's a copy of that creature": a token copy of
     // each of them, as one instruction (CR 707.2); later sentences name those tokens.
-    if let Effect::CreateTokenCopy { of: Sel::Var(v), .. } = &body {
+    if let Effect::CreateTokenCopy {
+        of: Sel::Var(v), ..
+    } = &body
+    {
         if *v == EACH {
             let mut copy = body.clone();
             if let Effect::CreateTokenCopy { of, .. } = &mut copy {

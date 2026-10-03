@@ -338,11 +338,15 @@ impl Frames {
     fn new(g: &Game, mut items: Vec<Item>, as_player: Option<&PlayerRef>, ctx: &Ctx) -> Frames {
         // Players act in APNAP order (CR 101.4, 608.2f) — with shared team turns, the
         // active team's players first (CR 805.6), as for other simultaneous choices (see
-        // `Game::apnap_round`); objects in the order given.
+        // `Game::apnap_round`). Objects are taken by their controllers in that order too
+        // ("for each of those creatures, its controller ...": the active player's first,
+        // CR 101.4), otherwise in the order given (the sort is stable).
         let order = g.pregame_order_or_apnap();
+        let pos = |p: PlayerId| order.iter().position(|x| *x == p).unwrap_or(usize::MAX);
         items.sort_by_key(|i| match i {
-            Item::Player(p) => order.iter().position(|x| x == p).unwrap_or(usize::MAX),
-            Item::Object(..) => 0,
+            Item::Player(p) => pos(*p),
+            Item::Object(_, Entity::Player(p)) => pos(*p),
+            Item::Object(_, Entity::Object(o)) => g.try_obj(*o).map_or(0, |x| pos(x.controller)),
         });
         let frames = items
             .into_iter()

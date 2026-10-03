@@ -60,28 +60,43 @@ fn gorbag_reflexive_mode_is_chosen_only_if_the_creature_was_sacrificed() {
         .any(|(_, d)| matches!(d, Decision::ChooseModes { .. })));
 }
 
+/// The most modes Bumi's enters ability let P0 choose, with `lessons` Lesson cards in the
+/// graveyard.
+fn bumi_max_modes(lessons: usize) -> Option<usize> {
+    let mut t = TestGame::new(2);
+    for _ in 0..lessons {
+        t.graveyard(P0, "Containment Breach");
+    }
+    let from = t.asked().len();
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    t.enter(P0, "Bumi, King of Three Trials");
+    t.g.flush_events();
+    t.settle();
+    t.asked()[from..].iter().find_map(|(_, d)| match d {
+        Decision::ChooseModes { max, .. } => Some(*max as usize),
+        _ => None,
+    })
+}
+
 #[test]
 fn bumi_chooses_up_to_x_modes_where_x_counts_lessons() {
-    cr!("700.2", "601.2b");
-    ruling!(
-        "Bumi, King of Three Trials",
-        "You can't choose the same mode of Bumi, King of Three Trials's triggered ability more than once"
-    );
+    cr!("700.2", "603.3c");
     compiles("Bumi, King of Three Trials");
     // "When Bumi enters, choose up to X, where X is the number of Lesson cards in your
     // graveyard — • Put three +1/+1 counters on Bumi. • Target player scries 3. •
     // Earthbend 3."
+    assert_eq!(bumi_max_modes(2), Some(2));
+    assert_eq!(bumi_max_modes(5), Some(3));
+    // No Lesson in the graveyard: no mode can be chosen.
+    assert!(bumi_max_modes(0).is_none_or(|m| m == 0));
+    // With one, the first mode: three counters on Bumi.
     let mut t = TestGame::new(2);
-    let from = t.asked().len();
-    t.enter(P0, "Bumi, King of Three Trials");
+    t.graveyard(P0, "Containment Breach");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    let bumi = t.enter(P0, "Bumi, King of Three Trials");
     t.g.flush_events();
-    t.settle();
-    // No Lesson in the graveyard: at most zero modes.
-    let max = t.asked()[from..].iter().find_map(|(_, d)| match d {
-        Decision::ChooseModes { max, .. } => Some(*max),
-        _ => None,
-    });
-    assert!(max.is_none_or(|m| m == 0), "{max:?}");
+    t.resolve_all();
+    assert_eq!(t.counters(bumi, "+1/+1"), 3);
 }
 
 #[test]
@@ -125,6 +140,26 @@ fn depth_defiler_kicked_chooses_both_modes() {
     assert!(t.in_hand(P1, "Grizzly Bears"));
     // Cast Defiler (-1), drew two, discarded one.
     assert_eq!(t.hand_size(P0), hand - 1 + 2 - 1);
+    // Not kicked: one mode only.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Island", 5);
+    let defiler = t.hand(P0, "Depth Defiler");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0, 1]));
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    let from = t.asked().len();
+    let hand = t.hand_size(P0);
+    t.cast(P0, defiler).go();
+    t.resolve();
+    let max = t.asked()[from..].iter().find_map(|(_, d)| match d {
+        Decision::ChooseModes { min, max, .. } => Some((*min, *max)),
+        _ => None,
+    });
+    assert_eq!(max, Some((1, 1)));
+    // The invalid two-mode answer fell back to a single mode: not both happened.
+    let both = !t.on_battlefield(bears) && t.hand_size(P0) == hand - 1 + 1;
+    assert!(!both);
 }
 
 #[test]

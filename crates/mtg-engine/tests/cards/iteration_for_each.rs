@@ -71,10 +71,7 @@ fn curse_of_the_swine_boars_for_the_exiled_creatures_controllers() {
 #[test]
 fn fade_away_each_creature_costs_its_controller_a_payment_or_a_sacrifice() {
     cr!("608.2f", "118.12a", "101.4");
-    ruling!(
-        "Fade Away",
-        "all the sacrifices are done at the same time"
-    );
+    ruling!("Fade Away", "all the sacrifices are done at the same time");
     compiles("Fade Away");
     // "For each creature, its controller sacrifices a permanent of their choice unless they
     // pay {1}."
@@ -312,7 +309,10 @@ fn maulfist_revolutionary_gives_one_counter_of_each_kind() {
     t.enter(P0, "Maulfist Revolutionary");
     t.g.flush_events();
     t.resolve_all();
-    assert_eq!(t.g.player(P1).counters.get("poison").copied().unwrap_or(0), 3);
+    assert_eq!(
+        t.g.player(P1).counters.get("poison").copied().unwrap_or(0),
+        3
+    );
 }
 
 #[test]
@@ -527,7 +527,13 @@ fn killing_wave_pay_x_life_for_some_creatures_and_sacrifice_the_rest() {
     t.cast(P0, spell).x(3).go();
     t.resolve();
     assert_eq!(t.life(P1), 17);
-    assert_eq!([t.on_battlefield(a), t.on_battlefield(b)].iter().filter(|x| **x).count(), 1);
+    assert_eq!(
+        [t.on_battlefield(a), t.on_battlefield(b)]
+            .iter()
+            .filter(|x| **x)
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -551,26 +557,45 @@ fn doppelgang_x_copies_of_each_target() {
     assert_eq!(controlled(&t, P0, "Hill Giant"), 2);
 }
 
+fn shuffles(t: &TestGame, p: PlayerId) -> usize {
+    t.g.turn_events
+        .iter()
+        .filter(|e| matches!(e, mtg_engine::events::Event::Shuffled { player } if *player == p))
+        .count()
+}
+
 #[test]
 fn from_the_ashes_each_destroyed_lands_controller_may_search() {
-    cr!("608.2c", "701.23");
+    cr!("608.2c", "701.23", "701.24");
     compiles("From the Ashes");
     // "Destroy all nonbasic lands. For each land destroyed this way, its controller may
     // search their library for a basic land card and put it onto the battlefield. Then
     // each player who searched their library this way shuffles."
-    let mut t = TestGame::new(2);
+    let mut t = TestGame::new(3);
     t.battlefield(P1, "Ancient Tomb");
     t.battlefield(P1, "Ancient Tomb");
+    t.battlefield(P2, "Ancient Tomb");
     t.library_top(P1, "Forest");
     t.library_top(P1, "Island");
+    t.library_top(P2, "Forest");
     t.lands(P0, "Mountain", 4);
     let spell = t.hand(P0, "From the Ashes");
+    // P1 searches twice; P2 declines.
     t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
     t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer(P2, DecisionKind::YesNo, Answer::Bool(false));
     t.cast(P0, spell).go();
     t.resolve();
     assert!(t.named_on_battlefield("Ancient Tomb").is_empty());
-    assert_eq!(controlled(&t, P1, "Forest") + controlled(&t, P1, "Island"), 2);
+    assert_eq!(
+        controlled(&t, P1, "Forest") + controlled(&t, P1, "Island"),
+        2
+    );
+    assert_eq!(controlled(&t, P2, "Forest"), 0);
+    // P1 shuffles once after both searches, P2 (who didn't search) not at all.
+    assert_eq!(shuffles(&t, P1), 1);
+    assert_eq!(shuffles(&t, P2), 0);
+    assert_eq!(shuffles(&t, P0), 0);
 }
 
 #[test]
@@ -667,4 +692,158 @@ fn winged_hive_tyrant_long_flavor_word_before_a_static_ability() {
     use mtg_engine::keywords::KeywordKind;
     assert!(t.obj(bears).chars.has_keyword(KeywordKind::Flying));
     assert!(!t.obj(plain).chars.has_keyword(KeywordKind::Flying));
+}
+
+#[test]
+fn divergent_transformations_the_active_player_replaces_first() {
+    cr!("101.4", "608.2c");
+    ruling!(
+        "Divergent Transformations",
+        "start with the player whose turn it is"
+    );
+    // "If two players' creatures are exiled this way, start with the player whose turn it
+    // is." P1's creature is the first target, but P0 (the active player) goes first.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.library_top(P1, "Hill Giant");
+    t.library_top(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 6);
+    let spell = t.hand(P0, "Divergent Transformations");
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(theirs), Entity::Object(mine)])
+        .go();
+    t.resolve();
+    let giants = t.named_on_battlefield("Hill Giant");
+    assert_eq!(giants.len(), 2);
+    let of = |p: PlayerId| {
+        giants
+            .iter()
+            .copied()
+            .find(|o| t.obj(*o).controller == p)
+            .unwrap()
+    };
+    // P0's Hill Giant entered first (objects get increasing ids as they change zones).
+    assert!(of(P0) < of(P1), "{:?} {:?}", of(P0), of(P1));
+}
+
+#[test]
+fn bladecoil_serpent_opponents_discard_all_the_cards_at_once() {
+    cr!("601.2h", "701.9a");
+    compiles("Bladecoil Serpent");
+    // "When this creature enters, for each {B}{B} spent to cast it, each opponent discards a
+    // card.": with {B}{B}{B}{B} spent, each opponent discards two cards, as one discard.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    t.lands(P0, "Wastes", 2);
+    for _ in 0..3 {
+        t.hand(P1, "Grizzly Bears");
+    }
+    let serpent = t.hand(P0, "Bladecoil Serpent");
+    let from = t.asked().len();
+    t.cast(P0, serpent).x(0).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), 1);
+    let discards: Vec<u32> = t.asked()[from..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { min, .. } if *p == P1 => Some(*min),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(discards, vec![2]);
+}
+
+/// "Whenever another nontoken creature you control dies, you may pay 2 life and exile
+/// it. If you do, draw a card." (Kinzu of the Bleak Coven's cost, with an effect this test
+/// can see.)
+fn exile_it_watcher(t: &mut TestGame) {
+    let def = crate::basic_effects_common::oracle_card(
+        "Exile Watcher",
+        "Enchantment",
+        "Whenever another nontoken creature you control dies, you may pay 2 life and exile it. If you do, draw a card.",
+    );
+    t.custom(P0, def, mtg_engine::object::Zone::Battlefield);
+}
+
+#[test]
+fn pay_life_and_exile_the_dead_creature() {
+    cr!("118.12", "118.3");
+    let mut t = TestGame::new(2);
+    exile_it_watcher(&mut t);
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
+    let hand = t.hand_size(P0);
+    t.g.destroy(giant, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    assert!(t.in_exile("Hill Giant"));
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // If the card left the graveyard first, the cost can't be paid (CR 118.3): no life
+    // paid, no card drawn.
+    let mut t = TestGame::new(2);
+    exile_it_watcher(&mut t);
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
+    let hand = t.hand_size(P0);
+    t.g.destroy(giant, None);
+    t.g.flush_events();
+    let card = t.g.player(P0).graveyard.last().copied().unwrap();
+    t.g.move_object(
+        card,
+        mtg_engine::object::Zone::Exile,
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.hand_size(P0), hand);
+}
+
+#[test]
+fn dreamshaper_shaman_pays_mana_and_sacrifices_then_digs() {
+    cr!("118.12", "608.2c");
+    compiles("Dreamshaper Shaman");
+    // "At the beginning of your end step, you may pay {2}{R} and sacrifice a nonland
+    // permanent. If you do, reveal cards from the top of your library until you reveal a
+    // nonland permanent card. Put that card onto the battlefield and the rest on the bottom
+    // of your library in a random order."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Dreamshaper Shaman");
+    let thopter = t.battlefield(P0, "Ornithopter");
+    t.lands(P0, "Mountain", 3);
+    t.library_top(P0, "Grizzly Bears");
+    let giant = t.library_top(P0, "Hill Giant");
+    let forest = t.library_top(P0, "Forest");
+    let _ = giant;
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
+    t.answer_choose(P0, &[Entity::Object(thopter)]);
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(!t.on_battlefield(thopter));
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    // The Forest went to the bottom; the Bears are now on top.
+    let lib = &t.g.player(P0).library;
+    let top = t.obj(*lib.last().unwrap()).chars.name.to_string();
+    let bottom = t.obj(*lib.first().unwrap()).chars.name.to_string();
+    assert_eq!(
+        (top.as_str(), bottom.as_str()),
+        ("Grizzly Bears", "Forest"),
+        "{forest:?}"
+    );
+    // Declining: nothing is revealed or sacrificed.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Dreamshaper Shaman");
+    let thopter = t.battlefield(P0, "Ornithopter");
+    t.lands(P0, "Mountain", 3);
+    t.library_top(P0, "Hill Giant");
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(false));
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.on_battlefield(thopter));
+    assert!(t.named_on_battlefield("Hill Giant").is_empty());
 }

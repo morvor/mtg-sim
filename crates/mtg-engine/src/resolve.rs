@@ -2338,7 +2338,7 @@ impl Game {
     /// can find the new object it became in the zone it moved to, if that zone is public
     /// ("When ~ dies, return it to its owner's hand"). Information about the object (its
     /// power, etc.) still uses last known information, via `eval_sel`.
-    fn follow_zone_change_trigger_object(&self, e: Entity, ctx: &Ctx) -> Entity {
+    pub(crate) fn follow_zone_change_trigger_object(&self, e: Entity, ctx: &Ctx) -> Entity {
         let Entity::Object(id) = e else {
             return e;
         };

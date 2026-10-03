@@ -482,9 +482,6 @@ pub fn remove_up_to_counters(
     remove_chosen_counters(g, target, kind, n.max(0) as u32, chooser, source)
 }
 
-/// [`Effect::ChooseCounterKind`]: the controller chooses a kind of counter among those on
-/// `from`; returns `then` with that kind in place of [`CHOSEN_COUNTER_KIND`], or None if
-/// there's no counter to choose.
 /// The instruction `then` for each kind of counter on `from` ([`Effect::ForEachCounterKind`]).
 pub fn for_each_counter_kind(
     g: &mut Game,
@@ -515,6 +512,9 @@ pub fn for_each_counter_kind(
         .collect()
 }
 
+/// [`Effect::ChooseCounterKind`]: the controller chooses a kind of counter among those on
+/// `from`; returns `then` with that kind in place of [`CHOSEN_COUNTER_KIND`], or None if
+/// there's no counter to choose.
 pub fn with_chosen_counter_kind(
     g: &mut Game,
     from: &Sel,

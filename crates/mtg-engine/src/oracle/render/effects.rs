@@ -330,6 +330,11 @@ impl Renderer<'_> {
 
     fn effect_inner(&mut self, e: &Effect) -> String {
         self.new_clause();
+        // "For each {B}{B} spent to cast it, each opponent discards a card": one action on
+        // that many, said as the instruction for each.
+        if let Some(each) = per_mana_spent(e) {
+            return self.effect(&each);
+        }
         // "You may cast that card" (`play_terms.rs`).
         if let Some(s) = self.cast_only_permission(e) {
             return s;
@@ -365,6 +370,20 @@ impl Renderer<'_> {
                 self.effect(effect)
             }
             Effect::May { who, effect } => self.may(who, effect),
+            // "Then each player who searched their library this way shuffles."
+            Effect::ForEachPlayer {
+                who: PlayerRef::Var(v),
+                effect,
+            } if *v == crate::oracle::patterns::iteration_grammar::SEARCHERS
+                && matches!(
+                    effect.as_ref(),
+                    Effect::Shuffle {
+                        who: PlayerRef::Iterated
+                    }
+                ) =>
+            {
+                "then each player who searched their library this way shuffles".to_string()
+            }
             Effect::PayOptional {
                 who,
                 cost,
@@ -962,7 +981,11 @@ impl Renderer<'_> {
                     if parts.iter().all(|p| {
                         matches!(
                             p,
-                            Sel::Var(_) | Sel::Target(_) | Sel::This | Sel::TriggerObject
+                            Sel::Var(_)
+                                | Sel::Target(_)
+                                | Sel::This
+                                | Sel::TriggerObject
+                                | Sel::Players(_)
                         )
                     }) =>
                 {
@@ -2354,16 +2377,26 @@ impl Renderer<'_> {
                             times: Value::EventAmount,
                             effect,
                         } => Some((**effect).clone()),
-                        Effect::AddCounters {
-                            what,
-                            kind,
-                            n: Value::EventAmount,
-                        } => Some(Effect::AddCounters {
-                            what: what.clone(),
-                            kind: kind.clone(),
-                            n: Value::c(1),
-                        }),
-                        _ => None,
+                        // A counted action on that many: once for each 1 damage.
+                        e => {
+                            let mut one = e.clone();
+                            let n = match &mut one {
+                                Effect::AddCounters { n, .. }
+                                | Effect::Discard { n, .. }
+                                | Effect::Mill { n, .. }
+                                | Effect::GainLife { n, .. }
+                                | Effect::LoseLife { n, .. } => Some(n),
+                                Effect::CreateToken { count, .. } => Some(count),
+                                _ => None,
+                            };
+                            match n {
+                                Some(n) if matches!(n, Value::EventAmount) => {
+                                    *n = Value::c(1);
+                                    Some(one)
+                                }
+                                _ => None,
+                            }
+                        }
                     };
                     let saved = self.event_scope;
                     self.event_scope = true;
@@ -3680,6 +3713,15 @@ impl Renderer<'_> {
     }
 
     fn may(&mut self, who: &PlayerRef, effect: &Effect) -> String {
+        // "Its controller may search ..." recording who searched (for "each player who
+        // searched their library this way shuffles"): the record isn't said.
+        if let Effect::Seq(v) = effect {
+            if let [a, Effect::Store { var, .. }] = v.as_slice() {
+                if *var == crate::oracle::patterns::iteration_grammar::SEARCHERS {
+                    return self.may(who, a);
+                }
+            }
+        }
         if matches!(who, PlayerRef::You) {
             if let Some(c) = self.cast_up_to_one(effect) {
                 return c;
@@ -6345,4 +6387,33 @@ impl Renderer<'_> {
             _ => return None,
         })
     }
+}
+
+/// A counted action whose count is how many times some mana was spent to cast the object
+/// ("each opponent discards a card for each {B}{B} spent"), as the [`Effect::Repeat`] of
+/// the action on one.
+fn per_mana_spent(e: &Effect) -> Option<Effect> {
+    let spent = |v: &Value| matches!(v, Value::Custom(c) if c.starts_with("mana_spent_of:"));
+    let mut one = e.clone();
+    let n = match &mut one {
+        Effect::AddCounters { n, .. }
+        | Effect::Discard { n, .. }
+        | Effect::Mill { n, .. }
+        | Effect::GainLife { n, .. }
+        | Effect::LoseLife { n, .. } => n,
+        Effect::CreateToken { count, .. } => count,
+        _ => return None,
+    };
+    let ok = match &*n {
+        Value::Div(v, _, false) => spent(v),
+        v => spent(v),
+    };
+    if !ok {
+        return None;
+    }
+    let times = std::mem::replace(n, Value::c(1));
+    Some(Effect::Repeat {
+        times,
+        effect: Box::new(one),
+    })
 }

@@ -58,12 +58,26 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
                     }),
             )
         }
-        // "You may pay {1} and exile it": the object must still be there to be exiled.
+        // "You may pay {1} and exile it": the object must still be there to be exiled — a
+        // card a dies trigger is about can be found in the graveyard (CR 400.7, 603.10a),
+        // as the exile itself finds it (`Game::resolve_sel`).
         Effect::Exile {
             what: what @ (Sel::This | Sel::TriggerObject | Sel::TriggerLki | Sel::Target(_)),
             ..
         } => {
-            let objs = g.eval_sel_objects(what, ctx);
+            let follow = matches!(what, Sel::This | Sel::TriggerLki);
+            let objs: Vec<_> = g
+                .eval_sel(what, ctx)
+                .into_iter()
+                .map(|e| {
+                    if follow {
+                        g.follow_zone_change_trigger_object(e, ctx)
+                    } else {
+                        e
+                    }
+                })
+                .filter_map(|e| e.object())
+                .collect();
             Some(!objs.is_empty() && objs.iter().all(|o| g.is_live(*o)))
         }
         // "Return a basic land card from your graveyard to your hand", "exile a creature
