@@ -43,6 +43,7 @@ fn spell_copy_wordings_compile() {
         "Sevinne's Reclamation",
         "Chain of Acid",
         "Chain of Smog",
+        "Errant, Street Artist",
     ]);
 }
 
@@ -194,4 +195,25 @@ fn mentors_guidance_copies_itself_only_if_you_control_a_listed_permanent() {
         let drawn = t.hand_size(P0) + 1 - before;
         assert_eq!(drawn, if cleric { 2 } else { 1 }, "{}", t.dump_log());
     }
+}
+
+#[test]
+fn errant_copies_only_a_spell_that_wasnt_cast() {
+    cr!("707.10");
+    let mut t = TestGame::new(2);
+    let errant = t.battlefield(P0, "Errant, Street Artist");
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Island", 4);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let spell = t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    // The cast Bolt isn't a legal target.
+    assert!(t.activate(P0, errant, 0, &[Entity::Object(spell)]).is_err());
+    let tc = t.hand(P0, "Twincast");
+    t.cast(P0, tc).target(spell).go();
+    t.resolve();
+    let copy = *t.g.stack.last().unwrap();
+    assert_ne!(copy, spell);
+    t.activate(P0, errant, 0, &[Entity::Object(copy)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 11, "{}", t.dump_log());
 }

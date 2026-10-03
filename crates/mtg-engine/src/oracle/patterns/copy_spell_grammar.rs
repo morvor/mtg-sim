@@ -242,3 +242,22 @@ fn copy_each_card(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "copy spell grammar: copy each [card]", priority: 101, parse: copy_each_card } }
+
+/// "[spell] that wasn't cast" (Errant, Street Artist: "Copy target spell you control that
+/// wasn't cast."): a copy of a spell, or a card put on the stack without being cast
+/// (CR 707.10).
+fn that_wasnt_cast<'a>(t: &'a str, f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("that wasn't cast")?;
+    if !(r.is_empty() || r.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    if !serde_json::to_string(f).is_ok_and(|s| s.contains("\"Spell\"")) {
+        return None;
+    }
+    Some((
+        Filter::Custom(crate::kw::spell_not_cast::NOT_CAST.into()),
+        r,
+    ))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "copy spell grammar: that wasn't cast", priority: 100, parse: that_wasnt_cast } }
