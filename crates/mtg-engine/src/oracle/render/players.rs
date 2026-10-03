@@ -904,6 +904,10 @@ impl Renderer<'_> {
                 self.target_vars[i].1.clone()
             }
             PlayerRef::Var(_) => "that player".into(),
+            // The active player: in an attack trigger, the attacking player (CR 506.2).
+            PlayerRef::ActivePlayer if self.attack_trigger => {
+                "{alt:that player|that attacking player|the attacking player}".into()
+            }
             PlayerRef::ActivePlayer => "that player".into(),
             PlayerRef::DefendingPlayer => "defending player".into(),
             PlayerRef::ChosenPlayer(_) => "the chosen player".into(),

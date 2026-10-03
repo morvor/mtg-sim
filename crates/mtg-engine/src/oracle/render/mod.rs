@@ -815,6 +815,9 @@ pub struct Renderer<'a> {
     /// The single object an instruction done "for each" of it is done to ("it"), for
     /// instructions about the iterated object.
     pub(crate) for_each_subject: Option<String>,
+    /// Rendering a triggered ability that triggers on an attack: the active player is the
+    /// attacking player.
+    pub(crate) attack_trigger: bool,
 }
 
 impl<'a> Renderer<'a> {
@@ -851,6 +854,7 @@ impl<'a> Renderer<'a> {
             vote_words: Vec::new(),
             vote_noun: None,
             for_each_subject: None,
+            attack_trigger: false,
             granted_keyword: false,
             self_before_target: false,
             last_actor_other: false,

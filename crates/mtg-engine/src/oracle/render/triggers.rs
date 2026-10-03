@@ -66,6 +66,14 @@ impl Renderer<'_> {
     }
 
     fn triggered_plain(&mut self, t: &TriggeredAbility) -> String {
+        let attack = format!("{:?}", t.trigger).contains("PlayerAttack");
+        let saved = std::mem::replace(&mut self.attack_trigger, attack);
+        let s = self.triggered_plain_inner(t);
+        self.attack_trigger = saved;
+        s
+    }
+
+    fn triggered_plain_inner(&mut self, t: &TriggeredAbility) -> String {
         // Saga chapters (CR 714.2b): "I — effect".
         if let TriggerCond::Custom(name) = &t.trigger {
             if let Some(nums) = chapter_numbers(name) {
