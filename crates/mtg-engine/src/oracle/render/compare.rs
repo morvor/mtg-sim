@@ -1962,10 +1962,11 @@ pub fn check_card(def: &CardDef) -> CardCheck {
         let oracle = oracle_units(&face.chars.rules_text, &names);
         let mut c = compare_face(&r.lines, &oracle, &names);
         if !c.0.is_empty() || !c.1.is_empty() {
-            if let Some(m) = &r.merged {
+            for m in [&r.merged, &r.static_if].into_iter().flatten() {
                 let c2 = compare_face(m, &oracle, &names);
                 if c2.0.is_empty() && c2.1.is_empty() {
                     c = c2;
+                    break;
                 }
             }
         }

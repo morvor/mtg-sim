@@ -1039,6 +1039,33 @@ impl Renderer<'_> {
                 };
                 Ev::new(self.me(), vp)
             }
+            // "Whenever you win a clash": the clash's result, 1 for a win (CR 701.30).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(1)),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, .. } if name == "clash") => {
+                let TriggerCond::PlayerAction { who, .. } = trigger.as_ref() else {
+                    return Ev::new("", self.gap("clash"));
+                };
+                Ev::new(self.rel_subject(*who), "win a clash")
+            }
+            // "Whenever the first noncreature spell of a turn is cast": a spell cast while
+            // it's the only such spell any player has cast this turn.
+            TriggerCond::Where {
+                trigger,
+                cond:
+                    Condition::Compare(
+                        Value::SpellsCastThisTurn(PlayerRef::EachPlayer, counted),
+                        Cmp::Eq,
+                        Value::Const(1),
+                    ),
+            } if matches!(trigger.as_ref(), TriggerCond::CastSpell { who: PlayerRel::Any, filter }
+                if format!("{filter:?}") == format!("{:?}", Filter::and(vec![counted.clone(), Filter::Spell]))) =>
+            {
+                let s = self.spell_noun(counted, Det::A);
+                let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an ")).unwrap_or(&s);
+                Ev::new(format!("the first {s} of a turn"), "is cast")
+            }
             // "Whenever you win a coin flip" / "lose a coin flip": the flip's result, 1 for
             // a win (CR 705.2).
             TriggerCond::Where {

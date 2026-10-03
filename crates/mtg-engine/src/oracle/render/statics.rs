@@ -258,7 +258,14 @@ impl Renderer<'_> {
             Some(c) if matches!(s.effect, StaticEffect::CostModifier(_)) => {
                 let e = self.static_effect(&s.effect);
                 let c = self.condition(c);
-                format!("{} if {c}", e.trim_end_matches('.'))
+                let e = e.trim_end_matches('.');
+                // Or "As long as ..." (a static ability's condition, CR 611.3a; see
+                // `RenderedFace::static_if`).
+                if self.static_if {
+                    format!("as long as {c}, {}", lower_first(e))
+                } else {
+                    format!("{e} if {c}")
+                }
             }
             Some(Condition::YourTurn) => {
                 let e = self.static_effect(&s.effect);
@@ -296,7 +303,15 @@ impl Renderer<'_> {
                     c = format!("{} is in your graveyard and {c}", self.me());
                 }
                 let e = self.static_effect(&s.effect);
-                format!("as long as {c}, {}", lower_first(&e))
+                // A static ability's effect applies whenever its condition is true (CR
+                // 604.2, 611.3a): "~ can't attack if defending player controls an
+                // untapped creature" says the same as "as long as" (the face's other
+                // rendering, `RenderedFace::static_if`).
+                if self.static_if {
+                    format!("if {c}, {}", lower_first(&e))
+                } else {
+                    format!("as long as {c}, {}", lower_first(&e))
+                }
             }
             // "As long as ~ isn't on the battlefield, it's a 1/1 Insect creature in
             // addition to its other types." (CR 113.6c)
@@ -1337,6 +1352,27 @@ impl Renderer<'_> {
                 if super::tail_parts::first_ability_alt_cost(self, cm, false).is_some() =>
             {
                 super::tail_parts::first_ability_alt_cost(self, cm, false).unwrap_or_default()
+            }
+            // "You may pay {0} rather than pay cycling costs": an alternative cost for a
+            // keyword's activated abilities (CR 118.9).
+            CostChange::AlternativeCost(c)
+                if matches!(&cm.applies_to, CostTarget::ActivatedAbilities(sc)
+                    if matches!(sc.class, AbilityClass::Keyword(_)) && matches!(sc.sources, Filter::Any)) =>
+            {
+                let CostTarget::ActivatedAbilities(sc) = &cm.applies_to else {
+                    return self.gap("an alternative activation cost");
+                };
+                let AbilityClass::Keyword(k) = sc.class else {
+                    return self.gap("an alternative activation cost");
+                };
+                let pay = match &c.mana {
+                    Some(m) if c.parts.is_empty() => format!("pay {m}"),
+                    _ => self.cost_as_payment(c),
+                };
+                format!(
+                    "you may {pay} rather than pay {} costs",
+                    k.name().to_lowercase()
+                )
             }
             CostChange::AlternativeCost(c) if c.is_free() => {
                 let m = self.me();

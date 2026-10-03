@@ -99,6 +99,11 @@ pub struct RenderedFace {
     /// written as one ("When ~ enters or the creature it haunts dies, ..."), when there
     /// are any: cards print such abilities either way (CR 603.2).
     pub merged: Option<Vec<String>>,
+    /// The same rendering with the conditions of static abilities worded the other way
+    /// ("~ can't attack if ..." for "as long as ...", "As long as ..., ~ costs {1} less"
+    /// for "if ..."), when there are any: a static ability's effect applies whenever its
+    /// condition is true either way (CR 604.2, 611.3a).
+    pub static_if: Option<Vec<String>>,
 }
 
 /// Renders every ability of a face.
@@ -109,7 +114,22 @@ pub fn render_face(face: &FaceDef) -> RenderedFace {
 
 /// Renders a list of abilities of an object described by `info`.
 pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace {
+    let mut out = render_abilities_with(abilities, info, false);
+    let conditional_static = abilities
+        .iter()
+        .any(|a| matches!(&a.kind, AbilityKind::Static(s) if s.condition.is_some()));
+    if conditional_static {
+        let other = render_abilities_with(abilities, info, true);
+        if other.lines != out.lines {
+            out.static_if = Some(other.lines);
+        }
+    }
+    out
+}
+
+fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool) -> RenderedFace {
     let mut r = Renderer::new(info);
+    r.static_if = static_if;
     let mut out = RenderedFace::default();
     let mut prev_changeling = false;
     // Per line: the body of the triggered ability it renders.
@@ -699,6 +719,8 @@ pub struct Renderer<'a> {
     /// "you" is reworded for that player; text about the controller made there is marked
     /// with [`KEEP_YOU`] so it isn't.
     pub(crate) in_as_player: bool,
+    /// See [`RenderedFace::static_if`].
+    pub(crate) static_if: bool,
     /// The zone the ability being rendered functions from.
     pub(crate) zone: FunctionZone,
     /// The object itself was the last object mentioned (a trigger "When ~ attacks"), so
@@ -865,6 +887,7 @@ impl<'a> Renderer<'a> {
             self_before_target: false,
             last_actor_other: false,
             in_as_player: false,
+            static_if: false,
             zone: FunctionZone::Battlefield,
             self_salient: false,
             other_salient: false,

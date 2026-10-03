@@ -179,6 +179,11 @@ impl Renderer<'_> {
                 } else {
                     format!("{n} spells")
                 };
+                let n = n.replace("permanent spell", "spell");
+                // All players' spells together: "the number of spells cast this turn".
+                if matches!(p, PlayerRef::EachPlayer) {
+                    return format!("the number of {n} cast this turn");
+                }
                 let p = self.player(p, Case::Subj);
                 let have = if p == "you" {
                     "you've"
