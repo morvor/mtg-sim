@@ -845,10 +845,20 @@ impl Game {
             if spec.related_to.is_some() {
                 cands.retain(|c| crate::target_groups::related_ok(self, spec, &[*c], &out, ctx));
             }
-            let spec_max = self.eval_value(&spec.max, ctx).max(0) as u32;
+            let mut spec_max = self.eval_value(&spec.max, ctx).max(0) as u32;
             // CR 601.2c: the number of targets is announced, then they're chosen: "X
             // target creatures" is exactly X of them, never more than the maximum.
             let min = self.target_min(spec, ctx) as u32;
+            // CR 601.2d: damage divided among the targets gives each at least 1, so there
+            // are never more targets than the amount ("8 damage divided as you choose
+            // among X target creatures" can't have nine targets).
+            if let Some(d) = &spec.divide {
+                let total = self.eval_value(d, ctx).max(0) as u32;
+                if min > total {
+                    return None;
+                }
+                spec_max = spec_max.min(total.max(min));
+            }
             // A target that would leave a later instance of "target" that must be a
             // different object without enough choices isn't one to choose (CR 115.3).
             if spec_max == 1 {
