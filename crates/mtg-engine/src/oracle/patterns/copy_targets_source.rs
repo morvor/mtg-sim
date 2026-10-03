@@ -57,27 +57,37 @@ inventory::submit! { TriggerPattern { name: "casts a spell that targets only a s
 /// "The copy targets ~." after "[you may] copy that spell".
 fn the_copy_targets_source(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let l = s.to_lowercase();
-    if end(&l) != "the copy targets ~" {
-        return false;
-    }
-    fn retarget(e: &mut Effect) -> bool {
+    // "Create a 1/1 red Soldier creature token with haste, then copy that spell. The copy
+    // targets that token." (Frontline Heroism): the token just created.
+    let target = match end(&l) {
+        "the copy targets ~" => Sel::This,
+        "the copy targets that token" | "the copy targets the token" => Sel::Var(vars::CREATED),
+        _ => return false,
+    };
+    fn retarget(e: &mut Effect, target: &Sel, created: bool) -> bool {
         match e {
-            Effect::May { effect, .. } => retarget(effect),
+            Effect::May { effect, .. } => retarget(effect, target, created),
+            // The token is created earlier in the same instruction.
+            Effect::Seq(v) if matches!(target, Sel::Var(_)) => {
+                let created = created
+                    || v.iter().any(|x| matches!(x, Effect::CreateToken { .. }));
+                v.last_mut().is_some_and(|x| retarget(x, target, created))
+            }
             Effect::CopySpell {
                 what,
                 count: Value::Const(1),
                 ..
-            } => {
+            } if created || matches!(target, Sel::This) => {
                 *e = Effect::CopySpellRetargeted {
                     what: what.clone(),
-                    target: Some(Sel::This),
+                    target: Some(target.clone()),
                 };
                 true
             }
             _ => false,
         }
     }
-    retarget(prev)
+    retarget(prev, &target, false)
 }
 
 inventory::submit! { FollowupPattern { name: "the copy targets ~", priority: 100, apply: the_copy_targets_source } }

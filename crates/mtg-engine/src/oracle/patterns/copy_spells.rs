@@ -80,11 +80,32 @@ fn new_targets_for_copy(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let l = s.to_lowercase();
     if !matches!(
         end(&l),
-        "you may choose new targets for the copy" | "you may choose new targets for the copies"
+        "you may choose new targets for the copy"
+            | "you may choose new targets for the copies"
+            | "you may choose new targets for that copy"
     ) {
         return false;
     }
-    match copy_in(prev) {
+    set_new_targets(prev)
+}
+
+/// Sets the `new_targets` flag of the spell copies `e` ends with, in both branches of
+/// "copy it. If ..., copy that spell twice instead" (Increasing Vengeance).
+fn set_new_targets(e: &mut Effect) -> bool {
+    if let Effect::If {
+        then, otherwise, ..
+    } = e
+    {
+        if !matches!(**otherwise, Effect::Noop) {
+            let (Some(a), Some(b)) = (copy_in(then), copy_in(otherwise)) else {
+                return false;
+            };
+            *a = true;
+            *b = true;
+            return true;
+        }
+    }
+    match copy_in(e) {
         Some(new_targets) => {
             *new_targets = true;
             true
@@ -98,13 +119,17 @@ fn new_targets_for_copy(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 /// may remove two +1/+1 counters from ~. If you do, copy that spell").
 fn copy_in(e: &mut Effect) -> Option<&mut bool> {
     match e {
-        Effect::CopySpell { new_targets, .. } => Some(new_targets),
+        Effect::CopySpell { new_targets, .. } | Effect::CopySpellExcept { new_targets, .. } => {
+            Some(new_targets)
+        }
         Effect::May { effect, .. } => copy_in(effect),
         Effect::PayOptional { then, .. } => copy_in(then),
         Effect::If {
             then, otherwise, ..
         } if matches!(**otherwise, Effect::Noop) => copy_in(then),
-        Effect::Seq(v) => v.last_mut().and_then(copy_in),
+        // "Copy target instant or sorcery spell, then return it to its owner's hand."
+        // (Narset's Reversal): the copy made earlier in the sentence.
+        Effect::Seq(v) => v.iter_mut().rev().find_map(copy_in),
         _ => None,
     }
 }

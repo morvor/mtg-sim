@@ -1076,7 +1076,15 @@ impl Renderer<'_> {
                         t = format!("each of {t}");
                     }
                 }
-                format!("{s} deals {a} damage to {t}{}", w.unwrap_or_default())
+                // "~ deals damage equal to its power": the source's own value is "its"
+                // even while another object is "it" (Gleeful Arsonist's spell).
+                let w = w.unwrap_or_default();
+                let w = if matches!(source, Sel::This) && s == "~" {
+                    w.replace(" ~'s ", " ~it's ")
+                } else {
+                    w
+                };
+                format!("{s} deals {a} damage to {t}{w}")
             }
             Effect::DealDamageExcess {
                 source,
@@ -1488,6 +1496,50 @@ impl Renderer<'_> {
                     other => {
                         let t = self.times(other);
                         format!("copy {w} {t}")
+                    }
+                };
+                if *new_targets {
+                    let c = if matches!(count, Value::Const(1)) {
+                        "the copy"
+                    } else {
+                        "the copies"
+                    };
+                    s.push_str(&format!(". You may choose new targets for {c}"));
+                }
+                s
+            }
+            Effect::TokensJoinCombat {
+                effect,
+                attacking,
+                blocking,
+            } => {
+                let mut s = self.effect(effect);
+                if let Some(p) = attacking {
+                    let p = self.player(p, Case::Obj);
+                    s.push_str(&format!(" {p}"));
+                }
+                if let Some(a) = blocking {
+                    let a = self.sel(a, Case::Obj);
+                    s.push_str(&format!(" that's blocking {a}"));
+                }
+                s
+            }
+            Effect::CopySpellExcept {
+                what,
+                count,
+                new_targets,
+                mods,
+            } => {
+                let w = self.sel(what, Case::Obj);
+                let ex = self.exceptions(mods);
+                let ex = ex
+                    .replacen("it isn't", "the copy isn't", 1)
+                    .replacen("it's", "the copy is", 1);
+                let mut s = match count {
+                    Value::Const(1) => format!("copy {w}, except {ex}"),
+                    other => {
+                        let t = self.times(other);
+                        format!("copy {w} {t}, except {ex}")
                     }
                 };
                 if *new_targets {
