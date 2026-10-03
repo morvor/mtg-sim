@@ -1242,3 +1242,24 @@ fn f_create_for_each_put_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -
 }
 
 inventory::submit! { FollowupPattern { name: "token grammar: create a token for each card put into a graveyard this way", priority: 50, apply: f_create_for_each_put_this_way } }
+
+/// "Target creature's controller sacrifices it, then creates X 1/1 ... tokens" (Mercy
+/// Killing): the second instruction's subject is the first one's player, left out.
+fn then_same_player_creates(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (a, c) = l.split_once(", then creates ")?;
+    if a.starts_with("you ") || a.starts_with("~ ") || !a.contains(' ') {
+        return None;
+    }
+    let rewritten = format!("{a}, then that player creates {c}");
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let e = crate::oracle::effects::parse_clause(&rewritten, b);
+    if e.is_none() {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        b.it_player = saved.2;
+    }
+    e
+}
+
+inventory::submit! { EffectPattern { name: "token grammar: [player] ..., then creates", priority: 99, parse: then_same_player_creates } }

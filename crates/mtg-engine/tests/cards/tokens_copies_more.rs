@@ -32,6 +32,7 @@ fn more_token_wordings_compile() {
         "Frontline Heroism",
         "Red Sun's Twilight",
         "Pinnacle Starcage",
+        "Mercy Killing",
     ]);
 }
 
@@ -310,4 +311,18 @@ fn pinnacle_starcage_creates_a_robot_for_each_card_put_into_a_graveyard() {
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Memnite") && t.in_graveyard(P1, "Grizzly Bears"));
     assert_eq!(tokens(&t, P0, "Robot").len(), 2, "{}", t.dump_log());
+}
+
+#[test]
+fn mercy_killing_gives_the_controller_elves_equal_to_the_power() {
+    cr!("111.2", "608.2h");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Forest", 3);
+    let mk = t.hand(P0, "Mercy Killing");
+    t.cast(P0, mk).target(giant).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(tokens(&t, P1, "Elf").len(), 3, "{}", t.dump_log());
+    assert_eq!(tokens(&t, P0, "Elf").len(), 0);
 }
