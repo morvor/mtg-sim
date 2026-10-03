@@ -2459,6 +2459,19 @@ fn each_combat_this_turn(l: &str, b: &mut crate::oracle::effects::Builder) -> Op
 
 inventory::submit! { super::EffectPattern { name: "at the beginning of each combat this turn, …", priority: 100, parse: each_combat_this_turn } }
 
+/// "counter that ability" in an ability that triggers on activating one (Imprison): the
+/// ability activated (CR 701.6b).
+fn counter_that_ability(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    if end(l) != "counter that ability" || !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    Some(Effect::CounterSpell {
+        what: Sel::TriggerSpell,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "counter that ability (the one activated)", priority: 100, parse: counter_that_ability } }
+
 /// "When ~ dies during combat" and other events qualified by a combat timing.
 fn during_combat(r: &str) -> Option<Parsed> {
     let head = r.strip_suffix(" during combat")?;

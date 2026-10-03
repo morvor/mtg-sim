@@ -346,3 +346,19 @@ fn haunting_wind_triggers_on_tapping_or_tapless_artifact_abilities() {
     assert_eq!(t.life(P1), 18);
     let _ = CardType::Artifact;
 }
+
+#[test]
+fn imprison_counters_tap_abilities_of_the_enchanted_creature() {
+    cr!("602.2", "701.6b");
+    assert_compiled("Imprison", "with {T} in its activation cost");
+    let mut t = TestGame::new(2);
+    let sorcerer = t.battlefield(P1, "Prodigal Sorcerer");
+    let imprison = t.battlefield(P0, "Imprison");
+    assert!(t.g.attach(imprison, Entity::Object(sorcerer)));
+    t.lands(P0, "Swamp", 1);
+    t.answer_yes(P0, true);
+    t.activate(P1, sorcerer, 0, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20, "the ability was countered");
+    assert!(t.on_battlefield(imprison));
+}
