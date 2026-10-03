@@ -11,6 +11,15 @@ use mtg_engine::turn::Step;
 use mtg_engine::types::CardType;
 use mtg_engine::*;
 
+/// The number of permanents with that subtype (tokens are named after their subtypes,
+/// CR 111.4).
+fn with_subtype(t: &TestGame, s: &str) -> usize {
+    t.g.battlefield
+        .iter()
+        .filter(|o| t.g.obj(**o).chars.subtypes.iter().any(|x| x == s))
+        .count()
+}
+
 #[test]
 fn firespitter_whelp_triggers_on_noncreature_or_dragon_spells() {
     cr!("601.2i", "603.2");
@@ -271,4 +280,82 @@ fn hidden_herd_wakes_up_when_an_opponent_plays_a_nonbasic_land() {
     t.resolve_all();
     assert!(t.obj_now(herd).is(CardType::Creature));
     assert_eq!(t.pt(herd), (3, 3));
+}
+
+#[test]
+fn saproling_infestation_triggers_on_kicked_spells() {
+    cr!("702.33d", "601.2i");
+    assert_supported("Saproling Infestation");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Saproling Infestation");
+    t.lands(P1, "Mountain", 6);
+    let a = t.hand(P1, "Burst Lightning");
+    t.cast(P1, a).target(Entity::Player(P0)).go();
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, "Saproling"), 0, "not kicked");
+    let b = t.hand(P1, "Burst Lightning");
+    t.cast(P1, b).target(Entity::Player(P0)).kicked(true).go();
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, "Saproling"), 1);
+}
+
+#[test]
+fn curse_of_shaken_faith_hits_spells_after_the_first() {
+    cr!("303.4", "601.2i");
+    assert_supported("Curse of Shaken Faith");
+    let mut t = TestGame::new(2);
+    let curse = t.battlefield(P0, "Curse of Shaken Faith");
+    assert!(t.g.attach(curse, Entity::Player(P1)));
+    t.lands(P1, "Mountain", 2);
+    for _ in 0..2 {
+        let s = t.hand(P1, "Shock");
+        t.cast(P1, s).target(Entity::Player(P0)).go();
+        t.resolve_all();
+    }
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn the_lost_and_the_damned_counts_lands_not_from_your_hand() {
+    cr!("400.7", "603.6a");
+    assert_supported("The Lost and the Damned");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Lost and the Damned");
+    let forest = t.hand(P0, "Forest");
+    t.play_land(P0, forest).unwrap();
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, "Spawn"), 0, "played from hand");
+    let land = t.graveyard(P0, "Forest");
+    t.g.move_object(
+        land,
+        mtg_engine::object::Zone::Battlefield,
+        mtg_engine::events::MoveCause::Effect,
+        Some(P0),
+    );
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, "Spawn"), 1);
+}
+
+#[test]
+fn full_throttle_untaps_attackers_at_each_combat() {
+    cr!("603.7b", "505.1a");
+    assert_supported("Full Throttle");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 6);
+    let ft = t.hand(P0, "Full Throttle");
+    t.cast(P0, ft).go();
+    t.resolve_all();
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::EndOfCombat);
+    assert!(t.obj_now(bears).tapped);
+    // The next combat phase begins: the creature that attacked untaps.
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    assert!(!t.obj_now(bears).tapped);
 }

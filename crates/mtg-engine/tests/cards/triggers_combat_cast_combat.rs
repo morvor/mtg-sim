@@ -359,3 +359,56 @@ fn vengeful_ancestor_damages_the_controller_of_an_attacking_goaded_creature() {
     assert_eq!(t.life(P0), 19);
     let _ = CardType::Creature;
 }
+
+#[test]
+fn giant_shark_needs_a_damaged_creature() {
+    cr!("509.3b", "509.3d");
+    assert_supported("Giant Shark");
+    let mut t = TestGame::new(2);
+    let shark = t.battlefield(P1, "Giant Shark");
+    t.battlefield(P1, "Island");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let damaged = t.battlefield(P0, "Craw Wurm");
+    t.lands(P0, "Mountain", 1);
+    let shock = t.hand(P0, "Shock");
+    t.cast(P0, shock).target(Entity::Object(damaged)).go();
+    t.resolve_all();
+    combat(&mut t, &at_p1(&[bears, damaged]), &[(shark, damaged)]);
+    assert_eq!(t.pt(shark), (6, 4));
+    let _ = bears;
+}
+
+#[test]
+fn preacher_of_the_schism_draws_while_you_have_the_most_life() {
+    cr!("508.1", "119.1");
+    assert_supported("Preacher of the Schism");
+    let mut t = TestGame::new(2);
+    let preacher = t.battlefield(P0, "Preacher of the Schism");
+    t.g.players[1].life = 25;
+    let hand = t.hand_size(P0);
+    combat(&mut t, &at_p1(&[preacher]), &[]);
+    // P1 has the most life: the token ability, not the card ability.
+    assert_eq!(t.hand_size(P0), hand);
+    let mut t = TestGame::new(2);
+    let preacher = t.battlefield(P0, "Preacher of the Schism");
+    let hand = t.hand_size(P0);
+    combat(&mut t, &at_p1(&[preacher]), &[]);
+    // Tied for most life: both abilities.
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.life(P0), 19);
+}
+
+#[test]
+fn killian_draws_when_creatures_enchanted_by_your_auras_attack() {
+    cr!("303.4", "508.1");
+    assert_compiled("Killian, Decisive Mentor", "enchanted by an Aura you control");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Killian, Decisive Mentor");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let aura = t.battlefield(P0, "Holy Strength");
+    assert!(t.g.attach(aura, Entity::Object(a)));
+    let hand = t.hand_size(P0);
+    combat(&mut t, &at_p1(&[a, b]), &[]);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
