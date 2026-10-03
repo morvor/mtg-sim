@@ -246,3 +246,62 @@ fn blitzwing_converts_when_no_life_was_lost_this_way() {
         c.unsupported_text()
     );
 }
+
+#[test]
+fn cut_a_deal_draws_for_each_opponent_who_drew_this_way() {
+    cr!("608.2c", "121.1");
+    assert_supported("Cut a Deal");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Plains", 3);
+    let cd = t.hand(P0, "Cut a Deal");
+    let before = (t.hand_size(P0), t.hand_size(P1), t.hand_size(P2));
+    t.cast(P0, cd).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P1), before.1 + 1);
+    assert_eq!(t.hand_size(P2), before.2 + 1);
+    assert_eq!(t.hand_size(P0), before.0 - 1 + 2);
+}
+
+#[test]
+fn smugglers_share_counts_opponents_over_a_threshold() {
+    cr!("121.1", "608.2h");
+    assert_supported("Smuggler's Share");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Smuggler's Share");
+    t.g.draw_cards(P1, 2);
+    t.g.draw_cards(P2, 1);
+    t.g.flush_events();
+    t.enter(P1, "Forest");
+    t.enter(P1, "Forest");
+    t.enter(P2, "Forest");
+    let before = t.hand_size(P0);
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    // P1 drew two cards and had two lands enter; P2 only one of each.
+    assert_eq!(t.hand_size(P0), before + 1);
+    assert_eq!(count_subtype(&t, P0, "Treasure"), 1);
+}
+
+#[test]
+fn kaya_orzhov_usurper_gains_the_damage_dealt() {
+    cr!("120.4b", "608.2c");
+    let c = card("Kaya, Orzhov Usurper");
+    assert!(
+        c.unsupported_text().is_empty(),
+        "{:?}",
+        c.unsupported_text()
+    );
+    let mut t = TestGame::new(2);
+    let kaya = t.battlefield(P0, "Kaya, Orzhov Usurper");
+    t.g.add_counters(Entity::Object(kaya), "loyalty", 5, None);
+    t.exile(P1, "Grizzly Bears");
+    t.exile(P1, "Grizzly Bears");
+    t.exile(P0, "Grizzly Bears");
+    t.g.flush_events();
+    t.activate(P0, kaya, 2, &[Entity::Player(P1)])
+        .expect("activate");
+    t.resolve();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 22);
+}

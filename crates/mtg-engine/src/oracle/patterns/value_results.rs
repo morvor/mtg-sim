@@ -479,10 +479,26 @@ fn more_history_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             }
         }
     }
+    // "cards that player owns in exile".
+    for p in ["cards that player owns in exile", "cards they own in exile"] {
+        if let Some(rest) = r.strip_prefix(p) {
+            if word_end(rest) {
+                let rel = their_rel(b)?;
+                let f = Filter::and(vec![
+                    Filter::Card,
+                    Filter::InZone(ZoneKind::Exile),
+                    Filter::OwnedBy(rel),
+                ]);
+                return Some((Value::Count(f), rest.to_string()));
+            }
+        }
+    }
     // Times a commander was cast from the command zone (CR 903.8).
     for p in [
         "times you've cast a commander from the command zone this game",
         "time you've cast a commander from the command zone this game",
+        "times you've cast your commander from the command zone this game",
+        "time you've cast your commander from the command zone this game",
     ] {
         if let Some(rest) = r.strip_prefix(p) {
             if word_end(rest) {
@@ -692,6 +708,69 @@ fn kinds_among_history(r: &str, b: &Builder) -> Option<(Value, String)> {
     None
 }
 
+/// "opponent who drew two or more cards this turn", "opponent who had two or more lands
+/// enter the battlefield under their control this turn", "opponent who drew a card this
+/// way": the players of a relation for whom an amount reaches a threshold.
+fn players_who_counted(who: PlayerRel, x: &str) -> Option<(Value, String)> {
+    let pf = match who {
+        PlayerRel::Opponent => PlayerFilter::Opponent,
+        PlayerRel::Any => PlayerFilter::Any,
+        _ => return None,
+    };
+    let (amount, k, rest) = if let Some(y) = x.strip_prefix("drew a card this way") {
+        // The cards the latest draw instruction drew, in their owners' hands.
+        let drawn = Sel::Matching(
+            Box::new(Sel::Var(vars::REVEALED)),
+            Filter::OwnedBy(PlayerRel::Iterated),
+        );
+        (Value::CountSel(Box::new(drawn)), 1, y)
+    } else if let Some(y) = x.strip_prefix("drew ") {
+        let (n, z) = parse_number(y)?;
+        let k = n.as_const()?;
+        let z = z.trim_start();
+        let z = z.strip_prefix("or more ").unwrap_or(z);
+        let z = z.strip_prefix("cards").or_else(|| z.strip_prefix("card"))?;
+        let rest = this_turn(z)?;
+        let drew = events(
+            TriggerCond::Draws {
+                who: PlayerRel::Iterated,
+            },
+            Tally::Events,
+        );
+        (drew, k, rest)
+    } else if let Some(y) = x.strip_prefix("had ") {
+        let (n, z) = parse_number(y)?;
+        let k = n.as_const()?;
+        let z = z.trim_start();
+        let z = z.strip_prefix("or more ").unwrap_or(z);
+        let (noun, z) = z.split_once(" enter the battlefield under their control")?;
+        let (f, _, tail) = parse_object_phrase(noun)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        let rest = this_turn(z)?;
+        (
+            Value::PermanentsEnteredThisTurn(PlayerRef::Iterated, f),
+            k,
+            rest,
+        )
+    } else {
+        return None;
+    };
+    if !word_end(rest) {
+        return None;
+    }
+    let each = Value::If(
+        Box::new(Condition::Compare(amount, Cmp::Ge, Value::c(k))),
+        Box::new(Value::c(1)),
+        Box::new(Value::c(0)),
+    );
+    Some((
+        Value::OverPlayers(AggOp::Sum, pf, Box::new(each)),
+        rest.to_string(),
+    ))
+}
+
 /// "opponents who lost life this turn", "player who lost life this turn", "opponent who
 /// was dealt damage this turn", "opponents who were dealt combat damage this turn".
 fn players_who(r: &str, _b: &Builder) -> Option<(Value, String)> {
@@ -707,6 +786,9 @@ fn players_who(r: &str, _b: &Builder) -> Option<(Value, String)> {
     ]
     .iter()
     .find_map(|(p, rel)| r.strip_prefix(p).map(|x| (*rel, x)))?;
+    if let Some(v) = players_who_counted(who, x) {
+        return Some(v);
+    }
     // "your opponents who were dealt combat damage by ~ or a Dragon this turn".
     for (p, combat_only) in [
         ("were dealt combat damage by ", true),
@@ -1354,6 +1436,9 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
 /// [`this_way_sel`] as a whole.
 pub fn reads_this_way(s: &str, b: &Builder) -> bool {
     let s = end(s);
+    if players_who(s, b).is_some_and(|(_, rest)| rest.trim().is_empty()) {
+        return true;
+    }
     if life_lost_this_way(s).is_some_and(|(_, rest)| rest.trim().is_empty()) {
         return true;
     }
@@ -2196,6 +2281,50 @@ fn cap_payment(e: &mut Effect, v: &Value) -> bool {
 }
 
 inventory::submit! { super::AbilityPattern { name: "value results: X can't be greater than [value]", priority: 10, parse: x_cant_be_greater } }
+
+/// "Each opponent draws a card, then you draw a card for each opponent who drew a card
+/// this way." (Cut a Deal): the players draw at once (one instruction, whose drawn cards
+/// the next one counts), then the next instruction.
+fn each_draws_then_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (first, second) = l.split_once(", then ")?;
+    if !second.contains(" this way") {
+        return None;
+    }
+    let (who, r) = [
+        ("each opponent draws ", PlayerRef::EachOpponent),
+        ("each player draws ", PlayerRef::EachPlayer),
+    ]
+    .into_iter()
+    .find_map(|(p, w)| first.strip_prefix(p).map(|r| (w, r)))?;
+    let (n, tail) = parse_number(r)?;
+    if !matches!(tail.trim(), "card" | "cards") {
+        return None;
+    }
+    let then = crate::oracle::effects::parse_clause(second, b)?;
+    Some(Effect::seq(vec![Effect::Draw { who, n }, then]))
+}
+
+inventory::submit! { super::EffectPattern { name: "value results: each opponent draws, then [instruction counting this way]", priority: 5, parse: each_draws_then_this_way } }
+
+/// "~ deals damage to target player equal to ... and you gain that much life": the life
+/// gained is the damage actually dealt (CR 120.4b, 608.2c).
+fn damage_and_gain_that_much(l: &str, b: &mut Builder) -> Option<Effect> {
+    let first = end(l).strip_suffix(" and you gain that much life")?;
+    let e = crate::oracle::effects::parse_clause(first, b)?;
+    if !matches!(e, Effect::DealDamage { .. }) {
+        return None;
+    }
+    Some(Effect::seq(vec![
+        e,
+        Effect::GainLife {
+            who: PlayerRef::You,
+            n: Value::Prev,
+        },
+    ]))
+}
+
+inventory::submit! { super::EffectPattern { name: "value results: [damage] and you gain that much life", priority: 60, parse: damage_and_gain_that_much } }
 
 #[cfg(test)]
 mod tests {
