@@ -115,6 +115,21 @@ impl Renderer<'_> {
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
             Value::Var(vars::EXCESS) => "the excess damage".into(),
+            // "the number of grace votes" (CR 701.38a).
+            Value::Var(x)
+                if self
+                    .vote_words
+                    .iter()
+                    .any(|w| crate::kwa::vote::word_var(w) == *x) =>
+            {
+                let w = self
+                    .vote_words
+                    .iter()
+                    .find(|w| crate::kwa::vote::word_var(w) == *x)
+                    .cloned()
+                    .unwrap_or_default();
+                format!("the number of {w} votes")
+            }
             Value::Var(_) if self.stored_x(v).is_some() => "X".into(),
             Value::Var(_) => "that many".into(),
             Value::Devotion(cs) => {
@@ -335,9 +350,20 @@ impl Renderer<'_> {
                 parts.join(" plus ")
             }
             Value::Diff(a, b) => {
+                // "If you have fewer than seven cards in hand, draw cards equal to the
+                // difference": the difference of the numbers the condition compared.
+                let (ka, kb) = (format!("{a:?}"), format!("{b:?}"));
+                let named = self.compared.iter().any(|(x, y)| {
+                    let (kx, ky) = (format!("{x:?}"), format!("{y:?}"));
+                    (kx == ka && ky == kb) || (kx == kb && ky == ka)
+                });
                 let a = self.value(a);
                 let b = self.value(b);
-                format!("{a} minus {b}")
+                if named {
+                    format!("{{alt:the difference|{a} minus {b}}}")
+                } else {
+                    format!("{a} minus {b}")
+                }
             }
             Value::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
                 (Value::Const(1), x) | (x, Value::Const(1)) => self.value(x),
@@ -434,6 +460,36 @@ impl Renderer<'_> {
         if let Some(x) = self.stored_x(v) {
             return (format!("{x} {}", plural(noun)), None);
         }
+        // "Exile your hand, then draw that many cards": the number of objects the
+        // instruction just before acted on.
+        if let Value::CountSel(sel) = v {
+            if let Sel::Var(x) = sel.as_ref() {
+                if noun == "card" && self.this_way.last().is_some_and(|(y, _, _)| y == x) {
+                    let s = self.value(v);
+                    let p = plural(noun);
+                    // "a card for each permanent destroyed this way".
+                    let each = match s.strip_prefix("the number of ") {
+                        Some(r) => format!("{} for each {r}", with_article(noun)),
+                        None => format!("X {p}, where X is {s}"),
+                    };
+                    return (format!("{{alt:that many {p}|{each}}}"), None);
+                }
+            }
+        }
+        // "for each grace vote" (CR 701.38a).
+        if let Value::Var(x) = v {
+            if self
+                .vote_words
+                .iter()
+                .any(|w| crate::kwa::vote::word_var(w) == *x)
+            {
+                let s = self.value(v);
+                return (
+                    format!("X {}", plural(noun)),
+                    Some(format!(", where X is {s}")),
+                );
+            }
+        }
         match v {
             Value::Const(1) => (with_article(noun), None),
             Value::Const(n) => (format!("{} {}", number_word(*n), plural(noun)), None),
@@ -490,8 +546,45 @@ impl Renderer<'_> {
     }
 
     /// A condition as a clause ("you control an artifact").
+    /// "If grace gets more votes", "if condemnation gets more votes or the vote is tied"
+    /// (CR 701.38a): the votes for a word compared with the most votes and the number of
+    /// choices that got them.
+    fn vote_condition(&mut self, c: &Condition) -> Option<String> {
+        use crate::kwa::vote::{word_var, CHOICES_WITH_MOST, MOST_VOTES};
+        let more = |c: &Condition, words: &[String]| -> Option<String> {
+            let Condition::And(v) = c else {
+                return None;
+            };
+            let [Condition::Compare(Value::Var(w), Cmp::Eq, Value::Var(MOST_VOTES)), Condition::Compare(Value::Var(CHOICES_WITH_MOST), Cmp::Eq, Value::Const(1))] =
+                v.as_slice()
+            else {
+                return None;
+            };
+            words.iter().find(|x| word_var(x) == *w).cloned()
+        };
+        if self.vote_words.is_empty() {
+            return None;
+        }
+        if let Some(w) = more(c, &self.vote_words) {
+            return Some(format!("{w} gets more votes"));
+        }
+        if let Condition::Or(v) = c {
+            if let [a, Condition::Compare(Value::Var(CHOICES_WITH_MOST), Cmp::Ge, Value::Const(2))] =
+                v.as_slice()
+            {
+                if let Some(w) = more(a, &self.vote_words) {
+                    return Some(format!("{w} gets more votes or the vote is tied"));
+                }
+            }
+        }
+        None
+    }
+
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
         self.new_clause();
+        if let Some(v) = self.vote_condition(c) {
+            return v;
+        }
         match c {
             Condition::Always => self.gap("Condition::Always"),
             Condition::Never => self.gap("Condition::Never"),
@@ -625,6 +718,20 @@ impl Renderer<'_> {
                 let subj = self.sel(s, Case::Subj);
                 format!("{subj} entered this turn")
             }
+            // "If it's blue or black": colors only, as adjectives.
+            Condition::SelMatches(s, Filter::Or(v))
+                if v.len() > 1 && v.iter().all(|f| matches!(f, Filter::Color(_))) =>
+            {
+                let words: Vec<String> = v
+                    .iter()
+                    .filter_map(|f| match f {
+                        Filter::Color(c) => Some(c.word().to_string()),
+                        _ => None,
+                    })
+                    .collect();
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} is {}", join_list(&words, "or"))
+            }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, false) {
                     return c;
@@ -703,10 +810,18 @@ impl Renderer<'_> {
             n if n.starts_with("alternative cost ") => {
                 format!("the {} cost was paid", &n["alternative cost ".len()..])
             }
+            // "If it escaped" (CR 702.138c).
+            "escape" => {
+                let m = self.me();
+                format!(
+                    "{{alt:{m} escaped|{} escape cost was paid}}",
+                    nouns::possessive(&m)
+                )
+            }
             "sneak" | "surge" | "prowl" | "spectacle" | "mayhem" | "freerunning" | "madness"
-            | "dash" | "blitz" | "evoke" | "escape" | "emerge" | "plot" | "disturb"
-            | "overload" | "harmonize" | "impending" | "flashback" | "awaken" | "jump-start"
-            | "prototype" | "squad" | "offspring" | "bestow" => {
+            | "dash" | "blitz" | "evoke" | "emerge" | "plot" | "disturb" | "overload"
+            | "harmonize" | "impending" | "flashback" | "awaken" | "jump-start" | "prototype"
+            | "squad" | "offspring" | "bestow" => {
                 let m = self.me();
                 format!("{} {name} cost was paid", nouns::possessive(&m))
             }
@@ -1239,7 +1354,9 @@ impl Renderer<'_> {
                     (a_value, rest.split_once(" on "))
                 {
                     let subj = self.sel(sel, Case::Subj);
-                    return format!("{{alt:there is a {rest}|{subj} has a {counters} on it}}");
+                    return format!(
+                        "{{alt:there is a {rest}|{subj} has a {counters} on it|{subj} has one or more {counters} on it|{subj} has {counters} on it}}"
+                    );
                 }
                 return format!("there is a {rest}");
             }

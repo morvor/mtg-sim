@@ -199,9 +199,20 @@ impl Renderer<'_> {
                 let s = if let Some(sym) = symbol {
                     match n {
                         Value::Const(k) if *k > 0 => sym.repeat(*k as usize),
-                        other => {
+                        Value::X => format!("X {sym}"),
+                        other
+                            if Self::is_simple(other)
+                                || matches!(other, Value::EventAmount | Value::Prev) =>
+                        {
                             let v = self.value(other);
                             format!("{v} {sym}")
+                        }
+                        // "you get an amount of {E} equal to its mana value".
+                        other => {
+                            let v = self.value(other);
+                            format!(
+                                "{{alt:an amount of {sym} equal to {v}|X {sym}, where X is {v}}}"
+                            )
                         }
                     }
                 } else {
@@ -304,7 +315,9 @@ impl Renderer<'_> {
         let actor_other = match e {
             Effect::May { who, .. }
             | Effect::PayOptional { who, .. }
-            | Effect::AsPlayer { who, .. } => Some(!matches!(who, PlayerRef::You)),
+            | Effect::AsPlayer { who, .. }
+            | Effect::Sacrifice { who, .. }
+            | Effect::Discard { who, .. } => Some(!matches!(who, PlayerRef::You)),
             Effect::Seq(_) | Effect::If { .. } | Effect::Noop => None,
             _ => Some(false),
         };
@@ -457,11 +470,19 @@ impl Renderer<'_> {
                 self.each_target = saved;
                 s
             }
-            Effect::ForEach { sel, effect, .. } => {
+            Effect::ForEach { sel, var, effect } => {
                 let s = match sel {
                     Sel::All(f) => self.for_each_noun(f),
                     other => self.sel(other, Case::Obj),
                 };
+                // "If you do, it becomes plotted": done for the one object named "it".
+                if matches!(s.as_str(), "it" | "~it" | "~") {
+                    self.var_defs.push((*var, sel.clone(), false));
+                    let saved = self.for_each_subject.replace(s.clone());
+                    let t = self.effect(effect);
+                    self.for_each_subject = saved;
+                    return t;
+                }
                 let inner = self.effect(effect);
                 format!("for each {s}, {inner}")
             }
@@ -770,10 +791,13 @@ impl Renderer<'_> {
             }
             Effect::ChooseOne { who, options } => {
                 let w = self.player(who, Case::Subj);
+                // A choice made as the effect resolves (CR 608.2d), not a modal spell's or
+                // ability's choice of modes as it's put on the stack (CR 700.2a-b, which a
+                // printed "Choose one —" always is): written so the two can't be confused.
                 let head = if w == "you" {
-                    "choose one —".to_string()
+                    "as this resolves, choose one —".to_string()
                 } else {
-                    format!("{w} chooses one —")
+                    format!("as this resolves, {w} chooses one —")
                 };
                 let mut s = head;
                 let mut texts = Vec::new();
@@ -2262,6 +2286,15 @@ impl Renderer<'_> {
                     sub.as_deref(),
                     &spec.options,
                 );
+                // Secret council: "each player secretly votes for ..., then those votes are
+                // revealed" (no starting player).
+                if spec.secret && spec.action == KeywordAction::Vote {
+                    if let Some((_, w)) = s.split_once(" votes for ") {
+                        s = format!(
+                            "each player secretly votes for {w}, then those votes are revealed"
+                        );
+                    }
+                }
                 // "Each suspected creature is no longer suspected" (CR 701.60a).
                 if spec.undo && spec.action == KeywordAction::Suspect {
                     let w = self.sel(&spec.what, Case::Subj);
@@ -2827,7 +2860,9 @@ impl Renderer<'_> {
                     let w = self.sel(what, Case::Subj);
                     let d = self.duration(duration);
                     let s = format!("{w} becomes the basic land type of your choice");
-                    parts.push(join_words(&[s, d]));
+                    let b = format!("choose a basic land type. {w} becomes that type");
+                    let both = either_form(join_words(&[s, d.clone()]), join_words(&[b, d]));
+                    parts.push(both);
                     i += 2;
                     continue;
                 }
@@ -3290,6 +3325,24 @@ impl Renderer<'_> {
     }
 
     fn if_effect(&mut self, cond: &Condition, then: &Effect, otherwise: &Effect) -> String {
+        let pushed = super::compared_values(cond)
+            .map(|p| self.compared.push(p))
+            .is_some();
+        let top = std::mem::take(&mut self.trigger_body_if);
+        let s = self.if_effect_inner(cond, then, otherwise, top);
+        if pushed {
+            self.compared.pop();
+        }
+        s
+    }
+
+    fn if_effect_inner(
+        &mut self,
+        cond: &Condition,
+        then: &Effect,
+        otherwise: &Effect,
+        trigger_body: bool,
+    ) -> String {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
         // "Exile that card from your graveyard": only if it's still there (CR 400.7).
@@ -3368,6 +3421,12 @@ impl Renderer<'_> {
             {
                 self.effect(then)
             }
+            // "Sacrifice it unless it escaped": nothing happens if C.
+            _ if then_empty && !else_empty => {
+                let o = self.effect(otherwise);
+                let c = self.condition(cond);
+                format!("{o} unless {c}")
+            }
             // "X. If C, Y instead." (the comparison treats "If C, Y. Otherwise, X." the
             // same): the default effect comes first, so it names the targets.
             _ if !else_empty => {
@@ -3395,6 +3454,9 @@ impl Renderer<'_> {
                 // "Discard a card unless you attacked this turn."
                 if let Some(inner) = c.strip_prefix("it's not true that ") {
                     return format!("{t} unless {inner}");
+                }
+                if trigger_body {
+                    return format!("{t} if {c}");
                 }
                 format!("if {c}, {t}")
             }
@@ -3489,7 +3551,11 @@ impl Renderer<'_> {
                 | Effect::AddRestriction { .. }
         ) || matches!(effect, Effect::KeywordAction { action, .. }
             if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure));
-        if has_subject && !inner.starts_with("gain control") && !inner.starts_with("switch") {
+        if has_subject
+            && !inner.starts_with("gain control")
+            && !inner.starts_with("switch")
+            && !inner.starts_with("{alt:switch")
+        {
             return format!("{p} may have {inner}");
         }
         format!("{p} may {inner}")
@@ -3766,7 +3832,8 @@ impl Renderer<'_> {
             // the player putting it there; cards still say "under your control" when the
             // object isn't theirs, and "under its owner's control" when it goes back.
             match &to.controller {
-                Some(PlayerRef::You) if yours => {}
+                // The player putting it there controls it (CR 110.2a): cards may say so.
+                Some(PlayerRef::You) if yours => s.push_str(" {opt:under your control}"),
                 // Its owner is you: a card from your graveyard enters under your control
                 // (CR 110.2a), said or not.
                 Some(PlayerRef::OwnerOf(_)) if yours => {
@@ -3877,7 +3944,8 @@ impl Renderer<'_> {
             return s;
         }
         if to.zone == ZoneKind::Exile {
-            s.push_str(&format!(", exile {pron}"));
+            let fd = if to.face_down { " face down" } else { "" };
+            s.push_str(&format!(", exile {pron}{fd}"));
         } else {
             s.push_str(&format!(", put {pron} {dest}"));
         }
@@ -3978,7 +4046,22 @@ impl Renderer<'_> {
         }
         if spec.shuffle == SearchShuffle::Before {
             let order = if many { " {opt:in any order}" } else { "" };
-            s.push_str(&format!(", then shuffle and put {pron} on top{order}"));
+            // Where the cards go once the library is shuffled: on top, or "third from the
+            // top".
+            let pos = match spec.dests.as_slice() {
+                [d] if d.or.is_empty() && d.to.zone == ZoneKind::Library => match d.to.position {
+                    LibraryPosition::Top => "on top".to_string(),
+                    LibraryPosition::FromTop(n) => format!("{} from the top", ordinal_word(n + 1)),
+                    _ => self.gap("a search's destination after shuffling"),
+                },
+                _ => self.gap("a search's destination after shuffling"),
+            };
+            let what = if many {
+                "{alt:them|those cards}"
+            } else {
+                "{alt:it|that card}"
+            };
+            s.push_str(&format!(", then shuffle and put {what} {pos}{order}"));
             return s;
         }
         let own = same_player(&spec.who, &spec.whose);
@@ -4072,7 +4155,11 @@ impl Renderer<'_> {
             && !(rest_to.zone == ZoneKind::Library
                 && rest_to.position == LibraryPosition::Top
                 && !matches!(n, Value::Const(1)));
-        let p = if only_look {
+        // The cards are another player's, but the ability's controller looks at them and
+        // chooses (`library::dig`): "look at the top four cards of target opponent's
+        // library, exile one of them".
+        let others_cards = !matches!(who, PlayerRef::You) && !self.in_as_player && !only_look;
+        let p = if only_look || others_cards {
             self.player(who, Case::Poss)
         } else {
             self.possessive_for(who)
@@ -4090,7 +4177,11 @@ impl Renderer<'_> {
         if only_look {
             return format!("look at {top}");
         }
-        let mut s = self.with_subject(who, &format!("{look} {top}"), false);
+        let mut s = if others_cards {
+            format!("{look} {top}")
+        } else {
+            self.with_subject(who, &format!("{look} {top}"), false)
+        };
         // Only looking ("Look at the top card of your library."), or looking and
         // putting them back ("then put them back in any order").
         if matches!(take, Value::Const(0)) {
@@ -4192,6 +4283,12 @@ impl Renderer<'_> {
                 format!("{may}put {what} from among them {d}")
             }
         };
+        // "exile one of them face down": an exile destination is the verb.
+        let take_s = if take_to.zone == ZoneKind::Exile {
+            take_s.replacen("put ", "exile ", 1)
+        } else {
+            take_s
+        };
         let mut rest = self.destination_phrase(rest_to, true, true);
         if rest_to.zone == ZoneKind::Library {
             rest = rest.replace("their owners' library", &format!("{p} library"));
@@ -4215,7 +4312,7 @@ impl Renderer<'_> {
             s.push_str(&format!(". {}", capitalize(&take_s)));
             return s;
         }
-        if matches!(filter, Filter::Any) || take_all {
+        if (matches!(filter, Filter::Any) || take_all) && take_to.zone != ZoneKind::Exile {
             s.push_str(&format!(". {} and {left} {rest}", capitalize(&take_s)));
         } else {
             s.push_str(&format!(". {}. Put {left} {rest}", capitalize(&take_s)));
@@ -4224,6 +4321,41 @@ impl Renderer<'_> {
     }
 
     fn create_token(
+        &mut self,
+        spec: &TokenSpec,
+        count: &Value,
+        tapped: bool,
+        attacking: bool,
+    ) -> String {
+        // "create a 1/1 white Soldier creature token that's tapped and attacking": the
+        // status said after the token, or before it ("a tapped and attacking token").
+        if attacking {
+            let saved = self.gaps.len();
+            let base = self.create_token(spec, count, false, false);
+            self.gaps.truncate(saved);
+            let prefix = self.create_token_status(spec, count, tapped, attacking);
+            let st = match (tapped, attacking) {
+                (true, true) => "tapped and attacking",
+                (true, false) => "tapped",
+                _ => "attacking",
+            };
+            let that = if matches!(count, Value::Const(1)) {
+                "that's"
+            } else {
+                "that are"
+            };
+            let suffix = match base.find(", where X is") {
+                Some(i) if !base.contains("{alt:") => {
+                    format!("{} {that} {st}{}", &base[..i], &base[i..])
+                }
+                _ => format!("{base} {that} {st}"),
+            };
+            return format!("{{alt:{prefix}|{suffix}}}");
+        }
+        self.create_token_status(spec, count, tapped, false)
+    }
+
+    fn create_token_status(
         &mut self,
         spec: &TokenSpec,
         count: &Value,
@@ -4409,9 +4541,27 @@ impl Renderer<'_> {
     ) -> String {
         if mods.len() == 1 {
             if let Modification::SwitchPT = mods[0] {
-                let w = self.sel(what, Case::Poss);
+                // "switch target creature's power and toughness" / "switch the power and
+                // toughness of each of up to two target creatures".
+                let (a, b) = self.two_ways(
+                    |r| {
+                        let w = r.sel(what, Case::Poss);
+                        format!("switch {w} power and toughness")
+                    },
+                    |r| {
+                        let o = r.sel(what, Case::Obj);
+                        let many = o.contains(" creatures") || o.contains(" permanents");
+                        let each = if many { "each of " } else { "" };
+                        format!("switch the power and toughness of {each}{o}")
+                    },
+                );
                 let d = self.duration(d);
-                return join_words(&[format!("switch {w} power and toughness"), d]);
+                let s = if a.contains(['{', '|']) || b.contains(['{', '|']) {
+                    a
+                } else {
+                    format!("{{alt:{a}|{b}}}")
+                };
+                return join_words(&[s, d]);
             }
             if let Modification::SetController(p) = &mods[0] {
                 let w = self.sel(what, Case::Obj);
@@ -4766,7 +4916,9 @@ impl Renderer<'_> {
                         .subtypes
                         .extend(subtypes.iter().map(|x| x.to_string()));
                 }
-                Modification::AllCreatureTypes => parts.push("{alt:is every creature type|gains all creature types}".into()),
+                Modification::AllCreatureTypes => parts.push(
+                    "{alt:is every creature type|gains all creature types|all creature types}".into(),
+                ),
                 // "becomes a 4/4 Dragon artifact creature": the new creature types replace
                 // the old ones (CR 205.1b), which the effect records as removing them.
                 Modification::RemoveAllCreatureTypes
@@ -4864,13 +5016,20 @@ impl Renderer<'_> {
                         }
                     }
                 }
+                let base_with = b.contains(" with base power and toughness ");
                 if let Some(i) = ps.iter().position(|p| p == BECOMES) {
                     ps[i] = b;
                 }
                 let mut grants = keywords.clone();
                 grants.extend(abilities.iter().cloned());
                 if !grants.is_empty() {
-                    let g = format!("{has} {}", join_list(&grants, "and"));
+                    // "becomes a Bird with base power and toughness 1/1 and flying": the
+                    // abilities may join the "with" list.
+                    let g = if base_with {
+                        format!("{{opt:{has}}} {}", join_list(&grants, "and"))
+                    } else {
+                        format!("{has} {}", join_list(&grants, "and"))
+                    };
                     match ps.iter().position(|p| p == GRANTS) {
                         Some(i) => ps[i] = g,
                         None => ps.push(g),
@@ -5182,7 +5341,7 @@ impl Renderer<'_> {
             M::SpellOfChosenType => "to cast a creature spell of the chosen type".into(),
             M::SpellsOnly => "to cast spells".into(),
             M::AbilitiesOnly => "to activate {alt:abilities|an ability}".into(),
-            M::XCostsOnly => "on costs that include {X}".into(),
+            M::XCostsOnly => "on costs that {alt:include|contain} {X}".into(),
             M::ArtifactSpellOrAbility => {
                 "to cast artifact spells or activate abilities of artifacts".into()
             }
@@ -5460,18 +5619,34 @@ impl Renderer<'_> {
                     }
                 }
             }
-            K::Vote | K::VillainousChoice => {
+            // CR 701.38a: each player votes, starting with a given player, for one of
+            // the words or objects.
+            K::Vote => {
                 let names: Vec<String> = options.iter().map(|(n, _)| n.clone()).collect();
-                let mut s = if action == K::Vote {
-                    format!("vote for {}", join_list(&names, "or"))
+                let what_s = if names.is_empty() {
+                    let f = match what {
+                        Sel::All(f) => f.clone(),
+                        _ => return self.gap("a vote for objects"),
+                    };
+                    let head = self.noun(&f, Num::One);
+                    self.vote_noun = Some(if format!("{f:?}").contains("Permanent") {
+                        "permanent".to_string()
+                    } else {
+                        head.rsplit(' ').next().unwrap_or("permanent").to_string()
+                    });
+                    self.noun_det(&f, Det::A)
                 } else {
-                    "face a villainous choice —".into()
+                    self.vote_words = names.clone();
+                    join_list(&names, "or")
                 };
-                if action == K::VillainousChoice {
-                    for (_, e) in options {
-                        let t = self.effect_sentences(e);
-                        s.push_str(&format!("\n• {t}"));
-                    }
+                let start = self.player(who, Case::Obj);
+                format!("starting with {start}, each player votes for {what_s}")
+            }
+            K::VillainousChoice => {
+                let mut s: String = "face a villainous choice —".into();
+                for (_, e) in options {
+                    let t = self.effect_sentences(e);
+                    s.push_str(&format!("\n• {t}"));
                 }
                 s
             }

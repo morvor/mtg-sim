@@ -209,8 +209,31 @@ impl Renderer<'_> {
         ))
     }
 
+    /// What an object shares a quality with: any one of a group ("a creature you
+    /// control", see `eval.rs`), or a selected object.
+    pub(crate) fn shared_with(&mut self, s: &Sel) -> String {
+        if let Sel::All(f) = s {
+            if !format!("{f:?}").contains("Linked") {
+                return self.noun_det(f, Det::A);
+            }
+        }
+        let r = self.sel(s, Case::Obj);
+        if !matches!(s, Sel::All(_)) {
+            return r;
+        }
+        // Any one of them: "each creature you control" is "a creature you control".
+        let r = r.replace("{alt:each ", "{alt:a ").replace("|each ", "|a ");
+        match r.strip_prefix("each ") {
+            Some(rest) => with_article(rest),
+            None => r,
+        }
+    }
+
     /// The noun used for "enchanted [thing]" / "equipped creature" on this face.
     pub(crate) fn attached_noun(&mut self) -> String {
+        if self.equipment_holder_depth == Some(self.quote_depth) {
+            return "equipped creature".into();
+        }
         if self.info.has_subtype("Equipment") {
             return "equipped creature".into();
         }
@@ -629,7 +652,7 @@ impl Renderer<'_> {
             Filter::Named(n) => np.post.push(format!("named {n}")),
             // "with the same name as a card exiled with ~": as any of them.
             Filter::SameNameAs(s) => {
-                let s = self.sel(s, Case::Obj);
+                let s = self.shared_with(s);
                 let s = s.replace("|each card exiled with ~it}", "|a card exiled with ~it}");
                 np.with.push(format!("the same name as {s}"));
             }
@@ -640,16 +663,18 @@ impl Renderer<'_> {
             Filter::NameOriginallyPrintedIn(set) => np
                 .with
                 .push(format!("a name originally printed in the {set} expansion")),
+            // Sharing a quality with any of a group of objects: "that shares a color with a
+            // creature you control".
             Filter::SharesCreatureType(s) => {
-                let s = self.sel(s, Case::Obj);
+                let s = self.shared_with(s);
                 np.rel.push(format!("that shares a creature type with {s}"));
             }
             Filter::SharesCardType(s) => {
-                let s = self.sel(s, Case::Obj);
+                let s = self.shared_with(s);
                 np.rel.push(format!("that shares a card type with {s}"));
             }
             Filter::SharesColor(s) => {
-                let s = self.sel(s, Case::Obj);
+                let s = self.shared_with(s);
                 np.rel.push(format!("that shares a color with {s}"));
             }
             Filter::HasKeyword(k) => np.with.push(self.keyword_kind_word(*k)),
@@ -940,6 +965,16 @@ impl Renderer<'_> {
             Filter::ChosenType => np
                 .rel
                 .push("that {alt:isn't|aren't} of {alt:the chosen type|that type}".into()),
+            // "a creature spell that doesn't share a color with a creature you control".
+            Filter::SharesColor(x) | Filter::SharesCardType(x) | Filter::SharesCreatureType(x) => {
+                let what = match other_kind(inner) {
+                    Some(k) => k,
+                    None => "a color",
+                };
+                let w = self.shared_with(x);
+                np.rel
+                    .push(format!("that {{alt:doesn't|don't}} share {what} with {w}"));
+            }
             other => {
                 let s = self.noun(other, Num::One);
                 np.rel.push(format!("that isn't {}", with_article(&s)));
@@ -959,11 +994,16 @@ impl Renderer<'_> {
         words.extend(np.subtypes.iter().cloned());
         let mut types = np.types.clone();
         types.sort_by_key(|t| type_order(*t));
+        // "each Frog, Rabbit, Raccoon, or Squirrel" / "Knights and Walls": the same kinds
+        // either way. With a card type, the alternatives come first: "a Wolf or Werewolf
+        // creature".
+        let conj = if self.alt_and { "{alt:and|or}" } else { "or" };
+        let alts_first = !np.alts.is_empty() && !types.is_empty() && np.subtypes.is_empty();
+        if alts_first {
+            words.push(join_list(&np.alts, conj));
+        }
         words.extend(types.iter().map(|t| t.word().to_string()));
-        if !np.alts.is_empty() {
-            // "each Frog, Rabbit, Raccoon, or Squirrel" / "Knights and Walls": the same
-            // kinds either way.
-            let conj = if self.alt_and { "{alt:and|or}" } else { "or" };
+        if !np.alts.is_empty() && !alts_first {
             words.push(join_list(&np.alts, conj));
         }
         if np.permanent_card {
@@ -1071,6 +1111,25 @@ impl Renderer<'_> {
         }
         if let Some(f) = &np.fixed {
             let mut s = f.clone();
+            // Qualities a fixed phrase has no place for: never dropped silently.
+            // ("enchanted land" that's a land says it.)
+            let said = |w: &str| f.split(|c: char| !c.is_alphanumeric()).any(|x| x == w);
+            let types_said = np.types.iter().all(|t| said(t.word()));
+            let subtypes_said = np.subtypes.iter().all(|t| said(t));
+            if !np.status.is_empty()
+                || !np.supers.is_empty()
+                || !np.colors.is_empty()
+                || !np.quality.is_empty()
+                || !np.nons.is_empty()
+                || !subtypes_said
+                || !types_said
+                || !np.alts.is_empty()
+                || np.permanent_card
+                || np.controller_matches.is_some()
+                || np.cast_from.is_some()
+            {
+                return self.gap(format!("qualities of an alternative list ({np:?})"));
+            }
             // The qualities the alternatives share: "artifact, enchantment, or nonbasic land
             // an opponent controls", "artifact or non-Aura enchantment card in your
             // graveyard".
@@ -1082,6 +1141,19 @@ impl Renderer<'_> {
                     Num::One => " card",
                     Num::Many => " cards",
                 });
+            }
+            // What the alternatives all have: "... card with mana value 3 or less".
+            let mut with: Vec<String> = np.with.clone();
+            for w in &np.with_on {
+                with.push(format!("{} on it", with_article(w)));
+            }
+            if !with.is_empty() {
+                s.push_str(" with ");
+                s.push_str(&join_list(&with, "and"));
+            }
+            if !np.without.is_empty() {
+                s.push_str(" without ");
+                s.push_str(&join_list(&np.without, "or"));
             }
             if let (Some(z), true) = (np.zone, in_zone) {
                 if !s.contains(" in ") && !s.contains(" from ") {
@@ -1128,16 +1200,15 @@ impl Renderer<'_> {
         let mut words: Vec<String> = Vec::new();
         words.extend(np.status.iter().cloned());
         words.extend(np.supers.iter().cloned());
+        // Oracle order: "a nonland historic permanent".
+        let nons = np.nons.clone();
         words.extend(np.colors.iter().cloned());
-        words.extend(np.quality.iter().cloned());
-        if !np.nons.is_empty() {
-            let nons = np.nons.join(", ");
-            // "nonland permanent card": the non- word goes before "permanent".
-            match words.iter().position(|w| w == "permanent") {
-                Some(i) => words.insert(i, nons),
-                None => words.push(nons),
-            }
+        if !nons.is_empty() {
+            let nons = nons.join(", ");
+            words.push(nons);
         }
+        // "nonland permanent card": the non- word goes before "permanent".
+        words.extend(np.quality.iter().cloned());
         let head = match num {
             Num::One => self.head(&np),
             Num::Many => self.plural_head(&np),
@@ -1711,5 +1782,15 @@ pub fn possessive(s: &str) -> String {
         "they" | "them" => "their".into(),
         _ if s.ends_with('s') && !s.ends_with("ss") && s != "~" => format!("{s}'"),
         _ => format!("{s}'s"),
+    }
+}
+
+/// The quality a "shares a ... with" filter is about.
+fn other_kind(f: &Filter) -> Option<&'static str> {
+    match f {
+        Filter::SharesColor(_) => Some("a color"),
+        Filter::SharesCardType(_) => Some("a card type"),
+        Filter::SharesCreatureType(_) => Some("a creature type"),
+        _ => None,
     }
 }

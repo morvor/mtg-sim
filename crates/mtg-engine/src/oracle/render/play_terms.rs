@@ -140,7 +140,7 @@ impl Renderer<'_> {
             let pay = self.cost_as_payment(c);
             s.push_str(&format!(
                 " by {} in addition to paying its other costs",
-                pay.replacen("pay ", "paying ", 1)
+                super::statics::gerund_first(&pay)
             ));
         }
         if terms.spend_as_any_color {

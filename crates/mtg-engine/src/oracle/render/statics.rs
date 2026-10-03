@@ -38,6 +38,59 @@ pub(crate) fn plural_vp(vp: &str) -> String {
     out.join(" and ")
 }
 
+/// A cost's instructions with the first verb as a gerund ("by sacrificing a land", "by
+/// removing a counter").
+pub(crate) fn gerund_first(s: &str) -> String {
+    let (verb, rest) = s.split_once(' ').unwrap_or((s, ""));
+    let g = match verb {
+        "pay" => "paying",
+        "sacrifice" => "sacrificing",
+        "remove" => "removing",
+        "discard" => "discarding",
+        "exile" => "exiling",
+        "tap" => "tapping",
+        "untap" => "untapping",
+        "return" => "returning",
+        "put" => "putting",
+        "reveal" => "revealing",
+        "collect" => "collecting",
+        other => return format!("{other} {rest}").trim_end().to_string(),
+    };
+    format!("{g} {rest}").trim_end().to_string()
+}
+
+/// `[common] and (a land or a nonland card)`: the cards a permission to "play lands and
+/// cast spells from among [cards]" is for (a land is played, a nonland card cast, CR
+/// 305.9): the common part.
+fn lands_or_spells(f: &Filter) -> Option<Filter> {
+    let Filter::And(v) = f else {
+        return None;
+    };
+    let is_land = |x: &Filter| match x {
+        Filter::Type(CardType::Land) => true,
+        Filter::And(w) => w.iter().all(|y| matches!(y, Filter::Type(CardType::Land))),
+        _ => false,
+    };
+    let is_nonland_card = |x: &Filter| match x {
+        Filter::And(w) => w.iter().all(|y| {
+            matches!(y, Filter::Card)
+                || matches!(y, Filter::Not(l) if matches!(l.as_ref(), Filter::Type(CardType::Land)))
+        }),
+        _ => false,
+    };
+    let i = v.iter().position(|x| {
+        matches!(x, Filter::Or(alts) if alts.len() == 2
+            && alts.iter().any(is_land) && alts.iter().any(is_nonland_card))
+    })?;
+    let common: Vec<Filter> = v
+        .iter()
+        .enumerate()
+        .filter(|(j, x)| *j != i && !matches!(x, Filter::Card))
+        .map(|(_, x)| x.clone())
+        .collect();
+    Some(Filter::and(common))
+}
+
 fn filter_has(f: &Filter, p: &dyn Fn(&Filter) -> bool) -> bool {
     p(f) || match f {
         Filter::And(v) | Filter::Or(v) => v.iter().any(|x| filter_has(x, p)),
@@ -46,8 +99,50 @@ fn filter_has(f: &Filter, p: &dyn Fn(&Filter) -> bool) -> bool {
     }
 }
 
+/// Whether a static ability grants abilities to Equipment: the objects it affects are
+/// Equipment, or it affects the permanent this one is attached to only as long as that
+/// permanent is an Equipment. An ability granted to an Equipment calls the creature it's
+/// attached to "equipped creature" (CR 301.5).
+pub(crate) fn grants_to_equipment(s: &StaticAbility) -> bool {
+    let StaticEffect::Continuous { affected, mods } = &s.effect else {
+        return false;
+    };
+    if !mods
+        .iter()
+        .any(|m| matches!(m, Modification::AddAbility(_)))
+    {
+        return false;
+    }
+    let equipment = |f: &Filter| match f {
+        Filter::Subtype(t) => t == "Equipment",
+        Filter::And(v) => v
+            .iter()
+            .any(|x| matches!(x, Filter::Subtype(t) if t == "Equipment")),
+        _ => false,
+    };
+    equipment(affected)
+        || (matches!(affected, Filter::AttachedToSource)
+            && matches!(&s.condition, Some(Condition::SelMatches(Sel::AttachedTo, f)) if equipment(f)))
+}
+
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
+        // CR 702.178a: "Max speed — [ability]" means "As long as your speed is 4, this
+        // object has [ability]": a static ability that applies as long as you have max
+        // speed. Cards may also say the condition.
+        if matches!(s.condition, Some(Condition::MaxSpeed)) {
+            let mut inner = s.clone();
+            inner.condition = None;
+            let (i, c) = self.two_ways(
+                |r| r.static_ability(&inner),
+                |r| r.static_ability_conditioned(s),
+            );
+            return format!("{{alt:Max speed — {i}|{c}}}");
+        }
+        self.static_ability_conditioned(s)
+    }
+
+    fn static_ability_conditioned(&mut self, s: &StaticAbility) -> String {
         // "Cast this spell only during combat": no player can cast it unless (CR 601.3).
         if let (
             Some(Condition::Not(c)),
@@ -120,6 +215,20 @@ impl Renderer<'_> {
             self.subject_types = self.info.card_types.iter().collect();
         }
         let e = match &s.condition {
+            // "Once during each of your turns, you may cast a Zombie creature spell from
+            // your graveyard" (`once_each_turn.rs`).
+            Some(Condition::And(v)) if self.once_each_turn_permission(v, &s.effect).is_some() => {
+                self.once_each_turn_permission(v, &s.effect)
+                    .unwrap_or_default()
+            }
+            Some(c @ Condition::Custom(_))
+                if self
+                    .once_each_turn_permission(std::slice::from_ref(c), &s.effect)
+                    .is_some() =>
+            {
+                self.once_each_turn_permission(std::slice::from_ref(c), &s.effect)
+                    .unwrap_or_default()
+            }
             // A once-each-turn permission or alternative cost ("Once during each of your
             // turns, you may cast a creature spell from your graveyard", see
             // `kw/once_each_turn_cast.rs`).
@@ -154,12 +263,6 @@ impl Renderer<'_> {
             Some(Condition::YourTurn) => {
                 let e = self.static_effect(&s.effect);
                 format!("during your turn, {}", lower_first(&e))
-            }
-            // "Once during each of your turns, you may cast a Zombie creature spell from
-            // your graveyard" (`once_each_turn.rs`).
-            Some(Condition::And(v)) if self.once_each_turn_permission(v, &s.effect).is_some() => {
-                self.once_each_turn_permission(v, &s.effect)
-                    .unwrap_or_default()
             }
             Some(Condition::NotYourTurn) => {
                 let e = self.static_effect(&s.effect);
@@ -387,6 +490,12 @@ impl Renderer<'_> {
                             format!("{x} entering {{opt:the battlefield}}")
                         } else if let Some(x) = t.strip_suffix(" dies") {
                             format!("{x} dying")
+                        } else if let Some(x) = t.strip_suffix(" attacks") {
+                            format!("{x} attacking")
+                        } else if let Some((x, y)) = t.split_once(" deals ") {
+                            format!("{x} dealing {y}")
+                        } else if let Some((x, y)) = t.split_once(" draws ") {
+                            format!("{x} drawing {y}")
                         } else {
                             t
                         };
@@ -756,18 +865,54 @@ impl Renderer<'_> {
     fn play_permission(&mut self, pp: &PlayPermission) -> String {
         let who = self.rel_subject(pp.who);
         let p = if who == "you" { "your" } else { "their" };
+        // A spell isn't a land, and it's the card that's cast (CR 305.9): "nonland" and
+        // "card" in what may be cast say nothing more.
+        let spell_what = |f: &Filter| {
+            match f {
+            Filter::And(v) => Filter::and(
+                v.iter()
+                    .filter(|x| {
+                        !matches!(x, Filter::Not(l) if matches!(l.as_ref(), Filter::Type(CardType::Land)))
+                    })
+                    .map(|x| match x {
+                        Filter::Card => Filter::Spell,
+                        x => x.clone(),
+                    })
+                    .collect(),
+            ),
+            Filter::Not(l) if matches!(l.as_ref(), Filter::Type(CardType::Land)) => Filter::Any,
+            other => other.clone(),
+        }
+        };
         let verb = match (pp.lands, pp.spells) {
             (true, true) => {
                 if matches!(pp.what, Filter::Any) {
                     "play lands and cast spells".to_string()
+                } else if let Some(common) = lands_or_spells(&pp.what) {
+                    // "play lands and cast spells from among cards you own with croak
+                    // counters on them": cards of the group, as lands or as spells.
+                    let n = self.noun(&Filter::and(vec![Filter::Card, common]), Num::Many);
+                    format!("play lands and cast spells from among {n}")
                 } else {
                     let n = self.noun(&pp.what, Num::Many);
                     format!("play {n}")
                 }
             }
-            (true, false) => "play lands".to_string(),
+            (true, false) => {
+                if matches!(pp.what, Filter::Type(CardType::Land)) {
+                    "play lands".to_string()
+                } else {
+                    let n = self.noun(&pp.what, Num::Many);
+                    format!("play {n}")
+                }
+            }
             (false, _) => {
-                let s = self.spell_noun_plural(&pp.what);
+                let w = spell_what(&pp.what);
+                let s = if matches!(w, Filter::Any | Filter::Spell) {
+                    "spells".to_string()
+                } else {
+                    self.spell_noun_plural(&w)
+                };
                 format!("cast {s}")
             }
         };
@@ -784,6 +929,63 @@ impl Renderer<'_> {
                 let c = self.cost_as_payment(c);
                 s.push_str(&format!(" by {}", c.replacen("pay", "paying", 1)));
             }
+        }
+        let tail = self.static_permission_terms(pp);
+        s.push_str(&tail);
+        s
+    }
+
+    /// The terms a static ability's permission to play cards comes with: "If you cast a
+    /// spell this way, you may cast it as though it had flash", "by removing a counter
+    /// from a creature you control in addition to paying their other costs", "If a spell
+    /// cast this way would be put into your graveyard, exile it instead" (see
+    /// [`PlayTerms`]).
+    pub(crate) fn static_permission_terms(&mut self, pp: &PlayPermission) -> String {
+        let t = &pp.terms;
+        let mut s = String::new();
+        if let Some(c) = &t.extra_cost {
+            let pay = self.cost_as_payment(c);
+            s.push_str(&format!(
+                " by {} in addition to paying their other costs",
+                gerund_first(&pay)
+            ));
+        }
+        if pp.flash || t.flash {
+            s.push_str(
+                " {alt:. If you cast a spell this way, you may cast it as though it had flash|as though they had flash|as though it had flash}",
+            );
+        }
+        if t.alt_cost.is_some() {
+            s.push_str(&self.gap("an alternative cost for spells cast with a static permission"));
+        }
+        if t.spend_as_any_color {
+            s.push_str(
+                " {alt:. If you cast a spell this way, you may spend mana as though it were mana of any color to cast it|and you may spend mana as though it were mana of any color to cast those spells}",
+            );
+        }
+        if t.spend_any_type {
+            s.push_str(" {alt:and mana of any type can be spent to cast those spells|. Mana of any type can be spent to cast those spells}");
+        }
+        if t.cost_increase > 0 {
+            s.push_str(&format!(
+                ". {{alt:A|Each}} spell cast this way costs {{{}}} more to cast",
+                t.cost_increase
+            ));
+        }
+        if t.lands_enter_tapped {
+            s.push_str(". Each land played this way enters tapped");
+        }
+        if let Some(c) = &t.condition {
+            let c = self.condition(c);
+            s.push_str(&format!(" {{alt:if|as long as}} {c}"));
+        }
+        if t.what.is_some() || t.limit.is_some() || t.until_another || t.later_turn {
+            s.push_str(&self.gap("terms of a static permission to play cards"));
+        }
+        if t.exile_instead {
+            s.push_str(
+                ". If a spell cast this way would be put into its owner's graveyard, exile it instead",
+            );
         }
         s
     }
@@ -1523,6 +1725,21 @@ impl Renderer<'_> {
                 cost,
             } => {
                 let a = subj(self, attackers);
+                // Attacking anything (a player, a planeswalker, or a battle, `combat.rs`):
+                // "Leviathan can't attack unless you sacrifice two Islands", "Green
+                // creatures can't attack unless their controller sacrifices a land for
+                // each green creature they control that's attacking".
+                if matches!(defender, PlayerFilter::Any) && *planeswalkers {
+                    let pay = self.cost_as_payment(cost);
+                    if matches!(attackers, Filter::Source) {
+                        return format!("{a} can't attack unless you {pay}");
+                    }
+                    let pays = super::effects::third_person(&pay);
+                    let n = self.noun(&super::effects::strip_controller(attackers), Num::One);
+                    return format!(
+                        "{a} can't attack unless their controller {pays} for each {{alt:{n} they control that's attacking|of those creatures}}"
+                    );
+                }
                 let d = self.player_filter_object(defender);
                 let pw = if *planeswalkers {
                     " or planeswalkers you control"
@@ -2181,9 +2398,16 @@ impl Renderer<'_> {
                     on.push(self.player_filter_object(p));
                 }
                 let on = join_list(&on, "or");
+                // Counters of any kind: "twice that many of each of those kinds of
+                // counters".
+                let many = if kind.is_none() {
+                    "{alt:of each of those kinds of counters|counters}".to_string()
+                } else {
+                    plural(&k)
+                };
                 let then = match action {
                     A::Multiply(2) => {
-                        format!("twice that many {} are put on it instead", plural(&k))
+                        format!("twice that many {many} are put on it instead")
                     }
                     A::Add(v) => {
                         let v = match v {
@@ -2197,29 +2421,48 @@ impl Renderer<'_> {
                 };
                 format!("if one or more {} would be put on {on}, {then}", plural(&k))
             }
+            // The event is any counters a matching player puts, on a permanent or on a
+            // player (CR 122.6a).
             (E::PutCountersBy { by, kind }, action) => {
                 let w = self.rel_subject(*by);
-                let k = match kind {
-                    Some(k) => counter_name(k),
-                    None => "counter".into(),
+                let (k, each) = match kind {
+                    Some(k) => (plural(&counter_name(k)), plural(&counter_name(k))),
+                    None => (
+                        "counters".to_string(),
+                        "{alt:of each of those kinds of counters|counters}".to_string(),
+                    ),
                 };
+                let they = if w == "you" {
+                    "you".to_string()
+                } else {
+                    "they".to_string()
+                };
+                let on = "on {alt:that permanent or player|it}";
                 let then = match action {
                     A::Multiply(2) => {
-                        format!("{w} put twice that many {} on it instead", plural(&k))
+                        format!("{{opt:{they}}} put twice that many {each} {on} instead")
+                    }
+                    A::Multiply(3) => {
+                        format!("{{opt:{they}}} put three times that many {each} {on} instead")
                     }
                     A::Add(v) => {
                         let v = match v {
                             Value::Const(1) => "one".to_string(),
                             other => self.value(other),
                         };
-                        format!("{w} put that many plus {v} {} on it instead", plural(&k))
+                        format!("{{opt:{they}}} put that many plus {v} {each} {on} instead")
+                    }
+                    // Half rounded down remains when half rounded up is taken away (see
+                    // `r122_counters_put_by.rs`).
+                    A::Subtract(Value::Div(a, 2, up))
+                        if matches!(a.as_ref(), Value::EventAmount) =>
+                    {
+                        let r = if *up { "down" } else { "up" };
+                        format!("{they} put half that many {each} {on} instead, rounded {r}")
                     }
                     other => self.replacement_then(other, "it"),
                 };
-                format!(
-                    "if {w} would put one or more {} on a permanent, {then}",
-                    plural(&k)
-                )
+                format!("if {w} would put one or more {k} on a permanent or player, {then}")
             }
             (E::CreateTokens(p), action) => {
                 let w = self.player_filter_subject(p);
@@ -2853,17 +3096,40 @@ impl Renderer<'_> {
         use crate::start::DeckCondition as D;
         match dc {
             D::Each { each, must } => {
-                let e = self.noun(each, Num::One);
-                let m = self.is_predicate(must, false);
-                let m = m.strip_prefix("is ").map(|x| x.to_string()).unwrap_or(m);
-                format!("each {e} in your starting deck has {m}")
+                let e = self.card_noun(each);
+                // What the card must be beyond being one of `each`.
+                let parts = |f: &Filter| match f {
+                    Filter::And(v) => v.clone(),
+                    other => vec![other.clone()],
+                };
+                let have = parts(each);
+                let rest: Vec<Filter> = parts(must)
+                    .into_iter()
+                    .filter(|x| {
+                        !matches!(x, Filter::Card)
+                            && !have.iter().any(|h| format!("{h:?}") == format!("{x:?}"))
+                    })
+                    .collect();
+                let m = match rest.as_slice() {
+                    // "has mana value 2 or less".
+                    [Filter::ManaValue(c, v)] => {
+                        let v = self.value(v);
+                        format!("has mana value {}", super::nouns::cmp_phrase(*c, &v))
+                    }
+                    // "is a Cat, Elemental, Nightmare, Dinosaur, or Beast card".
+                    _ => {
+                        let n = self.card_noun(&Filter::and(rest.clone()));
+                        format!("is {}", with_article(&n))
+                    }
+                };
+                format!("each {e} in your starting deck {m}")
             }
             D::DifferentNames { each } => {
-                let e = self.noun(each, Num::One);
+                let e = self.card_noun(each);
                 format!("each {e} in your starting deck has a different name")
             }
             D::ShareACardType { each } => {
-                let e = self.noun(each, Num::One);
+                let e = self.card_noun(each);
                 format!("each {e} in your starting deck shares a card type")
             }
             D::MoreThanMinimumSize(n) => format!(

@@ -159,11 +159,18 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         ),
     ] {
         if r == format!("{a} attack {d}") || r == format!("{a} attacks {d}") {
-            return Some((
-                TriggerCond::PlayerAttacksPlayer { attacker, defender },
-                Sel::None,
-                PlayerRef::TriggerPlayer,
-            ));
+            let t = TriggerCond::PlayerAttacksPlayer { attacker, defender };
+            // "attacks one or more of your opponents": once for the attack, however many
+            // of them it attacks.
+            let t = if d.starts_with("one or more") {
+                TriggerCond::Batched {
+                    trigger: Box::new(t),
+                    per: BatchPer::Batch,
+                }
+            } else {
+                t
+            };
+            return Some((t, Sel::None, PlayerRef::TriggerPlayer));
         }
     }
     // CR 508.3b: "[player or permanent] is attacked".
