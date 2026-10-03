@@ -53,6 +53,11 @@ pub struct FaceInfo {
     /// cost reveals (Dragons of Tarkir), for "if you revealed a Dragon card or controlled
     /// a Dragon as you cast this spell".
     pub reveal_card: Option<crate::ability::Filter>,
+    /// The face has spree (CR 702.172): its modes are written "+ [cost] — [effect]".
+    pub spree: bool,
+    /// The face has tiered (CR 702.183): its modes are written "• [cost] — [effect]"
+    /// after the keyword.
+    pub tiered: bool,
 }
 
 impl FaceInfo {
@@ -64,6 +69,14 @@ impl FaceInfo {
             enchant: None,
             meld: None,
             reveal_card: None,
+            spree: face.chars.abilities.iter().any(|a| {
+                matches!(&a.kind, AbilityKind::Keyword(k)
+                    if k.kind == crate::keywords::KeywordKind::Spree)
+            }),
+            tiered: face.chars.abilities.iter().any(|a| {
+                matches!(&a.kind, AbilityKind::Keyword(k)
+                    if k.kind == crate::keywords::KeywordKind::Tiered)
+            }),
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
         info.reveal_card = reveal_card(&face.chars.abilities);
@@ -122,6 +135,16 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
             out.lines.push(format!("Backup {n}"));
             continue;
         }
+        // CR 702.139a: the companion keyword and its condition are one line ("Companion —
+        // Each permanent card in your starting deck has mana value 2 or less"), the
+        // condition compiled after the keyword.
+        if matches!(&a.kind, AbilityKind::Keyword(k) if k.kind == crate::keywords::KeywordKind::Companion)
+            && abilities.get(i + 1).is_some_and(|n| {
+                matches!(&n.kind, AbilityKind::Static(s) if matches!(s.effect, StaticEffect::Companion(_)))
+            })
+        {
+            continue;
+        }
         // CR 702.73a: a printed changeling's "is every creature type" CDA is the keyword's
         // meaning, compiled next to it; it isn't printed separately.
         if prev_changeling && is_changeling_cda(a) {
@@ -162,6 +185,12 @@ pub fn render_abilities(abilities: &[Ability], info: &FaceInfo) -> RenderedFace 
     out.merged = merge_same_triggers(&out.lines, &bodies);
     if let Some(m) = &mut out.merged {
         merge_chapters(m);
+    }
+    // "{3}, {T} or {R}, {T}: ~ deals 1 damage to any target": one ability printed with
+    // two costs, compiled as one ability for each.
+    let base = out.merged.clone().unwrap_or_else(|| out.lines.clone());
+    if let Some(m) = merge_alternative_costs(&base) {
+        out.merged = Some(m);
     }
     merge_chapters(&mut out.lines);
     merge_shared_as_though(&mut out.lines);
@@ -223,6 +252,36 @@ fn off_battlefield_group(abilities: &[Ability]) -> Option<(usize, Ability)> {
 }
 
 /// See [`RenderedFace::merged`]: "When A, X." + "When B, X." = "When A or B, X."
+/// Consecutive activated abilities that do the same with different costs, written as one
+/// ability with either cost: "{3}, {T} or {R}, {T}: [effect]".
+fn merge_alternative_costs(lines: &[String]) -> Option<Vec<String>> {
+    let split = |l: &str| -> Option<(String, String)> {
+        let (c, b) = l.split_once(": ")?;
+        if c.is_empty() || c.contains(['"', '\n']) || c.contains("{alt:") {
+            return None;
+        }
+        Some((c.to_string(), b.to_string()))
+    };
+    let mut out: Vec<String> = Vec::new();
+    let mut any = false;
+    let mut i = 0;
+    while i < lines.len() {
+        if let (Some((c1, b1)), Some((c2, b2))) =
+            (split(&lines[i]), lines.get(i + 1).and_then(|l| split(l)))
+        {
+            if b1 == b2 {
+                out.push(format!("{c1} or {c2}: {b1}"));
+                any = true;
+                i += 2;
+                continue;
+            }
+        }
+        out.push(lines[i].clone());
+        i += 1;
+    }
+    any.then_some(out)
+}
+
 fn merge_same_triggers(lines: &[String], bodies: &[Option<String>]) -> Option<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     let mut merged_any = false;
@@ -614,6 +673,7 @@ pub enum Num {
 
 /// The renderer: holds the state of the ability being rendered (its targets, which of
 /// them have been mentioned) and the gaps found so far.
+#[derive(Clone)]
 pub struct Renderer<'a> {
     pub(crate) info: &'a FaceInfo,
     pub gaps: Vec<String>,
@@ -682,6 +742,11 @@ pub struct Renderer<'a> {
     pub(crate) default_head: Option<&'static str>,
     /// The previous instruction was a clash ("If you win, ...", CR 701.30).
     pub(crate) after_clash: bool,
+    /// The body of a triggered ability without an intervening "if" is a conditional
+    /// effect: its condition is checked only as the ability resolves, so it's worded
+    /// "[effect] if [condition]", not "if [condition], [effect]", which after a trigger
+    /// condition is an intervening "if" clause (CR 603.4).
+    pub(crate) trigger_body_if: bool,
     /// Selections stored in variables by the ability being rendered ("other creatures
     /// you control gain ..." stored, then modified): the first mention is the phrase.
     pub(crate) var_defs: Vec<(Var, Sel, bool)>,
@@ -739,9 +804,48 @@ pub struct Renderer<'a> {
     /// Targets remembered in variables, first mentioned through them: (variable, target
     /// phrase, mentioned yet).
     pub(crate) target_vars: Vec<(Var, String, bool)>,
+    /// The static ability being rendered grants abilities to an Equipment ("As long as
+    /// enchanted permanent is an Equipment, it has \"Equipped creature has flying.\"").
+    pub(crate) grants_to_equipment: bool,
+    /// The quote depth of an ability granted to an Equipment: there, the object the
+    /// ability's holder is attached to is "equipped creature".
+    pub(crate) equipment_holder_depth: Option<u32>,
+    /// The numbers an enclosing condition compares ("if you have fewer than seven cards
+    /// in hand"): their difference is "the difference".
+    pub(crate) compared: Vec<(Value, Value)>,
+    /// The words of a vote earlier in the ability ("grace", "condemnation"), and what the
+    /// players voted for when they voted for objects ("permanent").
+    pub(crate) vote_words: Vec<String>,
+    pub(crate) vote_noun: Option<String>,
+    /// The single object an instruction done "for each" of it is done to ("it"), for
+    /// instructions about the iterated object.
+    pub(crate) for_each_subject: Option<String>,
+    /// Rendering a triggered ability that triggers on an attack: the active player is the
+    /// attacking player.
+    pub(crate) attack_trigger: bool,
 }
 
 impl<'a> Renderer<'a> {
+    /// Renders two wordings of the same thing from the same state (each sees the state
+    /// as it was before either), keeping the state the second leaves and the gaps of both.
+    pub(crate) fn two_ways(
+        &mut self,
+        a: impl FnOnce(&mut Self) -> String,
+        b: impl FnOnce(&mut Self) -> String,
+    ) -> (String, String) {
+        let before = self.clone();
+        let x = a(self);
+        let gaps = std::mem::take(&mut self.gaps);
+        *self = before;
+        let y = b(self);
+        for g in gaps {
+            if !self.gaps.contains(&g) {
+                self.gaps.push(g);
+            }
+        }
+        (x, y)
+    }
+
     pub fn new(info: &'a FaceInfo) -> Renderer<'a> {
         Renderer {
             info,
@@ -749,6 +853,13 @@ impl<'a> Renderer<'a> {
             targets: Vec::new(),
             introduced: Vec::new(),
             quote_depth: 0,
+            grants_to_equipment: false,
+            equipment_holder_depth: None,
+            compared: Vec::new(),
+            vote_words: Vec::new(),
+            vote_noun: None,
+            for_each_subject: None,
+            attack_trigger: false,
             granted_keyword: false,
             self_before_target: false,
             last_actor_other: false,
@@ -768,6 +879,7 @@ impl<'a> Renderer<'a> {
             plural_alts: false,
             default_head: None,
             after_clash: false,
+            trigger_body_if: false,
             sacrificed: None,
             search_verb: None,
             last_group: None,
@@ -867,9 +979,16 @@ impl<'a> Renderer<'a> {
         let saved_v = std::mem::take(&mut self.var_defs);
         let saved_ov = std::mem::take(&mut self.outer_vars);
         let saved_p = std::mem::take(&mut self.plural_vars);
+        let saved_eq = self.equipment_holder_depth;
+        let saved_ge = std::mem::replace(&mut self.grants_to_equipment, false);
         self.quote_depth += 1;
+        if saved_ge {
+            self.equipment_holder_depth = Some(self.quote_depth);
+        }
         let s = self.ability(a);
         self.quote_depth -= 1;
+        self.equipment_holder_depth = saved_eq;
+        self.grants_to_equipment = saved_ge;
         self.var_defs = saved_v;
         self.outer_vars = saved_ov;
         self.plural_vars = saved_p;
@@ -897,6 +1016,8 @@ impl<'a> Renderer<'a> {
         self.revealed_hand = false;
         self.x_for_each = None;
         self.sacrificed = None;
+        self.vote_words.clear();
+        self.vote_noun = None;
         self.last_group = None;
         self.trigger_names_opponent = false;
         let saved_scope = std::mem::replace(
@@ -926,7 +1047,15 @@ impl<'a> Renderer<'a> {
                 }
             }
             AbilityKind::Triggered(t) => self.triggered(t),
-            AbilityKind::Static(s) => self.static_ability(s),
+            AbilityKind::Static(s) => {
+                let saved = std::mem::replace(
+                    &mut self.grants_to_equipment,
+                    statics::grants_to_equipment(s),
+                );
+                let t = self.static_ability(s);
+                self.grants_to_equipment = saved;
+                t
+            }
             AbilityKind::Keyword(k) => self.keyword(k),
             AbilityKind::Unsupported(_) => self.gap("unsupported ability"),
         }
@@ -1015,6 +1144,44 @@ impl<'a> Renderer<'a> {
     }
 
     fn modal(&mut self, m: &Modal) -> String {
+        // CR 702.172a: spree means "choose one or more modes; as an additional cost,
+        // pay the costs of each chosen mode", which its "+ [cost] — [effect]" lines say.
+        if self.info.spree
+            && m.per_mode_cost
+            && matches!(m.chooser, ModeChooser::Controller)
+            && m.min.as_const() == Some(1)
+            && m.max.as_const().is_none_or(|b| b as usize >= m.modes.len())
+            && !m.optional
+            && !m.allow_repeat
+            && m.modes.iter().all(|x| x.cost.is_some())
+        {
+            let mut lines = Vec::new();
+            for mode in &m.modes {
+                let cost = mode.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
+                let text = self.with_targets(&mode.targets, |r| r.effect_sentences(&mode.effect));
+                lines.push(format!("+ {cost} — {text}"));
+            }
+            return lines.join("\n");
+        }
+        // CR 702.183a: tiered means "choose one mode; as an additional cost, pay the cost
+        // of the chosen mode", which its "• [cost] — [effect]" bullets say.
+        if self.info.tiered
+            && m.per_mode_cost
+            && matches!(m.chooser, ModeChooser::Controller)
+            && m.min.as_const() == Some(1)
+            && m.max.as_const() == Some(1)
+            && !m.optional
+            && !m.allow_repeat
+            && m.modes.iter().all(|x| x.cost.is_some())
+        {
+            let mut lines = Vec::new();
+            for mode in &m.modes {
+                let cost = mode.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
+                let text = self.with_targets(&mode.targets, |r| r.effect_sentences(&mode.effect));
+                lines.push(format!("• {cost} — {text}"));
+            }
+            return lines.join("\n");
+        }
         let mut head = match &m.chooser {
             ModeChooser::Controller => "choose".to_string(),
             ModeChooser::Opponent => "an opponent chooses".to_string(),
@@ -1125,6 +1292,16 @@ impl<'a> Renderer<'a> {
 }
 
 /// Cardinal number words as printed on cards ("two", "ten"; larger numbers as digits).
+/// The two numbers a condition compares ("if you have fewer than seven cards in hand").
+pub(crate) fn compared_values(c: &Condition) -> Option<(Value, Value)> {
+    match c {
+        Condition::Compare(a, Cmp::Lt | Cmp::Gt | Cmp::Le | Cmp::Ge, b) => {
+            Some((a.clone(), b.clone()))
+        }
+        _ => None,
+    }
+}
+
 pub fn number_word(n: i32) -> String {
     const W: [&str; 21] = [
         "zero",

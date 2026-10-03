@@ -180,6 +180,100 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               \"nonartifact, nonblack creature\" is a \"nonblack nonartifact creature\".",
     },
     Equivalence {
+        pattern: r"\b(creatures?|creature tokens?)((?: you control)?) that(?:'s| is| are) (enchanted|equipped)( get\b| gets\b| have\b| has\b|[.,])",
+        replacement: "$3 $1$2$4",
+        why: "A clause saying what an object is describes it as the adjective does: \
+              \"creatures you control that are enchanted\" are \"enchanted creatures you \
+              control\".",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?|permanents?)((?: you control| your opponents control| an opponent controls)?) that(?:'s| is| are) (?:an? )?([a-z-]+),? (or|and/or) (?:an? )?([a-z-]+)\b",
+        replacement: "$3 $4 $5 $1$2",
+        why: "The same for kinds: \"each creature you control that's a Wolf or a \
+              Werewolf\" is \"each Wolf or Werewolf creature you control\".",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?|permanents?)((?: you control| your opponents control| an opponent controls)?) that(?:'s| is| are) (?:an? )?([a-z-]+), (?:an? )?([a-z-]+), (or|and/or) (?:an? )?([a-z-]+)\b",
+        replacement: "$3, $4, $5 $6 $1$2",
+        why: "The same with three kinds: \"each creature that's a Barbarian, a Warrior, or \
+              a Berserker\".",
+    },
+    Equivalence {
+        pattern: r"\b(exiles?) (?:all|each) (?:the )?cards (?:in|from) ((?:all|each) graveyards|(?:target player|target opponent|that player)'s (?:hand|graveyard|library))\b",
+        replacement: "$1 $2",
+        why: "As above, for all graveyards and another player's zones: exiling all cards \
+              from all graveyards is exiling all graveyards (CR 400.1).",
+    },
+    Equivalence {
+        pattern: r"(^|\s)(~|it) attacks or blocks each combat if able\b",
+        replacement: "$1$2 attacks each combat if able. $2 blocks each combat if able",
+        why: "A requirement to attack each combat and one to block each combat (CR 508.1d, \
+              509.1c), stated together.",
+    },
+    Equivalence {
+        pattern: r"\bactivate only (once each turn|as a sorcery|during your turn) and only if ([^.]+?)(\.|$)",
+        replacement: "activate only if $2 and only $1$3",
+        why: "Restrictions on activating an ability all apply, in whatever order they're \
+              listed (CR 602.5).",
+    },
+    Equivalence {
+        pattern: r"\byou have an? card in (your )?hand\b",
+        replacement: "you have one or more cards in ${1}hand",
+        why: "Having a card in hand is having one or more.",
+    },
+    Equivalence {
+        pattern: r"\bwith no ((?:[a-z+/0-9-]+ )?)counters on\b",
+        replacement: "without $1counters on",
+        why: "\"With no counters on it\" and \"without counters on it\" are the same.",
+    },
+    Equivalence {
+        pattern: r"\bprevent all (combat )?damage that would be dealt to and dealt by ([^.]+)\.",
+        replacement: "prevent all ${1}damage that would be dealt to $2. prevent all ${1}damage that would be dealt by $2.",
+        why: "Damage dealt to an object and damage dealt by it are prevented alike (CR \
+              615.1a): the same as two prevention effects.",
+    },
+    Equivalence {
+        pattern: r"\bprevent all (combat )?damage (?:that )?((?:~|target [^.{}|]+?|[a-z][^.{}|]*?)) would deal to ([^.{}|]+?)((?: this turn)?)\.",
+        replacement: "prevent all ${1}damage that would be dealt to $3 by $2$4.",
+        why: "\"Prevent all damage X would deal to Y\" is the damage that would be dealt to Y \
+              by X (CR 615.1a).",
+    },
+    Equivalence {
+        pattern: r"\bprevent all (combat )?damage (?:that )?((?:~|target [^.{}|]+?|[a-z][^.{}|]*?)) would deal\b",
+        replacement: "prevent all ${1}damage that would be dealt by $2",
+        why: "\"Prevent all damage X would deal\" is the damage that would be dealt by X (CR \
+              615.1a).",
+    },
+    Equivalence {
+        pattern: r"\bas long as it's your turn\b",
+        replacement: "during your turn",
+        why: "A static ability that applies \"as long as it's your turn\" applies during \
+              your turn.",
+    },
+    Equivalence {
+        pattern: r"\byour life total is less than (\d+|[a-z]+)\b",
+        replacement: "you have less than $1 life",
+        why: "A player's life total is the amount of life they have (CR 119.1).",
+    },
+    Equivalence {
+        pattern: r"(^|[.:—•] |\n)for each (opponent|player), ([^.]+)\.",
+        replacement: "$1$3 for each $2.",
+        why: "\"For each opponent, create a token\" and \"create a token for each \
+              opponent\" do the same thing once per opponent.",
+    },
+    Equivalence {
+        pattern: r"\b(creatures?|permanents?)((?: you control| your opponents control| an opponent controls)?) that(?:'s| is| are) (?:an? )?((?:[a-z-]+, ){3,})(or|and/or) ([a-z-]+)\b",
+        replacement: "$3$4 $5 $1$2",
+        why: "The same with a longer list of kinds: \"each other creature you control that's \
+              a Cat, Elemental, Nightmare, Dinosaur, or Beast\".",
+    },
+    Equivalence {
+        pattern: r"\bnontoken (white|blue|black|red|green)\b",
+        replacement: "$1 nontoken",
+        why: "The same for a color and \"nontoken\": a \"nontoken blue creature\" is a \
+              \"blue nontoken creature\".",
+    },
+    Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(~it|~|it) (gets|gains) ([^.;",{]*?)(,? and|,? then) (deals)\b"#,
         replacement: "$1$2 $3 $4$5 $2 $6",
         why: "As for players above: \"~ gets +1/+0 until end of turn and deals 1 damage to \
@@ -380,7 +474,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               of them gets +1/+1\" is \"they get +1/+1\" (CR 611.2c: each affected object).",
     },
     Equivalence {
-        pattern: r"(^|[.:—•] |\n)it ([^.]*?) as long as (enchanted creature|enchanted permanent|equipped creature|enchanted land|enchanted artifact) is ",
+        pattern: r#"(^|[.:—•] |\n)it ((?:[^."]|"[^"]*")*?) as long as (enchanted creature|enchanted permanent|equipped creature|enchanted land|enchanted artifact) is "#,
         replacement: "${1}$3 $2 as long as $3 is ",
         why: "\"Enchanted permanent gets -1/-1 as long as it's a creature\" and \"As long as \
               enchanted permanent is a creature, it gets -1/-1\": the noun and the pronoun \
@@ -831,6 +925,11 @@ fn number_words() -> &'static [(&'static str, &'static str)] {
         ("eighteen", "18"),
         ("nineteen", "19"),
         ("twenty", "20"),
+        ("thirty", "30"),
+        ("forty", "40"),
+        ("fifty", "50"),
+        ("ninety-nine", "99"),
+        ("hundred", "100"),
         ("once", "1 time"),
         ("twice", "2 times"),
     ]
@@ -1083,7 +1182,7 @@ pub fn equivalence_regexes() -> &'static [Option<Regex>] {
 fn sentence_rewrites(s: &str) -> String {
     static LEAD: OnceLock<Option<Regex>> = OnceLock::new();
     let lead = LEAD.get_or_init(|| {
-        Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ([^.]+)\."#)
+        Regex::new(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+ remains? exiled|at the beginning of the next end step|until the end of your next turn|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."]|"[^"]*")*?"[^"]*\."|(?:[^."]|"[^"]*")+?\.)"#)
             .ok()
     });
     let mut s = s.to_string();
@@ -1131,11 +1230,17 @@ fn sentence_rewrites(s: &str) -> String {
                 || cond.starts_with("able ")
                 || body.contains(" unless ")
                 || body.contains("\"");
-            if keep {
-                c[0].to_string()
-            } else {
-                format!("{lead}if {cond}, {body}.")
+            // After a trigger condition, "When ~ enters, draw a card if C" is checked only
+            // as the ability resolves; "When ~ enters, if C, draw a card" is an
+            // intervening "if" clause (CR 603.4), checked when it triggers too: the two
+            // aren't the same, so the sentence stays as it is.
+            let trigger = body.starts_with("when ")
+                || body.starts_with("whenever ")
+                || body.starts_with("at the beginning ");
+            if keep || trigger {
+                return c[0].to_string();
             }
+            format!("{lead}if {cond}, {body}.")
         })
         .to_string();
     for (re, rep) in where_x_rewrites() {
@@ -1160,6 +1265,27 @@ fn sentence_rewrites(s: &str) -> String {
                     return c[0].to_string();
                 }
                 format!("{}{}{}", &c[1], lead, &c[2])
+            })
+            .to_string();
+    }
+    // "Choose target creature. Reveal cards ... That creature gets +X/-X ...": the same,
+    // with the target named where it's first used (as above); only "that [noun]", which
+    // refers back to what was chosen, is taken for the target.
+    static CHOOSE_THAT: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = CHOOSE_THAT.get_or_init(|| {
+        Regex::new(r"(^|[.:—•] |\n|, )choose ((?:up to (?:one|1) )?(?:another |other )?target [^.,]+?)\. ([^\n]*?)\bthat (creature|player|opponent|permanent|spell|card|artifact|land|planeswalker)\b").ok()
+    }) {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                // The noun must be the target's ("target opponent ... that player").
+                let head = c[2].split_whitespace().last().unwrap_or("").to_string();
+                let noun = &c[4];
+                let fits = c[2].contains(noun)
+                    || (noun == "player" && (head == "opponent" || head == "player"));
+                if !fits || c[3].contains("choose ") {
+                    return c[0].to_string();
+                }
+                format!("{}{}{}", &c[1], &c[3], &c[2])
             })
             .to_string();
     }
@@ -1200,6 +1326,21 @@ fn sentence_rewrites(s: &str) -> String {
             })
             .to_string();
     }
+    // "When ~ enters, until end of turn, whenever another creature dies, ...": a
+    // duration after a trigger condition moves to the end of its sentence too.
+    static MID_DURATION: OnceLock<Option<Regex>> = OnceLock::new();
+    static MID_TRIGGER_DURATION: OnceLock<Option<Regex>> = OnceLock::new();
+    if let Some(re) = MID_TRIGGER_DURATION.get_or_init(|| {
+        Regex::new(r#"(, )(until end of turn|this turn), (whenever|when) ([^,."]+), "#).ok()
+    }) {
+        // A delayed trigger for the duration: "whenever another creature dies this turn".
+        s = re.replace_all(&s, "$1$3 $4 $2, ").to_string();
+    }
+    if let Some(re) = MID_DURATION
+        .get_or_init(|| Regex::new(r#"(, )(until end of turn|this turn), ([^."]+)\."#).ok())
+    {
+        s = re.replace_all(&s, "$1$3 $2.").to_string();
+    }
     let Some(lead) = lead else {
         return s;
     };
@@ -1208,7 +1349,9 @@ fn sentence_rewrites(s: &str) -> String {
         // a number in it.
         let n = lead
             .replace_all(&s, |c: &regex::Captures| {
-                let (start, clause, body) = (&c[1], &c[2], &c[3]);
+                let (start, clause) = (&c[1], &c[2]);
+                // The sentence ends with its last period, or with a quoted ability's.
+                let body = c[3].strip_suffix('.').unwrap_or(&c[3]);
                 let duration = clause == "until end of turn" || clause == "this turn";
                 match body.split_once(", where x is ") {
                     Some((head, x)) if duration && !body.contains('"') => {

@@ -52,9 +52,10 @@ impl Renderer<'_> {
             "ascend:spell" => "ascend".into(),
             // A saddled permanent stays saddled until end of turn (CR 702.171b).
             "saddle:becomes saddled" => {
-                let w = match self.each_target {
-                    Some(i) => self.target_mention(i, Case::Subj),
-                    None => me(self),
+                let w = match (self.each_target, &self.for_each_subject) {
+                    (Some(i), _) => self.target_mention(i, Case::Subj),
+                    (None, Some(s)) => s.clone(),
+                    (None, None) => me(self),
                 };
                 format!("{w} becomes saddled {{opt:until end of turn}}")
             }
