@@ -316,3 +316,25 @@ fn devouring_hellion_enters_with_twice_that_many_counters() {
     assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
     assert_eq!(t.counters(t.g.current(h), "+1/+1"), 4);
 }
+
+#[test]
+fn teferis_time_twist_returns_a_creature_with_an_additional_counter() {
+    cr!("614.1c", "614.15", "603.7");
+    compiles(&[
+        "Teferi's Time Twist",
+        "Silver Surfer, Cosmic Voyager",
+        "The First Tyrannic War",
+    ]);
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 2);
+    let tw = t.hand(P0, "Teferi's Time Twist");
+    t.cast(P0, tw).target(Entity::Object(bears)).go();
+    t.resolve();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    t.advance_to_step(mtg_engine::turn::Step::End);
+    t.resolve_all();
+    let back = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(back.len(), 1, "{}", t.dump_log());
+    assert_eq!(t.counters(back[0], "+1/+1"), 1);
+}

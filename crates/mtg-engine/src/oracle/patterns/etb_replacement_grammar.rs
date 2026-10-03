@@ -101,7 +101,7 @@ enum Entry {
 }
 
 /// "enters with N counters on it", "enters tapped", "enters tapped and attacking".
-fn entry(s: &str) -> Option<Entry> {
+fn entry(s: &str, ctx: &CompileContext) -> Option<Entry> {
     let s = s.trim();
     match s {
         "tapped" => return Some(Entry::Tapped),
@@ -109,6 +109,18 @@ fn entry(s: &str) -> Option<Entry> {
         _ => {}
     }
     let r = s.strip_prefix("with ")?;
+    // "a number of +1/+1 counters on it equal to the number of lands you control"
+    if let Some(x) = r.strip_prefix("a number of ") {
+        let (kind, x) = crate::oracle::costs::counter_kind(x)?;
+        let x = x.trim_start();
+        let x = x.strip_prefix("counters on it equal to ")?;
+        let mut b = Builder::new(ctx);
+        let (v, rest) = super::value_grammar::parse_value(x, &mut b)?;
+        if !rest.trim().is_empty() || !b.targets.is_empty() {
+            return None;
+        }
+        return Some(Entry::Counters(kind, v));
+    }
     let (k, n) = counters_on(r)?;
     Some(Entry::Counters(k, n))
 }
@@ -118,6 +130,9 @@ fn last_entry_effect(e: &mut Effect) -> Option<&mut Effect> {
     match e {
         Effect::Seq(v) => v.iter_mut().rev().find_map(last_entry_effect),
         Effect::May { effect, .. } => last_entry_effect(effect),
+        // "Return those cards to the battlefield ... at the beginning of the next end step.
+        // If a land enters this way, it enters tapped."
+        Effect::AtNext { effect, .. } => last_entry_effect(effect),
         Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => Some(e),
         Effect::Dig { take_to, .. } if take_to.zone == ZoneKind::Battlefield => Some(e),
         Effect::CreateToken { .. } => Some(e),
@@ -196,6 +211,18 @@ fn self_replacement(f: Filter, entry: &Entry, e: Effect) -> Option<Effect> {
 /// this way", "that card has mana value 3 or less", "it's a creature".
 fn entering_filter(c: &str) -> Option<Filter> {
     let c = c.trim();
+    // "it enters as a creature"
+    if let Some(r) = c
+        .strip_prefix("it enters as a ")
+        .or_else(|| c.strip_prefix("it enters as an "))
+    {
+        let (f, plural, tail) = parse_object_phrase(r)?;
+        return (!plural && tail.trim().is_empty()).then_some(f);
+    }
+    // "its mana cost contains {x}" (CR 107.3)
+    if c == "its mana cost contains {x}" {
+        return Some(Filter::HasX);
+    }
     if let Some(x) = c.strip_suffix(" enters this way") {
         let r = x.strip_prefix("a ").or_else(|| x.strip_prefix("an "))?;
         let (f, plural, tail) = parse_object_phrase(r)?;
@@ -259,7 +286,7 @@ fn f_enters_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Some((a, m)) if cond.is_none() => (a, Some(format!("it gains {m}"))),
         _ => (r, None),
     };
-    let Some(entry) = entry(r) else {
+    let Some(entry) = entry(r, ctx) else {
         return false;
     };
     let extra = match &more {
