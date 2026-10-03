@@ -115,9 +115,8 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             return Some((PlayerRef::ChosenOpponent, r.to_string()));
         }
     }
-    // "Whenever a player attacks enchanted player ..., that attacking player ...": the
-    // player whose creatures attacked (the trigger's player is the attacked one, CR
-    // 508.3e; the trigger's objects are the creatures attacking them).
+    // "Whenever a player attacks enchanted player ..., that attacking player ...": not the
+    // trigger's player, who is the attacked one (CR 508.3e).
     if let Some(r) = s.strip_prefix("that attacking player") {
         let attacking = crate::oracle::raw_text().to_lowercase().contains("whenever a player attacks");
         if b.in_trigger
@@ -125,10 +124,8 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             && !super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
             && (r.is_empty() || r.starts_with(' '))
         {
-            return Some((
-                PlayerRef::ControllerOf(Box::new(Sel::TriggerObjects)),
-                r.to_string(),
-            ));
+            // The attacking player is the active player (CR 506.2).
+            return Some((PlayerRef::ActivePlayer, r.to_string()));
         }
         return None;
     }
@@ -157,27 +154,55 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             }
         }
     }
-    if let Some(r) = s.strip_prefix("each player who controls the most ") {
+    // "each player who controls the fewest creatures" (Gor Muldrak): likewise.
+    for (p, tie, cmp, op) in [
+        (
+            "each player who controls the most ",
+            "or is tied for the most ",
+            Cmp::Ge,
+            AggOp::Max,
+        ),
+        (
+            "each player who controls the fewest ",
+            "or is tied for the fewest ",
+            Cmp::Le,
+            AggOp::Min,
+        ),
+    ] {
+        let Some(r) = s.strip_prefix(p) else {
+            continue;
+        };
         let (f, true, rest) = parse_object_phrase(r)? else {
             return None;
         };
         let rest = rest.trim_start();
-        let rest = rest
-            .strip_prefix("or is tied for the most ")
-            .unwrap_or(rest);
+        let rest = rest.strip_prefix(tie).unwrap_or(rest);
         let mine = Filter::and(vec![f.clone(), Filter::ControlledBy(PlayerRel::Iterated)]);
         return Some((
             PlayerRef::Each(PlayerFilter::Controls(
                 Box::new(f),
-                Cmp::Ge,
+                cmp,
                 Box::new(Value::OverPlayers(
-                    AggOp::Max,
+                    op,
                     PlayerFilter::Any,
                     Box::new(Value::Count(mine)),
                 )),
             )),
             format!(" {rest}"),
         ));
+    }
+    // "Each player other than target player creates ..." (Death by Dragons).
+    if let Some(r) = s.strip_prefix("each player other than target player") {
+        if r.is_empty() || r.starts_with(' ') {
+            let text = "target player";
+            let slot = b.add_target(TargetSpec::player(PlayerFilter::Any, text), text);
+            return Some((
+                PlayerRef::Each(PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+                    PlayerRef::Target(slot),
+                ))))),
+                r.to_string(),
+            ));
+        }
     }
     None
 }

@@ -94,6 +94,41 @@ pub fn copy_spell(
     Some(id)
 }
 
+/// Makes `mods` exceptions of the copy effect that created the spell copy `copy`
+/// ("except the copy isn't legendary", CR 707.9b): a copy effect on it that copies its
+/// own copiable values with those exceptions, lasting for as long as it exists (a copy
+/// of a permanent spell keeps its copiable values as it becomes a token, CR 608.3f).
+pub fn add_copy_exceptions(
+    g: &mut Game,
+    copy: ObjectId,
+    controller: PlayerId,
+    mods: &[crate::ability::Modification],
+) {
+    if mods.is_empty() {
+        return;
+    }
+    let values = g.obj(copy).copiable.clone();
+    let id = g.new_effect_id();
+    let timestamp = g.new_timestamp();
+    let created_turn = g.turn.number;
+    g.effects.push(crate::game::ContinuousEffect {
+        id,
+        source: Some(copy),
+        controller,
+        timestamp,
+        duration: crate::ability::Duration::Permanent,
+        affected: crate::game::Affected::Objects(vec![copy]),
+        mods: vec![],
+        layer1: Some(crate::game::Layer1::Copy {
+            values: Box::new(values),
+            exceptions: mods.to_vec(),
+        }),
+        created_turn,
+    });
+    g.dirty = true;
+    g.recompute();
+}
+
 /// CR 405.3: several copies put on the stack at the same time by one effect are put
 /// there in the order their controller chooses. `copies` are the new objects, which
 /// sit together on top of the stack in creation order; the controller is asked for
