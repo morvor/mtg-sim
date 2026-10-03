@@ -440,7 +440,7 @@ fn create(spec: TokenSpec, count: Value, tapped: bool, attacking: bool) -> Effec
 /// Goblin creature token that's tapped and attacking", "create a number of Food tokens
 /// equal to the number of opponents you have", "create a 1/1 white Human creature token
 /// and a Food token".
-fn create_described(l: &str, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn create_described(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let r = l
         .strip_prefix("you create ")
@@ -508,6 +508,11 @@ pub(crate) fn last_create(e: &mut Effect) -> Option<&mut Effect> {
             then, otherwise, ..
         } if matches!(**otherwise, Effect::Noop) => last_create(then),
         Effect::May { effect, .. } => last_create(effect),
+        // "Each player creates a green Elephant creature token. Those creatures have
+        // "..."" (Elephant Resurgence): the token each of them creates.
+        Effect::AsPlayer { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
+            last_create(effect)
+        }
         _ => None,
     }
 }
@@ -584,6 +589,7 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(r) = [
         "it has ",
         "they have ",
+        "those creatures have ",
         "the token has ",
         "the tokens have ",
         "that token has ",
@@ -609,6 +615,14 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(abilities) = ability_list(&masked, &quotes, &types, b.ctx) else {
         return false;
     };
+    // A creature token described without a power and toughness gets them from the
+    // characteristic-defining ability this sentence gives it (`token_copy_grammar`).
+    if super::token_copy_grammar::is_pt_pending(spec) {
+        if !abilities.iter().any(sets_pt) {
+            return false;
+        }
+        spec.pt_values = None;
+    }
     spec.abilities.extend(abilities);
     b.it = Sel::Var(vars::CREATED);
     true

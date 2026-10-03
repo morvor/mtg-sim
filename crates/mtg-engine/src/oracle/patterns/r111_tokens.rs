@@ -189,6 +189,11 @@ fn token_by_card_name(l: &str, _b: &mut Builder) -> Option<Effect> {
         return None;
     };
     let r = end(r);
+    // "create a tapped Mutavault token" (Mutable Explorer).
+    let (r, tapped) = match r.trim_start().strip_prefix("tapped ") {
+        Some(x) => (x, "tapped:"),
+        None => (r, ""),
+    };
     let name = r
         .strip_suffix(" tokens")
         .or_else(|| r.strip_suffix(" token"))?
@@ -201,7 +206,7 @@ fn token_by_card_name(l: &str, _b: &mut Builder) -> Option<Effect> {
         return None;
     }
     Some(Effect::Custom(SmolStr::new(format!(
-        "named-token:{n}:{}",
+        "named-token:{n}:{tapped}{}",
         sc.name
     ))))
 }

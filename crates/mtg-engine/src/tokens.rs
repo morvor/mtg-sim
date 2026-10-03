@@ -109,13 +109,18 @@ pub fn create_named_tokens(g: &mut Game, spec: &str, ctx: &mut crate::eval::Ctx)
         return;
     };
     let n: u32 = n.parse().unwrap_or(1);
+    // "N:tapped:Name": "create a tapped Mutavault token".
+    let (name, tapped) = match name.strip_prefix("tapped:") {
+        Some(x) => (x, true),
+        None => (name, false),
+    };
     let Some(card) = crate::card::CardDb::global().get(name) else {
         return;
     };
     let tc = crate::replacement::TokenCreate {
         chars: card.characteristics(FaceState::Front),
         card: None,
-        tapped: false,
+        tapped,
         attacking: None,
         copy_of: None,
         copy_exceptions: vec![],

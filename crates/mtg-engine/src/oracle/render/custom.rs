@@ -69,8 +69,16 @@ impl Renderer<'_> {
             n if n.starts_with("named-token:") => {
                 let mut it = n.split(':').skip(1);
                 let count: i32 = it.next().and_then(|x| x.parse().ok()).unwrap_or(1);
-                let tname = it.next().unwrap_or("");
-                if count == 1 {
+                let mut tname = it.next().unwrap_or("");
+                let tapped = tname == "tapped";
+                if tapped {
+                    tname = it.next().unwrap_or("");
+                }
+                if count == 1 && tapped {
+                    format!("create a tapped {tname} token")
+                } else if tapped {
+                    format!("create {} tapped {tname} tokens", number_word(count))
+                } else if count == 1 {
                     format!("create {} token", with_article(tname))
                 } else {
                     format!("create {} {tname} tokens", number_word(count))
