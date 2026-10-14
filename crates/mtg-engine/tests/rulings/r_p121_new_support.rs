@@ -7,6 +7,7 @@
 
 use crate::r_p121_common::*;
 use crate::r_s02_common::target_candidates;
+use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -26,14 +27,15 @@ fn protean_hydra_triggers_for_each_counter_removed_for_any_reason() {
     assert_eq!(plus1(&t, hydra), 1);
     end_step(&mut t, P0);
     assert_eq!(plus1(&t, hydra), 5);
-    // A -1/-1 counter: the state-based action removes a +1/+1 counter with it.
+    // Two -1/-1 counters: the state-based action removes two +1/+1 counters with them at
+    // once, which is two trigger events.
     let mut t = TestGame::new(2);
     let hydra = with_counters(&mut t, P0, "Protean Hydra", 3);
-    give_minus1(&mut t, hydra, 1);
+    give_minus1(&mut t, hydra, 2);
     t.resolve_all();
-    assert_eq!((plus1(&t, hydra), t.counters(hydra, MINUS1)), (2, 0));
+    assert_eq!((plus1(&t, hydra), t.counters(hydra, MINUS1)), (1, 0));
     end_step(&mut t, P0);
-    assert_eq!(plus1(&t, hydra), 4);
+    assert_eq!(plus1(&t, hydra), 5);
     // Damage: prevented, and that many counters removed by its own ability.
     let mut t = TestGame::new(2);
     let hydra = with_counters(&mut t, P0, "Protean Hydra", 3);
@@ -122,6 +124,36 @@ fn rumbling_ruin_counts_once_and_compares_power_continuously() {
     assert!(can_block(&mut t, giant));
     give_minus1(&mut t, giant, 1);
     assert!(!can_block(&mut t, giant));
+    // The group is a class, not the creatures there as it resolved (CR 611.2c): a 2/2
+    // entering later can't block either.
+    let later = t.battlefield(P1, "Grizzly Bears");
+    assert!(!can_block(&mut t, later));
+}
+
+#[test]
+fn droning_bureaucrats_affects_creatures_entering_later() {
+    cr!("611.2c", "608.2h");
+    ruling!(
+        "Droning Bureaucrats",
+        "Droning Bureaucrats's ability affects all creatures with mana value equal to exactly X, regardless of whether they were on the battlefield at the time the ability resolved."
+    );
+    supported("Droning Bureaucrats");
+    let mut t = TestGame::new(2);
+    let db = t.battlefield(P0, "Droning Bureaucrats");
+    t.lands(P0, "Wastes", 2);
+    let before = t.battlefield(P1, "Grizzly Bears");
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.activate(P0, db, 0, &[]).expect("activate");
+    t.resolve_all();
+    // A creature with mana value 2 entering afterwards can't block either; one with
+    // mana value 4 can.
+    let after = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.recompute();
+    for (id, mv2) in [(before, true), (after, true), (giant, false)] {
+        let id = t.g.current(id);
+        assert_eq!(t.g.can_block_at_all(id), !mv2, "{id:?}");
+    }
 }
 
 /// P0's Braided Net, with its net counters, ready to tap `target`.

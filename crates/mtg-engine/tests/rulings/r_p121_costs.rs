@@ -66,6 +66,7 @@ fn reductions_apply_to_the_total_cost_and_dont_change_mana_value() {
     supported("Hamza, Guardian of Arashin");
     supported("Prehistoric Turtlesaurus");
     supported("Gnarlid Colony");
+    supported("Explosive Growth");
     // The Earth Crystal: Gnarlid Colony ({1}{G}) kicked ({2}{G}) costs {2}{G}{G}.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "The Earth Crystal");
@@ -79,6 +80,19 @@ fn reductions_apply_to_the_total_cost_and_dont_change_mana_value() {
     // Kicked: two +1/+1 counters, doubled by The Earth Crystal.
     let c = t.named_on_battlefield("Gnarlid Colony")[0];
     assert_eq!(plus1(&t, c), 4);
+    // Explosive Growth ({G}) kicked ({5}): the reduction applies to the total {5}{G}, so
+    // it costs {4}{G} (reducing the mana cost first would leave the kicker at {5}).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Earth Crystal");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Wastes", 4);
+    let growth = t.hand(P0, "Explosive Growth");
+    let spell = t.cast(P0, growth).kicked(true).target(obj(bears)).go();
+    assert_eq!(tapped_lands(&t, P0), 5);
+    assert_eq!(t.g.mana_value_of(spell), 1);
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (7, 7));
     // Hamza: two creatures with counters, Hill Giant ({3}{R}) costs {1}{R}. Paying
     // the locked-in cost doesn't change it.
     let mut t = TestGame::new(2);
@@ -178,7 +192,7 @@ fn scrapyard_recombiner_can_sacrifice_itself_to_pay_its_cost() {
 
 #[test]
 fn biogenic_upgrade_divides_as_it_is_cast_at_least_one_each() {
-    cr!("601.2d", "115.7");
+    cr!("601.2d");
     ruling!(
         "Biogenic Upgrade",
         "You choose how many targets Biogenic Upgrade has and how the counters are distributed as you cast it. Each target must receive at least one counter. This means, for example, that you can't target three creatures and assign them two, one, and zero counters."
