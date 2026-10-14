@@ -172,8 +172,7 @@ fn tifa_melee_counts_only_opponents_attacked() {
         "Tifa, Martial Artist",
         "Melee will trigger if the creature with melee attacks a planeswalker or battle. However, the effect counts only opponents (and not planeswalkers or battles) that you attacked with a creature when determining the bonus."
     );
-    // Only its untap / additional combat trigger doesn't compile; melee does.
-    crate::r_p190_mana_costs::only_unsupported("Tifa, Martial Artist", "additional combat phase");
+    supported("Tifa, Martial Artist");
     // Tifa attacks P1's planeswalker: melee triggers, but no opponent was attacked.
     let mut t = TestGame::new(2);
     let tifa = t.battlefield(P0, "Tifa, Martial Artist");

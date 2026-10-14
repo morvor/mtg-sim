@@ -822,6 +822,12 @@ inventory::submit! { super::ConditionPattern { name: "history: [subject] [past v
 /// 400.7).
 pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Option<Condition> {
     let c = end(c);
+    // "if it's a creature or if {G}{W} was spent to cast ~": either condition.
+    if let Some((x, y)) = c.split_once(" or if ") {
+        let cx = super::conditions_referents::parse_condition_with(x, b)?;
+        let cy = super::conditions_referents::parse_condition_with(y, b)?;
+        return Some(Condition::Or(vec![cx, cy]));
+    }
     if let Some(cond) = cast_condition(c, b)
         .or_else(|| phase_condition(c))
         .or_else(|| resolved_ordinal(c))
@@ -859,6 +865,49 @@ pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Opt
         return Some(cond);
     }
     about(cond, &sel)
+}
+
+/// "[the object] [past predicate] [window]" for an object a static ability names ("~
+/// can't attack if it attacked during your last turn", "enchanted creature doesn't untap
+/// during its controller's untap step if it attacked during its controller's last turn").
+pub fn object_history(pred: &str, sel: &Sel) -> Option<Condition> {
+    let pred = end(pred);
+    if pred.contains('~') {
+        return None;
+    }
+    let (pred, controllers) = match pred.strip_suffix(" during its controller's last turn") {
+        Some(p) => (format!("{p} during your last turn"), true),
+        None => (pred.to_string(), false),
+    };
+    let cond = history_condition(&format!("~ {pred}"))?;
+    let cond = if matches!(sel, Sel::This) {
+        cond
+    } else {
+        about(cond, sel)?
+    };
+    if !controllers {
+        return Some(cond);
+    }
+    // The window is its controller's last turn.
+    let mut json = serde_json::to_value(&cond).ok()?;
+    let whose = serde_json::to_value(PlayerRef::ControllerOf(Box::new(sel.clone()))).ok()?;
+    fn walk(v: &mut serde_json::Value, whose: &serde_json::Value) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, x) in m.iter_mut() {
+                    if k == "PlayersLastTurn" {
+                        *x = whose.clone();
+                    } else {
+                        walk(x, whose);
+                    }
+                }
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, whose)),
+            _ => {}
+        }
+    }
+    walk(&mut json, &whose);
+    serde_json::from_value(json).ok()
 }
 
 /// The condition with each "~" ([`Filter::Source`]) in its trigger conditions meaning the
@@ -1430,6 +1479,129 @@ mod tests {
     use crate::oracle::effects::Builder;
     use crate::oracle::CompileContext;
     use crate::types::TypeLine;
+
+    use crate::ability::*;
+
+    fn cond(c: &str) -> Condition {
+        super::history_condition(c).unwrap_or_else(|| panic!("not read: {c}"))
+    }
+
+    fn json(c: &Condition) -> String {
+        serde_json::to_string(c).unwrap()
+    }
+
+    #[test]
+    fn player_clauses_count_this_turns_events() {
+        match cond("you cycled two or more cards this turn") {
+            Condition::Compare(Value::EventsThisTurn(t, Tally::Events), Cmp::Ge, Value::Const(2)) => {
+                assert!(matches!(*t, TriggerCond::Cycled { who: PlayerRel::You, .. }))
+            }
+            x => panic!("{x:?}"),
+        }
+        match cond("an opponent discarded a card this turn") {
+            Condition::Compare(Value::EventsThisTurn(t, _), Cmp::Ge, Value::Const(1)) => {
+                assert!(matches!(*t, TriggerCond::Discards { who: PlayerRel::Opponent, .. }))
+            }
+            x => panic!("{x:?}"),
+        }
+        // Negated: "didn't", "haven't".
+        assert!(matches!(
+            cond("you didn't attack with a creature this turn"),
+            Condition::Not(_)
+        ));
+        assert!(matches!(cond("you haven't cast a spell this turn"), Condition::Not(_)));
+        // An amount some one opponent reached.
+        let c = cond("an opponent lost 3 or more life this turn");
+        assert!(matches!(
+            c,
+            Condition::Compare(Value::OverPlayers(AggOp::Max, PlayerFilter::Opponent, _), Cmp::Ge, Value::Const(3))
+        ));
+        // Two verbs sharing an object, and "both [A] and [B]".
+        assert!(matches!(cond("you gained and lost life this turn"), Condition::And(v) if v.len() == 2));
+        assert!(matches!(
+            cond("you've cast both a creature spell and a noncreature spell this turn"),
+            Condition::And(v) if v.len() == 2
+        ));
+        // "this turn" before a qualifier.
+        assert!(json(&cond(
+            "you've played a land or cast a spell this turn from anywhere other than your hand"
+        ))
+        .contains("CastFrom"));
+    }
+
+    #[test]
+    fn object_clauses_count_this_turns_events() {
+        assert!(matches!(
+            cond("no permanents left the battlefield this turn"),
+            Condition::Compare(_, Cmp::Eq, Value::Const(0))
+        ));
+        let j = json(&cond("a creature card left your graveyard this turn"));
+        assert!(j.contains("\"from\":\"Graveyard\"") && j.contains("Creature"), "{j}");
+        let j = json(&cond(
+            "three or more cards were put into your graveyard from anywhere other than the battlefield this turn",
+        ));
+        assert!(j.contains("\"Const\":3") && !j.contains("\"from\":\"Battlefield\""), "{j}");
+        let j = json(&cond("a creature entered the battlefield under an opponent's control this turn"));
+        assert!(j.contains("EntersBattlefield") && j.contains("Opponent"), "{j}");
+        // "had [objects] enter": the objects entered.
+        let j = json(&cond("an opponent had three or more cards put into their graveyard from anywhere this turn"));
+        assert!(j.contains("\"Const\":3") && j.contains("Opponent"), "{j}");
+        // Distinct attackers.
+        assert!(json(&cond("you attacked with three or more merfolk this turn")).contains("CountSel"));
+    }
+
+    #[test]
+    fn windows_other_than_this_turn() {
+        assert!(json(&cond("an opponent lost life last turn")).contains("LastTurn"));
+        let c = cond("you haven't been dealt combat damage since your last turn");
+        assert!(matches!(&c, Condition::Not(_)) && json(&c).contains("SinceLastTurn"));
+        let c = cond("~ and at least two other creatures attacked this combat");
+        assert!(matches!(&c, Condition::And(v) if v.len() == 2) && json(&c).contains("ThisCombat"));
+        // Not history: no window, or no past tense.
+        assert!(super::history_condition("a creature died").is_none());
+        assert!(super::history_condition("you control a creature this turn").is_none());
+    }
+
+    #[test]
+    fn cast_status_and_mana_spent_about_the_source() {
+        let free = |c: &str| super::cast_condition_free(c).unwrap_or_else(|| panic!("{c}"));
+        assert!(matches!(
+            free("~ wasn't cast from your hand"),
+            Condition::Not(c) if matches!(*c, Condition::CastFrom(ZoneKind::Hand))
+        ));
+        assert!(matches!(
+            free("at least four mana was spent to cast ~"),
+            Condition::Compare(Value::ManaSpent, Cmp::Ge, Value::Const(4))
+        ));
+        assert!(json(&free("mana from a treasure was spent to cast ~")).contains("Treasure"));
+        assert!(matches!(
+            free("no colored mana was spent to cast ~"),
+            Condition::Compare(_, Cmp::Eq, Value::Const(0))
+        ));
+        assert!(json(&free("exactly three colors of mana were spent to activate this ability"))
+            .contains("this ability:colors"));
+        // A pronoun needs a referent (the Builder-aware reading).
+        assert!(super::cast_condition_free("it was cast").is_none());
+    }
+
+    #[test]
+    fn ordinals_and_totals() {
+        let o = |c: &str| super::ordinal_condition(c).unwrap_or_else(|| panic!("{c}"));
+        assert!(matches!(o("it's the first combat phase of the turn"), Condition::Custom(_)));
+        assert!(matches!(o("it's the first combat phase of your turn"), Condition::And(_)));
+        assert!(matches!(
+            o("this ability has been activated four or more times this turn"),
+            Condition::Compare(Value::Custom(_), Cmp::Ge, Value::Const(4))
+        ));
+        assert!(matches!(
+            o("this is the first or second time this ability has resolved this turn"),
+            Condition::Compare(Value::TimesResolvedThisTurn, Cmp::Le, _)
+        ));
+        assert!(matches!(
+            o("you attacked with creatures with total power 6 or greater this combat"),
+            Condition::Compare(Value::Aggregate(AggOp::Sum, Stat::Power, _), Cmp::Ge, Value::Const(6))
+        ));
+    }
 
     /// Developer probe: `HC_PROBE=<file>` with lines `C: <condition>` (a condition read
     /// in a creature's ability) or `U: <card name>` (the card's unsupported texts).

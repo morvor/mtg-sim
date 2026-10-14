@@ -53,6 +53,10 @@ fn to_end_step(t: &mut TestGame, p: PlayerId) {
 #[test]
 fn archmage_ascension_counts_the_cards_you_drew_this_turn() {
     cr!("603.4");
+    ruling!(
+        "Archmage Ascension",
+        "unless you’ve already drawn two or more cards by the time the end step begins"
+    );
     assert_supported("Archmage Ascension");
     let mut t = TestGame::new(2);
     let aa = t.battlefield(P0, "Archmage Ascension");
@@ -73,6 +77,10 @@ fn archmage_ascension_counts_the_cards_you_drew_this_turn() {
 #[test]
 fn bloodchief_ascension_needs_one_opponent_to_lose_two_life() {
     cr!("603.4", "119.3");
+    ruling!(
+        "Bloodchief Ascension",
+        "a single opponent must have lost 2 life. Two opponents each losing 1 life won't"
+    );
     assert_supported("Bloodchief Ascension");
     let mut t = TestGame::new(3);
     let ba = t.battlefield(P0, "Bloodchief Ascension");
@@ -95,6 +103,10 @@ fn bloodchief_ascension_needs_one_opponent_to_lose_two_life() {
 #[test]
 fn tinybones_draws_if_an_opponent_discarded_this_turn() {
     cr!("603.4", "701.9a");
+    ruling!(
+        "Tinybones, Trinket Thief",
+        "draw just one card and lose just 1 life, no matter how many opponents discarded"
+    );
     assert_supported("Tinybones, Trinket Thief");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Tinybones, Trinket Thief");
@@ -106,6 +118,9 @@ fn tinybones_draws_if_an_opponent_discarded_this_turn() {
     to_end_step(&mut t, P0);
     assert_eq!(t.hand_size(P0), hand);
     assert_eq!(t.life(P0), 20);
+    // Two cards discarded: still one card and 1 life.
+    let theirs = t.hand(P1, "Island");
+    t.g.discard(P1, theirs, None);
     let theirs = t.hand(P1, "Island");
     t.g.discard(P1, theirs, None);
     t.g.flush_events();
@@ -119,6 +134,10 @@ fn tinybones_draws_if_an_opponent_discarded_this_turn() {
 #[test]
 fn luminarch_ascension_checks_that_you_didnt_lose_life() {
     cr!("603.4", "119.3");
+    ruling!(
+        "Luminarch Ascension",
+        "doesn't trigger if you have lost life before an opponent's end step begins"
+    );
     assert_supported("Luminarch Ascension");
     let mut t = TestGame::new(2);
     let la = t.battlefield(P0, "Luminarch Ascension");
@@ -137,6 +156,10 @@ fn luminarch_ascension_checks_that_you_didnt_lose_life() {
 #[test]
 fn lunar_convocation_needs_both_life_gained_and_life_lost() {
     cr!("603.4");
+    ruling!(
+        "Lunar Convocation",
+        "if you haven’t both gained and lost life during the turn when your end step begins"
+    );
     assert_supported("Lunar Convocation");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Lunar Convocation");
@@ -236,6 +259,10 @@ fn deepway_navigator_two_merfolk_attacking_isnt_enough() {
 #[test]
 fn mercadian_atlas_draws_only_if_you_didnt_play_a_land() {
     cr!("603.4", "305.1");
+    ruling!(
+        "Mercadian Atlas",
+        "Putting a land onto the battlefield by using an effect of another card does not count"
+    );
     assert_supported("Mercadian Atlas");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Mercadian Atlas");
@@ -246,8 +273,10 @@ fn mercadian_atlas_draws_only_if_you_didnt_play_a_land() {
     let hand = t.hand_size(P0);
     to_end_step(&mut t, P0);
     assert_eq!(t.hand_size(P0), hand);
+    // A land put onto the battlefield by an effect wasn't played.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Mercadian Atlas");
+    t.enter(P0, "Island");
     t.answer_yes(P0, true);
     let hand = t.hand_size(P0);
     to_end_step(&mut t, P0);
@@ -296,6 +325,10 @@ fn inferno_hellion_is_shuffled_away_after_it_attacked() {
 #[test]
 fn vizier_of_deferment_asks_about_the_target_not_itself() {
     cr!("603.4", "608.2b");
+    ruling!(
+        "Vizier of Deferment",
+        "it will affect a creature only if that creature was declared as an attacker or blocker"
+    );
     assert_supported("Vizier of Deferment");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -408,6 +441,7 @@ fn gnoll_hunter_pack_tactics_totals_the_power_of_attackers_this_combat() {
 #[test]
 fn feast_on_the_fallen_looks_at_last_turn() {
     cr!("603.4", "500.1");
+    ruling!("Feast on the Fallen", "looks at the entire previous turn");
     assert_supported("Feast on the Fallen");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Feast on the Fallen");
@@ -462,6 +496,10 @@ fn marchesa_draws_if_you_werent_dealt_combat_damage_since_your_last_turn() {
 #[test]
 fn josu_vess_makes_zombies_only_if_he_was_kicked() {
     cr!("702.33d", "603.4");
+    ruling!(
+        "Josu Vess, Lich Knight",
+        "onto the battlefield without casting it, you can't kick it"
+    );
     assert_supported("Josu Vess, Lich Knight");
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 4);
@@ -475,6 +513,10 @@ fn josu_vess_makes_zombies_only_if_he_was_kicked() {
     t.cast(P0, josu).kicked(true).go();
     t.resolve_all();
     assert_eq!(count_named(&t, P0, "Zombie Knight Token"), 8);
+    let mut t = TestGame::new(2);
+    t.enter(P0, "Josu Vess, Lich Knight");
+    t.resolve_all();
+    assert_eq!(count_named(&t, P0, "Zombie Knight Token"), 0);
 }
 
 #[test]
@@ -575,6 +617,7 @@ fn kotis_counts_creatures_that_entered_from_a_graveyard() {
 #[test]
 fn vexing_bauble_counters_spells_cast_without_mana() {
     cr!("601.2h", "603.4");
+    ruling!("Nix", "it checks how much mana was actually spent to cast it");
     assert_supported("Vexing Bauble");
     assert_supported("Nix");
     let mut t = TestGame::new(2);
@@ -595,6 +638,22 @@ fn vexing_bauble_counters_spells_cast_without_mana() {
     t.cast(P1, nix).target(bolt).go();
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
+    // A spell with mana cost {0}: no mana was spent. Nix and Vexing Bauble counter it.
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Island", 1);
+    let orni = t.hand(P0, "Ornithopter");
+    t.cast(P0, orni).go();
+    let nix = t.hand(P1, "Nix");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, nix).target(orni).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Ornithopter"));
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Vexing Bauble");
+    let orni = t.hand(P0, "Ornithopter");
+    t.cast(P0, orni).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Ornithopter"));
 }
 
 #[test]
@@ -682,6 +741,10 @@ fn karlach_adds_a_combat_only_in_the_first_combat_phase() {
 #[test]
 fn vengevine_returns_on_the_second_creature_spell() {
     cr!("603.4", "601.2i");
+    ruling!(
+        "Vengevine",
+        "triggers only for the second creature spell you cast in a turn"
+    );
     assert_supported("Vengevine");
     let mut t = TestGame::new(2);
     t.graveyard(P0, "Vengevine");
@@ -694,6 +757,14 @@ fn vengevine_returns_on_the_second_creature_spell() {
     assert_eq!(t.named_on_battlefield("Vengevine").len(), 0);
     t.answer_yes(P0, true);
     t.cast(P0, b2).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Vengevine").len(), 1);
+    // The third creature spell doesn't return another one.
+    t.graveyard(P0, "Vengevine");
+    t.lands(P0, "Forest", 2);
+    let b3 = t.hand(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.cast(P0, b3).go();
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Vengevine").len(), 1);
 }
@@ -726,14 +797,83 @@ fn nalathni_dragon_is_sacrificed_after_four_activations() {
 #[test]
 fn omnath_does_something_different_each_time() {
     cr!("603.4", "608.2c");
+    ruling!(
+        "Omnath, Locus of Creation",
+        "has no effect each time beyond the third it resolves in a turn"
+    );
     assert_supported("Omnath, Locus of Creation");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Omnath, Locus of Creation");
-    for _ in 0..3 {
+    for _ in 0..4 {
         t.enter(P0, "Forest");
         t.resolve_all();
     }
     assert_eq!(t.life(P0), 24, "4 life the first time only");
     assert_eq!(t.g.player(P0).mana_pool.total(), 4, "the second time: RGWU");
     assert_eq!(t.life(P1), 16, "the third time: 4 damage to each opponent");
+}
+
+#[test]
+fn briarbridge_patrol_sees_clues_sacrificed_for_any_reason() {
+    cr!("603.4", "701.21a");
+    ruling!(
+        "Briarbridge Patrol",
+        "It will see Clues sacrificed for any reason"
+    );
+    assert_supported("Briarbridge Patrol");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Briarbridge Patrol");
+    let spec = mtg_engine::tokens::predefined("Clue").expect("Clue token");
+    let tc = mtg_engine::replacement::TokenCreate {
+        chars: mtg_engine::tokens::token_characteristics(&spec),
+        card: None,
+        tapped: false,
+        attacking: None,
+        copy_of: None,
+        copy_exceptions: vec![],
+    };
+    let clues = t.g.create_tokens(P0, tc, 3, None);
+    for c in &clues[..2] {
+        t.g.sacrifice(*c, P0);
+    }
+    t.g.flush_events();
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    to_end_step(&mut t, P0);
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 0, "two Clues aren't three");
+    t.g.sacrifice(clues[2], P0);
+    t.g.flush_events();
+    t.clear_answers();
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{}", t.dump_log());
+}
+
+#[test]
+fn curious_obsession_any_creature_attacking_satisfies_it() {
+    cr!("603.4", "508.1");
+    ruling!(
+        "Curious Obsession",
+        "is satisfied if any creature has attacked"
+    );
+    assert_supported("Curious Obsession");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let other = t.battlefield(P0, "Grizzly Bears");
+    let co = t.custom(P0, (*card("Curious Obsession")).clone(), Zone::Battlefield);
+    t.g.obj_mut(co).attached_to = Some(Entity::Object(bears));
+    t.g.recompute();
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(other, Entity::Player(P1))], &[]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.on_battlefield(co), "a creature attacked");
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    to_end_step(&mut t, P0);
+    assert!(!t.on_battlefield(co), "no creature attacked: sacrificed");
 }
