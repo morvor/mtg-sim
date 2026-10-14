@@ -637,3 +637,75 @@ fn gavi_counts_cycling_earlier_in_the_turn() {
     t.battlefield(P0, "Gavi, Nest Warden");
     assert!(can_cycle(&mut t, P0, first));
 }
+
+/// P0's Academy Loremaster; P1 takes the additional draw in their draw step, then it's
+/// P1's main phase.
+fn loremaster_draw(t: &mut TestGame) {
+    supported("Academy Loremaster");
+    t.battlefield(P0, "Academy Loremaster");
+    let hand = t.hand_size(P1);
+    t.answer_yes(P1, true);
+    t.advance_to(P1, Step::PrecombatMain);
+    assert_eq!(t.hand_size(P1), hand + 2);
+}
+
+#[test]
+fn academy_loremaster_increase_applies_before_reductions() {
+    cr!("601.2f", "118.7");
+    ruling!(
+        "Academy Loremaster",
+        "Abilities that reduce the cost to cast a spell apply after abilities that raise them. For example, if an opponent chose to draw an additional card as Academy Loremaster's triggered ability resolved, Argivian Phalanx (a card with mana cost {5}{W} and the ability \"This spell costs {1} less to cast for each creature you control.\") will cost them {W} to cast that turn if they have seven or more creatures."
+    );
+    supported("Argivian Phalanx");
+    let mut t = main_phase(2);
+    loremaster_draw(&mut t);
+    for _ in 0..7 {
+        t.battlefield(P1, "Grizzly Bears");
+    }
+    t.lands(P1, "Plains", 2);
+    let card = t.hand(P1, "Argivian Phalanx");
+    t.cast(P1, card).go();
+    let tapped = t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P1 && o.is(CardType::Land) && o.tapped)
+        .count();
+    assert_eq!(tapped, 1);
+}
+
+#[test]
+fn academy_loremaster_taxes_alternative_and_free_casts() {
+    cr!("601.2f", "118.9d");
+    ruling!(
+        "Academy Loremaster",
+        "The cost increase applies to spells that player casts even if they're casting them for an alternative cost. If they cast a spell without paying its mana cost, they'll still have to pay {2}."
+    );
+    let mut t = main_phase(2);
+    loremaster_draw(&mut t);
+    t.battlefield(P1, "Omniscience");
+    let card = t.hand(P1, "Craw Wurm");
+    t.lands(P1, "Wastes", 1);
+    let methods = crate::r_s08_common::legal_cast_methods(&mut t, P1, card);
+    assert!(methods.iter().all(|m| *m == CastMethod::Normal), "{methods:?}");
+    t.lands(P1, "Wastes", 1);
+    let free = crate::r_s08_common::legal_cast_methods(&mut t, P1, card)
+        .into_iter()
+        .find(|m| *m != CastMethod::Normal)
+        .expect("free cast paying {2}");
+    t.cast(P1, card).method(free).go();
+    let tapped = t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P1 && o.is(CardType::Land) && o.tapped)
+        .count();
+    assert_eq!(tapped, 2);
+    // Without the additional draw, no tax: a second game where P1 declines.
+    let mut t = main_phase(2);
+    t.battlefield(P0, "Academy Loremaster");
+    t.answer_yes(P1, false);
+    t.advance_to(P1, Step::PrecombatMain);
+    t.battlefield(P1, "Omniscience");
+    let card = t.hand(P1, "Craw Wurm");
+    let methods = crate::r_s08_common::legal_cast_methods(&mut t, P1, card);
+    assert!(methods.iter().any(|m| *m != CastMethod::Normal));
+}
