@@ -81,29 +81,53 @@ fn player_condition(c: &str, _b: &Builder) -> Option<PlayerFilter> {
     }
     // "Each opponent discards a card. For each opponent who can't, ...": a player who
     // discarded nothing (the discard instruction records what each player discarded).
+    // "Each player sacrifices a creature or planeswalker of their choice. Each player who
+    // can't discards a card." (Plaguecrafter): a player who sacrificed nothing (the
+    // sacrifice instruction records the sacrificed permanents as they last existed).
     if c == "can't" {
         let raw = crate::oracle::raw_text().to_lowercase();
-        let after_discard = [
-            "each opponent discards a card. ",
-            "each player discards a card. ",
-        ]
-        .iter()
-        .any(|p| {
+        let followed = |sentence: &str| {
             [
                 "for each opponent who can't",
                 "for each player who can't",
                 "each opponent who can't",
+                "each player who can't",
             ]
             .iter()
-            .any(|w| raw.contains(&format!("{p}{w}")))
-        });
-        if !after_discard {
-            return None;
+            .any(|w| sentence.ends_with(&format!(". {w}")))
+        };
+        // The sentence before "... who can't" and what it does.
+        let mut after = None;
+        for (i, _) in raw.match_indices(" who can't") {
+            let head = &raw[..i + " who can't".len()];
+            if !followed(head) {
+                continue;
+            }
+            let Some(dot) = head.rfind(". ") else {
+                continue;
+            };
+            let prev = &head[..dot];
+            let start = prev.rfind(['.', '\n']).map_or(0, |k| k + 1);
+            let prev = prev[start..].trim();
+            for who in ["each opponent ", "each player "] {
+                if prev.ends_with(&format!("{who}discards a card")) {
+                    after = Some(false);
+                } else if prev.contains(&format!("{who}sacrifices a "))
+                    && prev.ends_with(" of their choice")
+                {
+                    after = Some(true);
+                }
+            }
         }
-        let discarded = PlayerFilter::Ref(Box::new(PlayerRef::OwnerOf(Box::new(Sel::All(
-            Filter::In(Box::new(Sel::Var(crate::discard_rules::DISCARDED))),
+        let player = match after? {
+            false => PlayerRef::OwnerOf(Box::new(Sel::All(Filter::In(Box::new(Sel::Var(
+                crate::discard_rules::DISCARDED,
+            )))))),
+            true => PlayerRef::ControllerOf(Box::new(Sel::Var(vars::SACRIFICED))),
+        };
+        return Some(PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+            player,
         )))));
-        return Some(PlayerFilter::Not(Box::new(discarded)));
     }
     let c = c.strip_suffix(" do").unwrap_or(c);
     match c {

@@ -548,6 +548,9 @@ impl Renderer<'_> {
             }
             n if n.starts_with(crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN) => {
                 let t = &n[crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN.len()..];
+                let t = t
+                    .strip_prefix(crate::oracle::patterns::grant_conditions::SACRIFICED_SUBTYPE)
+                    .unwrap_or(t);
                 format!("you've sacrificed {} this turn", with_article(t))
             }
             other => match self
