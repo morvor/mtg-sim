@@ -1072,6 +1072,17 @@ impl Renderer<'_> {
     /// before), "the rest" / "the other" (the group without what was chosen from it).
     pub(crate) fn sel_extra(&mut self, s: &Sel, case: Case) -> Option<String> {
         match s {
+            // "Exile it. If you do, exile the top card of your library. ... one of those
+            // cards": the cards both instructions moved, worded as "those cards" (see
+            // `permission_grammar::keep_earlier_moved`).
+            Sel::Union(parts)
+                if matches!(parts.as_slice(), [Sel::All(Filter::And(f)), Sel::Var(v)]
+                    if *v == vars::IT
+                        && matches!(f.first(), Some(Filter::In(s)) if matches!(s.as_ref(),
+                            Sel::Var(e) if *e == crate::oracle::patterns::permission_grammar::EARLIER_MOVED))) =>
+            {
+                Some(self.sel(&Sel::Var(vars::IT), case))
+            }
             Sel::Choose {
                 chooser: PlayerRef::You,
                 filter: Filter::In(g),
