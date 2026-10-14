@@ -1050,6 +1050,16 @@ impl Renderer<'_> {
                     }
                     String::new()
                 }
+                Sel::Union(parts) => {
+                    let var = match e {
+                        Effect::Store { var, .. } => *var,
+                        _ => 0,
+                    };
+                    match self.remember_union(var, parts) {
+                        Some(s) => s,
+                        None => self.gap(format!("remembering {sel:?}")),
+                    }
+                }
                 other => self.gap(format!("remembering {other:?}")),
             },
             Effect::StoreValue { var, value } => {

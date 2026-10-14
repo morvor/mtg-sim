@@ -686,3 +686,57 @@ impl Renderer<'_> {
         Some(format!("{head}{one}{tail}"))
     }
 }
+
+impl Renderer<'_> {
+    /// Remembering a group made of several parts (`Effect::Store` of a `Sel::Union`):
+    /// a choice added to what the variable already holds ("You may choose a creature card
+    /// in your graveyard"), two choices ("You choose from it a nonland card with mana value
+    /// 3 or less and a card with mana value 4 or greater"), or a group named where it's
+    /// used ("destroy it and all creatures it blocked this turn").
+    pub(crate) fn remember_union(&mut self, var: Var, parts: &[Sel]) -> Option<String> {
+        // The variable's own earlier contents plus new ones: the new ones are chosen.
+        let new: Vec<&Sel> = parts
+            .iter()
+            .filter(|p| !matches!(p, Sel::Var(v) if *v == var))
+            .collect();
+        if new.len() < parts.len() {
+            if let [one @ Sel::Choose { .. }] = new.as_slice() {
+                return Some(self.effect(&Effect::Store {
+                    var,
+                    sel: (*one).clone(),
+                }));
+            }
+        }
+        if new.len() == parts.len()
+            && parts.len() == 2
+            && parts.iter().all(|p| matches!(p, Sel::Choose { .. }))
+        {
+            let a = self.effect(&Effect::Store {
+                var,
+                sel: parts[0].clone(),
+            });
+            let b = self.effect(&Effect::Store {
+                var,
+                sel: parts[1].clone(),
+            });
+            self.plural_vars.push(var);
+            let (Some(a), Some(b)) = (a.strip_prefix("choose "), b.strip_prefix("choose ")) else {
+                return Some(format!("{a}, then {b}"));
+            };
+            let mut forms = vec![format!("choose {a} and {b}"), format!("choose {a}, then choose {b}")];
+            if let (Some(x), Some(y)) = (a.strip_suffix(" from it"), b.strip_suffix(" from it")) {
+                forms.push(format!("choose from it {x} and {y}"));
+            }
+            return Some(format!("{{alt:{}}}", forms.join("|")));
+        }
+        // Named where it's used.
+        if parts
+            .iter()
+            .all(|p| matches!(p, Sel::This | Sel::All(_) | Sel::Target(_) | Sel::TriggerObject))
+        {
+            self.var_defs.push((var, Sel::Union(parts.to_vec()), false));
+            return Some(String::new());
+        }
+        None
+    }
+}
