@@ -487,7 +487,7 @@ fn serial_then(l: &str, b: &mut Builder) -> Option<Effect> {
             acc = Effect::seq(vec![acc, e]);
             continue;
         }
-        if i == n
+        if i > 0
             && !matches!(acc, Effect::Noop)
             && crate::oracle_ext::apply_followup_ext(p, &mut acc, b)
         {
