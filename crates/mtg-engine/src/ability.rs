@@ -1053,6 +1053,20 @@ pub enum TurnOrderStart {
     NextOpponent,
 }
 
+/// A direction around the table (CR 101.4: the next player in turn order is usually the
+/// one seated to the left; CR 103.1: turn order proceeds clockwise). See `seats.rs`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SeatSide {
+    /// To the left: the direction of turn order.
+    #[default]
+    Left,
+    /// To the right.
+    Right,
+    /// The direction last chosen for the source ("choose left or right", stored as its
+    /// chosen word); undefined if none was chosen.
+    Chosen,
+}
+
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
 pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
 
@@ -1100,6 +1114,14 @@ pub enum PlayerRef {
     /// target player loses 6 life. When ~ leaves the battlefield, that player gains 6
     /// life." (Laquatus's Champion).
     LinkedNoted,
+    /// "the player to your left/right", "the next player in the chosen direction"
+    /// (`opponent: false`: whoever sits there, teammate or not), "the opponent to your
+    /// left" (`opponent: true`: the nearest opponent in that direction). See `seats.rs`.
+    Seat {
+        of: Box<PlayerRef>,
+        side: SeatSide,
+        opponent: bool,
+    },
 }
 
 /// Player predicates, used in targets and filters.
@@ -1580,6 +1602,12 @@ pub enum Value {
     Prev,
     /// Numeric variable.
     Var(Var),
+    /// A player's own running total kept with [`Effect::AddToPlayerTally`] ("the amount of
+    /// life they paid this way", "for each card they revealed this way"); 0 if none.
+    PlayerTally {
+        var: Var,
+        who: Box<PlayerRef>,
+    },
     /// Devotion to colors (CR 700.5).
     Devotion(ColorSet),
     /// Number of basic land types among lands you control (domain).
@@ -2573,6 +2601,13 @@ pub enum Restriction {
     MustBlockAttacker {
         blocker: Filter,
         attacker: Filter,
+    },
+    /// "Each player may attack only the nearest opponent in the [chosen] direction and
+    /// planeswalkers controlled by that opponent" (CR 508.1c): no other player, none of
+    /// their planeswalkers, and no battle. Only declared attackers are restricted (CR
+    /// 508.4c). See `seats.rs`.
+    AttackOnlyNearestOpponent {
+        side: SeatSide,
     },
     /// "[attackers] can't attack [defender] (or planeswalkers they control) unless their
     /// controller pays [cost] for each ..." (CR 508.1d, 508.1h).
@@ -3731,6 +3766,18 @@ pub enum Effect {
         first: TurnOrderStart,
         who: PlayerFilter,
         effect: Box<Effect>,
+        /// "and proceeding in the chosen direction": around the table that way (the
+        /// default, to the left, is turn order).
+        #[serde(default)]
+        direction: SeatSide,
+    },
+    /// Adds `value` to each of `who`'s own running totals under `var` ("each player may
+    /// pay any amount of life ... for each 1 life they paid this way"), read back with
+    /// [`Value::PlayerTally`]; kept for the rest of the resolution.
+    AddToPlayerTally {
+        var: Var,
+        who: PlayerRef,
+        value: Value,
     },
     /// "[player] does the same": the player performs the effect in place of its
     /// controller, so "you" in it is that player (none if `who` names no player).

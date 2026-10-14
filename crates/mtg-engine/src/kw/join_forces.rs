@@ -57,6 +57,8 @@ impl KeywordRules for JoinForces {
             let var = crate::oracle::patterns::iteration_grammar::MANA_PAID;
             let total = ctx.nums.get(&var).copied().unwrap_or(0);
             ctx.nums.insert(var, total + n);
+            // "the amount of mana they paid this way": each player's own.
+            ctx.add_tally(crate::tallies::MANA_PAID, p, n);
         }
         true
     }
