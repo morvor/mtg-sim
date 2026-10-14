@@ -3553,6 +3553,14 @@ pub struct PlayTerms {
     /// relative to the permission's source and player as the cost is determined.
     #[serde(default)]
     pub cost_increase_each: Option<Value>,
+    /// "you may spend colorless mana as though it were mana of any color to cast that
+    /// spell": mana of this type, for spells cast with the permission (CR 609.4b).
+    #[serde(default)]
+    pub spend_type_as_any_color: Option<ManaType>,
+    /// "you may spend mana from snow sources as though it were mana of any color to cast
+    /// those spells" (CR 609.4b, 106.3).
+    #[serde(default)]
+    pub snow_as_any_color: bool,
     /// The effect that gave the permission (0: none recorded), which "cast this way"
     /// refers to (see `permissions::PermissionUse`).
     #[serde(default)]
@@ -3621,6 +3629,10 @@ impl PlayTerms {
         if other.cast_face.is_some() {
             self.cast_face = other.cast_face;
         }
+        if other.spend_type_as_any_color.is_some() {
+            self.spend_type_as_any_color = other.spend_type_as_any_color;
+        }
+        self.snow_as_any_color |= other.snow_as_any_color;
         if other.cost_increase_each.is_some() {
             self.cost_increase_each = other.cost_increase_each.clone();
         }

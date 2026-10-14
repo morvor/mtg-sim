@@ -1827,7 +1827,28 @@ impl Game {
             all_creature_types: crate::kw::changeling::every_creature_type(&chars),
             has_x: base_cost_has_x,
             source: Some(id),
-            any_color: self.any_color_mana(p, id, false),
+            any_color: {
+                let mut v = self.any_color_mana(p, id, false);
+                // "you may spend colorless mana as though it were mana of any color to cast
+                // that spell" (the permission it's cast with, CR 609.4b).
+                if let Some(t) = opt
+                    .permission
+                    .as_ref()
+                    .and_then(|c| c.terms.spend_type_as_any_color)
+                {
+                    v.push(t);
+                }
+                v
+            },
+            // "you may spend mana from snow sources as though it were mana of any color to
+            // cast those spells".
+            rules: crate::mana::SpendRules {
+                snow_any_color: opt
+                    .permission
+                    .as_ref()
+                    .is_some_and(|c| c.terms.snow_as_any_color),
+                ..Default::default()
+            },
             check_only: false,
             class_level: false,
             cost_of: Some(crate::rule_statics::payment::CostOf::Spell),

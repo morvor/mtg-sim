@@ -481,9 +481,17 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
         .filter(|(d, _)| d.contains(" in exile ") || d.starts_with("in exile "))
     {
         let d = d.replacen("in exile ", "", 1);
+        // "cards in exile your opponents own with ice counters on them".
+        let (owner, d) = match d.strip_prefix("your opponents own ") {
+            Some(r) => (Some(Filter::OwnedBy(PlayerRel::Opponent)), r.to_string()),
+            None => (None, d),
+        };
         let desc = format!("cards {} on them", d.trim());
         let f = object_filter(&desc)?;
-        p.zone_filter = Some(f);
+        p.zone_filter = Some(match owner {
+            Some(o) => Filter::and(vec![o, f]),
+            None => f,
+        });
         return Some((From::Exile, rest));
     }
     // "from among face-up cards your opponents own from exile" (Ashiok, Nightmare Muse).
@@ -768,6 +776,28 @@ fn strip_spend(s: &str, p: &mut Perm) -> String {
                         p.terms.spend_any_type = true;
                     } else {
                         p.terms.spend_as_any_color = true;
+                    }
+                    return r.to_string();
+                }
+            }
+        }
+    }
+    // "..., and you may spend colorless mana as though it were mana of any color to cast
+    // that spell", "... mana from snow sources ..." (CR 609.4b).
+    for lead in [", and ", " and "] {
+        for (clause, snow) in [
+            ("you may spend colorless mana as though it were mana of any color to cast ", false),
+            (
+                "you may spend mana from snow sources as though it were mana of any color to cast ",
+                true,
+            ),
+        ] {
+            for obj in ["it", "that spell", "those spells", "them", "that card"] {
+                if let Some(r) = s.strip_suffix(&format!("{lead}{clause}{obj}")) {
+                    if snow {
+                        p.terms.snow_as_any_color = true;
+                    } else {
+                        p.terms.spend_type_as_any_color = Some(crate::mana::ManaType::C);
                     }
                     return r.to_string();
                 }

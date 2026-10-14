@@ -460,6 +460,8 @@ pub fn attach(
                 || perm.requires_cost()
                 || perm.terms.cost_reduction > 0
                 || perm.terms.cast_face.is_some()
+                || perm.terms.spend_type_as_any_color.is_some()
+                || perm.terms.snow_as_any_color
                 || perm.terms.cost_increase_each.is_some()
                 || perm.terms.spend_any_type
                 || perm.terms.spend_as_any_color;
