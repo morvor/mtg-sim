@@ -112,7 +112,11 @@ impl Renderer<'_> {
                         .collect();
                     join_list(&names, "and/or")
                 } else {
+                    // "up to two instant and/or sorcery cards": several, of either kind.
+                    let saved = self.alt_and;
+                    self.alt_and = !matches!(count, Some(Value::Const(1)));
                     let noun = self.card_noun(filter);
+                    self.alt_and = saved;
                     match count {
                         None => format!("all {}", plural(&noun)),
                         Some(Value::Const(1)) if *random => with_article(&format!("random {noun}")),
@@ -191,6 +195,17 @@ impl Renderer<'_> {
                     } else {
                         "from among them"
                     };
+                    // "You may put one of them back on top of your library": the cards looked
+                    // at came from the top of that library.
+                    if !*reveal
+                        && what == "a card"
+                        && among == "from among them"
+                        && d.starts_with("on top of ")
+                    {
+                        return format!(
+                            "{may}put {{alt:a card from among them|one of them back}} {d}"
+                        );
+                    }
                     if d.is_empty() {
                         format!("{may}{verb} {what} {among}")
                     } else {
