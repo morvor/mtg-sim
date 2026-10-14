@@ -25,6 +25,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = life_lost_this_way(r) {
         return Some(v);
     }
+    // Counters an earlier instruction removed (`referents_results`).
+    if let Some(v) = super::referents_results::count_ext(r, b) {
+        return Some(v);
+    }
     // Attractions visited this turn (`un_stickers_attractions`).
     if let Some(v) = super::un_stickers_attractions::count(r) {
         return Some(v);
@@ -1176,6 +1180,10 @@ fn event_amount(s: &str, b: &Builder) -> Option<(Value, String)> {
     let damage = ["damage"];
     if !triggers_on(b, &damage) {
         return None;
+    }
+    // "that player discards cards equal to the damage": the damage the trigger event dealt.
+    if x.is_empty() || x.starts_with([',', '.', ';', '"']) {
+        return Some((Value::EventAmount, x.to_string()));
     }
     let x = x.strip_prefix(" dealt").or_else(|| {
         [
