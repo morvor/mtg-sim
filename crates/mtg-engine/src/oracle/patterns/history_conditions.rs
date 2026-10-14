@@ -2177,7 +2177,7 @@ mod tests {
                 }
             } else if let Some(c) = line.strip_prefix("D: ") {
                 let def = crate::card::card(c);
-                for a in &def.faces[0].abilities {
+                for a in &def.faces[0].chars.abilities {
                     println!("D {c}: {a:?}");
                 }
             } else if let Some(c) = line.strip_prefix("U: ") {

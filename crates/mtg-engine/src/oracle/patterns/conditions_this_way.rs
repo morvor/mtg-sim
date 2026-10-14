@@ -403,6 +403,11 @@ fn optional_core(e: &Effect) -> Option<&Effect> {
 /// The objects phrase after a quantifier: "a land card", "an instant or sorcery card",
 /// "at least one Zombie card", "one or more creature cards".
 fn quantified(s: &str) -> Option<(Filter, &str)> {
+    // "another Desert": not the source (followed to where it went, `Filter::Other`).
+    if let Some(r) = s.strip_prefix("another ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Filter::and(vec![Filter::Other, f]), rest.trim_start()));
+    }
     let r = ["at least one ", "one or more ", "any ", "a ", "an "]
         .iter()
         .find_map(|q| s.strip_prefix(q))?;
@@ -410,6 +415,19 @@ fn quantified(s: &str) -> Option<(Filter, &str)> {
     if let Some(rest) = r.strip_prefix("card named ~") {
         let f = Filter::and(vec![Filter::Card, Filter::SameNameAs(Box::new(Sel::This))]);
         return Some((f, rest.trim_start()));
+    }
+    // "a permanent you controlled or a token": either kind (as it last existed).
+    if let Some((x, y)) = r.split_once(" or a ").or_else(|| r.split_once(" or an ")) {
+        let one = |s: &str| {
+            let s = s.replace(" you controlled", " you control");
+            parse_object_phrase(&s)
+                .filter(|(_, _, rest)| end(rest).is_empty())
+                .map(|(f, _, _)| f)
+        };
+        if let Some(fx) = one(x) {
+            let (fy, _, rest) = parse_object_phrase(y)?;
+            return Some((Filter::Or(vec![fx, fy]), rest.trim_start()));
+        }
     }
     let (f, _, rest) = parse_object_phrase(r)?;
     Some((f, rest.trim_start()))

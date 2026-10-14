@@ -175,3 +175,89 @@ fn vikya_draws_for_excess_damage_to_a_creature_only() {
         );
     }
 }
+
+#[test]
+fn break_the_spell_draws_for_your_permanent_or_a_token() {
+    cr!("608.2c", "608.2h");
+    assert_supported("Break the Spell");
+    for (whose, token, draws) in [(P0, false, 1), (P1, false, 0), (P1, true, 1)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let e = if token {
+            let spec = mtg_engine::tokens::predefined("Shard").expect("Shard token");
+            let tc = mtg_engine::replacement::TokenCreate {
+                chars: mtg_engine::tokens::token_characteristics(&spec),
+                card: None,
+                tapped: false,
+                attacking: None,
+                copy_of: None,
+                copy_exceptions: vec![],
+            };
+            t.g.create_tokens(whose, tc, 1, None)[0]
+        } else {
+            t.battlefield(whose, "Glorious Anthem")
+        };
+        t.lands(P0, "Plains", 1);
+        let bts = t.hand(P0, "Break the Spell");
+        let hand = t.hand_size(P0);
+        t.cast(P0, bts).target(e).go();
+        t.resolve_all();
+        assert!(!t.on_battlefield(e));
+        assert_eq!(
+            t.hand_size(P0),
+            hand - 1 + draws,
+            "{whose:?} {token}: {}",
+            t.dump_log()
+        );
+    }
+}
+
+#[test]
+fn shilgengar_makes_blood_equal_to_a_sacrificed_angels_toughness() {
+    cr!("608.2h", "608.2c");
+    assert_supported("Shilgengar, Sire of Famine");
+    for (victim, bloods) in [("Serra Angel", 4), ("Grizzly Bears", 1)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let sh = t.battlefield(P0, "Shilgengar, Sire of Famine");
+        let v = t.battlefield(P0, victim);
+        t.answer_choose(P0, &[Entity::Object(v)]);
+        t.activate(P0, sh, 0, &[]).unwrap();
+        t.resolve_all();
+        assert_eq!(
+            count_named(&t, P0, "Blood Token"),
+            bloods,
+            "{victim}: {}",
+            t.dump_log()
+        );
+    }
+}
+
+#[test]
+fn arid_archway_surveils_only_for_another_desert() {
+    cr!("608.2c");
+    assert_supported("Arid Archway");
+    // Returning a Desert other than itself, a non-Desert, and itself.
+    for (other, surveils) in [
+        (Some("Desert"), true),
+        (Some("Forest"), false),
+        (None, false),
+    ] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let o = other.map(|n| t.battlefield(P0, n));
+        t.library_top(P0, "Island");
+        let aa = t.hand(P0, "Arid Archway");
+        // The only choice is the land returned.
+        if let Some(o) = o {
+            t.answer_choose(P0, &[Entity::Object(o)]);
+        }
+        t.play_land(P0, aa).unwrap();
+        t.resolve_all();
+        let asked = t
+            .asked()
+            .iter()
+            .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::Surveil { .. }));
+        assert_eq!(asked, surveils, "{other:?}: {}", t.dump_log());
+    }
+}
