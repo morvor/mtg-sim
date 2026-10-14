@@ -255,6 +255,24 @@ fn describe(g: &Game, pile: &[ObjectId]) -> String {
         .join(", ")
 }
 
+/// The cards of a pile as a player who may look at them sees them: a face-down card has
+/// no characteristics (CR 406.3a), but the player sees which card it is.
+fn describe_seen(g: &Game, pile: &[ObjectId]) -> String {
+    if pile.is_empty() {
+        return "(empty)".into();
+    }
+    pile.iter()
+        .map(|o| {
+            let ob = g.obj(*o);
+            match &ob.card {
+                Some(c) if ob.face_down => c.front().chars.name.to_string(),
+                _ => ob.chars.name.to_string(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn pile(ctx: &Ctx, var: Var) -> Vec<ObjectId> {
     ctx.vars
         .get(&var)
@@ -299,7 +317,7 @@ fn show(
     {
         format!("face-down pile of {} card(s)", pile.len())
     } else {
-        describe(g, pile)
+        describe_seen(g, pile)
     }
 }
 

@@ -718,9 +718,13 @@ fn exile_it_and_top_cards_in_pile(l: &str, b: &mut Builder) -> Option<Effect> {
     if !rest.is_empty() || !b.in_trigger || !matches!(b.it, Sel::This | Sel::TriggerObject) {
         return None;
     }
-    let it = Sel::This;
+    // The card put into the graveyard, as the new object it became there (CR 400.7).
+    let it = Sel::TriggerObject;
     let cond = Condition::And(vec![
-        Condition::SelMatches(it.clone(), Filter::InZone(ZoneKind::Graveyard)),
+        Condition::Exists(Filter::and(vec![
+            Filter::In(Box::new(it.clone())),
+            Filter::InZone(ZoneKind::Graveyard),
+        ])),
         Condition::Compare(Value::LibrarySize(PlayerRef::You), Cmp::Ge, n.clone()),
     ]);
     b.it = Sel::Var(vars::IT);

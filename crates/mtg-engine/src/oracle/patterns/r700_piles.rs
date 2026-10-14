@@ -84,6 +84,10 @@ fn separate_into_piles(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let objs = r.strip_suffix(" into two piles")?;
     let what = match objs {
+        // "Exile up to five target creature cards from graveyards. An opponent separates
+        // those cards ...": the cards the previous instruction exiled (the new objects,
+        // CR 400.7).
+        "those cards" | "them" if matches!(b.it, Sel::Target(_)) => Sel::Var(vars::IT),
         "those cards" | "them" => b.it.clone(),
         _ => {
             let (sel, tail) = object_ref(objs, b)?;
