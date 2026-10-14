@@ -51,6 +51,14 @@ Tests in `crates/mtg-engine/tests/cards/roundtrip_clusters_3.rs`; each fails on 
   because the new "that permanent or player" rendering of an any-target pronoun no longer
   matched "that land". Fixed in `patterns/conditions_referents.rs`.
 
+- Darksteel Colossus, Blightsteel Colossus, Progenitus, Nexus of Fate, Legacy Weapon (found
+  in review): "If ~ would be put into a graveyard from anywhere, reveal ~ and shuffle it into
+  its owner's library instead" dropped the reveal. Now `ReplacementAction::RevealAndMoveInstead`
+  (the modified move of Nephalia Academy's fix, so sacrifice costs such as Viscera Seer's are
+  still paid); `patterns/r400_zones.rs`, `patterns/control_exile_graveyard.rs`,
+  `patterns/replacement_grammar_zones.rs` (`move_instead`). Tests: sacrificed as a cost,
+  dying, and a resolving spell.
+
 Also a renderer error, not a parser bug: a move to the battlefield with no controller named
 was rendered "under its owner's control"; it enters under the control of the player putting
 it there (CR 110.2a), which the engine does (Purgatory's ruling). Cauldron's Gift, Tomb
@@ -62,11 +70,6 @@ Checked and kept: Arashin War Beast triggers once for two blockers (test, its ru
 
 Mismatches left in the taken clusters, each checked against the AST:
 
-- Darksteel Colossus, Blightsteel Colossus, Progenitus, Nexus of Fate, Legacy Weapon:
-  "reveal ~ and shuffle it into its owner's library instead" drops the reveal (a parser
-  omission: the replacement is a modified move, `ReplacementAction::MoveInstead`, which has
-  no way to reveal; replacing it with an `Instead` effect broke "sacrifice" costs such as
-  offering, so it's left for an AST hook). The shuffle itself is right.
 - Garruk's Harbinger: "a creature card or Garruk planeswalker card" as "a creature or Garruk
   planeswalker card" (same filter).
 - Arachne, Psionic Weaver: "a card type other than creature" as the list of the other
@@ -82,11 +85,9 @@ Mismatches left in the taken clusters, each checked against the AST:
   the opponent's instruction (same player performs it).
 - Animal Magnetism: "An opponent chooses a creature card from among them" rendered "puts";
   the dig step keeps the card among them for "Put that card onto the battlefield" (under
-  your control).
+  your control; checked in play by a test).
 - Slumbering Trudge: one paragraph compiled as two abilities ("If X is 2 or less, it enters
   tapped" as its own replacement).
-- Arrow Storm, Lightning Surge: the "instead" sentence is its own paragraph on the card;
-  rendered as one ability (same effect).
 - Stinging Vitriol, Pumpkin Bombs, The Fall of Kroog, Cerebral Vortex, Curse Artifact: "they"
   for the target player rendered "that player" where the subject isn't rendered through
   `with_subject` (a pronoun-only difference).

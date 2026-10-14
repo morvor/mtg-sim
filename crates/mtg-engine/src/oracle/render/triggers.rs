@@ -1721,10 +1721,16 @@ impl Renderer<'_> {
 
 /// Whether a filter names only permanents on the battlefield by what it says (enchanted,
 /// controlled, a permanent): "is put into a graveyard" means from the battlefield then.
+/// (A spell or card you control isn't a permanent; a type named alone is, CR 109.2.)
 fn on_battlefield_noun(f: &Filter) -> bool {
     match f {
         Filter::AttachedToSource | Filter::Permanent | Filter::ControlledBy(_) => true,
-        Filter::And(v) => v.iter().any(on_battlefield_noun),
+        Filter::And(v) => {
+            v.iter().any(on_battlefield_noun)
+                && !v
+                    .iter()
+                    .any(|x| matches!(x, Filter::Spell | Filter::Card | Filter::InZone(_)))
+        }
         _ => false,
     }
 }

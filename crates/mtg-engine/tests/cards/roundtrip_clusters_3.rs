@@ -1,6 +1,8 @@
 //! roundtrip-clusters-3 (docs/agents/items/roundtrip-clusters-3.md): parser bugs the round
 //! trip found in its clusters, and cards whose rendering differs in wording, checked in play.
 
+use mtg_engine::events::Event;
+use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -88,3 +90,95 @@ fn arashin_war_beast_triggers_once_for_two_blockers() {
     assert_eq!(face_down, 1, "{}", t.dump_log());
 }
 
+
+/// Whether a card named `name` was revealed this turn.
+fn revealed(t: &TestGame, name: &str) -> bool {
+    t.g.turn_events.iter().any(|e| {
+        matches!(e, Event::Custom { name: n, obj: Some(o), .. }
+            if n == mtg_engine::reveal::REVEALED && t.g.obj(*o).name() == name)
+    })
+}
+
+fn in_library(t: &TestGame, p: PlayerId, name: &str) -> usize {
+    t.g.find_in_zone(Zone::Library(p), name).len()
+}
+
+#[test]
+fn colossus_is_revealed_and_shuffled_into_its_library_when_sacrificed_as_a_cost() {
+    cr!("701.20a", "614.1a", "614.6");
+    // Darksteel Colossus: "If ~ would be put into a graveyard from anywhere, reveal ~ and
+    // shuffle it into its owner's library instead." The reveal was dropped. Sacrificed to
+    // pay a cost, it's still sacrificed (the cost is paid) and goes to the library.
+    let mut t = TestGame::new(2);
+    let seer = t.battlefield(P0, "Viscera Seer");
+    let colossus = t.battlefield(P0, "Darksteel Colossus");
+    let before = in_library(&t, P0, "Darksteel Colossus");
+    t.answer_choose(P0, &[Entity::Object(colossus)]);
+    t.activate(P0, seer, 0, &[]).expect("the cost can be paid");
+    assert!(!t.on_battlefield(colossus));
+    assert_eq!(in_library(&t, P0, "Darksteel Colossus"), before + 1);
+    assert!(!t.in_graveyard(P0, "Darksteel Colossus"));
+    assert!(revealed(&t, "Darksteel Colossus"), "{}", t.dump_log());
+    // The ability (Scry 1) resolves: the cost was paid.
+    t.resolve_all();
+    assert!(t.g.stack.is_empty());
+}
+
+#[test]
+fn progenitus_is_revealed_and_shuffled_into_its_library_when_it_dies() {
+    cr!("701.20a", "614.1a", "700.4");
+    let mut t = TestGame::new(2);
+    let progenitus = t.battlefield(P0, "Progenitus");
+    t.lands(P0, "Plains", 4);
+    let wrath = t.hand(P0, "Wrath of God");
+    t.cast(P0, wrath).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(progenitus));
+    assert!(!t.in_graveyard(P0, "Progenitus"));
+    assert_eq!(in_library(&t, P0, "Progenitus"), 1);
+    assert!(revealed(&t, "Progenitus"), "{}", t.dump_log());
+}
+
+#[test]
+fn nexus_of_fate_is_revealed_and_shuffled_into_its_library_as_it_resolves() {
+    cr!("701.20a", "614.1a", "608.2n");
+    // "Take an extra turn after this one. If ~ would be put into a graveyard from anywhere,
+    // reveal ~ and shuffle it into its owner's library instead."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 7);
+    let nexus = t.hand(P0, "Nexus of Fate");
+    t.cast(P0, nexus).go();
+    t.resolve_all();
+    assert!(!t.in_graveyard(P0, "Nexus of Fate"));
+    assert_eq!(in_library(&t, P0, "Nexus of Fate"), 1);
+    assert!(revealed(&t, "Nexus of Fate"), "{}", t.dump_log());
+}
+
+#[test]
+fn animal_magnetism_puts_the_card_the_opponent_chose_onto_the_battlefield() {
+    cr!("608.2c", "110.2a");
+    // "Reveal the top five cards of your library. An opponent chooses a creature card from
+    // among them. Put that card onto the battlefield and the rest into your graveyard."
+    // (Rendered "an opponent puts ..."; checked that the choice only picks the card.)
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Grizzly Bears");
+    let elves = t.library_top(P0, "Llanowar Elves");
+    for _ in 0..3 {
+        t.library_top(P0, "Forest");
+    }
+    t.lands(P0, "Forest", 5);
+    let spell = t.hand(P0, "Animal Magnetism");
+    t.answer_choose(P1, &[Entity::Object(elves)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let on_bf: Vec<_> = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.obj_now(**o).name() == "Llanowar Elves")
+        .collect();
+    assert_eq!(on_bf.len(), 1, "{}", t.dump_log());
+    assert_eq!(t.obj_now(*on_bf[0]).controller, P0);
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!(t.g.find_in_zone(Zone::Graveyard(P0), "Forest").len(), 3);
+}

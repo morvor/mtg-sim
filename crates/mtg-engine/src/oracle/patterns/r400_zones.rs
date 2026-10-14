@@ -196,10 +196,14 @@ fn graveyard_from_anywhere(l: &str, text: &str, _ctx: &CompileContext) -> Option
         "an opponent's" => Some(PlayerRel::Opponent),
         _ => return None,
     };
+    // "Reveal ~ and shuffle it into ...": the card is revealed as it's moved (CR 701.20a).
+    let (reveal, instead) = match instead.strip_prefix("reveal ~ and ") {
+        Some(x) if own => (true, x),
+        _ => (false, instead),
+    };
     let dest = match instead {
         "exile it instead" | "exile that card instead" => Destination::zone(ZoneKind::Exile),
-        "reveal ~ and shuffle it into its owner's library instead"
-        | "shuffle it into its owner's library instead" => {
+        "shuffle it into its owner's library instead" => {
             let mut d = Destination::zone(ZoneKind::Library);
             d.position = LibraryPosition::Shuffled;
             d
@@ -216,7 +220,11 @@ fn graveyard_from_anywhere(l: &str, text: &str, _ctx: &CompileContext) -> Option
             from: None,
             to: Some(ZoneKind::Graveyard),
         },
-        action: ReplacementAction::MoveInstead(dest),
+        action: if reveal {
+            ReplacementAction::RevealAndMoveInstead(dest)
+        } else {
+            ReplacementAction::MoveInstead(dest)
+        },
         // A static ability's replacement effect, even one that applies only to its own
         // object, isn't a self-replacement effect (CR 614.15): with another replacement
         // effect for the same event, the affected object's controller chooses (CR 616.1).

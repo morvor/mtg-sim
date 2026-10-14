@@ -2144,6 +2144,7 @@ Blighted Woodland
 Blightreaper Thallid // Blightsower Thallid
 Blightsoil Druid
 Blightspeaker
+Blightsteel Colossus
 Blightstep Pathway // Searstep Pathway
 Blightwidow
 Blind Creeper
@@ -4884,6 +4885,7 @@ Darkstar Augur
 Darksteel Axe
 Darksteel Brute
 Darksteel Citadel
+Darksteel Colossus
 Darksteel Forge
 Darksteel Garrison
 Darksteel Ingot
@@ -12439,6 +12441,7 @@ Leering Emblem
 Leering Gargoyle
 Leering Onlooker
 Leery Fogbeast
+Legacy Weapon
 Legion Conquistador
 Legion Extruder
 Legion Guildmage
@@ -14782,6 +14785,7 @@ News Helicopter
 Nexos
 Nexus Wardens
 Nexus of Becoming
+Nexus of Fate
 Neyam Shai Murad
 Nezahal, Primal Tide
 Nezumi Bladeblesser
@@ -16554,6 +16558,7 @@ Profound Journey
 Proft, Consulting Detective
 Progenitor Exarch
 Progenitor Mimic
+Progenitus
 Prognostic Sphinx
 Project Deathlok Soldier
 Projektor Inspector

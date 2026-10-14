@@ -2508,7 +2508,16 @@ impl Renderer<'_> {
                     (Some(f), None) => format!("leave {}", self.zone_src(*f)),
                     (None, None) => "change zones".into(),
                 };
-                let then = self.replacement_then(action, "it");
+                let then = match action {
+                    // "reveal ~ and shuffle it into its owner's library instead": the
+                    // object itself is revealed, named again in the instruction.
+                    A::RevealAndMoveInstead(d) if matches!(filter, Filter::Source) => {
+                        let me = self.me();
+                        let t = self.replacement_then(&A::MoveInstead(d.clone()), "it");
+                        format!("reveal {me} and {t}")
+                    }
+                    _ => self.replacement_then(action, "it"),
+                };
                 format!("if {subj} would {where_}, {then}")
             }
             (E::Destroy(f), action) => {
