@@ -929,6 +929,7 @@ Archelos, Lagoon Mystic
 Archenemy's Charm
 Archers of Qarsi
 Archers' Parapet
+Archery Training
 Archetype of Aggression
 Archetype of Courage
 Archetype of Endurance
@@ -5087,6 +5088,7 @@ Deathless Pilot
 Deathmark
 Deathmark Prelate
 Deathmask Nezumi
+Deathpact Angel
 Deathreap Ritual
 Deathrender
 Deathrite Shaman
@@ -7700,6 +7702,7 @@ First Sliver's Chosen
 First Volley
 First-Sphere Gargantua
 First-Time Flyer
+Fishing Pole
 Fishliver Oil
 Fisk Tower
 Fissure Vent
@@ -9668,6 +9671,7 @@ Gut, True Soul Zealot
 Gutless Ghoul
 Gutless Plunderer
 Gutsplitter Gang
+Gutter Grime
 Gutter Skulk
 Gutterbones
 Guttersnipe
@@ -17524,6 +17528,7 @@ Rejuvenating Springs
 Rejuvenation Chamber
 Reki, the History of Kamigawa
 Rekindled Flame
+Rekindling Phoenix
 Reknit
 Relearn
 Release the Ants
@@ -20538,6 +20543,7 @@ Soulsurge Elemental
 Soulsworn Jury
 Soulsworn Spirit
 Soultether Golem
+Sound the Call
 Sound the Trumpets
 Sourbread Auntie
 Soured Springs
@@ -20559,6 +20565,7 @@ Space-Time Anomaly
 Spaceshift
 Spara's Adjudicators
 Spara's Headquarters
+Spare Dagger
 Spare Supplies
 Spare from Evil
 Spark Elemental
@@ -21596,6 +21603,7 @@ Sundial, Dawn Tyrant
 Sundown Pass
 Sunfall
 Sunfire Balm
+Sunfire Torch
 Sunfrill Imitator
 Sungold Barrage
 Sungrace Pegasus
@@ -23341,6 +23349,7 @@ Trickery Charm
 Tricks of the Trade
 Trickster Mage
 Trickster's Elk
+Trickster's Talisman
 Triclopean Sight
 Trigon of Corruption
 Trigon of Infestation
