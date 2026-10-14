@@ -69,17 +69,26 @@ fn generator_servant_haste_lasts_until_end_of_turn_and_needs_a_creature_spell() 
     t.advance_to(P1, Step::PrecombatMain);
     assert!(!has(&t, b[0], KeywordKind::Haste), "until end of turn");
 
-    // Spent on a noncreature spell: nothing gains haste.
+    // Spent on an instant that creates creature tokens: not a creature spell, so the
+    // tokens don't gain haste.
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let gs = t.battlefield(P0, "Generator Servant");
+    t.lands(P0, "Plains", 1);
     t.activate(P0, gs, 0, &[]).unwrap();
-    let sign = t.hand(P0, "Mind Stone");
-    t.cast(P0, sign).go();
+    let alarm = t.hand(P0, "Raise the Alarm");
+    t.cast(P0, alarm).go();
     t.resolve_all();
-    let ms = t.named_on_battlefield("Mind Stone");
-    assert_eq!(ms.len(), 1, "{}", t.dump_log());
-    assert!(!has(&t, ms[0], KeywordKind::Haste));
+    let soldiers: Vec<ObjectId> = t
+        .g
+        .permanents_controlled_by(P0)
+        .into_iter()
+        .filter(|o| t.g.obj(*o).chars.has_subtype("Soldier"))
+        .collect();
+    assert_eq!(soldiers.len(), 2, "{}", t.dump_log());
+    for s in soldiers {
+        assert!(!has(&t, s, KeywordKind::Haste), "{}", t.dump_log());
+    }
 }
 
 #[test]

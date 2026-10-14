@@ -1156,10 +1156,6 @@ fn some_one_source_must_have_dealt_the_damage() {
 #[test]
 fn maarika_needs_excess_damage_dealt_to_that_creature_this_turn() {
     cr!("120.10", "603.4");
-    ruling!(
-        "Overclocked Electromancer",
-        "Excess damage has been dealt to a creature if the damage dealt to it is greater than lethal damage."
-    );
     assert_supported("Maarika, Brutal Gladiator");
     for (blocker, sacrifices) in [("Llanowar Elves", true), ("Ancient Brontodon", false)] {
         let mut t = TestGame::new(2);
