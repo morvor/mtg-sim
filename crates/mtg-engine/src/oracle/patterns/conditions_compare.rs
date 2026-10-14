@@ -211,15 +211,23 @@ fn parse_inner(c: &str, b: &mut Builder) -> Option<Condition> {
     if let Some(cond) = value_comparison(c, b) {
         return Some(cond);
     }
-    // "a creature is attacking and a creature is blocking": both parts of this grammar.
-    for (i, _) in c.match_indices(" and ") {
-        let saved = b.targets.len();
-        if let Some(x) = parse_with(&c[..i], b) {
-            if let Some(y) = parse_with(&c[i + 5..], b) {
-                return Some(Condition::And(vec![x, y]));
+    // "a creature is attacking and a creature is blocking", "a card with the same name is
+    // in a graveyard or a nontoken permanent with the same name is on the battlefield":
+    // both parts of this grammar.
+    for (sep, all) in [(" and ", true), (" or ", false)] {
+        for (i, _) in c.match_indices(sep) {
+            let saved = b.targets.len();
+            if let Some(x) = parse_with(&c[..i], b) {
+                if let Some(y) = parse_with(&c[i + sep.len()..], b) {
+                    return Some(if all {
+                        Condition::And(vec![x, y])
+                    } else {
+                        Condition::Or(vec![x, y])
+                    });
+                }
             }
+            b.targets.truncate(saved);
         }
-        b.targets.truncate(saved);
     }
     None
 }
@@ -439,7 +447,10 @@ fn exists(c: &str, b: &mut Builder) -> Option<Condition> {
         .strip_prefix("a ")
         .or_else(|| c.strip_prefix("an "))
         .or_else(|| c.starts_with("another ").then_some(c))?;
-    let (f, plural, rest) = parse_object_phrase(r)?;
+    // "a card with the same name is in a graveyard": the same name as what the text
+    // named ("it").
+    let r = r.replacen(" with the same name is ", " with the same name as it is ", 1);
+    let (f, plural, rest) = parse_object_phrase(&r)?;
     if plural {
         return None;
     }

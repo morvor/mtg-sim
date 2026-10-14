@@ -449,7 +449,13 @@ fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)
         .strip_prefix("with ")
         .or_else(|| t.strip_prefix("and has "))?;
     // "with lesser power [than ...]"
-    for (p, cmp) in [("lesser ", Cmp::Lt), ("greater ", Cmp::Gt)] {
+    for (p, cmp) in [
+        ("lesser ", Cmp::Lt),
+        ("greater ", Cmp::Gt),
+        // "with equal or lesser mana value" (the object the text named before).
+        ("equal or lesser ", Cmp::Le),
+        ("equal or greater ", Cmp::Ge),
+    ] {
         if let Some(x) = r.strip_prefix(p) {
             let (stat, rest) = stat_word(x)?;
             let (obj, rest) = match rest.trim_start().strip_prefix("than ") {

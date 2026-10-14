@@ -148,6 +148,13 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
     if x.is_empty() || x.starts_with("if ") || x.contains(" if ") || c.contains(',') {
         return None;
     }
+    // "You may put one of those cards onto the battlefield if it has ...": "it" is the
+    // card chosen, which the condition would have to restrict the choice to.
+    if (x.contains(" one of those ") || x.contains(" one of them "))
+        && c.split(' ').any(|w| matches!(w, "it" | "it's" | "its"))
+    {
+        return None;
+    }
     let first_new = b.targets.len();
     // "Destroy target creature if no other creature has greater power.": the condition is
     // about the target the instruction names.

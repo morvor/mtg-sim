@@ -295,6 +295,10 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "token" => Filter::Token,
         "historic" => Filter::Historic,
         "face-down" => Filter::FaceDown,
+        // CR 406.3, 708: a face-up permanent or exiled card.
+        "face-up" => Filter::not(Filter::FaceDown),
+        // CR 712.1.
+        "double-faced" => Filter::Custom(crate::kw::dig_filters::DOUBLE_FACED.into()),
         "enchanted" => Filter::Enchanted,
         "equipped" => Filter::Equipped,
         "modified" => Filter::Modified,

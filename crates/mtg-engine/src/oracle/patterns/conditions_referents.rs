@@ -1012,6 +1012,41 @@ fn has(sel: &Sel, h: &str, b: &mut Builder) -> Option<Condition> {
             return Some(Condition::Compare(stat.of(sel), cmp, v));
         }
     }
+    // "the same name as a permanent", "the same name as a card in your graveyard": some
+    // other such object has a name in common with it (CR 201.2); "the same name as that
+    // card", "the same name as one of the cards exiled with ~".
+    if let Some(r) = h.strip_prefix("the same name as ") {
+        if let Some(x) = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")) {
+            let (f, plural, rest) = parse_object_phrase(x)?;
+            if plural || !end(rest).trim().is_empty() {
+                return None;
+            }
+            return Some(Condition::Exists(Filter::and(vec![
+                f,
+                Filter::SameNameAs(Box::new(sel.clone())),
+                Filter::not(Filter::In(Box::new(sel.clone()))),
+            ])));
+        }
+        let other = match r.strip_prefix("one of ") {
+            Some(x) => {
+                let (o, rest) = super::filters_relational::object_in(x)?;
+                if !rest.trim().is_empty() {
+                    return None;
+                }
+                o
+            }
+            None => other_object(r, b)?,
+        };
+        // An object always has the same name as itself: "that card" read as the subject
+        // isn't what the text means.
+        if format!("{other:?}") == format!("{sel:?}") {
+            return None;
+        }
+        return Some(Condition::SelMatches(
+            sel.clone(),
+            Filter::SameNameAs(Box::new(other)),
+        ));
+    }
     // "the same mana value as the discarded card"
     for (p, stat) in [
         ("the same mana value as ", Stat::ManaValue),
@@ -1188,6 +1223,16 @@ fn counters(sel: &Sel, h: &str) -> Option<Condition> {
 /// "shares a color with [object]", "shares a creature type with ...", "shares a card
 /// type with ...".
 fn shares(sel: &Sel, x: &str, b: &mut Builder) -> Option<Condition> {
+    // "a color with the most common color among all permanents or a color tied for most
+    // common" (CR 105.4: a color an object has).
+    if end(x)
+        == "a color with the most common color among all permanents or a color tied for most common"
+    {
+        return Some(Condition::SelMatches(
+            sel.clone(),
+            Filter::Custom(super::filter_qualities::MOST_COMMON_COLOR.into()),
+        ));
+    }
     let (mk, r): (fn(Box<Sel>) -> Filter, &str) = if let Some(r) = x.strip_prefix("a color with ") {
         (Filter::SharesColor, r)
     } else if let Some(r) = x.strip_prefix("a creature type with ") {
