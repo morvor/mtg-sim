@@ -238,7 +238,7 @@ const STOP_WORDS: [&str; 8] = [
 
 /// Phrases of a card's text, and a phrase of the text of other cards that make them
 /// matter in a game: "whenever you discard" wants discard effects, and so on.
-const PHRASES: [(&str, &str); 16] = [
+const PHRASES: [(&str, &str); 18] = [
     ("spell that targets", "target creature gets +"),
     ("becomes the target", "target creature"),
     ("discard", "discards"),
@@ -255,6 +255,13 @@ const PHRASES: [(&str, &str); 16] = [
     ("tapped", "tap target"),
     ("lose life", "loses"),
     ("counter target", "counter target"),
+    // "When ~ dies", "when enchanted creature dies", "whenever a land is put into a
+    // graveyard from the battlefield": removal.
+    ("dies", "destroy target"),
+    (
+        "put into a graveyard from the battlefield",
+        "destroy target",
+    ),
 ];
 
 impl<'a> Picker<'a> {
@@ -395,15 +402,21 @@ impl<'a> Picker<'a> {
                 }
             }
         }
+        picks.shuffle(rng);
+        // What its text cares about ("whenever you cast a spell that targets ~") comes
+        // before the types and keywords it names.
+        let mut wanted: Vec<Vec<usize>> = Vec::new();
         for (k, (wants, _)) in PHRASES.iter().enumerate() {
             if x.text.contains(wants) {
                 let fit = self.fitting(&self.by_phrase[k], mask);
-                if !fit.is_empty() {
-                    picks.push(fit);
+                if !fit.is_empty() && !wanted.contains(&fit) {
+                    wanted.push(fit);
                 }
             }
         }
-        picks.shuffle(rng);
+        wanted.shuffle(rng);
+        wanted.truncate(2);
+        picks.splice(0..0, wanted);
         let mut out = Vec::new();
         let mut used: HashSet<usize> = HashSet::new();
         for from in picks.iter().take(4) {
