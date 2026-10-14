@@ -1654,6 +1654,16 @@ impl Renderer<'_> {
                 duration,
                 uses,
             } => {
+                // Crafty Cutpurse.
+                if let (
+                    ReplacementEvent::CreateTokens(PlayerFilter::Opponent),
+                    ReplacementAction::EnterUnderControl(PlayerRef::You),
+                    Duration::EndOfTurn,
+                    None,
+                ) = (&def.event, &def.action, duration, uses)
+                {
+                    return "each token that would be created under an opponent's control this turn is created under your control instead".into();
+                }
                 let s = self.replacement(def, *uses);
                 let d = self.duration(duration);
                 // "All damage that would be dealt to target creature this turn is dealt to

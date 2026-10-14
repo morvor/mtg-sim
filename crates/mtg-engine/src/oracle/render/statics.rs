@@ -2420,6 +2420,7 @@ impl Renderer<'_> {
                     | A::Multiply(_)
                     | A::Add(_)
                     | A::PlusTokens { .. }
+                    | A::TokensInstead { .. }
                     | A::Subtract(_)
                     | A::Redirect(_)
                     | A::RedirectNext(..)
@@ -3191,6 +3192,10 @@ impl Renderer<'_> {
                     format!("{c} {d} tokens{tail}")
                 };
                 format!("those tokens plus {tokens} are created instead")
+            }
+            A::TokensInstead { spec } => {
+                let (d, tail) = self.token_desc(spec);
+                format!("that many {d} tokens{tail} are created instead")
             }
             A::Redirect(sel) => {
                 let t = self.sel(sel, Case::Obj);
