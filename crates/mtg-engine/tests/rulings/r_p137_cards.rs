@@ -477,3 +477,169 @@ fn ulamogs_crusher_doesnt_attack_when_it_cant_or_it_costs_something() {
     );
     crate::r_p065_combat::attacks_if_able_but_not_when_tapped_or_costly("Ulamog's Crusher");
 }
+
+#[test]
+fn plaguecrafter_can_be_sacrificed_to_its_own_ability() {
+    cr!("701.21a", "603.2");
+    ruling!(
+        "Plaguecrafter",
+        "Plaguecrafter can be the creature its controller sacrifices for its own ability."
+    );
+    supported("Plaguecrafter");
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.hand(P2, "Island");
+    let from = t.asked().len();
+    let crafter = t.enter(P0, "Plaguecrafter");
+    t.answer_choose(P0, &[obj(crafter)]);
+    t.settle();
+    t.resolve_all();
+    assert!(offered_to(&t, P0, from)
+        .iter()
+        .any(|c| c.contains(&crafter) && c.contains(&bears)));
+    assert!(!t.on_battlefield(crafter) && t.on_battlefield(bears));
+    assert!(!t.on_battlefield(theirs));
+    // "Each player who can't discards a card": only P2, who had nothing to sacrifice.
+    assert_eq!(t.hand_size(P2), 0);
+    assert_eq!(t.graveyard_size(P0), 1);
+    assert_eq!(t.graveyard_size(P1), 1);
+}
+
+#[test]
+fn single_combat_players_choose_in_turn_order_then_sacrifice_the_rest() {
+    cr!("101.4", "701.21a");
+    ruling!(
+        "Single Combat",
+        "As Single Combat resolves, first the player whose turn it is chooses a creature or planeswalker they control, then each other player in turn order does the same, knowing the choices made before them. Then each unchosen creature and planeswalker is sacrificed at the same time."
+    );
+    supported("Single Combat");
+    let mut t = TestGame::new(3);
+    t.set_step(P1, Step::PrecombatMain);
+    t.battlefield(P0, "Leyline of Anticipation");
+    let mut kept = vec![];
+    let mut lost = vec![];
+    for p in [P0, P1, P2] {
+        let bears = t.battlefield(p, "Grizzly Bears");
+        let walker = t.battlefield(p, "Liliana of the Veil");
+        t.answer_choose(p, &[obj(walker)]);
+        kept.push(walker);
+        lost.push(bears);
+    }
+    let seen = [P0, P1, P2].map(|p| {
+        watch(&mut t, p, is_choose, |g| {
+            g.permanents()
+                .filter(|o| o.is(CardType::Creature))
+                .count()
+        })
+    });
+    give_mana_for(&mut t, P0, "Single Combat");
+    let spell = t.hand(P0, "Single Combat");
+    let from = t.asked().len();
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(choosers_since(&t, from), vec![P1, P2, P0]);
+    for s in &seen {
+        assert_eq!(*s.lock().unwrap(), vec![3], "nothing sacrificed while choosing");
+    }
+    assert!(kept.iter().all(|k| t.on_battlefield(*k)));
+    assert!(lost.iter().all(|l| !t.on_battlefield(*l)));
+    // "Players can't cast creature or planeswalker spells until the end of your next
+    // turn."
+    let bears = t.hand(P1, "Grizzly Bears");
+    t.lands(P1, "Forest", 2);
+    assert!(t.cast(P1, bears).try_go().is_err());
+}
+
+#[test]
+fn limited_resources_a_player_with_fewer_than_five_lands_keeps_them_all() {
+    cr!("101.4", "701.21a");
+    ruling!(
+        "Limited Resources",
+        "If a player has less than 5 lands, they get to pick and keep all of their lands."
+    );
+    supported("Limited Resources");
+    let mut t = TestGame::new(2);
+    let mine = t.lands(P0, "Plains", 3);
+    let theirs = t.lands(P1, "Island", 6);
+    let keep: Vec<Entity> = theirs[..5].iter().map(|l| obj(*l)).collect();
+    t.answer_choose(P1, &keep);
+    t.enter(P0, "Limited Resources");
+    t.settle();
+    t.resolve_all();
+    assert!(mine.iter().all(|l| t.on_battlefield(*l)));
+    assert!(theirs[..5].iter().all(|l| t.on_battlefield(*l)));
+    assert!(!t.on_battlefield(theirs[5]));
+    // Eight lands on the battlefield: lands can still be played.
+    let land = t.hand(P0, "Plains");
+    t.play_land(P0, land).unwrap();
+    // With ten, they can't.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Limited Resources");
+    t.lands(P1, "Island", 10);
+    let land = t.hand(P0, "Plains");
+    assert!(!can_play_land(&mut t, P0, land));
+}
+
+#[test]
+fn ogre_marauder_second_trigger_doesnt_undo_the_first() {
+    cr!("603.2", "611.2a", "506.1");
+    ruling!(
+        "Ogre Marauder",
+        "Attacking with Ogre Marauder a second time would cause a second trigger. If no creature was previously sacrificed, the Marauder already can’t be blocked. Sacrificing a creature for the second trigger will not nullify the first."
+    );
+    supported("Ogre Marauder");
+    supported("Relentless Assault");
+    let mut t = TestGame::new(2);
+    let ogre = t.battlefield(P0, "Ogre Marauder");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    // First combat: P1 sacrifices nothing.
+    t.answer_yes(P1, false);
+    attack_with(&mut t, &[(ogre, Entity::Player(P1))]);
+    t.resolve_all();
+    block_and_finish(&mut t, P1, &[(giant, ogre)]);
+    assert_eq!(t.life(P1), 17, "unblockable");
+    // An additional combat phase: P1 sacrifices the Bears, but the Marauder still can't
+    // be blocked.
+    t.advance_to(P0, Step::PostcombatMain);
+    give_mana_for(&mut t, P0, "Relentless Assault");
+    let assault = t.hand(P0, "Relentless Assault");
+    t.cast(P0, assault).go();
+    t.resolve_all();
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[obj(bears)]);
+    attack_with(&mut t, &[(ogre, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    block_and_finish(&mut t, P1, &[(giant, ogre)]);
+    assert_eq!(t.life(P1), 14);
+    assert!(t.on_battlefield(ogre));
+}
+
+#[test]
+fn fandaniel_surveils_before_the_spell_resolves_even_if_it_is_countered() {
+    cr!("603.3", "405.5", "701.25a");
+    ruling!(
+        "Fandaniel, Telophoroi Ascian",
+        "Fandaniel's first ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered or otherwise leaves the stack."
+    );
+    // (Its first ability: "Whenever you cast an instant or sorcery spell, surveil 1.")
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Fandaniel, Telophoroi Ascian");
+    let top = t.library_top(P0, "Forest");
+    give_mana_for(&mut t, P0, "Lightning Bolt");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let bolt = t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 2, "the trigger is above the spell");
+    give_mana_for(&mut t, P1, "Counterspell");
+    let counter = t.hand(P1, "Counterspell");
+    t.cast(P1, counter).target(obj(bolt)).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    t.answer(P0, DecisionKind::Surveil, Answer::Split(vec![], vec![top]));
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Forest"), "surveilled");
+    assert_eq!(t.life(P1), 20);
+}
