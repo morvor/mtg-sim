@@ -163,3 +163,17 @@ fn medomai_cant_attack_during_extra_turns() {
     t.attack(&[(m, Entity::Player(P1))], &[]);
     assert_eq!(t.life(P1), 16);
 }
+
+#[test]
+fn vraska_gives_poison_counters_up_to_nine() {
+    cr!("122.1f");
+    assert_supported(&["Vraska, Betrayal's Sting"]);
+    let mut t = TestGame::new(2);
+    let v = t.battlefield(P0, "Vraska, Betrayal's Sting");
+    t.g.add_counters(Entity::Object(v), "loyalty", 10, None);
+    t.g.add_counters(Entity::Player(P1), "poison", 3, None);
+    t.activate(P0, v, 2, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.g.player(P1).counter("poison"), 9);
+    assert!(!t.has_lost(P1));
+}
