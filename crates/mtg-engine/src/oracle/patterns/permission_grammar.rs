@@ -1336,6 +1336,20 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
             optional: false,
         }
     };
+    if terms.alt_cost.is_some() && p.free {
+        return None;
+    }
+    // "by paying {1} rather than paying its mana cost" (CR 118.9).
+    let cast = match &terms.alt_cost {
+        Some(c) => Effect::WithPlayTerms {
+            terms: PlayTerms {
+                alt_cost: Some(c.clone()),
+                ..Default::default()
+            },
+            effect: Box::new(cast),
+        },
+        None => cast,
+    };
     // "..., and mana of any type can be spent to cast that spell" (CR 118.14): for the
     // cards it may be cast from among.
     if terms.spend_any_type {
@@ -1393,9 +1407,16 @@ fn referent_effect(
                 || terms.spend_as_any_color
                 || terms.condition.is_some()
                 || p.who != Who::You
+                || (terms.alt_cost.is_some() && p.free)
             {
                 return None;
             }
+            // "You may cast that card by paying {1} rather than paying its mana cost": the
+            // spell is cast for that cost (CR 118.9).
+            let alt = terms.alt_cost.take().map(|c| PlayTerms {
+                alt_cost: Some(c),
+                ..Default::default()
+            });
             let whole = limit.is_none() && quality.is_none();
             // The cards are remembered (for "put the rest ...", once some are cast).
             let among = if whole { it.clone() } else { Sel::Var(AMONG) };
@@ -1444,6 +1465,13 @@ fn referent_effect(
                     free: p.free,
                     optional: !chooses,
                 }
+            };
+            let cast = match alt {
+                Some(terms) => Effect::WithPlayTerms {
+                    terms,
+                    effect: Box::new(cast),
+                },
+                None => cast,
             };
             Some(if whole {
                 cast
@@ -1938,6 +1966,20 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
                     free: p.free,
                     optional: true,
                 }
+            };
+            if terms.alt_cost.is_some() && p.free {
+                return None;
+            }
+            // "by paying {1} rather than paying its mana cost" (CR 118.9).
+            let cast = match &terms.alt_cost {
+                Some(c) => Effect::WithPlayTerms {
+                    terms: PlayTerms {
+                        alt_cost: Some(c.clone()),
+                        ..Default::default()
+                    },
+                    effect: Box::new(cast),
+                },
+                None => cast,
             };
             // "..., and mana of any type can be spent to cast that spell" (CR 118.14).
             Some(if terms.spend_any_type {

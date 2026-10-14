@@ -112,6 +112,24 @@ impl CastPermission {
 
 thread_local! {
     static OWN_ONLY: Cell<bool> = const { Cell::new(false) };
+    static RESOLUTION_TERMS: std::cell::RefCell<Option<PlayTerms>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` (an effect that may cast spells as it resolves) with the terms those spells
+/// are cast with: "You may cast that card by paying {1} rather than paying its mana cost"
+/// (CR 608.2g, 118.9).
+pub fn with_resolution_terms<R>(terms: &PlayTerms, f: impl FnOnce() -> R) -> R {
+    let prev = RESOLUTION_TERMS.with(|c| c.replace(Some(terms.clone())));
+    let r = f();
+    RESOLUTION_TERMS.with(|c| *c.borrow_mut() = prev);
+    r
+}
+
+/// The alternative cost spells cast while an effect resolves are cast for, if its terms
+/// give one (see [`with_resolution_terms`]).
+pub fn resolution_alt_cost() -> Option<Cost> {
+    RESOLUTION_TERMS.with(|c| c.borrow().as_ref().and_then(|t| t.alt_cost.clone()))
 }
 
 /// Whether only the card's own permissions (rules, its own abilities) count right now.

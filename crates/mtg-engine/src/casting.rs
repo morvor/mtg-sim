@@ -225,7 +225,11 @@ pub fn cast_during_resolution_as(
     // CR 608.2g, 601.2b: a spell cast with its costs paid while an effect resolves may be
     // cast for an alternative cost the card has (evoke, emerge, ...) rather than its mana
     // cost.
-    if method == CastMethod::Normal && !keyword_way && face == FaceState::Front {
+    if method == CastMethod::Normal
+        && !keyword_way
+        && face == FaceState::Front
+        && crate::permissions::resolution_alt_cost().is_none()
+    {
         let mut alts = resolution_alternative_costs(g, p, card);
         if !alts.is_empty() {
             let mut names = vec![format!("Cast {}", g.obj(card).chars.name)];
@@ -237,6 +241,20 @@ pub fn cast_during_resolution_as(
         }
     }
     opt.any_time = true;
+    // "You may cast that card by paying {1} rather than paying its mana cost" (CR 118.9).
+    if let Some(cost) = crate::permissions::resolution_alt_cost()
+        .filter(|_| method == CastMethod::Normal && opt.alt_cost.is_none())
+    {
+        let mv = g
+            .face_characteristics(card, face)
+            .mana_cost
+            .as_ref()
+            .map_or(0, |m| m.mana_value_with_x(0));
+        opt.alt_cost = Some(crate::permissions::spell_relative_cost(&cost, mv));
+        if matches!(opt.method, CastMethod::Normal | CastMethod::Half(_)) {
+            opt.method = CastMethod::Alternative(PERMISSION_COST);
+        }
+    }
     if method == CastMethod::Free {
         if !keyword_way {
             opt.method = CastMethod::Free;
