@@ -250,9 +250,15 @@ fn conjugate(r: &str, second: bool, base: bool) -> Option<(String, &str)> {
     let (w, rest) = split_word(r);
     let one = |w: &str| -> Option<&'static str> {
         let (b, t) = if base {
-            VERBS.iter().find(|(_, b, _)| *b == w).map(|(_, b, t)| (*b, *t))?
+            VERBS
+                .iter()
+                .find(|(_, b, _)| *b == w)
+                .map(|(_, b, t)| (*b, *t))?
         } else {
-            VERBS.iter().find(|(p, _, _)| *p == w).map(|(_, b, t)| (*b, *t))?
+            VERBS
+                .iter()
+                .find(|(p, _, _)| *p == w)
+                .map(|(_, b, t)| (*b, *t))?
         };
         Some(if second { b } else { t })
     };
@@ -280,7 +286,11 @@ fn article(np: &str) -> &'static str {
 fn counted_object(s: &str) -> Option<(String, Cmp, i32)> {
     let (cmp, n, plural, np) = quantity(s)?;
     let (np, tail) = split_qualifier(np);
-    let np = if plural { singular(np)? } else { np.to_string() };
+    let np = if plural {
+        singular(np)?
+    } else {
+        np.to_string()
+    };
     let obj = if np.starts_with("another ") {
         format!("{np}{tail}")
     } else {
@@ -331,8 +341,14 @@ fn player_clause_as(c: &str) -> Option<Clause> {
             _ => return None,
         };
         let x = x
-            .replace("under their control", &format!("under {possessive} control"))
-            .replace("into their graveyard", &format!("into {possessive} graveyard"));
+            .replace(
+                "under their control",
+                &format!("under {possessive} control"),
+            )
+            .replace(
+                "into their graveyard",
+                &format!("into {possessive} graveyard"),
+            );
         let x = x
             .replacen(" enter ", " entered ", 1)
             .replacen(" put into ", " were put into ", 1);
@@ -368,8 +384,16 @@ fn player_clause_as(c: &str) -> Option<Clause> {
     }
     // Amounts: "lost 3 or more life", "gained life".
     if verb.starts_with("los") || verb.starts_with("gain") {
-        let v = if verb.starts_with("los") { "lose" } else { "gain" };
-        let v = if second { v.to_string() } else { format!("{v}s") };
+        let v = if verb.starts_with("los") {
+            "lose"
+        } else {
+            "gain"
+        };
+        let v = if second {
+            v.to_string()
+        } else {
+            format!("{v}s")
+        };
         let (cmp, n, amount) = if rest == "life" {
             (Cmp::Ge, 1, false)
         } else {
@@ -522,7 +546,10 @@ fn object_clause(c: &str) -> Option<Clause> {
             .replace(" your opponents controlled", " your opponents control");
         let rest = words[i..].join(" ");
         // "has dealt", "have attacked": the perfect is the past here.
-        let rest = match rest.strip_prefix("has ").or_else(|| rest.strip_prefix("have ")) {
+        let rest = match rest
+            .strip_prefix("has ")
+            .or_else(|| rest.strip_prefix("have "))
+        {
             Some(r) if !r.starts_with("been ") => r.to_string(),
             _ => rest,
         };
@@ -658,7 +685,8 @@ fn trigger_of(text: &str) -> Option<TriggerCond> {
             TriggerCond::ControlChanged(f),
         ]));
     }
-    let parse = |t: &str| crate::oracle::triggers::parse_trigger_condition(&format!("whenever {t}"));
+    let parse =
+        |t: &str| crate::oracle::triggers::parse_trigger_condition(&format!("whenever {t}"));
     // A card put into a hand from the battlefield is returned there.
     let (cond, _, _) = parse(text).or_else(|| {
         let i = text.find(" is put into ")?;
@@ -879,10 +907,7 @@ fn split_window(c: &str) -> Option<(String, Option<HistoryWindow>)> {
         }
     }
     let i = c.find(" this turn from ")?;
-    Some((
-        format!("{}{}", &c[..i], &c[i + " this turn".len()..]),
-        None,
-    ))
+    Some((format!("{}{}", &c[..i], &c[i + " this turn".len()..]), None))
 }
 
 /// "if [history clause] [window]" without referents.
@@ -1111,7 +1136,9 @@ fn cast_trigger(b: &Builder) -> bool {
 fn self_trigger(b: &Builder) -> bool {
     b.in_trigger
         && trigger_texts().iter().any(|t| {
-            let t = t.trim_start_matches("whenever ").trim_start_matches("when ");
+            let t = t
+                .trim_start_matches("whenever ")
+                .trim_start_matches("when ");
             t.starts_with("~ enters") || t.starts_with("~ enter ")
         })
 }
@@ -1199,11 +1226,25 @@ fn entered_from(w: &Whose, z: ZoneKind) -> Condition {
 }
 
 const SUBJECTS: &[&str] = &[
-    "~", "this spell", "this creature", "it", "he", "she", "they", "that spell",
+    "~",
+    "this spell",
+    "this creature",
+    "it",
+    "he",
+    "she",
+    "they",
+    "that spell",
     "that creature",
 ];
 const OBJECTS: &[&str] = &[
-    "~", "this spell", "this creature", "it", "him", "her", "them", "that spell",
+    "~",
+    "this spell",
+    "this creature",
+    "it",
+    "him",
+    "her",
+    "them",
+    "that spell",
     "that creature",
 ];
 
@@ -1221,10 +1262,9 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
             let w = whose(word, b.as_deref_mut())?;
             let cond = match rest.trim() {
                 "" => was_cast(&w),
-                "from anywhere other than your hand" => Condition::And(vec![
-                    was_cast(&w),
-                    not(cast_from(&w, ZoneKind::Hand)),
-                ]),
+                "from anywhere other than your hand" => {
+                    Condition::And(vec![was_cast(&w), not(cast_from(&w, ZoneKind::Hand))])
+                }
                 z => cast_from(&w, zone_phrase(z.strip_prefix("from ")?)?),
             };
             return Some(if neg { not(cond) } else { cond });
@@ -1289,9 +1329,7 @@ fn cast_status(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
     let cx = cast_status_clause(x, &mut b)?;
     let cy = cast_status_clause(y, &mut b).or_else(|| {
         // The same subject, elided: "... or was cast from your library".
-        let subj = SUBJECTS
-            .iter()
-            .find(|w| x.starts_with(&format!("{w} ")))?;
+        let subj = SUBJECTS.iter().find(|w| x.starts_with(&format!("{w} ")))?;
         cast_status_clause(&format!("{subj} {y}"), &mut b)
     })?;
     Some(Condition::Or(vec![cx, cy]))
@@ -1376,7 +1414,8 @@ fn mana_spent(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
         if !neg || !matches!(w, Whose::Own) || key != "self" {
             return None;
         }
-        let cond = crate::oracle_ext::parse_condition_ext(&format!("{amount} was spent to cast ~"))?;
+        let cond =
+            crate::oracle_ext::parse_condition_ext(&format!("{amount} was spent to cast ~"))?;
         return Some(if neg { not(cond) } else { cond });
     }
     if neg {
@@ -1395,9 +1434,7 @@ fn mana_spent(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
             }
             match rest {
                 "mana" => cmp("total", q, n),
-                "mana from creatures" | "mana from a creature" => {
-                    cmp("source type:Creature", q, n)
-                }
+                "mana from creatures" | "mana from a creature" => cmp("source type:Creature", q, n),
                 "colors of mana" | "color of mana" => cmp("colors", q, n),
                 _ => return None,
             }
@@ -1441,7 +1478,10 @@ pub fn cast_condition(c: &str, b: &mut Builder) -> Option<Condition> {
         if !matches!(b.it, Sel::TriggerObjects) {
             return None;
         }
-        return some_of(cast_status(&format!("it {r}"), Some(b))?, &Sel::TriggerObjects);
+        return some_of(
+            cast_status(&format!("it {r}"), Some(b))?,
+            &Sel::TriggerObjects,
+        );
     }
     cast_status(c, Some(b)).or_else(|| mana_spent(c, Some(b)))
 }
@@ -1498,7 +1538,8 @@ fn activated_times(c: &str) -> Option<Condition> {
 /// ability ("..., if this is the first time this ability has resolved this turn. If it's
 /// the second time, ...").
 fn resolved_ordinal(c: &str) -> Option<Condition> {
-    let times = |n: i32, cmp: Cmp| Condition::Compare(Value::TimesResolvedThisTurn, cmp, Value::c(n));
+    let times =
+        |n: i32, cmp: Cmp| Condition::Compare(Value::TimesResolvedThisTurn, cmp, Value::c(n));
     if let Some(r) = c.strip_prefix("this is the ") {
         let r = r.strip_suffix(" time this ability has resolved this turn")?;
         let (a, b) = r.split_once(" or ")?;
@@ -1746,7 +1787,11 @@ fn their_last_turn(c: &str, b: Option<&Builder>) -> Option<Condition> {
         return None;
     }
     let cond: TriggerCond = serde_json::from_value(json).ok()?;
-    let v = Value::EventsDuring(HistoryWindow::PlayersLastTurn(who), Box::new(cond), Tally::Events);
+    let v = Value::EventsDuring(
+        HistoryWindow::PlayersLastTurn(who),
+        Box::new(cond),
+        Tally::Events,
+    );
     let v = if over {
         Value::OverPlayers(AggOp::Max, PlayerFilter::Any, Box::new(v))
     } else {
@@ -1868,14 +1913,30 @@ mod tests {
     #[test]
     fn player_clauses_count_this_turns_events() {
         match cond("you cycled two or more cards this turn") {
-            Condition::Compare(Value::EventsThisTurn(t, Tally::Events), Cmp::Ge, Value::Const(2)) => {
-                assert!(matches!(*t, TriggerCond::Cycled { who: PlayerRel::You, .. }))
+            Condition::Compare(
+                Value::EventsThisTurn(t, Tally::Events),
+                Cmp::Ge,
+                Value::Const(2),
+            ) => {
+                assert!(matches!(
+                    *t,
+                    TriggerCond::Cycled {
+                        who: PlayerRel::You,
+                        ..
+                    }
+                ))
             }
             x => panic!("{x:?}"),
         }
         match cond("an opponent discarded a card this turn") {
             Condition::Compare(Value::EventsThisTurn(t, _), Cmp::Ge, Value::Const(1)) => {
-                assert!(matches!(*t, TriggerCond::Discards { who: PlayerRel::Opponent, .. }))
+                assert!(matches!(
+                    *t,
+                    TriggerCond::Discards {
+                        who: PlayerRel::Opponent,
+                        ..
+                    }
+                ))
             }
             x => panic!("{x:?}"),
         }
@@ -1884,22 +1945,37 @@ mod tests {
             cond("you didn't attack with a creature this turn"),
             Condition::Not(_)
         ));
-        assert!(matches!(cond("you haven't cast a spell this turn"), Condition::Not(_)));
+        assert!(matches!(
+            cond("you haven't cast a spell this turn"),
+            Condition::Not(_)
+        ));
         // An amount some one opponent reached.
         let c = cond("an opponent lost 3 or more life this turn");
         assert!(matches!(
             c,
-            Condition::Compare(Value::OverPlayers(AggOp::Max, PlayerFilter::Opponent, _), Cmp::Ge, Value::Const(3))
+            Condition::Compare(
+                Value::OverPlayers(AggOp::Max, PlayerFilter::Opponent, _),
+                Cmp::Ge,
+                Value::Const(3)
+            )
         ));
         // A count some one opponent reached.
         let c = cond("an opponent cast two or more spells this turn");
         assert!(
-            matches!(&c, Condition::Compare(Value::OverPlayers(AggOp::Max, PlayerFilter::Opponent, _), Cmp::Ge, Value::Const(2)))
-                && json(&c).contains("Iterated"),
+            matches!(
+                &c,
+                Condition::Compare(
+                    Value::OverPlayers(AggOp::Max, PlayerFilter::Opponent, _),
+                    Cmp::Ge,
+                    Value::Const(2)
+                )
+            ) && json(&c).contains("Iterated"),
             "{c:?}"
         );
         // Two verbs sharing an object, and "both [A] and [B]".
-        assert!(matches!(cond("you gained and lost life this turn"), Condition::And(v) if v.len() == 2));
+        assert!(
+            matches!(cond("you gained and lost life this turn"), Condition::And(v) if v.len() == 2)
+        );
         assert!(matches!(
             cond("you've cast both a creature spell and a noncreature spell this turn"),
             Condition::And(v) if v.len() == 2
@@ -1918,18 +1994,33 @@ mod tests {
             Condition::Compare(_, Cmp::Eq, Value::Const(0))
         ));
         let j = json(&cond("a creature card left your graveyard this turn"));
-        assert!(j.contains("\"from\":\"Graveyard\"") && j.contains("Creature"), "{j}");
+        assert!(
+            j.contains("\"from\":\"Graveyard\"") && j.contains("Creature"),
+            "{j}"
+        );
         let j = json(&cond(
             "three or more cards were put into your graveyard from anywhere other than the battlefield this turn",
         ));
-        assert!(j.contains("\"Const\":3") && !j.contains("\"from\":\"Battlefield\""), "{j}");
-        let j = json(&cond("a creature entered the battlefield under an opponent's control this turn"));
-        assert!(j.contains("EntersBattlefield") && j.contains("Opponent"), "{j}");
+        assert!(
+            j.contains("\"Const\":3") && !j.contains("\"from\":\"Battlefield\""),
+            "{j}"
+        );
+        let j = json(&cond(
+            "a creature entered the battlefield under an opponent's control this turn",
+        ));
+        assert!(
+            j.contains("EntersBattlefield") && j.contains("Opponent"),
+            "{j}"
+        );
         // "had [objects] enter": the objects entered.
-        let j = json(&cond("an opponent had three or more cards put into their graveyard from anywhere this turn"));
+        let j = json(&cond(
+            "an opponent had three or more cards put into their graveyard from anywhere this turn",
+        ));
         assert!(j.contains("\"Const\":3") && j.contains("Opponent"), "{j}");
         // Distinct attackers.
-        assert!(json(&cond("you attacked with three or more merfolk this turn")).contains("CountSel"));
+        assert!(
+            json(&cond("you attacked with three or more merfolk this turn")).contains("CountSel")
+        );
     }
 
     #[test]
@@ -1960,8 +2051,10 @@ mod tests {
             free("no colored mana was spent to cast ~"),
             Condition::Compare(_, Cmp::Eq, Value::Const(0))
         ));
-        assert!(json(&free("exactly three colors of mana were spent to activate this ability"))
-            .contains("this ability:colors"));
+        assert!(json(&free(
+            "exactly three colors of mana were spent to activate this ability"
+        ))
+        .contains("this ability:colors"));
         // A pronoun needs a referent (the Builder-aware reading).
         assert!(super::cast_condition_free("it was cast").is_none());
     }
@@ -1969,8 +2062,14 @@ mod tests {
     #[test]
     fn ordinals_and_totals() {
         let o = |c: &str| super::ordinal_condition(c).unwrap_or_else(|| panic!("{c}"));
-        assert!(matches!(o("it's the first combat phase of the turn"), Condition::Custom(_)));
-        assert!(matches!(o("it's the first combat phase of your turn"), Condition::And(_)));
+        assert!(matches!(
+            o("it's the first combat phase of the turn"),
+            Condition::Custom(_)
+        ));
+        assert!(matches!(
+            o("it's the first combat phase of your turn"),
+            Condition::And(_)
+        ));
         assert!(matches!(
             o("this ability has been activated four or more times this turn"),
             Condition::Compare(Value::Custom(_), Cmp::Ge, Value::Const(4))
@@ -1981,7 +2080,11 @@ mod tests {
         ));
         assert!(matches!(
             o("you attacked with creatures with total power 6 or greater this combat"),
-            Condition::Compare(Value::Aggregate(AggOp::Sum, Stat::Power, _), Cmp::Ge, Value::Const(6))
+            Condition::Compare(
+                Value::Aggregate(AggOp::Sum, Stat::Power, _),
+                Cmp::Ge,
+                Value::Const(6)
+            )
         ));
     }
 
@@ -2009,8 +2112,7 @@ mod tests {
                 let c = c.to_lowercase();
                 let mut b = Builder::new(&ctx);
                 let s = crate::oracle::statics::parse_condition(&c, &ctx);
-                let w =
-                    super::super::conditions_referents::parse_condition_with(&c, &mut b);
+                let w = super::super::conditions_referents::parse_condition_with(&c, &mut b);
                 println!("C {c}\n  static={s:?}\n  with={w:?}");
             } else if let Some(c) = line.strip_prefix("W: ") {
                 let c = c.to_lowercase();
@@ -2072,6 +2174,11 @@ mod tests {
                             }
                         }
                     }
+                }
+            } else if let Some(c) = line.strip_prefix("D: ") {
+                let def = crate::card::card(c);
+                for a in &def.faces[0].abilities {
+                    println!("D {c}: {a:?}");
                 }
             } else if let Some(c) = line.strip_prefix("U: ") {
                 let def = crate::card::card(c);
