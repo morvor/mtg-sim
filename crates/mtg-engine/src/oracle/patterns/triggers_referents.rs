@@ -341,8 +341,8 @@ fn trigger_with_event_body(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
 }
 
 /// Whether the trigger event carries a meaningful amount for "that many"/"that much":
-/// damage, life gained or lost, counters put, cards milled, attackers, or the number of
-/// objects in a batch.
+/// damage, life gained or lost, counters put, cards milled, attackers, a die roll's
+/// result, or the number of objects in a batch.
 fn has_event_amount(t: &TriggerCond) -> bool {
     match t {
         TriggerCond::DealsDamage { .. }
@@ -358,6 +358,8 @@ fn has_event_amount(t: &TriggerCond) -> bool {
         | TriggerCond::PlayerAttacksWith { .. }
         | TriggerCond::PlayerAttacked { .. }
         | TriggerCond::BlockedByN { .. }
+        // The result of the die roll (CR 706.4).
+        | TriggerCond::RollDie(_)
         | TriggerCond::Batched { .. } => true,
         TriggerCond::Where { trigger, .. }
         | TriggerCond::FirstTimeEachTurn(trigger)

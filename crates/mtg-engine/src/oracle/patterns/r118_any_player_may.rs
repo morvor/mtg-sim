@@ -75,16 +75,34 @@ fn without_you(f: Filter) -> Filter {
 
 /// "any player may [cost]": each player in turn order may pay it; the first payment is
 /// noted for "if a player does".
-fn any_player_may(l: &str, _b: &mut Builder) -> Option<Effect> {
-    let r = end(l).strip_prefix("any player may ")?;
-    let cost = any_player_cost(r)?;
+fn any_player_may(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    // "Whenever a player casts a spell, any other player may pay that spell's mana cost."
+    // (Ice Cave): each player other than the one who cast it.
+    let (who, cost) = if let Some(r) = l.strip_prefix("any other player may ") {
+        if !b.in_trigger || r != "pay that spell's mana cost" {
+            return None;
+        }
+        (
+            PlayerRef::Each(PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+                PlayerRef::TriggerPlayer,
+            ))))),
+            Cost {
+                mana: None,
+                parts: vec![CostPart::PayManaCostOf(Box::new(Sel::TriggerSpell))],
+            },
+        )
+    } else {
+        let r = l.strip_prefix("any player may ")?;
+        (PlayerRef::EachPlayer, any_player_cost(r)?)
+    };
     Some(Effect::Seq(vec![
         Effect::StoreValue {
             var: PAID,
             value: Value::c(0),
         },
         Effect::ForEachPlayer {
-            who: PlayerRef::EachPlayer,
+            who,
             effect: Box::new(Effect::PayOptional {
                 who: PlayerRef::Iterated,
                 cost,
@@ -128,6 +146,12 @@ fn if_a_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     };
     let Effect::PayOptional { then, .. } = &mut **effect else {
         return false;
+    };
+    // "If a player does, counter the spell." (Ice Cave): the spell that was cast.
+    let r = if r == "counter the spell" && b.in_trigger {
+        "counter that spell"
+    } else {
+        r
     };
     let Some(e) = parse_clause(r, b) else {
         return false;

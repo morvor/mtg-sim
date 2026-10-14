@@ -468,6 +468,8 @@ impl Renderer<'_> {
                         }
                     }
                     np.alts.extend(alts);
+                } else if let Some(q) = self.or_quality(v) {
+                    np.post.push(q);
                 } else if self.plural_alts {
                     // "Red spells and white spells you cast cost {1} less to cast."
                     let alts: Vec<String> = v.iter().map(|x| self.noun(x, Num::Many)).collect();

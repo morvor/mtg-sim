@@ -34,9 +34,22 @@ Decided 2026-10-01.
 - **Already implemented:** the rules for stickers on permanents (CR 123) are in
   `stickers.rs`. Cards that put stickers on permanents are supported only as far as they
   work without modeling sheets; anything that needs sheets is deferred with them.
-- **Status:** sheets are to be excluded from `card-coverage` and `unsupported` and
-  reported separately; the `cards-dice-un` item does this. Rulings that apply only to
+- **Status:** sheets are excluded from `card-coverage` (which reports their count
+  separately) and from `unsupported` (unless asked for with `--card`). Rulings that apply only to
   sticker sheets are DEFERRED in `scripts/rulings_batches.py`.
+- **Cards deferred with the sheets** (noted by `cards-dice-un`, 2026-10-14): every
+  sticker a player puts on a permanent comes from one of their sheets (CR 123.2c, 123.3),
+  so in a game without sheets nothing ever has a sticker. These cards' sticker abilities
+  stay unsupported (the cards count as not fully supported) until sheets are modeled:
+  putting stickers ("you may put a name sticker on it", Wizards of the \_\_\_\_\_,
+  \_\_\_\_\_ Goblin, Wolf in \_\_\_\_\_ Clothing, Last Voyage of the \_\_\_\_\_,
+  \_\_\_\_\_ \_\_\_\_\_ Rocketship, Pin Collection, Roxi, Publicist to the Stars, Done
+  for the Day), triggers on placing them (Goblin Airbrusher, Wee Champion, A Good Day to
+  Pie, \_\_\_\_\_ Balls of Fire, Make a \_\_\_\_\_ Splash, Tusk and Whiskers, Unlawful
+  Entry), and abilities that read the stickers on objects (Fight the \_\_\_\_\_ Fight,
+  Ambassador Blorpityblorpboop, Clandestine Chameleon, Scampire, Lineprancers, Proficient
+  Pyrodancer, Baaallerina, \_\_\_\_\_ \_\_\_\_\_ \_\_\_\_\_ Trespasser, Sword-Swallowing
+  Seraph).
 
 ### Digital-only cards
 

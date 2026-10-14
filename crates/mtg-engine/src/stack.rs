@@ -1388,8 +1388,15 @@ impl Game {
         // CR 805.9: which active player "the active player" refers to.
         crate::teams::choose_active_player(self, body, ctx);
         for cm in chosen {
-            ctx.targets = cm.targets.clone();
-            ctx.divided = cm.divided.clone();
+            // A body without targets of its own created by another ability (a reflexive
+            // or delayed triggered ability, CR 603.12, 603.7c) refers to the targets of
+            // the ability that created it ("When you do, destroy that permanent").
+            let own_targets =
+                !(body.targets.is_empty() && body.modal.is_none()) || !cm.targets.is_empty();
+            if own_targets {
+                ctx.targets = cm.targets.clone();
+                ctx.divided = cm.divided.clone();
+            }
             let effect = match (cm.mode, &body.modal) {
                 (Some(m), Some(modal)) => modal.modes[m].effect.clone(),
                 _ => body.effect.clone(),

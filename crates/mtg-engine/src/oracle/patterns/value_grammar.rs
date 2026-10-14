@@ -225,6 +225,12 @@ fn plausible_end(rest: &str) -> bool {
 }
 
 fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // CR 119.1: "your starting life total".
+    if let Some(r) = s.strip_prefix("your starting life total") {
+        if word_end(r) {
+            return Some((Value::StartingLife, r.to_string()));
+        }
+    }
     // "the number of cards you've drawn this turn" (Fractal Anomaly).
     if let Some(r) = s.strip_prefix("the number of cards you've drawn this turn") {
         if word_end(r) {
@@ -1287,6 +1293,13 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             .or_else(|| tail.strip_prefix("cards in it"))?;
         return Some((
             Value::CountPlayers(PlayerFilter::GraveyardSize(cmp, Box::new(n))),
+            rest.to_string(),
+        ));
+    }
+    // "unlocked doors among Rooms you control" (Misty Salon, CR 709.5).
+    if let Some(rest) = r.strip_prefix("unlocked doors among rooms you control") {
+        return Some((
+            Value::Custom(crate::kw::mana_grammar::UNLOCKED_DOORS.into()),
             rest.to_string(),
         ));
     }
