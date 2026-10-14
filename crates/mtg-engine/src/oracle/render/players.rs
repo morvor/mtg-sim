@@ -999,6 +999,30 @@ impl Renderer<'_> {
                 format!("each {n}")
             }
             PlayerRef::Owner => "~'s owner".into(),
+            PlayerRef::Seat { of, side, opponent } => {
+                let who = if *opponent { "opponent" } else { "player" };
+                let s = match (of.as_ref(), side) {
+                    (PlayerRef::Iterated, SeatSide::Chosen) => {
+                        "the next player in {alt:the chosen|that} direction".to_string()
+                    }
+                    (_, SeatSide::Chosen) => {
+                        format!("the {who} next to you in the chosen direction")
+                    }
+                    (of, side) => {
+                        let side = if *side == SeatSide::Left {
+                            "left"
+                        } else {
+                            "right"
+                        };
+                        let o = self.player(of, Case::Poss);
+                        format!("the {who} to {o} {side}")
+                    }
+                };
+                return match case {
+                    Case::Poss => format!("{s}'s"),
+                    _ => s,
+                };
+            }
             // "Choose an opponent. ... the chosen player's hand".
             PlayerRef::ChosenOpponent if matches!(case, Case::Poss) => {
                 return "the chosen {alt:opponent's|player's}".into();

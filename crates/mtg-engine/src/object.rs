@@ -453,6 +453,10 @@ pub struct GameObject {
     /// The object (and link) whose ability created this token or put this permanent onto
     /// the battlefield (CR 607.1d).
     pub created_by: Option<(ObjectId, u16)>,
+    /// The permission this spell was cast with, or this land played with (CR 601.3,
+    /// 305.1): "When you cast a spell this way" finds it (CR 400.7h, 400.7i).
+    #[serde(default)]
+    pub played_with: Option<crate::permissions::PermissionUse>,
     /// Previous incarnation of this card (before its last zone change).
     pub prev: Option<ObjectId>,
     /// Next incarnation (after it changed zones).
@@ -605,6 +609,7 @@ impl GameObject {
             linked_choices: BTreeMap::new(),
             linked: BTreeMap::new(),
             created_by: None,
+            played_with: None,
             prev: None,
             next: None,
             entered_turn: 0,

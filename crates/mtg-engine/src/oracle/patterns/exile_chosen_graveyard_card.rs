@@ -6,7 +6,7 @@
 
 use super::EffectPattern;
 use crate::ability::*;
-use crate::oracle::effects::Builder;
+use crate::oracle::effects::{parse_effect_text, Builder};
 use crate::oracle::phrases::*;
 
 /// The card exiled.
@@ -52,3 +52,35 @@ fn exile_a_graveyard_card(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "exile a [card] from your graveyard (chosen)", priority: 100, parse: exile_a_graveyard_card } }
+
+/// "exile an artifact or creature card from your graveyard and put a cage counter on it":
+/// within the sentence, "it" is the exiled card (even in a triggered ability, where "it"
+/// would otherwise be the source); later sentences keep their own antecedents.
+fn exile_a_graveyard_card_and(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    for (i, _) in l.match_indices(" and ") {
+        let (first, rest) = (&l[..i], &l[i + " and ".len()..]);
+        let saved_it = b.it.clone();
+        let saved_named = b.named.len();
+        let saved_targets = b.targets.len();
+        let Some(exile) = exile_a_graveyard_card(first, b) else {
+            continue;
+        };
+        let outer_it = std::mem::replace(&mut b.it, Sel::Var(EXILED_CARD));
+        let then = parse_effect_text(rest, b);
+        // Later sentences: the antecedent the exile pattern left (the source in a
+        // triggered ability).
+        b.it = outer_it;
+        match then {
+            Some(then) => return Some(Effect::seq(vec![exile, then])),
+            None => {
+                b.it = saved_it;
+                b.named.truncate(saved_named);
+                b.targets.truncate(saved_targets);
+            }
+        }
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "exile a [card] from your graveyard and [instruction about it]", priority: 99, parse: exile_a_graveyard_card_and } }

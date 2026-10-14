@@ -143,11 +143,16 @@ pub(crate) fn card_filter(s: &str, b: &Builder) -> Option<Filter> {
     // "card named ~", "cards named ~".
     for p in ["card named ~", "cards named ~"] {
         if s == p {
-            let name = if b.ctx.card_name.is_empty() {
-                return None;
+            // In a quoted ability compiled on its own (a token's, `granted_by`), "~" in
+            // "card named ~" is still the name of the card being compiled (CR 201.2).
+            let name = if b.ctx.card_name == "\u{1}" {
+                crate::oracle::card_name()
             } else {
-                b.ctx.card_name
+                b.ctx.card_name.to_string()
             };
+            if name.is_empty() {
+                return None;
+            }
             return Some(Filter::and(vec![Filter::Card, Filter::Named(name.into())]));
         }
     }

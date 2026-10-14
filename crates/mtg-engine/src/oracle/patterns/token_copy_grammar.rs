@@ -202,10 +202,16 @@ fn mark_pending(e: &mut Effect) -> bool {
     fn specs<'a>(e: &'a mut Effect, out: &mut Vec<&'a mut TokenSpec>) {
         match e {
             Effect::CreateToken { spec, .. } | Effect::CreateTokenAttached { spec, .. } => {
+                // (Not one whose quoted ability defines its power and toughness: "a green
+                // Ooze creature token with \"This token's power and toughness are each
+                // equal to ...\"", Gutter Grime.)
                 if spec.power == Some(0)
                     && spec.toughness == Some(0)
                     && spec.pt_values.is_none()
                     && spec.card_types.contains(&crate::types::CardType::Creature)
+                    && !spec.abilities.iter().any(|a| {
+                        matches!(&a.kind, AbilityKind::Static(st) if st.is_cda)
+                    })
                 {
                     out.push(spec)
                 }

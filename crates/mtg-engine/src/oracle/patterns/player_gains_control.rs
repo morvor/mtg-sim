@@ -18,6 +18,14 @@ fn player_gains_control(l: &str, b: &mut Builder) -> Option<Effect> {
     if !r.trim().is_empty() || matches!(who, PlayerRef::You) {
         return None;
     }
+    // "Each player gains control of ...": one instruction for all of them
+    // (`control_players_grammar`).
+    if matches!(
+        who,
+        PlayerRef::EachPlayer | PlayerRef::EachOpponent | PlayerRef::EachOtherPlayer | PlayerRef::Each(_)
+    ) {
+        return None;
+    }
     let (what, tail) = object_ref(obj, b)?;
     if !end(&tail).is_empty() || matches!(what, Sel::None) {
         return None;

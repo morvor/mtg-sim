@@ -61,6 +61,16 @@ pub fn token_characteristics_in(
     ctx: &crate::eval::Ctx,
 ) -> Characteristics {
     let mut chars = token_characteristics(spec);
+    // "This token's power and toughness are each equal to the number of slime counters on
+    // Gutter Grime": that specific object, the one creating the token; as part of the
+    // token's copiable values, a copy of the token refers to it too (CR 201.5a, 707.2).
+    if let Some(src) = ctx.source {
+        for a in chars.abilities.iter_mut() {
+            if crate::granted_by::refers_to_granter(a) {
+                *a = crate::granted_by::bind_granter(a, src);
+            }
+        }
+    }
     if let Some(pt) = &spec.pt_values {
         chars.power = Some(g.eval_value(&pt.0, ctx) as i32);
         chars.toughness = Some(g.eval_value(&pt.1, ctx) as i32);
