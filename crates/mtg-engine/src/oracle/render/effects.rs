@@ -5820,6 +5820,11 @@ impl Renderer<'_> {
                 let syms: Vec<String> = types.iter().map(|t| mana_symbol(*t)).collect();
                 join_list(&syms, "or")
             }
+            ManaProduction::CouldProduce(Filter::In(s))
+                if matches!(**s, Sel::Var(crate::ability::vars::SACRIFICED)) =>
+            {
+                "one mana of any type the sacrificed land could produce".into()
+            }
             ManaProduction::CouldProduce(f) => {
                 let n = self.noun_det(f, Det::A);
                 format!("one mana of any type that {n} could produce")
@@ -5870,9 +5875,23 @@ impl Renderer<'_> {
                     }
                 }
             }
+            ManaProduction::AnyColorAmong(Filter::Source) => "one mana of any of ~'s colors".into(),
+            ManaProduction::AnyColorAmong(Filter::And(v))
+                if v.iter()
+                    .any(|f| matches!(f, Filter::In(s) if matches!(**s, Sel::Linked))) =>
+            {
+                "one mana of any of the exiled {alt:card's|cards'} colors".into()
+            }
             ManaProduction::AnyColorAmong(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("one mana of any color among {n}")
+            }
+            ManaProduction::DistinctColors(2, each) if *each > 1 => {
+                let w = number_word(*each as i32);
+                format!("{w} mana of any one color and {w} mana of any other color")
+            }
+            ManaProduction::DistinctColors(colors, _) => {
+                format!("{} mana of different colors", number_word(*colors as i32))
             }
             ManaProduction::EachColorAmong(f) => {
                 let n = self.noun(f, Num::Many);
@@ -5967,6 +5986,19 @@ impl Renderer<'_> {
                 format!("to activate {{alt:abilities of {n}|an ability of {a}|an ability of {a} source}}")
             }
             M::ClassLevel => "to gain a Class level".into(),
+            M::Purpose(crate::mana::SpendPurpose::UnlockDoor) => "to unlock doors".into(),
+            M::Purpose(crate::mana::SpendPurpose::Keyword(k)) => {
+                use crate::keywords::KeywordKind as K;
+                match k {
+                    K::CumulativeUpkeep => "to pay cumulative upkeep costs".into(),
+                    K::Foretell => "to foretell {alt:cards|a card from your hand}".into(),
+                    k => {
+                        let n = k.name().to_lowercase();
+                        format!("to activate {{alt:{n} abilities|an {n} ability|a {n} ability}}")
+                    }
+                }
+            }
+            M::CostWithColorless => "to pay a cost that contains {C}".into(),
             // "This mana can't be spent to cast spells from your hand."
             M::NotCastSpell(f) => {
                 let saved = self.default_head.replace("spell");
@@ -6007,8 +6039,12 @@ impl Renderer<'_> {
                 s.push_str(" and ignore all but the highest roll")
             }
         }
+        if r.choose_one {
+            s.push_str(" and choose one result");
+        }
         for row in &r.table {
             let range = match row.hi {
+                Some(h) if row.lo == i64::MIN => format!("{h} or less"),
                 None => format!("{}+", row.lo),
                 Some(h) if h == row.lo => format!("{h}"),
                 Some(h) => format!("{}—{h}", row.lo),
@@ -6025,7 +6061,10 @@ impl Renderer<'_> {
 
     fn flip_coins(&mut self, c: &crate::dice::CoinFlip) -> String {
         let p = self.player(&c.who, Case::Subj);
-        let mut s = if c.until_lose {
+        let mut s = if let (true, Some(max)) = (c.until_lose, &c.max_flips) {
+            let n = self.value(max);
+            format!("flip a coin {n} times or until you lose a flip, whichever comes first")
+        } else if c.until_lose {
             "flip a coin until you lose a flip".to_string()
         } else {
             match &c.count {

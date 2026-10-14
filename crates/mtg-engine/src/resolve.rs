@@ -1261,6 +1261,7 @@ impl Game {
                 // "Attach ~ to a creature you control. If you do, ...": whether anything
                 // became attached.
                 let mut any = false;
+                let to = &crate::attach::recipient_for_all(self, to, &objs, ctx);
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
                     for o in objs {
                         any |= self.attach(o, t);
@@ -2638,6 +2639,12 @@ impl Game {
                 *f = Filter::Objects(self.named_objects(f, ctx));
             }
         }
+        // "Spells with the same mana value as that spell": amounts naming the resolving
+        // ability's objects are determined as the effect begins (CR 608.2h), as they
+        // can't be evaluated later.
+        if let Restriction::CantCast { what, .. } = &mut r {
+            self.lock_filter_amounts(what, ctx);
+        }
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
         if let Some(pf) = restriction_player_filter(&mut r) {
@@ -2703,6 +2710,41 @@ impl Game {
                 Filter::Or(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
             }
             other => other.clone(),
+        }
+    }
+
+    /// Replaces the amounts of a filter's comparisons that refer to the resolving spell's
+    /// or ability's objects ("the same mana value as that spell", "X") with their values
+    /// now (CR 608.2h).
+    fn lock_filter_amounts(&self, f: &mut Filter, ctx: &Ctx) {
+        fn refers_to_ctx(v: &Value) -> bool {
+            match v {
+                Value::X | Value::Var(_) | Value::EventAmount | Value::Chosen => true,
+                Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s) => matches!(
+                    **s,
+                    Sel::Target(_)
+                        | Sel::Var(_)
+                        | Sel::TriggerObject
+                        | Sel::TriggerLki
+                        | Sel::TriggerOtherObject
+                        | Sel::TriggerSpell
+                ),
+                _ => false,
+            }
+        }
+        match f {
+            Filter::And(v) | Filter::Or(v) => {
+                for x in v {
+                    self.lock_filter_amounts(x, ctx);
+                }
+            }
+            Filter::Not(x) => self.lock_filter_amounts(x, ctx),
+            Filter::ManaValue(_, v) | Filter::Power(_, v) | Filter::Toughness(_, v)
+                if refers_to_ctx(v) =>
+            {
+                **v = Value::c(self.eval_value(v, ctx) as i32);
+            }
+            _ => {}
         }
     }
 
@@ -2920,6 +2962,26 @@ impl Game {
                 self.choose_mana_combination(p, ctx, opts, k)
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
+            ManaProduction::DistinctColors(colors, each) => {
+                // Each color chosen is different from those chosen before it.
+                let mut left = vec![
+                    ManaType::W,
+                    ManaType::U,
+                    ManaType::B,
+                    ManaType::R,
+                    ManaType::G,
+                ];
+                let mut out = Vec::new();
+                for _ in 0..*colors {
+                    if left.is_empty() {
+                        break;
+                    }
+                    let c = self.choose_mana_color(p, ctx, &left);
+                    left.retain(|t| *t != c);
+                    out.extend(std::iter::repeat_n(c, *each as usize));
+                }
+                out
+            }
             ManaProduction::OneOfOrChosenColor(opts) => {
                 let mut u = opts.clone();
                 if let Some(c) = self

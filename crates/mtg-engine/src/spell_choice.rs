@@ -15,6 +15,9 @@ use crate::types::*;
 /// The faces or halves `card` could be cast as whose characteristics as a spell match `f`
 /// (CR 601.3e). For a card with a single way to be cast, the card itself is checked.
 pub fn matching_faces(g: &Game, card: ObjectId, f: &Filter, ctx: &Ctx) -> Vec<FaceState> {
+    // "Spells from your hand": the card isn't a spell yet, so the "is on the stack" part
+    // of the filter doesn't apply.
+    let f = &crate::casting::as_spell_filter(f);
     let faces = crate::casting::castable_faces(g, card);
     if faces.len() < 2 {
         return if g.matches(card, f, ctx) {
