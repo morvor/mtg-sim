@@ -127,10 +127,12 @@ impl Perm {
         let Some(c) = &self.cond_text else {
             return Some(terms);
         };
-        if let Some(q) = c
-            .strip_prefix("it's ")
-            .filter(|q| q.ends_with(" spell") || q.ends_with(" spells"))
-        {
+        if let Some(q) = c.strip_prefix("it's ").filter(|q| {
+            q.ends_with(" spell")
+                || q.ends_with(" spells")
+                || q.contains(" spell with ")
+                || q.contains(" spells with ")
+        }) {
             let (f, _, rest) = class_phrase(q)?;
             if !rest.trim().is_empty() {
                 return None;
@@ -336,6 +338,8 @@ fn among_referent(s: &str) -> Option<&str> {
     for w in [
         "the cards exiled this way",
         "cards exiled this way",
+        "cards revealed this way",
+        "the revealed cards",
         "those exiled cards",
         "the exiled cards",
         "those cards",
@@ -950,6 +954,20 @@ pub fn parse(l: &str) -> Option<Perm> {
         if let Some((z, x)) = strip_from(rest, &mut p) {
             p.from = Some(z);
             rest = x;
+            // "a spell from among them with mana value 3 or less": a quality after the
+            // cards it's among.
+            if z == From::AmongReferent {
+                if let (Some(q), Obj::Class { what, .. }) = (rest.strip_prefix(" with "), &mut p.obj) {
+                    let stop = [" without paying", " this turn", " until ", " for as long as "]
+                        .iter()
+                        .filter_map(|w| q.find(w))
+                        .min()
+                        .unwrap_or(q.len());
+                    let f = object_filter(&format!("card with {}", &q[..stop]))?;
+                    *what = Filter::and(vec![what.clone(), f]);
+                    rest = &q[stop..];
+                }
+            }
             // "from your graveyard or from exile", "from your hand or the top of your
             // library".
             for (w, z2) in [
@@ -1241,8 +1259,12 @@ fn flash_only(p: &Perm, terms: &PlayTerms) -> bool {
 /// its mana cost": a spell cast as the effect resolves (CR 608.2g), chosen among the
 /// cards with those qualities as the spell each would become (CR 601.3e).
 fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Option<Effect> {
-    if p.lands
-        || terms.flash
+    // "You may play a land from the top of your library or cast a spell ... from the top
+    // of your library" (one card, played as the effect resolves).
+    if p.lands && !(single && p.spells && p.from == Some(From::LibraryTop)) {
+        return None;
+    }
+    if terms.flash
         || terms.extra_cost.is_some()
         || terms.spend_as_any_color
         || terms.condition.is_some()
@@ -1273,6 +1295,7 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
             Filter::InZone(ZoneKind::Exile),
             p.zone_filter.clone()?,
         ]),
+        From::LibraryTop => Filter::In(Box::new(Sel::TopOfLibrary(PlayerRef::You, Value::c(1)))),
         From::HandGraveyardOwnedExile => Filter::and(vec![
             Filter::Or(vec![
                 Filter::InZone(ZoneKind::Hand),
@@ -1287,21 +1310,31 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
         return None;
     }
     let filter = Filter::and(vec![zone, what]);
-    let cast = Effect::CastCard {
-        who: PlayerRef::You,
-        what: Sel::Choose {
-            chooser: PlayerRef::You,
-            filter: filter.clone(),
-            count: Value::c(if single {
-                1
-            } else {
-                p.count.unwrap_or(99) as i32
-            }),
-            up_to: true,
-            store: None,
-        },
-        free: p.free,
-        optional: false,
+    let choose = Sel::Choose {
+        chooser: PlayerRef::You,
+        filter: filter.clone(),
+        count: Value::c(if single {
+            1
+        } else {
+            p.count.unwrap_or(99) as i32
+        }),
+        up_to: true,
+        store: None,
+    };
+    let cast = if p.lands {
+        Effect::PlayCard {
+            who: PlayerRef::You,
+            what: choose,
+            free: p.free,
+            optional: false,
+        }
+    } else {
+        Effect::CastCard {
+            who: PlayerRef::You,
+            what: choose,
+            free: p.free,
+            optional: false,
+        }
     };
     // "..., and mana of any type can be spent to cast that spell" (CR 118.14): for the
     // cards it may be cast from among.
@@ -1349,6 +1382,10 @@ fn referent_effect(
     match &p.duration {
         // As the effect resolves (CR 608.2g).
         None => {
+            // "You may cast the exiled card without paying its mana cost if it's an
+            // instant spell with mana value 2 or less": only if the spell it would become
+            // has those qualities (CR 601.3e).
+            let spell_quality = terms.what.take();
             if p.look
                 || terms.flash
                 || terms.extra_cost.is_some()
@@ -1369,10 +1406,21 @@ fn referent_effect(
             if let Some(q) = quality {
                 parts.push(q);
             }
-            // "You may cast it": each of them (a land card can't be cast, CR 305.9).
+            // "You may cast it": each of them (a land card can't be cast, CR 305.9); "...
+            // if it's an instant spell": each of them that would be such a spell.
             let what = if whole {
-                it.clone()
+                match &spell_quality {
+                    Some(q) => Sel::All(Filter::and(vec![
+                        Filter::In(Box::new(it.clone())),
+                        Filter::InZone(zone),
+                        q.clone(),
+                    ])),
+                    None => it.clone(),
+                }
             } else {
+                if let Some(q) = spell_quality {
+                    parts.push(q);
+                }
                 Sel::Choose {
                     chooser: PlayerRef::You,
                     filter: Filter::and(parts),
