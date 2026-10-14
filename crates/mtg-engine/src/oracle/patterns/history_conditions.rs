@@ -809,7 +809,18 @@ fn split_window(c: &str) -> Option<(String, Option<HistoryWindow>)> {
 
 /// "if [history clause] [window]" without referents.
 pub fn history_condition(c: &str) -> Option<Condition> {
-    let (body, w) = split_window(end(c))?;
+    let c = end(c);
+    // A legendary card's short name ("if Kaito entered this turn", Kaito Shizuki) is ~.
+    let short;
+    let name = crate::oracle::card_name().to_lowercase();
+    let c = match name.split_once(' ') {
+        Some((first, _)) if !name.contains(',') && c.starts_with(&format!("{first} ")) => {
+            short = format!("~{}", &c[first.len()..]);
+            short.as_str()
+        }
+        _ => c,
+    };
+    let (body, w) = split_window(c)?;
     clause_or_joined(&body, &w)
 }
 
@@ -1131,6 +1142,15 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
             };
             return Some(if neg { not(cond) } else { cond });
         }
+    }
+    // "was cast for its warp cost" (an alternative cost, CR 118.9).
+    if let Some(k) = rest
+        .strip_prefix("was cast for its ")
+        .and_then(|r| r.strip_suffix(" cost"))
+    {
+        let kind = crate::keywords::KeywordKind::from_name(k)?;
+        let f = Filter::Custom(format!("{}{kind:?}", ch::CAST_FOR).into());
+        return Some(status(&w, Condition::SelMatches(Sel::This, f.clone()), f));
     }
     if matches!(rest, "was kicked" | "were kicked") {
         return Some(status(
@@ -1473,6 +1493,41 @@ fn nth_spell(c: &str, b: &mut Builder) -> Option<Condition> {
     })
 }
 
+/// "[instruction] if [condition] or if [condition]" ("Destroy target nonland permanent if
+/// it's a creature or if {G}{W} was spent to cast ~"): the instruction happens if either
+/// holds. A pronoun in the conditions refers to the target the instruction names.
+fn either_if(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (x, c) = l.split_once(" if ")?;
+    if !c.contains(" or if ") || c.matches(" if ").count() != 1 || x.contains(',') {
+        return None;
+    }
+    let first = b.targets.len();
+    let e = crate::oracle::effects::parse_clause(x, b)?;
+    let saved = b.it.clone();
+    if let Some(i) = (first..b.targets.len()).find(|i| {
+        matches!(
+            b.targets[*i].what,
+            TargetKind::Object(_) | TargetKind::Spell(_)
+        )
+    }) {
+        b.it = Sel::Target(i as u8);
+    }
+    let cond = super::conditions_referents::parse_condition_with(c, b);
+    b.it = saved;
+    let Some(cond) = cond else {
+        b.targets.truncate(first);
+        return None;
+    };
+    Some(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "history: [instruction] if [condition] or if [condition]", priority: 240, parse: either_if } }
+
 #[cfg(test)]
 mod tests {
     use crate::card::Layout;
@@ -1641,6 +1696,46 @@ mod tests {
                 let tc = t.as_deref().and_then(super::trigger_of);
                 let hc = super::history_condition(&c);
                 println!("H {c}\n  clause={t:?}\n  trigger={tc:?}\n  cond={hc:?}");
+            } else if let Some(c) = line.strip_prefix("S: ") {
+                // Which sentence of each unsupported block first fails.
+                let def = crate::card::card(c);
+                let f = &def.faces[0].chars;
+                use crate::types::CardType;
+                let tl = if f.card_types.contains(CardType::Instant) {
+                    "Instant"
+                } else if f.card_types.contains(CardType::Sorcery) {
+                    "Sorcery"
+                } else if f.card_types.contains(CardType::Creature) {
+                    "Creature — Test"
+                } else {
+                    "Artifact"
+                };
+                let tl = TypeLine::parse(tl);
+                let name = f.name.to_string();
+                let ctx = CompileContext {
+                    card_name: &name,
+                    full_name: &name,
+                    type_line: &tl,
+                    layout: Layout::Normal,
+                    face_index: 0,
+                    keywords: &[],
+                    power: None,
+                    toughness: None,
+                };
+                for u in def.unsupported_text() {
+                    let u = u.replace('~', &name);
+                    let parts: Vec<&str> = u.split(". ").collect();
+                    let mut bad = None;
+                    for k in 1..=parts.len() {
+                        let t = parts[..k].join(". ");
+                        let t = if t.ends_with('.') { t } else { format!("{t}.") };
+                        if !crate::oracle::compile(&t, &ctx).unsupported.is_empty() {
+                            bad = Some(parts[k - 1].to_string());
+                            break;
+                        }
+                    }
+                    println!("S {c}: {:?}", bad);
+                }
             } else if let Some(c) = line.strip_prefix("U: ") {
                 let def = crate::card::card(c);
                 for u in def.unsupported_text() {

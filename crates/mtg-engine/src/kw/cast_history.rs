@@ -29,6 +29,9 @@ pub const WAS_CAST: &str = "cast history:was cast";
 pub const CAST_FROM: &str = "cast history:cast from:";
 /// `Filter::Custom`: the object was cast this turn.
 pub const CAST_THIS_TURN: &str = "cast history:cast this turn";
+/// `Filter::Custom` prefix: the object was cast with this keyword's alternative cost or
+/// permission (`cast for:Warp`: "if that creature was cast for its warp cost").
+pub const CAST_FOR: &str = "cast history:cast for:";
 /// `Filter::Custom`: the object was kicked (CR 702.33).
 pub const KICKED: &str = "cast history:kicked";
 /// `Value::Custom`: how many times the ability being resolved has been activated this
@@ -191,6 +194,11 @@ impl KeywordRules for CastHistory {
         }
         if name == KICKED {
             return Some(cast.is_some_and(|c| c.times_kicked > 0 || c.paid.iter().any(|p| p == "kicker")));
+        }
+        if let Some(k) = name.strip_prefix(CAST_FOR) {
+            return Some(cast.is_some_and(|c| {
+                matches!(&c.method, crate::object::CastMethod::Keyword(kind) if format!("{kind:?}") == k)
+            }));
         }
         let z = name.strip_prefix(CAST_FROM)?;
         Some(cast.is_some_and(|c| c.from.is_some_and(|f| format!("{f:?}") == z)))
