@@ -391,3 +391,22 @@ fn garruk_dies_before_his_wolf_trigger_can_save_him() {
     assert!(!t.on_battlefield(wolves[0]));
     assert_eq!(t.zone(garruk), Zone::Graveyard(P0));
 }
+
+/// "~ deals 3 damage to target player and 1 damage to each creature that player
+/// controls." (Radiating Lightning): a damage list whose second recipient follows a
+/// target phrase, compiled with the same fix as Cuombajj Witches.
+#[test]
+fn radiating_lightning_damages_the_player_and_their_creatures() {
+    cr!("120.3", "115.1a");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    let theirs = t.battlefield(P1, "Llanowar Elves");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    cast_modes(&mut t, P0, "Radiating Lightning", &[], &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert!(!t.on_battlefield(theirs));
+    assert_eq!(damage_on(&t, bears), 1);
+    assert!(t.on_battlefield(mine));
+    assert_eq!(t.life(P0), 20);
+}
