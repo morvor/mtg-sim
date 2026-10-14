@@ -521,12 +521,12 @@ impl Renderer<'_> {
     /// hand", "reveal it and put it into your hand": the chosen cards stored, then
     /// revealed.
     fn reveal_part(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
-        use crate::kw::reveal_from_hand::{REVEALED, REVEAL_CHOSEN};
+        use crate::kw::reveal_from_hand::{REVEALED, REVEAL_CHOSEN, REVEAL_CHOSEN_ANY};
         let (Effect::Store { var: REVEALED, sel }, Some(Effect::Custom(c))) = (&v[i], v.get(i + 1))
         else {
             return None;
         };
-        if c != REVEAL_CHOSEN {
+        if c != REVEAL_CHOSEN && c != REVEAL_CHOSEN_ANY {
             return None;
         }
         let text = match sel {

@@ -2138,6 +2138,14 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Obj);
                 format!("remove {w} from combat")
             }
+            Effect::BecomeUnblocked { what } => {
+                let w = self.sel(what, Case::Subj);
+                format!("{w} become unblocked")
+            }
+            Effect::BlockAttackerOfChoice { blocker } => {
+                let w = self.sel(blocker, Case::Subj);
+                format!("{w} blocks an attacking creature of your choice")
+            }
             Effect::Choose { who, kind } => {
                 let c = self.choice(kind);
                 self.with_subject(who, &format!("choose {c}"), false)
@@ -2804,6 +2812,11 @@ impl Renderer<'_> {
                 } else if spec.undo {
                     s = format!("{s} (undo)");
                     s = self.gap(format!("keyword action undo: {s}"));
+                }
+                // "Populate. The token enters tapped and attacking."
+                if spec.action == KeywordAction::Populate && spec.tapped {
+                    let how = if spec.attacking { "tapped and attacking" } else { "tapped" };
+                    s = format!("{s}. the token enters {how}");
                 }
                 s
             }

@@ -84,7 +84,8 @@ fn for_each_player_targets(l: &str, b: &mut Builder) -> Option<Effect> {
             b.named.push((format!("the chosen {noun}"), slot.clone()));
         }
     }
-    Some(e)
+    // "... unless its controller has you draw a card": each one's own controller decides.
+    Some(super::unless_grammar::unless_for_each_target(e, before as u8))
 }
 
 /// Whether every object the filter matches is described relative to the player.

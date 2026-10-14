@@ -22,6 +22,12 @@ pub const CHOOSES_BLOCKS: &str = "combat: controller chooses how creatures block
 pub const CHOOSES_OPPONENTS_BLOCKS: &str =
     "combat: controller chooses how opponents' creatures block";
 
+/// `Restriction::Custom` name of a static ability: the attacking player chooses how each
+/// creature blocks each combat (Invasion Plans): they declare blockers instead of the
+/// defending players.
+pub const ATTACKING_PLAYER_CHOOSES_BLOCKS: &str =
+    "combat: attacking player chooses how creatures block";
+
 /// Whether the players who'd pay the costs to block of a declaration `decider` made agree
 /// to pay them: a player may decline to pay the costs of blocks another player chose for
 /// their creatures (then a new set of blocks must be proposed). The decider's own costs
@@ -57,13 +63,17 @@ pub fn block_decider(g: &Game, defenders: &[PlayerId]) -> Option<PlayerId> {
             let Restriction::Custom(n) = &r else {
                 return None;
             };
-            let applies = match n.as_str() {
-                CHOOSES_BLOCKS => true,
-                CHOOSES_OPPONENTS_BLOCKS => {
-                    defenders.iter().all(|d| g.are_opponents(controller, *d))
+            let decider = match n.as_str() {
+                CHOOSES_BLOCKS => controller,
+                CHOOSES_OPPONENTS_BLOCKS
+                    if defenders.iter().all(|d| g.are_opponents(controller, *d)) =>
+                {
+                    controller
                 }
-                _ => false,
+                // CR 506.2: the active player is the attacking player.
+                ATTACKING_PLAYER_CHOOSES_BLOCKS => g.turn.active,
+                _ => return None,
             };
-            (applies && g.player(controller).in_game()).then_some(controller)
+            g.player(decider).in_game().then_some(decider)
         })
 }

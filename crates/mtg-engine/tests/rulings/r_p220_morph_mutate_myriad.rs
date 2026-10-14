@@ -1,0 +1,272 @@
+//! Rulings batch P220 — morph (Hooded Hydra, Gift of Doom), mutate (Otrimi, the
+//! Ever-Playful, Huntmaster Liger, Mindleecher), myriad (Conclave Evangelist, Chittering
+//! Dispatcher, Herald of the Host).
+
+use crate::r_s01_common::*;
+use crate::r_s06_common::give_control;
+use crate::r_s11_common::{can_turn_face_up, turn_face_up};
+use crate::r_s12_common::{attack_target, morph};
+use mtg_engine::decision::Answer;
+use mtg_engine::keywords::KeywordKind;
+use mtg_engine::mana::ManaType;
+use mtg_engine::object::{CastMethod, Zone};
+use mtg_engine::testing::*;
+use mtg_engine::types::*;
+use mtg_engine::turn::Step;
+use mtg_engine::*;
+
+const MUTATE: CastMethod = CastMethod::Keyword(KeywordKind::Mutate);
+
+fn add_mana(t: &mut TestGame, p: PlayerId, ty: ManaType, n: u32) {
+    t.g.players[p.idx()].mana_pool.add_type(ty, n);
+}
+
+/// `p` casts `card` for its mutate cost onto `target`, on top, and it resolves (with the
+/// triggers it causes).
+fn mutate_onto(t: &mut TestGame, p: PlayerId, card: ObjectId, target: ObjectId) {
+    t.cast(p, card).method(MUTATE).target(target).go();
+    t.answer(p, DecisionKind::Option, Answer::Index(0));
+    t.resolve_all();
+}
+
+#[test]
+fn hooded_hydra_gets_its_counters_however_it_turns_face_up() {
+    cr!("702.37e", "708.8");
+    ruling!(
+        "Hooded Hydra",
+        "If Hooded Hydra is face down and it's turned face up some other way than by having its morph cost paid, the last ability will still apply."
+    );
+    supported("Hooded Hydra");
+    supported("Ugin's Mastery");
+    // Ugin's Mastery: "Whenever you attack with creatures with total power 6 or greater,
+    // you may turn a face-down creature you control face up."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ugin's Mastery");
+    let hydra = morph(&mut t, P0, "Hooded Hydra");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    attack_with(&mut t, &[(wurm, Entity::Player(P1))]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(hydra)]);
+    t.resolve_all();
+    assert!(!t.obj(hydra).face_down);
+    assert_eq!(t.counters(hydra, counters::PLUS1), 5);
+    assert_eq!(t.pt(hydra), (5, 5));
+}
+
+#[test]
+fn gift_of_dooms_morph_cost_is_paid_only_once() {
+    cr!("702.37e", "116.2b");
+    ruling!("Gift of Doom", "You can't pay Gift of Doom's morph cost more than once.");
+    supported("Gift of Doom");
+    // Morph—Sacrifice another creature. "As this Aura is turned face up, you may attach
+    // it to a creature."
+    let mut t = TestGame::new(2);
+    let gift = morph(&mut t, P0, "Gift of Doom");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    assert!(can_turn_face_up(&mut t, P0, gift));
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    assert!(turn_face_up(&mut t, P0, gift));
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(!t.obj(gift).face_down);
+    // Face up, it can't be turned face up (its morph cost paid) again.
+    assert!(!can_turn_face_up(&mut t, P0, gift));
+    assert!(!turn_face_up(&mut t, P0, gift));
+    assert!(t.on_battlefield(giant));
+}
+
+#[test]
+fn otrimi_dealt_lethal_damage_as_it_deals_combat_damage_can_return_itself() {
+    cr!("603.10a", "510.2", "702.19c");
+    ruling!(
+        "Otrimi, the Ever-Playful",
+        "If Otrimi deals combat damage to a player at the same time that it’s dealt lethal damage, Otrimi (or any other creature card with mutate that was merged with it) can be the target of its triggered ability."
+    );
+    supported("Otrimi, the Ever-Playful");
+    // Otrimi (6/6 trample) is blocked by Craw Wurm (6/4): 4 damage to the Wurm, 2
+    // trample over; the Wurm's 6 damage kills Otrimi.
+    let mut t = TestGame::new(2);
+    let otrimi = t.battlefield(P0, "Otrimi, the Ever-Playful");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    attack_with(&mut t, &[(otrimi, Entity::Player(P1))]);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![4, 2]));
+    block_and_finish(&mut t, P1, &[(wurm, otrimi)]);
+    assert_eq!(t.life(P1), 18);
+    // Otrimi died; its trigger (the only creature card with mutate in the graveyard was
+    // Otrimi itself) returned it to P0's hand.
+    assert!(t.named_on_battlefield("Otrimi, the Ever-Playful").is_empty());
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Otrimi, the Ever-Playful"));
+    assert!(t.in_graveyard(P1, "Craw Wurm"));
+}
+
+#[test]
+fn huntmaster_ligers_x_is_locked_in_and_a_second_mutation_adds_a_larger_bonus() {
+    cr!("702.140d", "608.2h", "611.2c");
+    ruling!(
+        "Huntmaster Liger",
+        "The value of X is determined only as the triggered ability resolves. Once that happens, the value of X won’t change later in the turn even if Huntmaster Liger mutates again, although in that case the creatures will receive a second, larger +X/+X in addition to the one generated by the ability’s earlier resolution."
+    );
+    supported("Huntmaster Liger");
+    supported("Gemrazer");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    // Liger mutates onto the Bears: mutated once, the Giant gets +1/+1.
+    let liger = t.hand(P0, "Huntmaster Liger");
+    add_mana(&mut t, P0, ManaType::W, 1);
+    add_mana(&mut t, P0, ManaType::C, 2);
+    mutate_onto(&mut t, P0, liger, bears);
+    assert_eq!(t.pt(giant), (4, 4));
+    // Gemrazer mutates onto it, under: mutated twice, +2/+2 more (the first +1/+1 stays
+    // +1/+1).
+    let gem = t.hand(P0, "Gemrazer");
+    add_mana(&mut t, P0, ManaType::G, 2);
+    add_mana(&mut t, P0, ManaType::C, 1);
+    t.cast(P0, gem).method(MUTATE).target(bears).go();
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.resolve_all();
+    assert_eq!(t.obj(bears).chars.name, "Huntmaster Liger");
+    assert_eq!(t.pt(giant), (6, 6));
+}
+
+#[test]
+fn mindleecher_cards_are_cast_paying_their_costs_or_mutate() {
+    cr!("702.140a", "601.2f", "118.9");
+    ruling!(
+        "Mindleecher",
+        "You pay the costs for the exiled cards if you cast them. You may pay alternative costs such as mutate rather than a card’s mana cost."
+    );
+    supported("Mindleecher");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.library_top(P1, "Huntmaster Liger");
+    // Mindleecher mutates onto the Bears ({4}{B}): the top card of P1's library is exiled.
+    let ml = t.hand(P0, "Mindleecher");
+    add_mana(&mut t, P0, ManaType::B, 1);
+    add_mana(&mut t, P0, ManaType::C, 4);
+    mutate_onto(&mut t, P0, ml, bears);
+    // (Exiled face down: found by its card.)
+    let liger = t
+        .g
+        .objects
+        .iter()
+        .find(|o| {
+            o.zone == Zone::Exile && o.card.as_ref().is_some_and(|c| c.name == "Huntmaster Liger")
+        })
+        .map(|o| o.id)
+        .expect("exiled Liger");
+    // With no mana, it can't be cast.
+    let methods = |t: &mut TestGame| {
+        t.g.turn.priority = Some(P0);
+        t.g.legal_actions(P0)
+            .into_iter()
+            .filter_map(|a| match a {
+                mtg_engine::decision::Action::Cast { card, method } if card == liger => {
+                    Some(method)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert!(methods(&mut t).is_empty());
+    // With {2}{W}, its mutate cost (not its {3}{W} mana cost) can be paid.
+    add_mana(&mut t, P0, ManaType::W, 1);
+    add_mana(&mut t, P0, ManaType::C, 2);
+    let m = methods(&mut t);
+    assert!(m.contains(&MUTATE));
+    assert!(!m.contains(&CastMethod::Normal));
+    // A mutating creature spell needs a target with the same owner (CR 702.140a): a
+    // non-Human creature P1 owns and P0 controls.
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    give_control(&mut t, bear, P0);
+    mutate_onto(&mut t, P0, liger, bear);
+    assert_eq!(t.obj(bear).chars.name, "Huntmaster Liger");
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+}
+
+#[test]
+fn conclave_evangelists_copy_made_by_a_myriad_token_isnt_exiled() {
+    cr!("702.116a", "707.2");
+    ruling!(
+        "Conclave Evangelist",
+        "If a token created by Conclave Evangelist's myriad ability deals combat damage to a player, the token created by its last ability will not be exiled at end of combat."
+    );
+    supported("Conclave Evangelist");
+    let mut t = TestGame::new(3);
+    let ev = t.battlefield(P0, "Conclave Evangelist");
+    attack_with(&mut t, &[(ev, Entity::Player(P1))]);
+    t.resolve_all();
+    let myriad = tokens(&t, P0);
+    assert_eq!(myriad.len(), 1);
+    assert_eq!(attack_target(&t, myriad[0]), Some(Entity::Player(P2)));
+    // Both deal combat damage: two copies are created.
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(t.life(P2), 16);
+    t.advance_to(P0, Step::PostcombatMain);
+    t.resolve_all();
+    // The myriad token was exiled; the two copies remain.
+    assert!(!t.on_battlefield(myriad[0]));
+    let left = tokens(&t, P0);
+    assert_eq!(left.len(), 2);
+    for x in left {
+        assert_eq!(t.obj(x).chars.name, "Conclave Evangelist");
+    }
+}
+
+#[test]
+fn myriad_tokens_attack_each_other_opponent_and_are_exiled_at_end_of_combat() {
+    cr!("702.116a");
+    ruling!(
+        "Chittering Dispatcher",
+        "Myriad is a triggered ability. Whenever a creature with myriad attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat."
+    );
+    ruling!(
+        "Herald of the Host",
+        "The tokens created by the myriad ability enter the battlefield tapped even though they’ll have vigilance."
+    );
+    supported("Chittering Dispatcher");
+    supported("Herald of the Host");
+    // Four players: Chittering Dispatcher attacks P1; tokens attack P2 and P3. At end of
+    // combat they're exiled (and each one's leaves-the-battlefield trigger makes an
+    // Eldrazi Spawn).
+    let mut t = TestGame::new(4);
+    let d = t.battlefield(P0, "Chittering Dispatcher");
+    attack_with(&mut t, &[(d, Entity::Player(P1))]);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 2);
+    let mut at: Vec<Option<Entity>> = toks.iter().map(|x| attack_target(&t, *x)).collect();
+    at.sort_by_key(|e| format!("{e:?}"));
+    assert_eq!(at, vec![Some(Entity::Player(P2)), Some(Entity::Player(P3))]);
+    for x in &toks {
+        assert!(t.obj(*x).tapped);
+    }
+    t.advance_to(P0, Step::PostcombatMain);
+    t.resolve_all();
+    for x in &toks {
+        assert!(!t.on_battlefield(*x));
+    }
+    assert_eq!(with_subtype(&t, P0, "Spawn").len(), 2);
+    // Two players: no other opponent, no token.
+    let mut t = TestGame::new(2);
+    let d = t.battlefield(P0, "Chittering Dispatcher");
+    attack_with(&mut t, &[(d, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(tokens(&t, P0).is_empty());
+    // Herald of the Host (vigilance): it stays untapped; its tokens enter tapped.
+    let mut t = TestGame::new(3);
+    let h = t.battlefield(P0, "Herald of the Host");
+    attack_with(&mut t, &[(h, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(!t.obj(h).tapped);
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 1);
+    assert!(t.obj(toks[0]).has_keyword(KeywordKind::Vigilance));
+    assert!(t.obj(toks[0]).tapped);
+}

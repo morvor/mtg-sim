@@ -627,7 +627,11 @@ fn p_reveal(l: &str, b: &mut Builder) -> Option<Effect> {
             var: crate::kw::reveal_from_hand::REVEALED,
             sel: selection(&c, who),
         },
-        Effect::Custom(SmolStr::new(crate::kw::reveal_from_hand::REVEAL_CHOSEN)),
+        Effect::Custom(SmolStr::new(if matches!(c.qty, Qty::AnyNumber) {
+            crate::kw::reveal_from_hand::REVEAL_CHOSEN_ANY
+        } else {
+            crate::kw::reveal_from_hand::REVEAL_CHOSEN
+        })),
         Effect::Store {
             var: vars::IT,
             sel: Sel::Var(crate::kw::reveal_from_hand::REVEALED),

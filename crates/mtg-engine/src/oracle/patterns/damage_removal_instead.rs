@@ -53,8 +53,14 @@ fn damage_amount(x: &str, prev: &Effect) -> Option<Effect> {
         .iter()
         .find_map(|p| x.strip_prefix(p))
         .or(named_again)?;
-    // "twice that much damage": twice the amount it would have dealt.
-    if r.trim() == "twice that much damage" {
+    // "twice that much damage": twice the amount it would have dealt ("to itself" when it
+    // deals the damage to itself, Cut Propulsion).
+    let r = match r.trim().strip_suffix(" to itself") {
+        Some(x) if format!("{source:?}") == format!("{to:?}") => x,
+        Some(_) => return None,
+        None => r,
+    };
+    if matches!(r.trim(), "twice that much damage" | "double that damage") {
         return Some(Effect::DealDamage {
             source: source.clone(),
             amount: Value::Mul(Box::new(Value::Const(2)), Box::new(amount.clone())),
@@ -177,7 +183,15 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     else {
         return false;
     };
-    if matches!(prev, Effect::Seq(_) | Effect::Noop) {
+    // A sentence of several instructions isn't replaced, except one dealing damage in
+    // parts ("~ deals 1 damage to target player and 1 damage to target creature that
+    // player controls"), replaced by another dealing damage ("... ~ deals 3 damage to that
+    // player and 3 damage to that creature instead").
+    let damage_parts = |e: &Effect| match e {
+        Effect::Seq(v) => v.iter().all(|e| matches!(e, Effect::DealDamage { .. })),
+        _ => false,
+    };
+    if matches!(prev, Effect::Noop) || (matches!(prev, Effect::Seq(_)) && !damage_parts(prev)) {
         return false;
     }
     // A condition about what an earlier sentence named ("If that creature is a Human, put
@@ -242,6 +256,10 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(e) = replacement else {
         return false;
     };
+    if damage_parts(prev) && !damage_parts(&e) {
+        b.targets.truncate(targets);
+        return false;
+    }
     // "... put that card onto the battlefield instead": a replacement that acts on what
     // the previous sentence produced ("it", "that card") can't stand in for it.
     if mentions_it(&e) {

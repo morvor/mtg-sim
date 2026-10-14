@@ -16,6 +16,19 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
         .find_map(|(c, e)| parse_triggered_at(text, c, e, ctx))
 }
 
+/// Whether "that player" in the effect may mean the trigger's player: not when each use
+/// follows "each opponent"/"each player" in its sentence ("each opponent loses 4 life
+/// unless that player sacrifices ...", where it's each of them).
+fn that_player_is_the_triggers(eff: &str) -> bool {
+    let l = eff.to_lowercase();
+    super::effects::split_sentences(&l).iter().any(|s| {
+        s.match_indices("that player").any(|(i, _)| {
+            let before = &s[..i];
+            !(before.contains("each opponent ") || before.contains("each player "))
+        })
+    })
+}
+
 /// The triggered ability `text`, read as the trigger condition `cond_s` followed by
 /// `eff_s`.
 fn parse_triggered_at(
@@ -186,7 +199,7 @@ fn parse_triggered_at(
     } else {
         it
     };
-    if matches!(it_player, PlayerRef::Iterated) && eff.to_lowercase().contains("that player") {
+    if matches!(it_player, PlayerRef::Iterated) && that_player_is_the_triggers(eff) {
         return None;
     }
     // "Whenever ~ becomes blocked by a creature, the blocking creature gets -1/-1 until
