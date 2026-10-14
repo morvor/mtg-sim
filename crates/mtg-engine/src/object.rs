@@ -267,6 +267,11 @@ pub struct CastInfo {
     pub paid: Vec<SmolStr>,
     pub mana_spent: Vec<ManaType>,
     pub mana_spent_snow: u32,
+    /// The objects that produced the mana spent, one per mana with a source ("if mana from
+    /// a Treasure was spent to cast it"; see `kw/cast_history.rs`). For an ability on the
+    /// stack, the mana spent to activate it (with `mana_spent`).
+    #[serde(default)]
+    pub mana_sources: Vec<ObjectId>,
     /// Objects sacrificed/exiled/discarded to pay costs (last known info ids).
     pub cost_objects: Vec<ObjectId>,
     pub was_cast: bool,
@@ -528,6 +533,11 @@ pub struct LeftBattlefield {
     /// existed there.
     #[serde(default)]
     pub attached: bool,
+    /// The (blocker, attacker) pairs it was part of as it left, during combat: an
+    /// ability whose source left the battlefield uses its last known information
+    /// ("target creature blocking or blocked by it", CR 113.7a, 608.2h).
+    #[serde(default)]
+    pub blocks: Vec<(ObjectId, ObjectId)>,
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability

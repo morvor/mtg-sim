@@ -195,6 +195,10 @@ impl Renderer<'_> {
         known: &mut Vec<(Var, OutcomeVerb)>,
     ) -> Option<(usize, String)> {
         self.tail_seq_part(v, i)
+            .or_else(|| self.block_pair_phase_part(v, i))
+            .or_else(|| self.chosen_from_targets_part(v, i))
+            .or_else(|| self.any_opponent_sacrifices_part(v, i))
+            .or_else(|| self.cast_then_rest_part(v, i))
             .or_else(|| self.look_then_exile_part(v, i))
             .or_else(|| self.named_group_part(v, i))
             .or_else(|| self.distribute_part(v, i))
@@ -228,7 +232,20 @@ impl Renderer<'_> {
         } else {
             "it"
         };
-        Some((2, format!("look at {s}, then exile {pron} face down")))
+        // CR 406.3: a player told to look at a card and then exile it face down may
+        // look at it for as long as it remains exiled, the same permission as "exile it
+        // face down. You may look at it for as long as it remains exiled".
+        let (that, remains) = if pron == "them" {
+            ("{alt:those cards|them}", "they remain")
+        } else {
+            ("{alt:that card|it}", "it remains")
+        };
+        Some((
+            2,
+            format!(
+                "{{alt:look at {s}, then exile {pron} face down|exile {s} face down and look at {pron}|exile {s} face down. You may look at {that} for as long as {remains} exiled}}"
+            ),
+        ))
     }
 
     /// "Untap target creature and each other creature that shares a color with it. Those

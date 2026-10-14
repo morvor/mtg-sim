@@ -536,6 +536,16 @@ const COUNTED: Var = vars::USER + 3340;
 /// instruction is carried out; "that number" in the next sentence is it.
 fn count_the_number_of(l: &str, _b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("count the number of ")?;
+    // "count the number of +1/+1 counters on creatures you control" (Rumbling Ruin): the
+    // counters on all of them, summed.
+    if let Some(v @ Value::CountersOn(..)) =
+        super::statics::parse_amount(&format!("the number of {r}"), None)
+    {
+        return Some(Effect::StoreValue {
+            var: COUNTED,
+            value: v,
+        });
+    }
     let (f, plural, tail) = parse_object_phrase(r)?;
     if !plural || !end(tail).is_empty() {
         return None;

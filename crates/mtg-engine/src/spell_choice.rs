@@ -19,7 +19,9 @@ pub fn matching_faces(g: &Game, card: ObjectId, f: &Filter, ctx: &Ctx) -> Vec<Fa
     // of the filter doesn't apply.
     let f = &crate::casting::as_spell_filter(f);
     let faces = crate::casting::castable_faces(g, card);
-    if faces.len() < 2 {
+    // CR 406.3b: a face-down card in exile has no characteristics; it's the spell it
+    // would become that must have them.
+    if faces.len() < 2 && !g.obj(card).face_down {
         return if g.matches(card, f, ctx) {
             faces
         } else {

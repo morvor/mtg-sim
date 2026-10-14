@@ -610,14 +610,14 @@ impl Game {
                     Entity::Object(_) => false,
                 }),
             Filter::BlockingSource => ctx.source.is_some_and(|s| {
-                self.combat
-                    .as_ref()
-                    .is_some_and(|cb| cb.blockers_of(s).contains(&id))
+                self.combat.as_ref().is_some_and(|cb| {
+                    cb.blockers_of(s).contains(&id) || self.left_combat_pair(s, id, s)
+                })
             }),
             Filter::BlockedBySource => ctx.source.is_some_and(|s| {
-                self.combat
-                    .as_ref()
-                    .is_some_and(|cb| cb.blockers_of(id).contains(&s))
+                self.combat.as_ref().is_some_and(|cb| {
+                    cb.blockers_of(id).contains(&s) || self.left_combat_pair(s, s, id)
+                })
             }),
             Filter::BlockingAnyOf(sel) => self.combat.as_ref().is_some_and(|cb| {
                 self.eval_sel_objects(sel, ctx)
@@ -864,7 +864,8 @@ impl Game {
             }
             Filter::AbilityFrom(inner) => match o.stack.as_deref().map(|si| &si.kind) {
                 Some(StackKind::Activated { source, .. } | StackKind::Triggered { source, .. }) => {
-                    self.matches_view(view, *source, inner, ctx)
+                    !crate::monarch_initiative::is_sourceless(self, *source)
+                        && self.matches_view(view, *source, inner, ctx)
                 }
                 _ => false,
             },
@@ -991,6 +992,10 @@ impl Game {
             Sel::Var(v) => {
                 crate::merge::with_components_of(self, ctx.vars.get(v).cloned().unwrap_or_default())
             }
+            Sel::EventsDuring(w, cond) => crate::history_query::objects_during(self, w, cond, ctx)
+                .into_iter()
+                .map(Entity::Object)
+                .collect(),
             Sel::ThisTurn(cond) => {
                 crate::kw::value_results::event_objects_this_turn(self, cond, ctx)
                     .into_iter()
@@ -1487,6 +1492,9 @@ impl Game {
                 }
             }
             Value::Custom(name) => crate::custom::custom_value(self, name, ctx),
+            Value::EventsDuring(w, cond, tally) => {
+                crate::history_query::events_during(self, w, cond, *tally, ctx)
+            }
             Value::EventsThisTurn(cond, tally) => {
                 crate::kw::value_results::events_this_turn(self, cond, *tally, ctx)
             }
@@ -1613,5 +1621,20 @@ pub(crate) fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
         Filter::Or(v) if !v.is_empty() => v.iter().map(|x| x.zone()).collect(),
         Filter::And(v) => v.iter().find_map(alternative_zones),
         _ => None,
+    }
+}
+
+impl Game {
+    /// Whether `gone`, a permanent that has left the battlefield during this combat, was
+    /// part of the block of `blocker` and `attacker` as it last existed on the battlefield
+    /// (CR 113.7a, 608.2h): "target creature blocking or blocked by it" after the source
+    /// left.
+    pub fn left_combat_pair(&self, gone: ObjectId, blocker: ObjectId, attacker: ObjectId) -> bool {
+        !self.is_live(gone)
+            && self
+                .obj(gone)
+                .left_battlefield
+                .as_ref()
+                .is_some_and(|l| l.blocks.contains(&(blocker, attacker)))
     }
 }

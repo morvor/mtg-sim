@@ -1048,6 +1048,10 @@ pub enum Sel {
     /// sacrificed this turn", "creatures you controlled that dealt combat damage to a
     /// player this turn" (see `kw/value_results.rs`).
     ThisTurn(Box<TriggerCond>),
+    /// The objects the events matching the trigger condition during another stretch of the
+    /// game were about ("~ and at least two other creatures attacked this combat"), like
+    /// [`Sel::ThisTurn`] (see `history_query.rs`).
+    EventsDuring(HistoryWindow, Box<TriggerCond>),
 }
 
 /// Where an [`Effect::InTurnOrder`] instruction starts.
@@ -1718,8 +1722,31 @@ pub enum Value {
     /// controller) would trigger on, whether or not anything triggered (CR 603.1b),
     /// tallied (see `kw/value_results.rs`).
     EventsThisTurn(Box<TriggerCond>, Tally),
+    /// Like [`Value::EventsThisTurn`], over the events of another stretch of the game: "if
+    /// an opponent lost life last turn", "if it attacked during your last turn", "if you
+    /// haven't been dealt combat damage since your last turn" (see `history_query.rs`).
+    EventsDuring(HistoryWindow, Box<TriggerCond>, Tally),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
+}
+
+/// A stretch of the game whose events a history condition looks at (besides "this turn",
+/// [`Value::EventsThisTurn`]).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum HistoryWindow {
+    /// "this combat": since the latest combat phase of this turn began (CR 506.1).
+    ThisCombat,
+    /// "last turn": the turn before this one.
+    LastTurn,
+    /// "during [player's] last turn": the latest turn the player took before this one
+    /// (CR 500.1).
+    PlayersLastTurn(PlayerRef),
+    /// "since [player's] last turn": everything after the latest turn the player took
+    /// before this one, including this turn so far.
+    SinceLastTurn(PlayerRef),
+    /// "since [player's] last upkeep": from the latest upkeep of the player's before this
+    /// one, including this turn so far.
+    SinceLastUpkeep(PlayerRef),
 }
 
 /// How [`Value::EventsThisTurn`] tallies the events it finds.
@@ -3571,9 +3598,14 @@ pub enum TriggerCond {
         filter: Filter,
         by: PlayerRel,
     },
+    /// Counters are removed from [filter]: once for each removal action, or with `each`
+    /// ("Whenever a +1/+1 counter is removed from ~", Protean Hydra), once for each
+    /// counter removed.
     CountersRemoved {
         filter: Filter,
         kind: Option<CounterKind>,
+        #[serde(default)]
+        each: bool,
     },
     /// "When the Nth [kind] counter is put on [filter]": one or more counters are put on it
     /// such that it had fewer than N before and N or more after (CR 122.7).

@@ -714,6 +714,20 @@ fn damage_to_each_of(l: &str, b: &mut Builder) -> Option<Effect> {
             });
         }
     }
+    // "each of X targets" (Meteor Blast): exactly X different "any target"s (CR 115.3,
+    // 601.2c).
+    if end(r) == "x targets" {
+        let mut spec = TargetSpec::any_target();
+        spec.min = Value::X;
+        spec.max = Value::X;
+        spec.text = "x targets".to_string();
+        let slot = b.add_target(spec, "targets");
+        return Some(Effect::DealDamage {
+            source,
+            amount,
+            to: Sel::Target(slot),
+        });
+    }
     let (sels, tail) = object_list(r, b)?;
     if sels.len() < 2 || !end(&tail).is_empty() {
         return None;
@@ -885,11 +899,13 @@ fn both_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     // "Whenever equipped creature blocks or becomes blocked by a creature, destroy both
-    // creatures." (Dead-Iron Sledge): an Equipment's or Aura's creature, not itself.
+    // creatures." (Dead-Iron Sledge): an Equipment's or Aura's creature, not itself — the
+    // one the trigger is about (the event's other creature), even if the Equipment has
+    // moved since (CR 603.2, 608.2b; ruling).
     let mine = if b.ctx.type_line.card_types.contains(crate::types::CardType::Creature) {
         Sel::This
     } else {
-        Sel::AttachedTo
+        Sel::TriggerOtherObject
     };
     Some(Effect::Destroy {
         what: Sel::Union(vec![mine, other]),

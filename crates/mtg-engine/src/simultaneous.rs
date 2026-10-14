@@ -188,6 +188,8 @@ fn adds_to_collected(e: &Effect) -> bool {
     }
     match e {
         Effect::Custom(_) => true,
+        // Each player's own piles (`piles.rs`).
+        Effect::Piles(a) => a.collects(),
         Effect::Store { var, sel } => mentions(sel, *var),
         Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => adds_to_collected(effect),
         Effect::If {
@@ -983,10 +985,27 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
     }
     let outcomes = perform_plans(g, &mut plans, frames, ctx);
     g.end_apnap_choices(round);
+    let mut process_done = false;
     for (i, outcome) in outcomes.into_iter().enumerate() {
         if frames.frames[i].actor.is_none() {
             continue;
         }
+        // A process of several steps ("reveals cards until ..., puts that card onto the
+        // battlefield, then shuffles") can't be performed simultaneously: it's performed
+        // for each player or object individually (CR 608.2f), one after another, so the
+        // events of an earlier one happened before a later one began: a permanent put
+        // onto the battlefield by a later one doesn't see an earlier one enter.
+        let individual = match &plans[i] {
+            Some(Plan::Exec(e)) => is_process(e),
+            None => ins.action.as_ref().is_some_and(is_process),
+            Some(_) => false,
+        };
+        if individual && process_done {
+            let hold = std::mem::replace(&mut g.batch_hold, 0);
+            g.sequential_step();
+            g.batch_hold = hold;
+        }
+        process_done |= individual;
         match plans[i].take() {
             None => {
                 // The whole instruction, for this player, in turn (CR 608.2f).
@@ -1007,6 +1026,34 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         for e in &ins.post {
             frames.run(g, i, e, ctx);
         }
+    }
+}
+
+/// Whether `e` is a process of several steps performed by one player (see
+/// [`perform_instruction`]): at least two of its instructions are actions that happen in
+/// the game. One action with bookkeeping around it ("may have ~ deal 5 damage to them",
+/// recording who did; "search for a basic land card and put it onto the battlefield",
+/// recording who searched; "exile a card from their hand and may play that card") is
+/// still one action, performed for all of them as one event.
+fn is_process(e: &Effect) -> bool {
+    match e {
+        Effect::AsPlayer { effect, .. } | Effect::May { effect, .. } => is_process(effect),
+        Effect::Seq(v) => {
+            !crate::trigger_timing::creates_tokens_together(v)
+                && v.iter().map(process_steps).sum::<usize>() > 1
+        }
+        _ => false,
+    }
+}
+
+/// How many actions that happen in the game `e` consists of, for [`is_process`]:
+/// bookkeeping and play permissions granted aren't events.
+fn process_steps(e: &Effect) -> usize {
+    match e {
+        Effect::Seq(v) => v.iter().map(process_steps).sum(),
+        Effect::GrantPlayPermission { .. } => 0,
+        e if is_bookkeeping(e) => 0,
+        _ => 1,
     }
 }
 
