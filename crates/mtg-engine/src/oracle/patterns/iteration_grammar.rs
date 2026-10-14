@@ -971,6 +971,24 @@ fn for_each_object(l: &str, b: &mut Builder) -> Option<Effect> {
             b.targets.truncate(saved.0);
             return None;
         }
+        // "Target creature gets +3/+0 until end of turn. For each Spirit sacrificed this
+        // way, that creature gets an additional +3/+0 until end of turn." (Devouring
+        // Rage): "that [noun]" with a noun the iterated objects aren't called by is the
+        // target named before, not each of them.
+        // (Not when the iterated objects are themselves targets: "for each of any number
+        // of target creatures, ... that creature".)
+        if matches!(b.it, Sel::Target(_)) && !matches!(sel, Sel::Target(_)) {
+            let same = |a: &str, n: &str| {
+                let j = |w: &str| head_noun(w).and_then(|f| serde_json::to_string(&f).ok());
+                a == n || j(a).is_some_and(|x| Some(x) == j(n))
+            };
+            for w in y.split("that ").skip(1) {
+                let w = w.split([' ', '\'', ',', '.']).next().unwrap_or("");
+                if head_noun(w).is_some() && !nouns.iter().any(|n| same(w, n)) {
+                    b.named.push((format!("that {w}"), b.it.clone()));
+                }
+            }
+        }
         b.it = Sel::Var(EACH);
         // "that player" is the object's controller ("its owner" if the instruction names
         // its owner).

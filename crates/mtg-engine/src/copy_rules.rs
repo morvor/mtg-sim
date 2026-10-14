@@ -180,7 +180,12 @@ fn copyable(g: &Game, spell: ObjectId) -> bool {
 /// CR 707.10d: copies `spell` for each other object or player it could target; each copy
 /// targets a different one of them. The copies are put onto the stack in the order their
 /// controller chooses.
-pub fn copy_for_each_target(g: &mut Game, spell: ObjectId, controller: PlayerId) -> Vec<ObjectId> {
+pub fn copy_for_each_target(
+    g: &mut Game,
+    spell: ObjectId,
+    controller: PlayerId,
+    among: Option<(&crate::ability::Filter, &crate::eval::Ctx)>,
+) -> Vec<ObjectId> {
     if !copyable(g, spell) {
         return vec![];
     }
@@ -208,6 +213,11 @@ pub fn copy_for_each_target(g: &mut Game, spell: ObjectId, controller: PlayerId)
         .into_iter()
         .filter(|e| !current.contains(e))
         .filter(|e| legal_for_each_target(g, spell, *e))
+        .filter(|e| match (among, e) {
+            (None, _) => true,
+            (Some((f, c)), Entity::Object(o)) => g.matches(*o, f, c),
+            (Some(_), _) => false,
+        })
         .collect();
     if cands.len() > 1 {
         let items = cands.iter().map(|e| format!("{e:?}")).collect();

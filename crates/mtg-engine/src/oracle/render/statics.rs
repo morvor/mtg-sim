@@ -127,6 +127,9 @@ pub(crate) fn grants_to_equipment(s: &StaticAbility) -> bool {
 
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
+        if let Some(l) = self.infinity_static(s) {
+            return l;
+        }
         // CR 702.178a: "Max speed — [ability]" means "As long as your speed is 4, this
         // object has [ability]": a static ability that applies as long as you have max
         // speed. Cards may also say the condition.
@@ -515,6 +518,8 @@ impl Renderer<'_> {
                         // gerund.
                         let t = if let Some(x) = t.strip_suffix(" enters") {
                             format!("{x} entering {{opt:the battlefield}}")
+                        } else if let Some(x) = t.strip_suffix(" is dealt damage") {
+                            format!("{x} being dealt damage")
                         } else if let Some(x) = t.strip_suffix(" dies") {
                             format!("{x} dying")
                         } else if let Some(x) = t.strip_suffix(" attacks") {
@@ -889,7 +894,10 @@ impl Renderer<'_> {
         }
     }
 
-    fn play_permission(&mut self, pp: &PlayPermission) -> String {
+    pub(crate) fn play_permission(&mut self, pp: &PlayPermission) -> String {
+        if let Some(s) = self.one_play_permission(pp) {
+            return s;
+        }
         let who = self.rel_subject(pp.who);
         let p = if who == "you" { "your" } else { "their" };
         // A spell isn't a land, and it's the card that's cast (CR 305.9): "nonland" and
@@ -1117,6 +1125,9 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn cost_modifier(&mut self, cm: &CostModifier) -> String {
+        if let Some(s) = self.qualified_cost_modifier(cm) {
+            return s;
+        }
         if let (CostTarget::Abilities(Filter::Source), CostChange::SpendAnyType) =
             (&cm.applies_to, &cm.change)
         {
@@ -1191,7 +1202,33 @@ impl Renderer<'_> {
                 format!("{}{who}{}", &target[..i], &target[i..]),
                 String::new(),
             ),
+            // "Noncreature spells your opponents cast with mana value 4 or greater": the
+            // caster before or after a quality.
+            _ if who.split_whitespace().count() >= 2
+                && matches!(
+                    cm.change,
+                    CostChange::ReduceGeneric(_) | CostChange::IncreaseGeneric(_)
+                )
+                && !target.contains('{')
+                && target.contains(" with ") =>
+            {
+                let i = target.find(" with ").unwrap_or(0);
+                (
+                    format!(
+                        "{{alt:{target}{who}|{}{who}{}}}",
+                        &target[..i],
+                        &target[i..]
+                    ),
+                    String::new(),
+                )
+            }
             _ => (target, who),
+        };
+        // "Abilities you activate that aren't mana abilities": abilities a player
+        // activates are activated abilities (CR 602.1).
+        let target = match target.strip_prefix("activated abilities you activate ") {
+            Some(r) => format!("{{opt:activated}} abilities you activate {r}"),
+            None => target,
         };
         let act = if is_spell { "to cast" } else { "to activate" };
         let costs = if matches!(cm.applies_to, CostTarget::ThisSpell) {
@@ -1337,6 +1374,11 @@ impl Renderer<'_> {
                 )
             }
             CostChange::AdditionalCost(c) => {
+                if matches!(cm.applies_to, CostTarget::ThisSpell) {
+                    if let Some(s) = self.additional_cost_extra(c) {
+                        return s;
+                    }
+                }
                 let c = self.cost_as_payment(c);
                 if matches!(cm.applies_to, CostTarget::ThisSpell) {
                     format!("as an additional cost to cast ~, {c}")
@@ -1406,6 +1448,11 @@ impl Renderer<'_> {
                     k.name().to_lowercase()
                 )
             }
+            // "You may pay {0} rather than pay ~'s mana cost": an alternative cost of
+            // nothing, as casting it without paying its mana cost is (CR 118.5, 118.9).
+            CostChange::AlternativeCost(c) if c.is_free() && c.mana.is_some() => {
+                "you may pay {0} rather than pay ~'s mana cost".to_string()
+            }
             CostChange::AlternativeCost(c) if c.is_free() => {
                 let m = self.me();
                 format!("you may cast {m} without paying its mana cost")
@@ -1471,7 +1518,10 @@ impl Renderer<'_> {
         let cond = match &oc.condition {
             None => String::new(),
             Some(Condition::YourTurn) => " during your turn".into(),
-            Some(c) => format!(" if {}", self.condition(c)),
+            Some(c) => match self.targets_condition(c) {
+                Some(t) => format!(" if {t}"),
+                None => format!(" if {}", self.condition(c)),
+            },
         };
         format!("This ability costs {amt} {dir} to activate{tail}{cond}.")
     }
@@ -1580,6 +1630,9 @@ impl Renderer<'_> {
 
     /// "{1}" / "{1} for each artifact you control" / "{X}, where X is ...".
     fn cost_amount(&mut self, v: &Value) -> (String, String) {
+        if let Some(r) = self.cost_amount_extra(v) {
+            return r;
+        }
         match v {
             Value::Const(n) => (format!("{{{n}}}"), String::new()),
             Value::X => ("{X}".into(), String::new()),
@@ -2117,6 +2170,7 @@ impl Renderer<'_> {
                 let a = match action {
                     ObjectAction::Untapped => "can't become untapped",
                     ObjectAction::PhasedIn => "can't phase in",
+                    ObjectAction::PhasedOut => "can't phase out",
                     ObjectAction::Equipped => "can't be equipped",
                     ObjectAction::EnchantedByOtherAuras => "can't be enchanted by other Auras",
                     ObjectAction::Suspected => "can't become suspected",
@@ -2271,6 +2325,9 @@ impl Renderer<'_> {
         use ReplacementAction as A;
         use ReplacementEvent as E;
         let _ = uses;
+        if let Some(s) = self.qualified_replacement(def) {
+            return s;
+        }
         match (&def.event, &def.action) {
             // --- Entering the battlefield (CR 614.1c).
             (E::EntersBattlefield(f), action) => {
@@ -2369,7 +2426,8 @@ impl Renderer<'_> {
                     | A::Regenerate
                     | A::PreventAndThen(..)
                     | A::LifeFloor(_)
-                    | A::ManaTypeInstead(_)) => {
+                    | A::ManaTypeInstead(_)
+                    | A::RevealAndMoveInstead(_)) => {
                         let then = self.replacement_then(other, "it");
                         format!("if {subj} would enter, {then}")
                     }
@@ -3055,7 +3113,13 @@ impl Renderer<'_> {
         match a {
             A::MoveInstead(d) => {
                 if d.zone == ZoneKind::Exile {
-                    return format!("exile {it} instead");
+                    // "exile it with a void counter on it instead".
+                    let mut w = String::new();
+                    for (k, n) in &d.with_counters {
+                        let (c, _) = self.counted(n, &counter_name(k));
+                        w.push_str(&format!(" with {c} on it"));
+                    }
+                    return format!("exile {it}{w} instead");
                 }
                 if d.zone == ZoneKind::Library && d.position == LibraryPosition::Shuffled {
                     return format!("shuffle {it} into its owner's library instead");
@@ -3067,6 +3131,11 @@ impl Renderer<'_> {
                     "put"
                 };
                 format!("{verb} {it} {dest} instead")
+            }
+            // "reveal that card and put it on top of your library instead" (CR 701.20a).
+            A::RevealAndMoveInstead(d) => {
+                let then = self.replacement_then(&A::MoveInstead(d.clone()), it);
+                format!("reveal {it} and {then}")
             }
             A::Instead(e) => {
                 let e = self.effect(e);
@@ -3335,6 +3404,16 @@ impl Renderer<'_> {
                     })
                     .collect();
                 let m = match rest.as_slice() {
+                    // "Your starting deck contains only cards with even mana values".
+                    [Filter::Custom(n)] if n == crate::kw::companion::EVEN_MANA_VALUE => {
+                        return format!(
+                            "{{alt:your starting deck contains only {} with even mana values|each {e} in your starting deck has an even mana value}}",
+                            plural(&e)
+                        );
+                    }
+                    [Filter::Custom(n)] if n == crate::kw::companion::HAS_ACTIVATED_ABILITY => {
+                        "has an activated ability".to_string()
+                    }
                     // "has mana value 2 or less".
                     [Filter::ManaValue(c, v)] => {
                         let v = self.value(v);

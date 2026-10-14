@@ -479,7 +479,8 @@ impl Frames {
     }
 
     /// Restores what the "each player" instruction changed in `ctx`; the results of the
-    /// last player's instructions stay, as for any repeated instruction.
+    /// last player's instructions stay, as for any repeated instruction, except "it",
+    /// which becomes what all the players' instructions acted on.
     fn finish(&self, ctx: &mut Ctx) {
         ctx.iter_player = self.iter;
         // The variable bound to each object is what it was before.
@@ -492,6 +493,27 @@ impl Frames {
                     ctx.vars.remove(&var);
                 }
             }
+        }
+        // "Each opponent who has three or more poison counters exiles the top card of their
+        // library face down. You may look at and play those cards ..." (Ixhel, Scion of
+        // Atraxa): what "it" came to mean for each player (the objects their instructions
+        // acted on) is, after them, all of those objects, not only the last player's
+        // (CR 608.2c: later text refers to what the earlier instructions did).
+        if matches!(self.frames.first().map(|f| f.item), Some(Item::Player(_)))
+            && self.local_vars.contains(&vars::IT)
+        {
+            let mut all: Vec<Entity> = Vec::new();
+            for f in &self.frames {
+                let Some(mine) = f.vars.get(&vars::IT) else {
+                    continue;
+                };
+                for e in mine.iter().flatten() {
+                    if !all.contains(e) {
+                        all.push(*e);
+                    }
+                }
+            }
+            ctx.vars.insert(vars::IT, all);
         }
         ctx.controller = self.controller;
         ctx.resolving_controller = self.resolving;

@@ -501,6 +501,7 @@ fn s_discard_caused_by(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
         Some(x) => (true, x),
         None => (false, act),
     };
+    let mut reveal = false;
     let dest = if let Some(x) = act
         .strip_suffix(" instead of putting it into your graveyard")
         .and_then(|x| x.strip_prefix("put it onto the battlefield"))
@@ -521,6 +522,7 @@ fn s_discard_caused_by(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
     } else {
         match act {
             "reveal that card and put it on top of your library instead of putting it anywhere else" => {
+                reveal = true;
                 Destination::library_top()
             }
             _ => return None,
@@ -535,7 +537,11 @@ fn s_discard_caused_by(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
                     filter,
                     by: PlayerRel::Opponent,
                 },
-                action: ReplacementAction::MoveInstead(dest),
+                action: if reveal {
+                    ReplacementAction::RevealAndMoveInstead(dest)
+                } else {
+                    ReplacementAction::MoveInstead(dest)
+                },
                 self_replacement: false,
                 optional,
             }),
