@@ -3472,9 +3472,32 @@ impl Renderer<'_> {
                         };
                         format!("it deals that much damage plus {v}{to_that} instead")
                     }
+                    // "it deals half that damage, rounded down, to that permanent or player
+                    // instead": that much minus the other half.
+                    A::Subtract(Value::Diff(a, b))
+                        if matches!(a.as_ref(), Value::EventAmount)
+                            && matches!(b.as_ref(), Value::Div(n, 2, _) if matches!(n.as_ref(), Value::EventAmount)) =>
+                    {
+                        let Value::Div(_, _, up) = b.as_ref() else {
+                            return self.gap("half that damage");
+                        };
+                        // That much minus (that much minus half of it) is half of it.
+                        let r = if *up { "up" } else { "down" };
+                        let to_that = if anything {
+                            " {opt:to that permanent or player}"
+                        } else {
+                            to_that
+                        };
+                        format!("it deals half that damage, rounded {r},{to_that} instead")
+                    }
                     A::Subtract(v) => {
                         let v = self.value(v);
-                        format!("it deals that much damage minus {v} instead")
+                        let to_that = if anything {
+                            " {opt:to that permanent or player}"
+                        } else {
+                            to_that
+                        };
+                        format!("it deals that much damage minus {v}{to_that} instead")
                     }
                     A::Redirect(sel) => {
                         let t = self.sel(sel, Case::Obj);

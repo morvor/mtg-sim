@@ -1799,6 +1799,19 @@ impl Renderer<'_> {
                 }
                 // "If any source would deal 1 or more damage to a permanent or player this
                 // turn, it deals 2 damage to that permanent or player instead."
+                // "If a red source you control would deal damage to a permanent or player
+                // this turn, it deals that much damage plus 2 ... instead."
+                if d == "until end of turn"
+                    && uses.is_none()
+                    && matches!(def.event, ReplacementEvent::Damage { .. })
+                    && s.starts_with("if ")
+                    && s.contains(" would deal damage")
+                    && s.contains(", it deals ")
+                {
+                    if let Some((ev, then)) = s.split_once(", it deals ") {
+                        return format!("{ev} this turn, it deals {then}");
+                    }
+                }
                 if d == "until end of turn" && s.starts_with("if ") && s.contains(" or more damage to ") {
                     if let Some((ev, then)) = s.split_once(", ") {
                         return format!("{ev} this turn, {then}");
@@ -3222,14 +3235,26 @@ impl Renderer<'_> {
             format!("{n} of your choice")
         };
         let mut to: Vec<String> = Vec::new();
+        // "would deal damage to any target": the target, a player or an object.
+        let one_target = match (to_players, to_objects) {
+            (Some(PlayerFilter::Ref(p)), Some(Filter::In(s))) => match (p.as_ref(), s.as_ref()) {
+                (PlayerRef::Target(i), Sel::Target(j)) if i == j => Some(*i),
+                _ => None,
+            },
+            _ => None,
+        };
         match to_players {
             None => {}
+            _ if one_target.is_some() => {}
             Some(PlayerFilter::You) => to.push("you".into()),
             Some(PlayerFilter::Any) if matches!(to_objects, Some(Filter::Any)) => {}
             Some(_) => return None,
         }
         match to_objects {
             None => {}
+            Some(_) if one_target.is_some() => {
+                to.push(self.sel(&Sel::Target(one_target.unwrap_or_default()), Case::Obj))
+            }
             Some(Filter::Any) if matches!(to_players, Some(PlayerFilter::Any)) => {}
             Some(Filter::Source) => to.push(self.me()),
             Some(Filter::In(s)) => to.push(self.sel(s, Case::Obj)),
@@ -3253,6 +3278,38 @@ impl Renderer<'_> {
             {
                 "prevent that damage. You gain life equal to the damage prevented this way"
                     .to_string()
+            }
+            // "prevent half that damage, rounded down" (CR 615.1a).
+            ReplacementAction::PreventPortion(Value::Div(n, 2, up))
+                if matches!(n.as_ref(), Value::EventAmount) =>
+            {
+                let r = if *up { "up" } else { "down" };
+                format!("prevent half that damage, rounded {r}")
+            }
+            // "If damage is prevented this way, ~ deals that much damage to that source's
+            // controller" (the source of the damage, CR 614.1a).
+            ReplacementAction::PreventAndThen(
+                None,
+                e,
+            ) if matches!(e.as_ref(), Effect::DealDamage {
+                    source: Sel::This,
+                    amount: Value::EventAmount,
+                    to: Sel::Players(PlayerRef::ControllerOf(o)),
+                } if matches!(o.as_ref(), Sel::TriggerOtherObject)) =>
+            {
+                let m = self.me();
+                format!("prevent that damage. If damage is prevented this way, {m} deals that much damage to that source's controller")
+            }
+            // "Exile cards from the top of your library equal to the damage prevented this
+            // way."
+            ReplacementAction::PreventAndThen(None, e)
+                if matches!(e.as_ref(), Effect::Exile {
+                    what: Sel::TopOfLibrary(PlayerRef::You, Value::EventAmount),
+                    face_down: false,
+                    ..
+                }) =>
+            {
+                "prevent that damage. Exile cards from the top of your library equal to the damage prevented this way".to_string()
             }
             // "that source's controller": the damage event's source (CR 614.1a).
             ReplacementAction::Redirect(t) => {
