@@ -169,7 +169,8 @@ fn overloaded_body(b: &Body) -> Option<Body> {
         return None;
     }
     let n = b.targets.len();
-    let effect = rewrite_targets(serde_json::to_value(&b.effect).ok()?, n)?;
+    let effect = unlock_restrictions(serde_json::to_value(&b.effect).ok()?, &b.targets);
+    let effect = rewrite_targets(effect, n)?;
     let effect: Effect = serde_json::from_value(effect).ok()?;
     let mut seq: Vec<Effect> = b
         .targets
@@ -186,6 +187,56 @@ fn overloaded_body(b: &Body) -> Option<Body> {
         effect: Effect::Seq(seq),
         modal: None,
     })
+}
+
+/// In the restrictions the spell creates ("... can't be blocked this turn"), "each
+/// [object]" is the description itself, not the objects it described as the spell
+/// resolved: such an effect doesn't modify characteristics or change control, so it
+/// applies to every object that matches the description at any time during its duration
+/// (CR 611.2c; Teleportal's rulings). `{"In": {"Target": i}}` of an object target becomes
+/// the target's filter.
+fn unlock_restrictions(v: J, specs: &[TargetSpec]) -> J {
+    fn unlock(v: J, specs: &[TargetSpec]) -> J {
+        match v {
+            J::Object(m) => {
+                if m.len() == 1 {
+                    if let Some(J::Object(inner)) = m.get("In") {
+                        if let (1, Some(J::Number(k))) = (inner.len(), inner.get("Target")) {
+                            let spec = k.as_u64().and_then(|k| specs.get(k as usize));
+                            if let Some(TargetSpec {
+                                what: TargetKind::Object(f),
+                                ..
+                            }) = spec
+                            {
+                                if let Ok(f) = serde_json::to_value(f) {
+                                    return f;
+                                }
+                            }
+                        }
+                    }
+                }
+                J::Object(m.into_iter().map(|(k, v)| (k, unlock(v, specs))).collect())
+            }
+            J::Array(a) => J::Array(a.into_iter().map(|x| unlock(x, specs)).collect()),
+            other => other,
+        }
+    }
+    match v {
+        J::Object(m) => J::Object(
+            m.into_iter()
+                .map(|(k, v)| {
+                    let v = if k == "AddRestriction" {
+                        unlock(v, specs)
+                    } else {
+                        unlock_restrictions(v, specs)
+                    };
+                    (k, v)
+                })
+                .collect(),
+        ),
+        J::Array(a) => J::Array(a.into_iter().map(|x| unlock_restrictions(x, specs)).collect()),
+        other => other,
+    }
 }
 
 /// Replaces references to target slot `i` (`{"Target": i}`, a [`Sel`] or [`PlayerRef`])

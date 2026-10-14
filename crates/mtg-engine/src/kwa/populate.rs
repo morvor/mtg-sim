@@ -11,6 +11,18 @@ const CHOSEN: Var = vars::USER + 1036;
 
 /// `p` populates. Returns the tokens created.
 pub fn populate(g: &mut Game, p: PlayerId, ctx: &mut Ctx) -> Vec<ObjectId> {
+    populate_entering(g, p, false, false, ctx)
+}
+
+/// `p` populates; the token enters tapped and/or attacking ("The token enters tapped and
+/// attacking."). Returns the tokens created.
+pub fn populate_entering(
+    g: &mut Game,
+    p: PlayerId,
+    tapped: bool,
+    attacking: bool,
+    ctx: &mut Ctx,
+) -> Vec<ObjectId> {
     if g.dirty {
         g.recompute();
     }
@@ -42,8 +54,8 @@ pub fn populate(g: &mut Game, p: PlayerId, ctx: &mut Ctx) -> Vec<ObjectId> {
             of: Sel::Var(CHOSEN),
             count: Value::c(1),
             controller: PlayerRef::You,
-            tapped: false,
-            attacking: false,
+            tapped,
+            attacking,
             mods: vec![],
         },
         &mut c,
@@ -60,10 +72,12 @@ impl KeywordActionRules for Populate {
 
     fn perform(&self, g: &mut Game, a: &Args, ctx: &mut Ctx) {
         let times = number(g, a.n, ctx);
+        let tapped = a.spec.is_some_and(|s| s.tapped);
+        let attacking = a.spec.is_some_and(|s| s.attacking);
         let mut created = Vec::new();
         for p in g.eval_players(a.who, ctx) {
             for _ in 0..times {
-                created.extend(populate(g, p, ctx));
+                created.extend(populate_entering(g, p, tapped, attacking, ctx));
             }
         }
         ctx.prev_happened = !created.is_empty();

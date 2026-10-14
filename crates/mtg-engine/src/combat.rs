@@ -2432,6 +2432,12 @@ pub fn put_onto_battlefield_attacking(g: &mut Game, id: ObjectId, target: Entity
     if g.combat.is_none() {
         return;
     }
+    // Whether it's a creature as it enters counts what it enters with: a permanent that's
+    // a creature only while it has loyalty counters (Kaito, Bane of Nightmares) enters
+    // with them (CR 306.5b) and so enters attacking.
+    if g.dirty {
+        g.recompute();
+    }
     let o = g.obj(id);
     // CR 506.3b: only a creature controlled by an attacking player.
     if !attacking_players(g).contains(&o.controller) {
@@ -2510,7 +2516,11 @@ pub fn choose_attack_target_preferring(
 
 /// Puts a creature onto the battlefield blocking `attacker` (CR 509.4): called as it enters.
 pub fn put_onto_battlefield_blocking(g: &mut Game, id: ObjectId, attacker: ObjectId) {
-    // CR 506.3a, 506.3f: only a creature that isn't a battle.
+    // CR 506.3a, 506.3f: only a creature that isn't a battle (counting what it entered
+    // with).
+    if g.dirty {
+        g.recompute();
+    }
     let o = g.obj(id);
     if !o.is_creature() || o.is(CardType::Battle) {
         return;
