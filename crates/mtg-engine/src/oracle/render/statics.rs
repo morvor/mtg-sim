@@ -3046,7 +3046,13 @@ impl Renderer<'_> {
         match a {
             A::MoveInstead(d) => {
                 if d.zone == ZoneKind::Exile {
-                    return format!("exile {it} instead");
+                    // "exile it with a void counter on it instead".
+                    let mut w = String::new();
+                    for (k, n) in &d.with_counters {
+                        let (c, _) = self.counted(n, &counter_name(k));
+                        w.push_str(&format!(" with {c} on it"));
+                    }
+                    return format!("exile {it}{w} instead");
                 }
                 if d.zone == ZoneKind::Library && d.position == LibraryPosition::Shuffled {
                     return format!("shuffle {it} into its owner's library instead");
