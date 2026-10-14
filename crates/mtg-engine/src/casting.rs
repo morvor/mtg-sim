@@ -3329,11 +3329,13 @@ impl Game {
                     n,
                     ctx,
                 );
-                for o in pick {
-                    paid.objects.push(o);
-                    paid.sacrificed.push(o);
-                    self.sacrifice(o, p);
-                }
+                // The permanents one cost sacrifices leave the battlefield together, so
+                // their leaves-the-battlefield abilities see each other (CR 603.10a):
+                // "Sacrifice three white creatures" with Teysa, Orzhov Scion among them.
+                paid.objects.extend(pick.iter().copied());
+                paid.sacrificed.extend(pick.iter().copied());
+                let what: Vec<(ObjectId, PlayerId)> = pick.iter().map(|o| (*o, p)).collect();
+                self.sacrifice_simultaneously(&what);
             }
             CostPart::DiscardSelf => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
