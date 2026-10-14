@@ -4467,6 +4467,11 @@ pub enum Effect {
     CopySpellRetargeted {
         what: Sel,
         target: Option<Sel>,
+        /// "for each other [creature you control] that spell could target": only the
+        /// other legal targets that are objects matching this filter (evaluated for the
+        /// player who copies), not every other object or player.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        among: Option<Filter>,
     },
     /// "Copy [card]": a copy of each selected card, created in the zone the card is in
     /// (CR 707.12); "create a copy of the card with the chosen/noted name" (`named`):

@@ -1348,7 +1348,11 @@ impl Game {
                     });
                 }
             }
-            Effect::CopySpellRetargeted { what, target } => {
+            Effect::CopySpellRetargeted {
+                what,
+                target,
+                among,
+            } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
                     match &targets {
@@ -1361,7 +1365,12 @@ impl Game {
                             );
                         }
                         None => {
-                            crate::copy_rules::copy_for_each_target(self, o, ctx.controller);
+                            crate::copy_rules::copy_for_each_target(
+                                self,
+                                o,
+                                ctx.controller,
+                                among.as_ref().map(|f| (f, &*ctx)),
+                            );
                         }
                     }
                 }

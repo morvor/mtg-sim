@@ -2784,11 +2784,21 @@ impl Renderer<'_> {
                 };
                 format!("the next {f} you cast{d} {vp}")
             }
-            Effect::CopySpellRetargeted { what, target } => {
+            Effect::CopySpellRetargeted {
+                what,
+                target,
+                among,
+            } => {
                 let w = self.sel(what, Case::Obj);
-                match target {
-                    None => format!("copy {w} for each other object or player it could target"),
-                    Some(t) => {
+                match (target, among) {
+                    (None, Some(f)) => {
+                        let n = self.noun(f, Num::One);
+                        format!("copy {w} for each other {n} that spell could target")
+                    }
+                    (None, None) => {
+                        format!("copy {w} for each other object or player it could target")
+                    }
+                    (Some(t), _) => {
                         let t = self.sel(t, Case::Obj);
                         format!("copy {w}. The copy targets {t}")
                     }
