@@ -453,6 +453,9 @@ impl Renderer<'_> {
             }
             // "X can't be negative": a count clamped at zero (CR 107.1b) reads as the count.
             Value::Max(a, b) if matches!(b.as_ref(), Value::Const(0)) => self.value(a),
+            Value::Max(a, b) if self.greatest_across_zones(a, b).is_some() => {
+                self.greatest_across_zones(a, b).unwrap_or_default()
+            }
             Value::Max(a, b) => {
                 let a = self.value(a);
                 let b = self.value(b);

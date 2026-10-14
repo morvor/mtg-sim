@@ -373,6 +373,8 @@ impl Renderer<'_> {
                 match n.as_str() {
                     "stack:activated ability" => base = "activated ability".into(),
                     "stack:triggered ability" => base = "triggered ability".into(),
+                    // CR 606.2.
+                    crate::kw::game_rules::LOYALTY_ABILITY => base = "loyalty ability".into(),
                     _ => {}
                 }
             }
@@ -386,9 +388,26 @@ impl Renderer<'_> {
                 };
                 // "activated or triggered ability": both kinds, what an ability on the
                 // stack is (CR 113.1).
-                !kind(x) && !matches!(x, Filter::Or(v) if v.iter().all(kind))
+                !kind(x)
+                    && !matches!(x, Filter::Or(v) if v.iter().all(kind))
+                    && !matches!(x, Filter::Custom(n) if n == crate::kw::game_rules::LOYALTY_ABILITY)
             })
             .collect();
+        // "loyalty ability of a planeswalker": its source is one.
+        let flat: Vec<&Filter> = if base == "loyalty ability" {
+            flat.into_iter()
+                .filter(|x| {
+                    let of_pw = matches!(x, Filter::AbilityFrom(f)
+                        if matches!(f.as_ref(), Filter::Type(CardType::Planeswalker)));
+                    if of_pw {
+                        base = "loyalty ability of a planeswalker".into();
+                    }
+                    !of_pw
+                })
+                .collect()
+        } else {
+            flat
+        };
         for x in flat {
             match x {
                 Filter::Spell | Filter::SpellOnStack | Filter::Any => {}
@@ -493,6 +512,9 @@ impl Renderer<'_> {
     /// A selection of objects/players.
     pub(crate) fn sel(&mut self, s: &Sel, case: Case) -> String {
         if let Some(r) = self.sel_extra(s, case) {
+            return r;
+        }
+        if let Some(r) = self.graveyard_this_way(s, case) {
             return r;
         }
         let it = |case: Case| match case {

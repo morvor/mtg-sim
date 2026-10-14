@@ -1024,6 +1024,9 @@ impl Renderer<'_> {
     /// or 3", "your team controls" (you or a teammate, CR 808.2), "from graveyards or exile"
     /// (a spell cast from there, or a card there).
     pub(crate) fn or_quality(&mut self, v: &[Filter]) -> Option<String> {
+        if let Some(q) = self.or_predicates(v) {
+            return Some(q);
+        }
         let mvs: Option<Vec<String>> = v
             .iter()
             .map(|x| match x {

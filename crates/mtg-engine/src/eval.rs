@@ -116,6 +116,18 @@ impl Ctx {
         Ctx::new(Some(id), g.obj(id).controller)
     }
     pub fn set_var(&mut self, v: Var, e: Vec<Entity>) {
+        // The cards a dig put somewhere are "put ... this way" only until another
+        // instruction acts on other objects (`dig_steps::DUG_PLACED`).
+        if v == vars::IT {
+            let placed = crate::dig_steps::DUG_PLACED;
+            if self
+                .vars
+                .get(&placed)
+                .is_some_and(|p| !e.iter().all(|x| p.contains(x)))
+            {
+                self.vars.remove(&placed);
+            }
+        }
         self.vars.insert(v, e);
     }
     /// `p`'s running total under `var` (0 if none).
