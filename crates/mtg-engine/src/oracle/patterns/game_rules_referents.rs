@@ -64,9 +64,8 @@ fn draw_another_if(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "game rules: draw another card if [condition]", priority: 100, parse: draw_another_if } }
 
 /// "Each opponent who doesn't control a legendary creature or planeswalker loses the
-/// game.", "each player who controls an Island draws a card": each such player performs
-/// the instruction (whether they control one is checked for each as the instruction is
-/// performed).
+/// game.": each such player performs the instruction (whether they control one is
+/// checked for each as the instruction is performed).
 fn each_who_controls(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (who, r) = if let Some(r) = l.strip_prefix("each opponent who ") {
@@ -74,11 +73,8 @@ fn each_who_controls(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         (PlayerRef::EachPlayer, l.strip_prefix("each player who ")?)
     };
-    let (negated, r) = if let Some(r) = r.strip_prefix("doesn't control ") {
-        (true, r)
-    } else {
-        (false, r.strip_prefix("controls ")?)
-    };
+    // ("each player who controls [object]" is the core grammar's.)
+    let (negated, r) = (true, r.strip_prefix("doesn't control ")?);
     let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
     let (f, false, rest) = crate::oracle::phrases::parse_object_phrase(r)? else {
         return None;
