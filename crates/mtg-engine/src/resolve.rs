@@ -1651,6 +1651,10 @@ impl Game {
                     founds.push((p, owner, found));
                 }
                 let mut all = Vec::new();
+                // The cards found by all the searchers move at the same time (CR 701.23i,
+                // 614.12): (player, owner, the range of their moves in `moves`).
+                let mut moves: Vec<crate::replacement::MoveEv> = Vec::new();
+                let mut movers: Vec<(PlayerId, PlayerId, std::ops::Range<usize>)> = Vec::new();
                 for (p, owner, found) in founds {
                     let mut c = ctx.clone();
                     c.iter_player = Some(p);
@@ -1662,7 +1666,7 @@ impl Game {
                         }
                         continue;
                     }
-                    let res = if *shuffle
+                    if *shuffle
                         && to.zone == ZoneKind::Library
                         && matches!(to.position, LibraryPosition::Top)
                     {
@@ -1675,21 +1679,38 @@ impl Game {
                         if *reveal {
                             crate::reveal::reveal_in(self, p, &found, Some(&c));
                         }
-                        found
+                        all.extend(found);
                     } else {
                         // CR 701.23e: revealed only if the effect says so.
                         if *reveal {
                             crate::reveal::reveal_in(self, p, &found, Some(&c));
                         }
-                        let res = self.move_to_destination(found, to, &mut c);
+                        let start = moves.len();
+                        moves.extend(self.destination_moves(found, to, &mut c));
+                        movers.push((p, owner, start..moves.len()));
+                    }
+                }
+                if !movers.is_empty() {
+                    let res = if moves.is_empty() {
+                        vec![]
+                    } else {
+                        self.move_objects(moves)
+                    };
+                    for (p, owner, r) in movers {
+                        let mine: Vec<ObjectId> = res
+                            .get(r)
+                            .unwrap_or_default()
+                            .iter()
+                            .flatten()
+                            .copied()
+                            .collect();
                         // "Search your library for a card, exile it face down".
-                        crate::zones::looked_then_exiled(self, p, &res);
+                        crate::zones::looked_then_exiled(self, p, &mine);
                         if *shuffle {
                             self.shuffle_library(owner);
                         }
-                        res
-                    };
-                    all.extend(res);
+                        all.extend(mine);
+                    }
                 }
                 ctx.prev_affected = all.iter().map(|o| Entity::Object(*o)).collect();
                 ctx.prev_happened = searched;
