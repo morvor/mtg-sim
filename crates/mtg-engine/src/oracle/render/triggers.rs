@@ -328,6 +328,12 @@ impl Renderer<'_> {
                     ),
                 )
             }
+            // "When enchanted artifact is put into a graveyard", "whenever a permanent you
+            // control is put into a graveyard": what's enchanted or controlled is on the
+            // battlefield, so that's dying (CR 700.4).
+            TriggerCond::Dies(f) if on_battlefield_noun(f) && matches!(det, Det::A) => {
+                Ev::new(obj(self, f), "{alt:dies|is put into a graveyard}")
+            }
             TriggerCond::Dies(f) => Ev::new(obj(self, f), "dies"),
             // "Whenever a spell or ability an opponent controls destroys a land you
             // control" (CR 701.8).
@@ -1686,5 +1692,15 @@ impl Renderer<'_> {
                 format!("a spell or ability {c}")
             }
         }
+    }
+}
+
+/// Whether a filter names only permanents on the battlefield by what it says (enchanted,
+/// controlled, a permanent): "is put into a graveyard" means from the battlefield then.
+fn on_battlefield_noun(f: &Filter) -> bool {
+    match f {
+        Filter::AttachedToSource | Filter::Permanent | Filter::ControlledBy(_) => true,
+        Filter::And(v) => v.iter().any(on_battlefield_noun),
+        _ => false,
     }
 }

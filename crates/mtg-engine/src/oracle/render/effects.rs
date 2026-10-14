@@ -1963,7 +1963,12 @@ impl Renderer<'_> {
                 format!("regenerate {w}")
             }
             Effect::Attach { what, to } | Effect::AttachAsCreature { what, to } => {
+                // (Naming a target doesn't make "it" in "to it" the target.)
+                let salient = self.self_salient;
                 let w = self.sel(what, Case::Obj);
+                if matches!(to, Sel::This) && !matches!(what, Sel::This) {
+                    self.self_salient = salient;
+                }
                 // "attach ~ to another instant card in a graveyard": other than the card it
                 // enchants.
                 if let Sel::Choose {
@@ -3212,6 +3217,33 @@ impl Renderer<'_> {
                     continue;
                 }
             }
+            // "Look at the top four cards ... You may reveal a land card from among them and
+            // put it into your hand. ... If you didn't put a card into your hand this way,
+            // proliferate.": whether the dig took a card (CR 608.2c).
+            if let (
+                Some(dig @ Effect::Dig { take, take_to, .. }),
+                Some(Effect::If {
+                    cond: Condition::Not(c),
+                    then,
+                    otherwise,
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if take_to.zone == ZoneKind::Hand
+                    && !matches!(take, Value::Const(0))
+                    && matches!(c.as_ref(), Condition::PrevHappened)
+                    && matches!(otherwise.as_ref(), Effect::Noop)
+                {
+                    let d = self.effect(dig);
+                    let t = self.effect(then);
+                    parts.push(d);
+                    parts.push(format!(
+                        "{{alt:if you don't|if you didn't put a card into your hand this way}}, {t}"
+                    ));
+                    i += 2;
+                    continue;
+                }
+            }
             // "An opponent gains control of ~": an opponent you choose, named once.
             if let (
                 Some(Effect::Choose {
@@ -3227,12 +3259,15 @@ impl Renderer<'_> {
                     // of ~", "look at an opponent's hand" (as "clash with an opponent"
                     // means "choose an opponent. You and that opponent each clash", CR
                     // 701.30b).
-                    let chosen = ["the chosen {alt:opponent|player}", "the chosen opponent"];
-                    if let Some(c) = chosen.iter().find(|c| n.matches(**c).count() == 1) {
-                        if !chosen.iter().any(|o| *o != *c && n.contains(o))
-                            && !n.contains("chosen player")
-                        {
-                            parts.push(n.replacen(c, "an opponent", 1));
+                    let chosen = [
+                        ("the chosen {alt:opponent|player}", "an opponent"),
+                        ("the chosen {alt:opponent's|player's}", "an opponent's"),
+                        ("the chosen opponent", "an opponent"),
+                    ];
+                    let mentions: usize = chosen.iter().map(|(c, _)| n.matches(*c).count()).sum();
+                    if mentions == 1 && !n.contains("chosen player") {
+                        if let Some((c, r)) = chosen.iter().find(|(c, _)| n.contains(*c)) {
+                            parts.push(n.replacen(c, r, 1));
                             i += 2;
                             continue;
                         }

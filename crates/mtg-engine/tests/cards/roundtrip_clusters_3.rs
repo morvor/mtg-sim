@@ -87,3 +87,4 @@ fn arashin_war_beast_triggers_once_for_two_blockers() {
         .count();
     assert_eq!(face_down, 1, "{}", t.dump_log());
 }
+
