@@ -158,3 +158,51 @@ fn if_that_spell_targets_instead(l: &str, prev: &mut Effect, b: &mut Builder) ->
 }
 
 inventory::submit! { super::FollowupPattern { name: "game rules: if that spell targets [object], instead [effect]", priority: 100, apply: if_that_spell_targets_instead } }
+
+/// "they shuffle another creature they own into their library" (This Is How It Ends):
+/// the player chooses one of their permanents and shuffles it into their library.
+fn player_shuffles_own_permanent(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let i = l.find(" shuffles ")?;
+    let (subject, r) = (&l[..i], &l[i + " shuffles ".len()..]);
+    let r = r.strip_suffix(" into their library")?;
+    let r = r
+        .strip_prefix("another ")
+        .or_else(|| r.strip_prefix("a "))
+        .or_else(|| r.strip_prefix("an "))?;
+    let (obj, owner) = if let Some(o) = r.strip_suffix(" they own") {
+        (o, Filter::OwnedBy(PlayerRel::You))
+    } else {
+        (r.strip_suffix(" they control")?, Filter::ControlledBy(PlayerRel::You))
+    };
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(obj)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let (who, rest) = crate::oracle::effects::player_ref(subject, b)?;
+    if !end(&rest).is_empty() {
+        return None;
+    }
+    let f = if f.zone().is_none() {
+        Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)])
+    } else {
+        f
+    };
+    Some(Effect::AsPlayer {
+        who,
+        effect: Box::new(Effect::ShuffleIntoLibrary {
+            what: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: Filter::and(vec![f, owner]),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+            library: PlayerRef::You,
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "game rules: [player] shuffles a [permanent] they own into their library", priority: 100, parse: player_shuffles_own_permanent } }

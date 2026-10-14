@@ -117,3 +117,22 @@ fn sycorax_commander_discard_and_draw_one_fewer_or_damage() {
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn this_is_how_it_ends_shuffles_another_creature_they_own() {
+    cr!("701.55a");
+    assert_supported(&["This Is How It Ends"]);
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 4);
+    let spell = t.hand(P0, "This Is How It Ends");
+    option(&mut t, P1, 1);
+    let lib = t.library_size(P1);
+    t.cast(P0, spell).target(a).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(a));
+    assert!(!t.on_battlefield(b));
+    assert_eq!(t.library_size(P1), lib + 2);
+    assert_eq!(t.life(P1), 20);
+}
