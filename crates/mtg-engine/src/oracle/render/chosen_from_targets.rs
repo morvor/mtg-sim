@@ -151,17 +151,22 @@ impl Renderer<'_> {
         );
         // Whether any was sacrificed.
         let counted = |c: &Condition| -> Option<bool> {
+            let (c, negated) = match c {
+                Condition::Not(inner) => (inner.as_ref(), true),
+                other => (other, false),
+            };
             let Condition::Compare(Value::CountSel(s), cmp, Value::Const(k)) = c else {
                 return None;
             };
             if !matches!(s.as_ref(), Sel::Var(x) if x == u) {
                 return None;
             }
-            match (cmp, k) {
-                (Cmp::Ge, 1) | (Cmp::Gt, 0) => Some(true),
-                (Cmp::Eq, 0) | (Cmp::Lt, 1) | (Cmp::Le, 0) => Some(false),
-                _ => None,
-            }
+            let any = match (cmp, k) {
+                (Cmp::Ge, 1) | (Cmp::Gt, 0) => true,
+                (Cmp::Eq, 0) | (Cmp::Lt, 1) | (Cmp::Le, 0) => false,
+                _ => return None,
+            };
+            Some(any != negated)
         };
         let did = counted(cond)?;
         let (did, then) = match (
@@ -180,5 +185,54 @@ impl Renderer<'_> {
             "{alt:no one does|no player does}"
         };
         Some((3, format!("any opponent may sacrifice {n}. If {when}, {t}")))
+    }
+}
+
+impl Renderer<'_> {
+    /// "You may cast any number of spells from among them ... Put the rest into your
+    /// hand": the exiled cards not cast are those still in exile.
+    pub(crate) fn cast_then_rest_part(
+        &mut self,
+        v: &[Effect],
+        i: usize,
+    ) -> Option<(usize, String)> {
+        let (
+            Effect::CastCard {
+                what: Sel::Choose { filter, .. },
+                ..
+            },
+            Some(Effect::Move {
+                what: Sel::All(Filter::And(rest)),
+                to,
+            }),
+        ) = (&v[i], v.get(i + 1))
+        else {
+            return None;
+        };
+        let group = |f: &Filter| match f {
+            Filter::In(s) => match s.as_ref() {
+                Sel::Var(g) => Some(*g),
+                _ => None,
+            },
+            _ => None,
+        };
+        let cast_from = match filter {
+            Filter::And(parts) => parts.iter().find_map(group),
+            other => group(other),
+        }?;
+        let [a, Filter::InZone(ZoneKind::Exile)] = rest.as_slice() else {
+            return None;
+        };
+        if group(a) != Some(cast_from) {
+            return None;
+        }
+        let cast = self.effect(&v[i]);
+        let d = self.destination_phrase(to, true, true);
+        let d = if to.zone == ZoneKind::Hand {
+            d.replacen("to ", "into ", 1)
+        } else {
+            d
+        };
+        Some((2, format!("{cast}. put the rest {d}")))
     }
 }

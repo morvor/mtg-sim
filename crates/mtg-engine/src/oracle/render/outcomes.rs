@@ -198,6 +198,7 @@ impl Renderer<'_> {
             .or_else(|| self.block_pair_phase_part(v, i))
             .or_else(|| self.chosen_from_targets_part(v, i))
             .or_else(|| self.any_opponent_sacrifices_part(v, i))
+            .or_else(|| self.cast_then_rest_part(v, i))
             .or_else(|| self.look_then_exile_part(v, i))
             .or_else(|| self.named_group_part(v, i))
             .or_else(|| self.distribute_part(v, i))

@@ -22,6 +22,23 @@ fn same_duration(a: &Duration, b: &Duration) -> bool {
     format!("{a:?}") == format!("{b:?}")
 }
 
+/// "~ has base power and toughness 4/2 until end of turn and gains first strike until end
+/// of turn": the duration said for each part, as well as once at the end.
+fn duration_for_each_part(s: String) -> String {
+    let d = " until end of turn";
+    match (s.strip_suffix(d), s.find(" and gains ")) {
+        (Some(head), Some(k))
+            if head.contains(" has base power and toughness ")
+                && !s.contains('{')
+                && head[..k].matches(" and ").count() == 1 =>
+        {
+            let (a, b) = head.split_at(k);
+            format!("{{alt:{s}|{a}{d}{b}{d}}}")
+        }
+        _ => s,
+    }
+}
+
 /// Signed P/T modifier: "+2", "-1", "+X".
 pub(crate) fn signed(s: &str) -> String {
     if s.starts_with('-') || s.starts_with('+') {
@@ -1597,20 +1614,7 @@ impl Renderer<'_> {
                 duration,
             } => {
                 let s = self.modify_effect(what, mods, duration);
-                // "~ has base power and toughness 4/2 until end of turn and gains first
-                // strike until end of turn": the duration said for each part.
-                let d = " until end of turn";
-                match (s.strip_suffix(d), s.find(" and gains ")) {
-                    (Some(head), Some(k))
-                        if head.contains(" has base power and toughness ")
-                            && !s.contains('{')
-                            && head[..k].matches(" and ").count() == 1 =>
-                    {
-                        let (a, b) = head.split_at(k);
-                        format!("{{alt:{s}|{a}{d}{b}{d}}}")
-                    }
-                    _ => s,
-                }
+                duration_for_each_part(s)
             }
             Effect::AddRestriction {
                 restriction,
@@ -3765,7 +3769,8 @@ impl Renderer<'_> {
                     }
                 }
                 if j > i + 1 {
-                    parts.push(self.modify_effect(what, &all, duration));
+                    let s = self.modify_effect(what, &all, duration);
+                    parts.push(duration_for_each_part(s));
                     i = j;
                     continue;
                 }
@@ -4411,7 +4416,14 @@ impl Renderer<'_> {
         };
         // "Put a commander you own from the command zone into your hand".
         if let Some(head) = w.strip_suffix(" in the command zone") {
-            return format!("{verb} {head} from the command zone {d}");
+            let head = if head == "a commander you own" {
+                "{alt:a commander you own|your commander}"
+            } else {
+                head
+            };
+            return format!(
+                "{verb} {head} {{alt:from the command zone {d}|{d} from the command zone}}"
+            );
         }
         format!("{verb} {w} {d}")
     }
