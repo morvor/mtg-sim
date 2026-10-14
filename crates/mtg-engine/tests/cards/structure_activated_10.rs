@@ -896,8 +896,8 @@ fn birthing_boughs_makes_a_changeling_shapeshifter() {
     // A Goblin lord pumps it: it's a Goblin.
     t.battlefield(P0, "Goblin King");
     assert_eq!(t.pt(s[0]), (3, 3));
-    // Regression: a token with the changeling keyword (and no printed characteristic-
-    // defining ability) is a Rogue, Warrior or Wizard for the party (CR 700.8).
+    // Regression: a token created with changeling (its characteristic-defining ability
+    // comes with it) is a Rogue, Warrior or Wizard for the party (CR 700.8).
     let arch = t.battlefield(P0, "Archpriest of Iona");
     assert_eq!(t.pt(arch).0, 2, "the Cleric and the changeling token");
     // Changeling the creating effect gave the token is a characteristic-defining ability

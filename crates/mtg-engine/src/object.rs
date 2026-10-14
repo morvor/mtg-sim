@@ -71,14 +71,10 @@ impl Characteristics {
     pub fn is_legendary(&self) -> bool {
         self.has_supertype(Supertype::Legendary)
     }
-    /// Whether these characteristics include subtype `s`. An object that is every
-    /// creature type (changeling's characteristic-defining ability, or a changeling keyword
-    /// an effect gave it; see `kw/changeling.rs`, CR 702.73a) has every creature type.
     pub fn has_subtype(&self, s: &str) -> bool {
         self.subtypes.iter().any(|x| x.as_str() == s)
-            || ((self.is(CardType::Creature) || self.is(CardType::Kindred))
-                && (self.all_creature_types
-                    || crate::kw::changeling::every_creature_type_by_keyword(self))
+            || (self.all_creature_types
+                && (self.is(CardType::Creature) || self.is(CardType::Kindred))
                 && is_creature_type(s))
     }
     pub fn mana_value(&self) -> u32 {

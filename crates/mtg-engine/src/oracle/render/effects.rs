@@ -5134,14 +5134,14 @@ impl Renderer<'_> {
         // An Equipment token's abilities are about the creature it's attached to:
         // "equipped creature".
         let equipment = spec.subtypes.iter().any(|s| s.as_str() == "Equipment");
+        let changeling = spec.abilities.iter().any(|a| {
+            matches!(&a.kind, AbilityKind::Keyword(k) if k.kind == crate::keywords::KeywordKind::Changeling)
+        });
         for a in &spec.abilities {
-            // A changeling token's "is every creature type" CDA is the keyword's meaning
-            // (CR 702.73a), compiled next to it; it isn't printed separately.
-            if super::is_changeling_cda(a) {
-                continue;
-            }
             match &a.kind {
                 AbilityKind::Keyword(k) => kws.push(self.keyword_lower(k)),
+                // The characteristic-defining ability the changeling keyword implies.
+                _ if changeling && super::is_changeling_cda(a) => {}
                 _ => {
                     let saved = std::mem::replace(&mut self.grants_to_equipment, equipment);
                     others.push(self.nested_ability(a));
