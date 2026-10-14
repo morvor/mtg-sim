@@ -132,7 +132,7 @@ impl Renderer<'_> {
         let any_turn = terms
             .condition
             .as_ref()
-            .and_then(|c| self.during_any_turn(c));
+            .and_then(|c| self.attempt(|r| r.during_any_turn(c)));
         let saved = self.play_terms.replace(terms.clone());
         let saved_any = std::mem::replace(&mut self.any_turn_permission, any_turn.is_some());
         let mut s = self.effect(effect);

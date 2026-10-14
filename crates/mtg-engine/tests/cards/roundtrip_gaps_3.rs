@@ -154,3 +154,93 @@ fn behemoth_of_vault_0_destroys_the_dies_triggers_target() {
     assert!(t.in_graveyard(P1, "Grizzly Bears"), "{}", t.dump_log());
     assert_eq!(t.g.player(P0).counter("energy"), 1);
 }
+
+#[test]
+fn tempt_with_glory_counts_an_opponent_who_accepted_with_no_creatures() {
+    cr!("118.12", "101.4");
+    ruling!(
+        "Tempt with Glory",
+        "the effect happens again for you a number of times equal to the number of opponents who accepted"
+    );
+    // "Put a +1/+1 counter on each creature you control. Each opponent may put a +1/+1
+    // counter on each creature they control. For each opponent who does, put a +1/+1
+    // counter on each creature you control." Putting a counter on each of no creatures is
+    // still doing it.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Plains", 6);
+    let c = t.hand(P0, "Tempt with Glory");
+    t.answer_yes(P1, true);
+    t.cast(P0, c).go();
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 2, "{}", t.dump_log());
+}
+
+#[test]
+fn fyndhorn_druid_remembers_being_blocked_after_it_dies() {
+    cr!("603.10a", "603.4");
+    // "When this creature dies, if it was blocked this turn, you gain 4 life."
+    let mut t = TestGame::new(2);
+    let druid = t.battlefield(P0, "Fyndhorn Druid");
+    let wall = t.battlefield(P1, "Hill Giant");
+    t.set_step(P0, Step::PrecombatMain);
+    let life = t.life(P0);
+    t.attack(&[(druid, Entity::Player(P1))], &[(wall, druid)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Fyndhorn Druid"), "{}", t.dump_log());
+    assert_eq!(t.life(P0), life + 4, "{}", t.dump_log());
+}
+
+#[test]
+fn wave_of_rats_returns_after_dealing_combat_damage_to_a_player() {
+    cr!("603.10a", "603.4");
+    // "When this creature dies, if it dealt combat damage to a player this turn, return it
+    // to the battlefield under its owner's control."
+    let mut t = TestGame::new(2);
+    let rats = t.battlefield(P0, "Wave of Rats");
+    t.set_step(P0, Step::PrecombatMain);
+    t.attack(&[(rats, Entity::Player(P1))], &[]);
+    t.advance_to(P0, Step::PostcombatMain);
+    let now = t.g.current(rats);
+    t.g.destroy(now, None);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Wave of Rats").len(), 1, "{}", t.dump_log());
+}
+
+#[test]
+fn samut_draws_for_a_creature_that_entered_this_turn() {
+    cr!("603.4");
+    // "Whenever a creature you control deals combat damage to a player, if that creature
+    // entered this turn, draw a card."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Samut, Vizier of Naktamun");
+    let old = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::PrecombatMain);
+    let new = t.enter(P0, "Raging Goblin");
+    t.settle();
+    let hand = t.hand_size(P0);
+    t.attack(&[(old, Entity::Player(P1)), (new, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1, "{}", t.dump_log());
+}
+
+#[test]
+fn barrin_draws_after_a_permanent_was_returned_to_your_hand() {
+    cr!("603.4", "400.7");
+    // "At the beginning of your end step, if a permanent was put into your hand from the
+    // battlefield this turn, draw a card."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Barrin, Tolarian Archmage");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::PostcombatMain);
+    t.lands(P0, "Island", 1);
+    let u = t.hand(P0, "Unsummon");
+    t.cast(P0, u).target(Entity::Object(bears)).go();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    let hand = t.hand_size(P0);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1, "{}", t.dump_log());
+}

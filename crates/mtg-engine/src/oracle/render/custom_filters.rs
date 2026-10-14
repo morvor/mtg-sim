@@ -238,7 +238,7 @@ impl Renderer<'_> {
         f: &Filter,
         negated: bool,
     ) -> Option<String> {
-        if let Some(c) = self.cast_history_clause(s, f, negated) {
+        if let Some(c) = self.attempt(|r| r.cast_history_clause(s, f, negated)) {
             return Some(c);
         }
         let atoms: Vec<&Filter> = match f {

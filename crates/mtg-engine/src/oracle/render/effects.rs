@@ -2416,6 +2416,10 @@ impl Renderer<'_> {
             } if format!("{s:?}") == format!("{what:?}") => {
                 let w = self.sel(what, Case::Obj);
                 let it = if is_plural_sel(what) { "them" } else { "it" };
+                // "Its owner shuffles it into their library" (the object just named).
+                if w == "~it" || w == "it" {
+                    return format!("{{alt:the owner of {w}|its owner}} shuffles {it} into their library");
+                }
                 format!("the owner of {w} shuffles {it} into their library")
             }
             // "Each player shuffles their hand and graveyard into their library": each
@@ -2546,7 +2550,7 @@ impl Renderer<'_> {
             }
             Effect::ExtraCombat { after_this } => {
                 if *after_this {
-                    "after this phase, there is an additional combat phase".into()
+                    "{alt:after this phase, there is an additional combat phase|there is an additional combat phase after this phase}".into()
                 } else {
                     "there is an additional combat phase".into()
                 }
@@ -2581,6 +2585,10 @@ impl Renderer<'_> {
                         let p = self.player(p, Case::Subj);
                         format!("{p} get {list} after {after}{t}")
                     }
+                    // "There is an additional combat phase after this phase" says the same.
+                    None if t.is_empty() => format!(
+                        "{{alt:after {after}, there is {list}|there is {list} after {after}}}"
+                    ),
                     None => format!("after {after}, there is {list}{t}"),
                 }
             }
@@ -3317,7 +3325,7 @@ impl Renderer<'_> {
             return "each token that would be created under an opponent's control this turn is created under your control instead".into();
         }
         if *uses == Some(1) {
-            if let Some(s) = self.next_time_damage(def, duration) {
+            if let Some(s) = self.attempt(|r| r.next_time_damage(def, duration)) {
                 return s;
             }
         }
@@ -4410,7 +4418,7 @@ impl Renderer<'_> {
         {
             let t = self.effect(then);
             if t.contains("after this phase") {
-                return t.replacen("after this phase", "after this main phase", 1);
+                return t.replace("after this phase", "after this main phase");
             }
         }
         match cond {
@@ -4540,8 +4548,8 @@ impl Renderer<'_> {
                 let Condition::Compare(a, cmp, b) = inner.as_ref() else {
                     return String::new();
                 };
-                let neg = self.events_compare(a, *cmp, b, true);
-                let pos = self.events_compare(a, *cmp, b, false);
+                let neg = self.attempt(|r| r.events_compare(a, *cmp, b, true));
+                let pos = self.attempt(|r| r.events_compare(a, *cmp, b, false));
                 let t = self.effect(then);
                 match (neg, pos) {
                     (Some(neg), Some(pos)) => format!("{{alt:{t} unless {pos}|if {neg}, {t}}}"),
@@ -4699,6 +4707,24 @@ impl Renderer<'_> {
                 return c;
             }
         }
+        // "You may exile target creature if it attacked or blocked this turn": the
+        // option, with a condition checked as it's taken.
+        if let Effect::If {
+            cond,
+            then,
+            otherwise,
+        } = effect
+        {
+            if matches!(otherwise.as_ref(), Effect::Noop)
+                && !matches!(cond, Condition::PrevHappened)
+                && !matches!(then.as_ref(), Effect::Reflexive { .. })
+            {
+                let p = self.player(who, Case::Subj);
+                let t = self.effect(then);
+                let c = self.condition(cond);
+                return format!("{p} may {t} if {c}");
+            }
+        }
         if let Some((w, vp, _)) = self.actor_vp(effect) {
             if same_player(&w, who) {
                 let p = self.player(who, Case::Subj);
@@ -4837,6 +4863,13 @@ impl Renderer<'_> {
                 format!("{{alt:{w}|{head} from among cards exiled with ~}}")
             }
             _ => w,
+        };
+        // An ability that functions in a graveyard casts the card from there ("you may cast
+        // ~ from your graveyard", CR 113.6m).
+        let w = if matches!(what, Sel::This) && matches!(self.zone, FunctionZone::Graveyard) {
+            format!("{w} {{opt:from your graveyard}}")
+        } else {
+            w
         };
         let f = if free {
             " without paying its mana cost"

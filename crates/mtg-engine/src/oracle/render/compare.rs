@@ -1577,7 +1577,7 @@ fn sentence_rewrites(s: &str) -> String {
     static TRAILING_IF: OnceLock<Option<Regex>> = OnceLock::new();
     let trailing = TRAILING_IF.get_or_init(|| {
         Regex::new(
-            r"(^|[.:—•] |\n)((?:[^.:—•\n]|\{alt:|\{opt:)+?) if ((?:[^.,:\n]|\{alt:|\{opt:)+)\.",
+            r"(^|[.:—•] |\n)((?:[^.:—•\n{}]|\{(?:[^{}]|\{[^{}]*\})*\})+?) if ((?:[^.,:\n{}]|\{(?:[^{}]|\{[^{}]*\})*\})+)\.",
         )
         .ok()
     });

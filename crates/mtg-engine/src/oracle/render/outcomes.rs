@@ -195,7 +195,7 @@ impl Renderer<'_> {
         known: &mut Vec<(Var, OutcomeVerb)>,
     ) -> Option<(usize, String)> {
         self.tail_seq_part(v, i)
-            .or_else(|| self.remembered_group_part(v, i))
+            .or_else(|| self.attempt(|r| r.remembered_group_part(v, i)))
             .or_else(|| self.block_pair_phase_part(v, i))
             .or_else(|| self.chosen_from_targets_part(v, i))
             .or_else(|| self.any_opponent_sacrifices_part(v, i))
@@ -206,7 +206,7 @@ impl Renderer<'_> {
             .or_else(|| self.each_chooses_part(v, i))
             .or_else(|| self.random_pick_part(v, i))
             .or_else(|| self.reveal_part(v, i))
-            .or_else(|| self.opt_in_part(v, i))
+            .or_else(|| self.attempt(|r| r.opt_in_part(v, i)))
             .or_else(|| self.each_player_part(v, i))
             .or_else(|| self.outcome_part(v, i, known))
     }

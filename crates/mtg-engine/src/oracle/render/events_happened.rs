@@ -1220,6 +1220,27 @@ impl Renderer<'_> {
         Some(format!("{s} {when}"))
     }
 
+    /// "if a black card was milled this way": one of the objects an earlier instruction
+    /// acted on has the quality.
+    pub(crate) fn acted_on_this_way(&mut self, s: &Sel) -> Option<String> {
+        let Sel::All(Filter::And(v)) = s else {
+            return None;
+        };
+        let group = v.iter().find_map(|x| match x {
+            Filter::In(g) => Some(g.as_ref()),
+            _ => None,
+        })?;
+        let (verb, _, _) = self.this_way_of(group)?;
+        let rest = Filter::and(
+            v.iter()
+                .filter(|x| !matches!(x, Filter::In(_)))
+                .cloned()
+                .collect(),
+        );
+        let a = self.noun_det(&rest, Det::A);
+        Some(format!("{a} was {verb} this way"))
+    }
+
     /// [`Self::happened`] that leaves no trace (target mentions, gaps) when it can't say
     /// the clause.
     fn happened_peek(

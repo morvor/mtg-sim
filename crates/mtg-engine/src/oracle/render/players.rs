@@ -937,7 +937,13 @@ impl Renderer<'_> {
                     Value::Const(_) | Value::EventAmount | Value::Prev => self.top_cards(n, &p),
                     other => {
                         let v = self.value(other);
-                        format!("the top {v} cards of {p} library")
+                        // "a number of cards from the top of your library equal to the
+                        // number of ...": the same cards, the number said after them.
+                        if v.contains(' ') {
+                            format!("a number of cards from the top of {p} library equal to {v}")
+                        } else {
+                            format!("the top {v} cards of {p} library")
+                        }
                     }
                 };
                 decline(s, case)
