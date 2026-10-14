@@ -687,8 +687,20 @@ fn trigger_of(text: &str) -> Option<TriggerCond> {
     }
     let parse =
         |t: &str| crate::oracle::triggers::parse_trigger_condition(&format!("whenever {t}"));
+    // "~ is dealt excess damage": the trigger grammar reads it about "a permanent"; the
+    // permanent is then ~.
+    let about_source = || {
+        let r = text.strip_prefix("~ ")?;
+        let (c, x, y) = parse(&format!("a permanent {r}"))?;
+        let json = serde_json::to_string(&c).ok()?;
+        if json.matches("\"Permanent\"").count() != 1 {
+            return None;
+        }
+        let c = serde_json::from_str(&json.replace("\"Permanent\"", "\"Source\"")).ok()?;
+        Some((c, x, y))
+    };
     // A card put into a hand from the battlefield is returned there.
-    let (cond, _, _) = parse(text).or_else(|| {
+    let (cond, _, _) = parse(text).or_else(about_source).or_else(|| {
         let i = text.find(" is put into ")?;
         let r = &text[i + " is put into ".len()..];
         if !r.contains("hand from ") {

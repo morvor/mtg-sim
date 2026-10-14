@@ -7,9 +7,9 @@
 //! it's the first combat phase of the turn", "if it's the second creature spell you cast
 //! this turn", "if this ability has been activated four or more times this turn".
 
+use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
-use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::*;
 
 fn assert_supported(name: &str) {
@@ -184,7 +184,11 @@ fn sarevok_checks_that_no_permanents_left_the_battlefield() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Sarevok, Deathbringer");
     to_end_step(&mut t, P0);
-    assert_eq!(t.life(P0), 17, "the active player loses life equal to its power");
+    assert_eq!(
+        t.life(P0),
+        17,
+        "the active player loses life equal to its power"
+    );
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.g.destroy(bears, None);
     t.g.flush_events();
@@ -406,7 +410,10 @@ fn erg_raiders_and_mad_dog_creatures_that_came_under_your_control() {
 #[test]
 fn rushing_tide_zubera_counts_the_damage_dealt_to_it() {
     cr!("603.4", "603.10a", "120.3");
-    ruling!("Rushing-Tide Zubera", "counts all damage dealt to it this turn");
+    ruling!(
+        "Rushing-Tide Zubera",
+        "counts all damage dealt to it this turn"
+    );
     assert_supported("Rushing-Tide Zubera");
     let mut t = TestGame::new(2);
     let z = t.battlefield(P0, "Rushing-Tide Zubera");
@@ -439,7 +446,10 @@ fn gnoll_hunter_pack_tactics_totals_the_power_of_attackers_this_combat() {
     let ogre = t.battlefield(P0, "Hill Giant");
     t.set_step(P0, Step::BeginningOfCombat);
     // 2 + 3 power: not enough.
-    t.attack(&[(gnoll, Entity::Player(P1)), (ogre, Entity::Player(P1))], &[]);
+    t.attack(
+        &[(gnoll, Entity::Player(P1)), (ogre, Entity::Player(P1))],
+        &[],
+    );
     assert_eq!(t.counters(gnoll, "+1/+1"), 0);
     let mut t = TestGame::new(2);
     let gnoll = t.battlefield(P0, "Gnoll Hunter");
@@ -483,11 +493,18 @@ fn marchesa_draws_if_you_werent_dealt_combat_damage_since_your_last_turn() {
     cr!("603.4", "510.2");
     let name = "Invasion of Fiora // Marchesa, Resolute Monarch";
     let c = card(name);
-    assert!(!c.faces[1].unsupported.iter().any(|u| u.contains("since your last turn")));
+    assert!(!c.faces[1]
+        .unsupported
+        .iter()
+        .any(|u| u.contains("since your last turn")));
     // The condition is about the opponents' turns since yours.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
-    t.custom(P0, CardDef::custom(c.faces[1].chars.clone()), Zone::Battlefield);
+    t.custom(
+        P0,
+        CardDef::custom(c.faces[1].chars.clone()),
+        Zone::Battlefield,
+    );
     for p in [P0, P1] {
         for _ in 0..4 {
             t.library_top(p, "Island");
@@ -547,7 +564,10 @@ fn anti_venom_returns_a_creature_only_if_he_was_cast() {
     t.answer_targets(P0, &[Entity::Object(dead)]);
     t.enter(P0, "Anti-Venom, Horrifying Healer");
     t.resolve_all();
-    assert!(t.in_graveyard(P0, "Grizzly Bears"), "put onto the battlefield, not cast");
+    assert!(
+        t.in_graveyard(P0, "Grizzly Bears"),
+        "put onto the battlefield, not cast"
+    );
     let mut t = TestGame::new(2);
     let dead = t.graveyard(P0, "Grizzly Bears");
     t.lands(P0, "Plains", 5);
@@ -636,7 +656,10 @@ fn kotis_counts_creatures_that_entered_from_a_graveyard() {
 #[test]
 fn vexing_bauble_counters_spells_cast_without_mana() {
     cr!("601.2h", "603.4");
-    ruling!("Nix", "it checks how much mana was actually spent to cast it");
+    ruling!(
+        "Nix",
+        "it checks how much mana was actually spent to cast it"
+    );
     assert_supported("Vexing Bauble");
     assert_supported("Nix");
     let mut t = TestGame::new(2);
@@ -860,7 +883,11 @@ fn briarbridge_patrol_sees_clues_sacrificed_for_any_reason() {
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[Entity::Object(bears)]);
     to_end_step(&mut t, P0);
-    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 0, "two Clues aren't three");
+    assert_eq!(
+        t.named_on_battlefield("Grizzly Bears").len(),
+        0,
+        "two Clues aren't three"
+    );
     t.g.sacrifice(clues[2], P0);
     t.g.flush_events();
     t.clear_answers();
@@ -869,7 +896,12 @@ fn briarbridge_patrol_sees_clues_sacrificed_for_any_reason() {
     t.set_step(P0, Step::PostcombatMain);
     t.advance_to(P0, Step::End);
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{}", t.dump_log());
+    assert_eq!(
+        t.named_on_battlefield("Grizzly Bears").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
 }
 
 #[test]
@@ -908,7 +940,10 @@ fn firespout_damages_by_the_colors_spent() {
     let fs = t.hand(P0, "Firespout");
     t.cast(P0, fs).go();
     t.resolve_all();
-    assert!(!t.on_battlefield(bears), "{{R}} spent: creatures without flying");
+    assert!(
+        !t.on_battlefield(bears),
+        "{{R}} spent: creatures without flying"
+    );
     assert!(t.on_battlefield(bird));
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -918,7 +953,10 @@ fn firespout_damages_by_the_colors_spent() {
     t.cast(P0, fs).go();
     t.resolve_all();
     assert!(t.on_battlefield(bears));
-    assert!(!t.on_battlefield(bird), "{{G}} spent: creatures with flying");
+    assert!(
+        !t.on_battlefield(bird),
+        "{{G}} spent: creatures with flying"
+    );
 }
 
 #[test]
@@ -1025,7 +1063,11 @@ fn frodo_wins_if_the_ring_has_tempted_you_four_or_more_times_this_game() {
         t.resolve_all();
         assert_eq!(t.has_lost(P1), loses, "tempted {level} times");
         if !loses {
-            assert_eq!(t.g.players[0].ring_level, level + 1, "otherwise, the Ring tempts you");
+            assert_eq!(
+                t.g.players[0].ring_level,
+                level + 1,
+                "otherwise, the Ring tempts you"
+            );
         }
     }
 }
@@ -1034,10 +1076,18 @@ fn frodo_wins_if_the_ring_has_tempted_you_four_or_more_times_this_game() {
 fn vessel_of_the_all_consuming_counts_the_damage_it_dealt_to_that_player() {
     cr!("603.4", "104.3a");
     let c = card("Hidetsugu Consumes All // Vessel of the All-Consuming");
-    assert!(c.unsupported_text().is_empty(), "{:?}", c.unsupported_text());
+    assert!(
+        c.unsupported_text().is_empty(),
+        "{:?}",
+        c.unsupported_text()
+    );
     // Three players, so the game goes on after one loses.
     let mut t = TestGame::new(3);
-    let vessel = t.custom(P0, CardDef::custom(c.faces[1].chars.clone()), Zone::Battlefield);
+    let vessel = t.custom(
+        P0,
+        CardDef::custom(c.faces[1].chars.clone()),
+        Zone::Battlefield,
+    );
     // 9 damage to P1 and 5 to P2: neither has been dealt 10 by it.
     t.g.deal_damage(vessel, Entity::Player(P1), 9, false);
     t.g.deal_damage(vessel, Entity::Player(P2), 5, false);
@@ -1061,7 +1111,11 @@ fn vessel_of_the_all_consuming_counts_the_damage_it_dealt_to_that_player() {
 fn some_one_source_must_have_dealt_the_damage() {
     cr!("603.4", "120.3");
     let c = card("Dragon Cultist");
-    assert!(c.unsupported_text().is_empty(), "{:?}", c.unsupported_text());
+    assert!(
+        c.unsupported_text().is_empty(),
+        "{:?}",
+        c.unsupported_text()
+    );
     // The ability Dragon Cultist grants, on a creature of its own.
     let mut def = (*card("Grizzly Bears")).clone();
     let granted = mtg_engine::oracle::compile(
@@ -1097,4 +1151,26 @@ fn some_one_source_must_have_dealt_the_damage() {
     t.g.flush_events();
     to_end_step(&mut t, P0);
     assert_eq!(count_named(&t, P0, "Dragon Token"), 1);
+}
+
+#[test]
+fn maarika_needs_excess_damage_dealt_to_that_creature_this_turn() {
+    cr!("120.10", "603.4");
+    ruling!(
+        "Overclocked Electromancer",
+        "Excess damage has been dealt to a creature if the damage dealt to it is greater than lethal damage."
+    );
+    assert_supported("Maarika, Brutal Gladiator");
+    for (blocker, sacrifices) in [("Llanowar Elves", true), ("Ancient Brontodon", false)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let m = t.battlefield(P0, "Maarika, Brutal Gladiator");
+        assert!(t.pt(m).0 <= 9 && t.pt(m).0 > 1);
+        let b = t.battlefield(P1, blocker);
+        t.battlefield(P1, "Mind Stone");
+        t.attack(&[(m, Entity::Player(P1))], &[(b, m)]);
+        t.resolve_all();
+        let left = count_named(&t, P1, "Mind Stone");
+        assert_eq!(left == 0, sacrifices, "{blocker}: {}", t.dump_log());
+    }
 }
