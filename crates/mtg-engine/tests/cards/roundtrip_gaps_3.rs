@@ -70,3 +70,40 @@ fn regna_ignores_an_opponents_life_gain() {
     t.resolve_all();
     assert_eq!(warriors(&t), 0, "{}", t.dump_log());
 }
+
+/// `p` casts Reanimate on `card` (in some graveyard).
+fn reanimate(t: &mut TestGame, p: PlayerId, card: ObjectId) {
+    t.lands(p, "Swamp", 1);
+    let r = t.hand(p, "Reanimate");
+    t.cast(p, r).target(Entity::Object(card)).go();
+    t.resolve_all();
+}
+
+#[test]
+fn prized_amalgam_ignores_a_creature_from_another_players_graveyard() {
+    cr!("400.3", "603.4");
+    // "Whenever a creature enters, if it entered from your graveyard or you cast it from
+    // your graveyard, return this card from your graveyard to the battlefield tapped at
+    // the beginning of the next end step." A card in an opponent's graveyard isn't in
+    // yours.
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Prized Amalgam");
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    reanimate(&mut t, P1, bears);
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    t.advance_to(P0, Step::Upkeep);
+    assert!(t.in_graveyard(P0, "Prized Amalgam"), "{}", t.dump_log());
+}
+
+#[test]
+fn prized_amalgam_returns_for_a_creature_from_your_graveyard() {
+    cr!("603.4");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Prized Amalgam");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    reanimate(&mut t, P1, bears);
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(t.named_on_battlefield("Prized Amalgam").len(), 1, "{}", t.dump_log());
+}

@@ -145,6 +145,7 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             "with mana cost {}",
             &n[crate::kw::spell_cost_grammar::MANA_COST_IS.len()..]
         ))),
+        crate::kw::crew::CREWED_BY_IT_THIS_TURN => rel("crewed by ~ this turn"),
         n if n.starts_with("came from:") => match &n["came from:".len()..] {
             "Exile" => rel("from exile"),
             "Graveyard" => rel("from your graveyard"),
@@ -237,6 +238,9 @@ impl Renderer<'_> {
         f: &Filter,
         negated: bool,
     ) -> Option<String> {
+        if let Some(c) = self.cast_history_clause(s, f, negated) {
+            return Some(c);
+        }
         let atoms: Vec<&Filter> = match f {
             Filter::And(v) => v.iter().collect(),
             other => vec![other],

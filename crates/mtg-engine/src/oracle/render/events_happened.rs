@@ -55,6 +55,9 @@ struct Def {
     neg_aux: &'static str,
     /// "attack", "dealt damage".
     neg_rest: String,
+    /// The predicate says how many (or how much): "lost 4 or more life", "cast three or
+    /// more spells".
+    counted: bool,
 }
 
 impl Def {
@@ -69,6 +72,20 @@ impl Def {
             past: past.into(),
             neg_aux,
             neg_rest: neg_rest.into(),
+            counted: false,
+        }
+    }
+
+    fn counted(mut self) -> Def {
+        self.counted = true;
+        self
+    }
+
+    fn counted_if(self, yes: bool) -> Def {
+        if yes {
+            self.counted()
+        } else {
+            self
         }
     }
 
@@ -76,6 +93,9 @@ impl Def {
     fn say(&self, q: Quant) -> Option<String> {
         match q {
             Quant::Some => Some(format!("{} {}", perfect(&self.subj), self.past)),
+            Quant::AtLeast(_) if self.counted => {
+                Some(format!("{} {}", perfect(&self.subj), self.past))
+            }
             Quant::No => Some(format!("{} {} {}", self.subj, self.neg_aux, self.neg_rest)),
             _ => None,
         }
@@ -253,6 +273,11 @@ impl Renderer<'_> {
             let subj = r.past_player(who, iter);
             Said::Def(Def::new(subj, past, "didn't", neg_rest))
         };
+        // The same, with the amount in the predicate ("lost 4 or more life").
+        let counted_event = |r: &mut Self, who: PlayerRel, past: &str, neg_rest: &str| -> Said {
+            let subj = r.past_player(who, iter);
+            Said::Def(Def::new(subj, past, "didn't", neg_rest).counted())
+        };
         Some(match c {
             TriggerCond::Attacks(f) if !amount => {
                 if let Some(s) = self.definite(f) {
@@ -400,11 +425,11 @@ impl Renderer<'_> {
             }
             TriggerCond::GainsLife { who } => {
                 let a = Self::amount_of(q, "life")?;
-                player_event(self, *who, &format!("gained {a}"), &format!("gain {a}"))
+                counted_event(self, *who, &format!("gained {a}"), &format!("gain {a}"))
             }
             TriggerCond::LosesLife { who } => {
                 let a = Self::amount_of(q, "life")?;
-                player_event(self, *who, &format!("lost {a}"), &format!("lose {a}"))
+                counted_event(self, *who, &format!("lost {a}"), &format!("lose {a}"))
             }
             // "you've cast a spell from a graveyard", "an opponent cast three or more
             // spells".
@@ -438,12 +463,15 @@ impl Renderer<'_> {
                 let subj = self.past_player(*who, iter);
                 match q {
                     Quant::No => Said::Clause(format!("{subj} didn't cast a spell{from}")),
-                    _ => Said::Def(Def::new(
-                        subj,
-                        format!("cast {n}{from}"),
-                        "didn't",
-                        format!("cast {n}{from}"),
-                    )),
+                    _ => Said::Def(
+                        Def::new(
+                            subj,
+                            format!("cast {n}{from}"),
+                            "didn't",
+                            format!("cast {n}{from}"),
+                        )
+                        .counted(),
+                    ),
                 }
             }
             TriggerCond::LandPlayed {
@@ -525,12 +553,10 @@ impl Renderer<'_> {
                     if amount { q } else { Quant::Some },
                     &format!("{combat}damage"),
                 )?;
-                Said::Def(Def::new(
-                    s,
-                    format!("was dealt {d}"),
-                    "wasn't",
-                    format!("dealt {d}"),
-                ))
+                Said::Def(
+                    Def::new(s, format!("was dealt {d}"), "wasn't", format!("dealt {d}"))
+                        .counted_if(amount),
+                )
             }
             TriggerCond::DealtExcessDamage {
                 filter,
@@ -593,12 +619,15 @@ impl Renderer<'_> {
                         }
                         DamageRecipient::PlayerOrPlaneswalker(_) => return None,
                     };
-                    return Some(Said::Def(Def::new(
-                        s,
-                        format!("dealt {d}{to}"),
-                        "didn't",
-                        format!("deal {d}{to}"),
-                    )));
+                    return Some(Said::Def(
+                        Def::new(
+                            s,
+                            format!("dealt {d}{to}"),
+                            "didn't",
+                            format!("deal {d}{to}"),
+                        )
+                        .counted_if(amount),
+                    ));
                 }
                 match to {
                     DamageRecipient::Player(r) => {
@@ -1032,6 +1061,49 @@ impl Renderer<'_> {
                     }
                     _ => None,
                 }
+            }
+            // "if a source you controlled dealt 5 or more damage this turn": the most damage
+            // any one of them dealt.
+            Value::Extreme(m, s, true) if !negated => {
+                let (Value::EventsThisTurn(inner, Tally::Amount), Sel::ThisTurn(outer)) =
+                    (m.as_ref(), s.as_ref())
+                else {
+                    return None;
+                };
+                let (
+                    TriggerCond::DealsDamage {
+                        source: Filter::In(v),
+                        to: DamageRecipient::Any,
+                        combat_only: c1,
+                    },
+                    TriggerCond::DealsDamage {
+                        source,
+                        to: DamageRecipient::Any,
+                        combat_only: c2,
+                    },
+                ) = (inner.as_ref(), outer.as_ref())
+                else {
+                    return None;
+                };
+                if !matches!(v.as_ref(), Sel::Var(x) if *x == vars::TESTED) || c1 != c2 {
+                    return None;
+                }
+                let (r, rest) = controller_of(source);
+                let noun = if matches!(rest, Filter::Any) {
+                    "a source".to_string()
+                } else {
+                    self.noun_det(&rest, Det::A)
+                };
+                let whose = match r {
+                    Some(r) => {
+                        let w = self.rel_subject(r);
+                        format!(" {w} controlled")
+                    }
+                    None => String::new(),
+                };
+                let combat = if *c1 { "combat " } else { "" };
+                let d = Self::amount_of(q, &format!("{combat}damage"))?;
+                Some(format!("{noun}{whose} dealt {d} this turn"))
             }
             // "if you attacked with three or more Merfolk this turn", "if you've been
             // dealt damage by two or more creatures this turn": the objects the events

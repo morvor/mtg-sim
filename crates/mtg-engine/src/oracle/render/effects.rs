@@ -4537,16 +4537,43 @@ impl Renderer<'_> {
                 }
             }
             _ => {
+                let form = |c: String, t: String| -> String {
+                    // "Discard a card unless you attacked this turn."
+                    if let Some(inner) = c.strip_prefix("it's not true that ") {
+                        return format!("{t} unless {inner}");
+                    }
+                    if trigger_body {
+                        return format!("{t} if {c}");
+                    }
+                    format!("if {c}, {t}")
+                };
+                // A condition about a target the instruction acts on: "Counter target
+                // spell if it was kicked" names the target in the instruction, "If target
+                // spell was kicked, counter it" in the condition.
+                let mut probe = self.clone();
+                let _ = probe.condition(cond);
+                if probe.introduced != self.introduced {
+                    let (a, b) = self.two_ways(
+                        |r| {
+                            let c = r.condition(cond);
+                            let t = r.effect(then);
+                            form(c, t)
+                        },
+                        |r| {
+                            let t = r.effect(then);
+                            let c = r.condition(cond);
+                            form(c, t)
+                        },
+                    );
+                    return if a == b {
+                        a
+                    } else {
+                        format!("{{alt:{a}|{b}}}")
+                    };
+                }
                 let c = self.condition(cond);
                 let t = self.effect(then);
-                // "Discard a card unless you attacked this turn."
-                if let Some(inner) = c.strip_prefix("it's not true that ") {
-                    return format!("{t} unless {inner}");
-                }
-                if trigger_body {
-                    return format!("{t} if {c}");
-                }
-                format!("if {c}, {t}")
+                form(c, t)
             }
         }
     }

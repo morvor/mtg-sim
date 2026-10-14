@@ -13,6 +13,7 @@
 mod ability_cost_terms;
 mod activation_triggers;
 mod block_pairs;
+mod cast_history_terms;
 mod chosen_from_targets;
 pub mod compare;
 mod condition_terms;

@@ -1261,17 +1261,35 @@ fn was_cast(w: &Whose) -> Condition {
     status(w, Condition::WasCast, Filter::Custom(ch::WAS_CAST.into()))
 }
 
-fn cast_from(w: &Whose, z: ZoneKind) -> Condition {
+/// Whether a zone phrase names your zone ("your graveyard"): a card in it is yours (CR
+/// 400.3), unlike one in "a graveyard".
+fn yours(z: &str) -> bool {
+    z.starts_with("your ")
+}
+
+/// The quality, and that the object is yours if the zone was (`yours`).
+fn owned(f: Filter, yours: bool) -> Filter {
+    if yours {
+        Filter::and(vec![f, Filter::OwnedBy(PlayerRel::You)])
+    } else {
+        f
+    }
+}
+
+fn cast_from(w: &Whose, z: ZoneKind, yours: bool) -> Condition {
     status(
         w,
         Condition::CastFrom(z),
-        Filter::Custom(format!("{}{z:?}", ch::CAST_FROM).into()),
+        owned(Filter::Custom(format!("{}{z:?}", ch::CAST_FROM).into()), yours),
     )
 }
 
 /// "[S] entered from [zone]": the permanent came from that zone (CR 400.7).
-fn entered_from(w: &Whose, z: ZoneKind) -> Condition {
-    let f = Filter::Custom(crate::kw::played_from_zone::came_from(z).into());
+fn entered_from(w: &Whose, z: ZoneKind, yours: bool) -> Condition {
+    let f = owned(
+        Filter::Custom(crate::kw::played_from_zone::came_from(z).into()),
+        yours,
+    );
     match w {
         Whose::Own => Condition::SelMatches(Sel::This, f),
         Whose::TriggerSpell => Condition::Never,
@@ -1317,9 +1335,12 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
             let cond = match rest.trim() {
                 "" => was_cast(&w),
                 "from anywhere other than your hand" => {
-                    Condition::And(vec![was_cast(&w), not(cast_from(&w, ZoneKind::Hand))])
+                    Condition::And(vec![was_cast(&w), not(cast_from(&w, ZoneKind::Hand, false))])
                 }
-                z => cast_from(&w, zone_phrase(z.strip_prefix("from ")?)?),
+                z => {
+                    let z = z.strip_prefix("from ")?;
+                    cast_from(&w, zone_phrase(z)?, yours(z))
+                }
             };
             return Some(if neg { not(cond) } else { cond });
         }
@@ -1346,7 +1367,10 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
         if let Some(x) = rest.strip_prefix(p) {
             let cond = match x.trim() {
                 "" => was_cast(&w),
-                z => cast_from(&w, zone_phrase(z.strip_prefix("from ")?)?),
+                z => {
+                    let z = z.strip_prefix("from ")?;
+                    cast_from(&w, zone_phrase(z)?, yours(z))
+                }
             };
             return Some(if neg { not(cond) } else { cond });
         }
@@ -1368,7 +1392,7 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
         ));
     }
     if let Some(z) = rest.strip_prefix("entered from ") {
-        return Some(entered_from(&w, zone_phrase(z)?));
+        return Some(entered_from(&w, zone_phrase(z)?, yours(z)));
     }
     None
 }

@@ -343,7 +343,10 @@ impl Renderer<'_> {
             "bushido:points of bushido it has" => "the number of points of bushido it has".into(),
             other => match self.custom_value_more(other) {
                 Some(s) => s,
-                None => match self.custom_value_extra(other) {
+                None => match self
+                    .custom_value_extra(other)
+                    .or_else(|| self.cast_history_value(other))
+                {
                     Some(s) => s,
                     None => self.gap(format!("Value::Custom({other})")),
                 },
@@ -458,6 +461,10 @@ impl Renderer<'_> {
                 }
             }
             crate::kw::storied::HAS_ENDURING_STORY => "you have an enduring story".into(),
+            // CR 505.1a: a turn's combat phases are numbered in order.
+            crate::kw::activated_ability_kind::FIRST_COMBAT_PHASE => {
+                "it's the first combat phase of the turn".into()
+            }
             "foretell:this spell was foretold" => "this spell was foretold".into(),
             "a_player_cast_two_spells_last_turn" => {
                 "a player cast two or more spells last turn".into()
