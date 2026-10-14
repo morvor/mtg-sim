@@ -10,6 +10,7 @@ use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
+use mtg_engine::types::counters;
 
 fn assert_supported(names: &[&str]) {
     for n in names {
@@ -295,7 +296,7 @@ fn geode_golem_casts_your_commander_paying_only_the_tax() {
 
 #[test]
 fn banes_contingency_draws_when_the_spell_targets_your_commander() {
-    cr!("115.10", "701.6a");
+    cr!("608.2c", "701.6a");
     assert_supported(&["Bane's Contingency"]);
     let mut t = commander_game();
     let cmdr = commander_on_battlefield(&mut t, P0, "Hill Giant");
@@ -353,4 +354,84 @@ fn tevesh_szat_draws_another_card_for_a_sacrificed_commander() {
     t.activate(P0, tevesh, 1, &[]).unwrap();
     t.resolve_all();
     assert_eq!(t.hand_size(P0), before + 2);
+}
+
+#[test]
+fn drillworks_mole_counters_up_to_one_commander_creature() {
+    cr!("903.3");
+    assert_supported(&["Drillworks Mole"]);
+    let mut t = commander_game();
+    let mole = t.battlefield(P0, "Drillworks Mole");
+    let cmdr = commander_on_battlefield(&mut t, P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Wastes", 4);
+    // A noncommander creature isn't a legal target: no target is chosen ("up to one").
+    t.activate(P0, mole, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(mole, counters::PLUS1), 1);
+    assert_eq!(t.counters(bears, counters::PLUS1), 0);
+    t.g.untap(mole);
+    t.activate(P0, mole, 0, &[Entity::Object(cmdr)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(mole, counters::PLUS1), 2);
+    assert_eq!(t.counters(cmdr, counters::PLUS1), 1);
+}
+
+#[test]
+fn forge_of_heroes_counters_a_commander_that_entered_this_turn() {
+    cr!("903.3");
+    assert_supported(&["Forge of Heroes"]);
+    let mut t = commander_game();
+    let forge = t.battlefield(P0, "Forge of Heroes");
+    let cmdr = t.enter(P0, "Hill Giant");
+    make_commander(&mut t, P0, cmdr);
+    t.activate(P0, forge, 1, &[Entity::Object(cmdr)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(cmdr, counters::PLUS1), 1);
+    assert_eq!(t.counters(cmdr, "loyalty"), 0);
+}
+
+#[test]
+fn dungeon_delver_gives_commander_creatures_hama_pashars_ability() {
+    cr!("903.3", "603.2d");
+    assert_supported(&["Dungeon Delver"]);
+    use mtg_engine::ability::{Effect, KeywordAction, PlayerRef, Sel, Value};
+    fn venture(t: &mut TestGame) {
+        let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+        t.g.exec(
+            &Effect::KeywordAction {
+                action: KeywordAction::Venture,
+                who: PlayerRef::You,
+                what: Sel::None,
+                n: Value::c(1),
+            },
+            &mut ctx,
+        );
+        t.g.flush_events();
+        t.resolve_all();
+    }
+    fn treasures(t: &TestGame) -> usize {
+        t.g.permanents()
+            .filter(|o| o.is_token() && o.chars.has_subtype("Treasure"))
+            .count()
+    }
+    for commander in [true, false] {
+        let mut t = commander_game();
+        // A Background: it grants the ability to a commander creature you own.
+        t.battlefield(P0, "Dungeon Delver");
+        let giant = t.battlefield(P0, "Hill Giant");
+        if commander {
+            make_commander(&mut t, P0, giant);
+        }
+        t.custom(
+            P0,
+            (*card("Lost Mine of Phandelver")).clone(),
+            Zone::Outside(P0),
+        );
+        // Cave Entrance, then Mine Tunnels ("Create a Treasure token.").
+        venture(&mut t);
+        t.answer(P0, DecisionKind::Option, Answer::Index(1));
+        venture(&mut t);
+        assert_eq!(treasures(&t), if commander { 2 } else { 1 });
+    }
 }

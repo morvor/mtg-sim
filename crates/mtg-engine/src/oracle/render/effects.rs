@@ -3688,7 +3688,11 @@ impl Renderer<'_> {
                             who: PlayerRef::You,
                             ..
                         }
-                    ),
+                    )
+                    // "Pay {E}{E}. If you can't, ..." (see `kw/game_rules.rs`).
+                    || i > 0
+                        && matches!(&v[i - 1], Effect::Custom(n)
+                            if crate::kw::game_rules::is_pay_energy(n)),
             );
             let s = self.effect(&v[i]);
             self.prev_mandatory = saved_mandatory;

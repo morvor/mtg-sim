@@ -74,3 +74,23 @@ fn research_shuffles_up_to_four_outside_cards_into_your_library() {
     assert_eq!(t.library_size(P0), before + 2);
     assert_eq!(t.zone(side[2]), Zone::Outside(P0));
 }
+
+#[test]
+fn the_ravens_warning_puts_an_outside_card_on_top_of_your_library() {
+    cr!("400.11b", "714.2b");
+    assert_supported(&["The Raven's Warning"]);
+    let mut t = TestGame::new(2);
+    let side = t
+        .g
+        .add_to_sideboard(P0, vec![card("Grizzly Bears"), card("Hill Giant")]);
+    let saga = t.battlefield(P0, "The Raven's Warning");
+    t.g.add_counters(Entity::Object(saga), "lore", 2, None);
+    t.resolve_all();
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(side[1])]);
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.resolve_all();
+    let top = t.g.library_top(P0).expect("a library");
+    assert_eq!(t.g.obj(top).chars.name, "Hill Giant");
+    assert_eq!(t.zone(side[0]), Zone::Outside(P0));
+}

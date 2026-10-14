@@ -77,7 +77,7 @@ fn great_intelligences_plan_may_cast_a_spell_for_free() {
 
 #[test]
 fn nicol_bolas_ultimate_spares_opponents_with_a_legendary_creature() {
-    cr!("104.3e", "606.6");
+    cr!("104.3e");
     // (Its +1 ability is another construct; the -8 compiles.)
     assert!(!card("Nicol Bolas, Dragon-God")
         .unsupported_text()
@@ -116,6 +116,14 @@ fn sycorax_commander_discard_and_draw_one_fewer_or_damage() {
     t.enter(P0, "Sycorax Commander");
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
+    // An empty hand: "that many cards minus one" is never negative (CR 107.1b).
+    let mut t = TestGame::new(2);
+    option(&mut t, P1, 0);
+    let lib = t.library_size(P1);
+    t.enter(P0, "Sycorax Commander");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), 0);
+    assert_eq!(t.library_size(P1), lib);
 }
 
 #[test]

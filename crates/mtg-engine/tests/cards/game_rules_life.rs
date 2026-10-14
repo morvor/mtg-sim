@@ -132,11 +132,21 @@ fn court_of_ardenvale_returns_to_the_battlefield_for_the_monarch() {
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // Not the monarch: to the hand.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Court of Ardenvale");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.g.monarch = Some(P1);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.in_hand(P0, "Grizzly Bears"));
 }
 
 #[test]
 fn imoen_draws_another_card_after_completing_a_dungeon() {
-    cr!("309.7", "726.1");
+    cr!("726.1");
     assert_supported(&["Imoen, Mystic Trickster"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Imoen, Mystic Trickster");
@@ -145,4 +155,14 @@ fn imoen_draws_another_card_after_completing_a_dungeon() {
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert_eq!(t.hand_size(P0), before + 1);
+    // After completing a dungeon: another card.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Imoen, Mystic Trickster");
+    t.g.initiative = Some(P0);
+    t.g.players[0].dungeons_completed = 1;
+    t.g.players[0].completed_dungeons.push("Lost Mine of Phandelver".into());
+    let before = t.hand_size(P0);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 2);
 }

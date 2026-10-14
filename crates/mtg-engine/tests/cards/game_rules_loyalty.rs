@@ -108,4 +108,6 @@ fn verdant_command_counters_a_loyalty_ability() {
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
     assert_eq!(t.life(P0), 23);
+    // CR 701.6b: the loyalty cost isn't refunded.
+    assert_eq!(t.counters(ajani, "loyalty"), 5);
 }

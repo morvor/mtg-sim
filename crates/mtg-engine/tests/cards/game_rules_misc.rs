@@ -81,6 +81,11 @@ fn spatial_binding_keeps_a_phasing_permanent_in_until_your_next_upkeep() {
     // P1's untap step: it doesn't phase out.
     t.advance_to(P1, Step::Upkeep);
     assert!(!t.obj_now(f).phased_out);
+    // CR 500.4: the effect ends as P0's upkeep begins; at P1's next untap step it phases
+    // out.
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.obj_now(f).phased_out);
 }
 
 #[test]
@@ -125,7 +130,7 @@ fn hall_of_echoes_suspends_the_legend_rule_this_turn() {
 
 #[test]
 fn lord_of_the_nazgul_wraiths_have_protection_from_ring_bearers() {
-    cr!("702.16b", "701.54e");
+    cr!("702.16a", "701.54e");
     assert_supported(&["Lord of the Nazgûl"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Lord of the Nazgûl");
