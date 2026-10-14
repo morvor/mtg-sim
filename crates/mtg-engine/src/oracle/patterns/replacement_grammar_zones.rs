@@ -207,19 +207,37 @@ fn zone_event(s: &str, b: &mut OneShot) -> Option<ZoneEvent> {
 /// "exile it", "exile that card with an ice counter on it", "return it to its owner's
 /// hand", "put it on top of its owner's library", "[reveal ~ and] shuffle it into its
 /// owner's library": a move of the object somewhere else.
-fn move_instead(s: &str) -> Option<Destination> {
+/// A revealed card ("reveal ~ and shuffle it ...", "that card is revealed and put ...") is
+/// revealed as it's moved (CR 701.20a): `RevealAndMoveInstead`.
+fn move_instead(s: &str) -> Option<ReplacementAction> {
     let s = s.trim();
-    let s = s
+    let (reveal, s) = match s
         .strip_prefix("reveal ~ and ")
         .or_else(|| s.strip_prefix("reveal it and "))
-        .unwrap_or(s);
-    if matches!(
+    {
+        Some(r) => (true, r),
+        None => (false, s),
+    };
+    let d = if matches!(
         s,
         "that card is revealed and put on the bottom of that player's library"
             | "that card is revealed and put on the bottom of its owner's library"
     ) {
-        return Some(Destination::library_bottom());
-    }
+        return Some(ReplacementAction::RevealAndMoveInstead(
+            Destination::library_bottom(),
+        ));
+    } else {
+        move_destination(s)?
+    };
+    Some(if reveal {
+        ReplacementAction::RevealAndMoveInstead(d)
+    } else {
+        ReplacementAction::MoveInstead(d)
+    })
+}
+
+/// Where "exile it", "return it to its owner's hand", ... puts the object.
+fn move_destination(s: &str) -> Option<Destination> {
     for it in ["it", "that card", "~", "him", "her"] {
         if s == format!("exile {it}") {
             return Some(Destination::zone(ZoneKind::Exile));
@@ -270,13 +288,13 @@ fn zone_action(s: &str, ev: &ZoneEvent, ctx: &CompileContext) -> Option<(Replace
         ) {
             return None;
         }
-        return Some((ReplacementAction::MoveInstead(move_instead(r)?), false));
+        return Some((move_instead(r)?, false));
     }
     let inner = s
         .strip_suffix(" instead")
         .or_else(|| s.strip_prefix("instead "))?;
-    if let Some(d) = move_instead(inner) {
-        return Some((ReplacementAction::MoveInstead(d), false));
+    if let Some(a) = move_instead(inner) {
+        return Some((a, false));
     }
     // "instead exile it and put a hit counter on it"
     let e = instructions(inner, ctx, ev.it.clone())?;
@@ -414,7 +432,7 @@ fn not_cast_entry(l: &str, b: &mut OneShot) -> Option<(ReplacementDef, bool)> {
     let (subj, act) = r.split_once(" would enter and it wasn't cast, ")?;
     let (this_turn, act) = (false, act);
     let (f, _) = subject(subj, b)?;
-    let d = move_instead(act.strip_suffix(" instead")?)?;
+    let action = move_instead(act.strip_suffix(" instead")?)?;
     Some((
         ReplacementDef {
             // Checked against the object where it is (not as it would exist on the
@@ -426,7 +444,7 @@ fn not_cast_entry(l: &str, b: &mut OneShot) -> Option<(ReplacementDef, bool)> {
                     cast_spell(),
                 ))),
             },
-            action: ReplacementAction::MoveInstead(d),
+            action,
             self_replacement: false,
             optional: false,
         },

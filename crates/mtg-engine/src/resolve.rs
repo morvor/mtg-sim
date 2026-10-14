@@ -354,8 +354,10 @@ impl Game {
             }
             Effect::SacrificeObjects { what } => {
                 // "Sacrifice ~": the ability's controller sacrifices its source, which they
-                // can't do if another player controls it now (CR 701.21a).
-                let own_source = matches!(what, Sel::This);
+                // can't do if another player controls it now (CR 701.21a). The same for
+                // "sacrifice Spare Dagger" in an ability it grants (`granted_by`).
+                let own_source =
+                    matches!(what, Sel::This) || crate::granted_by::is_bound_granter(what);
                 let objs = self.resolve_objects(what, ctx);
                 let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 // Sacrificed at the same time (CR 101.4).
@@ -765,13 +767,15 @@ impl Game {
                 restriction,
                 duration,
             } => {
-                // CR 611.2b: a "for as long as" duration that already ended.
-                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                let objects = self.lock_restriction_objects(restriction, ctx);
+                // CR 611.2b: a "for as long as" duration that already ended (one about the
+                // objects it applies to, "for as long as it remains tapped", is checked
+                // for them).
+                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects) {
                     return;
                 }
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
-                let objects = self.lock_restriction_objects(restriction, ctx);
                 self.rule_effects.push(RuleEffect {
                     id,
                     source: ctx.source,
@@ -1986,6 +1990,7 @@ impl Game {
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let objs = self.resolve_objects(what, ctx);
+                let before = self.play_grants.len();
                 crate::casting::grant_play_permission(
                     self,
                     p,
@@ -1994,6 +1999,8 @@ impl Game {
                     *free,
                     ctx.source,
                 );
+                // "When you play a card this way" (see `permissions::PermissionUse`).
+                crate::permissions::note_way(self, before, ctx);
             }
             Effect::WithPlayTerms { terms, effect } => {
                 // The permissions the effect gives come with the terms.
@@ -2410,8 +2417,8 @@ impl Game {
                 }
                 // "gains all activated abilities of target creature until end of turn":
                 // the abilities it has as the effect is created (CR 608.2h).
-                Modification::AddAbilitiesOf { from, which } => {
-                    crate::ability_grants::snapshot(self, from, which, ctx)
+                Modification::AddAbilitiesOf { from, which, terms } => {
+                    crate::ability_grants::snapshot(self, from, which, terms, ctx)
                 }
                 other => vec![other.clone()],
             })
@@ -2563,6 +2570,10 @@ impl Game {
             if filter_references_specific(f) {
                 *f = Filter::Any;
             } else {
+                // "Creatures with power less than or equal to that number can't block this
+                // turn": the amount is fixed as the effect begins (CR 608.2h), the class
+                // isn't (CR 611.2c).
+                self.lock_filter_amounts(f, ctx);
                 // "Creatures target player controls don't untap ...": the objects that
                 // player controls, whichever they are later.
                 *f = self.bind_target_players(f, ctx);
@@ -2588,6 +2599,7 @@ impl Game {
                 if filter_references_specific(f) {
                     *f = Filter::Objects(self.named_objects(f, ctx));
                 } else {
+                    self.lock_filter_amounts(f, ctx);
                     // "creatures that player controls": the players as the effect begins.
                     *f = self.bind_target_players(f, ctx);
                 }

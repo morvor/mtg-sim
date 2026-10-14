@@ -166,6 +166,21 @@ impl Renderer<'_> {
             ));
         }
         Some(match name {
+            // CR 701.52a: the Attractions you visited after rolling to visit them.
+            crate::kw::visit::VISITED_THIS_TURN => {
+                "the number of Attractions you've visited this turn".into()
+            }
+            // CR 903.8: how many times the commander was cast from the command zone.
+            crate::kw::game_rules::TIMES_IT_WAS_CAST => {
+                "the number of times it's been cast from the command zone this game".into()
+            }
+            crate::kwa::ring::TIMES_TEMPTED => {
+                "the number of times the Ring has tempted you this game".into()
+            }
+            // CR 106.4: the mana in your mana pool.
+            crate::kw::unspent_mana_value::UNSPENT_MANA_YOU_HAVE => {
+                "the amount of unspent mana you have".into()
+            }
             "noncombat damage dealt this turn to:opponents" => {
                 "the total amount of noncombat damage dealt to your opponents this turn".into()
             }

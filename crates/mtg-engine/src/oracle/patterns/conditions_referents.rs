@@ -423,10 +423,21 @@ fn subject(c: &str, b: &mut Builder) -> Option<(Subject, String)> {
         (c.strip_prefix("that ").map(|r| split_word(r).0), &sel)
     {
         let noun = noun.trim_end_matches("'s");
-        if let Some(TargetKind::Object(f)) = b.targets.get(*slot as usize).map(|t| &t.what) {
-            if !can_be(f, noun) {
-                return None;
+        match b.targets.get(*slot as usize).map(|t| &t.what) {
+            Some(TargetKind::Object(f)) if !can_be(f, noun) => return None,
+            // "~ deals 1 damage to any target. If that land is a Mountain, ...": any
+            // target is a creature, planeswalker, battle, or player (CR 115.4), so "that
+            // land" is another object: in a triggered ability, the one the trigger event
+            // is about ("Whenever a land you control enters").
+            Some(TargetKind::AnyTarget)
+                if !matches!(noun, "creature" | "planeswalker" | "battle" | "permanent" | "player") =>
+            {
+                if !b.in_trigger {
+                    return None;
+                }
+                return Some((Subject::Object(Sel::TriggerObject), rest));
             }
+            _ => {}
         }
     }
     Some((Subject::Object(sel), rest))
