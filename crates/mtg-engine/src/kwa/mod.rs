@@ -63,6 +63,10 @@ pub struct Spec {
     /// those cards. They enter tapped.").
     #[serde(default)]
     pub tapped: bool,
+    /// The tokens the action creates enter attacking ("Populate. The token enters tapped
+    /// and attacking.", CR 508.4).
+    #[serde(default)]
+    pub attacking: bool,
 }
 
 impl Spec {
@@ -77,6 +81,7 @@ impl Spec {
             undo: false,
             secret: false,
             tapped: false,
+            attacking: false,
         }
     }
     pub fn effect(self) -> Effect {
