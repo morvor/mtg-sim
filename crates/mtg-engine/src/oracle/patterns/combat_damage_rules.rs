@@ -170,3 +170,104 @@ fn assign_effects(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "combat damage rules: assign as though unblocked this turn / no combat damage this combat", priority: 90, parse: assign_effects } }
+
+/// What "it" names for the unblocking sentences: one object the text named (a target, the
+/// trigger object, the enchanted creature).
+fn named_it(b: &Builder) -> Option<Sel> {
+    let it = super::pronoun_groups::singular_it(b);
+    match it {
+        Sel::Target(_) | Sel::TriggerObject | Sel::AttachedTo | Sel::This => Some(it),
+        _ => None,
+    }
+}
+
+/// "creatures it was blocking that had become blocked by only that creature this
+/// combat", "creatures it was blocking that hadn't become blocked by another creature
+/// this combat" (False Orders, Imprison, Balduvian Warlord; ruling: even if the other
+/// blockers have left combat since): attacking creatures whose blockers this combat were
+/// only it.
+fn unblock_its_attackers(s: &str, b: &Builder) -> Option<Effect> {
+    if !matches!(
+        s,
+        "creatures it was blocking that had become blocked by only that creature this combat"
+            | "creatures it was blocking that hadn't become blocked by another creature this combat"
+    ) {
+        return None;
+    }
+    let it = named_it(b)?;
+    Some(Effect::BecomeUnblocked {
+        what: Sel::All(Filter::and(vec![
+            Filter::creature(),
+            Filter::Attacking,
+            Filter::BlockRelation {
+                rel: BlockRel::BlockedOnlyBy,
+                other: Box::new(it),
+                when: BlockWhen::ThisCombat,
+            },
+        ])),
+    })
+}
+
+/// "[creatures it was blocking that ...] become unblocked[, then it blocks an attacking
+/// creature of your choice]", "(you may) have it block an attacking creature of your
+/// choice", "tap the creature, remove it from combat, and creatures it was blocking that
+/// ... become unblocked".
+fn unblocking(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    // "tap the creature, remove it from combat, and [unblock]".
+    if let Some((head, tail)) = l.split_once(", and creatures it was blocking ") {
+        let unblock = format!("creatures it was blocking {tail}");
+        let head = match head.rsplit_once(", ") {
+            Some((a, c)) => format!("{a} and {c}"),
+            None => head.to_string(),
+        };
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let first = crate::oracle::effects::parse_clause(&head, b);
+        let second = first.as_ref().and_then(|_| unblocking(&unblock, b));
+        return match (first, second) {
+            (Some(a), Some(c)) => Some(Effect::seq(vec![a, c])),
+            _ => {
+                b.targets.truncate(saved.0);
+                b.it = saved.1;
+                b.it_player = saved.2;
+                None
+            }
+        };
+    }
+    if let Some((unblock, then)) = l.split_once(" become unblocked, then ") {
+        let a = unblock_its_attackers(unblock, b)?;
+        let c = block_of_choice(then, b)?;
+        return Some(Effect::seq(vec![a, c]));
+    }
+    if let Some(unblock) = l.strip_suffix(" become unblocked") {
+        return unblock_its_attackers(unblock, b);
+    }
+    block_of_choice(l, b)
+}
+
+fn block_of_choice(l: &str, b: &Builder) -> Option<Effect> {
+    let (may, r) = match l.strip_prefix("you may have ") {
+        Some(r) => (true, r),
+        None => (false, l.strip_prefix("have ").unwrap_or(l)),
+    };
+    if !matches!(
+        r,
+        "it block an attacking creature of your choice"
+            | "it blocks an attacking creature of your choice"
+    ) {
+        return None;
+    }
+    let e = Effect::BlockAttackerOfChoice {
+        blocker: named_it(b)?,
+    };
+    Some(if may {
+        Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(e),
+        }
+    } else {
+        e
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat damage rules: creatures it was blocking become unblocked; it blocks an attacking creature of your choice", priority: 90, parse: unblocking } }

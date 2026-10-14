@@ -76,6 +76,11 @@ pub struct CombatState {
     /// attacking (e.g. for ninjutsu, CR 702.49c).
     #[serde(default)]
     pub removed_attack_targets: Vec<(ObjectId, Entity)>,
+    /// Every (blocker, attacker) pair that existed this combat, in order (declared or by
+    /// an effect), kept when creatures leave combat ("creatures that were blocked by that
+    /// creature this combat"). Recorded by `kw/block_history.rs`.
+    #[serde(default)]
+    pub block_history: Vec<(ObjectId, ObjectId)>,
 }
 
 impl CombatState {
@@ -469,7 +474,7 @@ impl Game {
     /// The blocker's controller must be defending against the attacker (CR 509.1a): the
     /// attacker is attacking them, a planeswalker they control, or a battle they protect.
     /// With shared team turns, any player on the defending team (CR 805.10d).
-    fn could_block_pair(&self, blocker: ObjectId, attacker: ObjectId) -> bool {
+    pub(crate) fn could_block_pair(&self, blocker: ObjectId, attacker: ObjectId) -> bool {
         let Some(c) = &self.combat else { return false };
         let Some(dp) = c.defending_player_of(self, attacker) else {
             return false;
@@ -2621,6 +2626,47 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
             add_block(g, blocker, m, entered);
         }
     }
+}
+
+/// "[it] blocks an attacking creature of your choice": `chooser` picks an attacking
+/// creature `blocker` could block (CR 509.1a: attacking its controller, a planeswalker
+/// they control or a battle they protect; not one it's already blocking) and it blocks it
+/// (CR 509.3). Returns true if it did.
+pub fn block_attacker_of_choice(g: &mut Game, blocker: ObjectId, chooser: PlayerId) -> bool {
+    let o = g.obj(blocker);
+    if !g.is_live(blocker) || o.zone != Zone::Battlefield || !o.is_creature() {
+        return false;
+    }
+    let cands: Vec<ObjectId> = g
+        .attackers()
+        .into_iter()
+        .filter(|a| {
+            g.could_block_pair(blocker, *a)
+                && !g
+                    .combat
+                    .as_ref()
+                    .is_some_and(|c| c.blockers_of(*a).contains(&blocker))
+        })
+        .collect();
+    let chosen = match cands.len() {
+        0 => return false,
+        1 => cands[0],
+        _ => match g
+            .ask_objects(
+                chooser,
+                Some(blocker),
+                "Choose the attacking creature it blocks",
+                cands.clone(),
+                1,
+                1,
+            )
+            .first()
+        {
+            Some(a) if cands.contains(a) => *a,
+            _ => cands[0],
+        },
+    };
+    block_by_effect(g, blocker, chosen)
 }
 
 /// "[attacking creature] becomes unblocked" (CR 509.1h): an effect makes a blocked

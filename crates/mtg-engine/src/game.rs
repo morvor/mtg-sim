@@ -503,6 +503,15 @@ pub struct TurnHistory {
     pub milled: Vec<ObjectId>,
     #[serde(default)]
     pub discarded: Vec<(PlayerId, ObjectId)>,
+    /// Every (blocker, attacker) pair that existed this turn, with the attacker's
+    /// controller at the time ("creatures that were blocked by target Wall this turn").
+    /// Recorded by `kw/block_history.rs`.
+    #[serde(default)]
+    pub blocks: Vec<(ObjectId, ObjectId, PlayerId)>,
+    /// Attacks declared this turn: (creature, what it attacked, the defending player)
+    /// ("a player it has already attacked this turn"). Recorded by `kw/block_history.rs`.
+    #[serde(default)]
+    pub attacks: Vec<(ObjectId, Entity, PlayerId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

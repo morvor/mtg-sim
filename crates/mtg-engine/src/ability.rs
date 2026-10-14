@@ -1385,6 +1385,16 @@ pub enum Filter {
     /// "creature blocking it" where "it" isn't the source: blocking one of the selected
     /// creatures.
     BlockingAnyOf(Box<Sel>),
+    /// A block relation to the selected objects, now or in this combat's or this turn's
+    /// block history ("creatures blocking or blocked by target creature", "creatures
+    /// that were blocked by that creature this combat", "creatures it was blocking that
+    /// had become blocked by only that creature this combat", "creatures that were
+    /// blocked by target Wall this turn"; CR 509.1g-h, 506.4).
+    BlockRelation {
+        rel: BlockRel,
+        other: Box<Sel>,
+        when: BlockWhen,
+    },
     /// A target of one of the selected spells or abilities ("those creatures" after
     /// "whenever you cast a spell that targets one or more creatures"), as last known
     /// if the spell has left the stack.
@@ -2838,6 +2848,32 @@ pub enum Restriction {
     Custom(SmolStr),
 }
 
+/// How an object relates to others in combat ([`Filter::BlockRelation`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BlockRel {
+    /// It blocks (or blocked) one of them.
+    Blocking,
+    /// It's (or was) blocked by one of them.
+    BlockedBy,
+    /// Either.
+    BlockingOrBlockedBy,
+    /// An attacking creature that has become blocked only by them: blocked by one of them
+    /// and by no other creature (in the history the relation looks at).
+    BlockedOnlyBy,
+}
+
+/// When a [`Filter::BlockRelation`] holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BlockWhen {
+    /// Now (current blocks).
+    Now,
+    /// At some point in the current combat, even if a creature was removed from combat
+    /// or left the battlefield since.
+    ThisCombat,
+    /// At some point this turn.
+    ThisTurn,
+}
+
 /// Something that can't happen to an object ([`Restriction::CantBe`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObjectAction {
@@ -4207,6 +4243,18 @@ pub enum Effect {
     /// Remove from combat.
     RemoveFromCombat {
         what: Sel,
+    },
+    /// "[attacking creatures] become unblocked": blocked attacking creatures become
+    /// unblocked creatures (an exception to CR 509.1h an effect states).
+    BecomeUnblocked {
+        what: Sel,
+    },
+    /// "[it] blocks an attacking creature of your choice": the effect's controller chooses
+    /// an attacking creature the creature could block (one attacking its controller, a
+    /// planeswalker they control or a battle they protect, CR 509.1a) and it blocks it
+    /// (CR 509.3); nothing happens if there's none.
+    BlockAttackerOfChoice {
+        blocker: Sel,
     },
     /// "Choose a color/creature type/card name/number" — stored on the source object.
     Choose {

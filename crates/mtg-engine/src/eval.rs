@@ -619,6 +619,10 @@ impl Game {
                     cb.blockers_of(id).contains(&s) || self.left_combat_pair(s, s, id)
                 })
             }),
+            Filter::BlockRelation { rel, other, when } => {
+                let others = self.eval_sel_objects(other, ctx);
+                crate::kw::block_history::block_relation(self, id, *rel, &others, *when)
+            }
             Filter::BlockingAnyOf(sel) => self.combat.as_ref().is_some_and(|cb| {
                 self.eval_sel_objects(sel, ctx)
                     .into_iter()

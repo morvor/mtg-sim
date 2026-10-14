@@ -651,6 +651,28 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("blocking {s}"));
             }
+            Filter::BlockRelation { rel, other, when } => {
+                let s = self.sel(other, Case::Obj);
+                let w = match when {
+                    BlockWhen::Now => "",
+                    BlockWhen::ThisCombat => " this combat",
+                    BlockWhen::ThisTurn => " this turn",
+                };
+                let past = !matches!(when, BlockWhen::Now);
+                np.rel.push(match (rel, past) {
+                    (BlockRel::Blocking, false) => format!("blocking {s}"),
+                    (BlockRel::BlockedBy, false) => format!("blocked by {s}"),
+                    (BlockRel::BlockingOrBlockedBy, false) => format!("blocking or blocked by {s}"),
+                    (BlockRel::Blocking, true) => format!("that blocked {s}{w}"),
+                    (BlockRel::BlockedBy, true) => format!("that were blocked by {s}{w}"),
+                    (BlockRel::BlockingOrBlockedBy, true) => {
+                        format!("that blocked or were blocked by {s}{w}")
+                    }
+                    (BlockRel::BlockedOnlyBy, _) => {
+                        format!("that had become blocked by only {s}{w}")
+                    }
+                });
+            }
             Filter::TargetOf(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.rel.push(format!("targeted by {s}"));

@@ -771,9 +771,7 @@ impl Game {
                 // "For as long as they control it": the players a condition about the
                 // affected objects names are those as the effect begins.
                 let duration = &match duration {
-                    Duration::WhileCondition(Condition::SelMatches(s, f))
-                        if matches!(s, Sel::Var(v) if *v == vars::AFFECTED) =>
-                    {
+                    Duration::WhileCondition(Condition::SelMatches(s, f)) if matches!(s, Sel::Var(v) if *v == vars::AFFECTED) => {
                         Duration::WhileCondition(Condition::SelMatches(
                             s.clone(),
                             self.bind_target_players(f, ctx),
@@ -1260,6 +1258,20 @@ impl Game {
                 for o in self.resolve_objects(what, ctx) {
                     crate::combat::remove_from_combat(self, o);
                 }
+            }
+            Effect::BecomeUnblocked { what } => {
+                let mut any = false;
+                for o in self.resolve_objects(what, ctx) {
+                    any |= crate::combat::become_unblocked(self, o);
+                }
+                ctx.prev_happened = any;
+            }
+            Effect::BlockAttackerOfChoice { blocker } => {
+                let mut any = false;
+                for b in self.resolve_objects(blocker, ctx) {
+                    any |= crate::combat::block_attacker_of_choice(self, b, ctx.controller);
+                }
+                ctx.prev_happened = any;
             }
             Effect::Choose { who, kind } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
