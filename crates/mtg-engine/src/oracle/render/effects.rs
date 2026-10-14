@@ -306,9 +306,25 @@ impl Renderer<'_> {
         if matches!(f, Filter::Any) {
             return "card".into();
         }
+        let n = self.card_noun_plain(f);
+        // "a land or double-faced card": the shared qualities said once, or for each
+        // alternative (see `nouns::factor_or`).
+        let g = super::nouns::factor_or(f);
+        if format!("{g:?}") == format!("{f:?}") {
+            return n;
+        }
+        let m = self.card_noun_plain(&g);
+        if m == n {
+            n
+        } else {
+            format!("{{alt:{n}|{m}}}")
+        }
+    }
+
+    fn card_noun_plain(&mut self, f: &Filter) -> String {
         let n = self.noun(&f.clone().in_zone(ZoneKind::Hand), Num::One);
         // The zone is implied.
-        n.trim_end_matches(" in a hand").to_string()
+        n.replacen(" in a hand", "", 1)
     }
 
     /// "[subject] [vp]": "you" is dropped for imperative verbs.
@@ -362,6 +378,10 @@ impl Renderer<'_> {
 
     fn effect_inner(&mut self, e: &Effect) -> String {
         self.new_clause();
+        // Instructions worded as a whole (`effect_terms.rs`).
+        if let Some(s) = self.effect_terms(e) {
+            return s;
+        }
         // "For each {B}{B} spent to cast it, each opponent discards a card": one action on
         // that many, said as the instruction for each.
         if let Some(each) = per_mana_spent(e) {
@@ -558,10 +578,19 @@ impl Renderer<'_> {
                 format!("for each {s}, {inner}")
             }
             // "Starting with you, each player chooses a creature."
-            Effect::InTurnOrder { first, who, effect } => {
-                let start = match first {
-                    TurnOrderStart::You => "you",
-                    TurnOrderStart::NextOpponent => "the next opponent in turn order",
+            Effect::InTurnOrder {
+                first,
+                who,
+                effect,
+                direction,
+            } => {
+                let start = match (first, direction) {
+                    (TurnOrderStart::You, SeatSide::Left) => "you",
+                    (TurnOrderStart::You, SeatSide::Chosen) => {
+                        "you and proceeding in the chosen direction"
+                    }
+                    (TurnOrderStart::You, SeatSide::Right) => "you and proceeding to the right",
+                    (TurnOrderStart::NextOpponent, _) => "the next opponent in turn order",
                 };
                 let w = self.player_filter_noun(who, Num::One);
                 // "Join forces — Starting with you, each player may pay any amount of mana."
@@ -1085,6 +1114,8 @@ impl Renderer<'_> {
                 format!("note {v}")
             }
             Effect::SetX { .. } => String::new(),
+            // Bookkeeping for "... they paid this way" (named by the value that reads it).
+            Effect::AddToPlayerTally { .. } => String::new(),
             Effect::Destroy { what, no_regen } => {
                 let w = self.sel(what, Case::Obj);
                 // "... for each permanent destroyed this way".
@@ -1634,6 +1665,16 @@ impl Renderer<'_> {
                 duration,
                 uses,
             } => {
+                // Crafty Cutpurse.
+                if let (
+                    ReplacementEvent::CreateTokens(PlayerFilter::Opponent),
+                    ReplacementAction::EnterUnderControl(PlayerRef::You),
+                    Duration::EndOfTurn,
+                    None,
+                ) = (&def.event, &def.action, duration, uses)
+                {
+                    return "each token that would be created under an opponent's control this turn is created under your control instead".into();
+                }
                 let s = self.replacement(def, *uses);
                 let d = self.duration(duration);
                 // "All damage that would be dealt to target creature this turn is dealt to
@@ -1648,6 +1689,13 @@ impl Renderer<'_> {
                 // "If it would die this turn, exile it instead."
                 if d == "until end of turn" && s.starts_with("if ") && s.contains(" would die,") {
                     return s.replacen(" would die,", " would die this turn,", 1);
+                }
+                // "If any source would deal 1 or more damage to a permanent or player this
+                // turn, it deals 2 damage to that permanent or player instead."
+                if d == "until end of turn" && s.starts_with("if ") && s.contains(" or more damage to ") {
+                    if let Some((ev, then)) = s.split_once(", ") {
+                        return format!("{ev} this turn, {then}");
+                    }
                 }
                 // "The next time you would draw a card this turn, ... instead": one use.
                 if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
@@ -3016,8 +3064,9 @@ impl Renderer<'_> {
                 "prevent that damage. You gain life equal to the damage prevented this way"
                     .to_string()
             }
+            // "that source's controller": the damage event's source (CR 614.1a).
             ReplacementAction::Redirect(t) => {
-                let t = self.sel(t, Case::Obj);
+                let t = self.in_event_scope(|r| r.sel(t, Case::Obj));
                 format!("that damage is dealt to {t} instead")
             }
             _ => return None,
@@ -3041,6 +3090,33 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Sacrifice X Foods." with X chosen as they're sacrificed (CR 107.3f,
+            // `patterns/sacrifice_x.rs`).
+            if let (
+                Effect::Store {
+                    var,
+                    sel:
+                        Sel::Choose {
+                            chooser: PlayerRef::You,
+                            filter,
+                            up_to: true,
+                            ..
+                        },
+                },
+                Some(Effect::SetX {
+                    value: Value::CountSel(x),
+                }),
+                Some(Effect::SacrificeObjects { what: Sel::Var(w) }),
+            ) = (&v[i], v.get(i + 1), v.get(i + 2))
+            {
+                if matches!(x.as_ref(), Sel::Var(a) if a == var) && w == var {
+                    let what = self.noun(filter, Num::Many);
+                    let what = what.replacen(" you control", " {opt:you control}", 1);
+                    parts.push(format!("sacrifice X {what}"));
+                    i += 3;
+                    continue;
+                }
+            }
             if let Some((s, used)) = self.seq_extra(&v[i..]) {
                 parts.push(s);
                 i += used;
@@ -4247,7 +4323,13 @@ impl Renderer<'_> {
         // A permanent put onto the battlefield is under the control of the player who put
         // it there (CR 110.2a), "put" or "return": the instruction is yours.
         let d = if to.zone == ZoneKind::Battlefield {
-            d.replacen(" under your control", " {opt:under your control}", 1)
+            // Cards say it before or after "tapped and attacking".
+            d.replacen(
+                " tapped and attacking under your control",
+                " {alt:tapped and attacking {opt:under your control}|under your control tapped and attacking}",
+                1,
+            )
+            .replacen(" under your control", " {opt:under your control}", 1)
         } else {
             d
         };
@@ -4327,6 +4409,18 @@ impl Renderer<'_> {
             // the player putting it there; cards still say "under your control" when the
             // object isn't theirs, and "under its owner's control" when it goes back.
             match &to.controller {
+                // "onto the battlefield under your control tapped and attacking": the
+                // control said before the status.
+                Some(PlayerRef::You) if yours && to.tapped && to.attacking && !to.transformed => {
+                    let st = " tapped and attacking";
+                    if let Some(head) = s.strip_suffix(st) {
+                        s = format!(
+                            "{head} {{alt:tapped and attacking {{opt:under your control}}|under your control tapped and attacking}}"
+                        );
+                    } else {
+                        s.push_str(" {opt:under your control}");
+                    }
+                }
                 // The player putting it there controls it (CR 110.2a): cards may say so.
                 Some(PlayerRef::You) if yours => s.push_str(" {opt:under your control}"),
                 // Its owner is you: a card from your graveyard enters under your control
@@ -4841,6 +4935,13 @@ impl Renderer<'_> {
             }
             _ => "the rest",
         };
+        // "the other back on top of your library": where it came from.
+        if left == "the other"
+            && rest_to.zone == ZoneKind::Library
+            && matches!(rest_to.position, LibraryPosition::Top)
+        {
+            rest = format!("{{opt:back}} {rest}");
+        }
         // The rest stay where they are ("..., then shuffle").
         if rest_to.zone == ZoneKind::Library
             && matches!(rest_to.position, LibraryPosition::FromTop(_))
@@ -5044,9 +5145,14 @@ impl Renderer<'_> {
         // An Equipment token's abilities are about the creature it's attached to:
         // "equipped creature".
         let equipment = spec.subtypes.iter().any(|s| s.as_str() == "Equipment");
+        let changeling = spec.abilities.iter().any(|a| {
+            matches!(&a.kind, AbilityKind::Keyword(k) if k.kind == crate::keywords::KeywordKind::Changeling)
+        });
         for a in &spec.abilities {
             match &a.kind {
                 AbilityKind::Keyword(k) => kws.push(self.keyword_lower(k)),
+                // The characteristic-defining ability the changeling keyword implies.
+                _ if changeling && super::is_changeling_cda(a) => {}
                 _ => {
                     let saved = std::mem::replace(&mut self.grants_to_equipment, equipment);
                     others.push(self.nested_ability(a));

@@ -23,19 +23,6 @@ fn take_n_extra_turns(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "game rules: take N extra turns after this one", priority: 100, parse: take_n_extra_turns } }
 
-/// "The player to your right gains control of ~." (Hithlain Rope, Bucknard's Everfull
-/// Purse): the player seated to your right (CR 101.4).
-fn neighbor_gains_control(l: &str, _b: &mut Builder) -> Option<Effect> {
-    let name = match end(l) {
-        "the player to your right gains control of ~" => crate::kw::game_rules::RIGHT_GAINS_CONTROL,
-        "the player to your left gains control of ~" => crate::kw::game_rules::LEFT_GAINS_CONTROL,
-        _ => return None,
-    };
-    Some(Effect::Custom(name.into()))
-}
-
-inventory::submit! { EffectPattern { name: "game rules: the player to your right gains control of ~", priority: 100, parse: neighbor_gains_control } }
-
 /// "Until your next upkeep, ~ can't phase out.", "Until the end of your next turn, they
 /// can't phase in.": the same instruction with its duration written after it (read by
 /// the duration suffixes).

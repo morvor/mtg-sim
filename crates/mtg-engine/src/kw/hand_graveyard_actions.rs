@@ -57,6 +57,8 @@ impl KeywordRules for HandGraveyardActions {
         if let Some(p) = ctx.iter_player {
             let n = ctx.nums.get(&THAT_MANY_VAR).copied().unwrap_or(0);
             ctx.nums.insert(THAT_MANY_BY_PLAYER + p.0 as Var, n);
+            // Also as that player's own count (0 for a player who didn't act).
+            ctx.set_tally(crate::tallies::CARDS_ACTED_ON, p, n);
         }
         true
     }

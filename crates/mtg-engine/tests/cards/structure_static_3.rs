@@ -24,7 +24,7 @@ fn play(t: &mut TestGame, name: &str) -> ObjectId {
 }
 
 /// Casts the Aura `name` from P0's hand onto `target` (paying with `land`s) and resolves it.
-fn enchant(t: &mut TestGame, name: &str, land: &str, n: usize, target: ObjectId) -> ObjectId {
+pub fn enchant(t: &mut TestGame, name: &str, land: &str, n: usize, target: ObjectId) -> ObjectId {
     t.lands(P0, land, n);
     let aura = t.hand(P0, name);
     t.cast(P0, aura).target(target).go();

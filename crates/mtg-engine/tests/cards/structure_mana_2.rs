@@ -8,11 +8,11 @@ use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
-fn pool(t: &TestGame, p: PlayerId, m: ManaType) -> u32 {
+pub fn pool(t: &TestGame, p: PlayerId, m: ManaType) -> u32 {
     t.g.player(p).mana_pool.count(m) as u32
 }
 
-fn pool_size(t: &TestGame, p: PlayerId) -> usize {
+pub fn pool_size(t: &TestGame, p: PlayerId) -> usize {
     t.g.player(p).mana_pool.mana.len()
 }
 

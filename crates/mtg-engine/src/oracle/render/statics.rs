@@ -127,6 +127,9 @@ pub(crate) fn grants_to_equipment(s: &StaticAbility) -> bool {
 
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
+        if let Some(l) = self.infinity_static(s) {
+            return l;
+        }
         // CR 702.178a: "Max speed — [ability]" means "As long as your speed is 4, this
         // object has [ability]": a static ability that applies as long as you have max
         // speed. Cards may also say the condition.
@@ -515,6 +518,8 @@ impl Renderer<'_> {
                         // gerund.
                         let t = if let Some(x) = t.strip_suffix(" enters") {
                             format!("{x} entering {{opt:the battlefield}}")
+                        } else if let Some(x) = t.strip_suffix(" is dealt damage") {
+                            format!("{x} being dealt damage")
                         } else if let Some(x) = t.strip_suffix(" dies") {
                             format!("{x} dying")
                         } else if let Some(x) = t.strip_suffix(" attacks") {
@@ -1120,6 +1125,9 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn cost_modifier(&mut self, cm: &CostModifier) -> String {
+        if let Some(s) = self.qualified_cost_modifier(cm) {
+            return s;
+        }
         if let (CostTarget::Abilities(Filter::Source), CostChange::SpendAnyType) =
             (&cm.applies_to, &cm.change)
         {
@@ -1194,7 +1202,33 @@ impl Renderer<'_> {
                 format!("{}{who}{}", &target[..i], &target[i..]),
                 String::new(),
             ),
+            // "Noncreature spells your opponents cast with mana value 4 or greater": the
+            // caster before or after a quality.
+            _ if who.split_whitespace().count() >= 2
+                && matches!(
+                    cm.change,
+                    CostChange::ReduceGeneric(_) | CostChange::IncreaseGeneric(_)
+                )
+                && !target.contains('{')
+                && target.contains(" with ") =>
+            {
+                let i = target.find(" with ").unwrap_or(0);
+                (
+                    format!(
+                        "{{alt:{target}{who}|{}{who}{}}}",
+                        &target[..i],
+                        &target[i..]
+                    ),
+                    String::new(),
+                )
+            }
             _ => (target, who),
+        };
+        // "Abilities you activate that aren't mana abilities": abilities a player
+        // activates are activated abilities (CR 602.1).
+        let target = match target.strip_prefix("activated abilities you activate ") {
+            Some(r) => format!("{{opt:activated}} abilities you activate {r}"),
+            None => target,
         };
         let act = if is_spell { "to cast" } else { "to activate" };
         let costs = if matches!(cm.applies_to, CostTarget::ThisSpell) {
@@ -1414,6 +1448,11 @@ impl Renderer<'_> {
                     k.name().to_lowercase()
                 )
             }
+            // "You may pay {0} rather than pay ~'s mana cost": an alternative cost of
+            // nothing, as casting it without paying its mana cost is (CR 118.5, 118.9).
+            CostChange::AlternativeCost(c) if c.is_free() && c.mana.is_some() => {
+                "you may pay {0} rather than pay ~'s mana cost".to_string()
+            }
             CostChange::AlternativeCost(c) if c.is_free() => {
                 let m = self.me();
                 format!("you may cast {m} without paying its mana cost")
@@ -1479,7 +1518,10 @@ impl Renderer<'_> {
         let cond = match &oc.condition {
             None => String::new(),
             Some(Condition::YourTurn) => " during your turn".into(),
-            Some(c) => format!(" if {}", self.condition(c)),
+            Some(c) => match self.targets_condition(c) {
+                Some(t) => format!(" if {t}"),
+                None => format!(" if {}", self.condition(c)),
+            },
         };
         format!("This ability costs {amt} {dir} to activate{tail}{cond}.")
     }
@@ -1626,6 +1668,14 @@ impl Renderer<'_> {
         let subj = |me: &mut Self, f: &Filter| me.restricted_subject(f);
         match r {
             Restriction::CantAttack(f) => format!("{} can't attack", subj(self, f)),
+            Restriction::AttackOnlyNearestOpponent { side } => {
+                let d = match side {
+                    SeatSide::Left => "to the left",
+                    SeatSide::Right => "to the right",
+                    SeatSide::Chosen => "in the {alt:chosen|last chosen} direction",
+                };
+                format!("each player may attack only the nearest opponent {d} and planeswalkers controlled by that opponent")
+            }
             Restriction::CantBlock(f) => format!("{} can't block", subj(self, f)),
             Restriction::CantAttackOrBlock(f) => {
                 format!("{} can't attack or block", subj(self, f))
@@ -2283,6 +2333,9 @@ impl Renderer<'_> {
         use ReplacementAction as A;
         use ReplacementEvent as E;
         let _ = uses;
+        if let Some(s) = self.qualified_replacement(def) {
+            return s;
+        }
         match (&def.event, &def.action) {
             // --- Entering the battlefield (CR 614.1c).
             (E::EntersBattlefield(f), action) => {
@@ -2375,13 +2428,15 @@ impl Renderer<'_> {
                     | A::Multiply(_)
                     | A::Add(_)
                     | A::PlusTokens { .. }
+                    | A::TokensInstead { .. }
                     | A::Subtract(_)
                     | A::Redirect(_)
                     | A::RedirectNext(..)
                     | A::Regenerate
                     | A::PreventAndThen(..)
                     | A::LifeFloor(_)
-                    | A::ManaTypeInstead(_)) => {
+                    | A::ManaTypeInstead(_)
+                    | A::RevealAndMoveInstead(_)) => {
                         let then = self.replacement_then(other, "it");
                         format!("if {subj} would enter, {then}")
                     }
@@ -2731,6 +2786,23 @@ impl Renderer<'_> {
             (E::CreateTokensMatching { who, tokens }, action) => {
                 let w = self.player_filter_subject(who);
                 let t = self.noun(tokens, Num::Many);
+                if let (
+                    PlayerFilter::You,
+                    Filter::Subtype(sub),
+                    A::PlusTokens {
+                        spec,
+                        count: Value::EventAmount,
+                    },
+                ) = (who, tokens, action)
+                {
+                    // "If you would create a Food token, instead create a Food token and a
+                    // Treasure token." (Bilbo, Fellow Conspirator).
+                    let (d, tail) = self.token_desc(spec);
+                    return format!(
+                        "if you would create a {sub} token, instead create a {sub} token and {} token{tail}",
+                        with_article(&d)
+                    );
+                }
                 let then = match action {
                     A::Multiply(2) => {
                         "twice that many of those tokens are created instead".to_string()
@@ -3086,6 +3158,11 @@ impl Renderer<'_> {
                 };
                 format!("{verb} {it} {dest} instead")
             }
+            // "reveal that card and put it on top of your library instead" (CR 701.20a).
+            A::RevealAndMoveInstead(d) => {
+                let then = self.replacement_then(&A::MoveInstead(d.clone()), it);
+                format!("reveal {it} and {then}")
+            }
             A::Instead(e) => {
                 let e = self.effect(e);
                 format!("{e} instead")
@@ -3123,6 +3200,10 @@ impl Renderer<'_> {
                     format!("{c} {d} tokens{tail}")
                 };
                 format!("those tokens plus {tokens} are created instead")
+            }
+            A::TokensInstead { spec } => {
+                let (d, tail) = self.token_desc(spec);
+                format!("that many {d} tokens{tail} are created instead")
             }
             A::Redirect(sel) => {
                 let t = self.sel(sel, Case::Obj);
@@ -3353,6 +3434,16 @@ impl Renderer<'_> {
                     })
                     .collect();
                 let m = match rest.as_slice() {
+                    // "Your starting deck contains only cards with even mana values".
+                    [Filter::Custom(n)] if n == crate::kw::companion::EVEN_MANA_VALUE => {
+                        return format!(
+                            "{{alt:your starting deck contains only {} with even mana values|each {e} in your starting deck has an even mana value}}",
+                            plural(&e)
+                        );
+                    }
+                    [Filter::Custom(n)] if n == crate::kw::companion::HAS_ACTIVATED_ABILITY => {
+                        "has an activated ability".to_string()
+                    }
                     // "has mana value 2 or less".
                     [Filter::ManaValue(c, v)] => {
                         let v = self.value(v);

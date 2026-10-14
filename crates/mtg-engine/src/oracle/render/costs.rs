@@ -409,8 +409,16 @@ impl Renderer<'_> {
         let saved_salient = self.self_salient;
         // "Sacrifice ~: It deals 2 damage to any target."
         self.self_salient = cost.contains('~');
+        let saved_exiles = std::mem::replace(
+            &mut self.cost_exiles_self,
+            a.cost
+                .parts
+                .iter()
+                .any(|p| matches!(p, CostPart::ExileSelf)),
+        );
         let body = self.body(&a.body);
         self.self_salient = saved_salient;
+        self.cost_exiles_self = saved_exiles;
         let mut restr: Vec<String> = Vec::new();
         match a.timing {
             ActivationTiming::Instant => {}
