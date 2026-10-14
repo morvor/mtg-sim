@@ -327,6 +327,17 @@ fn kaito_is_a_hexproof_ninja_creature_only_during_your_turn() {
     assert!(o.is_creature() && o.chars.has_subtype("Ninja"));
     assert!(o.has_keyword(mtg_engine::keywords::KeywordKind::Hexproof));
     assert_eq!(t.pt(k), (3, 4));
+    // Without loyalty counters (checked before state-based actions), he isn't one.
+    let saved = t.g.objects[k.0 as usize].counters.clone();
+    t.g.objects[k.0 as usize].counters.remove("loyalty");
+    t.g.dirty = true;
+    t.g.recompute();
+    assert!(!t.obj(k).is_creature());
+    assert!(!t.obj(k).has_keyword(mtg_engine::keywords::KeywordKind::Hexproof));
+    t.g.objects[k.0 as usize].counters = saved;
+    t.g.dirty = true;
+    t.g.recompute();
+    assert!(t.obj(k).is_creature());
     t.advance_to(P1, Step::Upkeep);
     t.g.recompute();
     let o = t.obj(k);

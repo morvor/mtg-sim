@@ -76,6 +76,10 @@ pub struct CombatState {
     /// attacking (e.g. for ninjutsu, CR 702.49c).
     #[serde(default)]
     pub removed_attack_targets: Vec<(ObjectId, Entity)>,
+    /// The power each creature had as it was declared as an attacker ("if you attacked
+    /// with creatures with total power 6 or greater this combat").
+    #[serde(default)]
+    pub declared_attack_power: Vec<(ObjectId, i32)>,
 }
 
 impl CombatState {
@@ -1139,10 +1143,18 @@ fn perform_attack_declaration(
             }
         }
     }
+    if g.dirty {
+        g.recompute();
+    }
+    let powers: Vec<(ObjectId, i32)> = final_decl
+        .iter()
+        .map(|(a, _)| (*a, g.obj(*a).power()))
+        .collect();
     let c = g.combat.get_or_insert_with(CombatState::default);
     c.attackers_declared = true;
     c.had_to_attack = had_to_attack.to_vec();
     c.declared_attackers = final_decl.clone();
+    c.declared_attack_power = powers;
     if !final_decl.is_empty() {
         c.any_attackers = true;
     }

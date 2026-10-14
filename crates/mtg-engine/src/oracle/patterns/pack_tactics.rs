@@ -1,7 +1,8 @@
 //! Pack tactics (an ability word): "Whenever ~ attacks, if you attacked with creatures
 //! with total power 6 or greater this combat, ..." — the intervening "if" (CR 603.4)
-//! compares the total power of the creatures you're attacking with to N, both as the
-//! ability triggers and as it resolves.
+//! compares to N the total power the creatures you declared as attackers this combat had
+//! as they were declared (see `kw::pack_tactics`), both as the ability triggers and as it
+//! resolves.
 
 use super::ConditionPattern;
 use crate::ability::*;
@@ -14,9 +15,8 @@ fn attacked_with_total_power(c: &str) -> Option<Condition> {
     if end(rest) != "or greater this combat" {
         return None;
     }
-    let attackers = Filter::and(vec![Filter::creature().you_control(), Filter::Attacking]);
     Some(Condition::Compare(
-        Value::PowerOf(Box::new(Sel::All(attackers))),
+        Value::Custom(crate::kw::pack_tactics::ATTACKED_WITH_TOTAL_POWER.into()),
         Cmp::Ge,
         n,
     ))
