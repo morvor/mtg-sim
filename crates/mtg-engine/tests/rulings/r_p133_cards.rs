@@ -512,3 +512,63 @@ fn bounce_chamber_lowest_toughness_on_resolution() {
     assert!(in_hand_of(&t, memnite, P1));
     assert!(t.on_battlefield(scout) && t.on_battlefield(bears));
 }
+
+#[test]
+fn teferi_restriction_beats_flash_permission() {
+    cr!("101.2", "702.8a", "307.1");
+    ruling!(
+        "Teferi, Time Raveler",
+        "If an effect allows opponents to cast a spell as though it had flash (for example, if your opponent also controls a Teferi, Time Raveler and activates his +1 loyalty ability), the restriction of Teferi's first ability takes precedence over that permission."
+    );
+    supported("Teferi, Time Raveler");
+    for p0_teferi in [false, true] {
+        let mut t = TestGame::new(2);
+        // P1 activated their Teferi's +1 on their own turn.
+        t.set_step(P1, Step::PrecombatMain);
+        let theirs = t.battlefield(P1, "Teferi, Time Raveler");
+        t.activate(P1, theirs, 0, &[]).unwrap();
+        t.resolve_all();
+        if p0_teferi {
+            t.battlefield(P0, "Teferi, Time Raveler");
+        }
+        // On P0's turn (P1's "next turn" hasn't come yet), P1 tries to cast a sorcery.
+        t.set_step(P0, Step::PrecombatMain);
+        let sorcery = spell(&mut t, P1, "Divination");
+        assert_eq!(
+            can_cast(&mut t, P1, sorcery, CastMethod::Normal),
+            !p0_teferi,
+            "P0 controls Teferi: {p0_teferi}"
+        );
+    }
+}
+
+#[test]
+fn barals_expertise_casts_a_returned_card() {
+    cr!("608.2c", "118.9");
+    ruling!(
+        "Baral's Expertise",
+        "The card that you cast may be an artifact or creature that was returned to your hand by this spell."
+    );
+    supported("Baral's Expertise");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Hill Giant");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let card = spell(&mut t, P0, "Baral's Expertise");
+    t.cast(P0, card)
+        .targets(&[Entity::Object(mine), Entity::Object(theirs)])
+        .go();
+    let lands_tapped = crate::r_s01_common::tapped_lands(&t, P0);
+    // The returned Hill Giant (P0's only card in hand) is the card chosen to cast.
+    crate::r_s03_common::respond(&mut t, P0, |_, d| match d {
+        decision::Decision::ChooseEntities {
+            prompt, candidates, ..
+        } if prompt.contains("for free") => Some(Answer::Entities(candidates.clone())),
+        _ => None,
+    });
+    t.resolve_all();
+    assert!(in_hand_of(&t, theirs, P1));
+    let giant = t.named_on_battlefield("Hill Giant");
+    assert_eq!(giant.len(), 1);
+    assert_ne!(giant[0], mine);
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), lands_tapped);
+}
