@@ -21,7 +21,7 @@ use super::{
 };
 use crate::ability::*;
 use crate::dice::*;
-use crate::oracle::effects::{parse_clause, parse_sentence, Builder};
+use crate::oracle::effects::{parse_clause, parse_effect_text, parse_sentence, Builder};
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 use smol_str::SmolStr;
@@ -148,7 +148,8 @@ fn parse_row_text(text: &str, b: &mut Builder, rows: &[ResultRow]) -> Option<Eff
             return Some(e);
         }
     }
-    parse_sentence(t, b)
+    // Read as an effect text of its own (with its own referents).
+    parse_effect_text(t, b)
 }
 
 // ---------------------------------------------------------------------------

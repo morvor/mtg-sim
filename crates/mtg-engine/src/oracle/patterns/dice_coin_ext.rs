@@ -414,6 +414,55 @@ fn not_subtype_list<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
 
 inventory::submit! { FilterSuffixPattern { name: "a705 that isn't a [subtype], [subtype], or [subtype]", priority: 960, parse: not_subtype_list } }
 
+thread_local! {
+    /// The variable holding the object an earlier "(you may) choose a [permanent]" chose,
+    /// while the sentence after it is read ([`f_not_chosen`]).
+    static CHOSEN_OBJECT: std::cell::Cell<Option<Var>> = const { std::cell::Cell::new(None) };
+}
+
+/// The variable an effect ending with "(you may) choose a [permanent]" stores it in.
+fn chose_object(e: &Effect) -> Option<Var> {
+    match e {
+        Effect::Store {
+            var,
+            sel: Sel::Choose { .. },
+        } => Some(*var),
+        Effect::May { effect, .. } => chose_object(effect),
+        Effect::Seq(v) => v.last().and_then(chose_object),
+        _ => None,
+    }
+}
+
+/// "You may choose a creature. ~ deals 3 damage to each creature not chosen this way."
+/// (Thunderwave): every such object but the chosen one (all of them if none was chosen).
+fn f_not_chosen(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !l.contains(" not chosen this way") {
+        return false;
+    }
+    let Some(var) = chose_object(prev) else {
+        return false;
+    };
+    CHOSEN_OBJECT.with(|c| c.set(Some(var)));
+    let e = crate::oracle::effects::parse_sentence(l, b);
+    CHOSEN_OBJECT.with(|c| c.set(None));
+    let Some(e) = e else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "a706 not chosen this way (after choose a permanent)", priority: 10, apply: f_not_chosen } }
+
+fn not_chosen_object<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let rest = s.strip_prefix("not chosen this way")?;
+    let var = CHOSEN_OBJECT.with(|c| c.get())?;
+    Some((Filter::not(Filter::In(Box::new(Sel::Var(var)))), rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "a706 not chosen this way (choose a permanent)", priority: 90, parse: not_chosen_object } }
+
 /// "After you roll a die, you may pay 1 life. If you do, increase or decrease the result by
 /// 1. Do this only once each turn." (CR 706.2a)
 fn s_after_you_roll(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {

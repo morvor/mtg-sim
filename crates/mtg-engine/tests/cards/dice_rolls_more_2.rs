@@ -271,3 +271,26 @@ fn tokens_named_and_permanents_named() {
     assert!(t.named_on_battlefield("Wirefly").is_empty());
     assert!(t.on_battlefield(bears));
 }
+
+#[test]
+fn each_creature_not_chosen_this_way() {
+    cr!("706.3a");
+    compiles("Thunderwave");
+    // "Roll a d20. ... 10—19 | You may choose a creature. Thunderwave deals 3 damage to each
+    // creature not chosen this way."
+    for choose in [true, false] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.lands(P0, "Mountain", 4);
+        t.set_step(P0, Step::PrecombatMain);
+        t.g.dice.loaded.push_back(15);
+        t.answer_yes(P0, choose);
+        t.answer_choose(P0, &[Entity::Object(bears)]);
+        let spell = t.hand(P0, "Thunderwave");
+        t.cast(P0, spell).go();
+        t.resolve_all();
+        assert_eq!(t.on_battlefield(bears), choose);
+        assert!(!t.on_battlefield(giant));
+    }
+}
