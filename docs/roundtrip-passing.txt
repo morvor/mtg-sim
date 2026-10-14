@@ -1920,12 +1920,14 @@ Bestial Incursion
 Bestow Greatness
 Betor, Ancestor's Voice
 Betrayal
+Betrayal at the Vault
 Betrayal of Flesh
 Betrayer's Bargain
 Betrothed of Fire
 Bewilder
 Bewildering Blizzard
 Beyeen Veil // Beyeen Coast
+Beyond the Quiet
 Bhaal's Invoker
 Biblioplex Assistant
 Biblioplex Kraken
@@ -2113,6 +2115,7 @@ Blazing Torch
 Blazing Volley
 Bleachbone Verge
 Bleak Coven Vampires
+Blech, Loafing Pest
 Bleed Dry
 Bleeding Edge
 Bleeding Woods
@@ -2631,6 +2634,7 @@ Brain Maggot
 Brain Weevil
 Brain in a Jar
 Brainbite
+Brainspoil
 Brainstone
 Brainstorm
 Brainsurge
@@ -3505,6 +3509,7 @@ Chandra's Defeat
 Chandra's Emberling
 Chandra's Firemaw
 Chandra's Flame Wave
+Chandra's Fury
 Chandra's Ignition
 Chandra's Incinerator
 Chandra's Magmutt
@@ -3970,6 +3975,7 @@ Cogwork Wrestler
 Cogworker's Puzzleknot
 Coiling Rebirth
 Coiling Woodworm
+Coils of the Medusa
 Cold Case Cracker
 Cold Snap
 Cold Storage
@@ -4680,6 +4686,7 @@ Cunning Sparkmage
 Cunning Strike
 Cunning Survivor
 Cunning Wish
+Cuombajj Witches
 Curate
 Curator Beastie
 Curator of Destinies
@@ -7152,6 +7159,7 @@ Extended Absence
 Exterminate!
 Exterminatus
 Extinction
+Extinction Event
 Extinguish
 Extinguish All Hope
 Extinguish the Light
@@ -7676,6 +7684,7 @@ Find // Finality
 Find the Path
 Finishing Blow
 Finishing Move
+Finneas, Ace Archer
 Firbolg Flutist
 Firdoch Core
 Fire // Ice
@@ -8778,6 +8787,7 @@ Gideon the Oathless
 Gideon's Avenger
 Gideon's Battle Cry
 Gideon's Company
+Gideon's Defeat
 Gideon's Intervention
 Gideon's Lawkeeper
 Gideon's Memorial
@@ -9282,6 +9292,7 @@ Goliath, Mass Manipulator
 Gollum the Abandoned
 Gollum's Bite
 Gollum, Patient Plotter
+Gollum, Riddle Master
 Gollum, Silent Slinker // Meager Meal
 Goma Fada Vanguard
 Gond Gate
@@ -10691,6 +10702,7 @@ Hunting Pack
 Hunting Triad
 Hunting Velociraptor
 Huntmaster Liger
+Huntmaster of the Fells // Ravager of the Fells
 Hurkyl's Recall
 Hurl into History
 Hurler Cyclops
@@ -10736,6 +10748,7 @@ Hysterical Blindness
 Hystrodon
 Hythonia the Cruel
 I Am Iron Man
+Ib Halfheart, Goblin Tactician
 Icatian Crier
 Icatian Infantry
 Icatian Javelineers
@@ -11313,6 +11326,7 @@ Iron Man, Modern Marvel
 Iron Man, Tony Stark
 Iron Monger, Sadistic Tycoon
 Iron Myr
+Iron Spider, Stark Upgrade
 Iron Star
 Iron Suitcase
 Iron Tusk Elephant
@@ -13541,6 +13555,7 @@ Marshdrinker Giant
 Marshmist Titan
 Martha Jones
 Martial Glory
+Martial Impetus
 Martial Law
 Martyr for the Cause
 Martyr of Ashes
@@ -13789,6 +13804,7 @@ Mercurial Kite
 Mercurial Pretender
 Mercurial Spelldancer
 Meren of Clan Nel Toth
+Merfolk Assassin
 Merfolk Branchwalker
 Merfolk Cave-Diver
 Merfolk Coralsmith
@@ -14586,6 +14602,7 @@ Mutant Town Musicians
 Mutant's Prey
 Mutational Advantage
 Mutilate
+Mutinous Massacre
 Mutiny
 Mutual Destruction
 Muxus, Goblin Grandee
@@ -16881,6 +16898,7 @@ Puppet Strings
 Puppet's Verdict
 Puppeteer
 Puppeteer Clique
+Pure // Simple
 Pure Reflection
 Purelace
 Puresight Merrow
@@ -17118,6 +17136,7 @@ Radiant Summit
 Radiant's Dragoons
 Radiant's Judgment
 Radiant, Serra Archangel
+Radiating Lightning
 Radical Idea
 Radioactive Man
 Radioactive Spider
@@ -20673,6 +20692,7 @@ Soul of Magma
 Soul of Migration
 Soul of New Phyrexia
 Soul of Ravnica
+Soul of Shandalar
 Soul of Theros
 Soul of Windgrace
 Soul of Zendikar
@@ -21666,6 +21686,7 @@ Sudden Disappearance
 Sudden Edict
 Sudden Impact
 Sudden Insight
+Sudden Setback
 Sudden Shock
 Sudden Spinnerets
 Sudden Spoiling
@@ -21868,6 +21889,7 @@ Surestrike Trident
 Surge Conductor
 Surge Mare
 Surge Node
+Surge of Righteousness
 Surge of Strength
 Surge of Thoughtweft
 Surge of Zeal
@@ -22287,6 +22309,7 @@ Tectonic Edge
 Tectonic Fiend
 Tectonic Giant
 Tectonic Hazard
+Tectonic Instability
 Tectonic Reformation
 Tectonic Rift
 Teeka's Dragon
@@ -22533,6 +22556,7 @@ Thallid Shell-Dweller
 Thallid Soothsayer
 Thancred Waters
 Thanos, Death's Consort
+Thanos, the Mad Titan
 Thantis, the Warweaver
 Thassa's Bounty
 Thassa's Devourer
@@ -24114,6 +24138,7 @@ Utvara Hellkite
 Utvara Scalper
 Uurg, Spawn of Turg
 Uyo, Silent Prophet
+Vaan, Street Thief
 Vacuumelt
 Vadmir, New Blood
 Vadrik, Astral Archmage
@@ -25422,6 +25447,7 @@ Windreaver
 Windrider Eel
 Windrider Patrol
 Windrider Wizard
+Winds of Rath
 Winds of Rebuke
 Windscouter
 Windshaper Planetar

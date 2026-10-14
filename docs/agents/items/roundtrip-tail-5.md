@@ -58,7 +58,8 @@ docs/roundtrip-passing.txt; `roundtrip --check` must pass.
 ## Result
 
 Re-run on the branch (Oct 14): 25,861 of 28,994 passed at the start; 25,983 of 29,179
-pass after (merged with origin, whose passing list had 25,861). 92 of the 93 cards in the
+pass after (merged with origin, whose passing list had 25,861); 26,009 of 29,230 after merging
+the later landings. 92 of the 93 cards in the
 taken clusters pass.
 
 ## Parser bugs found
