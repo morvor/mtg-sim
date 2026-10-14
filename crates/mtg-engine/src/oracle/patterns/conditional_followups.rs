@@ -248,6 +248,10 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
             let it_after = b.it.clone();
             if let Some(sel) = exiled_card {
                 b.it = sel;
+            } else if let Effect::CounterSpell { what } = &e {
+                // "counter that spell if it has the same mana value as the revealed card":
+                // "it" is the spell the instruction counters.
+                b.it = what.clone();
             } else if matches!(it_after, Sel::Var(_)) {
                 let new_object_target = (first_new..b.targets.len())
                     .rev()

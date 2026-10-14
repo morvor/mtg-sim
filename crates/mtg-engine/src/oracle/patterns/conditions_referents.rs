@@ -1169,6 +1169,18 @@ impl Stat {
 
 /// Another object named in a comparison: "~", "that creature", "the discarded card".
 fn other_object(r: &str, b: &mut Builder) -> Option<Sel> {
+    // "the revealed card": the card an earlier instruction revealed from the top of a
+    // library (and left there).
+    if end(r) == "the revealed card" {
+        if let Some((_, sel)) = b
+            .named
+            .iter()
+            .rev()
+            .find(|(p, _)| p == "the revealed card" || p == super::dig_grammar::DIG_MARK)
+        {
+            return Some(sel.clone());
+        }
+    }
     let (s, rest) = subject(end(r), b)?;
     if !rest.trim().is_empty() {
         return None;

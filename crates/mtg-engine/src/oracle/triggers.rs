@@ -776,6 +776,7 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         if !end(tail).is_empty() {
             return None;
         }
+        let f = super::patterns::filter_qualities::they_as_tested_controller(f);
         // "it" is the creature that died: its last known information for values ("its
         // power"), and the card it became for actions ("return it", CR 400.7e).
         return Some((

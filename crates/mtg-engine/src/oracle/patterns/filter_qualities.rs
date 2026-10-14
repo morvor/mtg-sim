@@ -117,6 +117,16 @@ fn qualities<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
             r,
         ));
     }
+    // "cards of each of the sacrificed creature's colors": a card with any of its colors
+    // (CR 105.2).
+    if let Some(x) = t.strip_prefix("of each of ") {
+        let i = x.find("'s colors")?;
+        let (sel, r) = super::filters_relational::object_in(&x[..i])?;
+        if !r.trim().is_empty() {
+            return None;
+        }
+        return Some((Filter::SharesColor(Box::new(sel)), &x[i + "'s colors".len()..]));
+    }
     // "with doctor's companion" (CR 702.124m).
     if let Some(r) = t.strip_prefix("with doctor's companion") {
         return Some((
@@ -407,3 +417,50 @@ fn each_enters_tapped(
 }
 
 inventory::submit! { super::StaticPattern { name: "each [object] enters tapped", priority: 100, parse: each_enters_tapped } }
+
+/// "a creature an opponent controls with the greatest power among creatures that player
+/// controls" in a trigger condition (Kraven the Hunter): "that player" is the controller
+/// of the object the condition is about. Top-level, the object is trivially controlled by
+/// its controller; inside a comparison, it's the tested object's controller.
+pub fn they_as_tested_controller(f: Filter) -> Filter {
+    let they = Filter::ControlledBy(super::filters_relational::THEY);
+    let they_json = match serde_json::to_string(&they) {
+        Ok(j) => j,
+        Err(_) => return f,
+    };
+    let Ok(j) = serde_json::to_string(&f) else {
+        return f;
+    };
+    if !j.contains(&they_json) {
+        return f;
+    }
+    let tested_ctl = Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(Box::new(
+        Sel::Var(vars::TESTED),
+    ))));
+    fn walk(f: Filter, top: bool, they: &Filter, inner: &Filter) -> Filter {
+        let same = |x: &Filter| format!("{x:?}") == format!("{they:?}");
+        match f {
+            x if same(&x) => {
+                if top {
+                    Filter::Any
+                } else {
+                    inner.clone()
+                }
+            }
+            Filter::And(v) => Filter::and(v.into_iter().map(|x| walk(x, top, they, inner)).collect()),
+            Filter::ValueCmp(a, c, b) => {
+                let fix = |v: Value| -> Value {
+                    let Ok(j) = serde_json::to_string(&v) else {
+                        return v;
+                    };
+                    let tj = serde_json::to_string(they).unwrap_or_default();
+                    let ij = serde_json::to_string(inner).unwrap_or_default();
+                    serde_json::from_str(&j.replace(&tj, &ij)).unwrap_or(v)
+                };
+                Filter::ValueCmp(Box::new(fix(*a)), c, Box::new(fix(*b)))
+            }
+            x => x,
+        }
+    }
+    walk(f, true, &they, &tested_ctl)
+}
