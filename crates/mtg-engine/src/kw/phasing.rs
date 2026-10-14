@@ -58,6 +58,18 @@ fn attached_closure(g: &Game, objs: &[ObjectId]) -> Vec<ObjectId> {
     out
 }
 
+/// CR 702.26b: a phased-out permanent is treated as though it doesn't exist, so no effect
+/// moves it off the battlefield (an effect that remembers it — "exile it at the beginning
+/// of the next end step" — finds nothing while it's phased out). The rules still exile it
+/// when the player controlling it leaves the game (CR 702.26n, 800.4a, 800.4c); its owner
+/// leaving the game removes it without a move (CR 702.26k).
+pub fn move_forbidden(g: &Game, mv: &crate::replacement::MoveEv) -> bool {
+    let o = g.obj(mv.obj);
+    o.zone == crate::object::Zone::Battlefield
+        && o.phased_out
+        && mv.cause != crate::events::MoveCause::PlayerLeft
+}
+
 /// Phases permanents out (CR 702.26b), removing them from combat. Auras, Equipment, and
 /// Fortifications attached to them phase out at the same time, indirectly (CR 702.26g);
 /// one that would phase out both directly and indirectly just phases out indirectly
@@ -66,6 +78,8 @@ pub fn phase_out(g: &mut Game, objs: Vec<ObjectId>) {
     let objs: Vec<ObjectId> = objs
         .into_iter()
         .filter(|o| g.is_live(*o) && !g.obj(*o).phased_out)
+        // "can't phase out" (directly; CR 702.26).
+        .filter(|o| !crate::prohibitions::object_cant(g, *o, crate::ability::ObjectAction::PhasedOut))
         .collect();
     let indirect = attached_closure(g, &objs);
     let direct: Vec<ObjectId> = objs

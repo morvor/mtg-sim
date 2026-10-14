@@ -43,7 +43,17 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_effect_more(&mut self, name: &str) -> Option<String> {
+        // "Pay {E}{E}." as an instruction (see `kw/game_rules.rs`).
+        if let Some(n) = crate::kw::game_rules::pay_energy_amount(name) {
+            return Some(format!("pay {}", "{E}".repeat(n.max(0) as usize)));
+        }
         Some(match name {
+            crate::kw::game_rules::RIGHT_GAINS_CONTROL => {
+                "the player to your right gains control of ~".into()
+            }
+            crate::kw::game_rules::LEFT_GAINS_CONTROL => {
+                "the player to your left gains control of ~".into()
+            }
             // Reinterpret.
             // "equal or lesser" than the mana value of the spell's one target.
             n if n.starts_with("cast from hand free with mana value at most that of target:") => {

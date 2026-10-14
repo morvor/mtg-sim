@@ -13,6 +13,18 @@ use crate::types::{Color, ColorSet};
 pub(crate) fn mana_symbols_among_your_permanents(r: &str) -> Option<(Value, &str)> {
     let (w, rest) = split_word(r.trim_start());
     let color = Color::from_word(w)?;
+    // "... in the mana costs of cards in your graveyard" (Umbra Stalker).
+    if let Some(r) = rest
+        .strip_prefix("mana symbols in the mana costs of cards in your graveyard")
+        .or_else(|| rest.strip_prefix("mana symbol in the mana costs of cards in your graveyard"))
+    {
+        let name = format!(
+            "{}{}",
+            crate::kw::mana_grammar::CHROMA_GRAVEYARD,
+            color.letter()
+        );
+        return Some((Value::Custom(name.into()), r));
+    }
     let rest = rest
         .strip_prefix("mana symbols in the mana costs of permanents you control")
         .or_else(|| rest.strip_prefix("mana symbol in the mana costs of permanents you control"))?;

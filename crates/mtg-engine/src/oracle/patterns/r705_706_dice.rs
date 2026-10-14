@@ -21,7 +21,7 @@ use super::{
 };
 use crate::ability::*;
 use crate::dice::*;
-use crate::oracle::effects::{parse_clause, parse_sentence, Builder};
+use crate::oracle::effects::{parse_clause, parse_effect_text, parse_sentence, Builder};
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 use smol_str::SmolStr;
@@ -40,6 +40,10 @@ fn table_row(line: &str) -> Option<(i64, Option<i64>, &str)> {
         n.chars().all(|c| c.is_ascii_digit()).then_some((n, text))
     })?;
     let range = range.trim();
+    // "9 or less | ..." (Druid of the Emerald Grove): every result up to N.
+    if let Some(n) = range.strip_suffix(" or less") {
+        return Some((i64::MIN, Some(n.trim().parse().ok()?), text));
+    }
     if let Some(n) = range.strip_suffix('+') {
         return Some((n.trim().parse().ok()?, None, text));
     }
@@ -79,6 +83,11 @@ fn last_roll(e: &mut Effect) -> Option<&mut DieRoll> {
         Effect::RollDice(r) => Some(r),
         Effect::Seq(v) => v.iter_mut().rev().find_map(last_roll),
         Effect::May { effect, .. } => last_roll(effect),
+        // "Roll a six-sided die. If the result is ...": a roll made only if a condition
+        // holds ("if you do, roll a d20").
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => last_roll(then),
         _ => None,
     }
 }
@@ -90,7 +99,7 @@ fn f_table_row(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     if let Some((lo, hi, text)) = table_row(l) {
-        let Some(e) = parse_row_text(text, b) else {
+        let Some(e) = parse_row_text(text, b, &roll.table) else {
             return false;
         };
         roll.table.push(ResultRow { lo, hi, effect: e });
@@ -115,9 +124,32 @@ inventory::submit! { FollowupPattern { name: "r706 results table row", priority:
 
 /// A row's effect: one sentence (a row ends at its period; further sentences are added
 /// by [`f_table_row`]).
-fn parse_row_text(text: &str, b: &mut Builder) -> Option<Effect> {
-    let t = end(text.trim());
-    parse_sentence(t, b)
+fn parse_row_text(text: &str, b: &mut Builder, rows: &[ResultRow]) -> Option<Effect> {
+    let mut t = end(text.trim());
+    // "1 | Trapped! — You lose 3 life.": a row's flavor words have no rules meaning.
+    if let Some((flavor, rest)) = t.split_once(" — ") {
+        if flavor.split_whitespace().count() <= 4 && !flavor.contains([',', '.', '|']) {
+            t = rest;
+        }
+    }
+    // "10—19 | Create two of those tokens.": the tokens an earlier row creates.
+    if let Some(r) = t.strip_prefix("create ") {
+        if let Some(n) = r
+            .strip_suffix(" of those tokens")
+            .and_then(|n| parse_number(n).filter(|(_, rest)| rest.trim().is_empty()))
+        {
+            let mut e = rows.iter().rev().find_map(|row| match &row.effect {
+                e @ Effect::CreateToken { .. } => Some(e.clone()),
+                _ => None,
+            })?;
+            if let Effect::CreateToken { count, .. } = &mut e {
+                *count = n.0;
+            }
+            return Some(e);
+        }
+    }
+    // Read as an effect text of its own (with its own referents).
+    parse_effect_text(t, b)
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +212,15 @@ fn p_roll(l: &str, b: &mut Builder) -> Option<Effect> {
         } else if let Some(x) = r.strip_prefix("and store those results on ~") {
             spec.store_on = Some(Sel::This);
             x.to_string()
+        } else if let Some(x) = r.strip_prefix("for each player being attacked") {
+            // Only opponents can be attacked (CR 508.1b).
+            spec.count = Value::Custom(SmolStr::new(
+                crate::kw::value_counts::OPPONENTS_BEING_ATTACKED,
+            ));
+            x.to_string()
+        } else if let Some(x) = r.strip_prefix("and choose one result") {
+            spec.choose_one = true;
+            x.to_string()
         } else if let Some(x) = r.strip_prefix("and add ") {
             let (v, rest) = crate::oracle::statics::parse_value_phrase(x, b)?;
             spec.bonus = Some(v);
@@ -214,36 +255,60 @@ fn p_reroll_stored(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "r706 reroll stored results", priority: 0, parse: p_reroll_stored } }
 
-/// "... equal to the result" (CR 706.4): the amount is the roll's result.
+/// "... equal to the result" (CR 706.4): the amount is the roll's result ("that result" /
+/// "the other result" after "roll two d4 and choose one result"). The amount is read as
+/// X: "create a number of tokens equal to that result" is "create X tokens", "scry a
+/// number of cards equal to the result" is "scry X", "gain life equal to the result" is
+/// "gain X life".
 fn p_equal_to_result(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let l = l.strip_prefix("you ").unwrap_or(l);
-    let rewritten = if let Some(x) = l.strip_suffix(" equal to the result") {
-        if x.contains(" a number of ") {
-            x.replacen(" a number of ", " x ", 1)
-        } else {
+    let mut candidates: Vec<(String, Value)> = Vec::new();
+    for (phrase, value) in [
+        (" equal to the result", Value::Custom(SmolStr::new(THE_RESULT))),
+        (" equal to that result", Value::Custom(SmolStr::new(THE_RESULT))),
+        (" equal to the other result", Value::Var(OTHER)),
+        (
+            " equal to the total of those results",
+            Value::Custom(SmolStr::new(THE_RESULT)),
+        ),
+    ] {
+        let Some(pos) = l.find(phrase) else {
+            continue;
+        };
+        let (x, after) = (&l[..pos], &l[pos + phrase.len()..]);
+        if !(after.is_empty() || after.starts_with(',')) {
+            continue;
+        }
+        if let Some(i) = x.rfind(" a number of ") {
+            let (head, tail) = (&x[..i], &x[i + " a number of ".len()..]);
+            candidates.push((format!("{head} x {tail}{after}"), value.clone()));
+            // "scry a number of cards" is "scry x".
+            if tail == "cards" {
+                candidates.push((format!("{head} x{after}"), value.clone()));
+            }
+        } else if after.is_empty() {
             // "gain life", "draw cards", "deals damage": "gain x life".
-            let mut done = None;
             for noun in ["life", "cards", "damage"] {
                 if let Some(head) = x.strip_suffix(&format!(" {noun}")) {
-                    done = Some(format!("{head} x {noun}"));
+                    candidates.push((format!("{head} x {noun}"), value.clone()));
                     break;
                 }
             }
-            done?
         }
-    } else if let Some(x) = l.strip_suffix(", where x is the result") {
-        x.to_string()
-    } else {
-        return None;
-    };
-    let e = parse_clause(&rewritten, b)?;
-    Some(Effect::seq(vec![
-        Effect::SetX {
-            value: Value::Custom(SmolStr::new(THE_RESULT)),
-        },
-        e,
-    ]))
+    }
+    if let Some(x) = l.strip_suffix(", where x is the result") {
+        candidates.push((x.to_string(), Value::Custom(SmolStr::new(THE_RESULT))));
+    }
+    for (rewritten, value) in candidates {
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        if let Some(e) = parse_clause(&rewritten, b) {
+            return Some(Effect::seq(vec![Effect::SetX { value }, e]));
+        }
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    None
 }
 
 inventory::submit! { EffectPattern { name: "r706 equal to the result", priority: 0, parse: p_equal_to_result } }
@@ -279,8 +344,31 @@ fn c_doubles(c: &str) -> Option<Condition> {
     if c == "you rolled doubles" {
         return Some(Condition::Custom(SmolStr::new(ROLLED_DOUBLES)));
     }
+    // "the result is greater than the damage dealt or the result is 12" (Sword of Hours).
+    if let Some((a, b)) = c.split_once(" or the result is ") {
+        if a.starts_with("the result is ") {
+            let a = c_doubles(a)?;
+            let b = c_doubles(&format!("the result is {b}"))?;
+            return Some(Condition::Or(vec![a, b]));
+        }
+    }
     // "the result is 1", "the result is 15 or greater".
     let r = c.strip_prefix("the result is ")?;
+    // "the result is greater than the damage dealt": the damage dealt in the event that
+    // triggered the ability.
+    if let Some(cmp) = [
+        ("greater than the damage dealt", Cmp::Gt),
+        ("less than the damage dealt", Cmp::Lt),
+    ]
+    .into_iter()
+    .find_map(|(p, cmp)| (r == p).then_some(cmp))
+    {
+        return Some(Condition::Compare(
+            Value::Custom(SmolStr::new(THE_RESULT)),
+            cmp,
+            Value::EventAmount,
+        ));
+    }
     // "the result is equal to or less than the number of Robots you control" (Clowning
     // Around): compared with a value determined as the condition is checked.
     for (p, cmp) in [
@@ -395,7 +483,61 @@ fn f_for_each_flip(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "r705 for each flip after the flip", priority: 10, apply: f_for_each_flip } }
 
-fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
+/// Whether the effect's last coin flip is part of a delayed triggered ability.
+fn in_delayed(e: &Effect) -> bool {
+    match e {
+        Effect::FlipCoins(_) => false,
+        Effect::Seq(v) => v.last().is_some_and(in_delayed),
+        Effect::If { then, .. } => in_delayed(then),
+        Effect::May { effect, .. } => in_delayed(effect),
+        Effect::AtNext { .. } | Effect::DelayedTrigger { .. } => true,
+        _ => false,
+    }
+}
+
+/// Where a delayed flip keeps the target with index `i` ([`keep_targets`]).
+const KEPT_TARGET: Var = vars::USER + 8510;
+
+/// `Sel::Target(i)` references in `e` replaced by variables holding them, and the
+/// instructions that store them.
+fn keep_targets(e: &Effect) -> (Vec<Effect>, Option<Effect>) {
+    use serde_json::Value as J;
+    fn walk(v: J, used: &mut Vec<u64>) -> J {
+        match v {
+            J::Object(mut m) => {
+                if m.len() == 1 {
+                    if let Some(J::Number(n)) = m.get("Target") {
+                        let i = n.as_u64().unwrap_or(0);
+                        if !used.contains(&i) {
+                            used.push(i);
+                        }
+                        m.remove("Target");
+                        m.insert("Var".into(), J::Number((KEPT_TARGET as u64 + i).into()));
+                        return J::Object(m);
+                    }
+                }
+                J::Object(m.into_iter().map(|(k, v)| (k, walk(v, used))).collect())
+            }
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, used)).collect()),
+            other => other,
+        }
+    }
+    let Ok(json) = serde_json::to_value(e) else {
+        return (vec![], None);
+    };
+    let mut used = Vec::new();
+    let kept: Option<Effect> = serde_json::from_value(walk(json, &mut used)).ok();
+    let stores = used
+        .into_iter()
+        .map(|i| Effect::Store {
+            var: KEPT_TARGET + i as Var,
+            sel: Sel::Target(i as u8),
+        })
+        .collect();
+    (stores, kept)
+}
+
+pub(crate) fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
     match e {
         Effect::FlipCoins(f) => Some(f),
         Effect::Seq(v) => v.iter_mut().rev().find_map(last_flip),
@@ -404,6 +546,19 @@ fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
         Effect::If {
             then, otherwise, ..
         } if matches!(**otherwise, Effect::Noop) => last_flip(then),
+        // "At the beginning of your upkeep, you may flip a coin. If you win the flip, ..."
+        Effect::May { effect, .. } => last_flip(effect),
+        // "Flip a coin at the beginning of the next end step. If you lose the flip, ...":
+        // the results are part of the delayed flip.
+        Effect::AtNext { effect, .. } => last_flip(effect),
+        Effect::DelayedTrigger {
+            body, once: true, ..
+        } => last_flip(&mut body.effect),
+        // "Flip a coin for each opponent you have", "for each blocking creature, flip a
+        // coin" (`dice_coin_ext`): one flip for each.
+        Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
+            last_flip(effect)
+        }
         _ => None,
     }
 }
@@ -424,19 +579,50 @@ fn f_flip_result(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Heads,
         Tails,
     }
+    // "If they lose the flip" (the player who flipped, CR 705.2); "if both coins come up
+    // heads": every coin flipped came up heads.
     let which = match cond {
-        "you win the flip" => Which::Win,
-        "you lose the flip" => Which::Lose,
-        "the coin comes up heads" | "it comes up heads" => Which::Heads,
-        "the coin comes up tails" | "it comes up tails" => Which::Tails,
+        "you win the flip" | "they win the flip" | "that player wins the flip" => Which::Win,
+        "you lose the flip" | "they lose the flip" | "that player loses the flip" => Which::Lose,
+        "the coin comes up heads" | "it comes up heads" | "both coins come up heads" => {
+            Which::Heads
+        }
+        "the coin comes up tails" | "it comes up tails" | "both coins come up tails" => {
+            Which::Tails
+        }
         _ => return false,
     };
+    if (cond.starts_with("they ") || cond.starts_with("that player "))
+        && !last_flip(prev).is_some_and(|f| !matches!(f.who, PlayerRef::You))
+    {
+        return false;
+    }
+    if cond.starts_with("both ")
+        && !last_flip(prev).is_some_and(|f| matches!(f.count, Value::Const(2)))
+    {
+        return false;
+    }
     if last_flip(prev).is_none() {
         return false;
     }
-    let Some(e) = parse_clause(rest, b) else {
+    let Some(mut e) = parse_clause(rest, b) else {
         return false;
     };
+    // A flip in a delayed triggered ability: the ability's targets are kept in variables
+    // when the delayed ability is created (CR 603.7c).
+    if in_delayed(prev) {
+        let (stores, kept) = keep_targets(&e);
+        let Some(kept) = kept else {
+            return false;
+        };
+        e = kept;
+        if !stores.is_empty() {
+            let old = std::mem::take(prev);
+            let mut v = stores;
+            v.push(old);
+            *prev = Effect::seq(v);
+        }
+    }
     let Some(f) = last_flip(prev) else {
         return false;
     };

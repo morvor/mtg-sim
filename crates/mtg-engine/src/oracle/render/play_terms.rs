@@ -150,7 +150,7 @@ impl Renderer<'_> {
         }
         if terms.spend_any_type {
             s.push_str(
-                " {alt:and mana of any type can be spent to cast it|and mana of any type can be spent to cast that spell|. You may spend mana as though it were mana of any type to cast that spell}",
+                " {alt:and mana of any type can be spent to cast it|and mana of any type can be spent to cast that spell|. You may spend mana as though it were mana of any type to cast that spell|. If you cast a spell this way, you may spend mana as though it were mana of any type to cast it}",
             );
         }
         if terms.cost_increase > 0 {
