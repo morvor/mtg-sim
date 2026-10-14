@@ -2460,8 +2460,8 @@ impl Game {
                 }
                 // "gains all activated abilities of target creature until end of turn":
                 // the abilities it has as the effect is created (CR 608.2h).
-                Modification::AddAbilitiesOf { from, which } => {
-                    crate::ability_grants::snapshot(self, from, which, ctx)
+                Modification::AddAbilitiesOf { from, which, terms } => {
+                    crate::ability_grants::snapshot(self, from, which, terms, ctx)
                 }
                 other => vec![other.clone()],
             })

@@ -5320,7 +5320,7 @@ impl Renderer<'_> {
                         join_list(&k, "and")
                     ));
                 }
-                Modification::AddAbilitiesOf { from, which } => {
+                Modification::AddAbilitiesOf { from, which, .. } => {
                     let kinds = match (which.activated, which.triggered, which.only) {
                         (_, _, Some(AbilityClass::Loyalty)) => "loyalty",
                         (_, _, Some(AbilityClass::Mana)) => "mana",

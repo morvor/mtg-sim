@@ -211,6 +211,11 @@ pub struct ActivatedAbility {
     /// functions while the ability is on the stack (CR 113.6g, 707.10).
     #[serde(default)]
     pub cant_be_copied: bool,
+    /// Mana types that may be spent as though they were mana of any color to activate
+    /// this ability (empty: any), an activation instruction an effect gave it with the
+    /// ability (CR 113.10a, 609.4b; see [`GainedTerms`]).
+    #[serde(default)]
+    pub spend_as_any_color: Option<Vec<crate::mana::ManaType>>,
 }
 
 /// A change an activated ability makes to its own total cost, applying while its condition
@@ -238,6 +243,7 @@ impl ActivatedAbility {
             max_total: None,
             own_cost_changes: Vec::new(),
             cant_be_copied: false,
+            spend_as_any_color: None,
         }
     }
 }
@@ -2039,6 +2045,12 @@ pub enum Modification {
     AddAbilitiesOf {
         from: Box<Sel>,
         which: AbilitySelection,
+        /// Activation instructions the effect gives the gained abilities ("You may spend
+        /// mana as though it were mana of any color to activate those abilities", "You
+        /// may activate each of those abilities only once each turn"): they become part
+        /// of each gained ability (CR 113.10a, 602.5c).
+        #[serde(default)]
+        terms: GainedTerms,
     },
     RemoveKeyword(KeywordKind),
     /// Loses one particular keyword ability: the instances of that kind with the same
@@ -2883,6 +2895,36 @@ impl AbilitySelection {
         only: None,
         except: None,
     };
+}
+
+/// Activation instructions an effect that gives activated abilities includes for them
+/// (CR 113.10a): see [`Modification::AddAbilitiesOf`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GainedTerms {
+    /// "You may activate each of those abilities only once each turn" (CR 602.5b): each
+    /// gained ability, as acquired from that object (CR 602.5c).
+    #[serde(default)]
+    pub max_per_turn: Option<u32>,
+    /// "You may spend [blue] mana as though it were mana of any color to activate those
+    /// abilities" (CR 609.4b): the mana types that may be spent so (empty: any).
+    #[serde(default)]
+    pub spend_as_any_color: Option<Vec<crate::mana::ManaType>>,
+}
+
+impl GainedTerms {
+    pub fn is_empty(&self) -> bool {
+        self.max_per_turn.is_none() && self.spend_as_any_color.is_none()
+    }
+
+    /// `act` with these terms.
+    pub fn apply(&self, act: &mut ActivatedAbility) {
+        if let Some(n) = self.max_per_turn {
+            act.max_per_turn = Some(act.max_per_turn.map_or(n, |m| m.min(n)));
+        }
+        if let Some(t) = &self.spend_as_any_color {
+            act.spend_as_any_color = Some(t.clone());
+        }
+    }
 }
 
 /// A kind of activated ability.

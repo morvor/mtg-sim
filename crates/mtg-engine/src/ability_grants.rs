@@ -121,21 +121,70 @@ fn gained_link(link: u16, granter: u32, from: u32) -> u16 {
 }
 
 /// Ability `a` of `from` as an object gains it through an effect of `granter`, with a
-/// stable identity across recomputation.
-fn gained(a: &Ability, granter: Option<ObjectId>, from: ObjectId) -> Ability {
-    static CACHE: OnceLock<Mutex<HashMap<(u64, u32, u32), Ability>>> = OnceLock::new();
+/// stable identity across recomputation; the effect's activation instructions become part
+/// of it (CR 113.10a).
+fn gained(a: &Ability, granter: Option<ObjectId>, from: ObjectId, terms: &GainedTerms) -> Ability {
+    type Key = (
+        u64,
+        u32,
+        u32,
+        Option<u32>,
+        Option<Vec<crate::mana::ManaType>>,
+    );
+    static CACHE: OnceLock<Mutex<HashMap<Key, Ability>>> = OnceLock::new();
     let g = granter.map_or(u32::MAX, |s| s.0);
     let m = CACHE.get_or_init(Default::default);
     let mut c = m.lock().unwrap();
-    c.entry((a.uid, g, from.0))
-        .or_insert_with(|| {
-            AbilityDef::with_link(
-                a.kind.clone(),
-                a.text.clone(),
-                gained_link(a.link, g, from.0),
-            )
+    c.entry((
+        a.uid,
+        g,
+        from.0,
+        terms.max_per_turn,
+        terms.spend_as_any_color.clone(),
+    ))
+    .or_insert_with(|| {
+        AbilityDef::with_link(
+            with_terms(&a.kind, terms),
+            a.text.clone(),
+            gained_link(a.link, g, from.0),
+        )
+    })
+    .clone()
+}
+
+/// An ability's kind with the activation instructions `terms` (for activated abilities).
+fn with_terms(kind: &AbilityKind, terms: &GainedTerms) -> AbilityKind {
+    match kind {
+        AbilityKind::Activated(act) if !terms.is_empty() => {
+            let mut act = act.clone();
+            terms.apply(&mut act);
+            AbilityKind::Activated(act)
+        }
+        other => other.clone(),
+    }
+}
+
+/// [`gained_from`], with keywords standing for activated abilities expanded when the
+/// effect gives the abilities activation instructions (which apply to each ability).
+fn gained_from_with(
+    g: &Game,
+    which: &AbilitySelection,
+    from: ObjectId,
+    terms: &GainedTerms,
+) -> Vec<Ability> {
+    let v = gained_from(g, which, from);
+    if terms.is_empty() {
+        return v;
+    }
+    v.into_iter()
+        .flat_map(|a| match &a.kind {
+            AbilityKind::Keyword(k) => crate::keyword_impls::derived_abilities(k)
+                .into_iter()
+                .filter(|d| selected(which, d))
+                .collect(),
+            _ => vec![a],
         })
-        .clone()
+        .collect()
 }
 
 /// The abilities a continuously reevaluated effect from `ctx.source` gives `target`.
@@ -143,13 +192,14 @@ pub fn abilities_for(
     g: &Game,
     from: &Sel,
     which: &AbilitySelection,
+    terms: &GainedTerms,
     ctx: &Ctx,
     target: ObjectId,
 ) -> Vec<Ability> {
     let mut out = Vec::new();
     for o in sources(g, from, ctx, Some(target)) {
-        for a in gained_from(g, which, o) {
-            out.push(gained(&a, ctx.source, o));
+        for a in gained_from_with(g, which, o, terms) {
+            out.push(gained(&a, ctx.source, o, terms));
         }
     }
     out
@@ -171,16 +221,22 @@ pub fn copied_uids(g: &Game, from: &Sel, which: &AbilitySelection, ctx: &Ctx) ->
 /// activate the ability more than once, collecting abilities from multiple creatures (or
 /// the same creature more than once)"), with the links among those gained from one object
 /// kept (CR 607.5).
-pub fn snapshot(g: &Game, from: &Sel, which: &AbilitySelection, ctx: &Ctx) -> Vec<Modification> {
+pub fn snapshot(
+    g: &Game,
+    from: &Sel,
+    which: &AbilitySelection,
+    terms: &GainedTerms,
+    ctx: &Ctx,
+) -> Vec<Modification> {
     let mut out = Vec::new();
     for o in sources(g, from, ctx, None) {
         let mut links: HashMap<u16, u16> = HashMap::new();
-        for a in gained_from(g, which, o) {
+        for a in gained_from_with(g, which, o, terms) {
             let link = *links
                 .entry(a.link)
                 .or_insert_with(|| 0x8000 | (next_ability_uid() % 0x7fff) as u16);
             out.push(Modification::AddAbility(AbilityDef::with_link(
-                a.kind.clone(),
+                with_terms(&a.kind, terms),
                 a.text.clone(),
                 link,
             )));
