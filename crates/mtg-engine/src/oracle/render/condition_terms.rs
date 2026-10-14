@@ -50,4 +50,28 @@ impl Renderer<'_> {
             _ => return None,
         })
     }
+
+    /// Comparisons worded as a whole: "two or more of those creatures are attacking you
+    /// and/or planeswalkers you control", "you have the most life or are tied for most
+    /// life" (CR 119).
+    pub(crate) fn compare_terms(&mut self, c: &Condition) -> Option<String> {
+        match c {
+            Condition::Compare(Value::Count(Filter::And(v)), Cmp::Ge, Value::Const(n))
+                if matches!(v.as_slice(), [Filter::In(s), Filter::Custom(q)]
+                    if matches!(s.as_ref(), Sel::TriggerObjects)
+                        && q == crate::kw::activated_ability_kind::ATTACKING_YOU_OR_YOUR_PLANESWALKER) =>
+            {
+                Some(format!(
+                    "{} or more of {{alt:those creatures|them}} are attacking you and/or planeswalkers you control",
+                    number_word(*n)
+                ))
+            }
+            Condition::Compare(Value::LifeTotal(PlayerRef::You), Cmp::Ge, Value::OverPlayers(AggOp::Max, PlayerFilter::Any, v))
+                if matches!(v.as_ref(), Value::LifeTotal(PlayerRef::Iterated)) =>
+            {
+                Some("you have the most life or are tied for most life".into())
+            }
+            _ => None,
+        }
+    }
 }

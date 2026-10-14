@@ -138,7 +138,22 @@ impl Renderer<'_> {
                 _ => false,
             }
         }
-        if targeted(&t.trigger) {
+        // "Whenever you become the target of a spell or ability an opponent controls,
+        // counter that spell or ability unless its controller pays {1}": the event's
+        // player is the spell's controller.
+        fn player_targeted(t: &TriggerCond) -> bool {
+            match t {
+                TriggerCond::Custom(n) => crate::kw::activated_ability_kind::is_player_targeted(n),
+                TriggerCond::AnyOf(v) => v.iter().any(player_targeted),
+                TriggerCond::Where { trigger, .. } | TriggerCond::Batched { trigger, .. } => {
+                    player_targeted(trigger)
+                }
+                _ => false,
+            }
+        }
+        if player_targeted(&t.trigger) {
+            self.trigger_player = Some("{alt:that spell's controller|that player}");
+        } else if targeted(&t.trigger) {
             self.trigger_player = Some("that spell's controller");
         }
         let trig = self.trigger_text(&t.trigger);

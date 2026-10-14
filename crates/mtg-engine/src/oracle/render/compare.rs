@@ -936,6 +936,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               ability's controller (\"you\", CR 106.4), so \"when you spend this mana\" is \
               when that mana is spent (CR 106.6).",
     },
+    Equivalence {
+        pattern: r"\bthe number of ([^.]+?) and each ",
+        replacement: "the number of $1 and ",
+        why: "\"+1/+1 for each card in your hand and each foretold card you own in exile\" \
+              counts the objects of both kinds: the number of cards in your hand and foretold \
+              cards you own in exile (CR 107.3a).",
+    },
 ];
 
 /// The sentence-level rewrites `sentence_rewrites` applies to both sides (word order and

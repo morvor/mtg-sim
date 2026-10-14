@@ -362,6 +362,10 @@ impl Renderer<'_> {
 
     fn effect_inner(&mut self, e: &Effect) -> String {
         self.new_clause();
+        // Instructions worded as a whole (`effect_terms.rs`).
+        if let Some(s) = self.effect_terms(e) {
+            return s;
+        }
         // "For each {B}{B} spent to cast it, each opponent discards a card": one action on
         // that many, said as the instruction for each.
         if let Some(each) = per_mana_spent(e) {
@@ -1638,6 +1642,13 @@ impl Renderer<'_> {
                 // "If it would die this turn, exile it instead."
                 if d == "until end of turn" && s.starts_with("if ") && s.contains(" would die,") {
                     return s.replacen(" would die,", " would die this turn,", 1);
+                }
+                // "If any source would deal 1 or more damage to a permanent or player this
+                // turn, it deals 2 damage to that permanent or player instead."
+                if d == "until end of turn" && s.starts_with("if ") && s.contains(" or more damage to ") {
+                    if let Some((ev, then)) = s.split_once(", ") {
+                        return format!("{ev} this turn, {then}");
+                    }
                 }
                 // "The next time you would draw a card this turn, ... instead": one use.
                 if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
@@ -2979,8 +2990,9 @@ impl Renderer<'_> {
                 "prevent that damage. You gain life equal to the damage prevented this way"
                     .to_string()
             }
+            // "that source's controller": the damage event's source (CR 614.1a).
             ReplacementAction::Redirect(t) => {
-                let t = self.sel(t, Case::Obj);
+                let t = self.in_event_scope(|r| r.sel(t, Case::Obj));
                 format!("that damage is dealt to {t} instead")
             }
             _ => return None,
@@ -4769,6 +4781,13 @@ impl Renderer<'_> {
             }
             _ => "the rest",
         };
+        // "the other back on top of your library": where it came from.
+        if left == "the other"
+            && rest_to.zone == ZoneKind::Library
+            && matches!(rest_to.position, LibraryPosition::Top)
+        {
+            rest = format!("{{opt:back}} {rest}");
+        }
         // The rest stay where they are ("..., then shuffle").
         if rest_to.zone == ZoneKind::Library
             && matches!(rest_to.position, LibraryPosition::FromTop(_))

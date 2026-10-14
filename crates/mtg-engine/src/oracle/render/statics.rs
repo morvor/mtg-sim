@@ -127,6 +127,9 @@ pub(crate) fn grants_to_equipment(s: &StaticAbility) -> bool {
 
 impl Renderer<'_> {
     pub(crate) fn static_ability(&mut self, s: &StaticAbility) -> String {
+        if let Some(l) = self.infinity_static(s) {
+            return l;
+        }
         // CR 702.178a: "Max speed — [ability]" means "As long as your speed is 4, this
         // object has [ability]": a static ability that applies as long as you have max
         // speed. Cards may also say the condition.
@@ -1454,7 +1457,10 @@ impl Renderer<'_> {
         let cond = match &oc.condition {
             None => String::new(),
             Some(Condition::YourTurn) => " during your turn".into(),
-            Some(c) => format!(" if {}", self.condition(c)),
+            Some(c) => match self.targets_condition(c) {
+                Some(t) => format!(" if {t}"),
+                None => format!(" if {}", self.condition(c)),
+            },
         };
         format!("This ability costs {amt} {dir} to activate{tail}{cond}.")
     }

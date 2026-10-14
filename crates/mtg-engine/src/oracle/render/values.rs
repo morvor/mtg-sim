@@ -620,6 +620,9 @@ impl Renderer<'_> {
 
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
         self.new_clause();
+        if let Some(s) = self.compare_terms(c) {
+            return s;
+        }
         if let Some(v) = self.vote_condition(c) {
             return v;
         }
@@ -1044,6 +1047,12 @@ impl Renderer<'_> {
 
     /// "is tapped", "is a creature", "has flying".
     pub(crate) fn is_predicate(&mut self, f: &Filter, negated: bool) -> String {
+        if let Filter::Custom(n) = f {
+            if let Some(p) = super::custom_filters::custom_predicate(n) {
+                let is = if negated { "isn't" } else { "is" };
+                return format!("{is} {p}");
+            }
+        }
         let mut atoms: Vec<&Filter> = match f {
             Filter::And(v) => v.iter().collect(),
             other => vec![other],

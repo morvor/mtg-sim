@@ -46,9 +46,13 @@ impl Renderer<'_> {
                 let w = self.player_filter_object(who);
                 let c = match filter {
                     Filter::Source => self.me(),
+                    Filter::Any => "a card".to_string(),
                     f => self.noun_det(f, Det::A),
                 };
-                let dest = self.destination_phrase(d, false, false);
+                // The card is put there by its owner, who discarded it (CR 110.2a).
+                let dest = self
+                    .destination_phrase(d, false, false)
+                    .replace(" under its owner's control", "");
                 let may = if def.optional { "you may " } else { "" };
                 Some(format!(
                     "if a spell or ability{by} causes {w} to discard {c}, {may}put it {dest} {{alt:instead of putting it into your graveyard|instead of putting it anywhere else|instead}}"
@@ -115,7 +119,12 @@ impl Renderer<'_> {
                         self.default_head = Some("source");
                         let s = self.noun_det(other, Det::A);
                         self.default_head = saved;
-                        s
+                        // "an instant or sorcery source".
+                        if s.split(' ').any(|w| w == "source" || w == "sources") {
+                            s
+                        } else {
+                            format!("{s} source")
+                        }
                     }
                 };
                 let (to, to_that) = match (to_players, to_objects) {

@@ -64,9 +64,15 @@ impl Renderer<'_> {
                 else {
                     return None;
                 };
+                // "Exile ~ from your hand: ... You may cast ~ for as long as it remains
+                // exiled": the card the cost exiled is the object itself.
+                let what = match sel {
+                    Sel::Var(v) if *v == crate::zones::COST_MOVED && self.self_salient => Sel::This,
+                    other => other.clone(),
+                };
                 let g = Effect::GrantPlayPermission {
                     who: who.clone(),
-                    what: sel.clone(),
+                    what,
                     duration: duration.clone(),
                     free: *free,
                 };

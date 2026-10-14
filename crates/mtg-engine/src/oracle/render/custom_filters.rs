@@ -149,6 +149,17 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
     }
 }
 
+/// What an object with a custom quality is, after "is": "your Ring-bearer" (CR
+/// 701.54a), "a double-faced card" (CR 712.1), "harnessed" (CR 701.64b).
+pub(crate) fn custom_predicate(name: &str) -> Option<&'static str> {
+    Some(match name {
+        crate::kwa::ring::RING_BEARER => "your Ring-bearer",
+        crate::kw::dig_filters::DOUBLE_FACED => "a double-faced card",
+        crate::kwa::harness::HARNESSED => "harnessed",
+        _ => return None,
+    })
+}
+
 /// A clause saying the subject has a custom quality, for a condition: "you cast it from
 /// your hand", "an opponent protects it", "it attacked a battle this turn".
 fn custom_clause(name: &str, subj: &str, negated: bool) -> Option<String> {
@@ -268,6 +279,26 @@ impl Renderer<'_> {
         }
         if name == crate::kwa::ring::RING_BEARER {
             return Some("your Ring-bearer".into());
+        }
+        // "If it's paired with a creature, that creature also gets ...".
+        if name == crate::kw::soulbond::PAIRED_WITH_TARGET && atoms.len() == 1 {
+            return Some("that creature {opt:also}".into());
+        }
+        // "a spell you've cast": a spell's controller is the player who cast it (CR
+        // 601.2a), unless it wasn't cast.
+        if name == crate::custom::WAS_CAST {
+            let who = atoms.iter().find_map(|a| match a {
+                Filter::ControlledBy(r) => Some(*r),
+                _ => None,
+            })?;
+            let rest: Vec<Filter> = atoms
+                .iter()
+                .filter(|a| !matches!(a, Filter::ControlledBy(_) | Filter::Custom(_)))
+                .map(|a| (*a).clone())
+                .collect();
+            let n = self.noun_det(&Filter::and(rest), super::nouns::Det::A);
+            let w = self.rel_subject(who);
+            return Some(format!("{n} {w} {{alt:cast|'ve cast|have cast}}"));
         }
         if name == "soulbond:the creature this is paired with" {
             return Some("a creature ~it is paired with".into());

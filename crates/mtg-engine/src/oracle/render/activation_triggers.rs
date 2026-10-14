@@ -100,6 +100,12 @@ impl Renderer<'_> {
                 let by = self.targeting_controller(by);
                 Some((w, format!("become the target of a spell or ability{by}")))
             }
+            // "Whenever an opponent attacks with creatures": a player attacks with
+            // creatures (CR 508.1a).
+            TriggerCond::PlayerAttacks(r) => {
+                let w = self.rel_subject(*r);
+                Some((w, "attack {opt:with creatures}".into()))
+            }
             TriggerCond::AnyOf(v) => self
                 .player_or_permanent_targeted(v, false)
                 .or_else(|| self.land_or_spell_from_elsewhere(v)),
@@ -253,6 +259,22 @@ impl Renderer<'_> {
                     format!("{event} causes a triggered ability of that {kind}"),
                     "to trigger".into(),
                 ))
+            }
+            // "Whenever one or more creatures attack one of your opponents", "Whenever that
+            // creature attacks the monarch": attacking a player (not a planeswalker or
+            // battle, CR 508.1b) who is such a player.
+            (TriggerCond::Attacks(f), Condition::And(cs))
+                if matches!(cs.as_slice(), [
+                    Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::Opponent | PlayerFilter::Monarch),
+                    Condition::Not(n),
+                ] if matches!(n.as_ref(), Condition::SelNonEmpty(Sel::TriggerOtherObject))) =>
+            {
+                let who = match &cs[0] {
+                    Condition::PlayerMatches(_, PlayerFilter::Monarch) => "the monarch",
+                    _ => "{alt:one of your opponents|an opponent}",
+                };
+                let o = self.noun_det(f, det.clone());
+                Some((o, format!("attacks {who}")))
             }
             // "Whenever ~ attacks the player with the most life or tied for most life".
             (

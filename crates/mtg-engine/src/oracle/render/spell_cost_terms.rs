@@ -29,6 +29,11 @@ impl Renderer<'_> {
         let CostTarget::Spells(f) = &cm.applies_to else {
             return None;
         };
+        // The spell being cast is the event the cost change looks at: "that spell"
+        // (`kw/spell_cost_grammar.rs`).
+        if !self.event_scope {
+            return Some(self.in_event_scope(|r| r.cost_modifier(cm)));
+        }
         let with = |base: Filter| {
             let mut cm2 = cm.clone();
             cm2.applies_to = CostTarget::Spells(base);
