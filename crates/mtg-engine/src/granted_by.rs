@@ -24,13 +24,24 @@ pub fn refer_to_granter(a: &Ability) -> Option<Ability> {
     };
     let mut act = act.clone();
     let mut sacrifices = false;
+    let this = serde_json::to_value(Sel::This).ok()?;
+    let all_granter = serde_json::to_value(Sel::All(Filter::Custom(GRANTER.into()))).ok()?;
     for p in act.cost.parts.iter_mut() {
-        if matches!(p, CostPart::SacrificeSelf) {
-            *p = CostPart::Sacrifice {
-                filter: Filter::Custom(GRANTER.into()),
-                count: Value::c(1),
-            };
-            sacrifices = true;
+        match p {
+            CostPart::SacrificeSelf => {
+                *p = CostPart::Sacrifice {
+                    filter: Filter::Custom(GRANTER.into()),
+                    count: Value::c(1),
+                };
+                sacrifices = true;
+            }
+            // "{T}, Unattach Heartseeker: ..." (CR 701.3d): the granting Equipment is
+            // unattached, not the creature.
+            CostPart::Effect(e) => {
+                let v = serde_json::to_value(&**e).ok()?;
+                **e = serde_json::from_value(replace(v, &this, &all_granter)).ok()?;
+            }
+            _ => {}
         }
     }
     // Other costs naming "~" (exiling, discarding or returning it) aren't supported here.
@@ -49,7 +60,6 @@ pub fn refer_to_granter(a: &Ability) -> Option<Ability> {
         Sel::All(Filter::Custom(GRANTER.into()))
     };
     let body = serde_json::to_value(&act.body).ok()?;
-    let this = serde_json::to_value(Sel::This).ok()?;
     let to = serde_json::to_value(&granter).ok()?;
     act.body = serde_json::from_value(replace(body, &this, &to)).ok()?;
     Some(AbilityDef::with_link(
