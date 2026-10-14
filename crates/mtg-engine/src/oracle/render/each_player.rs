@@ -248,7 +248,7 @@ impl Renderer<'_> {
 
     /// What one player does, worded for "each player ...": "discard their hand and draw
     /// seven cards".
-    fn as_each_player(&mut self, e: &Effect) -> String {
+    pub(crate) fn as_each_player(&mut self, e: &Effect) -> String {
         let inner = match e {
             Effect::AsPlayer {
                 who: PlayerRef::Iterated,

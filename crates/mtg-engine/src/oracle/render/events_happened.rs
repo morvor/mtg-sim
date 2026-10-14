@@ -1105,6 +1105,20 @@ impl Renderer<'_> {
                 let d = Self::amount_of(q, &format!("{combat}damage"))?;
                 Some(format!("{noun}{whose} dealt {d} this turn"))
             }
+            // "If a creature card was discarded this way": the cards the instruction's
+            // discards discarded.
+            Value::Count(Filter::And(v))
+                if v.iter().any(|x| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Var(d) if *d == crate::discard_rules::DISCARDED))) =>
+            {
+                let rest = Filter::and(
+                    v.iter()
+                        .filter(|x| !matches!(x, Filter::In(_)))
+                        .cloned()
+                        .collect(),
+                );
+                let s = self.quantified(&rest, q, "was discarded", "were discarded")?;
+                Some(format!("{s} this way"))
+            }
             // "if you attacked with three or more Merfolk this turn", "if you've been
             // dealt damage by two or more creatures this turn": the objects the events
             // were about.

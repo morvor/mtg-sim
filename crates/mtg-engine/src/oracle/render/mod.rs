@@ -40,6 +40,7 @@ mod library_top;
 mod more_terms;
 mod nouns;
 mod once_each_turn;
+mod opt_in;
 mod outcomes;
 mod play_terms;
 mod players;
@@ -865,6 +866,10 @@ pub struct Renderer<'a> {
     /// Rendering a permission given "during any turn [something happened]": the card
     /// leaves its usual duration ("for as long as it remains exiled") unsaid.
     pub(crate) any_turn_permission: bool,
+    /// The players an opt-in choice being rendered recorded (who accepted, who did it),
+    /// with what they did ("discarded a card" / "discard a card"), for "each player who
+    /// doesn't" (see `opt_in.rs`).
+    pub(crate) opt_in_vars: Vec<(Var, String, String)>,
     /// Variables an earlier instruction of the sequence being rendered filled with the
     /// objects it acted on, and what it did to them ("destroyed", "discarded"): "the
     /// number of creatures destroyed this way" (see `tail_parts.rs`).
@@ -998,6 +1003,7 @@ impl<'a> Renderer<'a> {
             play_terms: None,
             after_exile: false,
             any_turn_permission: false,
+            opt_in_vars: Vec::new(),
             this_way: Vec::new(),
             stored_this_way: Vec::new(),
             each_target: None,

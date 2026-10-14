@@ -107,3 +107,28 @@ fn prized_amalgam_returns_for_a_creature_from_your_graveyard() {
     t.advance_to(P0, Step::Upkeep);
     assert_eq!(t.named_on_battlefield("Prized Amalgam").len(), 1, "{}", t.dump_log());
 }
+
+#[test]
+fn mog_sees_the_cards_every_player_discarded() {
+    cr!("101.4", "608.2c");
+    // "At the beginning of your end step, each player may discard a card. Each player who
+    // discarded a card this way draws a card. If a creature card was discarded this way,
+    // you create a 1/2 white Moogle creature token with lifelink. Then if a noncreature
+    // card was discarded this way, put a +1/+1 counter on each Moogle you control."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mog, Moogle Warrior");
+    t.hand(P0, "Grizzly Bears");
+    t.hand(P1, "Forest");
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"), "{}", t.dump_log());
+    assert!(t.in_graveyard(P1, "Forest"), "{}", t.dump_log());
+    assert_eq!(t.hand_size(P0), 1);
+    assert_eq!(t.hand_size(P1), 1);
+    let moogles = t.named_on_battlefield("Moogle Token");
+    assert_eq!(moogles.len(), 1, "{}", t.dump_log());
+    assert_eq!(t.counters(moogles[0], "+1/+1"), 1, "{}", t.dump_log());
+}

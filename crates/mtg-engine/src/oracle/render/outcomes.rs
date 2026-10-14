@@ -205,6 +205,7 @@ impl Renderer<'_> {
             .or_else(|| self.each_chooses_part(v, i))
             .or_else(|| self.random_pick_part(v, i))
             .or_else(|| self.reveal_part(v, i))
+            .or_else(|| self.opt_in_part(v, i))
             .or_else(|| self.each_player_part(v, i))
             .or_else(|| self.outcome_part(v, i, known))
     }

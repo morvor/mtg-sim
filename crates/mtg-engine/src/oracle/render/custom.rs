@@ -159,6 +159,20 @@ impl Renderer<'_> {
             // "You control target opponent during their next turn" (CR 723).
             n if n.starts_with("player control:") => {
                 let parts: Vec<&str> = n["player control:".len()..].split(':').collect();
+                // "The first player controls the second player during the second
+                // player's next turn" (Cruel Entertainment): two target players, called
+                // by the order they were chosen in.
+                if let ["turn", slot, by] = parts.as_slice() {
+                    let (Ok(i), Some(Ok(j))) = (
+                        slot.parse::<u8>(),
+                        by.strip_prefix("by").map(|b| b.parse::<u8>()),
+                    ) else {
+                        return self.gap(format!("Effect::Custom({n})"));
+                    };
+                    let a = format!("the {} player", ordinal_word(u32::from(i) + 1));
+                    let b = format!("the {} player", ordinal_word(u32::from(j) + 1));
+                    return format!("{b} controls {a} during {a}'s next turn");
+                }
                 let (span, slot, extra) = match parts.as_slice() {
                     [span, slot] => (*span, *slot, false),
                     [span, slot, "extra"] => (*span, *slot, true),
