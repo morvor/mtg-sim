@@ -12,11 +12,7 @@ use std::sync::{Arc, Mutex};
 
 fn supported(name: &str) {
     let d = mtg_engine::card::card(name);
-    assert!(
-        d.is_fully_supported(),
-        "{name}: {:?}",
-        d.unsupported_text()
-    );
+    assert!(d.is_fully_supported(), "{name}: {:?}", d.unsupported_text());
 }
 
 type Log = Arc<Mutex<Vec<String>>>;
@@ -58,9 +54,10 @@ impl Agent for Picker {
                 let (_, names) = self.picks.remove(i);
                 let mut out = Vec::new();
                 for n in names {
-                    if let Some(e) = candidates.iter().find(|e| {
-                        !out.contains(*e) && e.object().is_some_and(|o| name(g, o) == n)
-                    }) {
+                    if let Some(e) = candidates
+                        .iter()
+                        .find(|e| !out.contains(*e) && e.object().is_some_and(|o| name(g, o) == n))
+                    {
                         out.push(*e);
                     }
                 }
@@ -179,19 +176,24 @@ fn abstract_performance_exiles_a_face_down_pile_and_a_face_up_pile() {
     });
     // When you choose the spell to cast, you've looked at the cards (and the opponent
     // still can't), and Abstract Performance is still on the stack.
-    let mine = picker(&mut t, P0, vec![("Choose", vec!["Grizzly Bears"])], |g, d| match d {
-        Decision::ChooseEntities { candidates, .. } => {
-            let giant = exiled(g, "Hill Giant")[0];
-            Some(format!(
-                "{} cards; you {} / they {} / stack {}",
-                candidates.len(),
-                can_look_at(g, P0, giant),
-                can_look_at(g, P1, giant),
-                g.stack.len()
-            ))
-        }
-        _ => None,
-    });
+    let mine = picker(
+        &mut t,
+        P0,
+        vec![("Choose", vec!["Grizzly Bears"])],
+        |g, d| match d {
+            Decision::ChooseEntities { candidates, .. } => {
+                let giant = exiled(g, "Hill Giant")[0];
+                Some(format!(
+                    "{} cards; you {} / they {} / stack {}",
+                    candidates.len(),
+                    can_look_at(g, P0, giant),
+                    can_look_at(g, P1, giant),
+                    g.stack.len()
+                ))
+            }
+            _ => None,
+        },
+    );
     // The opponent puts the face-up pile into your graveyard.
     t.answer(P1, DecisionKind::Option, Answer::Index(1));
     let ap = t.hand(P0, "Abstract Performance");
@@ -206,7 +208,10 @@ fn abstract_performance_exiles_a_face_down_pile_and_a_face_up_pile() {
     );
     // The spells you may cast: the face-down pile's nonland cards (judged as the spells
     // they'd become, CR 406.3b), not the Island.
-    assert_eq!(lines(&mine), vec!["3 cards; you true / they false / stack 1".to_string()]);
+    assert_eq!(
+        lines(&mine),
+        vec!["3 cards; you true / they false / stack 1".to_string()]
+    );
     // The Bears were cast as Abstract Performance resolved; the rest went to your hand.
     assert_eq!(t.stack_len(), 1);
     t.resolve();
@@ -214,7 +219,13 @@ fn abstract_performance_exiles_a_face_down_pile_and_a_face_up_pile() {
     for n in ["Hill Giant", "Lightning Bolt", "Island"] {
         assert!(t.in_hand(P0, n), "{n}");
     }
-    for n in ["Ornithopter", "Forest", "Shock", "Plains", "Abstract Performance"] {
+    for n in [
+        "Ornithopter",
+        "Forest",
+        "Shock",
+        "Plains",
+        "Abstract Performance",
+    ] {
         assert!(t.in_graveyard(P0, n), "{n}");
     }
     assert_eq!(count_exiled(&t.g), 0);
@@ -242,7 +253,12 @@ fn abstract_performance_an_opponent_of_your_choice_chooses_the_pile() {
     for n in ["Grizzly Bears", "Hill Giant", "Lightning Bolt", "Island"] {
         assert!(t.in_graveyard(P0, n), "{n}");
     }
-    assert!(t.g.player(P0).graveyard.iter().all(|o| !t.g.obj(*o).face_down));
+    assert!(t
+        .g
+        .player(P0)
+        .graveyard
+        .iter()
+        .all(|o| !t.g.obj(*o).face_down));
     // You may cast a spell (you didn't); the rest went to your hand.
     for n in ["Ornithopter", "Forest", "Shock", "Plains"] {
         assert!(t.in_hand(P0, n), "{n}");
@@ -283,7 +299,14 @@ fn hostile_negotiations_two_face_down_piles_one_turned_face_up() {
     stack(
         &mut t,
         P0,
-        &["Grizzly Bears", "Hill Giant", "Lightning Bolt", "Island", "Forest", "Ornithopter"],
+        &[
+            "Grizzly Bears",
+            "Hill Giant",
+            "Lightning Bolt",
+            "Island",
+            "Forest",
+            "Ornithopter",
+        ],
     );
     // You looked at both piles: you see their cards; they're two separate face-down piles.
     let mine = picker(&mut t, P0, vec![], |g, d| {
@@ -309,7 +332,9 @@ fn hostile_negotiations_two_face_down_piles_one_turned_face_up() {
     );
     assert_eq!(
         lines(&theirs),
-        vec!["Pile 1: face-down pile of 3 card(s) | Pile 2: Island, Forest, Ornithopter".to_string()]
+        vec![
+            "Pile 1: face-down pile of 3 card(s) | Pile 2: Island, Forest, Ornithopter".to_string()
+        ]
     );
     for n in ["Grizzly Bears", "Hill Giant", "Lightning Bolt"] {
         assert!(t.in_hand(P0, n), "{n}");
@@ -330,7 +355,11 @@ fn hostile_negotiations_with_few_cards_in_the_library() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 4);
     t.g.players[0].library.clear();
-    stack(&mut t, P0, &["Grizzly Bears", "Hill Giant", "Lightning Bolt", "Island"]);
+    stack(
+        &mut t,
+        P0,
+        &["Grizzly Bears", "Hill Giant", "Lightning Bolt", "Island"],
+    );
     // You turn the first pile face up; the opponent gives you the one-card pile.
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
     let theirs = picker(&mut t, P1, vec![], |_, d| pile_options(d, "Choose a pile"));
@@ -356,15 +385,26 @@ fn celestial_toymaker_exiles_a_face_down_pile_you_looked_at() {
     cr!("700.3", "406.3");
     let mut t = TestGame::new(2);
     let toy = t.battlefield(P0, "The Celestial Toymaker");
-    stack(&mut t, P0, &["Grizzly Bears", "Hill Giant", "Lightning Bolt"]);
-    picker(&mut t, P0, vec![("Separate", vec!["Grizzly Bears"])], |_, _| None);
+    stack(
+        &mut t,
+        P0,
+        &["Grizzly Bears", "Hill Giant", "Lightning Bolt"],
+    );
+    picker(
+        &mut t,
+        P0,
+        vec![("Separate", vec!["Grizzly Bears"])],
+        |_, _| None,
+    );
     let theirs = picker(&mut t, P1, vec![], |_, d| pile_options(d, "Choose a pile"));
     // The defending player gives you the face-up pile.
     t.answer(P1, DecisionKind::Option, Answer::Index(1));
     t.attack(&[(toy, Entity::Player(P1))], &[]);
     assert_eq!(
         lines(&theirs),
-        vec!["Pile 1: face-down pile of 1 card(s) | Pile 2: Hill Giant, Lightning Bolt".to_string()]
+        vec![
+            "Pile 1: face-down pile of 1 card(s) | Pile 2: Hill Giant, Lightning Bolt".to_string()
+        ]
     );
     assert!(t.in_hand(P0, "Hill Giant"));
     assert!(t.in_hand(P0, "Lightning Bolt"));
@@ -399,7 +439,12 @@ fn phyrexian_portal_two_face_down_piles() {
     let portal = t.battlefield(P0, "Phyrexian Portal");
     t.lands(P0, "Plains", 3);
     stack(&mut t, P0, &TEN);
-    picker(&mut t, P1, vec![("Separate", vec!["Grizzly Bears", "Hill Giant"])], |_, _| None);
+    picker(
+        &mut t,
+        P1,
+        vec![("Separate", vec!["Grizzly Bears", "Hill Giant"])],
+        |_, _| None,
+    );
     // You choose blind: both piles are face down to you; the cards stay in your library.
     let mine = picker(
         &mut t,
@@ -434,7 +479,9 @@ fn phyrexian_portal_one_pile_may_be_empty() {
     t.lands(P0, "Plains", 3);
     stack(&mut t, P0, &TEN);
     // The opponent puts all ten cards into the second pile; you exile the empty one.
-    picker(&mut t, P0, vec![("Search", vec!["Hill Giant"])], |_, _| None);
+    picker(&mut t, P0, vec![("Search", vec!["Hill Giant"])], |_, _| {
+        None
+    });
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
     t.activate(P0, portal, 0, &[Entity::Player(P1)]).unwrap();
     t.resolve();
@@ -454,10 +501,20 @@ fn phyrexian_portal_needs_ten_cards() {
     t.activate(P0, portal, 0, &[Entity::Player(P1)]).unwrap();
     t.resolve();
     // Nothing happened: no piles, nothing exiled or searched, the library not shuffled.
-    assert!(!t.asked().iter().any(|(p, d)| *p == P1
-        && matches!(d, Decision::ChooseEntities { .. })));
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::ChooseEntities { .. })));
     assert_eq!(count_exiled(&t.g), 0);
-    assert_eq!(t.g.player(P0).library.iter().rev().copied().collect::<Vec<_>>(), cards);
+    assert_eq!(
+        t.g.player(P0)
+            .library
+            .iter()
+            .rev()
+            .copied()
+            .collect::<Vec<_>>(),
+        cards
+    );
 }
 
 // --- Whims of the Fates -------------------------------------------------------------
@@ -542,7 +599,12 @@ fn make_an_example_you_choose_each_opponents_pile() {
     let giant = t.battlefield(P1, "Hill Giant");
     let thopter = t.battlefield(P2, "Ornithopter");
     let elves = t.battlefield(P2, "Llanowar Elves");
-    picker(&mut t, P1, vec![("Separate", vec!["Grizzly Bears"])], |_, _| None);
+    picker(
+        &mut t,
+        P1,
+        vec![("Separate", vec!["Grizzly Bears"])],
+        |_, _| None,
+    );
     // P2 puts both creatures into the second pile; you choose P1's Bears pile and P2's
     // empty pile.
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
@@ -575,9 +637,22 @@ fn bend_or_break_each_players_pile_is_chosen_by_an_opponent_of_their_choice() {
     t.lands(P0, "Mountain", 4);
     let mut mine: Vec<ObjectId> = t.g.battlefield.clone();
     mine.retain(|o| ![forest, island, mountain, swamp, plains, wastes].contains(o));
-    picker(&mut t, P0, vec![("Separate", vec!["Forest"])], |_, _| None);
-    picker(&mut t, P1, vec![("Separate", vec!["Mountain"])], |_, _| None);
+    // Who separates, in order.
+    let order: Arc<Mutex<Vec<PlayerId>>> = Arc::new(Mutex::new(vec![]));
+    let sep = |p: PlayerId| {
+        let order = order.clone();
+        move |_: &Game, d: &Decision| {
+            if matches!(d, Decision::ChooseEntities { prompt, .. } if prompt.starts_with("Separate"))
+            {
+                order.lock().unwrap().push(p);
+            }
+            None
+        }
+    };
+    picker(&mut t, P0, vec![("Separate", vec!["Forest"])], sep(P0));
+    picker(&mut t, P1, vec![("Separate", vec!["Mountain"])], sep(P1));
     // P2 puts both lands into the second pile.
+    picker(&mut t, P2, vec![], sep(P2));
     // Your piles: you pick P2 to choose; P2 chooses the Forest pile.
     t.answer_choose(P0, &[Entity::Player(P2)]);
     t.answer(P2, DecisionKind::Option, Answer::Index(0));
@@ -588,6 +663,8 @@ fn bend_or_break_each_players_pile_is_chosen_by_an_opponent_of_their_choice() {
     let bb = t.hand(P0, "Bend or Break");
     t.cast(P0, bb).go();
     t.resolve();
+    // The players separate their lands in APNAP order (CR 101.4).
+    assert_eq!(*order.lock().unwrap(), vec![P0, P1, P2]);
     assert_eq!(asked_pile(&t, P2), 1);
     assert_eq!(asked_pile(&t, P1), 0);
     assert_eq!(asked_pile(&t, P0), 2);
@@ -617,16 +694,17 @@ fn parallel_thoughts_takes_the_top_card_of_the_shuffled_face_down_pile() {
     // Seven cards exiled face down; once the pile is shuffled, you can't look at them.
     assert_eq!(count_exiled(&t.g), 7);
     assert_eq!(t.library_size(P0), 3);
-    let pile: Vec<ObjectId> = t
-        .g
-        .zones
-        .piles
-        .iter()
-        .map(|(o, _)| *o)
-        .filter(|o| t.g.is_live(*o) && t.g.obj(*o).zone == Zone::Exile)
-        .collect();
+    let pile: Vec<ObjectId> =
+        t.g.zones
+            .piles
+            .iter()
+            .map(|(o, _)| *o)
+            .filter(|o| t.g.is_live(*o) && t.g.obj(*o).zone == Zone::Exile)
+            .collect();
     assert_eq!(pile.len(), 7);
-    assert!(pile.iter().all(|o| t.g.obj(*o).face_down && !can_look_at(&t.g, P0, *o)));
+    assert!(pile
+        .iter()
+        .all(|o| t.g.obj(*o).face_down && !can_look_at(&t.g, P0, *o)));
     // You draw: you may take the top card of the pile instead (you do).
     let hand = t.hand_size(P0);
     t.answer_yes(P0, true);
@@ -650,7 +728,10 @@ fn parallel_thoughts_with_few_cards_and_an_empty_pile() {
         "Parallel Thoughts",
         "You can choose to take the top card from the pile (and not draw) even if there are no cards in the pile"
     );
-    ruling!("Parallel Thoughts", "If you have fewer than 7 cards in your library, exile them all");
+    ruling!(
+        "Parallel Thoughts",
+        "If you have fewer than 7 cards in your library, exile them all"
+    );
     let mut t = TestGame::new(2);
     t.g.players[0].library.clear();
     stack(&mut t, P0, &TEN[..5]);
@@ -674,9 +755,15 @@ fn parallel_thoughts_with_few_cards_and_an_empty_pile() {
 
 #[test]
 fn mangaras_tome_replaces_the_next_draw() {
-    cr!("406.4", "701.24a");
-    ruling!("Mangara's Tome", "The ability is a replacement effect that replaces a draw");
-    ruling!("Mangara's Tome", "If there are no cards left, you can still use the ability");
+    cr!("406.4");
+    ruling!(
+        "Mangara's Tome",
+        "The ability is a replacement effect that replaces a draw"
+    );
+    ruling!(
+        "Mangara's Tome",
+        "If there are no cards left, you can still use the ability"
+    );
     supported("Mangara's Tome");
     let mut t = TestGame::new(2);
     t.g.players[0].library.clear();
@@ -730,8 +817,18 @@ fn triumph_of_saint_katherine_shuffles_a_face_down_pile_onto_the_library() {
     assert_eq!(count_exiled(&t.g), 0);
     assert!(!t.in_graveyard(P0, "Triumph of Saint Katherine"));
     // The seven cards are the top of the library.
-    let top: Vec<String> = t.g.player(P0).library.iter().rev().take(7).map(|o| name(&t.g, *o)).collect();
-    assert!(top.contains(&"Triumph of Saint Katherine".to_string()), "{top:?}");
+    let top: Vec<String> =
+        t.g.player(P0)
+            .library
+            .iter()
+            .rev()
+            .take(7)
+            .map(|o| name(&t.g, *o))
+            .collect();
+    assert!(
+        top.contains(&"Triumph of Saint Katherine".to_string()),
+        "{top:?}"
+    );
     for n in &TEN[..6] {
         assert!(top.contains(&n.to_string()), "{n}: {top:?}");
     }
@@ -791,7 +888,10 @@ fn triumph_of_saint_katherine_must_still_be_in_the_graveyard() {
 #[test]
 fn saurons_ransom_the_chosen_opponent_separates() {
     cr!("700.3", "700.3d");
-    ruling!("Sauron's Ransom", "You choose just one opponent to look at the top four cards");
+    ruling!(
+        "Sauron's Ransom",
+        "You choose just one opponent to look at the top four cards"
+    );
     ruling!(
         "Sauron's Ransom",
         "The opponent may split the cards into one pile of four and one pile of zero"
@@ -805,7 +905,15 @@ fn saurons_ransom_the_chosen_opponent_separates() {
     picker(
         &mut t,
         P2,
-        vec![("Separate", vec!["Grizzly Bears", "Hill Giant", "Lightning Bolt", "Ornithopter"])],
+        vec![(
+            "Separate",
+            vec![
+                "Grizzly Bears",
+                "Hill Giant",
+                "Lightning Bolt",
+                "Ornithopter",
+            ],
+        )],
         |_, _| None,
     );
     let mine = picker(&mut t, P0, vec![], |_, d| pile_options(d, "Choose a pile"));
@@ -813,8 +921,10 @@ fn saurons_ransom_the_chosen_opponent_separates() {
     let sr = t.hand(P0, "Sauron's Ransom");
     t.cast(P0, sr).go();
     t.resolve();
-    assert!(!t.asked().iter().any(|(p, d)| *p == P1
-        && matches!(d, Decision::ChooseEntities { .. })));
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::ChooseEntities { .. })));
     assert_eq!(
         lines(&mine),
         vec!["Pile 1: face-down pile of 4 card(s) | Pile 2: (empty)".to_string()]
@@ -841,13 +951,12 @@ fn become_anonymous_cloaks_a_shuffled_face_down_pile_tapped() {
     let ba = t.hand(P0, "Become Anonymous");
     t.cast(P0, ba).target(bears).go();
     t.resolve();
-    let cloaked: Vec<ObjectId> = t
-        .g
-        .battlefield
-        .iter()
-        .copied()
-        .filter(|o| t.g.obj(*o).face_down)
-        .collect();
+    let cloaked: Vec<ObjectId> =
+        t.g.battlefield
+            .iter()
+            .copied()
+            .filter(|o| t.g.obj(*o).face_down)
+            .collect();
     assert_eq!(cloaked.len(), 3);
     for o in &cloaked {
         assert!(t.g.obj(*o).tapped);
@@ -885,13 +994,12 @@ fn expose_the_culprit_cloaks_face_up_disguise_creatures() {
     assert_eq!(lines(&seen), vec!["1".to_string()]);
     assert!(!t.g.is_live(gardener));
     assert!(t.on_battlefield(bears));
-    let cloaked: Vec<ObjectId> = t
-        .g
-        .battlefield
-        .iter()
-        .copied()
-        .filter(|o| t.g.obj(*o).face_down)
-        .collect();
+    let cloaked: Vec<ObjectId> =
+        t.g.battlefield
+            .iter()
+            .copied()
+            .filter(|o| t.g.obj(*o).face_down)
+            .collect();
     assert_eq!(cloaked.len(), 1);
     assert!(!t.g.obj(cloaked[0]).tapped);
     assert!(can_look_at(&t.g, P0, cloaked[0]));
@@ -906,7 +1014,12 @@ fn boneyard_parley(choice: usize) -> (TestGame, [ObjectId; 3]) {
     let a = t.graveyard(P0, "Grizzly Bears");
     let b = t.graveyard(P1, "Hill Giant");
     let c = t.graveyard(P1, "Ornithopter");
-    picker(&mut t, P1, vec![("Separate", vec!["Hill Giant"])], |_, _| None);
+    picker(
+        &mut t,
+        P1,
+        vec![("Separate", vec!["Hill Giant"])],
+        |_, _| None,
+    );
     t.answer(P0, DecisionKind::Option, Answer::Index(choice));
     let bp = t.hand(P0, "Boneyard Parley");
     t.cast(P0, bp)
@@ -919,7 +1032,10 @@ fn boneyard_parley(choice: usize) -> (TestGame, [ObjectId; 3]) {
 #[test]
 fn boneyard_parley_you_choose_the_pile_to_put_onto_the_battlefield() {
     cr!("700.3");
-    ruling!("Boneyard Parley", "The creature cards may come from different graveyards");
+    ruling!(
+        "Boneyard Parley",
+        "The creature cards may come from different graveyards"
+    );
     ruling!(
         "Boneyard Parley",
         "You (not your opponent) choose which pile to put onto the battlefield"
@@ -983,12 +1099,21 @@ fn brilliant_ultimatum_plays_cards_from_the_chosen_pile() {
     stack(
         &mut t,
         P0,
-        &["Forest", "Mountain", "Grizzly Bears", "Hill Giant", "Ornithopter"],
+        &[
+            "Forest",
+            "Mountain",
+            "Grizzly Bears",
+            "Hill Giant",
+            "Ornithopter",
+        ],
     );
     picker(
         &mut t,
         P1,
-        vec![("Separate", vec!["Forest", "Mountain", "Grizzly Bears", "Hill Giant"])],
+        vec![(
+            "Separate",
+            vec!["Forest", "Mountain", "Grizzly Bears", "Hill Giant"],
+        )],
         |_, _| None,
     );
     // You play both lands (only one can be played), cast the Bears, and leave Hill Giant.
@@ -1029,15 +1154,22 @@ fn boneyard_parley_you_choose_the_opponent_who_separates() {
     // You choose P2 (not a target) as the spell resolves; P2 puts the Bears alone in the
     // first pile; you take that pile.
     t.answer_choose(P0, &[Entity::Player(P2)]);
-    picker(&mut t, P2, vec![("Separate", vec!["Grizzly Bears"])], |_, _| None);
+    picker(
+        &mut t,
+        P2,
+        vec![("Separate", vec!["Grizzly Bears"])],
+        |_, _| None,
+    );
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
     let bp = t.hand(P0, "Boneyard Parley");
     t.cast(P0, bp)
         .targets(&[Entity::Object(a), Entity::Object(b)])
         .go();
     t.resolve();
-    assert!(!t.asked().iter().any(|(p, d)| *p == P1
-        && matches!(d, Decision::ChooseEntities { .. })));
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::ChooseEntities { .. })));
     let bears = t.named_on_battlefield("Grizzly Bears");
     assert_eq!(bears.len(), 1);
     assert_eq!(t.g.obj(bears[0]).controller, P0);
@@ -1058,16 +1190,19 @@ fn brilliant_ultimatum_a_pile_may_be_empty() {
     stack(
         &mut t,
         P0,
-        &["Forest", "Mountain", "Grizzly Bears", "Hill Giant", "Ornithopter"],
+        &[
+            "Forest",
+            "Mountain",
+            "Grizzly Bears",
+            "Hill Giant",
+            "Ornithopter",
+        ],
     );
     // The opponent puts all five cards into the second pile; you take it and cast
     // Ornithopter.
-    let seen = picker(
-        &mut t,
-        P0,
-        vec![("Choose", vec!["Ornithopter"])],
-        |_, d| pile_options(d, "Choose a pile"),
-    );
+    let seen = picker(&mut t, P0, vec![("Choose", vec!["Ornithopter"])], |_, d| {
+        pile_options(d, "Choose a pile")
+    });
     t.answer_yes(P0, true);
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
     let bu = t.hand(P0, "Brilliant Ultimatum");
@@ -1082,4 +1217,55 @@ fn brilliant_ultimatum_a_pile_may_be_empty() {
     );
     assert_eq!(t.stack_len(), 1);
     assert_eq!(count_exiled(&t.g), 4);
+}
+
+/// The order of a shuffled face-down pile isn't the order the cards were exiled in, and it
+/// varies (CR 701.24a).
+#[test]
+fn shuffled_face_down_piles_are_randomized() {
+    cr!("701.24a");
+    use rand::SeedableRng;
+    let mut tops = std::collections::BTreeSet::new();
+    let mut orders = std::collections::BTreeSet::new();
+    for seed in 0..12u64 {
+        // Parallel Thoughts: the card you get first from the pile.
+        let mut t = TestGame::new(2);
+        t.g.rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        t.g.players[0].library.clear();
+        stack(&mut t, P0, &TEN);
+        picker(&mut t, P0, vec![("", TEN[..7].to_vec())], |_, _| None);
+        t.enter(P0, "Parallel Thoughts");
+        t.resolve();
+        let before: Vec<ObjectId> = t.g.player(P0).hand.clone();
+        t.answer_yes(P0, true);
+        t.g.draw_cards(P0, 1);
+        let got: Vec<String> =
+            t.g.player(P0)
+                .hand
+                .iter()
+                .filter(|o| !before.contains(o))
+                .map(|o| name(&t.g, *o))
+                .collect();
+        assert_eq!(got.len(), 1);
+        tops.insert(got[0].clone());
+        // Triumph of Saint Katherine: the order the pile goes back on top of the library.
+        let mut t = TestGame::new(2);
+        t.g.rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        stack(&mut t, P0, &TEN[..6]);
+        let tri = t.battlefield(P0, "Triumph of Saint Katherine");
+        t.g.sacrifice(tri, P0);
+        t.g.flush_events();
+        t.resolve();
+        let top: Vec<String> =
+            t.g.player(P0)
+                .library
+                .iter()
+                .rev()
+                .take(7)
+                .map(|o| name(&t.g, *o))
+                .collect();
+        orders.insert(top);
+    }
+    assert!(tops.len() > 2, "{tops:?}");
+    assert!(orders.len() > 2, "{orders:?}");
 }

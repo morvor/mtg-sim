@@ -59,7 +59,8 @@ const COUNT: Var = vars::USER + 708;
 /// (A number) the player who separated the piles (who has seen the face-down ones).
 const SEPARATOR: Var = vars::USER + 709;
 /// The first variable of the per-player families: [`SLOTS`] variables per player.
-const PER_PLAYER: Var = vars::USER + 12000;
+// Above the range `kwa/vote.rs` hashes vote names into (USER + 2000 .. USER + 22000).
+const PER_PLAYER: Var = vars::USER + 24000;
 const SLOTS: Var = 8;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
