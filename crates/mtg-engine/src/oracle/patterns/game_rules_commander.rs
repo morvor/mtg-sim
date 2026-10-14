@@ -242,3 +242,29 @@ fn that_target_one_or_more(l: &str, _text: &str, ctx: &CompileContext) -> Option
 }
 
 inventory::submit! { super::StaticPattern { name: "game rules: that target one or more [objects]", priority: 100, parse: that_target_one_or_more } }
+
+/// "Your commander costs {1} less to cast for each time it's been cast from the command
+/// zone this game." (Myth Unbound): a cost reduction for commanders you own (CR 601.2f),
+/// counting each commander's own casts (CR 903.8).
+fn commander_costs_less(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("your commander costs {")?;
+    let (n, r) = r.split_once('}')?;
+    let n: i32 = n.parse().ok()?;
+    if r != " less to cast for each time it's been cast from the command zone this game" {
+        return None;
+    }
+    let s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::Spells(Filter::and(vec![
+            Filter::Commander,
+            Filter::OwnedBy(PlayerRel::You),
+        ])),
+        who: PlayerRel::You,
+        change: CostChange::ReduceGeneric(Value::Mul(
+            Box::new(Value::c(n)),
+            Box::new(Value::Custom(crate::kw::game_rules::TIMES_IT_WAS_CAST.into())),
+        )),
+    }));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { super::StaticPattern { name: "game rules: your commander costs less for each time it's been cast", priority: 100, parse: commander_costs_less } }

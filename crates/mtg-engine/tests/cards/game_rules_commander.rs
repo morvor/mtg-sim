@@ -255,3 +255,20 @@ fn esior_taxes_spells_targeting_your_commanders() {
     t.resolve();
     assert!(!t.on_battlefield(bears));
 }
+
+#[test]
+fn myth_unbound_offsets_part_of_the_commander_tax() {
+    cr!("903.8", "601.2f");
+    assert_supported(&["Myth Unbound"]);
+    let mut t = commander_game();
+    t.battlefield(P0, "Myth Unbound");
+    let giant = commander_in_zone(&mut t, P0, "Hill Giant");
+    t.g.players[0]
+        .commander_casts
+        .insert("Hill Giant".into(), 2);
+    // {3}{R} + {4} tax - {2} = six mana.
+    t.lands(P0, "Mountain", 5);
+    assert!(t.cast(P0, giant).try_go().is_err());
+    t.lands(P0, "Mountain", 1);
+    t.cast(P0, giant).go();
+}

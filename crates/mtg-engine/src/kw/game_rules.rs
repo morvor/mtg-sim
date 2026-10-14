@@ -30,6 +30,10 @@ pub fn neighbor(g: &Game, p: PlayerId, left: bool) -> PlayerId {
     p
 }
 
+/// `Value::Custom` name: how many times the spell being cast (or considered) has been cast
+/// from the command zone this game (CR 903.8; Myth Unbound).
+pub const TIMES_IT_WAS_CAST: &str = "game rules:times it's been cast from the command zone";
+
 /// `Condition::Custom` name: the current turn is an extra turn (CR 500.7).
 pub const EXTRA_TURN: &str = "game rules:it's an extra turn";
 
@@ -97,6 +101,24 @@ pub struct GameRules;
 impl KeywordRules for GameRules {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name != TIMES_IT_WAS_CAST {
+            return None;
+        }
+        let Some(spell) = ctx.event.as_ref().and_then(|e| e.spell) else {
+            return Some(0);
+        };
+        let owner = g.obj(spell).owner;
+        let key = crate::kw::partner::commander_key(g, spell);
+        Some(
+            g.player(owner)
+                .commander_casts
+                .get(&key)
+                .copied()
+                .unwrap_or(0) as i64,
+        )
     }
 
     fn custom_condition(&self, g: &Game, name: &str, _ctx: &Ctx) -> Option<bool> {
