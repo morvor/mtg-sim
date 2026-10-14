@@ -173,6 +173,23 @@ fn your_third_die_each_turn_and_dice_rolled_this_turn() {
 }
 
 #[test]
+fn the_third_die_among_dice_rolled_at_once() {
+    cr!("706.1a");
+    ruling!(
+        "Resolute Veggiesaur",
+        "If you roll multiple dice at the same time, and one of them is your third die roll that turn"
+    );
+    let mut t = TestGame::new(2);
+    let veggie = t.battlefield(P0, "Resolute Veggiesaur");
+    t.g.dice.loaded.extend([2, 3, 4, 5]);
+    mtg_engine::dice::roll_dice(&mut t.g, P0, 4, 6, DiceIgnore::None, 0, None);
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(veggie, counters::PLUS1), 1);
+}
+
+#[test]
 fn if_the_roll_was_n_or_higher() {
     cr!("706.4");
     compiles("Monoxa, Midway Manager");

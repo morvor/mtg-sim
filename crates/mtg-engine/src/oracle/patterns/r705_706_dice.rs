@@ -99,7 +99,7 @@ fn f_table_row(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     if let Some((lo, hi, text)) = table_row(l) {
-        let Some(e) = parse_row_text(text, b) else {
+        let Some(e) = parse_row_text(text, b, &roll.table) else {
             return false;
         };
         roll.table.push(ResultRow { lo, hi, effect: e });
@@ -124,8 +124,30 @@ inventory::submit! { FollowupPattern { name: "r706 results table row", priority:
 
 /// A row's effect: one sentence (a row ends at its period; further sentences are added
 /// by [`f_table_row`]).
-fn parse_row_text(text: &str, b: &mut Builder) -> Option<Effect> {
-    let t = end(text.trim());
+fn parse_row_text(text: &str, b: &mut Builder, rows: &[ResultRow]) -> Option<Effect> {
+    let mut t = end(text.trim());
+    // "1 | Trapped! — You lose 3 life.": a row's flavor words have no rules meaning.
+    if let Some((flavor, rest)) = t.split_once(" — ") {
+        if flavor.split_whitespace().count() <= 4 && !flavor.contains([',', '.', '|']) {
+            t = rest;
+        }
+    }
+    // "10—19 | Create two of those tokens.": the tokens an earlier row creates.
+    if let Some(r) = t.strip_prefix("create ") {
+        if let Some(n) = r
+            .strip_suffix(" of those tokens")
+            .and_then(|n| parse_number(n).filter(|(_, rest)| rest.trim().is_empty()))
+        {
+            let mut e = rows.iter().rev().find_map(|row| match &row.effect {
+                e @ Effect::CreateToken { .. } => Some(e.clone()),
+                _ => None,
+            })?;
+            if let Effect::CreateToken { count, .. } = &mut e {
+                *count = n.0;
+            }
+            return Some(e);
+        }
+    }
     parse_sentence(t, b)
 }
 
@@ -315,8 +337,31 @@ fn c_doubles(c: &str) -> Option<Condition> {
     if c == "you rolled doubles" {
         return Some(Condition::Custom(SmolStr::new(ROLLED_DOUBLES)));
     }
+    // "the result is greater than the damage dealt or the result is 12" (Sword of Hours).
+    if let Some((a, b)) = c.split_once(" or the result is ") {
+        if a.starts_with("the result is ") {
+            let a = c_doubles(a)?;
+            let b = c_doubles(&format!("the result is {b}"))?;
+            return Some(Condition::Or(vec![a, b]));
+        }
+    }
     // "the result is 1", "the result is 15 or greater".
     let r = c.strip_prefix("the result is ")?;
+    // "the result is greater than the damage dealt": the damage dealt in the event that
+    // triggered the ability.
+    if let Some(cmp) = [
+        ("greater than the damage dealt", Cmp::Gt),
+        ("less than the damage dealt", Cmp::Lt),
+    ]
+    .into_iter()
+    .find_map(|(p, cmp)| (r == p).then_some(cmp))
+    {
+        return Some(Condition::Compare(
+            Value::Custom(SmolStr::new(THE_RESULT)),
+            cmp,
+            Value::EventAmount,
+        ));
+    }
     // "the result is equal to or less than the number of Robots you control" (Clowning
     // Around): compared with a value determined as the condition is checked.
     for (p, cmp) in [

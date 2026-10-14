@@ -110,6 +110,7 @@ fn that_player_flips_a_coin_and_loses() {
 fn each_player_whose_coin_comes_up_tails() {
     cr!("705.2");
     compiles("Goblin Assassin");
+    ruling!("Goblin Assassin", "This coin flip has no winner or loser.");
     // "Whenever this creature or another Goblin enters, each player flips a coin. Each
     // player whose coin comes up tails sacrifices a creature of their choice."
     let mut t = TestGame::new(2);

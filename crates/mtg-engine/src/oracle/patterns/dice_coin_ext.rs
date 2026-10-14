@@ -14,10 +14,14 @@
 //! - Triggers: "when you roll a natural 20", "whenever you roll a 1 or 2", "whenever you
 //!   roll your third die each turn".
 
-use super::{ConditionPattern, EffectPattern, FollowupPattern, TriggerPattern};
+use super::{
+    ConditionPattern, EffectPattern, FilterSuffixPattern, FollowupPattern, StaticPattern,
+    TriggerPattern,
+};
 use crate::ability::*;
 use crate::dice::*;
 use crate::oracle::effects::{parse_clause, player_ref, Builder};
+use crate::oracle::CompileContext;
 use crate::oracle::phrases::*;
 use smol_str::SmolStr;
 
@@ -95,6 +99,14 @@ inventory::submit! { EffectPattern { name: "a705 player flips coins", priority: 
 /// on that creature." / "Create a tapped Treasure token for each even result."
 fn p_for_each_result(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
+    // "draw two cards for each flip" (after flips that all won): every flip.
+    if let Some(head) = l.strip_suffix(" for each flip") {
+        let e = parse_clause(head, b)?;
+        return Some(Effect::Repeat {
+            times: Value::Sum(vec![Value::Var(WINS), Value::Var(LOSSES)]),
+            effect: Box::new(e),
+        });
+    }
     const COUNTS: [(&str, Var); 6] = [
         ("flip you win", WINS),
         ("flip you won", WINS),
@@ -167,6 +179,124 @@ fn f_whose_coin(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "a705 each player whose coin comes up", priority: 10, apply: f_whose_coin } }
 
+/// "Flip a coin X times or until you lose a flip, whichever comes first."
+fn p_flip_until(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("flip a coin ")?;
+    let (n, rest) = parse_number(r)?;
+    if rest.trim() != "times or until you lose a flip, whichever comes first" {
+        return None;
+    }
+    let mut spec = CoinFlip::new();
+    spec.until_lose = true;
+    spec.max_flips = Some(n);
+    Some(Effect::FlipCoins(Box::new(spec)))
+}
+
+inventory::submit! { EffectPattern { name: "a705 flip until you lose or N times", priority: 0, parse: p_flip_until } }
+
+/// "Until end of turn, you may have ~ become an X/X Insect artifact creature with flying":
+/// optionally, "~ becomes ...".
+fn p_may_have_become(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let i = l.find("you may have ~ become ")?;
+    let rewritten = format!(
+        "{}~ becomes {}",
+        &l[..i],
+        &l[i + "you may have ~ become ".len()..]
+    );
+    let e = parse_clause(&rewritten, b)?;
+    Some(Effect::May {
+        who: PlayerRef::You,
+        effect: Box::new(e),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "a706 you may have ~ become", priority: 0, parse: p_may_have_become } }
+
+/// The token an effect creates last, if it ends creating one.
+fn last_create(e: &Effect) -> Option<&Effect> {
+    match e {
+        Effect::CreateToken { .. } => Some(e),
+        Effect::Seq(v) => v.last().and_then(last_create),
+        _ => None,
+    }
+}
+
+/// "Create a 3/3 colorless Robot artifact creature token. If you rolled 6 or higher,
+/// instead create that token and a Treasure token.": the token, and more.
+fn f_instead_that_token_and(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = l.strip_prefix("if ") else {
+        return false;
+    };
+    let Some((cond, rest)) = r.split_once(", instead create that token and ") else {
+        return false;
+    };
+    let Some(token) = last_create(prev).cloned() else {
+        return false;
+    };
+    let Some(cond) = crate::oracle::statics::parse_condition(cond, b.ctx) else {
+        return false;
+    };
+    let Some(more) = parse_clause(&format!("create {rest}"), b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::If {
+        cond,
+        then: Box::new(Effect::seq(vec![token, more])),
+        otherwise: Box::new(old),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "a706 instead create that token and", priority: 10, apply: f_instead_that_token_and } }
+
+/// "permanents named Wirefly": an object with that name (CR 201.2); the name is as printed
+/// (capitalized).
+fn named_suffix<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = s.strip_prefix("named ")?;
+    let n = r.find([',', '.', ';']).unwrap_or(r.len());
+    let (name, rest) = (&r[..n], &r[n..]);
+    if name.is_empty() || name.contains('~') || name.contains(" and ") || name.contains(" or ")
+    {
+        return None;
+    }
+    let printed = super::cost_parts::printed_name(name)?;
+    Some((Filter::Named(printed), rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "a705 named [printed name]", priority: 100, parse: named_suffix } }
+
+/// "After you roll a die, you may pay 1 life. If you do, increase or decrease the result by
+/// 1. Do this only once each turn." (CR 706.2a)
+fn s_after_you_roll(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("after you roll a die, you may ")?;
+    let (cost, rest) = r.split_once(". if you do, increase or decrease the result by ")?;
+    let (n, once) = match rest.split_once(". ") {
+        Some((n, "do this only once each turn")) => (n, true),
+        None => (rest, false),
+        _ => return None,
+    };
+    let n: i64 = n.trim().parse().ok()?;
+    let (cost, _) = crate::oracle::costs::parse_cost(cost)?;
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Dice(DiceStatic::Modifier(
+            DieModifier {
+                whose: PlayerRel::You,
+                kind: ModifierKind::AddOrSubtract(n),
+                cost,
+                once_per_turn: once,
+                natural: None,
+                sides: None,
+                text: text.to_string(),
+            },
+        )))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "a706 after you roll a die, you may", priority: 0, parse: s_after_you_roll } }
+
 // ---------------------------------------------------------------------------
 // Conditions
 // ---------------------------------------------------------------------------
@@ -195,6 +325,21 @@ fn c_dice_coins(c: &str) -> Option<Condition> {
             "{RESULT_THIS_TURN}:{n}"
         ))));
     }
+    // "you rolled 6 exactly seven times": that many of the roll's results were 6.
+    if let Some(r) = c.strip_prefix("you rolled ") {
+        if let Some((n, times)) = r.split_once(" exactly ") {
+            let n: u32 = n.parse().ok().filter(|n| (1..=20).contains(n))?;
+            let (m, rest) = parse_number(times)?;
+            if rest.trim() != "times" && rest.trim() != "time" {
+                return None;
+            }
+            return Some(Condition::Compare(
+                Value::Var(RESULT_COUNT + n as Var),
+                Cmp::Eq,
+                m,
+            ));
+        }
+    }
     // "you rolled 6 or higher", "the roll was 6 or higher": the roll the ability is about.
     if let Some(r) = c
         .strip_prefix("you rolled ")
@@ -220,6 +365,10 @@ fn c_dice_coins(c: &str) -> Option<Condition> {
         };
         let n: i32 = n.parse().ok()?;
         return Some(Condition::Compare(the_result(), cmp, Value::c(n)));
+    }
+    // "if you win all the flips": none lost.
+    if c == "you win all the flips" || c == "you won all the flips" {
+        return Some(Condition::Compare(Value::Var(LOSSES), Cmp::Eq, Value::c(0)));
     }
     // "you won five flips this way"
     if let Some(r) = c.strip_prefix("you won ") {

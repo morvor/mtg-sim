@@ -41,6 +41,9 @@ pub const OTHER: Var = vars::USER + 8500;
 /// The number of even and odd results of the most recent roll ("for each even result").
 pub const EVENS: Var = vars::USER + 8501;
 pub const ODDS: Var = vars::USER + 8502;
+/// `RESULT_COUNT + n`: how many results of the most recent roll were `n` (1..=20, "if you
+/// rolled 6 exactly seven times").
+pub const RESULT_COUNT: Var = vars::USER + 8530;
 
 /// `Value::Custom`: "the result" — of the resolving ability's own roll, or else of the
 /// roll that triggered the ability ("whenever you roll one or more dice, ... equal to
@@ -155,6 +158,10 @@ pub struct CoinFlip {
     pub call: bool,
     /// "flip a coin until you lose a flip".
     pub until_lose: bool,
+    /// With `until_lose`: "flip a coin X times or until you lose a flip, whichever comes
+    /// first".
+    #[serde(default)]
+    pub max_flips: Option<Value>,
     pub on_win: Effect,
     pub on_lose: Effect,
     pub on_heads: Effect,
@@ -168,6 +175,7 @@ impl CoinFlip {
             count: Value::c(1),
             call: true,
             until_lose: false,
+            max_flips: None,
             on_win: Effect::Noop,
             on_lose: Effect::Noop,
             on_heads: Effect::Noop,
@@ -295,6 +303,10 @@ pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
                 .insert(EVENS, results.iter().filter(|r| *r % 2 == 0).count() as i64);
             ctx.nums
                 .insert(ODDS, results.iter().filter(|r| *r % 2 != 0).count() as i64);
+            for n in 1..=20i64 {
+                let k = results.iter().filter(|r| **r == n).count() as i64;
+                ctx.nums.insert(RESULT_COUNT + n as Var, k);
+            }
             if let Some(sel) = &spec.store_on {
                 for o in g.resolve_objects(sel, ctx) {
                     let v = g.dice.stored.entry(o).or_default();
@@ -574,9 +586,13 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
         let (mut wins, mut losses, mut heads, mut tails) = (0i64, 0i64, 0i64, 0i64);
         let at_once = &mut at_once[pi];
         let mut i = 0u32;
+        let max = spec
+            .max_flips
+            .as_ref()
+            .map_or(1000, |v| g.eval_value(v, ctx).clamp(0, 1000) as u32);
         loop {
             if spec.until_lose {
-                if losses > 0 || i >= 1000 {
+                if losses > 0 || i >= max {
                     break;
                 }
             } else if i >= n {
