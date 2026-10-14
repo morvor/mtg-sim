@@ -348,6 +348,12 @@ impl Renderer<'_> {
                     ),
                 )
             }
+            // "When enchanted artifact is put into a graveyard", "whenever a permanent you
+            // control is put into a graveyard": what's enchanted or controlled is on the
+            // battlefield, so that's dying (CR 700.4).
+            TriggerCond::Dies(f) if on_battlefield_noun(f) && matches!(det, Det::A) => {
+                Ev::new(obj(self, f), "{alt:dies|is put into a graveyard}")
+            }
             TriggerCond::Dies(f) => Ev::new(obj(self, f), "dies"),
             // "Whenever a spell or ability an opponent controls destroys a land you
             // control" (CR 701.8).
@@ -720,7 +726,7 @@ impl Renderer<'_> {
                     )
                 }
             }
-            TriggerCond::CountersRemoved { filter, kind } => {
+            TriggerCond::CountersRemoved { filter, kind, .. } => {
                 let k = match kind {
                     Some(k) => counter_name(k),
                     None => "counter".into(),
@@ -766,7 +772,9 @@ impl Renderer<'_> {
                     ),
                     other => other.clone(),
                 };
-                let o = self.noun_det(&f, Det::A);
+                // "Whenever you create one or more tokens" (once for all created at once).
+                let d = if self.batch_once { Det::OneOrMore } else { Det::A };
+                let o = self.noun_det(&f, d);
                 Ev::new("you", format!("create {o}"))
             }
             TriggerCond::LandPlayed { who, filter } => {
@@ -1377,8 +1385,11 @@ impl Renderer<'_> {
                 };
                 let many = matches!(d, Det::OneOrMore);
                 let saved = std::mem::replace(&mut self.batch_once, matches!(per, BatchPer::Batch));
+                let saved_source =
+                    std::mem::replace(&mut self.batch_per_source, matches!(per, BatchPer::Other));
                 let e = self.trigger_event(trigger, d);
                 self.batch_once = saved;
+                self.batch_per_source = saved_source;
                 // "Whenever one or more creatures attack" / "Whenever ~ deals damage".
                 if many || e.subj.contains("one or more") {
                     Ev::new(e.subj, plural_verb(&e.vp))
@@ -1390,6 +1401,12 @@ impl Renderer<'_> {
                 let w = self.rel_subject(*who);
                 let s = self.spell_noun(filter, det.clone());
                 Ev::new(w, format!("copy {s}"))
+            }
+            // "Whenever the Ring tempts you" (CR 701.54d): the player is the object.
+            TriggerCond::PlayerAction { name, who: PlayerRel::You }
+                if name == crate::kwa::ring::RING_TEMPTS =>
+            {
+                Ev::new("", "the Ring tempts you")
             }
             TriggerCond::PlayerAction {
                 name,
@@ -1524,6 +1541,19 @@ impl Renderer<'_> {
     }
 
     fn recipient(&mut self, r: &DamageRecipient) -> String {
+        // Once for all the recipients dealt damage at once (by the whole batch, or by each
+        // source): "deals combat damage to one or more players", "~ deals combat damage to
+        // one or more blocking creatures".
+        if self.batch_once || self.batch_per_source {
+            match r {
+                DamageRecipient::Player(PlayerRel::Any) => return "one or more players".into(),
+                DamageRecipient::Player(PlayerRel::Opponent) => {
+                    return "one or more opponents".into()
+                }
+                DamageRecipient::Object(f) => return self.noun_det(f, Det::OneOrMore),
+                _ => {}
+            }
+        }
         match r {
             DamageRecipient::Any => "any target".into(),
             DamageRecipient::Player(PlayerRel::Any) => "a player".into(),
@@ -1654,6 +1684,10 @@ fn names_another_object(trig: &str) -> bool {
         if !DETERMINERS.contains(w) && !quantity {
             continue;
         }
+        // What's attacked ("Whenever ~ attacks a battle") isn't what "it" names after.
+        if i >= 1 && matches!(words[i - 1], "attacks" | "attack") {
+            continue;
+        }
         // The noun: skip modifiers ("a +1/+1 counter", "a nontoken creature").
         let noun = words[i + 1..]
             .iter()
@@ -1682,5 +1716,21 @@ impl Renderer<'_> {
                 format!("a spell or ability {c}")
             }
         }
+    }
+}
+
+/// Whether a filter names only permanents on the battlefield by what it says (enchanted,
+/// controlled, a permanent): "is put into a graveyard" means from the battlefield then.
+/// (A spell or card you control isn't a permanent; a type named alone is, CR 109.2.)
+fn on_battlefield_noun(f: &Filter) -> bool {
+    match f {
+        Filter::AttachedToSource | Filter::Permanent | Filter::ControlledBy(_) => true,
+        Filter::And(v) => {
+            v.iter().any(on_battlefield_noun)
+                && !v
+                    .iter()
+                    .any(|x| matches!(x, Filter::Spell | Filter::Card | Filter::InZone(_)))
+        }
+        _ => false,
     }
 }

@@ -29,6 +29,7 @@ mod effects;
 mod extremes;
 mod history_values;
 mod keywords;
+mod library_top;
 mod nouns;
 mod once_each_turn;
 mod outcomes;
@@ -804,6 +805,8 @@ pub struct Renderer<'a> {
     /// Rendering a trigger event that triggers once for a whole batch of events
     /// (`BatchPer::Batch`): "one or more players", "one or more Humans".
     pub(crate) batch_once: bool,
+    /// Rendering a trigger that triggers once per source of a batch of damage events.
+    pub(crate) batch_per_source: bool,
     /// The instruction before is one the player must follow if able ("Sacrifice a
     /// creature. If you can't, ...").
     pub(crate) prev_mandatory: bool,
@@ -945,6 +948,7 @@ impl<'a> Renderer<'a> {
             outer_vars: Vec::new(),
             it_done: None,
             batch_once: false,
+            batch_per_source: false,
             prev_mandatory: false,
             milled: false,
             in_emblem: None,

@@ -3571,9 +3571,14 @@ pub enum TriggerCond {
         filter: Filter,
         by: PlayerRel,
     },
+    /// Counters are removed from [filter]: once for each removal action, or with `each`
+    /// ("Whenever a +1/+1 counter is removed from ~", Protean Hydra), once for each
+    /// counter removed.
     CountersRemoved {
         filter: Filter,
         kind: Option<CounterKind>,
+        #[serde(default)]
+        each: bool,
     },
     /// "When the Nth [kind] counter is put on [filter]": one or more counters are put on it
     /// such that it had fewer than N before and N or more after (CR 122.7).
