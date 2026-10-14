@@ -704,3 +704,45 @@ fn divine_visitation_ignores_tokens_that_become_creatures_as_they_enter() {
     assert!(named_tokens(&t, P0, "Angel").is_empty());
 }
 
+
+#[test]
+fn divine_visitation_and_effects_that_change_control_of_the_tokens() {
+    cr!("614.1a", "616.1", "614.12");
+    ruling!(
+        "Divine Visitation",
+        "If an effect changes under whose control a token would be created, that effect applies before Divine Visitation's effect applies. If an effect changes under whose control a token would enter the battlefield, that effect applies after Divine Visitation's effect is able to be applied."
+    );
+    supported("Crafty Cutpurse");
+    supported("Gather Specimens");
+    // Created under P1's control instead: P0's Divine Visitation doesn't apply, P1's does.
+    for p1_visitation in [false, true] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Divine Visitation");
+        if p1_visitation {
+            t.battlefield(P1, "Divine Visitation");
+        }
+        enter(&mut t, P1, "Crafty Cutpurse");
+        t.resolve_all();
+        create_soldier(&mut t, P0, false);
+        assert!(tokens(&t, P0).is_empty());
+        let (angels, soldiers) = (
+            named_tokens(&t, P1, "Angel").len(),
+            named_tokens(&t, P1, "Soldier").len(),
+        );
+        if p1_visitation {
+            assert_eq!((angels, soldiers), (2, 0));
+        } else {
+            assert_eq!((angels, soldiers), (0, 2));
+        }
+    }
+    // Entering under P1's control instead: P0's Divine Visitation still applies.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Divine Visitation");
+    let gs = t.hand(P1, "Gather Specimens");
+    mana(&mut t, P1, ManaType::U, 6);
+    t.cast(P1, gs).go();
+    t.resolve_all();
+    create_soldier(&mut t, P0, false);
+    assert!(tokens(&t, P0).is_empty());
+    assert_eq!(named_tokens(&t, P1, "Angel").len(), 2);
+}
