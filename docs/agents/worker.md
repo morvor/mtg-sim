@@ -12,8 +12,11 @@ implementation, an adversarial review, and landing, using subagents.
    the checkout is on that branch and up to date (`git pull --ff-only`).
 2. `cargo --version` must work. If it doesn't, install the stable toolchain
    (`curl -sSf https://sh.rustup.rs | sh -s -- -y`, then `source ~/.cargo/env`).
-3. Disk and CPU are limited: run at most the number of items in parallel your queue
-   says (default 3). Each worktree's `target/` grows to about 4-5 GB.
+3. Disk, CPU and memory are limited (4 cores, ~15 GB RAM; running out of memory restarts
+   the whole machine and kills every subagent): run at most the number of items in parallel
+   your queue says (default 2), `export CARGO_BUILD_JOBS=2` in every shell, and tell every
+   subagent the same and never to run two cargo builds at once in one worktree or to build
+   a second checkout for before/after numbers. Each worktree's `target/` grows to about 4-5 GB.
 
 ## Per item
 
@@ -26,8 +29,10 @@ implementation, an adversarial review, and landing, using subagents.
    brief**, including the implementer's full report. It reviews, fixes, and lands.
 4. When the reviewer reports, record the result. After a successful landing, remove the
    worktree (`cargo clean` inside it, then `git worktree remove <worktree>`) and start the
-   next item. If a subagent dies or stops early, launch a fresh one on the same worktree,
-   telling it to continue from `git log`/`git status`/`git diff`.
+   next item. If a subagent dies or stops early (a crash, a machine restart, a usage limit),
+   launch a fresh one on the same worktree, telling it to continue from
+   `git log`/`git status`/`git diff`. After a usage limit your session may only resume when
+   the coordinator messages you: then relaunch every interrupted item the same way.
 
 Keep your own context small: don't read engine code yourself, delegate. Never push
 anything yourself except through `scripts/land.sh` (the reviewer runs it); never push

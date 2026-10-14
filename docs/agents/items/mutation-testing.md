@@ -10,3 +10,5 @@ WHY: the suite has about 12,800 tests, and most of the effort now goes into test
 6. Leave the commands in docs/MUTATION.md so the measurement can be repeated later, for example before the final PR.
 
 DONE when docs/MUTATION.md covers the core files above, the meaningful survivors are killed or listed with reasons, and the kill rates before and after are recorded.
+
+INTERRUPTIONS: a first run (Oct 3) caught 214 of 279 mutants (80%) on the first files before it was interrupted, and its results were lost with its machine. So that an interruption never loses hours of runs again: run one file (or one shard) at a time, write each file's results into docs/MUTATION.md as soon as it finishes, commit, and land the partial report with scripts/land.sh after every few files. A resumed run skips files already in the report.
