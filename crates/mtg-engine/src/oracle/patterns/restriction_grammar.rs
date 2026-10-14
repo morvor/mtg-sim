@@ -538,7 +538,13 @@ fn cost_and_cant_be_countered(l: &str, text: &str, ctx: &CompileContext) -> Opti
         PlayerRel::Opponent => PlayerRel::Opponent,
         _ => return None,
     };
-    let what = Filter::and(vec![f.clone(), Filter::Spell, Filter::ControlledBy(rel)]);
+    // "Spells ... you cast": cast by that player, not copies or spells whose control changed.
+    let who = if head.contains(" cast") {
+        Filter::CastBy(rel)
+    } else {
+        Filter::ControlledBy(rel)
+    };
+    let what = Filter::and(vec![f.clone(), Filter::Spell, who]);
     let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBeCountered(
         what,
     )));
@@ -646,6 +652,7 @@ fn spells_subject(s: &str) -> Option<Filter> {
         Some(r) => (r, true),
         None => (s, false),
     };
+    let cast = s.ends_with(" cast");
     let (head, rel) = if let Some(h) = s
         .strip_suffix(" you cast")
         .or_else(|| s.strip_suffix(" you control"))
@@ -669,7 +676,13 @@ fn spells_subject(s: &str) -> Option<Filter> {
         f
     };
     if let Some(rel) = rel {
-        f = Filter::and(vec![f, Filter::ControlledBy(rel)]);
+        // "Spells you cast": cast by that player (not copies, CR 707.10).
+        let who = if cast {
+            Filter::CastBy(rel)
+        } else {
+            Filter::ControlledBy(rel)
+        };
+        f = Filter::and(vec![f, who]);
     }
     if other {
         f = Filter::and(vec![f, Filter::Other]);

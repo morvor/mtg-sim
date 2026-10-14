@@ -1461,6 +1461,9 @@ pub enum Filter {
     StackTargets(Box<TargetsFilter>),
     /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
     CastFrom(ZoneKind),
+    /// A spell cast by the given player ("spells you cast"): not a copy, and not one cast by
+    /// another player that changed control (Cunning Nightbonder's rulings).
+    CastBy(PlayerRel),
     /// A spell for which the named optional additional cost was paid ("a kicked spell":
     /// `"kicked"`, see `kw/kicker.rs`).
     CastWithCost(SmolStr),
