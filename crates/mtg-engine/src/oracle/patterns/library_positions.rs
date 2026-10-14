@@ -135,6 +135,17 @@ fn self_and(s: &str, b: &mut Builder) -> Option<Sel> {
             ])),
         ]));
     }
+    // "put ~ and each creature blocking or blocked by it on top of their owners'
+    // libraries" (Vortex Elemental).
+    if r == "each creature blocking or blocked by it" {
+        return Some(Sel::Union(vec![
+            Sel::This,
+            Sel::All(Filter::and(vec![
+                Filter::Type(crate::types::CardType::Creature),
+                Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]),
+            ])),
+        ]));
+    }
     let (spec, rest) = parse_target(r)?;
     if !rest.trim().is_empty() {
         return None;

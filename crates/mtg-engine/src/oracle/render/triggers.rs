@@ -723,7 +723,7 @@ impl Renderer<'_> {
                     )
                 }
             }
-            TriggerCond::CountersRemoved { filter, kind } => {
+            TriggerCond::CountersRemoved { filter, kind, .. } => {
                 let k = match kind {
                     Some(k) => counter_name(k),
                     None => "counter".into(),
