@@ -292,3 +292,37 @@ fn geode_golem_casts_your_commander_paying_only_the_tax() {
     assert!(t.on_battlefield(t.g.current(giant)));
     assert!(lands.iter().all(|l| t.obj_now(*l).tapped));
 }
+
+#[test]
+fn banes_contingency_draws_when_the_spell_targets_your_commander() {
+    cr!("115.10", "701.6a");
+    assert_supported(&["Bane's Contingency"]);
+    let mut t = commander_game();
+    let cmdr = commander_on_battlefield(&mut t, P0, "Hill Giant");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let spell = t.cast(P1, bolt).target(cmdr).go();
+    t.lands(P0, "Island", 3);
+    let bane = t.hand(P0, "Bane's Contingency");
+    let before = t.hand_size(P0);
+    t.cast(P0, bane).target(spell).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(cmdr));
+    // Bane's Contingency left the hand; a card was drawn.
+    assert_eq!(t.hand_size(P0), before);
+    // Targeting a noncommander: only countered.
+    let mut t = commander_game();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let spell = t.cast(P1, bolt).target(bears).go();
+    t.lands(P0, "Island", 3);
+    let bane = t.hand(P0, "Bane's Contingency");
+    let before = t.hand_size(P0);
+    t.cast(P0, bane).target(spell).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.hand_size(P0), before - 1);
+}

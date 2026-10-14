@@ -112,3 +112,49 @@ fn each_who_controls(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "game rules: each opponent who (doesn't) control(s) [object] [does something]", priority: 100, parse: each_who_controls } }
+
+/// "Counter target spell. If that spell targets a commander you control, instead counter
+/// that spell, scry 2, then draw a card." (Bane's Contingency): the "instead" sentence
+/// replaces the countering when the countered spell has such a target (CR 115.10).
+fn if_that_spell_targets_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if that spell targets ") else {
+        return false;
+    };
+    let Some((obj, rest)) = r.split_once(", instead ") else {
+        return false;
+    };
+    let Effect::CounterSpell { what } = &*prev else {
+        return false;
+    };
+    let spell = what.clone();
+    let Some(obj) = obj.strip_prefix("a ").or_else(|| obj.strip_prefix("an ")) else {
+        return false;
+    };
+    let Some((f, false, tail)) = crate::oracle::phrases::parse_object_phrase(obj) else {
+        return false;
+    };
+    if !end(tail).is_empty() {
+        return false;
+    }
+    let saved_it = std::mem::replace(&mut b.it, spell.clone());
+    // "counter that spell, scry 2, then draw a card": a list of instructions.
+    let rest = rest.replace("that spell", "it").replace(", then ", ", ");
+    let parts: Option<Vec<Effect>> = rest
+        .split(", ")
+        .map(|p| crate::oracle::effects::parse_clause(p, b))
+        .collect();
+    b.it = saved_it;
+    let Some(parts) = parts else {
+        return false;
+    };
+    let new = Effect::seq(parts);
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::If {
+        cond: Condition::SelMatches(spell, Filter::Targets(Box::new(f))),
+        then: Box::new(new),
+        otherwise: Box::new(old),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "game rules: if that spell targets [object], instead [effect]", priority: 100, apply: if_that_spell_targets_instead } }

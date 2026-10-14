@@ -177,3 +177,24 @@ fn vraska_gives_poison_counters_up_to_nine() {
     assert_eq!(t.g.player(P1).counter("poison"), 9);
     assert!(!t.has_lost(P1));
 }
+
+#[test]
+fn radiant_destiny_gives_vigilance_with_the_citys_blessing() {
+    cr!("702.131c");
+    assert_supported(&["Radiant Destiny"]);
+    let mut t = TestGame::new(2);
+    let i = mtg_engine::types::subtype_lists()
+        .creature
+        .iter()
+        .position(|s| s == "Bear")
+        .expect("creature type");
+    t.answer(P0, DecisionKind::Option, Answer::Index(i));
+    t.enter(P0, "Radiant Destiny");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.recompute();
+    assert_eq!(t.pt(bears), (3, 3));
+    assert!(!t.obj_now(bears).chars.has_keyword(keywords::KeywordKind::Vigilance));
+    t.g.players[0].has_citys_blessing = true;
+    t.g.recompute();
+    assert!(t.obj_now(bears).chars.has_keyword(keywords::KeywordKind::Vigilance));
+}
