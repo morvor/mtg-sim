@@ -15,8 +15,12 @@ impl Renderer<'_> {
         if let Some(s) = self.craft_value(v) {
             return s;
         }
+        if let Some(s) = self.value_extra(v) {
+            return s;
+        }
         match v {
             Value::Const(n) => n.to_string(),
+            Value::X if self.extra.x_words.is_some() => self.extra.x_words.unwrap_or("X").into(),
             Value::X => "X".into(),
             // "for each card discarded this way": the objects the instruction before
             // affected.
@@ -329,6 +333,9 @@ impl Renderer<'_> {
                 format!("the number of colors of mana spent to cast {}", self.me())
             }
             Value::ManaSpent => format!("the amount of mana spent to cast {}", self.me()),
+            // The number "pay any amount of life" as the permanent entered chose (see
+            // `kw/pay_any_amount_of_life.rs`).
+            Value::Chosen if self.extra.life_paid => "the life paid as ~it entered".into(),
             Value::Chosen => "the chosen number".into(),
             Value::TimesKicked => format!("the number of times {} was kicked", self.me()),
             Value::Speed(p) => {
@@ -535,6 +542,11 @@ impl Renderer<'_> {
         match v {
             Value::Const(1) => (with_article(noun), None),
             Value::Const(n) => (format!("{} {}", number_word(*n), plural(noun)), None),
+            // The amount paid by "pay any amount of ..." ("draw that many cards").
+            Value::X if self.extra.x_paid => {
+                let w = self.extra.x_words.unwrap_or("that many");
+                (format!("{w} {}", plural(noun)), None)
+            }
             Value::X => (format!("X {}", plural(noun)), None),
             Value::EventAmount | Value::Prev | Value::Var(_) => {
                 (format!("that many {}", plural(noun)), None)

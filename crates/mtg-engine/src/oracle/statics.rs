@@ -628,6 +628,13 @@ pub fn parse_value_phrase_core(s: &str, b: &mut Builder) -> Option<(Value, Strin
             return Some((Value::LifeGainedThisTurn(PlayerRef::You), rest.to_string()));
         }
     }
+    // CR 106.4: "the amount of unspent mana you have" (the mana in your mana pool).
+    if let Some(rest) = s.strip_prefix("the amount of unspent mana you have") {
+        return Some((
+            Value::Custom(crate::kw::unspent_mana_value::UNSPENT_MANA_YOU_HAVE.into()),
+            rest.to_string(),
+        ));
+    }
     // CR 903.3e: "your commander's mana value".
     if let Some(rest) = s.strip_prefix("your commander's mana value") {
         return Some((

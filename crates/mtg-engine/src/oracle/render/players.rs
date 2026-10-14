@@ -39,7 +39,7 @@ pub enum Case {
 /// attacks"): "that opponent" as well as "that player".
 pub(crate) const OPPONENT_EVENT: &str = "that opponent";
 
-fn decline(s: String, case: Case) -> String {
+pub(crate) fn decline(s: String, case: Case) -> String {
     match case {
         // Alternative wordings each take the possessive.
         Case::Poss if s.starts_with("{alt:") && s.ends_with('}') => {
@@ -120,7 +120,12 @@ impl Renderer<'_> {
                 Some("any number of".into())
             }
             (Some(n), None) => {
-                let v = self.value(&t.max);
+                // "up to that many target lands": the amount just paid.
+                let v = if matches!(t.max, Value::X) && self.extra.x_paid {
+                    "that many".to_string()
+                } else {
+                    self.value(&t.max)
+                };
                 if n == 0 {
                     Some(format!("up to {v}"))
                 } else {
@@ -453,6 +458,9 @@ impl Renderer<'_> {
 
     /// A selection of objects/players.
     pub(crate) fn sel(&mut self, s: &Sel, case: Case) -> String {
+        if let Some(r) = self.sel_extra(s, case) {
+            return r;
+        }
         let it = |case: Case| match case {
             Case::Poss => "its".to_string(),
             _ => "it".to_string(),
@@ -738,8 +746,11 @@ impl Renderer<'_> {
             Sel::LinkedNoted => decline("the last chosen card".into(), case),
             Sel::Before(inner) => self.sel(inner, case),
             Sel::ThisTurn(c) => {
-                let g = self.gap(format!("Sel::ThisTurn({c:?})"));
-                decline(g, case)
+                let s = match self.this_turn_objects(c) {
+                    Some(s) => s,
+                    None => self.gap(format!("Sel::ThisTurn({c:?})")),
+                };
+                decline(s, case)
             }
             // "the creatures destroyed this way": the objects an earlier instruction acted
             // on.

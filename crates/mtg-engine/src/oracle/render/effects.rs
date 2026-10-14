@@ -1070,6 +1070,16 @@ impl Renderer<'_> {
                     }
                     String::new()
                 }
+                Sel::Union(parts) => {
+                    let var = match e {
+                        Effect::Store { var, .. } => *var,
+                        _ => 0,
+                    };
+                    match self.remember_union(var, parts) {
+                        Some(s) => s,
+                        None => self.gap(format!("remembering {sel:?}")),
+                    }
+                }
                 other => self.gap(format!("remembering {other:?}")),
             },
             Effect::StoreValue { var, value } => {
@@ -1850,6 +1860,11 @@ impl Renderer<'_> {
                 duration,
                 repeatable,
             } => {
+                if matches!(duration, Duration::WhileSourceOnBattlefield) && !*repeatable {
+                    if let Some(s) = self.special_action_extra(def) {
+                        return s;
+                    }
+                }
                 let d = self.duration(duration);
                 let c = self.cost(&def.cost);
                 let what = match &def.action {
@@ -3032,6 +3047,11 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            if let Some((s, used)) = self.seq_extra(&v[i..]) {
+                parts.push(s);
+                i += used;
+                continue;
+            }
             // "Roll a d20. Create X Treasure tokens, where X is the result.": the number
             // X stands for is said where X is first used (CR 107.3).
             if let Effect::SetX { value } = &v[i] {
@@ -3404,11 +3424,20 @@ impl Renderer<'_> {
             ) = (v.get(i), v.get(i + 1))
             {
                 let named = format!("{all:?}");
+                let var_n = *var;
                 let var = format!("{:?}", Sel::Var(*var));
-                if !next.is_some_and(|n| {
-                    let n = format!("{n:?}");
-                    n.contains(&named) || n.contains(&var)
-                }) {
+                let names = |n: &Effect| {
+                    custom_extra::names_it(n, var_n) || {
+                        let n = format!("{n:?}");
+                        n.contains(&named) || n.contains(&var)
+                    }
+                };
+                // (A group remembered with others, named by a later instruction.)
+                let later = v[i + 1..]
+                    .iter()
+                    .take_while(|e| matches!(e, Effect::Store { .. }));
+                let named_later = v[i + 1..].iter().skip(later.count()).take(1).any(names);
+                if !next.is_some_and(names) && !named_later {
                     parts.push(self.gap("a remembered group no instruction names"));
                 }
             }
@@ -3716,7 +3745,11 @@ impl Renderer<'_> {
                             who: PlayerRef::You,
                             ..
                         }
-                    ),
+                    )
+                    // "Pay {E}{E}. If you can't, ..." (see `kw/game_rules.rs`).
+                    || i > 0
+                        && matches!(&v[i - 1], Effect::Custom(n)
+                            if crate::kw::game_rules::is_pay_energy(n)),
             );
             let s = self.effect(&v[i]);
             self.prev_mandatory = saved_mandatory;
@@ -3781,6 +3814,18 @@ impl Renderer<'_> {
     ) -> String {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
+        // "That player shuffles that card into their library": only if a card was chosen
+        // (there's nothing to shuffle otherwise).
+        if else_empty {
+            if let Condition::SelNonEmpty(sel) = cond {
+                let shuffles_it = |e: &Effect| matches!(e, Effect::ShuffleIntoLibrary { what, .. } if same_sel(what, sel));
+                if shuffles_it(then)
+                    || matches!(then, Effect::AsPlayer { effect, .. } if shuffles_it(effect))
+                {
+                    return self.effect(then);
+                }
+            }
+        }
         // "Exile that card from your graveyard": only if it's still there (CR 400.7).
         if else_empty {
             if let Condition::SelMatches(sel, Filter::InZone(z)) = cond {
@@ -4677,6 +4722,11 @@ impl Renderer<'_> {
         let top = match n {
             Value::Const(1) => format!("the top card of {p} library"),
             Value::Const(k) => format!("the top {} cards of {p} library", number_word(*k)),
+            // "that many cards from the top of your library": the amount paid by "pay any
+            // amount of ...".
+            Value::X if self.extra.x_paid => format!(
+                "{{alt:the top X cards of {p} library|that many cards from the top of {p} library}}"
+            ),
             // "the top X cards of your library, where X is ...".
             other => {
                 let (v, w) = self.amount(other);
@@ -4911,6 +4961,10 @@ impl Renderer<'_> {
         let (c, w) = match count {
             Value::Const(1) => (with_article(&noun_one), None::<String>),
             Value::Const(n) => (format!("{} {noun_many}", number_word(*n)), None),
+            Value::X if self.extra.x_paid => {
+                let w = self.extra.x_words.unwrap_or("that many");
+                (format!("{w} {noun_many}"), None)
+            }
             Value::X => (format!("X {noun_many}"), None),
             // "create that many 1/1 black Insect creature tokens".
             Value::EventAmount | Value::Prev => (format!("that many {noun_many}"), None),
@@ -5370,8 +5424,15 @@ impl Renderer<'_> {
                     let regains = mods[pos..].iter().any(|x| {
                         matches!(x, Modification::AddAbility(_) | Modification::AddKeyword(_))
                     });
+                    let land = if custom_extra::loses_land_types_and_abilities(mods) {
+                        "land types and "
+                    } else {
+                        ""
+                    };
                     parts.push(if regains {
-                        "loses all {opt:other} abilities".into()
+                        format!("loses all {land}{{opt:other}} abilities")
+                    } else if !land.is_empty() {
+                        format!("loses all {land}abilities")
                     } else {
                         "loses all abilities".into()
                     })
@@ -5383,6 +5444,10 @@ impl Renderer<'_> {
                     becomes.pt = Some((p.clone(), t.clone()));
                 }
                 Modification::SwitchPT => parts.push("has its power and toughness switched".into()),
+                // "loses all land types and abilities" (with `RemoveAllAbilities`).
+                Modification::Custom { name, .. }
+                    if name.as_str() == crate::kw::grant_filters::LOSE_ALL_LAND_TYPES
+                        && custom_extra::loses_land_types_and_abilities(mods) => {}
                 Modification::Custom { name, .. } => {
                     let t = self.custom_modification(name);
                     parts.push(t);
@@ -5591,7 +5656,9 @@ impl Renderer<'_> {
             let at = parts
                 .iter()
                 .take_while(|p| {
-                    p.starts_with("isn't") || (loses_first && p.as_str() == "loses all abilities")
+                    p.starts_with("isn't")
+                        || (loses_first && p.as_str() == "loses all abilities")
+                        || p.as_str() == custom_extra::LOSES_THIS_ABILITY
                 })
                 .count();
             parts.insert(at, b);
@@ -5822,6 +5889,11 @@ impl Renderer<'_> {
                 let syms: Vec<String> = types.iter().map(|t| mana_symbol(*t)).collect();
                 join_list(&syms, "or")
             }
+            ManaProduction::CouldProduce(Filter::In(s))
+                if matches!(**s, Sel::Var(crate::ability::vars::SACRIFICED)) =>
+            {
+                "one mana of any type the sacrificed land could produce".into()
+            }
             ManaProduction::CouldProduce(f) => {
                 let n = self.noun_det(f, Det::A);
                 format!("one mana of any type that {n} could produce")
@@ -5872,9 +5944,23 @@ impl Renderer<'_> {
                     }
                 }
             }
+            ManaProduction::AnyColorAmong(Filter::Source) => "one mana of any of ~'s colors".into(),
+            ManaProduction::AnyColorAmong(Filter::And(v))
+                if v.iter()
+                    .any(|f| matches!(f, Filter::In(s) if matches!(**s, Sel::Linked))) =>
+            {
+                "one mana of any of the exiled {alt:card's|cards'} colors".into()
+            }
             ManaProduction::AnyColorAmong(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("one mana of any color among {n}")
+            }
+            ManaProduction::DistinctColors(2, each) if *each > 1 => {
+                let w = number_word(*each as i32);
+                format!("{w} mana of any one color and {w} mana of any other color")
+            }
+            ManaProduction::DistinctColors(colors, _) => {
+                format!("{} mana of different colors", number_word(*colors as i32))
             }
             ManaProduction::EachColorAmong(f) => {
                 let n = self.noun(f, Num::Many);
@@ -5893,6 +5979,9 @@ impl Renderer<'_> {
             }
             ManaProduction::CommanderIdentity => {
                 "one mana of any color in your commander's color identity".into()
+            }
+            ManaProduction::DevotionToChosenColor => {
+                "an amount of mana of that color equal to your devotion to that color".into()
             }
         }
     }
@@ -5969,6 +6058,19 @@ impl Renderer<'_> {
                 format!("to activate {{alt:abilities of {n}|an ability of {a}|an ability of {a} source}}")
             }
             M::ClassLevel => "to gain a Class level".into(),
+            M::Purpose(crate::mana::SpendPurpose::UnlockDoor) => "to unlock doors".into(),
+            M::Purpose(crate::mana::SpendPurpose::Keyword(k)) => {
+                use crate::keywords::KeywordKind as K;
+                match k {
+                    K::CumulativeUpkeep => "to pay cumulative upkeep costs".into(),
+                    K::Foretell => "to foretell {alt:cards|a card from your hand}".into(),
+                    k => {
+                        let n = k.name().to_lowercase();
+                        format!("to activate {{alt:{n} abilities|an {n} ability|a {n} ability}}")
+                    }
+                }
+            }
+            M::CostWithColorless => "to pay a cost that contains {C}".into(),
             // "This mana can't be spent to cast spells from your hand."
             M::NotCastSpell(f) => {
                 let saved = self.default_head.replace("spell");
@@ -6009,8 +6111,12 @@ impl Renderer<'_> {
                 s.push_str(" and ignore all but the highest roll")
             }
         }
+        if r.choose_one {
+            s.push_str(" and choose one result");
+        }
         for row in &r.table {
             let range = match row.hi {
+                Some(h) if row.lo == i64::MIN => format!("{h} or less"),
                 None => format!("{}+", row.lo),
                 Some(h) if h == row.lo => format!("{h}"),
                 Some(h) => format!("{}—{h}", row.lo),
@@ -6027,7 +6133,10 @@ impl Renderer<'_> {
 
     fn flip_coins(&mut self, c: &crate::dice::CoinFlip) -> String {
         let p = self.player(&c.who, Case::Subj);
-        let mut s = if c.until_lose {
+        let mut s = if let (true, Some(max)) = (c.until_lose, &c.max_flips) {
+            let n = self.value(max);
+            format!("flip a coin {n} times or until you lose a flip, whichever comes first")
+        } else if c.until_lose {
             "flip a coin until you lose a flip".to_string()
         } else {
             match &c.count {

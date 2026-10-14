@@ -810,13 +810,19 @@ fn that_many_part(l: &str, b: &mut Builder) -> Option<Effect> {
     if !l.contains("that many") {
         return None;
     }
-    // "that many cards plus one".
+    // "that many cards plus one", "that many cards minus one" (Sycorax Commander).
     let (l, plus) = match l.rsplit_once(" plus ") {
         Some((head, n)) if head.contains("that many") => match parse_number(n) {
             Some((Value::Const(k), tail)) if tail.trim().is_empty() => (head, k),
             _ => (l, 0),
         },
-        _ => (l, 0),
+        _ => match l.rsplit_once(" minus ") {
+            Some((head, n)) if head.contains("that many") => match parse_number(n) {
+                Some((Value::Const(k), tail)) if tail.trim().is_empty() => (head, -k),
+                _ => (l, 0),
+            },
+            _ => (l, 0),
+        },
     };
     let rewritten = l.replace("that many", "x");
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
@@ -830,8 +836,14 @@ fn that_many_part(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let v = if plus == 0 {
         that_many
-    } else {
+    } else if plus > 0 {
         Value::Sum(vec![that_many, Value::Const(plus)])
+    } else {
+        // Never less than zero (CR 107.1b).
+        Value::Max(
+            Box::new(Value::Sum(vec![that_many, Value::Const(plus)])),
+            Box::new(Value::Const(0)),
+        )
     };
     super::r107_numbers::substitute_x(&e, &v)
 }

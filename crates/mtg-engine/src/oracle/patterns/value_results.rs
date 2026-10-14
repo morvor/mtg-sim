@@ -25,6 +25,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = life_lost_this_way(r) {
         return Some(v);
     }
+    // Attractions visited this turn (`un_stickers_attractions`).
+    if let Some(v) = super::un_stickers_attractions::count(r) {
+        return Some(v);
+    }
     if let Some(v) = trigger_spell_value(&format!("the number of {r}"), b) {
         return Some(v);
     }
@@ -50,6 +54,10 @@ pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some(v);
     }
     if let Some(v) = result_value(s, b) {
+        return Some(v);
+    }
+    // Die rolls and coin flips (`dice_coin_ext`).
+    if let Some(v) = super::dice_coin_ext::value(s) {
         return Some(v);
     }
     history_amount(s, b)

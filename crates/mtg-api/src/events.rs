@@ -64,6 +64,7 @@ fn cause_text(c: MoveCause) -> &'static str {
         MoveCause::Cost => "paid as a cost",
         MoveCause::Commander => "commander",
         MoveCause::Venture => "venture",
+        MoveCause::PlayerLeft => "a player left the game",
         MoveCause::Other => "other",
     }
 }

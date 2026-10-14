@@ -19,6 +19,7 @@ mod costs;
 mod counter_replacements;
 mod custom;
 mod custom_effects;
+mod custom_extra;
 mod custom_filters;
 mod custom_more;
 mod dig;
@@ -714,6 +715,8 @@ pub enum Num {
 pub struct Renderer<'a> {
     pub(crate) info: &'a FaceInfo,
     pub gaps: Vec<String>,
+    /// See [`custom_extra::ExtraState`].
+    pub(crate) extra: custom_extra::ExtraState,
     /// Target slots of the body being rendered.
     pub(crate) targets: Vec<TargetSpec>,
     /// Which target slots have been introduced ("target creature") already; later
@@ -902,6 +905,7 @@ impl<'a> Renderer<'a> {
         Renderer {
             info,
             gaps: Vec::new(),
+            extra: Default::default(),
             targets: Vec::new(),
             introduced: Vec::new(),
             quote_depth: 0,
@@ -1063,6 +1067,7 @@ impl<'a> Renderer<'a> {
     /// One ability.
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
+        self.extra.x_paid = false;
         self.var_defs.clear();
         self.outer_vars.clear();
         self.it_done = None;

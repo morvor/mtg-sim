@@ -28,7 +28,10 @@ fn phase_out(l: &str, b: &mut Builder) -> Option<Effect> {
         "it" | "that creature" | "that permanent" => b.it.clone(),
         "enchanted creature" | "equipped creature" | "enchanted permanent" => Sel::AttachedTo,
         // "each creature target player controls phases out" (Galadriel's Dismissal).
-        _ if subject.starts_with("each ") && subject.ends_with(" target player controls") => {
+        _ if subject.starts_with("each ")
+            && (subject.ends_with(" target player controls")
+                || subject.ends_with(" target opponent controls")) =>
+        {
             let r = subject.strip_prefix("each ")?;
             let (f, _, tail) = parse_object_phrase(r)?;
             let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
