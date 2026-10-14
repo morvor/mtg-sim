@@ -370,6 +370,10 @@ fn sudden_substitution_gives_the_permanent_the_spell_becomes_to_its_new_controll
         "Sudden Substitution",
         "its new controller will control the permanent it becomes"
     );
+    ruling!(
+        "Sudden Substitution",
+        "The noncreature spell is still on the stack after exchanging control"
+    );
     assert_supported("Sudden Substitution");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -386,6 +390,9 @@ fn sudden_substitution_gives_the_permanent_the_spell_becomes_to_its_new_controll
     t.resolve();
     assert_eq!(controller(&t, bears), P1);
     assert_eq!(controller(&t, spell), P0);
+    // Neither changed zones.
+    assert!(t.g.is_live(spell) && t.zone(spell) == Zone::Stack);
+    assert!(t.on_battlefield(bears));
     t.resolve_all();
     let stones = t.named_on_battlefield("Mind Stone");
     assert_eq!(stones.len(), 1);
@@ -459,4 +466,127 @@ fn inniaz_in_two_headed_giant_ignores_teams() {
     assert_eq!(controller(&t, bears), P1);
     assert_eq!(controller(&t, giant), P2);
     assert_eq!(controller(&t, wurm), P3);
+}
+
+#[test]
+fn aminatous_control_changes_outlast_her_and_her_controller() {
+    cr!("611.2a", "800.4a");
+    ruling!(
+        "Aminatou, the Fateshifter",
+        "It continues to apply after Aminatou (or her controller) leaves the game"
+    );
+    ruling!(
+        "Aminatou, the Fateshifter",
+        "stops applying to all permanents that player controlled and control of them reverts"
+    );
+    let mut t = TestGame::new(3);
+    let aminatou = loyal(&mut t, P0, "Aminatou, the Fateshifter", 6);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let c = t.battlefield(P2, "Craw Wurm");
+    aminatou_ultimate(&mut t, aminatou, LEFT);
+    assert_eq!(
+        [controller(&t, a), controller(&t, b), controller(&t, c)],
+        [P2, P0, P1]
+    );
+    t.g.destroy(aminatou, None);
+    t.settle();
+    assert_eq!(controller(&t, c), P1);
+    // P0 leaves: its own cards leave with it, what it took goes back, and the rest of
+    // the effect still applies.
+    t.g.lose_game(P0);
+    t.settle();
+    assert!(!t.g.is_live(a) || t.zone(a) != Zone::Battlefield);
+    assert_eq!(controller(&t, b), P1);
+    assert_eq!(controller(&t, c), P1);
+}
+
+#[test]
+fn inniazs_exchange_lasts_after_inniaz_and_the_turn_are_gone() {
+    cr!("611.2a");
+    ruling!(
+        "Inniaz, the Gale Force",
+        "It doesn’t wear off during the cleanup step, and it doesn’t expire if Inniaz leaves the battlefield"
+    );
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.answer_choose(P0, &[Entity::Object(theirs)]);
+    t.answer_choose(P0, &[Entity::Object(mine)]);
+    let inniaz = inniaz_attacks(&mut t);
+    assert_eq!(controller(&t, theirs), P0);
+    t.g.destroy(inniaz, None);
+    t.settle();
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(controller(&t, theirs), P0);
+    assert_eq!(controller(&t, mine), P1);
+}
+
+#[test]
+fn perplexing_chimeras_new_spell_is_yours_and_goes_to_its_owners_graveyard() {
+    cr!("701.12b", "109.5");
+    ruling!(
+        "Perplexing Chimera",
+        "After the ability resolves, you control the spell."
+    );
+    ruling!(
+        "Perplexing Chimera",
+        "If you gain control of an instant or sorcery spell, it will be put into its owner’s graveyard as it resolves, fails"
+    );
+    let mut t = TestGame::new(2);
+    let chimera = t.battlefield(P0, "Perplexing Chimera");
+    t.set_step(P1, Step::PrecombatMain);
+    let div = t.hand(P1, "Divination");
+    t.lands(P1, "Island", 3);
+    let (h0, h1) = (t.hand_size(P0), t.hand_size(P1) - 1);
+    t.cast(P1, div).go();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(controller(&t, chimera), P1);
+    // "Draw two cards": the new controller draws.
+    assert_eq!(t.hand_size(P0), h0 + 2);
+    assert_eq!(t.hand_size(P1), h1);
+    assert!(t.in_graveyard(P1, "Divination"));
+}
+
+#[test]
+fn perplexing_chimera_cant_exchange_once_it_has_left_the_battlefield() {
+    cr!("701.12a");
+    ruling!(
+        "Perplexing Chimera",
+        "If Perplexing Chimera leaves the battlefield or the spell leaves the stack before the triggered ability resolves"
+    );
+    let mut t = TestGame::new(2);
+    let chimera = t.battlefield(P0, "Perplexing Chimera");
+    t.set_step(P1, Step::PrecombatMain);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.lands(P1, "Mountain", 1);
+    let spell = t.cast(P1, bolt).target(P0).go();
+    t.answer_yes(P0, true);
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    t.g.destroy(chimera, None);
+    t.settle();
+    t.resolve();
+    // No half of the exchange happened: the spell is still P1's.
+    assert_eq!(controller(&t, spell), P1);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
+fn order_of_succession_can_take_a_creature_with_protection_from_blue() {
+    cr!("101.4b", "702.16b");
+    ruling!(
+        "Order of Succession",
+        "You can choose and gain control of a creature with protection from blue"
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let barbarian = t.battlefield(P1, "Yavimaya Barbarian");
+    let spell = t.hand(P0, "Order of Succession");
+    t.lands(P0, "Island", 4);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(controller(&t, barbarian), P0);
 }

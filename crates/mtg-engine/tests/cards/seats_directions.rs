@@ -343,3 +343,203 @@ fn teyos_restriction_ends_at_your_next_turn() {
     t.advance_to(P0, Step::BeginningOfCombat);
     assert!(attack_targets(&mut t, bears).contains(&Entity::Player(P2)));
 }
+
+#[test]
+fn teyos_restriction_outlasts_teyo() {
+    cr!("611.2a", "508.1c");
+    // The direction stays the one chosen for the ability, even after Teyo is gone.
+    let mut t = four_players();
+    let teyo = t.battlefield(P0, "Teyo, Geometric Tactician");
+    t.g.objects[teyo.0 as usize]
+        .counters
+        .insert("loyalty".into(), 5);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Option, Answer::Index(LEFT));
+    t.activate(P0, teyo, 1, &[]).unwrap();
+    t.resolve_all();
+    t.g.destroy(teyo, None);
+    t.settle();
+    assert!(!t.on_battlefield(teyo));
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    let targets = attack_targets(&mut t, bears);
+    assert!(targets.contains(&Entity::Player(P1)));
+    assert!(!targets.contains(&Entity::Player(P2)) && !targets.contains(&Entity::Player(P3)));
+}
+
+#[test]
+fn attack_direction_restrictions_dont_affect_targeting() {
+    cr!("508.1c", "115.1");
+    ruling!(
+        "Teyo, Geometric Tactician",
+        "It doesn't affect what players may be targeted by spells or abilities"
+    );
+    ruling!(
+        "Mystic Barrier",
+        "affects only what players and planeswalkers each player may attack with creatures they control"
+    );
+    for teyo in [false, true] {
+        let mut t = four_players();
+        t.set_step(P0, Step::PrecombatMain);
+        t.answer(P0, DecisionKind::Option, Answer::Index(LEFT));
+        if teyo {
+            let teyo = t.battlefield(P0, "Teyo, Geometric Tactician");
+            t.g.objects[teyo.0 as usize]
+                .counters
+                .insert("loyalty".into(), 5);
+            t.activate(P0, teyo, 1, &[]).unwrap();
+        } else {
+            t.enter(P0, "Mystic Barrier");
+        }
+        t.resolve_all();
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.g.objects[bears.0 as usize].summoning_sick = false;
+        // P2 can't be attacked, but can be targeted.
+        assert!(!attack_targets(&mut t, bears).contains(&Entity::Player(P2)));
+        let bolt = t.hand(P0, "Lightning Bolt");
+        t.lands(P0, "Mountain", 1);
+        t.cast(P0, bolt).target(P2).go();
+        t.resolve_all();
+        assert_eq!(t.life(P2), 17, "teyo: {teyo}");
+    }
+}
+
+#[test]
+fn pramikon_without_a_chosen_direction_restricts_nothing() {
+    cr!("508.1c");
+    ruling!(
+        "Pramikon, Sky Rampart",
+        "If no choice was made for Pramikon"
+    );
+    let mut t = four_players();
+    // Put onto the battlefield directly: no direction was chosen as it entered.
+    let pramikon = t.battlefield(P0, "Pramikon, Sky Rampart");
+    assert!(t.g.obj(pramikon).choices.text.is_none());
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    let targets = attack_targets(&mut t, bears);
+    for p in [P1, P2, P3] {
+        assert!(targets.contains(&Entity::Player(p)), "{p:?}");
+    }
+}
+
+#[test]
+fn mystic_barrier_skips_teammates_to_find_the_nearest_opponent() {
+    cr!("508.1c", "102.3");
+    ruling!(
+        "Mystic Barrier",
+        "you may need to disregard teammates sitting between you and the opponent seated nearest you"
+    );
+    let mut t = TestGame::with_config(
+        4,
+        GameConfig {
+            attack_multiple_players: true,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    );
+    t.answer(P0, DecisionKind::Option, Answer::Index(LEFT));
+    t.enter(P0, "Mystic Barrier");
+    t.resolve_all();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    // P1 (to P0's left) is a teammate: the nearest opponent to the left is P2.
+    let targets = attack_targets(&mut t, bears);
+    assert!(targets.contains(&Entity::Player(P2)));
+    assert!(!targets.contains(&Entity::Player(P3)));
+}
+
+#[test]
+fn grenzos_rebuttal_choices_arent_targeted_and_one_permanent_may_fill_two_kinds() {
+    cr!("101.4b", "702.16b");
+    ruling!(
+        "Grenzo's Rebuttal",
+        "If a permanent has more than one of the listed types, it can be chosen for any of them"
+    );
+    ruling!(
+        "Grenzo's Rebuttal",
+        "None of the chosen permanents are targeted. A player can choose a creature with protection from red"
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let thopter = t.battlefield(P1, "Ornithopter");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let knight = t.battlefield(P1, "Vulshok Refugee");
+    let forest = t.battlefield(P1, "Forest");
+    let spell = t.hand(P0, "Grenzo's Rebuttal");
+    t.lands(P0, "Mountain", 6);
+    // P0 chooses the Ornithopter as both the artifact and the creature.
+    t.answer_choose(P0, &[Entity::Object(thopter)]);
+    t.answer_choose(P0, &[Entity::Object(thopter)]);
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(thopter) && !t.on_battlefield(forest));
+    assert!(t.on_battlefield(bears) && t.on_battlefield(knight));
+
+    // A red spell's choice can be a creature with protection from red.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P1, "Mind Stone");
+    let knight = t.battlefield(P1, "Vulshok Refugee");
+    t.battlefield(P1, "Forest");
+    let spell = t.hand(P0, "Grenzo's Rebuttal");
+    t.lands(P0, "Mountain", 6);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(knight));
+}
+
+#[test]
+fn barroom_brawl_with_both_targets_gone_makes_no_copy() {
+    cr!("608.2b");
+    ruling!(
+        "Barroom Brawl",
+        "If both targets are illegal as Barroom Brawl attempts to resolve, it does nothing. No copy will be created."
+    );
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    let spell = t.hand(P0, "Barroom Brawl");
+    t.lands(P0, "Forest", 2);
+    t.answer_yes(P1, true);
+    t.cast(P0, spell).target(wurm).target(bears).go();
+    t.g.destroy(wurm, None);
+    t.g.destroy(bears, None);
+    t.settle();
+    let from = t.asked().len();
+    t.resolve_all();
+    assert!(t.asked()[from..].iter().all(|(p, _)| *p != P1));
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn barroom_brawl_with_one_target_gone_deals_no_damage_but_may_be_copied() {
+    cr!("608.2b", "707.10c");
+    ruling!(
+        "Barroom Brawl",
+        "neither creature will deal damage. However, the opponent to your left may still choose to copy"
+    );
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let p2_bears = t.battlefield(P2, "Grizzly Bears");
+    let spell = t.hand(P0, "Barroom Brawl");
+    t.lands(P0, "Forest", 2);
+    t.answer_yes(P1, true);
+    t.answer_yes(P1, true);
+    t.answer_targets(P1, &[Entity::Object(giant)]);
+    t.answer_targets(P1, &[Entity::Object(p2_bears)]);
+    t.cast(P0, spell).target(wurm).target(bears).go();
+    t.g.destroy(wurm, None);
+    t.settle();
+    t.resolve_all();
+    // The original dealt no damage; P1's copy had its Hill Giant fight P2's Grizzly Bears.
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.obj_now(bears).damage, 0);
+    assert!(!t.on_battlefield(p2_bears));
+}

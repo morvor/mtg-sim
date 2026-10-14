@@ -300,7 +300,15 @@ fn liege_of_the_hollows_gives_each_player_squirrels_for_their_own_mana() {
     let blade = t.hand(P1, "Doom Blade");
     t.g.turn.priority = Some(P1);
     t.cast(P1, blade).target(liege).go();
+    let from = t.asked().len();
     t.resolve_all();
+    // The player whose turn it is pays first, then the others in turn order.
+    let payers: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseX { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(payers, vec![P0, P1]);
     let squirrels = |p: PlayerId| {
         t.named_on_battlefield("Squirrel Token")
             .iter()
