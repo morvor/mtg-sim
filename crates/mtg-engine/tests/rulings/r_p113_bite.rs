@@ -591,3 +591,125 @@ fn bites_need_both_targets_to_be_cast() {
         }
     }
 }
+
+#[test]
+fn finishing_move_sticker_is_chosen_on_resolution_and_may_go_on_the_creature() {
+    cr!("123.3", "608.2c", "601.2c");
+    ruling!(
+        "Finishing Move",
+        "The nonland permanent you put a sticker on, if any, isn’t a target of the spell and is chosen as the spell resolves. It can be the creature that’s about to deal damage, but it doesn’t have to be."
+    );
+    use mtg_engine::stickers::{self, SheetFormat, StickerDef, StickerKind, StickerSheet};
+    let mut t = TestGame::new(2);
+    // P0's sticker sheet has a 5/5 power and toughness sticker.
+    let sheet = StickerSheet {
+        name: "Sheet".into(),
+        stickers: vec![StickerDef {
+            kind: StickerKind::PowerToughness(5, 5),
+            ticket_cost: 1,
+        }],
+    };
+    stickers::choose_sheets(&mut t.g, P0, vec![sheet], SheetFormat::Limited).unwrap();
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Craw Wurm");
+    let spell = cast_modes(&mut t, P0, "Finishing Move", &[], &[ent(mine), ent(theirs)]);
+    assert_eq!(
+        crate::r_s25_common::targets_of(&t, spell),
+        vec![ent(mine), ent(theirs)],
+        "only the two creatures are targets"
+    );
+    let from = t.asked().len();
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[ent(mine)]);
+    t.resolve_all();
+    let asked: Vec<_> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| !matches!(d, Decision::Priority { .. }))
+        .cloned()
+        .collect();
+    assert!(
+        asked.iter().any(|(_, d)| matches!(
+            d,
+            Decision::ChooseEntities { candidates, .. } if candidates.contains(&ent(mine))
+        )),
+        "the sticker's permanent is chosen as it resolves"
+    );
+    assert!(stickers::is_stickered(&t.g, t.g.current(mine)));
+    assert_eq!(t.pt(mine), (5, 5));
+    assert!(!t.on_battlefield(theirs), "5 damage to the 6/4 Wurm");
+}
+
+/// P0's Hill Giant (3/3) targeted by Betrayal at the Vault, with P1's Grizzly Bears and
+/// Craw Wurm (6/4) as the two other targets; `gone` (0 = the Giant, 1 = the Bears) leaves
+/// the battlefield in response. Returns (game, giant, bears, wurm).
+fn betrayal(gone: Option<usize>) -> (TestGame, ObjectId, ObjectId, ObjectId) {
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    supported("Betrayal at the Vault");
+    lands_for_cost(&mut t, P0, "Betrayal at the Vault");
+    let card = t.hand(P0, "Betrayal at the Vault");
+    t.answer_targets(P0, &[ent(giant)]);
+    t.answer_targets(P0, &[ent(bears), ent(wurm)]);
+    t.cast(P0, card).go();
+    if let Some(i) = gone {
+        destroy(&mut t, [giant, bears][i]);
+    }
+    t.resolve_all();
+    (t, giant, bears, wurm)
+}
+
+#[test]
+fn betrayal_at_the_vault_with_a_target_gone() {
+    cr!("608.2b", "601.2c", "115.3");
+    ruling!(
+        "Betrayal at the Vault",
+        "If one of the two other target creatures leaves the battlefield before Betrayal at the Vault resolves, the creature you control will still deal damage to the remaining other target creature."
+    );
+    ruling!(
+        "Betrayal at the Vault",
+        "If the creature you control leaves the battlefield before Betrayal at the Vault resolves, Betrayal at the Vault has no effect and no damage is dealt."
+    );
+    let (t, giant, bears, wurm) = betrayal(None);
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(damage_on(&t, wurm), 3);
+    assert_eq!(damage_on(&t, giant), 0);
+    let (t, _, _, wurm) = betrayal(Some(1));
+    assert_eq!(damage_on(&t, wurm), 3);
+    let (t, _, bears, wurm) = betrayal(Some(0));
+    assert!(t.on_battlefield(bears));
+    assert_eq!(damage_on(&t, bears), 0);
+    assert_eq!(damage_on(&t, wurm), 0);
+    // Exactly two other targets: not the creature you control, and not just one.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    lands_for_cost(&mut t, P0, "Betrayal at the Vault");
+    let card = t.hand(P0, "Betrayal at the Vault");
+    t.answer_targets(P0, &[ent(giant)]);
+    t.answer_targets(P0, &[ent(bears), ent(giant)]);
+    assert!(t.cast(P0, card).try_go().is_err());
+}
+
+#[test]
+fn spinning_wheel_kick_deals_damage_to_each_of_x_targets() {
+    cr!("601.2c", "107.3a");
+    supported("Spinning Wheel Kick");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let jace = t.battlefield(P1, "Jace Beleren");
+    // X = 3: {3}{3}{G}{G}.
+    t.lands(P0, "Forest", 8);
+    let card = t.hand(P0, "Spinning Wheel Kick");
+    t.answer_targets(P0, &[ent(giant)]);
+    t.answer_targets(P0, &[ent(bears), ent(wurm), ent(jace)]);
+    t.cast(P0, card).x(3).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(damage_on(&t, wurm), 3);
+    assert!(!t.on_battlefield(jace), "3 damage to a 3-loyalty Jace");
+    assert_eq!(damage_on(&t, giant), 0);
+}

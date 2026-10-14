@@ -336,6 +336,15 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
             }
         }
     }
+    // "each of two other target creatures" (Betrayal at the Vault): exactly that many
+    // targets (CR 601.2c), each dealt the amount.
+    if let Some(r) = s.strip_prefix("each of ") {
+        if parse_number(r).is_some() && !r.starts_with("up to ") {
+            if let Some((sel, rest)) = one_target(r, b) {
+                return Some((sel, rest, false));
+            }
+        }
+    }
     if let Some(r) = s.strip_prefix("you") {
         if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
             return Some((Sel::Players(PlayerRef::You), r.to_string(), false));
