@@ -418,6 +418,18 @@ pub fn them_player(s: &str, b: &Builder) -> Option<PlayerRef> {
 pub fn blocking_it(f: Filter, rest: &str, b: &Builder) -> Option<(Filter, String)> {
     let r = rest.trim_start();
     let r = r.strip_prefix("that's ").unwrap_or(r);
+    // "target creature blocking or blocked by it" (Steadfast Armasaur), "each creature
+    // blocking or blocked by it" (Vortex Elemental), "it" being the source: as "blocking
+    // or blocked by ~".
+    if let Some(r) = r.strip_prefix("blocking or blocked by it") {
+        if (r.is_empty() || r.starts_with(' ') || r.starts_with(','))
+            && matches!(singular_it(b), Sel::This)
+        {
+            let either = Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]);
+            return Some((Filter::and(vec![f, either]), r.to_string()));
+        }
+        return None;
+    }
     let r = r.strip_prefix("blocking it")?;
     if !(r.is_empty() || r.starts_with(' ') || r.starts_with(',')) {
         return None;

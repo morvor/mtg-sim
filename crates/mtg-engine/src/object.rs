@@ -524,6 +524,11 @@ pub struct LeftBattlefield {
     /// existed there.
     #[serde(default)]
     pub attached: bool,
+    /// The (blocker, attacker) pairs it was part of as it left, during combat: an
+    /// ability whose source left the battlefield uses its last known information
+    /// ("target creature blocking or blocked by it", CR 113.7a, 608.2h).
+    #[serde(default)]
+    pub blocks: Vec<(ObjectId, ObjectId)>,
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability
