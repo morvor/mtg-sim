@@ -9,7 +9,7 @@
 //! * the keywords: a keyword line, or a quoted one ("\"Cascade, cascade.\"": two instances,
 //!   each triggering, CR 702.85c);
 //! * an optional sentence about a cost keyword's cost: "The emerge cost is equal to its
-//!   mana cost.", "Its foretell cost is equal to its mana cost reduced by {2}."
+//!   mana cost.", "its foretell cost is equal to its mana cost reduced by {2}."
 //!   (`Modification::AddKeywordOwnCost`: the cost of each spell or card's own mana cost,
 //!   CR 702.119a, 702.152a, 702.143a, 702.94a);
 //! * an optional leading "During your turn, ".
@@ -228,18 +228,18 @@ mod tests {
     #[test]
     fn own_cost_sentences() {
         assert_eq!(
-            own_cost_sentence("The emerge cost is equal to its mana cost.", KeywordKind::Emerge),
+            own_cost_sentence("the emerge cost is equal to its mana cost.", KeywordKind::Emerge),
             Some(0)
         );
         assert_eq!(
             own_cost_sentence(
-                "Its foretell cost is equal to its mana cost reduced by {2}.",
+                "its foretell cost is equal to its mana cost reduced by {2}.",
                 KeywordKind::Foretell
             ),
             Some(2)
         );
         assert_eq!(
-            own_cost_sentence("The blitz cost is equal to its mana cost.", KeywordKind::Emerge),
+            own_cost_sentence("the blitz cost is equal to its mana cost.", KeywordKind::Emerge),
             None
         );
     }
