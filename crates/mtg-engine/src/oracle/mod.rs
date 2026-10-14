@@ -657,12 +657,33 @@ fn activated_zone(cost: &str, effect: &str) -> FunctionZone {
 }
 
 /// Whether a cost or effect moves cards to or from a library (drawing, milling, searching,
-/// surveilling, putting cards into a library, ...).
+/// surveilling, putting cards into a library, ...). A triggered ability the effect creates
+/// ("When you do, mill two cards.") is a separate ability: Shaun & Rebecca, Agents' "{T}:
+/// Add {C}. When you do, mill two cards." is a mana ability (its ruling).
 fn touches_library(cost: &Cost, effect: &Effect) -> bool {
+    fn own_part(v: serde_json::Value) -> serde_json::Value {
+        use serde_json::Value as J;
+        match v {
+            J::Object(m)
+                if m.len() == 1
+                    && ["Reflexive", "DelayedTrigger"]
+                        .iter()
+                        .any(|k| m.contains_key(*k)) =>
+            {
+                J::Null
+            }
+            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, own_part(v))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(own_part).collect()),
+            other => other,
+        }
+    }
+    let effect = serde_json::to_value(effect)
+        .map(own_part)
+        .unwrap_or_default();
     let text = format!(
         "{} {}",
         serde_json::to_string(cost).unwrap_or_default(),
-        serde_json::to_string(effect).unwrap_or_default()
+        effect
     );
     ["Library", "Draw", "Mill", "Search", "Surveil", "Explore"]
         .iter()
