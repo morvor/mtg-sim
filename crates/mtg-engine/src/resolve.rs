@@ -1261,6 +1261,7 @@ impl Game {
                 // "Attach ~ to a creature you control. If you do, ...": whether anything
                 // became attached.
                 let mut any = false;
+                let to = &crate::attach::recipient_for_all(self, to, &objs, ctx);
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
                     for o in objs {
                         any |= self.attach(o, t);
