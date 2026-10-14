@@ -29,6 +29,8 @@ use smol_str::SmolStr;
 pub const CHOSEN: Var = vars::USER + 6100;
 /// The cards the most recent action of this grammar affected ("[cards] exiled this way").
 pub const AFFECTED: Var = vars::USER + 6101;
+/// The cards chosen so far from each player's zone ([`Cards::per_owner`]).
+const PER_OWNER: Var = vars::USER + 6106;
 /// The number of cards it affected ("that many").
 pub const THAT_MANY: Var = crate::kw::hand_graveyard_actions::THAT_MANY_VAR;
 
@@ -57,6 +59,9 @@ pub struct Cards {
     pub owner: Option<PlayerRef>,
     /// The zone phrase named no single player's zone ("from all graveyards").
     pub any_owner: bool,
+    /// A number of cards from each player's zone ("a creature card from each graveyard"):
+    /// that many from each of them, not in all.
+    pub per_owner: bool,
 }
 
 fn word_end(rest: &str) -> bool {
@@ -318,7 +323,15 @@ pub fn cards<'a>(s: &'a str, b: &mut Builder, subject: Option<&PlayerRef>) -> Op
     let mut any_owner = zone.is_some() && owner_f.is_none();
     let mut rest = rest.to_string();
     let mut zones_or: Option<Vec<ZoneKind>> = None;
+    let mut per_owner = false;
     if zone.is_none() {
+        let t = rest.trim_start();
+        let t = t
+            .strip_prefix("from ")
+            .or_else(|| t.strip_prefix("in "))
+            .unwrap_or("");
+        per_owner = !matches!(qty, Qty::All)
+            && (t.starts_with("each ") || t.starts_with("all players' "));
         if let Some((zones, of, who, r2)) = zone_phrase(&rest, b, subject) {
             any_owner = of.is_none();
             owner_f = of;
@@ -357,6 +370,7 @@ pub fn cards<'a>(s: &'a str, b: &mut Builder, subject: Option<&PlayerRef>) -> Op
             zone,
             owner: owner.flatten(),
             any_owner,
+            per_owner: per_owner && any_owner,
         },
         rest,
     ))
@@ -505,6 +519,9 @@ fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
         None => (r.clone(), false),
     };
     let (c, rest) = cards(&r, b, Some(&who))?;
+    if c.per_owner {
+        return None;
+    }
     if !end(&rest).is_empty() {
         return None;
     }
@@ -590,6 +607,33 @@ fn p_exile(l: &str, b: &mut Builder) -> Option<Effect> {
     if !is_single_player(&who) {
         return None;
     }
+    if c.per_owner {
+        // "Exile a creature card from each graveyard": one chosen from each player's
+        // graveyard, all exiled at once.
+        let mine = Cards {
+            filter: Filter::and(vec![c.filter.clone(), Filter::OwnedBy(PlayerRel::Iterated)]),
+            ..c.clone()
+        };
+        let e = Effect::seq(vec![
+            Effect::Store {
+                var: PER_OWNER,
+                sel: Sel::Union(vec![]),
+            },
+            Effect::ForEachPlayer {
+                who: PlayerRef::EachPlayer,
+                effect: Box::new(Effect::Store {
+                    var: PER_OWNER,
+                    sel: Sel::Union(vec![Sel::Var(PER_OWNER), selection(&mine, who)]),
+                }),
+            },
+            Effect::Exile {
+                what: Sel::Var(PER_OWNER),
+                face_down: false,
+                link: false,
+            },
+        ]);
+        return Some(record(e, b));
+    }
     let e = Effect::Exile {
         what: selection(&c, who),
         face_down: false,
@@ -613,6 +657,9 @@ fn p_reveal(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let (c, rest) = cards(&r, b, Some(&who))?;
+    if c.per_owner {
+        return None;
+    }
     if !end(&rest).is_empty() || c.zone != Some(ZoneKind::Hand) {
         return None;
     }
@@ -708,6 +755,9 @@ fn p_put(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let (c, rest) = cards(&r, b, Some(&who))?;
+    if c.per_owner {
+        return None;
+    }
     c.zone?;
     let (to, tail) = destination(&rest, b, &who)?;
     if !end(tail).is_empty() || Some(to.zone) == c.zone {
@@ -732,6 +782,9 @@ fn p_shuffle(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let (c, rest) = cards(&r, b, Some(&who))?;
+    if c.per_owner {
+        return None;
+    }
     c.zone?;
     let r = rest.trim_start().strip_prefix("into ")?;
     let (_, lib_owner, r) = owner_phrase(r, b, Some(&who))?;
