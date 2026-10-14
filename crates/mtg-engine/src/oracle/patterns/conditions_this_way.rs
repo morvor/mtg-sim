@@ -21,7 +21,6 @@ use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::{end, parse_object_phrase, split_word};
 
-
 /// Whether an effect ends with an optional instruction ("you may ...", "you may pay").
 fn ends_optional(e: &Effect) -> bool {
     match e {
@@ -43,7 +42,9 @@ fn ends_optional(e: &Effect) -> bool {
 pub fn cond_subject(c: &Condition) -> Option<Sel> {
     fn of_value(v: &Value) -> Option<Sel> {
         match v {
-            Value::PowerOf(s) | Value::ToughnessOf(s) | Value::ManaValueOf(s) => Some((**s).clone()),
+            Value::PowerOf(s) | Value::ToughnessOf(s) | Value::ManaValueOf(s) => {
+                Some((**s).clone())
+            }
             Value::CountersOn(s, _) => Some((**s).clone()),
             _ => None,
         }
@@ -65,7 +66,10 @@ pub fn cond_subject(c: &Condition) -> Option<Sel> {
     }
     let exiled_with_source = matches!(&s, Sel::All(f) if linked(f));
     (exiled_with_source
-        || matches!(s, Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject | Sel::TriggerLki))
+        || matches!(
+            s,
+            Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject | Sel::TriggerLki
+        ))
     .then_some(s)
 }
 
@@ -364,6 +368,12 @@ fn verb(v: &str) -> Option<Verb> {
             var: vars::SACRIFICED,
             back: true,
         },
+        // "you put a Cave onto the battlefield this way"
+        "put" => Verb {
+            kind: |e| matches!(e, Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield),
+            var: vars::IT,
+            back: false,
+        },
         "return" | "returned" => Verb {
             kind: |e| matches!(e, Effect::Move { .. }),
             var: vars::IT,
@@ -378,9 +388,26 @@ fn verb(v: &str) -> Option<Verb> {
     })
 }
 
+/// The instruction an optional part performs: "you may exile a card from a graveyard"
+/// (the instruction, then what records what it affected).
+fn optional_core(e: &Effect) -> Option<&Effect> {
+    match e {
+        Effect::Seq(v) => match v.as_slice() {
+            [x, rest @ ..] if rest.iter().all(|r| matches!(r, Effect::Store { .. })) => Some(x),
+            _ => None,
+        },
+        other => Some(other),
+    }
+}
+
 /// The objects phrase after a quantifier: "a land card", "an instant or sorcery card",
 /// "at least one Zombie card", "one or more creature cards".
 fn quantified(s: &str) -> Option<(Filter, &str)> {
+    // "another Desert": not the source (followed to where it went, `Filter::Other`).
+    if let Some(r) = s.strip_prefix("another ") {
+        let (f, _, rest) = parse_object_phrase(r)?;
+        return Some((Filter::and(vec![Filter::Other, f]), rest.trim_start()));
+    }
     let r = ["at least one ", "one or more ", "any ", "a ", "an "]
         .iter()
         .find_map(|q| s.strip_prefix(q))?;
@@ -388,6 +415,19 @@ fn quantified(s: &str) -> Option<(Filter, &str)> {
     if let Some(rest) = r.strip_prefix("card named ~") {
         let f = Filter::and(vec![Filter::Card, Filter::SameNameAs(Box::new(Sel::This))]);
         return Some((f, rest.trim_start()));
+    }
+    // "a permanent you controlled or a token": either kind (as it last existed).
+    if let Some((x, y)) = r.split_once(" or a ").or_else(|| r.split_once(" or an ")) {
+        let one = |s: &str| {
+            let s = s.replace(" you controlled", " you control");
+            parse_object_phrase(&s)
+                .filter(|(_, _, rest)| end(rest).is_empty())
+                .map(|(f, _, _)| f)
+        };
+        if let Some(fx) = one(x) {
+            let (fy, _, rest) = parse_object_phrase(y)?;
+            return Some((Filter::Or(vec![fx, fy]), rest.trim_start()));
+        }
     }
     let (f, _, rest) = parse_object_phrase(r)?;
     Some((f, rest.trim_start()))
@@ -414,7 +454,10 @@ fn this_way_condition(c: &str) -> Option<(Filter, Verb, &str, bool, bool)> {
             let verb_ = verb(v)?;
             let (f, rest) = quantified(r)?;
             // "you return a nonland card to your hand this way"
-            if !matches!(rest, "" | "to your hand" | "to the battlefield") {
+            if !matches!(
+                rest,
+                "" | "to your hand" | "to the battlefield" | "onto the battlefield"
+            ) {
                 return None;
             }
             return Some((f, verb_, v, false, p == "you "));
@@ -478,7 +521,7 @@ fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         other => vec![other.clone()],
     };
     let is_kind = |e: &Effect| match e {
-        Effect::May { effect, .. } => (verb.kind)(effect),
+        Effect::May { effect, .. } => optional_core(effect).is_some_and(verb.kind),
         other => (verb.kind)(other),
     };
     // A snapshot of what it affected, taken right after it, so that several sentences can
@@ -492,13 +535,32 @@ fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             Effect::GrantPlayPermission { .. } | Effect::GainLife { .. } | Effect::LoseLife { .. }
         )
     };
+    // "Exile target creature you control, then return that card to the battlefield. If a
+    // Pirate was exiled this way, ...": the snapshot is taken right after the exile.
+    let returns_it = |i: usize| {
+        matches!(parts[i], Effect::Exile { .. })
+            && matches!(
+                &parts[i + 1..],
+                [Effect::Move {
+                    what: Sel::Var(vars::IT),
+                    ..
+                }]
+            )
+    };
     let i = match parts.iter().rposition(is_kind) {
-        Some(i) if verb.back || parts[i + 1..].iter().all(keeps) || snap_after(i) => i,
+        Some(i)
+            if verb.back || parts[i + 1..].iter().all(keeps) || snap_after(i) || returns_it(i) =>
+        {
+            i
+        }
         _ => return false,
     };
     let has_snapshot = snap_after(i);
     let (optional, instr) = match &parts[i] {
-        Effect::May { effect, .. } => (true, (**effect).clone()),
+        Effect::May { effect, .. } => match optional_core(effect) {
+            Some(e) => (true, e.clone()),
+            None => return false,
+        },
         other => (false, other.clone()),
     };
     // "Each player discards a card. If you discarded a card this way, ...": only the cards
@@ -616,10 +678,13 @@ inventory::submit! { FollowupPattern { name: "if [objects] [verb] this way, [eff
 /// doesn't, put a +1/+1 counter on it.").
 fn if_it_doesnt(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
-    let Some(x) = ["if it doesn't, ", "if it isn't, ", "if that creature doesn't, "]
-        .iter()
-        .find_map(|p| l.strip_prefix(p))
-    else {
+    let Some(x) = [
+        "if it doesn't, ",
+        "if it isn't, ",
+        "if that creature doesn't, ",
+    ]
+    .iter()
+    .find_map(|p| l.strip_prefix(p)) else {
         return false;
     };
     let last = match prev {
@@ -662,7 +727,11 @@ fn if_you_did_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Effect::Seq(v) => v.last(),
         other => Some(other),
     };
-    let Some(Effect::May { who: PlayerRef::You, effect }) = last else {
+    let Some(Effect::May {
+        who: PlayerRef::You,
+        effect,
+    }) = last
+    else {
         return false;
     };
     // The search may be followed by a record of the cards it found.
