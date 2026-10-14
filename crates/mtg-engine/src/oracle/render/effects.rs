@@ -3306,6 +3306,11 @@ impl Renderer<'_> {
         {
             return "each token that would be created under an opponent's control this turn is created under your control instead".into();
         }
+        if *uses == Some(1) {
+            if let Some(s) = self.next_time_damage(def, duration) {
+                return s;
+            }
+        }
         let s = self.replacement(def, *uses);
         let d = self.duration(duration);
         // "All damage that would be dealt to target creature this turn is dealt to
@@ -3481,7 +3486,7 @@ impl Renderer<'_> {
                 let t = self.in_event_scope(|r| r.sel(t, Case::Obj));
                 format!("that damage is dealt to {t} instead")
             }
-            _ => return None,
+            a => self.damage_then(a)?,
         };
         Some(match (uses, &def.action) {
             (Some(1), _) => {
