@@ -429,3 +429,23 @@ fn attack_conditions(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "combat referents: players' attacks", priority: 100, parse: attack_conditions } }
+
+/// "[creatures] banded with ~" (Urza's Engine): the source's band mates (CR 702.22).
+fn banded_with_source_suffix<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let rest = r.strip_prefix("banded with ~")?;
+    Some((Filter::BandedWith(Box::new(Sel::This)), rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "combat referents: banded with ~", priority: 100, parse: banded_with_source_suffix } }
+
+/// "all creatures banded with it gain first strike until end of turn" where "it" is the
+/// source (Icatian Skirmishers: "whenever ~ attacks").
+fn banded_with_it(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    if !l.contains(" banded with it") || !matches!(b.it, Sel::This) {
+        return None;
+    }
+    parse_clause(&l.replacen(" banded with it", " banded with ~", 1), b)
+}
+
+inventory::submit! { EffectPattern { name: "combat referents: banded with it", priority: 90, parse: banded_with_it } }

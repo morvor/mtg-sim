@@ -656,6 +656,10 @@ impl Game {
                     Entity::Player(p) => self.player_rel_matches(*rel, p, ctx),
                     Entity::Object(_) => false,
                 }),
+            Filter::BandedWith(sel) => self
+                .eval_sel_objects(sel, ctx)
+                .into_iter()
+                .any(|o| crate::kw::banding::band_mates(self, o).contains(&id)),
             Filter::AttackingObject(of) => self
                 .combat
                 .as_ref()

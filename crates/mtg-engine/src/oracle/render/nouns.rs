@@ -651,6 +651,10 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("blocking {s}"));
             }
+            Filter::BandedWith(s) => {
+                let s = self.sel(s, Case::Obj);
+                np.post.push(format!("banded with {s}"));
+            }
             Filter::AttackingObject(of) => {
                 let n = self.noun(of, Num::One);
                 np.post.push(format!("attacking {n}"));

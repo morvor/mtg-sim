@@ -168,3 +168,61 @@ fn jin_sakai_triggers_only_for_a_lone_attacker_on_that_player() {
     assert!(!t.obj_now(b).has_keyword(KeywordKind::DoubleStrike));
     assert!(!t.obj_now(c).has_keyword(KeywordKind::DoubleStrike));
 }
+
+// ---------------------------------------------------------------------------
+// Creatures banded with ~ (CR 702.22).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn icatian_skirmishers_gives_first_strike_to_its_band() {
+    cr!("702.22c", "508.1e");
+    supported("Icatian Skirmishers");
+    use mtg_engine::keywords::KeywordKind;
+    let mut t = TestGame::new(2);
+    let sk = t.battlefield(P0, "Icatian Skirmishers");
+    let mate = t.battlefield(P0, "Grizzly Bears");
+    let alone = t.battlefield(P0, "Hill Giant");
+    to_combat(&mut t, P0);
+    t.answer_choose(P0, &[Entity::Object(mate)]);
+    declare(
+        &mut t,
+        P0,
+        &[
+            (sk, Entity::Player(P1)),
+            (mate, Entity::Player(P1)),
+            (alone, Entity::Player(P1)),
+        ],
+    );
+    t.resolve_all();
+    assert!(t.obj_now(mate).has_keyword(KeywordKind::FirstStrike));
+    assert!(!t.obj_now(alone).has_keyword(KeywordKind::FirstStrike));
+}
+
+#[test]
+fn urzas_engine_gives_trample_to_its_band() {
+    cr!("702.22c");
+    supported("Urza's Engine");
+    use mtg_engine::keywords::KeywordKind;
+    let mut t = TestGame::new(2);
+    let engine = t.battlefield(P0, "Urza's Engine");
+    let mate = t.battlefield(P0, "Grizzly Bears");
+    let alone = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Plains", 6);
+    t.activate(P0, engine, 0, &[]).unwrap();
+    t.resolve();
+    to_combat(&mut t, P0);
+    t.answer_choose(P0, &[Entity::Object(mate)]);
+    declare(
+        &mut t,
+        P0,
+        &[
+            (engine, Entity::Player(P1)),
+            (mate, Entity::Player(P1)),
+            (alone, Entity::Player(P1)),
+        ],
+    );
+    t.activate(P0, engine, 1, &[]).unwrap();
+    t.resolve();
+    assert!(t.obj_now(mate).has_keyword(KeywordKind::Trample));
+    assert!(!t.obj_now(alone).has_keyword(KeywordKind::Trample));
+}

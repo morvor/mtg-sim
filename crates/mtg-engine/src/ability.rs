@@ -1393,6 +1393,9 @@ pub enum Filter {
     /// "attacking you", "attacking your opponents": attacking that player, not a
     /// planeswalker they control or a battle they protect (CR 506.2, 508.1b).
     AttackingPlayer(PlayerRel),
+    /// "creatures banded with ~": the other attacking creatures in the band of one of the
+    /// selected creatures (CR 702.22).
+    BandedWith(Box<Sel>),
     /// "attacking a battle", "attacking a planeswalker": attacking a permanent that
     /// matches the filter (CR 506.2, 508.1b).
     AttackingObject(Box<Filter>),
