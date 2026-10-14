@@ -205,18 +205,28 @@ fn precursor_golem_triggers_on_a_spell_targeting_the_same_golem_twice() {
     supported("Precursor Golem");
     let mut t = TestGame::new(2);
     let golems = three_golems(&mut t);
+    // Non-Golem creatures get no copy (only "each other Golem that spell could target").
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
     agony_warp_twice_at(&mut t, P0, golems[1]);
     let copies = resolve_until_copies(&mut t);
     assert_eq!(copies.len(), 2);
+    let mut firsts = vec![];
     for c in &copies {
         let ts = targets_of(&t, *c);
         assert_eq!(ts.len(), 2);
         assert_eq!(ts[0], ts[1]);
         assert_ne!(ts[0], obj(golems[1]));
+        firsts.push(ts[0]);
     }
+    firsts.sort();
+    let mut want = vec![obj(golems[0]), obj(golems[2])];
+    want.sort();
+    assert_eq!(firsts, want);
     t.resolve_all();
-    // Every Golem got -3/-3.
+    // Every Golem got -3/-3; the Bears and the Giant weren't touched.
     assert!(crate::r_s01_common::with_subtype(&t, P0, "Golem").is_empty());
+    assert!(t.on_battlefield(bears) && t.on_battlefield(giant));
 }
 
 #[test]

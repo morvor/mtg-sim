@@ -2791,9 +2791,21 @@ impl Renderer<'_> {
             } => {
                 let w = self.sel(what, Case::Obj);
                 match (target, among) {
+                    // "copy that spell for each other creature you control that the spell
+                    // could target. Each copy targets a different one of those creatures."
                     (None, Some(f)) => {
+                        let w = if matches!(what, Sel::TriggerSpell) {
+                            "that spell".to_string()
+                        } else {
+                            w
+                        };
                         let n = self.noun(f, Num::One);
-                        format!("copy {w} for each other {n} that spell could target")
+                        // "those creatures": the kind, without "you control".
+                        let ns = self.noun(f, Num::Many);
+                        let ns = ns.strip_suffix(" you control").unwrap_or(&ns).to_string();
+                        format!(
+                            "copy {w} for each other {n} {{alt:that the spell|that spell}} could target. Each copy targets a different one of those {ns}"
+                        )
                     }
                     (None, None) => {
                         format!("copy {w} for each other object or player it could target")
