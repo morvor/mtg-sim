@@ -22,6 +22,23 @@ fn same_duration(a: &Duration, b: &Duration) -> bool {
     format!("{a:?}") == format!("{b:?}")
 }
 
+/// "~ has base power and toughness 4/2 until end of turn and gains first strike until end
+/// of turn": the duration said for each part, as well as once at the end.
+fn duration_for_each_part(s: String) -> String {
+    let d = " until end of turn";
+    match (s.strip_suffix(d), s.find(" and gains ")) {
+        (Some(head), Some(k))
+            if head.contains(" has base power and toughness ")
+                && !s.contains('{')
+                && head[..k].matches(" and ").count() == 1 =>
+        {
+            let (a, b) = head.split_at(k);
+            format!("{{alt:{s}|{a}{d}{b}{d}}}")
+        }
+        _ => s,
+    }
+}
+
 /// Signed P/T modifier: "+2", "-1", "+X".
 pub(crate) fn signed(s: &str) -> String {
     if s.starts_with('-') || s.starts_with('+') {
@@ -398,6 +415,29 @@ impl Renderer<'_> {
         // "If it's a land card, you may ... If you don't, ..." (`outcomes.rs`).
         if let Some(s) = self.if_or_else_part(e) {
             return s;
+        }
+        // "Target opponent loses life equal to the number of creatures they control": the
+        // target is introduced by the subject, before the amount mentions it.
+        if let Effect::LoseLife {
+            who: who @ PlayerRef::Target(i),
+            n,
+        }
+        | Effect::GainLife {
+            who: who @ PlayerRef::Target(i),
+            n,
+        } = e
+        {
+            if !matches!(n, Value::Const(_))
+                && !self.introduced.get(*i as usize).copied().unwrap_or(true)
+            {
+                let subj = self.player(who, Case::Subj);
+                let saved = self.they_target.replace(*i);
+                let r = self.actor_vp(e);
+                self.they_target = saved;
+                if let Some((_, vp, _)) = r {
+                    return format!("{subj} {}", third_person(&vp));
+                }
+            }
         }
         if let Some((who, vp, keep)) = self.actor_vp(e) {
             return self.with_subject(&who, &vp, keep);
@@ -1027,7 +1067,10 @@ impl Renderer<'_> {
                 // The player a delayed trigger waits for ("at the beginning of that
                 // player's next end step"): named there.
                 Sel::Players(_) => String::new(),
-                Sel::Choose { chooser, .. } => {
+                Sel::Choose { chooser, count, .. } => {
+                    if let (Value::Const(1), Effect::Store { var, .. }) = (count, e) {
+                        self.chosen_one.push(*var);
+                    }
                     let c = self.player(chooser, Case::Subj);
                     let mut s = self.sel(&strip_chooser(sel), Case::Obj);
                     // "Target opponent reveals their hand. You choose a nonland card from
@@ -1038,6 +1081,23 @@ impl Renderer<'_> {
                                 s = format!("{} from it", &s[..i]);
                             }
                         }
+                    }
+                    // "You may choose a nonland card from it. If you do, ...": choosing
+                    // up to one is choosing one or none.
+                    if let (
+                        "you",
+                        Some(rest),
+                        Effect::Store { var, .. },
+                        Sel::Choose {
+                            count: Value::Const(1),
+                            up_to: true,
+                            ..
+                        },
+                    ) = (c.as_str(), s.strip_prefix("up to one "), e, sel)
+                    {
+                        self.chosen_up_to_one.push(*var);
+                        let a = with_article(rest);
+                        return format!("{{alt:choose {s}|you may choose {a}}}");
                     }
                     if c == "you" {
                         format!("choose {s}")
@@ -1116,6 +1176,16 @@ impl Renderer<'_> {
                         .map_or_else(|| value.clone(), |(_, v, _)| v.clone()),
                     other => other.clone(),
                 };
+                // "the number of creatures tapped this way", worded later.
+                if let Value::CountSel(c) = &value {
+                    if let Sel::Var(x) = c.as_ref() {
+                        if let Some(e) = self.this_way.iter().rev().find(|e| e.0 == *x) {
+                            if !e.1.is_empty() {
+                                self.stored_this_way.push(*e);
+                            }
+                        }
+                    }
+                }
                 // A variable stored again (a count set to 0, then to what an instruction
                 // did) holds the later value from here on.
                 match self.stored_values.iter_mut().find(|(x, _, _)| x == var) {
@@ -1568,7 +1638,10 @@ impl Renderer<'_> {
                 what,
                 mods,
                 duration,
-            } => self.modify_effect(what, mods, duration),
+            } => {
+                let s = self.modify_effect(what, mods, duration);
+                duration_for_each_part(s)
+            }
             Effect::AddRestriction {
                 restriction,
                 duration,
@@ -1716,7 +1789,10 @@ impl Renderer<'_> {
                 if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
                     if let Some(rest) = s.strip_prefix("if ") {
                         if let Some((ev, then)) = rest.split_once(", ") {
-                            if !ev.contains('{') {
+                            let one_alt = ev.starts_with("{alt:")
+                                && ev.ends_with('}')
+                                && ev.matches('{').count() == 1;
+                            if !ev.contains('{') || one_alt {
                                 return format!("the next time {ev} this turn, {then}");
                             }
                         }
@@ -2306,6 +2382,8 @@ impl Renderer<'_> {
             Effect::DigStep(step) => self.dig_step(step),
             Effect::LookAtHand { who } => {
                 let p = self.player(who, Case::Poss);
+                // A card chosen from the hand looked at is "from it".
+                self.revealed_hand = true;
                 format!("look at {p} hand")
             }
             Effect::RevealUntil {
@@ -3863,7 +3941,8 @@ impl Renderer<'_> {
                     }
                 }
                 if j > i + 1 {
-                    parts.push(self.modify_effect(what, &all, duration));
+                    let s = self.modify_effect(what, &all, duration);
+                    parts.push(duration_for_each_part(s));
                     i = j;
                     continue;
                 }
@@ -4008,6 +4087,22 @@ impl Renderer<'_> {
     ) -> String {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
+        // "You may choose a card from it. If you do, ... If you don't, ...": whether a
+        // card was chosen (see the `Effect::Store` of a choice of up to one).
+        if else_empty {
+            let chosen = |c: &Condition| matches!(c, Condition::SelNonEmpty(Sel::Var(v)) if self.chosen_up_to_one.contains(v));
+            let did = if chosen(cond) {
+                Some("do")
+            } else if matches!(cond, Condition::Not(c) if chosen(c)) {
+                Some("don't")
+            } else {
+                None
+            };
+            if let Some(did) = did {
+                let t = self.effect(then);
+                return format!("if you {did}, {t}");
+            }
+        }
         // "That player shuffles that card into their library": only if a card was chosen
         // (there's nothing to shuffle otherwise).
         if else_empty {
@@ -4188,14 +4283,40 @@ impl Renderer<'_> {
         if *count != 1 && !many {
             return None;
         }
-        let f = match filter {
-            Filter::And(v) => Filter::and(
-                v.iter()
-                    .filter(|x| !matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::Type(CardType::Land))))
-                    .cloned()
-                    .collect(),
-            ),
-            other => other.clone(),
+        // "from among them": a group an earlier instruction exiled (a card that left
+        // exile is a new object, not one of them, CR 400.7, so "in exile" goes unsaid).
+        let parts: Vec<Filter> = match filter {
+            Filter::And(v) => v.clone(),
+            other => vec![other.clone()],
+        };
+        let group = parts.iter().find_map(|x| match x {
+            Filter::In(s) => match s.as_ref() {
+                Sel::Var(v) if *v == vars::IT || *v >= vars::USER => Some(*v),
+                _ => None,
+            },
+            _ => None,
+        });
+        let group = group.filter(|_| {
+            parts
+                .iter()
+                .any(|x| matches!(x, Filter::InZone(ZoneKind::Exile)))
+                || parts.iter().any(|x| matches!(x, Filter::Card))
+        });
+        let f = Filter::and(
+            parts
+                .iter()
+                .filter(|x| !matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::Type(CardType::Land))))
+                .filter(|x| {
+                    group.is_none()
+                        || !matches!(x, Filter::In(_) | Filter::InZone(ZoneKind::Exile) | Filter::Spell)
+                })
+                .cloned()
+                .collect(),
+        );
+        let f = if group.is_some() && !format!("{f:?}").contains("Card") {
+            Filter::and(vec![f, Filter::Card])
+        } else {
+            f
         };
         let det = if many {
             super::nouns::Det::Count("any number of".into())
@@ -4207,7 +4328,15 @@ impl Renderer<'_> {
             Some(i) if n[i + 5..].is_empty() || n[i + 5..].starts_with(' ') => {
                 format!("{} spell{}", &n[..i], &n[i + 5..])
             }
+            Some(i) if group.is_some() && n[i + 5..].starts_with('s') => {
+                format!("{} spell{}", &n[..i], &n[i + 5..])
+            }
             _ => n,
+        };
+        let n = if group.is_some() {
+            format!("{n} from among {{alt:them|those cards|the exiled cards}}")
+        } else {
+            n
         };
         let fr = match (*free, many) {
             (false, _) => "",
@@ -4472,6 +4601,17 @@ impl Renderer<'_> {
         } else {
             d
         };
+        // "Put a commander you own from the command zone into your hand".
+        if let Some(head) = w.strip_suffix(" in the command zone") {
+            let head = if head == "a commander you own" {
+                "{alt:a commander you own|your commander}"
+            } else {
+                head
+            };
+            return format!(
+                "{verb} {head} {{alt:from the command zone {d}|{d} from the command zone}}"
+            );
+        }
         format!("{verb} {w} {d}")
     }
 
@@ -5649,6 +5789,16 @@ impl Renderer<'_> {
                 Modification::CantHaveKeyword(k) => {
                     parts.push(format!("can't have or gain {}", self.keyword_kind_word(*k)))
                 }
+                // "~'s base power and toughness become equal to that creature's power and
+                // toughness": the same object's power and toughness.
+                Modification::SetPT(Some(Value::PowerOf(a)), Some(Value::ToughnessOf(b)))
+                    if mods.len() == 1 && same_sel(a, b) =>
+                {
+                    let s = self.sel(a, Case::Poss);
+                    parts.push(format!(
+                        "{{alt:has base power and toughness equal to {s} power and toughness|base power and toughness become equal to {s} power and toughness}}"
+                    ));
+                }
                 Modification::SetPT(p, t) | Modification::CdaPT(p, t) => {
                     becomes.pt = Some((p.clone(), t.clone()));
                 }
@@ -5739,6 +5889,10 @@ impl Renderer<'_> {
                 {
                     becomes.replaces_creature_types = true
                 }
+                // "becomes that type" (a chosen creature type): the new creature type
+                // replaces the old ones (CR 205.1a); worded with the chosen type below.
+                Modification::RemoveAllCreatureTypes
+                    if mods.iter().any(|m| matches!(m, Modification::AddChosenType)) => {}
                 Modification::RemoveAllCreatureTypes => {
                     parts.push("loses all creature types".into())
                 }
@@ -5748,6 +5902,11 @@ impl Renderer<'_> {
                 }
                 // "This land is the chosen type" on a land with no land type of its own
                 // adds it (the land keeps its abilities).
+                Modification::AddChosenType
+                    if mods.iter().any(|m| matches!(m, Modification::RemoveAllCreatureTypes)) =>
+                {
+                    parts.push("becomes {alt:that type|the chosen type}".into())
+                }
                 Modification::AddChosenType => parts.push(
                     "is the chosen type {opt:in addition to its other types}".into(),
                 ),
@@ -6043,7 +6202,16 @@ impl Renderer<'_> {
                 Value::Const(k) => format!("{} mana of any one color", number_word(*k)),
                 other => {
                     let (a, w) = self.amount(other);
-                    format!("{a} mana of any one color{}", w.unwrap_or_default())
+                    let w = w.unwrap_or_default();
+                    // "Add one mana of the color of your choice for each charge counter on
+                    // ~": one color chosen for all of it (Selvala, Eager Trailblazer's
+                    // rulings), the same as X mana of any one color.
+                    match w.strip_prefix(", where X is the number of ") {
+                        Some(each) if a == "X" && !each.contains(['{', ',']) => format!(
+                            "{{alt:X mana of any one color{w}|one mana of the color of your choice for each {each}}}"
+                        ),
+                        _ => format!("{a} mana of any one color{w}"),
+                    }
                 }
             },
             // "Remove all charge counters from ~. Add one mana of any color for each charge

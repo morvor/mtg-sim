@@ -186,7 +186,7 @@ impl Renderer<'_> {
         // "If that spell would be put into a graveyard, exile it instead."
         if terms.exile_instead {
             s.push_str(
-                ". If {alt:that spell|that card|it} would be put into {alt:a|your} graveyard, exile it instead",
+                ". If {alt:that spell|that card|it|a spell cast this way} would be put {alt:into a graveyard|into your graveyard}, exile it instead",
             );
         }
         s

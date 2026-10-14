@@ -983,8 +983,8 @@ impl Renderer<'_> {
             // "If it's not their turn" (the active player's turn, CR 102.1).
             Condition::PlayerMatches(p, PlayerFilter::Active) if !matches!(p, PlayerRef::You) => {
                 let poss = self.player(p, Case::Poss);
-                let poss = if poss.starts_with("{alt:") {
-                    "their".to_string()
+                let poss = if poss.starts_with("{alt:") || poss == "their" {
+                    "{alt:their|that player's}".to_string()
                 } else {
                     poss
                 };
@@ -1277,6 +1277,20 @@ impl Renderer<'_> {
                             _ => {}
                         }
                     }
+                }
+            }
+        }
+        // "you have at least 7 life more than your starting life total".
+        if let PlayerFilter::Life(Cmp::Ge, v) = pf {
+            if let Value::Sum(xs) = v.as_ref() {
+                if let [Value::StartingLife, Value::Const(n)] = xs.as_slice() {
+                    let n = number_word(*n);
+                    let life = format!("at least {n} life more than your starting life total");
+                    return if negated {
+                        format!("doesn't have {life}")
+                    } else {
+                        format!("{have} {life}")
+                    };
                 }
             }
         }
