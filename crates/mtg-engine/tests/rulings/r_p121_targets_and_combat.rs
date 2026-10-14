@@ -147,7 +147,9 @@ fn solidarity_of_heroes_targets_any_creature_and_heroic_resolves_first() {
     // Strive: {1}{G} more for the second target.
     t.lands(P0, "Forest", 1);
     t.lands(P0, "Wastes", 1);
-    cast_new(&mut t, P0, "Solidarity of Heroes", &[obj(rider), obj(bears)]);
+    let spell = cast_slots(&mut t, P0, "Solidarity of Heroes", &[&[obj(rider), obj(bears)]]);
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 4);
+    assert_eq!(t.g.obj(spell).stack.as_ref().unwrap().chosen[0].targets[0].len(), 2);
     t.resolve_all();
     assert_eq!((plus1(&t, rider), plus1(&t, bears)), (2, 0));
 }
