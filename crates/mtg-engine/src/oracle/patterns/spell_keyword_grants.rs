@@ -118,6 +118,16 @@ fn hand_cards(subject: &str) -> Option<Filter> {
     Some(Filter::and(parts))
 }
 
+/// `f` with X (`Value::X`) replaced by `v`.
+fn with_x(f: &Filter, v: &Value) -> Option<Filter> {
+    let json = serde_json::to_string(f).ok()?;
+    if !json.contains("\"X\"") {
+        return None;
+    }
+    let v = serde_json::to_string(v).ok()?;
+    serde_json::from_str(&json.replace("\"X\"", &v)).ok()
+}
+
 fn s_spell_keyword_grant(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l.trim());
     let (lead_cond, l) = match l.strip_prefix("during your turn, ") {
@@ -127,6 +137,30 @@ fn s_spell_keyword_grant(l: &str, text: &str, ctx: &CompileContext) -> Option<Ve
     let (first, cost_sentence) = match l.split_once(". ") {
         Some((a, b)) => (a, Some(b)),
         None => (l, None),
+    };
+    // "..., where X is the total amount of life your opponents have lost this turn": X in
+    // the subject, determined continuously.
+    let (first, x_value) = match first.split_once(", where x is ") {
+        Some((a, x)) => {
+            let mut b = crate::oracle::effects::Builder::new(ctx);
+            let (v, rest) = super::value_grammar::parse_value(x, &mut b)?;
+            if !end(&rest).trim().is_empty() || !b.targets.is_empty() {
+                return None;
+            }
+            (a, Some(v))
+        }
+        None => (first, None),
+    };
+    // "Elemental permanent spells you cast from your hand gain evoke {4} as you cast
+    // them." (they have it as they're cast).
+    let gain;
+    let first = match first.strip_suffix(" as you cast them") {
+        Some(r) => {
+            let (subject, granted) = r.split_once(" gain ")?;
+            gain = format!("{subject} have {granted}");
+            gain.as_str()
+        }
+        None => first,
     };
     // Cards in a hand.
     if let Some((subject, granted)) = first.split_once(" has ") {
@@ -167,7 +201,10 @@ fn s_spell_keyword_grant(l: &str, text: &str, ctx: &CompileContext) -> Option<Ve
             crate::kw::first_spell_each_turn::FIRST_THIS_TURN.into(),
         ));
     }
-    let affected = Filter::and(parts);
+    let mut affected = Filter::and(parts);
+    if let Some(v) = &x_value {
+        affected = with_x(&affected, v)?;
+    }
     if serde_json::to_string(&affected).is_ok_and(|s| s.contains("\"X\"")) {
         return None;
     }

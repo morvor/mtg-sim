@@ -173,3 +173,48 @@ fn wild_magic_sorcerer_first_spell_from_exile_has_cascade() {
     t.g.recompute();
     assert_eq!(keyword_count(&t, spell, KeywordKind::Cascade), 1);
 }
+
+#[test]
+fn ashling_elemental_permanent_spells_from_hand_gain_evoke() {
+    cr!("702.74a", "610.5");
+    assert_supported(&["Ashling, the Limitless"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ashling, the Limitless");
+    let air = t.hand(P0, "Air Elemental");
+    t.lands(P0, "Island", 4);
+    t.cast(P0, air)
+        .method(CastMethod::Keyword(KeywordKind::Evoke))
+        .go();
+    t.resolve_all();
+    // Evoked: sacrificed as it enters.
+    assert!(t.in_graveyard(P0, "Air Elemental"));
+    // Not an Elemental: no evoke.
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 4);
+    assert!(t
+        .cast(P0, bears)
+        .method(CastMethod::Keyword(KeywordKind::Evoke))
+        .try_go()
+        .is_err());
+}
+
+#[test]
+fn abaddon_spells_with_mana_value_up_to_the_life_lost_have_cascade() {
+    cr!("702.85a", "610.5");
+    assert_supported(&["Abaddon the Despoiler"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Abaddon the Despoiler");
+    t.lands(P0, "Forest", 4);
+    let bears = t.hand(P0, "Grizzly Bears");
+    // An opponent lost 2 life this turn: X is 2.
+    t.g.lose_life(P1, 2);
+    let spell = t.cast(P0, bears).go();
+    t.g.recompute();
+    assert_eq!(keyword_count(&t, spell, KeywordKind::Cascade), 1);
+    t.resolve_all();
+    let giant = t.hand(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 3);
+    let spell = t.cast(P0, giant).go();
+    t.g.recompute();
+    assert_eq!(keyword_count(&t, spell, KeywordKind::Cascade), 0);
+}

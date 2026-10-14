@@ -170,6 +170,16 @@ pub(crate) fn spell_noun(s: &str, singular: bool) -> Option<Vec<Filter>> {
         parts.push(Filter::Or(kinds));
         return Some(parts);
     }
+    // "Elemental permanent spells": an Elemental spell that's a permanent spell.
+    for (marker, alone) in [(" permanent spells", "permanent spells"), (" permanent spell", "permanent spell")] {
+        if let Some(head) = s.strip_suffix(marker).filter(|h| !h.contains(' ')) {
+            let suffix = if alone.ends_with('s') { "spells" } else { "spell" };
+            let mut a = spell_noun(&format!("{head} {suffix}"), singular)?;
+            a.extend(spell_noun(alone, singular)?);
+            parts.extend(a);
+            return Some(parts);
+        }
+    }
     let phrase = super::statics::union_nouns(&s);
     let (f, plural, tail) = super::statics::object_phrase(&phrase)?;
     if !end(tail).is_empty() || plural == singular {
