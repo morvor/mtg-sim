@@ -115,8 +115,9 @@ fn spell_or_nonland_permanent_goes_on_top_or_bottom_of_its_owners_library() {
             .iter()
             .position(|&o| t.g.obj(o).chars.name == "Craw Wurm")
             .expect("in library");
-        // The owner (who was asked) chose the top or the bottom.
-        assert!(pos == 0 || pos == lib.len() - 1);
+        // The owner (who was asked) chose the top (the end of the list) or the bottom.
+        assert!(lib.len() > 1);
+        assert_eq!(pos, if top { lib.len() - 1 } else { 0 }, "top: {top}");
     }
 }
 
