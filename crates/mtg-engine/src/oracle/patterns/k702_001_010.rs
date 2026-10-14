@@ -212,7 +212,7 @@ fn strip_despite_defender(l: &str) -> Option<&str> {
 
 /// The objects a static ability's subject refers to: "~", "it", "enchanted Wall",
 /// "creatures you control", "Wall creatures".
-fn static_subject(s: &str) -> Option<Filter> {
+pub(crate) fn static_subject(s: &str) -> Option<Filter> {
     let s = s.trim();
     match s {
         "~" | "it" => return Some(Filter::Source),

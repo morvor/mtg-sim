@@ -933,6 +933,12 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 {
                     return None;
                 }
+                // A character's "he", "him" and "her" are the card itself (CR 201.5), not
+                // a target or a spell the text mentioned last ("That creature deals damage
+                // equal to its power to him.", Garruk Relentless).
+                if personal && matches!(it, Sel::Target(_) | Sel::TriggerSpell) {
+                    return Some((Sel::This, rest.to_string()));
+                }
                 return Some((it, rest.to_string()));
             }
         }

@@ -2976,6 +2976,13 @@ impl Game {
                     .collect();
                 crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
             }
+            // "... can't cause you to discard cards": nor choose to, to pay a cost such a
+            // spell or ability asks for (Tamiyo, Collector of Tales rulings).
+            CostPart::DiscardSelf | CostPart::Discard { .. } | CostPart::DiscardHand
+                if !crate::rule_statics::caused_actions::may_discard_for_cost(self, p, ctx) =>
+            {
+                false
+            }
             CostPart::DiscardSelf => so.is_some_and(|o| o.zone == Zone::Hand(p)),
             CostPart::Discard { filter, count, .. } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
