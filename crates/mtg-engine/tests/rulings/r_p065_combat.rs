@@ -27,7 +27,7 @@ use mtg_engine::*;
 
 /// A creature that attacks each combat if able need not attack when it's tapped, or when
 /// attacking would cost something (Ghostly Prison); otherwise not attacking is illegal.
-fn attacks_if_able_but_not_when_tapped_or_costly(name: &str) {
+pub fn attacks_if_able_but_not_when_tapped_or_costly(name: &str) {
     supported(name);
     supported("Ghostly Prison");
     // Untapped, no cost: it must attack.

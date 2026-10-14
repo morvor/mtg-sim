@@ -1461,6 +1461,28 @@ fn none_on_battlefield(c: &str) -> Option<Condition> {
 
 inventory::submit! { super::ConditionPattern { name: "restriction grammar: no [permanents] are on the battlefield", priority: 100, parse: none_on_battlefield } }
 
+/// "ten or more lands are on the battlefield" (Limited Resources): a count of the
+/// permanents of every player.
+fn n_or_more_on_battlefield(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let r = c.strip_suffix(" are on the battlefield")?;
+    if !(r.contains(" or more ") || r.contains(" or fewer ")) {
+        return None;
+    }
+    let (cmp, n, noun) = super::counters_resources_counters::amount_cmp(r)?;
+    let (f, plural) = whole_object_phrase(noun.trim())?;
+    if !plural {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![f, Filter::Permanent])),
+        cmp,
+        n,
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "restriction grammar: N or more [permanents] are on the battlefield", priority: 100, parse: n_or_more_on_battlefield } }
+
 /// "that doesn't have first strike, double strike, vigilance, or haste", "that don't
 /// have flying": none of the listed keyword abilities (CR 702).
 fn without_keywords<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
