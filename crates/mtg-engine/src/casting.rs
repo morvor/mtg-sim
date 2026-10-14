@@ -687,14 +687,18 @@ impl Game {
                 if let AbilityKind::Static(s) = &a.kind {
                     if let StaticEffect::CostModifier(cm) = &s.effect {
                         match (&cm.applies_to, &cm.change) {
-                            (CostTarget::ThisSpell, CostChange::AlternativeCost(c))
-                                if crate::spell_costs::alternative_cost_allowed(
-                                    self, p, card, s,
-                                ) =>
-                            {
+                            (
+                                CostTarget::ThisSpell,
+                                CostChange::AlternativeCost(c)
+                                | CostChange::AlternativeCostWithFlash(c),
+                            ) if crate::spell_costs::alternative_cost_allowed(self, p, card, s) => {
                                 let mut opt = CastOption::normal(FaceState::Front);
                                 opt.method = CastMethod::Alternative(a.uid);
                                 opt.alt_cost = Some(c.clone());
+                                // CR 601.3c: "... and as though it had flash" (Qasali
+                                // Ambusher): only when cast this way.
+                                opt.flash =
+                                    matches!(cm.change, CostChange::AlternativeCostWithFlash(_));
                                 out.push(opt);
                             }
                             // CR 601.3c: "You may cast this spell as though it had flash

@@ -352,6 +352,9 @@ impl Game {
             PlayerFilter::AttackedThisTurn => {
                 self.turn.active == p && !self.history.attackers.is_empty()
             }
+            PlayerFilter::CastSpellThisTurn => {
+                self.history.spells_cast.iter().any(|(q, _)| *q == p)
+            }
             PlayerFilter::AttackRelation {
                 attacking,
                 other,
