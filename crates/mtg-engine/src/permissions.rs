@@ -389,6 +389,7 @@ pub fn attach(
         for perm in allowing(g, p, card, &chars, false) {
             let changes_the_way = perm.terms.flash
                 || perm.requires_cost()
+                || perm.terms.cost_reduction > 0
                 || perm.terms.spend_any_type
                 || perm.terms.spend_as_any_color;
             if is_own && !changes_the_way {
@@ -743,6 +744,13 @@ pub fn land_played_with(g: &mut Game, perm: Option<&CastPermission>, land: Objec
             source: c.source,
             way: c.way,
         });
+        // "If you do, it gains \"...\"" (CR 400.7i).
+        if let Some(e) = &c.terms.on_land {
+            let mut ctx = Ctx::new(c.source, g.obj(land).controller);
+            ctx.set_var(vars::IT, vec![Entity::Object(land)]);
+            g.exec(e, &mut ctx);
+            g.dirty = true;
+        }
     }
 }
 

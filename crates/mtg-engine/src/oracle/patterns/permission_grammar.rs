@@ -570,6 +570,27 @@ fn strip_tails(mut s: &str, p: &mut Perm) -> Option<()> {
         if done {
             continue;
         }
+        // "by [cost] rather than paying its mana cost": a required alternative cost
+        // (CR 118.9b).
+        for tail in [
+            " rather than paying its mana cost",
+            " rather than paying their mana costs",
+            " rather than pay its mana cost",
+        ] {
+            if let Some(r) = t.strip_suffix(tail) {
+                let (head, cost) = r.rsplit_once(" by ")?;
+                if p.terms.alt_cost.is_some() || p.free {
+                    return None;
+                }
+                p.terms.alt_cost = Some(gerund_cost(cost)?);
+                s = head;
+                done = true;
+                break;
+            }
+        }
+        if done {
+            continue;
+        }
         // "by [cost] in addition to paying its other costs"
         for tail in [
             " in addition to paying its other costs",
@@ -713,6 +734,28 @@ fn strip_spend(s: &str, p: &mut Perm) -> String {
     s.to_string()
 }
 
+/// "play a land from your graveyard or cast a permanent spell ... from your graveyard"
+/// (Serra Paragon): the zone said once, after both ("play a land or cast a permanent
+/// spell ... from your graveyard").
+fn same_zone_twice(s: &str) -> String {
+    for zone in [
+        " from your graveyard",
+        " from the top of your library",
+        " from exile",
+    ] {
+        for (land, or) in [("play a land", " or cast "), ("play lands", " and cast ")] {
+            let first = format!("{land}{zone}{or}");
+            if let Some(rest) = s.strip_prefix(&first) {
+                // The zone again after the spells, and nowhere else.
+                if rest.matches(zone).count() == 1 && !rest.contains(" from among ") {
+                    return format!("{land}{or}{rest}");
+                }
+            }
+        }
+    }
+    s.to_string()
+}
+
 /// Parses a permission phrase (lowercase, without the final period).
 pub fn parse(l: &str) -> Option<Perm> {
     let mut p = Perm::default();
@@ -725,6 +768,7 @@ pub fn parse(l: &str) -> Option<Perm> {
     };
     p.who = who;
     let s = strip_spend(s, &mut p);
+    let s = same_zone_twice(&s);
     let mut r: &str = &s;
     // The verb, and what it takes.
     if let Some(x) = r.strip_prefix("look at and play ") {
@@ -1800,7 +1844,7 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
 }
 
 /// The terms of the last permission the effect gives, if it ends by giving one.
-fn last_terms(e: &mut Effect) -> Option<&mut PlayTerms> {
+pub(crate) fn last_terms(e: &mut Effect) -> Option<&mut PlayTerms> {
     match e {
         Effect::WithPlayTerms { terms, .. } => Some(terms),
         Effect::AddPlayerEffect {
@@ -1952,11 +1996,35 @@ fn statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     }
     // "[permission]. [rider]."
     if let Some((first, second)) = l.split_once(". ") {
+        // "As long as you control a Giant, [permission]. [rider]."
+        let (cond, first) = match first
+            .strip_prefix("if ")
+            .or_else(|| first.strip_prefix("as long as "))
+            .and_then(|r| r.split_once(", "))
+        {
+            Some((c, rest)) => (Some(c), rest),
+            None => (None, first),
+        };
         let mut p = parse(first)?;
+        if let Some(c) = cond {
+            if p.cond_text.is_some() {
+                return None;
+            }
+            p.cond_text = Some(c.to_string());
+        }
         // "If you cast a creature spell this way, it gains haste until end of turn.",
         // "When you cast an Equipment spell this way, ..." (see `played_this_way`).
         let mut extra = None;
-        if !static_rider(second, &mut p) {
+        let (spells, lands) = (p.spells, p.lands);
+        if !static_rider(second, &mut p)
+            && !super::permission_riders::apply(
+                second,
+                &mut p.terms,
+                spells,
+                lands,
+                &Builder::new(ctx),
+            )
+        {
             extra = super::played_this_way::static_rider(second, &mut p.terms, text, ctx)?;
         }
         let mut v = to_statics(&p, text, ctx)?;
@@ -1964,8 +2032,12 @@ fn statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         return Some(v);
     }
     // "If you control a creature with power 4 or greater, you may cast ~ as though it had
-    // flash.": a condition on casting it.
-    if let Some(r) = l.strip_prefix("if ") {
+    // flash.", "As long as you control a Giant, you may cast ~ from your graveyard by
+    // paying {U} rather than paying its mana cost.": a condition on casting it.
+    if let Some(r) = l
+        .strip_prefix("if ")
+        .or_else(|| l.strip_prefix("as long as "))
+    {
         let (c, rest) = r.split_once(", ")?;
         let mut p = parse(rest)?;
         if p.cond_text.is_some() {
@@ -2007,18 +2079,38 @@ fn spell_self_permission(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
     }
     let lower = block.to_lowercase();
     let l = end(lower.trim());
-    if l.contains(". ") {
+    // "[permission]. If you cast ~ this way and it would be put into your graveyard, exile
+    // it instead." (a rider, see `permission_riders`).
+    let (l, rider) = match l.split_once(". ") {
+        Some((a, b)) => (a, Some(b)),
+        None => (l, None),
+    };
+    if rider.is_some_and(|r| r.contains(". ")) {
         return None;
     }
     // "If there are two or more instant and/or sorcery cards in your graveyard, you may
-    // cast ~ as though it had flash." (a condition on casting it).
-    let (cond, l) = match l.strip_prefix("if ").and_then(|r| r.split_once(", ")) {
+    // cast ~ as though it had flash.", "As long as you control a Giant, you may cast ~
+    // from your graveyard by paying {U} rather than paying its mana cost." (a condition on
+    // casting it).
+    let (cond, l) = match l
+        .strip_prefix("if ")
+        .or_else(|| l.strip_prefix("as long as "))
+        .and_then(|r| r.split_once(", "))
+    {
         Some((c, rest)) => (Some(c), rest),
         None => (None, l),
     };
     let mut p = parse(l)?;
     if !matches!(p.obj, Obj::SelfCard) {
         return None;
+    }
+    if let Some(r) = rider {
+        let (spells, lands) = (p.spells, p.lands);
+        if !static_rider(r, &mut p)
+            && !super::permission_riders::apply(r, &mut p.terms, spells, lands, &Builder::new(ctx))
+        {
+            return None;
+        }
     }
     if let Some(c) = cond {
         if p.cond_text.is_some() {

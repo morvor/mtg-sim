@@ -3510,6 +3510,14 @@ pub struct PlayTerms {
     /// becomes.
     #[serde(default)]
     pub on_cast: Option<Box<Effect>>,
+    /// "If you do, it gains \"...\"" for a land played with the permission: done as it's
+    /// played, with `Var(IT)` the land (CR 305.1, 400.7i).
+    #[serde(default)]
+    pub on_land: Option<Box<Effect>>,
+    /// "Spells you cast this way cost {2} less to cast" (CR 601.2f): a generic reduction
+    /// for spells cast with the permission.
+    #[serde(default)]
+    pub cost_reduction: u32,
     /// The effect that gave the permission (0: none recorded), which "cast this way"
     /// refers to (see `permissions::PermissionUse`).
     #[serde(default)]
@@ -3561,6 +3569,13 @@ impl PlayTerms {
                 None => e.clone(),
             });
         }
+        if let Some(e) = &other.on_land {
+            self.on_land = Some(match self.on_land.take() {
+                Some(mine) => Box::new(Effect::seq(vec![*mine, (**e).clone()])),
+                None => e.clone(),
+            });
+        }
+        self.cost_reduction += other.cost_reduction;
     }
 }
 

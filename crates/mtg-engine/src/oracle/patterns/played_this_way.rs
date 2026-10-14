@@ -35,7 +35,7 @@ fn last(e: &Effect) -> &Effect {
 }
 
 /// "a creature spell", "an Equipment spell": the spell's qualities.
-fn spell_kind(s: &str) -> Option<Filter> {
+pub(crate) fn spell_kind(s: &str) -> Option<Filter> {
     let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
     if s == "spell" {
         return Some(Filter::Any);
@@ -134,7 +134,7 @@ fn if_cast_this_way(l: &str) -> Option<(Filter, &str)> {
 }
 
 /// What "it" (the spell, `it`) gets: X parsed with "it" as that spell.
-fn spell_effect(x: &str, b: &Builder, it: Sel) -> Option<Effect> {
+pub(crate) fn spell_effect(x: &str, b: &Builder, it: Sel) -> Option<Effect> {
     let mut sub = Builder::new(b.ctx);
     sub.in_trigger = b.in_trigger;
     sub.it = it;

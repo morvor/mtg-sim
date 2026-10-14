@@ -50,7 +50,7 @@ fn s_enters_under_control(l: &str, text: &str, _ctx: &CompileContext) -> Option<
 inventory::submit! { StaticPattern { name: "etb replacement grammar: enters under the control of an opponent of your choice", priority: 150, parse: s_enters_under_control } }
 
 /// "N [additional] [kind] counter(s) on it/them" → (kind, N).
-fn counters_on(s: &str) -> Option<(CounterKind, Value)> {
+pub(crate) fn counters_on(s: &str) -> Option<(CounterKind, Value)> {
     let (n, r) = parse_number(s)?;
     let r = r.trim_start();
     let r = r.strip_prefix("additional ").unwrap_or(r);

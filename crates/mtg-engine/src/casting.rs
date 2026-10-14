@@ -1996,6 +1996,18 @@ impl Game {
                 changes.add(self, &mut cost, &cm.change, &ctx);
             }
         }
+        // "Spells you cast this way cost {2} less to cast": a reduction that comes with the
+        // permission it's cast with.
+        if let Some(n) = opt
+            .permission
+            .as_ref()
+            .map(|c| c.terms.cost_reduction)
+            .filter(|n| *n > 0)
+        {
+            changes
+                .reductions
+                .push(crate::activation_costs::Reduction::Generic(n));
+        }
         let generic = |c: &Cost| c.mana.as_ref().map_or(0, |m| m.generic_amount());
         let before = generic(&cost);
         changes.apply(&mut cost, |i, cur, s| {
