@@ -1141,6 +1141,11 @@ pub enum PlayerFilter {
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
+    /// In the vote the ability triggered on ("whenever players finish voting", CR
+    /// 701.38): a player who voted for a choice you voted for (`true`), or who voted only
+    /// for choices you didn't vote for (`false`; Grudge Keeper's rulings). See
+    /// `kwa::vote::voted_like`.
+    VotedLikeYou(bool),
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,

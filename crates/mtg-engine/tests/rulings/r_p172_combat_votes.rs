@@ -405,3 +405,103 @@ fn illusion_of_choice_most_recent_one_wins() {
     plea(&mut t);
     assert_eq!(vote_choosers(&t), vec![P1, P1]);
 }
+
+/// `p` casts Council's Judgment ("Starting with you, each player votes for a nonland
+/// permanent you don't control. Exile each permanent with the most votes or tied for most
+/// votes."); it isn't resolved yet.
+fn judgment(t: &mut TestGame, p: PlayerId) {
+    supported("Council's Judgment");
+    let cj = t.hand(p, "Council's Judgment");
+    mana(t, p, ManaType::W, 3);
+    t.cast(p, cj).go();
+}
+
+#[test]
+fn grudge_keeper_triggers_after_the_vote_even_if_it_leaves() {
+    cr!("603.2", "603.10a", "701.38");
+    ruling!(
+        "Grudge Keeper",
+        "The spell or ability that caused you to vote will finish resolving before Grudge Keeper’s ability is put on the stack. The ability will be put on the stack even if the results of the vote cause Grudge Keeper to leave the battlefield."
+    );
+    supported("Grudge Keeper");
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    let gk = t.battlefield(P0, "Grudge Keeper");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P1, &[obj(gk)]);
+    t.answer_choose(P0, &[obj(bears)]);
+    judgment(&mut t, P1);
+    t.resolve();
+    // Both were exiled (tied); the spell finished; then the trigger.
+    assert!(t.in_exile("Grudge Keeper") && t.in_exile("Grizzly Bears"));
+    assert!(t.in_graveyard(P1, "Council's Judgment"));
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn grudge_keeper_considers_only_the_vote_that_triggered_it() {
+    cr!("701.38", "603.2");
+    ruling!(
+        "Grudge Keeper",
+        "Grudge Keeper’s ability considers only the vote that caused it to trigger, not any previous votes, even if they were caused by the same permanent."
+    );
+    // Options: 0 = time, 1 = knowledge.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grudge Keeper");
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.answer(P1, DecisionKind::Option, Answer::Index(1));
+    plea(&mut t);
+    assert_eq!(t.life(P1), 18);
+    // The second vote: the same choices; P1 doesn't lose life again for the first vote.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer(P1, DecisionKind::Option, Answer::Index(1));
+    plea(&mut t);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn grudge_keeper_with_additional_votes() {
+    cr!("701.38d");
+    ruling!(
+        "Grudge Keeper",
+        "If one of your opponents has additional votes because of Brago’s Representative, and that player votes for more than one choice you didn’t vote for, that player will lose only 2 life."
+    );
+    ruling!(
+        "Grudge Keeper",
+        "If you have additional votes because of Brago’s Representative, and you vote for more than one choice, an opponent will lose 2 life only if they voted for none of those choices."
+    );
+    // P1 votes for two choices P0 didn't vote for: 2 life.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Grudge Keeper");
+    t.battlefield(P1, "Brago's Representative");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P2, "Hill Giant");
+    let c = t.battlefield(P2, "Raging Goblin");
+    t.answer_choose(P0, &[obj(a)]);
+    t.answer_choose(P1, &[obj(b)]);
+    t.answer_choose(P1, &[obj(c)]);
+    t.answer_choose(P2, &[obj(a)]);
+    judgment(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P2), 20);
+    // P0 votes twice: only an opponent who voted for neither loses life.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Grudge Keeper");
+    t.battlefield(P0, "Brago's Representative");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P2, "Hill Giant");
+    let c = t.battlefield(P2, "Raging Goblin");
+    t.answer_choose(P0, &[obj(a)]);
+    t.answer_choose(P0, &[obj(b)]);
+    t.answer_choose(P1, &[obj(b)]);
+    t.answer_choose(P2, &[obj(c)]);
+    judgment(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.life(P2), 18);
+}
+

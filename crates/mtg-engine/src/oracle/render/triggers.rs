@@ -1371,6 +1371,10 @@ impl Renderer<'_> {
                 let s = self.spell_noun(filter, det.clone());
                 Ev::new(w, format!("copy {s}"))
             }
+            TriggerCond::PlayerAction {
+                name,
+                who: PlayerRel::Any,
+            } if name == crate::kwa::vote::FINISHED_VOTING => Ev::new("players", "finish voting"),
             TriggerCond::PlayerAction { name, who } => {
                 let w = self.rel_subject(*who);
                 Ev::new(w, name.to_string())
