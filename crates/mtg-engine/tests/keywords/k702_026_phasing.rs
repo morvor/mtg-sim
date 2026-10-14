@@ -419,6 +419,40 @@ fn phased_out_permanents_leave_with_their_owner() {
 }
 
 #[test]
+fn phased_out_permanents_controlled_by_a_departing_player_are_exiled() {
+    cr!("702.26n", "800.4a");
+    // P0's Gray Ogre was put onto the battlefield under P1's control (P1 is its default
+    // controller), then phased out. When P1 leaves the game, the rules exile it.
+    let mut t = TestGame::new(3);
+    let card = t.graveyard(P0, "Gray Ogre");
+    let ogre = t
+        .g
+        .move_object_ev(mtg_engine::replacement::MoveEv {
+            obj: card,
+            to: Zone::Battlefield,
+            pos: mtg_engine::ability::LibraryPosition::Top,
+            cause: mtg_engine::events::MoveCause::Effect,
+            by: Some(P1),
+            etb: mtg_engine::replacement::EtbInfo {
+                controller: Some(P1),
+                ..Default::default()
+            },
+            source: None,
+        })
+        .unwrap();
+    t.g.recompute();
+    assert_eq!(t.obj_now(ogre).controller, P1);
+    phase_out(&mut t.g, vec![ogre]);
+    // An effect can't exile it while it's phased out (CR 702.26b).
+    assert!(t.g.exile_object(ogre, None).is_none());
+    assert!(t.g.battlefield.contains(&ogre));
+    t.g.player_loses(P1);
+    t.settle();
+    assert!(!t.g.battlefield.contains(&ogre));
+    assert!(t.in_exile("Gray Ogre"));
+}
+
+#[test]
 fn a_skipped_untap_step_has_no_phasing() {
     cr!("702.26m");
     ruling!(

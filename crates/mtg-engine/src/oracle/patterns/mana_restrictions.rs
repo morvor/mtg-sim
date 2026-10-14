@@ -23,7 +23,8 @@
 
 use super::FollowupPattern;
 use crate::ability::*;
-use crate::mana::{ManaRestriction, SpendFilter};
+use crate::keywords::KeywordKind;
+use crate::mana::{ManaRestriction, SpendFilter, SpendPurpose};
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
 
@@ -34,7 +35,7 @@ pub fn parse_purposes(r: &str) -> Option<ManaRestriction> {
     // Split at each "cast"/"activate" verb that starts a purpose.
     let mut chunks: Vec<(&str, Vec<&str>)> = Vec::new();
     for (i, w) in words.iter().enumerate() {
-        let starts = matches!(*w, "cast" | "activate" | "gain")
+        let starts = matches!(*w, "cast" | "activate" | "gain" | "pay" | "foretell" | "unlock")
             && (i == 0
                 || matches!(words[i - 1], "to" | "or" | "and" | "and/or")
                 || words[i - 1].ends_with(','));
@@ -62,6 +63,18 @@ pub fn parse_purposes(r: &str) -> Option<ManaRestriction> {
             // "to gain a Class level" (CR 716.2c).
             "gain" if text == "a class level" => ManaRestriction::ClassLevel,
             "gain" => return None,
+            "pay" => pay_purpose(text)?,
+            // "to foretell cards", "to foretell a card from your hand": the foretell special
+            // action's cost (CR 702.143a; Karfell Harbinger's ruling).
+            "foretell" if matches!(text, "cards" | "a card" | "a card from your hand") => {
+                ManaRestriction::Purpose(SpendPurpose::Keyword(KeywordKind::Foretell))
+            }
+            "foretell" => return None,
+            // "to unlock doors" (CR 709.5e).
+            "unlock" if matches!(text, "doors" | "a door") => {
+                ManaRestriction::Purpose(SpendPurpose::UnlockDoor)
+            }
+            "unlock" => return None,
             _ => activate_purpose(text)?,
         });
     }
@@ -75,24 +88,76 @@ pub fn parse_purposes(r: &str) -> Option<ManaRestriction> {
 /// Phrases whose filters would be checked against something other than the spell's own
 /// characteristics on the stack (where it was cast from, a choice made for the mana's
 /// source, the last card exiled with it), or conditions this grammar doesn't track.
+///
+/// "Of the chosen type" is bound to the source's choice as the mana is produced
+/// (`mana_abilities::bind_restriction`); "of that color" is the chosen color only after
+/// mana of the chosen color (see [`that_color_ok`]).
 fn unsupported_spell_words(s: &str) -> bool {
-    [
-        "from ",
-        "graveyard",
-        "exile",
-        "hand",
-        "library",
-        "chosen",
-        "that type",
-        "that color",
-        "commander",
-        " own",
-        "starting deck",
-        "kicked",
-        "~",
-    ]
-    .iter()
-    .any(|w| s.contains(w))
+    s.contains('~')
+        || s.contains("that type")
+        || s.contains("starting deck")
+        || s
+            .split([' ', ',', '\''])
+            .any(|w| {
+                matches!(
+                    w,
+                    "from"
+                        | "graveyard"
+                        | "graveyards"
+                        | "exile"
+                        | "exiled"
+                        | "hand"
+                        | "library"
+                        | "commander"
+                        | "own"
+                        | "owned"
+                )
+            })
+}
+
+/// "Spend this mana only to cast monocolored spells of that color" names the color chosen
+/// for the source only when the mana is "of the chosen color" (Throne of Eldraine).
+pub(crate) fn that_color_ok(text: &str, e: &Effect) -> bool {
+    if !text.contains("that color") {
+        return true;
+    }
+    matches!(
+        e,
+        Effect::AddMana {
+            mana: ManaProduction::ChosenColor(_),
+            ..
+        }
+    )
+}
+
+/// "to pay [costs]": "cumulative upkeep costs" (CR 702.24a), "a disturb cost" (casting
+/// the spell with disturb, CR 702.146a), "a cost that contains {C}".
+fn pay_purpose(s: &str) -> Option<ManaRestriction> {
+    Some(match s {
+        "cumulative upkeep costs" | "a cumulative upkeep cost" => {
+            ManaRestriction::Purpose(SpendPurpose::Keyword(KeywordKind::CumulativeUpkeep))
+        }
+        "a disturb cost" | "disturb costs" => ManaRestriction::CastSpell(SpendFilter::new(
+            Filter::and(vec![
+                Filter::Spell,
+                Filter::CastWithCost(crate::kw::disturb::DISTURB.into()),
+            ]),
+        )),
+        "a cost that contains {c}" | "costs that contain {c}" => {
+            ManaRestriction::CostWithColorless
+        }
+        _ => return None,
+    })
+}
+
+/// "equip abilities", "an equip ability", "power-up abilities": the activated abilities
+/// of a keyword (CR 702.6a, 702.193a).
+fn keyword_abilities(s: &str) -> Option<KeywordKind> {
+    let w = s
+        .strip_suffix(" abilities")
+        .or_else(|| s.strip_prefix("an ").and_then(|r| r.strip_suffix(" ability")))
+        .or_else(|| s.strip_prefix("a ").and_then(|r| r.strip_suffix(" ability")))?;
+    KeywordKind::from_name(w)
 }
 
 /// "to cast [spells]".
@@ -119,13 +184,18 @@ pub(crate) fn spell_alternatives(s: &str) -> Option<Filter> {
     for sep in [" spell or a ", " spell or an "] {
         if let Some(i) = s.find(sep) {
             let first = &s[..i + " spell".len()];
-            let second = &s[i + sep.len() - 2..];
+            let second = &s[i + " spell or ".len()..];
             if let (Some(f), Some(g)) = (spell_alternatives(first), spell_alternatives(second.trim())) {
                 return Some(Filter::Or(vec![f, g]));
             }
         }
     }
-    let (f, _, tail) = parse_object_phrase(s)?;
+    if let Some(f) = crate::oracle::patterns::mana_grammar::spell_phrase(s) {
+        return Some(f);
+    }
+    let Some((f, _, tail)) = parse_object_phrase(s) else {
+        return crate::oracle::patterns::mana_grammar::subtype_spell(s);
+    };
     // "Dragon creature spell": a second narrowing noun.
     let (f, tail) = match tail
         .trim_start()
@@ -162,6 +232,9 @@ fn activate_purpose(s: &str) -> Option<ManaRestriction> {
     if matches!(s, "abilities" | "an ability") {
         return Some(ManaRestriction::AbilitiesOnly);
     }
+    if let Some(k) = keyword_abilities(s) {
+        return Some(ManaRestriction::Purpose(SpendPurpose::Keyword(k)));
+    }
     let r = s
         .strip_prefix("abilities of ")
         .or_else(|| s.strip_prefix("an ability of "))?;
@@ -169,6 +242,24 @@ fn activate_purpose(s: &str) -> Option<ManaRestriction> {
         .strip_prefix("a ")
         .or_else(|| r.strip_prefix("an "))
         .unwrap_or(r);
+    // "a source of the chosen type", "a creature source of the chosen type": an object
+    // of that type in any zone (Eclipsed Realms's ruling).
+    if let Some(head) = r
+        .strip_suffix(" of the chosen type")
+        .and_then(|h| h.strip_suffix("source").or_else(|| h.strip_suffix("sources")))
+    {
+        let f = match head.trim() {
+            "" => Filter::ChosenType,
+            h => {
+                let (f, _, tail) = parse_object_phrase(h)?;
+                if !end(tail).trim().is_empty() || names_spells(&f) {
+                    return None;
+                }
+                Filter::and(vec![f, Filter::ChosenType])
+            }
+        };
+        return Some(ManaRestriction::ActivateAbilityOf(SpendFilter::new(f)));
+    }
     // CR 109.2: "abilities of creatures" are abilities of creature permanents; "creature
     // sources" are creature objects in any zone.
     let (r, any_zone) = match r
@@ -262,7 +353,7 @@ fn f_spend_only(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let Some(restriction) = crate::oracle::patterns::r106_mana::parse_restriction(l) else {
         return false;
     };
-    restrict(prev, &restriction)
+    that_color_ok(l, prev) && restrict(prev, &restriction)
 }
 
 inventory::submit! { FollowupPattern { name: "mana: spend this mana only to ...", priority: 50, apply: f_spend_only } }

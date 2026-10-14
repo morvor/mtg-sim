@@ -1792,6 +1792,8 @@ impl Game {
             // "You can't spend mana to cast this spell": what's left is paid only with what
             // may pay mana symbols other than mana (life, CR 118.3).
             no_mana: crate::payment_rules::no_mana(&cost_rules),
+            // "Spend only mana produced by basic lands to cast ~".
+            only_from: crate::payment_rules::only_from(&cost_rules),
             ..Default::default()
         };
         ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Spell);
@@ -2306,9 +2308,12 @@ impl Game {
             *m = m.with_x(x);
         }
         let mut changes = crate::activation_costs::CostChanges::default();
+        let mut any_type = false;
         for (s, ctl, cm) in &self.statics.cost_modifiers {
             let ctx = Ctx::new(Some(*s), *ctl);
             if crate::activation_costs::modifier_applies(self, cm, p, src, a, act, stack, &ctx) {
+                // "Mana of any type can be spent to activate ~'s abilities" (CR 118.14).
+                any_type |= matches!(cm.change, CostChange::SpendAnyType);
                 // Its amount may depend on the ability's targets ("{X} less, where X is
                 // the power of the creature it targets").
                 crate::activation_costs::add_change_for_targets(
@@ -2339,6 +2344,9 @@ impl Game {
         });
         // Keyword rules that change the cost (power-up, CR 702.193a).
         crate::kw::activation_cost(self, p, src, a, &mut cost);
+        if any_type {
+            crate::cost_rules::pay_with_any_mana(&mut cost, true);
+        }
         let x_left = crate::payment_rules::x_left(x_part, before, generic(&cost));
         // CR 606.5: multiple costs to add or remove loyalty counters combine into one.
         let loyalty: Vec<i32> = cost
@@ -2474,7 +2482,14 @@ impl Game {
             ctx.cost_of = Some(crate::rule_statics::payment::CostOf::ManaAbility);
             let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx);
             ctx.cost_of = None;
-            paid?;
+            let paid = paid?;
+            // "the sacrificed land" (Squandered Resources).
+            if !paid.sacrificed.is_empty() {
+                ctx.vars.insert(
+                    vars::SACRIFICED,
+                    paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
+                );
+            }
             self.record_activation(p, src, a.uid);
             self.emit(Event::AbilityActivated {
                 ability: None,
@@ -2562,13 +2577,25 @@ impl Game {
             class_level: crate::classes::gains_a_level(act),
             has_x: cost_has_x,
             cost_of: Some(crate::rule_statics::payment::CostOf::Ability),
-            // "Spend only black mana on X" (see `payment_rules`).
+            // "Spend only black mana on X" (see `payment_rules`); "Spend only mana of the
+            // chosen color to activate this ability".
             x_spend: crate::payment_rules::x_spend(
                 &crate::payment_rules::ability_rules(act),
                 x_left,
-            ),
+            )
+            .or_else(|| {
+                crate::payment_rules::chosen_color_spend(
+                    self,
+                    src,
+                    &crate::payment_rules::ability_rules(act),
+                    cost.mana.as_ref().map_or(0, |m| m.generic_amount()),
+                )
+            }),
             // "When you spend this mana to ... activate an ability" (CR 106.6).
             ability_on_stack: Some(id),
+            // "Spend this mana only to activate equip abilities" (CR 106.6).
+            purpose: crate::keyword_impls::ability_from_keyword(a)
+                .map(crate::mana::SpendPurpose::Keyword),
             ..Default::default()
         };
         // The costs are paid for the ability on the stack: a card revealed to pay them
@@ -2838,6 +2865,9 @@ impl Game {
         // be spent only on those can't pay it (CR 106.6).
         let spend = SpendContext {
             source: src,
+            // "Spend this mana only to pay cumulative upkeep costs": the cost the resolving
+            // keyword ability asks for (CR 702.24a).
+            purpose: crate::keyword_impls::resolving_keyword_purpose(self, ctx),
             ..Default::default()
         };
         match self.pay_total_cost(p, cost, src, &spend, ctx) {
@@ -3206,6 +3236,8 @@ impl Game {
             let reserve = if reserves_source(cost) { src } else { None };
             let spend = &SpendContext {
                 reserve_may_tap: !cost.has_tap(),
+                // "Spend this mana only to ... pay a cost that contains {C}".
+                cost_has_colorless: m.symbols.contains(&crate::mana::ManaSymbol::Colorless),
                 ..spend.clone()
             };
             // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
@@ -3691,6 +3723,7 @@ impl Game {
                     is_ability: true,
                     source: src,
                     cost_of: ctx.cost_of,
+                    purpose: crate::keyword_impls::resolving_keyword_purpose(self, ctx),
                     ..Default::default()
                 };
                 let sub = self.pay_total_cost(p, &flat, src, &spend, ctx)?;

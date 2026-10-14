@@ -588,6 +588,8 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
     if l.starts_with("you may pay ")
         || (l.starts_with("you may ") && l.contains(" unless that player pays "))
         || (l.starts_with("you may cast ") && l.ends_with(" as though they had flash"))
+        // "You may activate the loyalty abilities of ... twice this turn": a permission.
+        || l.starts_with("you may activate ")
         // A permission to play cards (see `patterns::permission_grammar`).
         || (l.starts_with("you may ") && super::patterns::permission_grammar::parse(l).is_some())
     {
@@ -707,6 +709,14 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
             if let Some(mut ea) = parse_simple(a, b) {
                 // "put a +1/+1 counter on ~, then it deals damage ..."
                 super::patterns::oracle_hardening_referents::note_counters_on_source(&mut ea, b);
+                // "create a 2/2 Wolf token, then put a +1/+1 counter on it": the token
+                // (only when the second half says "it": "then copy that spell" still
+                // names the spell).
+                if c.split(|ch: char| !ch.is_alphanumeric()).any(|w| w == "it") {
+                    super::patterns::oracle_hardening_referents::note_created_in_first_half(
+                        &mut ea, b,
+                    );
+                }
                 // "untap all creatures and gain control of them": the group the first
                 // half affected.
                 let store = super::patterns::pronoun_groups::note(&mut ea, b);
@@ -1128,6 +1138,15 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         if let Some(r) = t.strip_suffix(p) {
             return (d, r);
         }
+    }
+    // "for as long as that creature is enchanted" (CR 611.2b): a condition about the
+    // objects the effect applies to.
+    if let Some(r) = t.strip_suffix(" for as long as that creature is enchanted") {
+        let affected = Sel::Var(vars::AFFECTED);
+        return (
+            Duration::WhileCondition(Condition::SelMatches(affected, Filter::Enchanted)),
+            r,
+        );
     }
     // "for as long as it has a flood counter on it" (CR 611.2b).
     if let Some((d, r)) = super::patterns::counter_grammar::counter_duration(t) {
@@ -1599,6 +1618,11 @@ fn p_return(l: &str, b: &mut Builder) -> Option<Effect> {
         .strip_prefix("from a graveyard")
         .map(str::trim)
         .unwrap_or(t);
+    // "Return target commander you own from the battlefield to your hand": a permanent.
+    let t = match t.strip_prefix("from the battlefield") {
+        Some(r) if what_is_permanent(&what, b) => r.trim(),
+        _ => t,
+    };
     let to = if t == "to its owner's hand"
         || t == "to their owners' hands"
         || t == "to your hand"
@@ -1625,6 +1649,9 @@ fn p_return(l: &str, b: &mut Builder) -> Option<Effect> {
         d
     } else if t == "to the top of its owner's library" || t == "on top of its owner's library" {
         Destination::library_top()
+    } else if t == "to the command zone" {
+        // A commander returned to its owner's command zone (CR 903.9).
+        Destination::zone(ZoneKind::Command)
     } else {
         return None;
     };
@@ -1634,6 +1661,20 @@ fn p_return(l: &str, b: &mut Builder) -> Option<Effect> {
         b.it = Sel::Var(vars::IT);
     }
     Some(Effect::Move { what, to })
+}
+
+/// Whether `what` selects permanents on the battlefield (a target or group the text
+/// describes without naming another zone).
+fn what_is_permanent(what: &Sel, b: &Builder) -> bool {
+    let f = match what {
+        Sel::Target(i) => match b.targets.get(*i as usize).map(|t| &t.what) {
+            Some(TargetKind::Object(f)) => f,
+            _ => return false,
+        },
+        Sel::All(f) => f,
+        _ => return false,
+    };
+    matches!(f.zone(), None | Some(ZoneKind::Battlefield))
 }
 
 /// "counter target spell", "counter target creature spell", "counter target spell
@@ -2315,6 +2356,10 @@ pub fn is_mana_effect(e: &Effect) -> bool {
     match e {
         Effect::AddMana { .. } => true,
         Effect::PersistentMana(inner) => is_mana_effect(inner),
+        // "Each player adds {B}{R}{G}" (Yurlok of Scorch Thrash).
+        Effect::ForEachPlayer { effect, .. } => {
+            matches!(**effect, Effect::AddMana { .. })
+        }
         Effect::Seq(v) => {
             v.iter().any(is_mana_effect) && v.iter().all(|x| !matches!(x, Effect::Draw { .. }))
         }

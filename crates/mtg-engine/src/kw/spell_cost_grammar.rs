@@ -38,7 +38,7 @@ pub const CASTER_NOT_ACTIVE: &str = "spell cost:caster isn't the active player";
 pub const CASTER_ENCHANTED: &str = "spell cost:caster is enchanted player";
 const TARGETS_PREFIX: &str = "spell cost:targets of type:";
 const PAID_TIMES: &str = "spell cost:times paid:";
-const MANA_COST_IS: &str = "spell cost:mana cost is:";
+pub const MANA_COST_IS: &str = "spell cost:mana cost is:";
 const PAY_ANY: &str = "spell cost:pay any amount:";
 const UNLOCK_LESS: &str = "spell cost:unlock costs less:";
 
@@ -203,7 +203,8 @@ fn pending_next_spell_reductions(g: &Game, p: PlayerId, card: ObjectId) -> Vec<(
                 effect:
                     StaticEffect::CostModifier(CostModifier {
                         applies_to: CostTarget::ThisSpell,
-                        change: change @ (CostChange::ReduceGeneric(_) | CostChange::ReduceColored(..)),
+                        change:
+                            change @ (CostChange::ReduceGeneric(_) | CostChange::ReduceColored(..)),
                         ..
                     }),
                 ..
@@ -353,7 +354,12 @@ impl KeywordRules for SpellCostGrammar {
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
         if let Some(m) = name.strip_prefix(MANA_COST_IS) {
             let o = g.obj(id);
-            return Some(o.chars.mana_cost.as_ref().is_some_and(|c| format!("{c}") == m));
+            return Some(
+                o.chars
+                    .mana_cost
+                    .as_ref()
+                    .is_some_and(|c| format!("{c}") == m),
+            );
         }
         match name {
             CASTER_NOT_ACTIVE => {
@@ -413,16 +419,25 @@ impl KeywordRules for SpellCostGrammar {
         let p = ctx.controller;
         let max = match kind {
             "life" => g.player(p).life.max(0) as i64,
+            "{e}" => g.player(p).counter(counters::ENERGY) as i64,
             _ => g.max_mana_available(p) as i64,
         };
         let src = ctx.source.or(ctx.stack_obj).unwrap_or(ObjectId(0));
-        let n = match g.ask(p, crate::decision::Decision::ChooseX { source: src, min: 0, max }) {
+        let n = match g.ask(
+            p,
+            crate::decision::Decision::ChooseX {
+                source: src,
+                min: 0,
+                max,
+            },
+        ) {
             crate::decision::Answer::Number(n) if n >= 0 => n.min(max),
             _ => 0,
         };
         let cost = match kind {
             "life" => Cost::free().with(CostPart::PayLife(Value::c(n as i32))),
             "mana" => Cost::mana(crate::mana::ManaCost::generic(n as u32)),
+            "{e}" => Cost::free().with(CostPart::PayEnergy(Value::c(n as i32))),
             sym => {
                 let Some(one) = crate::mana::ManaCost::parse(&sym.to_uppercase()) else {
                     return true;
@@ -461,11 +476,9 @@ impl KeywordRules for SpellCostGrammar {
             if being_considered(g, src) {
                 return Some(most_times_payable(g, src, ctx.controller, n));
             }
-            let times = g
-                .obj(src)
-                .stack
-                .as_deref()
-                .map_or(0, |si| si.cast.paid.iter().filter(|p| p.as_str() == n).count());
+            let times = g.obj(src).stack.as_deref().map_or(0, |si| {
+                si.cast.paid.iter().filter(|p| p.as_str() == n).count()
+            });
             return Some(times as i64);
         }
         if name == OWN_TARGETS {
@@ -493,9 +506,7 @@ impl KeywordRules for SpellCostGrammar {
             .iter()
             .flat_map(|cm| cm.targets.iter().flatten())
             .filter(|e| match e {
-                Entity::Object(o) => {
-                    g.is_live(*o) && g.obj(*o).chars.card_types.contains(t)
-                }
+                Entity::Object(o) => g.is_live(*o) && g.obj(*o).chars.card_types.contains(t),
                 Entity::Player(_) => false,
             })
             .count();

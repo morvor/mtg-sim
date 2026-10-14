@@ -123,6 +123,13 @@ impl ScryfallCard {
         )
     }
 
+    /// True for an Unfinity sticker sheet (type line "Stickers"). Sticker sheets aren't
+    /// cards that are played; they are deferred (`docs/DEFERRED.md`), so coverage reports
+    /// leave them out and count them separately.
+    pub fn is_sticker_sheet(&self) -> bool {
+        self.type_line.as_deref() == Some("Stickers")
+    }
+
     /// True if the card is legal (or restricted) in at least one format.
     pub fn is_legal_somewhere(&self) -> bool {
         self.legalities

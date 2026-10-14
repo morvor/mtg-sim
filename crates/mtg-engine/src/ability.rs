@@ -2189,6 +2189,9 @@ pub enum ManaProduction {
     AnyOneColor(Value),
     /// N mana in any combination of colors.
     AnyCombination(Value),
+    /// Mana of `.0` different colors, `.1` of each ("two mana of different colors": (2, 1);
+    /// "two mana of any one color and two mana of any other color": (2, 2)).
+    DistinctColors(u32, u32),
     /// N mana in any combination of the listed types ("three mana in any combination of
     /// {R} and/or {G}"): each mana is one of them, chosen separately.
     CombinationOf(Vec<ManaType>, Value),
@@ -2228,6 +2231,10 @@ pub enum ManaProduction {
     /// 702.124c: the combined identities of their commanders). Undefined without a
     /// commander, so no mana is added (CR 903.4f).
     CommanderIdentity,
+    /// "Choose a color. Add an amount of mana of that color equal to your devotion to that
+    /// color." (Nykthos, Shrine to Nyx; CR 700.5): the color is chosen as the ability
+    /// resolves, then the amount is the controller's devotion to it.
+    DevotionToChosenColor,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -2417,6 +2424,11 @@ pub enum ReplacementAction {
     EnterUnderControl(PlayerRef),
     /// Put into a different zone instead ("exile it instead").
     MoveInstead(Destination),
+    /// The moving card is revealed, then put into a different zone instead ("you may
+    /// reveal that card and put it on top of your library instead of putting it anywhere
+    /// else", CR 701.20a, 614.1a). It's still the same event (a card discarded is still
+    /// discarded).
+    RevealAndMoveInstead(Destination),
     /// Nothing happens (skip, prevention of the entire event).
     Prevent,
     /// Prevent N damage (a shield that is used up).
@@ -2768,6 +2780,8 @@ pub enum ObjectAction {
     Untapped,
     /// "can't phase in" (CR 702.26).
     PhasedIn,
+    /// "can't phase out" (CR 702.26).
+    PhasedOut,
     /// "can't be equipped" (CR 301.5c).
     Equipped,
     /// "can't be enchanted by other Auras" (CR 303.4).
@@ -2975,6 +2989,14 @@ pub enum CostRule {
     /// pay its total cost, so only other ways of paying it can (CR 601.2h): convoke, delve,
     /// and life where an effect lets a mana symbol be paid with life (CR 118.3).
     NoMana,
+    /// "Spend only mana produced by basic lands to cast ~." (Imperiosaur): only mana from
+    /// a source matching the filter may pay the spell's total cost (CR 601.2h). The source
+    /// is checked as it last existed.
+    OnlyManaFrom(crate::mana::SpendFilter),
+    /// "Spend only mana of the chosen color to activate this ability." (Throne of Eldraine):
+    /// only mana of the color chosen for the source may pay the ability's (generic) mana
+    /// cost; none may without a choice (CR 607.5a).
+    OnlyChosenColor,
 }
 
 /// Static abilities (CR 604) and what they do.
@@ -4476,6 +4498,11 @@ pub enum Effect {
     CopySpellRetargeted {
         what: Sel,
         target: Option<Sel>,
+        /// "for each other [creature you control] that spell could target": only the
+        /// other legal targets that are objects matching this filter (evaluated for the
+        /// player who copies), not every other object or player.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        among: Option<Filter>,
     },
     /// "Copy [card]": a copy of each selected card, created in the zone the card is in
     /// (CR 707.12); "create a copy of the card with the chosen/noted name" (`named`):
