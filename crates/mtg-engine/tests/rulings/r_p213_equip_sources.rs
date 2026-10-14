@@ -328,3 +328,29 @@ fn toralfs_hammer_the_creature_targets_but_the_hammer_deals_the_damage() {
     assert_eq!(marked(&t, oraxid), 0);
     assert_eq!(t.zone(hammer), mtg_engine::object::Zone::Hand(P0));
 }
+
+#[test]
+fn the_dominion_bracelet_cost_is_locked_in_before_costs_are_paid() {
+    cr!("601.2f", "602.2b", "723.1");
+    ruling!(
+        "The Dominion Bracelet",
+        "The cost of the activated ability granted by The Dominion Bracelet is locked in before costs are paid. For example, if the power of the equipped creature is 3 (including the +1/+1 granted by The Dominion Bracelet’s ability), the granted ability will cost {12} to activate."
+    );
+    supported("The Dominion Bracelet");
+    // Equipped creature gets +1/+1 and has "{15}, Exile The Dominion Bracelet: You
+    // control target opponent during their next turn. This ability costs {X} less to
+    // activate, where X is this creature's power. Activate only as a sorcery."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "The Dominion Bracelet", bears);
+    assert_eq!(t.pt(bears), (3, 3));
+    t.lands(P0, "Wastes", 11);
+    assert!(t.activate(P0, bears, 0, &[Entity::Player(P1)]).is_err());
+    t.clear_answers();
+    t.lands(P0, "Wastes", 1);
+    t.activate(P0, bears, 0, &[Entity::Player(P1)]).unwrap();
+    // Exiling the Bracelet (and losing its +1/+1) didn't change the cost: {12}.
+    assert!(t.in_exile("The Dominion Bracelet"));
+    assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 0);
+    assert_eq!(t.pt(bears), (2, 2));
+}

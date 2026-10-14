@@ -46,6 +46,15 @@ fn refer_to_granter_in(a: &Ability, in_body: bool) -> Option<Ability> {
                 };
                 sacrifices = true;
             }
+            // "{15}, Exile The Dominion Bracelet: ..." (the granter, which its controller
+            // must control, like a sacrificed one).
+            CostPart::ExileSelf => {
+                *p = CostPart::Exile {
+                    filter: Filter::Custom(GRANTER.into()),
+                    zone: ZoneKind::Battlefield,
+                    count: Value::c(1),
+                };
+            }
             // "{T}, Unattach Heartseeker: ..." (CR 701.3d): the granting Equipment is
             // unattached, not the creature.
             CostPart::Effect(e) => {
@@ -55,14 +64,14 @@ fn refer_to_granter_in(a: &Ability, in_body: bool) -> Option<Ability> {
             _ => {}
         }
     }
-    // Other costs naming "~" (exiling, discarding or returning it) aren't supported here.
-    // ({T} is the creature's own: it's the source of the ability.)
-    if act.cost.parts.iter().any(|p| {
-        matches!(
-            p,
-            CostPart::ExileSelf | CostPart::DiscardSelf | CostPart::ReturnSelfToHand
-        )
-    }) {
+    // Other costs naming "~" (discarding or returning it) aren't supported here. ({T} is
+    // the creature's own: it's the source of the ability.)
+    if act
+        .cost
+        .parts
+        .iter()
+        .any(|p| matches!(p, CostPart::DiscardSelf | CostPart::ReturnSelfToHand))
+    {
         return None;
     }
     if !in_body {
