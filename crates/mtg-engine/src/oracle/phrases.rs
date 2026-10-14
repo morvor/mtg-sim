@@ -416,24 +416,8 @@ fn own_alternative(
         0 => None,
         1 => pending.into_iter().next(),
         _ => Some(Filter::Or(pending)),
-    };
-    // Nothing else before: "artifact or non-Aura enchantment card" is "(artifact or
-    // non-Aura enchantment) card", the narrowing noun shared.
-    if let (Some(n), Some(p), Filter::And(v)) = (&narrowing, &pending, &alt) {
-        let same = |f: &Filter| format!("{f:?}") == format!("{n:?}");
-        if heads.is_empty()
-            && parts.iter().all(|p| matches!(p, Filter::Other))
-            && v.iter().filter(|f| same(f)).count() == 1
-        {
-            let rest: Vec<Filter> = v.iter().filter(|f| !same(f)).cloned().collect();
-            heads.push(Filter::and(vec![
-                Filter::Or(vec![p.clone(), Filter::and(rest)]),
-                n.clone(),
-            ]));
-            return;
-        }
     }
-    let pending = pending.map(|p| match &narrowing {
+    .map(|p| match &narrowing {
         Some(n) => Filter::and(vec![p, n.clone()]),
         None => p,
     });
