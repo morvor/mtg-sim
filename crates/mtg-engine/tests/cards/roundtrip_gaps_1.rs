@@ -7,6 +7,7 @@ use mtg_engine::ability::*;
 use mtg_engine::card::card;
 use mtg_engine::oracle::render::compare::check_card;
 use mtg_engine::testing::*;
+use mtg_engine::events::Event;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
 
@@ -31,7 +32,7 @@ fn assert_round_trips(name: &str) {
 
 #[test]
 fn target_opponent_blights_has_one_target() {
-    cr!("115.1c", "601.2c");
+    cr!("115.1c", "602.2b");
     // Champion of the Weird: "Pay 1 life, Blight 2: Target opponent blights 2." Trying the
     // subject with each player keyword action's verb left a "target opponent" behind for
     // each verb that didn't fit, so the ability had six targets.
@@ -84,7 +85,7 @@ fn sauron_attacks(ring_bearer: bool) -> (TestGame, ObjectId) {
 
 #[test]
 fn sauron_exiles_the_token_at_the_end_step_unless_it_is_the_ring_bearer() {
-    cr!("603.7a", "603.7c", "608.2c");
+    cr!("603.7a", "608.2c");
     // Sauron, the Necromancer: "Create a tapped and attacking token that's a copy of that
     // card, except ... At the beginning of the next end step, exile that token unless ~
     // is your Ring-bearer." "That token" was read as the exiled card (so the token
@@ -132,6 +133,8 @@ fn newly_worded_nodes_round_trip() {
         "Callous Giant",
         "Fasting",
         "Scion of Halaster",
+        "Nephalia Academy",
+        "Equal Treatment",
         // Triggers.
         "Reidane, God of the Worthy // Valkmira, Protector's Shield",
         "Leyline of Combustion",
@@ -154,4 +157,56 @@ fn newly_worded_nodes_round_trip() {
     ] {
         assert_round_trips(name);
     }
+}
+
+#[test]
+fn nephalia_academy_reveals_the_discarded_card_and_puts_it_on_top() {
+    cr!("701.20a", "701.20b", "614.1a");
+    ruling!("Nephalia Academy", "the card was still discarded");
+    // Nephalia Academy: "If a spell or ability an opponent controls causes you to discard
+    // a card, you may reveal that card and put it on top of your library instead of
+    // putting it anywhere else." The reveal was dropped; the card is revealed (where it
+    // is, in your hand) and then put on top, and it's still discarded.
+    supported("Nephalia Academy");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Nephalia Academy");
+    t.battlefield(P1, "Megrim");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.lands(P1, "Swamp", 3);
+    let rot = t.hand(P1, "Mind Rot");
+    t.g.turn.active = P1;
+    t.cast(P1, rot).target(P0).go();
+    t.resolve_all();
+    let top = *t.g.player(P0).library.last().expect("a card on top");
+    assert_eq!(t.g.obj(top).name(), "Grizzly Bears", "{}", t.dump_log());
+    assert!(
+        t.g.turn_events.iter().any(|e| matches!(e, Event::Custom { name, obj: Some(o), .. }
+            if name == mtg_engine::reveal::REVEALED && *o == bears)),
+        "the card was revealed: {}",
+        t.dump_log()
+    );
+    // Discarded all the same: Megrim's trigger dealt 2 damage.
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn equal_treatment_makes_one_damage_two() {
+    cr!("614.1a");
+    // Equal Treatment: "If any source would deal 1 or more damage to a permanent or player
+    // this turn, it deals 2 damage to that permanent or player instead." Compiled as
+    // subtracting (the amount minus 2), which was clamped at 0: 1 damage stayed 1.
+    supported("Equal Treatment");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    let et = t.hand(P0, "Equal Treatment");
+    let src = t.battlefield(P0, "Grizzly Bears");
+    t.cast(P0, et).go();
+    t.resolve_all();
+    t.g.deal_damage(src, Entity::Player(P1), 1, false);
+    t.settle();
+    assert_eq!(t.life(P1), 18, "1 damage became 2: {}", t.dump_log());
+    t.g.deal_damage(src, Entity::Player(P1), 5, false);
+    t.settle();
+    assert_eq!(t.life(P1), 16, "5 damage became 2");
 }

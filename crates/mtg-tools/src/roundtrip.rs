@@ -57,7 +57,9 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"For each card drawn this way, discard a card unless you sacrifice a permanent\" was one choice for all the cards | Read the Runes | `unless_grammar.rs`, `unless_you_sacrifice.rs`, `hand_graveyard_grammar.rs` |\n\
 | \"N damage divided as you choose among X target creatures\" allowed one to N targets whatever X was | Meteor Swarm | `oracle/effects.rs` (divided damage) |\n\
 | \"Target opponent blights 2\": the subject tried with each player keyword action's verb left a target behind for each verb that didn't fit (six targets; tests for this and the row below in `tests/cards/roundtrip_gaps_1.rs`) | Champion of the Weird | `patterns/a701_actions.rs` (`player_verb`, `object_verb`) |\n\
-| \"At the beginning of the next end step, exile that token unless ~ is your Ring-bearer\": \"that token\" was the exiled card (the token stayed) and the condition was checked as the token was created | Sauron, the Necromancer | `patterns/created_token_delayed_unless.rs` |\n\n\
+| \"At the beginning of the next end step, exile that token unless ~ is your Ring-bearer\": \"that token\" was the exiled card (the token stayed) and the condition was checked as the token was created | Sauron, the Necromancer | `patterns/created_token_delayed_unless.rs` |\n\
+| \"You may reveal that card and put it on top of your library instead\": the reveal was dropped | Nephalia Academy | `patterns/replacement_grammar_zones.rs`, `replacement.rs` (`RevealAndMoveInstead`) |\n\
+| \"If any source would deal 1 or more damage ..., it deals 2 damage ... instead\": 1 damage stayed 1 (the amount minus 2 was clamped at 0) | Equal Treatment | `replacement.rs` (`Subtract`) |\n\n\
 Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
 triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
 cycled card (CR 702.29d), so the two are the same.\n\n";

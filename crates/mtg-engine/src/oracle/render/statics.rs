@@ -2394,7 +2394,8 @@ impl Renderer<'_> {
                     | A::Regenerate
                     | A::PreventAndThen(..)
                     | A::LifeFloor(_)
-                    | A::ManaTypeInstead(_)) => {
+                    | A::ManaTypeInstead(_)
+                    | A::RevealAndMoveInstead(_)) => {
                         let then = self.replacement_then(other, "it");
                         format!("if {subj} would enter, {then}")
                     }
@@ -3092,6 +3093,11 @@ impl Renderer<'_> {
                     "put"
                 };
                 format!("{verb} {it} {dest} instead")
+            }
+            // "reveal that card and put it on top of your library instead" (CR 701.20a).
+            A::RevealAndMoveInstead(d) => {
+                let then = self.replacement_then(&A::MoveInstead(d.clone()), it);
+                format!("reveal {it} and {then}")
             }
             A::Instead(e) => {
                 let e = self.effect(e);

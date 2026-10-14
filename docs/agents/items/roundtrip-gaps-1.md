@@ -20,3 +20,18 @@ mismatch: parser bug (fix + in-game test in `tests/cards/roundtrip_gaps_1.rs` + 
 docs/ROUNDTRIP.md bug table), renderer wording, or a CR-justified equivalence. Gaps that
 expose an AST that can't express the text's meaning are usually parser bugs. Regenerate
 docs/ROUNDTRIP.md and docs/roundtrip-passing.txt; `roundtrip --check` must pass.
+
+## Remaining
+
+Still mismatching in the taken clusters (128 of the 130 cards pass):
+- **Nahiri, the Lithomancer** — the −10 creates a token "named Stoneforged Blade. It has
+  indestructible, 'Equipped creature gets +5/+5 and has double strike,' and equip {0}."
+  The renderer words a token's abilities the general way ("with indestructible, ...");
+  the card's "named X. It has ..." sentence form isn't a wording it has yet. Renderer
+  wording only; the token's abilities are compiled correctly.
+- **Heliod's Punishment** — "Enchanted creature can't attack or block. It loses all
+  abilities and has '...'" is compiled as two static abilities in the other order. No
+  play effect: "can't attack or block" is a restriction of the Aura's static ability
+  (not an ability of the creature), so losing all abilities doesn't remove it, and both
+  abilities of the Aura have the same timestamp (CR 613.7a); the comparison is
+  line-based, so the order shows up as a mismatch.

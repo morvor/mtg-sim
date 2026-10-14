@@ -215,8 +215,10 @@ impl Renderer<'_> {
                 // "a player activates an artifact's ability without {T} in its activation
                 // cost".
                 if let Condition::Not(c) = cond {
-                    if matches!(c.as_ref(), Condition::Custom(n) if n == aak::TAP_IN_COST) {
-                        let _ = include_mana;
+                    // Mana abilities count too ("an artifact's ability", CR 605).
+                    if matches!(c.as_ref(), Condition::Custom(n) if n == aak::TAP_IN_COST)
+                        && *include_mana
+                    {
                         let of = self.ability_owner(source);
                         return Some((
                             w,

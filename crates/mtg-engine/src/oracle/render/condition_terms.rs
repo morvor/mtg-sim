@@ -91,7 +91,10 @@ impl Renderer<'_> {
                     (Some(r), Filter::And(v)) => {
                         let rest: Vec<Filter> = v
                             .iter()
-                            .filter(|x| !matches!(x, Filter::ControlledBy(_) | Filter::Custom(_)))
+                            .filter(|x| {
+                                !matches!(x, Filter::ControlledBy(_))
+                                    && !matches!(x, Filter::Custom(n) if n == crate::custom::WAS_CAST)
+                            })
                             .cloned()
                             .collect();
                         let n = self.noun_det(&Filter::and(rest), super::nouns::Det::A);

@@ -743,6 +743,9 @@ pub struct Renderer<'a> {
     /// cards refer to it as "it": rendered as `~it`, which the comparison matches with
     /// either "~" or "it".
     pub(crate) self_salient: bool,
+    /// The activation cost of the ability being rendered exiles the object itself
+    /// ("Exile ~ from your hand: ..."), so the card the cost moved is "~".
+    pub(crate) cost_exiles_self: bool,
     /// Another object (one the trigger condition named, "it" for the triggering object)
     /// is what "it" refers to: the object itself is "~" until it's named again.
     pub(crate) other_salient: bool,
@@ -916,6 +919,7 @@ impl<'a> Renderer<'a> {
             static_if: false,
             zone: FunctionZone::Battlefield,
             self_salient: false,
+            cost_exiles_self: false,
             other_salient: false,
             self_named_in_clause: false,
             attached_left: false,

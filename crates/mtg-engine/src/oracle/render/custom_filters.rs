@@ -293,7 +293,10 @@ impl Renderer<'_> {
             })?;
             let rest: Vec<Filter> = atoms
                 .iter()
-                .filter(|a| !matches!(a, Filter::ControlledBy(_) | Filter::Custom(_)))
+                .filter(|a| {
+                    !matches!(a, Filter::ControlledBy(_))
+                        && !matches!(a, Filter::Custom(n) if n == crate::custom::WAS_CAST)
+                })
                 .map(|a| (*a).clone())
                 .collect();
             let n = self.noun_det(&Filter::and(rest), super::nouns::Det::A);

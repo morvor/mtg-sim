@@ -44,10 +44,13 @@ impl Renderer<'_> {
         if let Some(base) = without(f, scg::SECOND_THIS_TURN) {
             let s = self.cost_modifier(&with(base.clone()));
             let n = self.noun(&base, Num::One);
+            // A quality that isn't about spells keeps its word: "creature spell".
             let n = if n.contains("spell") {
                 n
-            } else {
+            } else if n == "permanent" || n == "card" {
                 "spell".to_string()
+            } else {
+                format!("{n} spell")
             };
             let who = if cm.who == PlayerRel::Any {
                 "a player".to_string()

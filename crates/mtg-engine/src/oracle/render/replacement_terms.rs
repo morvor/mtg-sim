@@ -36,7 +36,10 @@ impl Renderer<'_> {
         use ReplacementAction as A;
         use ReplacementEvent as E;
         match (&def.event, &def.action) {
-            (E::DiscardCausedBy { who, filter, by }, A::MoveInstead(d)) => {
+            (
+                E::DiscardCausedBy { who, filter, by },
+                act @ (A::MoveInstead(d) | A::RevealAndMoveInstead(d)),
+            ) => {
                 let by = match by {
                     PlayerRel::Any => String::new(),
                     PlayerRel::Opponent => " an opponent controls".into(),
@@ -54,8 +57,14 @@ impl Renderer<'_> {
                     .destination_phrase(d, false, false)
                     .replace(" under its owner's control", "");
                 let may = if def.optional { "you may " } else { "" };
+                // "reveal that card and put it on top of your library" (CR 701.20a).
+                let reveal = if matches!(act, A::RevealAndMoveInstead(_)) {
+                    "reveal that card and "
+                } else {
+                    ""
+                };
                 Some(format!(
-                    "if a spell or ability{by} causes {w} to discard {c}, {may}put it {dest} {{alt:instead of putting it into your graveyard|instead of putting it anywhere else|instead}}"
+                    "if a spell or ability{by} causes {w} to discard {c}, {may}{reveal}put it {dest} {{alt:instead of putting it into your graveyard|instead of putting it anywhere else|instead}}"
                 ))
             }
             (E::Where { event, cond }, action) => {
