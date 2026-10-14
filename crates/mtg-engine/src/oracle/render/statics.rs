@@ -889,7 +889,10 @@ impl Renderer<'_> {
         }
     }
 
-    fn play_permission(&mut self, pp: &PlayPermission) -> String {
+    pub(crate) fn play_permission(&mut self, pp: &PlayPermission) -> String {
+        if let Some(s) = self.one_play_permission(pp) {
+            return s;
+        }
         let who = self.rel_subject(pp.who);
         let p = if who == "you" { "your" } else { "their" };
         // A spell isn't a land, and it's the card that's cast (CR 305.9): "nonland" and
@@ -1337,6 +1340,11 @@ impl Renderer<'_> {
                 )
             }
             CostChange::AdditionalCost(c) => {
+                if matches!(cm.applies_to, CostTarget::ThisSpell) {
+                    if let Some(s) = self.additional_cost_extra(c) {
+                        return s;
+                    }
+                }
                 let c = self.cost_as_payment(c);
                 if matches!(cm.applies_to, CostTarget::ThisSpell) {
                     format!("as an additional cost to cast ~, {c}")
@@ -1580,6 +1588,9 @@ impl Renderer<'_> {
 
     /// "{1}" / "{1} for each artifact you control" / "{X}, where X is ...".
     fn cost_amount(&mut self, v: &Value) -> (String, String) {
+        if let Some(r) = self.cost_amount_extra(v) {
+            return r;
+        }
         match v {
             Value::Const(n) => (format!("{{{n}}}"), String::new()),
             Value::X => ("{X}".into(), String::new()),
@@ -3056,7 +3067,13 @@ impl Renderer<'_> {
         match a {
             A::MoveInstead(d) => {
                 if d.zone == ZoneKind::Exile {
-                    return format!("exile {it} instead");
+                    // "exile it with a void counter on it instead".
+                    let mut w = String::new();
+                    for (k, n) in &d.with_counters {
+                        let (c, _) = self.counted(n, &counter_name(k));
+                        w.push_str(&format!(" with {c} on it"));
+                    }
+                    return format!("exile {it}{w} instead");
                 }
                 if d.zone == ZoneKind::Library && d.position == LibraryPosition::Shuffled {
                     return format!("shuffle {it} into its owner's library instead");
