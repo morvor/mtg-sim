@@ -304,6 +304,25 @@ fn ertais_scorn_costs_less_after_an_opponent_cast_two_spells() {
     assert_eq!(t.life(P0), 17);
 }
 
+#[test]
+fn ertais_scorn_one_opponent_must_have_cast_two_spells() {
+    cr!("601.2f");
+    // Two opponents casting one spell each isn't "an opponent cast two or more spells".
+    let mut t = TestGame::new(3);
+    t.lands(P1, "Mountain", 1);
+    t.lands(P2, "Mountain", 1);
+    let b1 = t.hand(P1, "Lightning Bolt");
+    let b2 = t.hand(P2, "Lightning Bolt");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, b1).target(P0).go();
+    t.resolve();
+    t.g.turn.priority = Some(P2);
+    t.cast(P2, b2).target(P0).go();
+    t.lands(P0, "Island", 2);
+    let scorn = t.hand(P0, "Ertai's Scorn");
+    assert!(t.cast(P0, scorn).target(b2).try_go().is_err());
+}
+
 // --- [objects] [past verb] this turn --------------------------------------------------
 
 #[test]

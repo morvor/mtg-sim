@@ -285,8 +285,37 @@ fn counted_object(s: &str) -> Option<(String, Cmp, i32)> {
     Some((obj, cmp, n))
 }
 
-/// "[player] [verb past] [object phrase]" → present tense.
+/// "[player] [verb past] [object phrase]" → present tense. "an opponent" / "a player"
+/// with a count of two or more is some one of them ("if an opponent cast two or more
+/// spells this turn": not two opponents casting one each).
 fn player_clause(c: &str) -> Option<Clause> {
+    let cl = player_clause_as(c)?;
+    if cl.per_player.is_some() || cl.distinct || cl.cmp != Cmp::Ge || cl.n < 2 {
+        return Some(cl);
+    }
+    let Some((words, pf)) = [
+        ("an opponent", PlayerFilter::Opponent),
+        ("a player", PlayerFilter::Any),
+    ]
+    .into_iter()
+    .find(|(w, _)| c.starts_with(&format!("{w} "))) else {
+        return Some(cl);
+    };
+    let rest = &c[words.len()..];
+    // The rest must not mention "you" (it becomes each player in turn).
+    if rest
+        .split([' ', '\''])
+        .any(|w| matches!(w, "you" | "your" | "you've"))
+    {
+        return None;
+    }
+    let mut each = player_clause_as(&format!("you{rest}"))?;
+    each.per_player = Some(pf);
+    each.negated = cl.negated;
+    Some(each)
+}
+
+fn player_clause_as(c: &str) -> Option<Clause> {
     let (subj, second, negated, r) = player_subject(c)?;
     // "[player] had [objects] enter the battlefield ...", "... had three or more cards put
     // into their graveyard ...": the objects did.
@@ -674,25 +703,24 @@ fn clause_condition(cl: Clause, w: &Option<HistoryWindow>) -> Option<Condition> 
 
 /// The trigger condition with "you" as the player each player in turn ([`Value::OverPlayers`]).
 fn iterated_player(c: TriggerCond) -> Option<TriggerCond> {
-    Some(match c {
-        TriggerCond::LosesLife { who: PlayerRel::You } => TriggerCond::LosesLife {
-            who: PlayerRel::Iterated,
-        },
-        TriggerCond::GainsLife { who: PlayerRel::You } => TriggerCond::GainsLife {
-            who: PlayerRel::Iterated,
-        },
-        TriggerCond::DealsDamage {
-            source,
-            to: DamageRecipient::Player(PlayerRel::You),
-            combat_only,
-        } => TriggerCond::DealsDamage {
-            source,
-            to: DamageRecipient::Player(PlayerRel::Iterated),
-            combat_only,
-        },
-        TriggerCond::Noncombat(t) => TriggerCond::Noncombat(Box::new(iterated_player(*t)?)),
-        _ => return None,
-    })
+    let mut json = serde_json::to_value(&c).ok()?;
+    fn walk(v: &mut serde_json::Value, n: &mut usize) {
+        match v {
+            serde_json::Value::String(s) if s == "You" => {
+                *s = "Iterated".into();
+                *n += 1;
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, n)),
+            serde_json::Value::Object(m) => m.values_mut().for_each(|x| walk(x, n)),
+            _ => {}
+        }
+    }
+    let mut n = 0;
+    walk(&mut json, &mut n);
+    if n == 0 {
+        return None;
+    }
+    serde_json::from_value(json).ok()
 }
 
 /// A history clause (without its window): one clause, or two joined by "and"/"or" ("you
@@ -1571,6 +1599,13 @@ mod tests {
             c,
             Condition::Compare(Value::OverPlayers(AggOp::Max, PlayerFilter::Opponent, _), Cmp::Ge, Value::Const(3))
         ));
+        // A count some one opponent reached.
+        let c = cond("an opponent cast two or more spells this turn");
+        assert!(
+            matches!(&c, Condition::Compare(Value::OverPlayers(AggOp::Max, PlayerFilter::Opponent, _), Cmp::Ge, Value::Const(2)))
+                && json(&c).contains("Iterated"),
+            "{c:?}"
+        );
         // Two verbs sharing an object, and "both [A] and [B]".
         assert!(matches!(cond("you gained and lost life this turn"), Condition::And(v) if v.len() == 2));
         assert!(matches!(
