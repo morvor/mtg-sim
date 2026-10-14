@@ -406,3 +406,150 @@ fn shares_land_type<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "that shares / doesn't share a land type with [objects]", priority: 100, parse: shares_land_type } }
+
+/// The cards several players' searches found (Winds of Abandon).
+const FOUND_BY_EACH: Var = vars::USER + 2316;
+
+/// "Those players put those cards onto the battlefield tapped, then shuffle." after "For
+/// each creature exiled this way, its controller searches their library for a basic land
+/// card." (Winds of Abandon): each searcher shuffles their library (CR 701.23), and every
+/// card found is put onto the battlefield under its owner's control (the player who found
+/// it, CR 110.2a) at the same time.
+fn those_players_put_found(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let tapped = match end(l) {
+        "those players put those cards onto the battlefield tapped, then shuffle" => true,
+        "those players put those cards onto the battlefield, then shuffle" => false,
+        _ => return false,
+    };
+    // The last instruction: a search for each object, leaving the cards found.
+    let last = match &mut *prev {
+        Effect::Seq(v) => v.last_mut(),
+        e => Some(e),
+    };
+    let Some(Effect::ForEach { effect, .. }) = last else {
+        return false;
+    };
+    let Effect::SearchCards(spec) = &mut **effect else {
+        return false;
+    };
+    if !spec.dests.is_empty() || spec.shuffle != SearchShuffle::No {
+        return false;
+    }
+    spec.shuffle = SearchShuffle::After;
+    let search = std::mem::replace(&mut **effect, Effect::Noop);
+    **effect = Effect::seq(vec![
+        search,
+        Effect::Store {
+            var: FOUND_BY_EACH,
+            sel: Sel::Union(vec![Sel::Var(FOUND_BY_EACH), Sel::Var(vars::IT)]),
+        },
+    ]);
+    let mut to = Destination::battlefield();
+    to.tapped = tapped;
+    // Each under its owner's control (the player who found it).
+    to.controller = Some(PlayerRef::OwnerOf(Box::new(Sel::Var(FOUND_BY_EACH))));
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        Effect::Store {
+            var: FOUND_BY_EACH,
+            sel: Sel::None,
+        },
+        old,
+        Effect::Move {
+            what: Sel::Var(FOUND_BY_EACH),
+            to,
+        },
+    ]);
+    let _ = b;
+    true
+}
+
+inventory::submit! {
+    FollowupPattern { name: "those players put those cards onto the battlefield, then shuffle (after a search for each)", priority: 101, apply: those_players_put_found }
+}
+
+/// The cards a search found and revealed, for a condition about them.
+const REVEALED_BY_SEARCH: Var = vars::USER + 2317;
+/// The card of them chosen at random.
+const AT_RANDOM: Var = vars::USER + 2318;
+
+/// "If you reveal three cards with different names, [effect]" after "Search your library
+/// for three creature cards and reveal them." (Signal the Clans): whether the cards found
+/// (and revealed) have different names; "them" in the effect are those cards.
+fn if_you_reveal_with_different_names(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if you reveal ") else {
+        return false;
+    };
+    let Some((n, rest)) = crate::oracle::phrases::parse_number(r) else {
+        return false;
+    };
+    let Some(body) = rest
+        .trim_start()
+        .strip_prefix("cards with different names, ")
+    else {
+        return false;
+    };
+    let revealed = match &*prev {
+        Effect::SearchCards(s) => s.reveal && s.dests.is_empty(),
+        _ => false,
+    };
+    if !revealed || n.as_const().is_none() {
+        return false;
+    }
+    // "choose one of them at random and put that card into your hand"; "the rest" are
+    // the others.
+    if body != "choose one of them at random and put that card into your hand" {
+        return false;
+    }
+    let then = Effect::seq(vec![
+        Effect::Store {
+            var: AT_RANDOM,
+            sel: Sel::AtRandom {
+                filter: Filter::In(Box::new(Sel::Var(REVEALED_BY_SEARCH))),
+                count: Value::c(1),
+                store: None,
+            },
+        },
+        Effect::Move {
+            what: Sel::Var(AT_RANDOM),
+            to: Destination::zone(ZoneKind::Hand),
+        },
+    ]);
+    b.named.push((
+        "the rest".to_string(),
+        Sel::All(Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(REVEALED_BY_SEARCH))),
+            Filter::not(Filter::In(Box::new(Sel::Var(AT_RANDOM)))),
+        ])),
+    ));
+    let cond = Condition::Compare(
+        Value::Count(Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(REVEALED_BY_SEARCH))),
+            Filter::Together(TargetGroup::DifferentNames),
+        ])),
+        Cmp::Ge,
+        n,
+    );
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::Store {
+            var: REVEALED_BY_SEARCH,
+            sel: Sel::Var(vars::IT),
+        },
+        Effect::Store {
+            var: AT_RANDOM,
+            sel: Sel::None,
+        },
+        Effect::If {
+            cond,
+            then: Box::new(then),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! {
+    FollowupPattern { name: "if you reveal N cards with different names, [effect] (after a search)", priority: 101, apply: if_you_reveal_with_different_names }
+}

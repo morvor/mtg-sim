@@ -513,3 +513,65 @@ fn dichotomancy_takes_cards_named_like_the_tapped_permanents() {
     // The untapped Elves' name wasn't searched for.
     assert_eq!(library_sorted(&t, P1), ["Llanowar Elves", "Shock"]);
 }
+
+#[test]
+fn winds_of_abandon_the_controller_searches_and_puts_the_land_onto_the_battlefield() {
+    cr!("701.23a", "110.2a");
+    assert_supported("Winds of Abandon");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    library(&mut t, P1, &["Shock", "Forest", "Lightning Bolt"]);
+    let spell = t.hand(P0, "Winds of Abandon");
+    t.cast(P0, spell).target(Entity::Object(bears)).go();
+    t.resolve();
+    assert!(t.in_exile("Grizzly Bears"));
+    let forest: Vec<ObjectId> = t
+        .named_on_battlefield("Forest")
+        .into_iter()
+        .filter(|o| t.obj_now(*o).controller == P1)
+        .collect();
+    assert_eq!(forest.len(), 1, "{}", t.dump_log());
+    assert!(t.obj_now(forest[0]).tapped);
+    assert_eq!(library_sorted(&t, P1), ["Lightning Bolt", "Shock"]);
+}
+
+#[test]
+fn signal_the_clans_three_different_names_one_at_random_to_hand() {
+    cr!("701.23a", "201.2");
+    assert_supported("Signal the Clans");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Forest", 1);
+    let ids = library(
+        &mut t,
+        P0,
+        &["Grizzly Bears", "Llanowar Elves", "Raging Goblin", "Shock"],
+    );
+    let all: Vec<Entity> = ids[..3].iter().map(|o| Entity::Object(*o)).collect();
+    let spell = t.hand(P0, "Signal the Clans");
+    t.answer_choose(P0, &all);
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 1);
+    let in_hand = t.g.obj(t.g.player(P0).hand[0]).chars.name.to_string();
+    assert!(["Grizzly Bears", "Llanowar Elves", "Raging Goblin"].contains(&in_hand.as_str()));
+    assert_eq!(t.library_size(P0), 3);
+
+    // Two of them share a name: none goes to hand.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Forest", 1);
+    let ids = library(
+        &mut t,
+        P0,
+        &["Grizzly Bears", "Grizzly Bears", "Raging Goblin", "Shock"],
+    );
+    let all: Vec<Entity> = ids[..3].iter().map(|o| Entity::Object(*o)).collect();
+    let spell = t.hand(P0, "Signal the Clans");
+    t.answer_choose(P0, &all);
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), 0);
+    assert_eq!(t.library_size(P0), 4);
+}
