@@ -701,24 +701,6 @@ impl Game {
                                     matches!(cm.change, CostChange::AlternativeCostWithFlash(_));
                                 out.push(opt);
                             }
-                            // "If a creature is attacking you and you control a Forest
-                            // and a Plains, you may cast this creature without paying its
-                            // mana cost and as though it had flash." (CR 601.3c)
-                            (CostTarget::ThisSpell, CostChange::AlternativeCostWithFlash(c))
-                                if crate::spell_costs::alternative_cost_allowed(
-                                    self, p, card, s,
-                                ) =>
-                            {
-                                let mut opt = CastOption::normal(FaceState::Front);
-                                opt.method = if c.mana.is_none() && c.parts.is_empty() {
-                                    CastMethod::Free
-                                } else {
-                                    CastMethod::Alternative(a.uid)
-                                };
-                                opt.alt_cost = Some(c.clone());
-                                opt.flash = true;
-                                out.push(opt);
-                            }
                             // CR 601.3c: "You may cast this spell as though it had flash
                             // if you pay [cost] more to cast it."
                             (CostTarget::ThisSpell, CostChange::FlashForAdditionalCost(c)) => {

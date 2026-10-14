@@ -120,8 +120,15 @@ fn qasali_ambusher_free_with_flash_while_attacked() {
     t.battlefield(P0, "Forest");
     t.battlefield(P0, "Plains");
     let q = t.hand(P0, "Qasali Ambusher");
+    // The way of casting it for nothing (its own alternative cost).
+    let free = |t: &TestGame| {
+        t.g.cast_options(P0, q)
+            .into_iter()
+            .find(|o| o.alt_cost.as_ref().is_some_and(|c| c.mana.is_none() && c.parts.is_empty()))
+            .map(|o| o.method)
+    };
     // Not attacked: no.
-    assert!(t.cast(P0, q).method(CastMethod::Free).try_go().is_err());
+    assert!(free(&t).is_none());
     let attacker = t.battlefield(P1, "Grizzly Bears");
     t.advance_to(P1, Step::BeginningOfCombat);
     t.answer(
@@ -130,7 +137,8 @@ fn qasali_ambusher_free_with_flash_while_attacked() {
         mtg_engine::decision::Answer::Attackers(vec![(attacker, Entity::Player(P0))]),
     );
     t.advance_to(P1, Step::DeclareAttackers);
-    t.cast(P0, q).method(CastMethod::Free).go();
+    let m = free(&t).expect("castable for nothing");
+    t.cast(P0, q).method(m).go();
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Qasali Ambusher").len(), 1);
 }

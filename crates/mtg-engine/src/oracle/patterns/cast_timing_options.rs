@@ -10,10 +10,7 @@
 //!   permission for the first such spell (`kw/first_spell_each_turn.rs`);
 //! * "The first spell each player casts during each of their turns may be cast without
 //!   paying its mana cost." (Weftwalking): an alternative cost offered for that spell
-//!   (`kw/offered_costs.rs`);
-//! * "If a creature is attacking you and you control a Forest and a Plains, you may cast
-//!   this creature without paying its mana cost and as though it had flash." (Qasali
-//!   Ambusher): the card's own alternative cost that comes with flash (CR 601.3c).
+//!   (`kw/offered_costs.rs`).
 
 use super::{AbilityPattern, StaticPattern};
 use crate::ability::*;
@@ -124,36 +121,4 @@ fn s_first_spell_options(l: &str, text: &str, ctx: &CompileContext) -> Option<Ve
     None
 }
 
-/// "If a creature is attacking you and you control a Forest and a Plains, you may cast ~
-/// without paying its mana cost and as though it had flash."
-fn a_free_with_flash_if(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let lower = block.trim().to_lowercase();
-    let l = end(&lower);
-    let (c, rest) = l.strip_prefix("if ")?.split_once(", ")?;
-    if rest != "you may cast ~ without paying its mana cost and as though it had flash" {
-        return None;
-    }
-    // (The condition as written: subtypes keep their case.)
-    let c = block.trim().get(3..3 + c.len())?;
-    let cond = crate::oracle::statics::parse_condition(c, ctx).or_else(|| {
-        // "a creature is attacking you and you control a Forest and a Plains": two
-        // conditions.
-        let (a, b) = c.split_once(" and you ")?;
-        Some(Condition::And(vec![
-            crate::oracle::statics::parse_condition(a, ctx)?,
-            crate::oracle::statics::parse_condition(&format!("you {b}"), ctx)?,
-        ]))
-    })?;
-    let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
-        applies_to: CostTarget::ThisSpell,
-        who: PlayerRel::You,
-        change: CostChange::AlternativeCostWithFlash(Cost::free()),
-    }));
-    s.zone = FunctionZone::Anywhere;
-    s.condition = Some(cond);
-    Some(vec![AbilityDef::new(AbilityKind::Static(s), block.trim())])
-}
-
-inventory::submit! { AbilityPattern { name: "cast timing options: if [condition], you may cast ~ without paying its mana cost and as though it had flash", priority: 110, parse: a_free_with_flash_if } }
-
-inventory::submit! { StaticPattern { name: "cast timing options: the first spell each turn (flash, free), free with flash if ...", priority: 110, parse: s_first_spell_options } }
+inventory::submit! { StaticPattern { name: "cast timing options: the first spell each turn (flash, free)", priority: 110, parse: s_first_spell_options } }
