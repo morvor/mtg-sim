@@ -538,11 +538,18 @@ fn find_verb(masked: &str, verbs: &[(&str, &'static str, &'static str)]) -> Opti
 /// Treefolk creatures get +1/+1.", "During your turn, you and ~ have hexproof.": the
 /// predicate applies to each part of the subject. The objects are one group, so an object
 /// that fits two parts is affected once; a player part is a player ability.
-fn compound_subject_static(_l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let t = text.trim().trim_end_matches('.');
-    let lower = t.to_lowercase();
+fn compound_subject_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let mut t = text.trim().trim_end_matches('.');
+    let mut lower = t.to_lowercase();
     if lower.len() != t.len() {
         return None;
+    }
+    // The line after a condition ("As long as ~ has a shield counter on it, you and other
+    // Heroes you control have hexproof."): the condition is the caller's.
+    let l = crate::oracle::phrases::end(l).trim();
+    if !lower.starts_with(l) && lower.ends_with(l) && !l.is_empty() {
+        t = &t[t.len() - l.len()..];
+        lower = l.to_string();
     }
     let body_start = if lower.starts_with("during your turn, ") {
         "during your turn, ".len()

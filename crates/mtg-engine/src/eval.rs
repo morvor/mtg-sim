@@ -732,12 +732,16 @@ impl Game {
                 cmp.eval(mv as i64, self.eval_value(v, ctx))
             }
             Filter::Loyalty(cmp, v) => cmp.eval(o.loyalty() as i64, self.eval_value(v, ctx)),
-            Filter::Named(n) => c.has_name(n),
-            Filter::SameNameAs(sel) => self
-                .eval_sel(sel, ctx)
-                .iter()
-                .filter_map(|e| e.object())
-                .any(|x| c.shares_name_with(&self.obj(x).chars)),
+            Filter::Named(n) => {
+                c.has_name(n) || crate::counts_as_named::counts_as_named(self, id, n, ctx)
+            }
+            Filter::SameNameAs(sel) => {
+                self.eval_sel(sel, ctx)
+                    .iter()
+                    .filter_map(|e| e.object())
+                    .any(|x| c.shares_name_with(&self.obj(x).chars))
+                    || crate::counts_as_named::counts_as_named_like(self, id, sel, ctx)
+            }
             Filter::DifferentNameFrom(sel) => {
                 let others = self.eval_sel_objects(sel, ctx);
                 crate::names::has_different_name(c, others.iter().map(|x| &self.obj(*x).chars))
@@ -997,6 +1001,26 @@ impl Game {
                 Filter::And(v) => v.iter().find_map(within),
                 other => within(other),
             };
+            // Particular objects (an ability bound to the object granting it, "if ~ is
+            // exiled", `granted_by`) are wherever they are too.
+            let listed = match f {
+                Filter::Objects(v) => Some(v),
+                Filter::And(v) => v.iter().find_map(|f| match f {
+                    Filter::Objects(v) => Some(v),
+                    _ => None,
+                }),
+                _ => None,
+            };
+            if let (None, Some(ids)) = (&sel, listed) {
+                // (A permanent spell's object is also the permanent it became, CR 609.7a.)
+                let mut out: Vec<ObjectId> = Vec::new();
+                for id in ids.iter().flat_map(|x| [*x, self.current(*x)]) {
+                    if !out.contains(&id) && self.is_live(id) && self.matches(id, f, ctx) {
+                        out.push(id);
+                    }
+                }
+                return out;
+            }
             if let Some(sel) = sel {
                 return self
                     .eval_sel_objects(&sel, ctx)

@@ -580,6 +580,12 @@ impl Game {
             if lookback.is_some() && looks_back(&t.trigger, ev) {
                 continue;
             }
+            // "Ward abilities of those creatures don't trigger." (Nowhere to Run)
+            if a.text.as_str() == crate::keywords::KeywordKind::Ward.name()
+                && crate::kw::hexproof::ward_suppressed(self, id)
+            {
+                continue;
+            }
             sources.push((id, ctl, a));
         }
         if let Some(lb) = &lookback {

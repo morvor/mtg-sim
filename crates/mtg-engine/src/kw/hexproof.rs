@@ -24,26 +24,58 @@ pub const OPPONENT_CREATURES_AS_THOUGH_NO_HEXPROOF: &str =
 pub const OPPONENTS_AND_PERMANENTS_AS_THOUGH_NO_HEXPROOF: &str =
     "opponents and their permanents targetable as though no hexproof";
 
+/// Static ability: "Creatures your opponents control can be the targets of spells and
+/// abilities as though they didn't have hexproof. Ward abilities of those creatures don't
+/// trigger." (Nowhere to Run): spells and abilities of any player.
+pub const OPPONENT_CREATURES_TARGETABLE_BY_ANY: &str =
+    "opponents' creatures targetable by any player as though no hexproof; their ward doesn't trigger";
+
+/// Player effect (`PlayerModification::Custom`): "Until end of turn, your opponents and
+/// creatures your opponents control with hexproof can be the targets of spells and
+/// abilities you control as though they didn't have hexproof." (Detection Tower).
+pub const OPPONENTS_AND_CREATURES_AS_THOUGH_NO_HEXPROOF: &str =
+    "opponents and their creatures targetable as though no hexproof";
+
 /// Whether spells and abilities `by` controls may target `target` as though it didn't
 /// have hexproof.
 pub fn hexproof_ignored(g: &Game, target: Entity, by: PlayerId) -> bool {
-    g.statics.customs.iter().any(|(_, ctl, name)| {
-        if *ctl != by {
-            return false;
-        }
-        let creatures_only = match name.as_str() {
-            OPPONENT_CREATURES_AS_THOUGH_NO_HEXPROOF => true,
-            OPPONENTS_AND_PERMANENTS_AS_THOUGH_NO_HEXPROOF => false,
+    // (whose effect, which effect)
+    let from_statics = g.statics.customs.iter().map(|(_, c, n)| (*c, n.as_str()));
+    let from_players = g.players.iter().flat_map(|pl| {
+        pl.mods.iter().filter_map(move |m| match m {
+            crate::ability::PlayerModification::Custom(n) => Some((pl.id, n.as_str())),
+            _ => None,
+        })
+    });
+    from_statics.chain(from_players).any(|(ctl, name)| {
+        let (creatures_only, players, anyone) = match name {
+            OPPONENT_CREATURES_AS_THOUGH_NO_HEXPROOF => (true, false, false),
+            OPPONENTS_AND_PERMANENTS_AS_THOUGH_NO_HEXPROOF => (false, true, false),
+            OPPONENTS_AND_CREATURES_AS_THOUGH_NO_HEXPROOF => (true, true, false),
+            OPPONENT_CREATURES_TARGETABLE_BY_ANY => (true, false, true),
             _ => return false,
         };
+        if !anyone && ctl != by {
+            return false;
+        }
         match target {
-            Entity::Player(p) => !creatures_only && g.are_opponents(by, p),
+            Entity::Player(p) => players && g.are_opponents(ctl, p),
             Entity::Object(o) => {
                 let ob = g.obj(o);
-                g.are_opponents(by, ob.controller) && (!creatures_only || ob.is_creature())
+                g.are_opponents(ctl, ob.controller) && (!creatures_only || ob.is_creature())
             }
         }
     })
+}
+
+/// Whether the ward abilities of `obj` don't trigger ("Ward abilities of those creatures
+/// don't trigger.", Nowhere to Run).
+pub fn ward_suppressed(g: &Game, obj: crate::types::ObjectId) -> bool {
+    let ob = g.obj(obj);
+    ob.is_creature()
+        && g.statics.customs.iter().any(|(_, c, n)| {
+            n.as_str() == OPPONENT_CREATURES_TARGETABLE_BY_ANY && g.are_opponents(*c, ob.controller)
+        })
 }
 
 /// The quality of "hexproof from activated abilities", "hexproof from triggered
