@@ -2447,6 +2447,11 @@ pub enum ReplacementAction {
     EnterUnderControl(PlayerRef),
     /// Put into a different zone instead ("exile it instead").
     MoveInstead(Destination),
+    /// The moving card is revealed, then put into a different zone instead ("you may
+    /// reveal that card and put it on top of your library instead of putting it anywhere
+    /// else", CR 701.20a, 614.1a). It's still the same event (a card discarded is still
+    /// discarded).
+    RevealAndMoveInstead(Destination),
     /// Nothing happens (skip, prevention of the entire event).
     Prevent,
     /// Prevent N damage (a shield that is used up).
@@ -4531,6 +4536,11 @@ pub enum Effect {
     CopySpellRetargeted {
         what: Sel,
         target: Option<Sel>,
+        /// "for each other [creature you control] that spell could target": only the
+        /// other legal targets that are objects matching this filter (evaluated for the
+        /// player who copies), not every other object or player.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        among: Option<Filter>,
     },
     /// "Copy [card]": a copy of each selected card, created in the zone the card is in
     /// (CR 707.12); "create a copy of the card with the chosen/noted name" (`named`):
