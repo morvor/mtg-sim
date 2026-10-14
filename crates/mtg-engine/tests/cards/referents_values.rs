@@ -703,3 +703,69 @@ fn river_songs_diary_casts_one_of_its_exiled_cards_at_random() {
     t.resolve_all();
     assert_eq!(t.life(P1), 5, "one of them cast for free");
 }
+
+#[test]
+fn grim_contest_each_creature_deals_damage_equal_to_its_toughness_to_the_other() {
+    cr!("120.3");
+    compiles("Grim Contest");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Forest", 2);
+    let wall = t.battlefield(P0, "Indomitable Ancients"); // 2/10
+    let giant = t.battlefield(P1, "Hill Giant"); // 3/3
+    let spell = t.hand(P0, "Grim Contest");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(wall), Entity::Object(giant)])
+        .go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(giant), "10 damage");
+    assert_eq!(t.g.obj(wall).damage, 3);
+}
+
+#[test]
+fn mist_of_stagnation_untaps_a_permanent_for_each_card_in_their_graveyard() {
+    cr!("502.3", "608.2c");
+    compiles("Mist of Stagnation");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mist of Stagnation");
+    let lands = t.lands(P1, "Forest", 3);
+    for l in &lands {
+        t.g.tap(*l);
+    }
+    t.graveyard(P1, "Island");
+    t.graveyard(P1, "Island");
+    t.answer_choose(P1, &[Entity::Object(lands[0]), Entity::Object(lands[1])]);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    let untapped = lands.iter().filter(|l| !t.g.obj(**l).tapped).count();
+    assert_eq!(untapped, 2);
+}
+
+#[test]
+fn outlaw_stitcher_counts_spells_other_than_the_first() {
+    cr!("608.2c");
+    ruling!(
+        "Outlaw Stitcher",
+        "will count all spells you’ve cast this turn except the first"
+    );
+    compiles("Outlaw Stitcher");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 6);
+    t.advance_to(P0, Step::PrecombatMain);
+    let opt = t.hand(P0, "Opt");
+    t.cast(P0, opt).go();
+    t.resolve_all();
+    let stitcher = t.hand(P0, "Outlaw Stitcher");
+    t.cast(P0, stitcher).go();
+    t.resolve_all();
+    let zombie = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .find(|id| t.g.obj(*id).chars.has_subtype("Zombie"))
+        .expect("a Zombie token");
+    // Opt and Outlaw Stitcher: one spell other than the first.
+    assert_eq!(t.counters(zombie, "+1/+1"), 2);
+}

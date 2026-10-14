@@ -511,3 +511,36 @@ fn choose_those_that_got_counters(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: choose any number of permanents that had a counter put on them this way", priority: 1500, parse: choose_those_that_got_counters } }
+
+/// "Choose target creature you control and target creature an opponent controls. Each of
+/// those creatures deals damage equal to its toughness to the other." (Grim Contest): the
+/// two chosen creatures, each dealing damage to the other.
+fn each_deals_damage_to_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("each of those creatures deals damage equal to its ")?;
+    let (stat, rest) = super::value_grammar::stat_word(r)?;
+    if rest != " to the other" {
+        return None;
+    }
+    let mut slots: Vec<u8> = Vec::new();
+    for (_, sel) in &b.named {
+        if let Sel::Target(i) = sel {
+            if !slots.contains(i) {
+                slots.push(*i);
+            }
+        }
+    }
+    let [a, c] = slots.as_slice() else {
+        return None;
+    };
+    let (a, c) = (Sel::Target(*a), Sel::Target(*c));
+    let (a, c) = (&a, &c);
+    let hit = |from: &Sel, to: &Sel| Effect::DealDamage {
+        source: from.clone(),
+        amount: super::value_grammar::of_referent(stat.clone(), from.clone()),
+        to: to.clone(),
+    };
+    Some(Effect::seq(vec![hit(a, c), hit(c, a)]))
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: each of those creatures deals damage equal to its [stat] to the other", priority: 1500, parse: each_deals_damage_to_the_other } }

@@ -1076,7 +1076,9 @@ fn aggregate_over_them(
         return None;
     }
     let sel = match super::pronoun_groups::plural_object_ref(pron, b) {
-        Some(Some((sel, _))) if !matches!(sel, Sel::None) => sel,
+        // A group: the objects of a "one or more" trigger or an earlier mass instruction
+        // (not a single target, which "their" can't mean).
+        Some(Some((sel, _))) if matches!(sel, Sel::TriggerObjects | Sel::Var(_)) => sel,
         // "sacrifice any number of other creatures, then ..., where X is their total
         // power": the sacrificed creatures, as they last existed (CR 608.2h).
         _ if pron == "them" && sacrificed_any_number_before() => Sel::Var(vars::SACRIFICED),
@@ -1258,3 +1260,55 @@ fn one_of_the_counted_at_random(block: &str, ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { AbilityPattern { name: "referents: choose one of them at random (the condition's objects)", priority: 50, parse: one_of_the_counted_at_random } }
+
+/// "that player chooses a permanent for each card in their graveyard, then untaps those
+/// permanents" (Mist of Stagnation): that many permanents.
+fn choose_one_for_each(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if in_standard() {
+        return None;
+    }
+    let i = block.find(" chooses a ")?;
+    let r = &block[i + " chooses a ".len()..];
+    let (noun, r) = r.split_once(" for each ")?;
+    if noun.contains(' ') || !matches!(noun, "permanent" | "creature" | "land" | "artifact") {
+        return None;
+    }
+    let (counted, rest) = r.split_once(", then ")?;
+    let counted = plural_head(counted)?;
+    let rewritten = format!(
+        "{} chooses X {noun}s, where X is the number of {counted}, then {rest}",
+        &block[..i]
+    );
+    reread(block, &rewritten, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "referents: chooses a permanent for each [amount], then [those]", priority: 50, parse: choose_one_for_each } }
+
+/// "put two +1/+1 counters on that token for each spell you've cast this turn other than
+/// the first" (Outlaw Stitcher): for each of them but one.
+fn for_each_other_than_the_first(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if in_standard() {
+        return None;
+    }
+    const OTHER: &str = " other than the first";
+    let j = block.find(OTHER)?;
+    let head = &block[..j];
+    let i = head.rfind(" put ")?;
+    let (put, counted) = head[i + 1..].split_once(" for each ")?;
+    let r = put.strip_prefix("put ")?;
+    let (n, r) = r.split_once(' ')?;
+    let (times, minus) = match n {
+        "a" | "an" | "one" => ("", "1"),
+        "two" => ("twice ", "2"),
+        _ => return None,
+    };
+    let counted = plural_head(counted).unwrap_or_else(|| counted.to_string());
+    let rewritten = format!(
+        "{} put X {r}, where X is {times}the number of {counted} minus {minus}{}",
+        &block[..i],
+        &block[j + OTHER.len()..]
+    );
+    reread(block, &rewritten, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "referents: for each [thing] other than the first", priority: 50, parse: for_each_other_than_the_first } }
