@@ -1014,3 +1014,72 @@ fn brilliant_ultimatum_plays_cards_from_the_chosen_pile() {
     t.resolve();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
+
+#[test]
+fn boneyard_parley_you_choose_the_opponent_who_separates() {
+    cr!("700.3");
+    ruling!(
+        "Boneyard Parley",
+        "In multiplayer games, you choose an opponent to separate the cards when the ability resolves"
+    );
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Swamp", 7);
+    let a = t.graveyard(P1, "Grizzly Bears");
+    let b = t.graveyard(P2, "Hill Giant");
+    // You choose P2 (not a target) as the spell resolves; P2 puts the Bears alone in the
+    // first pile; you take that pile.
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    picker(&mut t, P2, vec![("Separate", vec!["Grizzly Bears"])], |_, _| None);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    let bp = t.hand(P0, "Boneyard Parley");
+    t.cast(P0, bp)
+        .targets(&[Entity::Object(a), Entity::Object(b)])
+        .go();
+    t.resolve();
+    assert!(!t.asked().iter().any(|(p, d)| *p == P1
+        && matches!(d, Decision::ChooseEntities { .. })));
+    let bears = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(bears.len(), 1);
+    assert_eq!(t.g.obj(bears[0]).controller, P0);
+    assert!(t.in_graveyard(P2, "Hill Giant"));
+}
+
+#[test]
+fn brilliant_ultimatum_a_pile_may_be_empty() {
+    cr!("700.3d");
+    ruling!(
+        "Brilliant Ultimatum",
+        "One of the piles may have zero cards in it if the opponent wishes"
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Island", 3);
+    t.lands(P0, "Swamp", 2);
+    stack(
+        &mut t,
+        P0,
+        &["Forest", "Mountain", "Grizzly Bears", "Hill Giant", "Ornithopter"],
+    );
+    // The opponent puts all five cards into the second pile; you take it and cast
+    // Ornithopter.
+    let seen = picker(
+        &mut t,
+        P0,
+        vec![("Choose", vec!["Ornithopter"])],
+        |_, d| pile_options(d, "Choose a pile"),
+    );
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    let bu = t.hand(P0, "Brilliant Ultimatum");
+    t.cast(P0, bu).go();
+    t.resolve();
+    assert_eq!(
+        lines(&seen),
+        vec![
+            "Pile 1: (empty) | Pile 2: Forest, Mountain, Grizzly Bears, Hill Giant, Ornithopter"
+                .to_string()
+        ]
+    );
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(count_exiled(&t.g), 4);
+}
