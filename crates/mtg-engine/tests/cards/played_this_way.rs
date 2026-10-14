@@ -30,7 +30,7 @@ fn activated(t: &mut TestGame, id: ObjectId) -> Vec<String> {
 
 #[test]
 fn havengul_lich_gains_the_abilities_when_the_card_is_cast_this_way() {
-    cr!("400.7h", "603.7a", "603.7c", "601.3");
+    cr!("400.7h", "603.7a", "603.7b", "601.3");
     ruling!(
         "Havengul Lich",
         "This triggered ability will go on the stack on top of the creature spell and will resolve before the creature spell will."
@@ -75,7 +75,7 @@ fn havengul_lich_gains_the_abilities_when_the_card_is_cast_this_way() {
 
 #[test]
 fn fires_of_mount_doom_deals_damage_only_for_a_card_played_with_that_permission() {
-    cr!("400.7i", "603.7c", "305.1");
+    cr!("400.7i", "603.7a");
     ruling!(
         "Fires of Mount Doom",
         "using that casting permission, Fires of Mount Doom won't deal damage to each player"
@@ -160,6 +160,12 @@ fn galea_equipment_cast_this_way_attaches_as_it_enters() {
     t.cast(P0, bs).go();
     t.resolve_all();
     assert_eq!(t.pt(bears), (4, 2));
+    // The permission doesn't pay the spell's costs: with no mana it can't be cast.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Galea, Kindler of Hope");
+    t.battlefield(P0, "Grizzly Bears");
+    let bs = t.library_top(P0, "Bonesplitter");
+    assert!(t.cast(P0, bs).try_go().is_err());
     // From the hand: it doesn't.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Galea, Kindler of Hope");
@@ -192,4 +198,8 @@ fn strago_and_relm_creature_cast_this_way_gains_haste() {
     assert_eq!(w.len(), 1);
     assert_eq!(t.obj_now(w[0]).controller, P0);
     assert!(t.obj_now(w[0]).has_keyword(KeywordKind::Haste));
+    // "At the beginning of the end step, sacrifice this creature."
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Craw Wurm").is_empty());
 }

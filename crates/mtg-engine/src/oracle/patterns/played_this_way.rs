@@ -73,18 +73,24 @@ fn this_way_trigger(l: &str) -> Option<(TriggerCond, bool, &str)> {
         who: PlayerRel::You,
         filter: this_way(),
     };
-    let cond = match event {
-        "you play a card this way" | "you play a land or cast a spell this way" => {
-            TriggerCond::AnyOf(vec![spell(Filter::Card), land()])
+    // A stated duration ("this turn", "until end of turn") ends the delayed ability at
+    // the end of the turn and lets it trigger more than once (CR 603.7b).
+    let (cond, this_turn) = match event {
+        "you play a card this way" => (TriggerCond::AnyOf(vec![spell(Filter::Card), land()]), false),
+        "you play a land or cast a spell this way" => {
+            (TriggerCond::AnyOf(vec![spell(Filter::Card), land()]), !once)
         }
-        "you cast it this turn" | "you cast that card this turn" => spell(Filter::Any),
+        "you cast it this turn" | "you cast that card this turn" => (spell(Filter::Any), true),
         _ => {
             let r = event
                 .strip_prefix("you cast ")?
                 .strip_suffix(" this way")?;
-            spell(spell_kind(r)?)
+            (spell(spell_kind(r)?), !once)
         }
     };
+    if this_turn {
+        return Some((TriggerCond::ThisTurn(Box::new(cond)), false, x));
+    }
     Some((cond, once, x))
 }
 

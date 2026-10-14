@@ -43,6 +43,12 @@ fn drana_and_linvala_spends_any_color_only_for_gained_abilities() {
     let mut t = TestGame::new(2);
     let dl = t.battlefield(P0, "Drana and Linvala");
     t.battlefield(P1, "Shivan Dragon");
+    // Not the trample of P1's Colossal Dreadmaw: only activated abilities.
+    t.battlefield(P1, "Colossal Dreadmaw");
+    t.g.recompute();
+    assert!(!t
+        .obj_now(dl)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Trample));
     let mantle = t.battlefield(P0, "Dragon Mantle");
     assert!(t.g.attach(mantle, Entity::Object(dl)));
     let idx = activated_index(&mut t, dl, "+1/+0");
@@ -101,23 +107,25 @@ fn grell_philosopher_horrors_spend_blue_mana_as_any_color() {
         "Grell Philosopher",
         "Grell Philosopher causes Horrors to gain only activated abilities."
     );
-    // P1's Saberclaw Golem: "{R}: This creature gains first strike until end of turn."
+    // P1's Furnace Hellkite: affinity for artifacts, flying, "{R}: This creature gets
+    // +1/+0 until end of turn." Grell gains only the activated ability, payable with blue mana.
     for (land, works) in [("Island", true), ("Plains", false)] {
         let mut t = TestGame::new(2);
-        let golem = t.battlefield(P1, "Saberclaw Golem");
-        t.answer_targets(P0, &[Entity::Object(golem)]);
+        let hellkite = t.battlefield(P1, "Furnace Hellkite");
+        t.answer_targets(P0, &[Entity::Object(hellkite)]);
         let grell = t.enter(P0, "Grell Philosopher");
         t.resolve_all();
-        let i = activated_index(&mut t, grell, "first strike");
+        let i = activated_index(&mut t, grell, "+1/+0");
         assert_eq!(i.len(), 1);
+        assert!(!t
+            .obj_now(grell)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+        let base = t.pt(grell);
         t.lands(P0, land, 1);
         assert_eq!(t.activate(P0, grell, i[0], &[]).is_ok(), works, "{land}");
         t.resolve_all();
-        assert_eq!(
-            t.obj_now(grell)
-                .has_keyword(mtg_engine::keywords::KeywordKind::FirstStrike),
-            works
-        );
+        let bonus = if works { 1 } else { 0 };
+        assert_eq!(t.pt(grell), (base.0 + bonus, base.1), "{land}");
     }
 }
 

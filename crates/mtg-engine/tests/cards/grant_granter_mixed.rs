@@ -181,7 +181,7 @@ fn archery_training_counts_the_counters_on_the_aura_that_granted_the_ability() {
 
 #[test]
 fn hankyu_and_fishing_pole_counters_and_tapping_are_the_equipments() {
-    cr!("113.7", "201.5a", "602.2b", "107.3");
+    cr!("113.7", "201.5a", "602.2b");
     ruling!(
         "Fishing Pole",
         "refers only to the Fishing Pole granting that ability"
@@ -226,7 +226,7 @@ fn hankyu_and_fishing_pole_counters_and_tapping_are_the_equipments() {
 
 #[test]
 fn animal_friend_counts_other_auras_and_equipment() {
-    cr!("113.7", "201.5a", "122.6");
+    cr!("113.7", "201.5a");
     assert_supported(&["Animal Friend"]);
     // Bears with Animal Friend and Bonesplitter: the Squirrel gets one counter (for the
     // Bonesplitter, not for Animal Friend).
@@ -294,4 +294,45 @@ fn shifting_shadow_moves_to_the_new_creature_even_if_the_old_one_survives() {
         Some(Entity::Object(giant[0]))
     );
     assert!(t.obj_now(giant[0]).has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+}
+
+#[test]
+fn dire_blunderbuss_sacrifices_an_artifact_other_than_itself() {
+    cr!("113.7", "201.5a", "603.12", "701.21a");
+    assert_supported(&["Dire Flail // Dire Blunderbuss"]);
+    // Grizzly Bears equipped with Dire Flail, transformed into Dire Blunderbuss (+3/+0):
+    // "Whenever this creature attacks, you may sacrifice an artifact other than Dire
+    // Blunderbuss. When you do, this creature deals damage equal to its power to target
+    // creature."
+    let setup = |t: &mut TestGame| -> (ObjectId, ObjectId, ObjectId) {
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let flail = attach_new(t, P0, "Dire Flail // Dire Blunderbuss", bears);
+        assert!(mtg_engine::dfc::transform(&mut t.g, flail));
+        t.g.recompute();
+        let flail = t.g.current(flail);
+        assert_eq!(t.pt(bears), (5, 2));
+        let giant = t.battlefield(P1, "Craw Wurm");
+        (bears, flail, giant)
+    };
+    // With an Ornithopter to sacrifice: the Bears deal 5 damage to the Craw Wurm.
+    let mut t = TestGame::new(2);
+    let (bears, buss, wurm) = setup(&mut t);
+    let thopter = t.battlefield(P0, "Ornithopter");
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(thopter));
+    assert!(t.on_battlefield(buss));
+    assert!(t.in_graveyard(P1, "Craw Wurm"));
+    // Without another artifact: the Blunderbuss itself can't be sacrificed.
+    let mut t = TestGame::new(2);
+    let (bears, buss, wurm) = setup(&mut t);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(t.on_battlefield(buss));
+    assert!(t.on_battlefield(wurm));
+    assert_eq!(t.obj_now(wurm).damage, 0);
 }
