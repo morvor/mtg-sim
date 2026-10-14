@@ -560,6 +560,39 @@ impl Renderer<'_> {
         if let Some(r) = self.countered_source(v) {
             return Some(r);
         }
+        // "An opponent chooses one of them. Put that card into your hand.": the chosen
+        // card, first mentioned as "that card".
+        if let [st @ Effect::Store { var, sel: Sel::Choose { chooser: PlayerRef::Var(_), filter: Filter::In(_), count: Value::Const(1), up_to: false, .. } }, ..] = v {
+            let s = self.effect(st);
+            self.target_vars.push((*var, "{alt:that card|it}".into(), false));
+            return Some((s, 1));
+        }
+        // "Choose up to two target creature cards in your graveyard. An opponent chooses
+        // one of them.": the targets, then the opponent's choice among them.
+        if let [d @ Effect::Custom(n), Effect::Store { var, sel: Sel::Target(i) }, ..] = v {
+            if n.starts_with(crate::kw::choice_grammar::DECIDING_OPPONENT)
+                && self.introduced.get(*i as usize) == Some(&false)
+            {
+                let t = self.target_phrase(*i);
+                self.introduced[*i as usize] = true;
+                self.plural_vars.push(*var);
+                let d = self.effect(d);
+                return Some((effects::join_words(&[d, format!("choose {t}")]), 2));
+            }
+        }
+        // "Pay any amount of life. The amount you pay can't be more than [V]."
+        if let [Effect::StoreValue { var, value }, pay @ Effect::Custom(n), ..] = v {
+            if *var == crate::kw::pay_any_amount_of_life::CAP
+                && n.as_str() == crate::kw::pay_any_amount_of_life::PAY_ANY_LIFE
+            {
+                let p = self.effect(pay);
+                let cap = self.value(value);
+                return Some((
+                    format!("{p}. The amount you pay can't be more than {cap}"),
+                    2,
+                ));
+            }
+        }
         // "create twice that many tokens": X doubled after "pay any amount".
         if let [Effect::SetX { value }, rest @ ..] = v {
             let doubled = match value {
@@ -913,5 +946,95 @@ impl Renderer<'_> {
         let zones = zones.filter(|z| z.len() >= 2)?;
         let z: Vec<String> = zones.iter().map(|s| s.to_string()).collect();
         Some(format!("from {}", join_list(&z, "or")))
+    }
+}
+
+impl Renderer<'_> {
+    /// Selections put into words here: "one of them" (chosen among a group named
+    /// before), "the rest" / "the other" (the group without what was chosen from it).
+    pub(crate) fn sel_extra(&mut self, s: &Sel, case: Case) -> Option<String> {
+        match s {
+            Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: Filter::In(g),
+                count: Value::Const(n),
+                up_to: false,
+                ..
+            } => {
+                let Sel::Var(g) = g.as_ref() else {
+                    return None;
+                };
+                let fresh = |v: &[(Var, String, bool)]| v.iter().any(|(x, _, used)| x == g && !used);
+                if *g == vars::IT
+                    || fresh(&self.target_vars)
+                    || self.var_defs.iter().any(|(x, _, used)| x == g && !used)
+                {
+                    return None;
+                }
+                Some(super::players::decline(
+                    format!("{} of them", number_word(*n)),
+                    case,
+                ))
+            }
+            // "Search your library and graveyard for five cards and exile the rest": each
+            // zone searched, without what was found.
+            Sel::Union(parts) if parts.len() >= 2 => {
+                let without: Option<Vec<Var>> = parts
+                    .iter()
+                    .map(|p| match p {
+                        Sel::All(Filter::And(v)) if v.iter().all(|x| {
+                            matches!(x, Filter::InZone(_) | Filter::OwnedBy(_) | Filter::Not(_))
+                        }) => v.iter().find_map(|x| match x {
+                            Filter::Not(n) => match n.as_ref() {
+                                Filter::In(s) => match s.as_ref() {
+                                    Sel::Var(v) => Some(*v),
+                                    _ => None,
+                                },
+                                _ => None,
+                            },
+                            _ => None,
+                        }),
+                        _ => None,
+                    })
+                    .collect();
+                let w = without?;
+                if w.iter().any(|x| *x != w[0]) {
+                    return None;
+                }
+                Some(super::players::decline("the rest".into(), case))
+            }
+            Sel::All(f) => {
+                let rest = |f: &Filter| match f {
+                    Filter::And(p) => p.iter().any(|x| {
+                        matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::In(s) if matches!(s.as_ref(), Sel::Var(_))))
+                    }) && p.iter().all(|x| {
+                        matches!(x, Filter::Not(_) | Filter::In(_))
+                    }),
+                    _ => false,
+                };
+                if !rest(f) {
+                    return None;
+                }
+                let Filter::And(p) = f else {
+                    return None;
+                };
+                // The group: what the variable holds, without the chosen ones.
+                let [Filter::In(a), Filter::Not(b)] = p.as_slice() else {
+                    return None;
+                };
+                let (Sel::Var(_), Filter::In(c)) = (a.as_ref(), b.as_ref()) else {
+                    return None;
+                };
+                let Sel::Var(chosen) = c.as_ref() else {
+                    return None;
+                };
+                let _ = chosen;
+                Some(super::players::decline(
+                    "{alt:the rest|the other|the others}".into(),
+                    case,
+                ))
+            }
+            _ => None,
+        }
     }
 }

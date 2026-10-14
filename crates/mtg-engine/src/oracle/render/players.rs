@@ -35,7 +35,7 @@ pub enum Case {
     Poss,
 }
 
-fn decline(s: String, case: Case) -> String {
+pub(crate) fn decline(s: String, case: Case) -> String {
     match case {
         // Alternative wordings each take the possessive.
         Case::Poss if s.starts_with("{alt:") && s.ends_with('}') => {
@@ -451,6 +451,9 @@ impl Renderer<'_> {
 
     /// A selection of objects/players.
     pub(crate) fn sel(&mut self, s: &Sel, case: Case) -> String {
+        if let Some(r) = self.sel_extra(s, case) {
+            return r;
+        }
         let it = |case: Case| match case {
             Case::Poss => "its".to_string(),
             _ => "it".to_string(),
