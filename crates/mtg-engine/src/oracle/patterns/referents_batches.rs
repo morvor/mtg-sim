@@ -544,3 +544,89 @@ fn each_deals_damage_to_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: each of those creatures deals damage equal to its [stat] to the other", priority: 1500, parse: each_deals_damage_to_the_other } }
+
+/// "~ deals 2 damage to each creature for each Aura attached to that creature." (Baki's
+/// Curse): an amount for each of the objects, measured for that object.
+fn damage_to_each_for_each_attached(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("~ deals ")?;
+    let (n, r) = crate::oracle::phrases::parse_number(r)?;
+    let r = r.trim_start().strip_prefix("damage to each ")?;
+    let (noun, r) = r.split_once(" for each ")?;
+    let (counted, that) = r.split_once(" attached to that ")?;
+    if that != noun {
+        return None;
+    }
+    let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(noun)?;
+    if plural || !tail.trim().is_empty() {
+        return None;
+    }
+    let (cf, cplural, ctail) = crate::oracle::phrases::parse_object_phrase(counted)?;
+    if cplural || !ctail.trim().is_empty() {
+        return None;
+    }
+    let _ = b;
+    let each = vars::USER + 12_008;
+    let attached = Value::Count(Filter::and(vec![
+        cf,
+        Filter::AttachedToAnyOf(Box::new(Sel::Var(each))),
+    ]));
+    Some(Effect::ForEach {
+        sel: Sel::All(Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)])),
+        var: each,
+        effect: Box::new(Effect::DealDamage {
+            source: Sel::This,
+            amount: Value::Mul(Box::new(n), Box::new(attached)),
+            to: Sel::Var(each),
+        }),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: N damage to each [object] for each [thing] attached to that [object]", priority: 1500, parse: damage_to_each_for_each_attached } }
+
+/// The cards "N of them at random" chose.
+pub const RETURNED_AT_RANDOM: Var = vars::USER + 12_009;
+
+/// "Choose three target creature cards in your graveyard. Return two of them at random to
+/// the battlefield and put the other on the bottom of your library." (Sinister Waltz).
+fn return_n_of_them_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("return ")?;
+    let (n, r) = crate::oracle::phrases::parse_number(r)?;
+    let r = r
+        .trim_start()
+        .strip_prefix("of them at random to the battlefield and put the other on the bottom of your library")?;
+    if !r.is_empty() {
+        return None;
+    }
+    let them = match super::pronoun_groups::plural_object_ref("them", b) {
+        Some(Some((sel, _))) if matches!(sel, Sel::Target(_)) => sel,
+        _ => return None,
+    };
+    let rest = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(them.clone())),
+        Filter::not(Filter::In(Box::new(Sel::Var(RETURNED_AT_RANDOM)))),
+    ]));
+    let mut bottom = Destination::zone(ZoneKind::Library);
+    bottom.position = LibraryPosition::Bottom;
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: RETURNED_AT_RANDOM,
+            sel: Sel::AtRandom {
+                filter: Filter::In(Box::new(them)),
+                count: n,
+                store: None,
+            },
+        },
+        Effect::Move {
+            what: Sel::Var(RETURNED_AT_RANDOM),
+            to: Destination::battlefield(),
+        },
+        Effect::Move {
+            what: rest,
+            to: bottom,
+        },
+    ]))
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: return N of them at random and put the other on the bottom", priority: 1500, parse: return_n_of_them_at_random } }

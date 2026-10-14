@@ -400,6 +400,35 @@ pub(crate) fn count_ext(
     r: &str,
     b: &mut crate::oracle::effects::Builder,
 ) -> Option<(Value, String)> {
+    // "spells and abilities countered this way" (Glen Elendra's Answer): everything the
+    // counter instruction countered, as it was on the stack.
+    for p in [
+        "spells and abilities countered this way",
+        "spell and ability countered this way",
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            return Some((
+                Value::CountSel(Box::new(Sel::Before(Box::new(Sel::Var(vars::IT))))),
+                rest.to_string(),
+            ));
+        }
+    }
+    // "cards exiled from their hand this way" (Necromentia): of the cards the exile
+    // instruction moved, those that were in a hand.
+    for p in [
+        "card exiled from their hand this way",
+        "cards exiled from their hand this way",
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            return Some((
+                Value::CountSel(Box::new(Sel::Matching(
+                    Box::new(Sel::Before(Box::new(Sel::Var(vars::IT)))),
+                    Filter::InZone(ZoneKind::Hand),
+                ))),
+                rest.to_string(),
+            ));
+        }
+    }
     // "opponents who control one or more of those permanents" (Sudden Salvation).
     for p in [
         "opponent who controls one or more of those permanents",
@@ -990,13 +1019,15 @@ inventory::submit! { AbilityPattern { name: "referents: twice that many ... inst
 /// Phrases of an instant's or sorcery's paragraph that name what an earlier paragraph
 /// chose ("Choose target creature you control and target creature an opponent controls.")
 /// or did ("untap those lands").
-const NAMED_BEFORE: [&str; 6] = [
+const NAMED_BEFORE: [&str; 7] = [
     "the creature you control",
     "the creature an opponent controls",
     "the creature you don't control",
     "those lands",
     "the creature they exiled",
     "the exiled creature",
+    // "If this spell was kicked, untap all Forests put onto the battlefield this way."
+    "put onto the battlefield this way",
 ];
 
 /// An instant's or sorcery's paragraphs are one spell ability, followed in order (CR
@@ -1312,3 +1343,56 @@ fn for_each_other_than_the_first(block: &str, ctx: &CompileContext) -> Option<Ve
 }
 
 inventory::submit! { AbilityPattern { name: "referents: for each [thing] other than the first", priority: 50, parse: for_each_other_than_the_first } }
+
+/// "Count the number of cards in your library. Your life total becomes that number."
+/// (Invincible Hymn): the number counted.
+fn count_then_that_number(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if in_standard() {
+        return None;
+    }
+    let body = crate::oracle::strip_ability_word(block.trim());
+    let r = body.strip_prefix("Count the number of ")?;
+    let (counted, rest) = r.split_once(". ")?;
+    if rest.matches("that number").count() != 1 || counted.contains(',') {
+        return None;
+    }
+    let rewritten = rest.replacen("that number", &format!("the number of {counted}"), 1);
+    reread(block, &rewritten, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "referents: count the number of [things]. ... that number", priority: 50, parse: count_then_that_number } }
+
+/// "At the beginning of each end step, if all lands on the battlefield are Islands, remove
+/// all flood counters from them." (Quicksilver Fountain): from each land.
+fn if_all_then_them(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if in_standard() {
+        return None;
+    }
+    const COND: &str = ", if all lands on the battlefield are ";
+    let i = block.find(COND)?;
+    let r = &block[i + COND.len()..];
+    let (_, eff) = r.split_once(", ")?;
+    if !eff.starts_with("remove all ") || !eff.ends_with(" counters from them.") {
+        return None;
+    }
+    let rewritten = format!(
+        "{}{}",
+        &block[..block.len() - " them.".len()],
+        " each land."
+    );
+    reread(block, &rewritten, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "referents: if all lands are ..., remove counters from them", priority: 50, parse: if_all_then_them } }
+
+/// "untap all Forests put onto the battlefield this way" (Hunting Wilds): the permanents
+/// the instruction before put onto the battlefield (CR 400.7: the objects they became).
+fn put_onto_the_battlefield_this_way<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let rest = s.strip_prefix("put onto the battlefield this way")?;
+    if !(rest.is_empty() || rest.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    Some((Filter::In(Box::new(Sel::Var(vars::IT))), rest))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "referents: put onto the battlefield this way", priority: 100, parse: put_onto_the_battlefield_this_way } }

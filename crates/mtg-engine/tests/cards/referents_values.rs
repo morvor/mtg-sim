@@ -769,3 +769,36 @@ fn outlaw_stitcher_counts_spells_other_than_the_first() {
     // Opt and Outlaw Stitcher: one spell other than the first.
     assert_eq!(t.counters(zombie, "+1/+1"), 2);
 }
+
+#[test]
+fn invincible_hymn_sets_life_to_the_number_counted() {
+    cr!("119.5");
+    compiles("Invincible Hymn");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 8);
+    for _ in 0..30 {
+        t.library_top(P0, "Island");
+    }
+    let n = t.library_size(P0) as i32;
+    let spell = t.hand(P0, "Invincible Hymn");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), n);
+}
+
+#[test]
+fn quicksilver_fountain_removes_flood_counters_from_all_lands() {
+    cr!("603.4", "122.8");
+    compiles("Quicksilver Fountain");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Quicksilver Fountain");
+    let a = t.battlefield(P0, "Island");
+    let b = t.battlefield(P1, "Island");
+    t.g.add_counters(Entity::Object(a), "flood", 1, None);
+    t.g.add_counters(Entity::Object(b), "flood", 2, None);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.counters(a, "flood"), 0);
+    assert_eq!(t.counters(b, "flood"), 0);
+}

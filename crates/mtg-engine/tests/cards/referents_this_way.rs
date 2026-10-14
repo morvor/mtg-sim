@@ -477,3 +477,140 @@ fn ripples_of_potential_phases_out_permanents_it_proliferated() {
     assert!(t.g.obj(a).phased_out);
     assert!(!t.g.obj(b).phased_out && !t.g.obj(plain).phased_out);
 }
+
+fn creature_tokens(t: &TestGame, p: PlayerId) -> usize {
+    t.g.battlefield
+        .iter()
+        .filter(|id| {
+            let o = t.g.obj(**id);
+            o.controller == p && o.kind == object::ObjKind::Token && o.is_creature()
+        })
+        .count()
+}
+
+#[test]
+fn hunting_wilds_kicked_untaps_and_animates_the_forests_it_put_onto_the_battlefield() {
+    cr!("702.33d", "608.2c");
+    compiles("Hunting Wilds");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 8);
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Forest");
+    let spell = t.hand(P0, "Hunting Wilds");
+    t.advance_to(P0, Step::PrecombatMain);
+    let before: Vec<ObjectId> = t.named_on_battlefield("Forest");
+    t.cast(P0, spell).kicked(true).go();
+    t.resolve_all();
+    t.g.recompute();
+    let new: Vec<ObjectId> = t
+        .named_on_battlefield("Forest")
+        .into_iter()
+        .filter(|f| !before.contains(f))
+        .collect();
+    assert_eq!(new.len(), 2);
+    for f in &new {
+        assert!(!t.g.obj(*f).tapped);
+        assert!(t.g.obj(*f).is_creature());
+        assert_eq!(t.pt(*f), (3, 3));
+    }
+    // The Forests that paid for it aren't affected.
+    assert!(before.iter().all(|f| !t.g.obj(*f).is_creature()));
+}
+
+#[test]
+fn glen_elendras_answer_counts_spells_and_abilities_countered() {
+    cr!("701.6a", "608.2c");
+    compiles("Glen Elendra's Answer");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 4);
+    t.lands(P1, "Mountain", 2);
+    t.advance_to(P1, Step::PrecombatMain);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    let shock = t.hand(P1, "Shock");
+    t.cast(P1, shock).target(Entity::Player(P0)).go();
+    let answer = t.hand(P0, "Glen Elendra's Answer");
+    t.cast(P0, answer).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(creature_tokens(&t, P0), 2);
+}
+
+#[test]
+fn necromentia_creates_zombies_for_the_cards_exiled_from_the_hand() {
+    cr!("608.2c", "400.7");
+    compiles("Necromentia");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    t.hand(P1, "Lightning Bolt");
+    t.hand(P1, "Lightning Bolt");
+    t.graveyard(P1, "Lightning Bolt");
+    t.library_top(P1, "Lightning Bolt");
+    let spell = t.hand(P0, "Necromentia");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer(
+        P0,
+        DecisionKind::Name,
+        mtg_engine::decision::Answer::Text("Lightning Bolt".into()),
+    );
+    t.cast(P0, spell).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(
+        t.g.exile
+            .iter()
+            .filter(|id| t.g.obj(**id).chars.name.as_str() == "Lightning Bolt")
+            .count(),
+        4
+    );
+    assert_eq!(creature_tokens(&t, P1), 2, "two were exiled from the hand");
+}
+
+#[test]
+fn bakis_curse_deals_damage_for_each_aura_on_each_creature() {
+    cr!("608.2h");
+    compiles("Baki's Curse");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 4);
+    let a = t.battlefield(P1, "Indomitable Ancients");
+    let b = t.battlefield(P1, "Hill Giant");
+    for _ in 0..2 {
+        let aura = t.battlefield(P1, "Holy Strength");
+        t.g.attach(aura, Entity::Object(a));
+    }
+    let spell = t.hand(P0, "Baki's Curse");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.g.obj(a).damage, 4);
+    assert_eq!(t.g.obj(b).damage, 0);
+}
+
+#[test]
+fn sinister_waltz_returns_two_at_random_and_bottoms_the_other() {
+    cr!("701.9b", "608.2c");
+    compiles("Sinister Waltz");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    t.lands(P0, "Mountain", 2);
+    let cards: Vec<ObjectId> = ["Grizzly Bears", "Hill Giant", "Llanowar Elves"]
+        .iter()
+        .map(|c| t.graveyard(P0, c))
+        .collect();
+    let spell = t.hand(P0, "Sinister Waltz");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(
+        P0,
+        &cards.iter().map(|c| Entity::Object(*c)).collect::<Vec<_>>(),
+    );
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let zones: Vec<object::Zone> = cards.iter().map(|c| t.zone(t.g.current(*c))).collect();
+    assert_eq!(
+        zones.iter().filter(|z| **z == object::Zone::Battlefield).count(),
+        2
+    );
+    assert_eq!(
+        zones.iter().filter(|z| **z == object::Zone::Library(P0)).count(),
+        1
+    );
+}
