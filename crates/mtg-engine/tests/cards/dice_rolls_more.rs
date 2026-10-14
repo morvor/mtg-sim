@@ -71,7 +71,7 @@ fn roll_two_dice_and_choose_one_result() {
 
 #[test]
 fn for_each_even_or_odd_result() {
-    cr!("706.1a");
+    cr!("706.4");
     compiles("Clown Car");
     compiles("Attempted Murder");
     // "When this Vehicle enters, roll X six-sided dice. For each odd result, create a 1/1
@@ -148,7 +148,7 @@ fn when_you_roll_a_natural_20() {
 
 #[test]
 fn your_third_die_each_turn_and_dice_rolled_this_turn() {
-    cr!("706.1a");
+    cr!("706.1");
     compiles("Resolute Veggiesaur");
     compiles("The Space Family Goblinson");
     // "Whenever you roll your third die each turn, put a +1/+1 counter on this creature."
@@ -174,7 +174,7 @@ fn your_third_die_each_turn_and_dice_rolled_this_turn() {
 
 #[test]
 fn the_third_die_among_dice_rolled_at_once() {
-    cr!("706.1a");
+    cr!("706.1");
     ruling!(
         "Resolute Veggiesaur",
         "If you roll multiple dice at the same time, and one of them is your third die roll that turn"

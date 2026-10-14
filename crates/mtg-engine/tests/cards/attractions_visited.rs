@@ -91,7 +91,8 @@ fn the_number_of_attractions_you_have_visited_this_turn() {
     t.battlefield(P0, "Information Booth");
     t.battlefield(P0, "Kiddie Coaster");
     t.set_step(P0, Step::PrecombatMain);
-    // A 2 visits both (each visit counts); a 3 visits only Kiddie Coaster.
+    // A 2 visits both; a 3 visits Kiddie Coaster again, which is still one Attraction
+    // visited.
     roll_to_visit(&mut t, P0, 2);
     t.resolve_all();
     roll_to_visit(&mut t, P0, 3);
@@ -106,7 +107,43 @@ fn the_number_of_attractions_you_have_visited_this_turn() {
         .permanents()
         .filter(|o| o.controller == P0 && o.is_token() && o.chars.has_subtype("Squirrel"))
         .count();
-    assert_eq!(squirrels, 3);
+    assert_eq!(squirrels, 2);
+}
+
+#[test]
+fn attractions_visited_this_turn_needn_t_still_be_on_the_battlefield() {
+    cr!("701.52a", "601.2c");
+    compiles("Black Hole");
+    ruling!(
+        "Black Hole",
+        "Those Attractions don’t have to still be on the battlefield as you cast Black Hole."
+    );
+    // "Destroy target creature and up to X other target creatures, where X is the number
+    // of Attractions you've visited this turn."
+    for visited in [false, true] {
+        let mut t = TestGame::new(2);
+        let booth = t.battlefield(P0, "Information Booth");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.lands(P0, "Swamp", 4);
+        t.set_step(P0, Step::PrecombatMain);
+        // Information Booth's lights are 2 and 6.
+        roll_to_visit(&mut t, P0, if visited { 6 } else { 5 });
+        t.resolve_all();
+        // The Attraction leaves the battlefield.
+        t.g.move_object(booth, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+        t.g.flush_events();
+        assert!(!t.on_battlefield(booth));
+        let spell = t.hand(P0, "Black Hole");
+        // The second target is chosen only if X is at least 1.
+        t.cast(P0, spell)
+            .target(Entity::Object(bears))
+            .target(Entity::Object(giant))
+            .go();
+        t.resolve_all();
+        assert!(!t.on_battlefield(bears));
+        assert_eq!(t.on_battlefield(giant), !visited);
+    }
 }
 
 #[test]
@@ -128,6 +165,30 @@ fn whenever_you_visit_an_attraction() {
     roll_to_visit(&mut t, P0, 6);
     t.resolve_all();
     assert_eq!(t.obj_now(aura).attached_to, Some(Entity::Object(second)));
+}
+
+#[test]
+fn motion_sickness_stays_if_the_target_untapped() {
+    cr!("608.2b");
+    ruling!(
+        "Motion Sickness",
+        "If the target creature has become untapped as the last ability tries to resolve"
+    );
+    let mut t = TestGame::new(2);
+    let first = t.battlefield(P1, "Grizzly Bears");
+    let second = t.battlefield(P1, "Hill Giant");
+    t.g.objects[second.0 as usize].tapped = true;
+    let aura = t.battlefield(P0, "Motion Sickness");
+    t.g.attach(aura, Entity::Object(first));
+    t.battlefield(P0, "Information Booth");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(second)]);
+    t.answer_yes(P0, true);
+    roll_to_visit(&mut t, P0, 6);
+    // The trigger is on the stack; the target untaps before it resolves.
+    t.g.objects[second.0 as usize].tapped = false;
+    t.resolve_all();
+    assert_eq!(t.obj_now(aura).attached_to, Some(Entity::Object(first)));
 }
 
 #[test]

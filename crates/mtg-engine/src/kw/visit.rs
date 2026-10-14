@@ -63,15 +63,22 @@ pub fn note_visits(g: &mut Game, p: PlayerId, result: i64) {
     }
 }
 
-/// The Attractions `p` visited this turn (each visit counts).
+/// The number of Attractions `p` visited this turn: an Attraction visited twice is one
+/// Attraction visited, and it counts even if it has left the battlefield since.
 fn visits_this_turn(g: &Game, p: PlayerId) -> usize {
     g.turn_events
         .iter()
-        .filter(|e| {
-            matches!(e, Event::Custom { name, player: Some(q), .. }
-                if name == VISITED && *q == p)
+        .filter_map(|e| match e {
+            Event::Custom {
+                name,
+                player: Some(q),
+                obj,
+                ..
+            } if name == VISITED && *q == p => *obj,
+            _ => None,
         })
-        .count()
+        .collect::<std::collections::BTreeSet<ObjectId>>()
+        .len()
 }
 
 pub struct Visit;

@@ -380,6 +380,17 @@ fn named_suffix<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
         return None;
     }
     let printed = super::cost_parts::printed_name(name)?;
+    // The whole phrase must be a name ("permanents named Wirefly"), not a name and more
+    // ("a card named Wirefly with mana value 3"): its words are capitalized, but for short
+    // connecting words between capitalized ones.
+    const CONNECTORS: &[&str] = &["of", "the", "a", "an", "to", "in", "from", "for", "on", "at"];
+    let words: Vec<&str> = printed.split_whitespace().collect();
+    let capitalized = |w: &str| w.chars().next().is_some_and(|c| c.is_uppercase());
+    if !words.last().is_some_and(|w| capitalized(w))
+        || !words.iter().all(|w| capitalized(w) || CONNECTORS.contains(w))
+    {
+        return None;
+    }
     Some((Filter::Named(printed), rest))
 }
 

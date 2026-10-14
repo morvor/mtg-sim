@@ -4,7 +4,7 @@
 //! - "the number of Attractions you've visited this turn", "for each Attraction you've
 //!   visited this turn", "as long as you've visited an Attraction this turn": an
 //!   Attraction is visited when its controller rolls to visit and the result is lit up
-//!   on it (CR 701.52a); each visit counts.
+//!   on it (CR 701.52a); an Attraction visited twice is one Attraction visited.
 //! - "Whenever you visit an Attraction", "whenever you roll to visit your Attractions"
 //!   (its result is "the result", see `dice_coin_ext`).
 

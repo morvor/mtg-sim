@@ -165,6 +165,27 @@ fn after_you_roll_a_die_you_may_pay_to_change_the_result() {
     // Only once each turn.
     assert_eq!(roll(&mut t, P0, 6, 5), 5);
     assert_eq!(t.life(P0), 19);
+    // Two dice rolled at once: only one of them can be changed, and the player sees both
+    // results before choosing which one (declining the first die, changing the second).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Night Shift of the Living Dead");
+    t.set_step(P0, Step::PrecombatMain);
+    t.g.dice.loaded.extend([5, 5]);
+    t.answer_yes(P0, false);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    // A second "yes" for the first die would be asked only if the ability could change
+    // another die.
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    let dice = mtg_engine::dice::roll_dice(&mut t.g, P0, 2, 6, DiceIgnore::None, 0, None);
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    let results: Vec<i64> = dice.iter().map(|d| d.result()).collect();
+    assert_eq!(results, vec![5, 6]);
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(tokens(&t, P0, "Zombie"), 1);
     // Xenosquirrels: "After you roll a die, you may remove a +1/+1 counter from this
     // creature. If you do, increase or decrease the result by 1."
     let mut t = TestGame::new(2);
@@ -189,7 +210,7 @@ fn after_you_roll_a_die_you_may_pay_to_change_the_result() {
 
 #[test]
 fn rolled_a_result_exactly_n_times() {
-    cr!("706.1a");
+    cr!("706.4");
     compiles("Luck Bobblehead");
     ruling!(
         "Luck Bobblehead",
@@ -202,7 +223,7 @@ fn rolled_a_result_exactly_n_times() {
     let bobbles: Vec<ObjectId> = (0..7)
         .map(|_| t.battlefield(P0, "Luck Bobblehead"))
         .collect();
-    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Plains", 3);
     t.set_step(P0, Step::PrecombatMain);
     t.g.dice.loaded.extend([6, 6, 6, 6, 6, 6, 5]);
     t.activate(P0, bobbles[0], 1, &[]).unwrap();
@@ -214,8 +235,13 @@ fn rolled_a_result_exactly_n_times() {
         .filter(|o| o.chars.has_subtype("Treasure"))
         .all(|o| o.tapped));
     assert!(!t.has_lost(P1));
-    t.g.dice.loaded.extend([6; 7]);
+    // Sixes rolled by an earlier resolution don't add up with this one's.
+    t.g.dice.loaded.extend([6, 1, 1, 1, 1, 1, 1]);
     t.activate(P0, bobbles[1], 1, &[]).unwrap();
+    t.resolve_all();
+    assert!(!t.has_lost(P1));
+    t.g.dice.loaded.extend([6; 7]);
+    t.activate(P0, bobbles[2], 1, &[]).unwrap();
     t.resolve_all();
     assert!(t.has_lost(P1));
 }
