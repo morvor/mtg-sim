@@ -1794,6 +1794,35 @@ impl Renderer<'_> {
                     ),
                 }
             }
+            Restriction::ExtraBlocksCounted { blocker, n } => {
+                let b = subj(self, blocker);
+                match n {
+                    Value::Count(f) => {
+                        let f = self.for_each_noun(f);
+                        format!("{b} can block an additional creature each combat for each {f}")
+                    }
+                    other => {
+                        let v = self.value(other);
+                        format!("{b} can block X additional creatures each combat, where X is {v}")
+                    }
+                }
+            }
+            Restriction::AssignAsThoughUnblocked { what, may } => {
+                match (what, may) {
+                    (Filter::AttachedToSource, true) => {
+                        let w = self.sel(&Sel::AttachedTo, Case::Poss);
+                        format!("{w} controller may have it assign its combat damage as though it weren't blocked")
+                    }
+                    (_, true) => {
+                        let n = self.noun(what, Num::One);
+                        format!("for each {n}, you may have that creature assign its combat damage as though it weren't blocked")
+                    }
+                    (_, false) => {
+                        let w = subj(self, what);
+                        format!("{w} assigns its combat damage as though it weren't blocked")
+                    }
+                }
+            }
             Restriction::CanBlockOnly { blocker, attackers } => {
                 let b = subj(self, blocker);
                 let a = self.noun(attackers, Num::Many);

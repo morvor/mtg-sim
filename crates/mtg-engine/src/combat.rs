@@ -499,6 +499,13 @@ impl Game {
                     }
                 }
             }
+            // "for each Equipment attached to ~": counted as blockers are declared.
+            if let Restriction::ExtraBlocksCounted { blocker: bf, n: v } = &r {
+                let ctx = Ctx::new(s, c);
+                if self.restriction_applies(blocker, bf, &ctx, &locked) {
+                    n += self.eval_value(v, &ctx).max(0) as u32;
+                }
+            }
         }
         Some(n)
     }

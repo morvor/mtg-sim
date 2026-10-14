@@ -3263,7 +3263,9 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         Restriction::AttackTogether { attackers, .. }
         | Restriction::MustAttackOtherThan { attackers, .. } => Some(attackers),
         Restriction::CantActivate { sources, .. } => Some(sources),
-        Restriction::ExtraBlocks { blocker, .. } => Some(blocker),
+        Restriction::ExtraBlocks { blocker, .. }
+        | Restriction::ExtraBlocksCounted { blocker, .. } => Some(blocker),
+        Restriction::AssignAsThoughUnblocked { what, .. } => Some(what),
         Restriction::MinBlockers { attacker, .. }
         | Restriction::MaxBlockedBy { attacker, .. }
         | Restriction::MustBeBlockedBy { attacker, .. }

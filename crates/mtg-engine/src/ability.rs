@@ -2819,6 +2819,21 @@ pub enum Restriction {
         who: PlayerFilter,
         n: u32,
     },
+    /// "For each creature you control, you may have that creature assign its combat damage
+    /// as though it weren't blocked" (`may`: its controller chooses for each creature just
+    /// before it assigns combat damage), "X target blocked creatures assign their combat
+    /// damage this turn as though they weren't blocked" (no choice): a rule, not an ability
+    /// the creatures have (CR 510.1c; see `kw::assign_as_though_unblocked`).
+    AssignAsThoughUnblocked {
+        what: Filter,
+        may: bool,
+    },
+    /// "~ can block an additional creature each combat for each Equipment attached to ~":
+    /// a number of additional blocks counted as blockers are declared (CR 509.1a).
+    ExtraBlocksCounted {
+        blocker: Filter,
+        n: Value,
+    },
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
 }
