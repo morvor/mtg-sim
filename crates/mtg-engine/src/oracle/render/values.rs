@@ -20,6 +20,7 @@ impl Renderer<'_> {
         }
         match v {
             Value::Const(n) => n.to_string(),
+            Value::PlayerTally { var, .. } => crate::tallies::words(*var).into(),
             Value::X if self.extra.x_words.is_some() => self.extra.x_words.unwrap_or("X").into(),
             Value::X => "X".into(),
             // "for each card discarded this way": the objects the instruction before
@@ -1327,6 +1328,8 @@ impl Renderer<'_> {
             PlayerFilter::Monarch => "is the monarch".into(),
             PlayerFilter::Poisoned => "is poisoned".into(),
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
+            PlayerFilter::VotedLikeYou(true) => "voted for a choice you voted for".into(),
+            PlayerFilter::VotedLikeYou(false) => "voted for a choice you didn't vote for".into(),
             PlayerFilter::LessThanHalfStartingLife => {
                 let p = if you { "your" } else { "their" };
                 format!("{have} less than half {p} starting life total")

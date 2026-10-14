@@ -1064,6 +1064,10 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     if let Some(x) = named_possessive_player(s, b) {
         return Some(x);
     }
+    // "the player to your right" (`patterns::seats_grammar`).
+    if let Some((p, r)) = super::patterns::seats_grammar::seat_phrase(s) {
+        return Some((p, r.to_string()));
+    }
     let with_space = format!("{s} ");
     if let Some((r, spec, rest)) = parse_player(&with_space) {
         let rest = rest.to_string();
@@ -1919,10 +1923,11 @@ pub fn parse_token_description(s: &str) -> Option<TokenSpec> {
         let mods = keyword_mods(r)?;
         for m in mods {
             if let Modification::AddKeyword(k) = m {
-                abilities.push(AbilityDef::new(
-                    AbilityKind::Keyword(k.clone()),
-                    k.kind.name(),
-                ));
+                // A keyword the token is created with is part of its definition: a
+                // changeling token also has the characteristic-defining ability
+                // (CR 702.73a, 604.3).
+                let name = k.kind.name();
+                abilities.extend(crate::oracle::keywords::compile_keyword(k, name));
             }
         }
     } else if !end(rest).is_empty() {
