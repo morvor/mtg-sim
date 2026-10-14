@@ -5819,9 +5819,23 @@ impl Renderer<'_> {
                     }
                 }
             }
+            ManaProduction::AnyColorAmong(Filter::Source) => "one mana of any of ~'s colors".into(),
+            ManaProduction::AnyColorAmong(Filter::And(v))
+                if v.iter()
+                    .any(|f| matches!(f, Filter::In(s) if matches!(**s, Sel::Linked))) =>
+            {
+                "one mana of any of the exiled {alt:card's|cards'} colors".into()
+            }
             ManaProduction::AnyColorAmong(f) => {
                 let n = self.noun(f, Num::Many);
                 format!("one mana of any color among {n}")
+            }
+            ManaProduction::DistinctColors(2, each) if *each > 1 => {
+                let w = number_word(*each as i32);
+                format!("{w} mana of any one color and {w} mana of any other color")
+            }
+            ManaProduction::DistinctColors(colors, _) => {
+                format!("{} mana of different colors", number_word(*colors as i32))
             }
             ManaProduction::EachColorAmong(f) => {
                 let n = self.noun(f, Num::Many);
@@ -5916,6 +5930,19 @@ impl Renderer<'_> {
                 format!("to activate {{alt:abilities of {n}|an ability of {a}|an ability of {a} source}}")
             }
             M::ClassLevel => "to gain a Class level".into(),
+            M::Purpose(crate::mana::SpendPurpose::UnlockDoor) => "to unlock doors".into(),
+            M::Purpose(crate::mana::SpendPurpose::Keyword(k)) => {
+                use crate::keywords::KeywordKind as K;
+                match k {
+                    K::CumulativeUpkeep => "to pay cumulative upkeep costs".into(),
+                    K::Foretell => "to foretell {alt:cards|a card from your hand}".into(),
+                    k => {
+                        let n = k.name().to_lowercase();
+                        format!("to activate {{alt:{n} abilities|an {n} ability|a {n} ability}}")
+                    }
+                }
+            }
+            M::CostWithColorless => "to pay a cost that contains {C}".into(),
             // "This mana can't be spent to cast spells from your hand."
             M::NotCastSpell(f) => {
                 let saved = self.default_head.replace("spell");

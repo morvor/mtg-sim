@@ -95,6 +95,14 @@ fn restricted_mana(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     for a in abilities {
         let mut kind = a.kind.clone();
         let ok = match &mut kind {
+            AbilityKind::Activated(act)
+                if !crate::oracle::patterns::mana_restrictions::that_color_ok(
+                    &lower[idx + 2..],
+                    &act.body.effect,
+                ) =>
+            {
+                false
+            }
             AbilityKind::Activated(act) => set_restriction(&mut act.body.effect, &restriction),
             AbilityKind::Triggered(t) => set_restriction(&mut t.body.effect, &restriction),
             AbilityKind::Spell(s) => set_restriction(&mut s.body.effect, &restriction),

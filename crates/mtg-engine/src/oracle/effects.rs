@@ -2315,6 +2315,10 @@ pub fn is_mana_effect(e: &Effect) -> bool {
     match e {
         Effect::AddMana { .. } => true,
         Effect::PersistentMana(inner) => is_mana_effect(inner),
+        // "Each player adds {B}{R}{G}" (Yurlok of Scorch Thrash).
+        Effect::ForEachPlayer { effect, .. } => {
+            matches!(**effect, Effect::AddMana { .. })
+        }
         Effect::Seq(v) => {
             v.iter().any(is_mana_effect) && v.iter().all(|x| !matches!(x, Effect::Draw { .. }))
         }

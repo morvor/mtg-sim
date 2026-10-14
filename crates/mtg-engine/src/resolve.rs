@@ -2920,6 +2920,26 @@ impl Game {
                 self.choose_mana_combination(p, ctx, opts, k)
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
+            ManaProduction::DistinctColors(colors, each) => {
+                // Each color chosen is different from those chosen before it.
+                let mut left = vec![
+                    ManaType::W,
+                    ManaType::U,
+                    ManaType::B,
+                    ManaType::R,
+                    ManaType::G,
+                ];
+                let mut out = Vec::new();
+                for _ in 0..*colors {
+                    if left.is_empty() {
+                        break;
+                    }
+                    let c = self.choose_mana_color(p, ctx, &left);
+                    left.retain(|t| *t != c);
+                    out.extend(std::iter::repeat_n(c, *each as usize));
+                }
+                out
+            }
             ManaProduction::OneOfOrChosenColor(opts) => {
                 let mut u = opts.clone();
                 if let Some(c) = self

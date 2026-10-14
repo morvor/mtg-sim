@@ -54,6 +54,9 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                 vec![ALL_COLORS.to_vec(); g.eval_value(n, ctx).max(0) as usize]
             }
             ManaProduction::OneOf(opts) => vec![opts.clone()],
+            ManaProduction::DistinctColors(colors, each) => {
+                vec![ALL_COLORS.to_vec(); (*colors * *each) as usize]
+            }
             ManaProduction::CombinationOf(opts, n) => {
                 vec![opts.clone(); g.eval_value(n, ctx).max(0) as usize]
             }
@@ -700,7 +703,12 @@ pub fn lose_unspent_mana(g: &mut Game, who: &PlayerRef, to: Option<&PlayerRef>, 
     let dest = to.and_then(|r| g.eval_player(r, ctx));
     let mut lost: Vec<Mana> = Vec::new();
     for p in players {
-        lost.extend(std::mem::take(&mut g.players[p.idx()].mana_pool.mana));
+        let m = std::mem::take(&mut g.players[p.idx()].mana_pool.mana);
+        // "A player losing unspent mana causes that player to lose that much life."
+        if !m.is_empty() && crate::kw::mana_grammar::mana_burn(g, p) {
+            g.lose_life(p, m.len() as u32);
+        }
+        lost.extend(m);
     }
     if let Some(d) = dest {
         if !lost.is_empty() {
@@ -822,7 +830,13 @@ pub fn empty_pool(g: &mut Game, p: PlayerId) {
         }
         return;
     }
+    let before = pool.mana.len();
     pool.mana.retain(|m| stays(m) || kept.contains(&m.ty));
+    let lost = before - pool.mana.len();
+    // "A player losing unspent mana causes that player to lose that much life."
+    if lost > 0 && crate::kw::mana_grammar::mana_burn(g, p) {
+        g.lose_life(p, lost as u32);
+    }
 }
 
 /// Resolves `Effect::PersistentMana` (CR 106.4, 514.2): the mana the inner effect adds
@@ -941,6 +955,42 @@ fn bind_restriction(g: &Game, source: Option<ObjectId>, r: &ManaRestriction) -> 
             .and_then(|s| g.obj(s).choices.creature_type.clone())
             .map(ManaRestriction::SpellWithSubtype)
             .unwrap_or(ManaRestriction::SpellOfChosenType),
+        // "a spell of the chosen type", "monocolored spells of that color": the choice
+        // made for the source as the mana is produced.
+        ManaRestriction::CastSpell(f) => {
+            ManaRestriction::CastSpell(SpendFilter::new(bind_chosen(g, source, &f.0)))
+        }
+        ManaRestriction::ActivateAbilityOf(f) => {
+            ManaRestriction::ActivateAbilityOf(SpendFilter::new(bind_chosen(g, source, &f.0)))
+        }
+        ManaRestriction::AnyOf(v) => {
+            ManaRestriction::AnyOf(v.iter().map(|x| bind_restriction(g, source, x)).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+/// `f` with "the chosen type" / "the chosen color" replaced by the choice made for
+/// `source` (CR 607.2d). Left as is without a choice: it then matches nothing (CR 607.5a).
+fn bind_chosen(g: &Game, source: Option<ObjectId>, f: &Filter) -> Filter {
+    let Some(ch) = source.and_then(|s| g.try_obj(s)).map(|o| &o.choices) else {
+        return f.clone();
+    };
+    match f {
+        Filter::ChosenType => match ch.creature_type.clone().or(ch.basic_land_type.clone()) {
+            Some(t) => Filter::Subtype(t),
+            None => match ch.card_type {
+                Some(t) => Filter::Type(t),
+                None => f.clone(),
+            },
+        },
+        Filter::ChosenColor => match ch.color {
+            Some(c) => Filter::Color(c),
+            None => f.clone(),
+        },
+        Filter::And(v) => Filter::And(v.iter().map(|x| bind_chosen(g, source, x)).collect()),
+        Filter::Or(v) => Filter::Or(v.iter().map(|x| bind_chosen(g, source, x)).collect()),
+        Filter::Not(x) => Filter::Not(Box::new(bind_chosen(g, source, x))),
         other => other.clone(),
     }
 }
@@ -989,6 +1039,12 @@ fn source_pays_generic(source: &ManaSource) -> bool {
 fn source_restriction_ok(g: &Game, p: PlayerId, source: &ManaSource, spend: &SpendContext) -> bool {
     if spend.check_only {
         return true;
+    }
+    // "Spend only mana produced by basic lands to cast ~".
+    if let Some(f) = &spend.only_from {
+        if !g.matches(source.obj, &f.0, &Ctx::new(Some(source.obj), p)) {
+            return false;
+        }
     }
     let AbilityKind::Activated(act) = &source.ability.kind else {
         return true;
