@@ -161,7 +161,7 @@ fn menace_gained_after_blocks_does_nothing() {
 
 #[test]
 fn dead_iron_sledge_moved_after_the_trigger_still_destroys_both() {
-    cr!("603.2", "608.2b");
+    cr!("603.2", "113.7a");
     ruling!(
         "Dead-Iron Sledge",
         "Moving Dead-Iron Sledge after the ability triggers will not affect which creatures are destroyed."
@@ -186,6 +186,23 @@ fn dead_iron_sledge_moved_after_the_trigger_still_destroys_both() {
     t.resolve_all();
     assert!(!t.on_battlefield(bears) && !t.on_battlefield(giant));
     assert!(t.on_battlefield(squire));
+    // The other direction: the equipped creature blocks; the Sledge is moved onto another
+    // creature (directly, as if by an effect) before the trigger resolves.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let other = t.battlefield(P0, "Grizzly Bears");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let sledge = t.battlefield(P1, "Dead-Iron Sledge");
+    t.g.attach(sledge, obj(bears));
+    t.settle();
+    blocked(&mut t, &[giant, other], &[(bears, giant)]);
+    assert_eq!(triggers_from(&t, sledge), 1);
+    assert!(t.g.attach(sledge, obj(elves)));
+    t.settle();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears) && !t.on_battlefield(giant));
+    assert!(t.on_battlefield(elves) && t.on_battlefield(other));
 }
 
 #[test]
@@ -315,18 +332,19 @@ fn abomination_checks_color_only_as_the_block_is_declared() {
     finish_combat(&mut t);
     t.resolve_all();
     assert!(!t.on_battlefield(courser));
-    // Red when blocked: no trigger, even if it turns green later.
+    // Red when blocked: no trigger, even though the Leprechaun (also blocking it) turns
+    // it green before combat ends. Earth Elemental (4/5) survives the 3 combat damage.
     let mut t = TestGame::new(2);
-    let giant = t.battlefield(P0, "Hill Giant");
+    let elemental = t.battlefield(P0, "Earth Elemental");
     let abom = t.battlefield(P1, "Abomination");
     let lep = t.battlefield(P1, "Aisling Leprechaun");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    blocked(&mut t, &[giant, bears], &[(abom, giant), (lep, bears)]);
+    blocked(&mut t, &[elemental], &[(abom, elemental), (lep, elemental)]);
     assert_eq!(triggers_from(&t, abom), 0);
     t.resolve_all();
+    assert_eq!(t.obj_now(elemental).chars.colors, ColorSet::single(Color::Green));
     finish_combat(&mut t);
     t.resolve_all();
-    assert!(t.on_battlefield(giant));
+    assert!(t.on_battlefield(elemental));
 }
 
 #[test]
@@ -1045,7 +1063,7 @@ fn knight_of_the_mists_alone_destroys_itself_unless_paid() {
 
 #[test]
 fn in_the_darkness_bind_them_wraith_can_be_the_ring_bearer() {
-    cr!("701.54a", "714.3b");
+    cr!("701.54a", "714.2b");
     ruling!(
         "In the Darkness Bind Them",
         "While resolving In the Darkness Bind Them's first three chapter abilities, you can choose the Wraith token you just created to be your Ring-bearer as the Ring tempts you."

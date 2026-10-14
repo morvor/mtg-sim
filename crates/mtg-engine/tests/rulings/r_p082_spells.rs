@@ -328,7 +328,7 @@ fn commander_on_battlefield(name: &str, casts: u32) -> (TestGame, ObjectId) {
 
 #[test]
 fn leadership_vacuum_targets_the_player_not_the_commander() {
-    cr!("115.1", "702.11b", "903.9a");
+    cr!("115.1", "702.11b");
     ruling!(
         "Leadership Vacuum",
         "Leadership Vacuum targets the player, not their creatures. A commander with hexproof or protection from blue may be returned this way."

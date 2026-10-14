@@ -183,7 +183,7 @@ fn vortex_elemental_forced_block_only_if_able() {
 
 #[test]
 fn ride_down_attackers_stay_blocked_and_trample_over() {
-    cr!("509.1h", "702.19e");
+    cr!("509.1h", "702.19d");
     ruling!(
         "Ride Down",
         "The attacking creatures that the destroyed creature was blocking remain blocked (even if no other creatures were blocking them). An attacking creature with trample that has no creature blocking it can deal its combat damage to the defending player, planeswalker, or battle."
@@ -210,7 +210,7 @@ fn ride_down_attackers_stay_blocked_and_trample_over() {
 
 #[test]
 fn ride_down_on_a_creature_that_entered_blocking_gives_no_trample() {
-    cr!("509.1a", "506.3");
+    cr!("509.1a", "509.4");
     ruling!(
         "Ride Down",
         "In some rare cases, the blocking creature wasn't declared as a blocking creature that combat (for example, if it entered the battlefield blocking). In that case, the attacking creatures it was blocking won't gain trample even though the blocking creature is destroyed."
@@ -253,4 +253,36 @@ fn outmaneuver_damage_goes_to_the_attacked_planeswalker() {
     assert_eq!(t.obj_now(bears).damage, 0);
     assert_eq!(loyalty, 4);
     assert_eq!(t.counters(pw, "loyalty"), 1, "the planeswalker was dealt 3 damage");
+}
+
+#[test]
+fn armasaur_and_outmaneuver_target_only_creatures_in_the_block() {
+    cr!("115.1", "509.1h");
+    // Steadfast Armasaur can't target a creature that isn't blocking or blocked by it.
+    let mut t = TestGame::new(2);
+    let (a, bs) = block_with(&mut t, "Steadfast Armasaur", &["Palace Guard"]);
+    let idle = t.battlefield(P1, "Grizzly Bears");
+    let from = t.asked().len();
+    armasaur_activate(&mut t, a, idle);
+    let cands = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert!(cands.iter().any(|c| c.contains(&obj(bs[0]))));
+    assert!(!cands.iter().any(|c| c.contains(&obj(idle))));
+    // Outmaneuver can't target an unblocked attacker; the blocked one deals its damage to
+    // the player, none to its blocker.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let free = t.battlefield(P0, "Grizzly Bears");
+    let guard = t.battlefield(P1, "Palace Guard");
+    blocked(&mut t, &[giant, free], &[(guard, giant)]);
+    t.lands(P0, "Mountain", 2);
+    let c = t.hand(P0, "Outmaneuver");
+    let from = t.asked().len();
+    t.cast(P0, c).x(1).targets(&[obj(giant)]).go();
+    let cands = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert!(cands.iter().any(|c| c.contains(&obj(giant))));
+    assert!(!cands.iter().any(|c| c.contains(&obj(free))));
+    t.resolve_all();
+    finish_combat(&mut t);
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.obj_now(guard).damage, 0);
 }
