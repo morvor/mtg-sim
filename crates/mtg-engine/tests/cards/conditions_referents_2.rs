@@ -280,3 +280,129 @@ fn different_mana_values_x_or_less_agadeems_awakening() {
     assert!(t.in_graveyard(P0, "Hill Giant"));
     let _ = b;
 }
+
+#[test]
+fn the_greatest_power_among_that_players_creatures_kraven() {
+    compiles("Kraven the Hunter");
+    for (dying, other, draws) in [
+        ("Hill Giant", "Grizzly Bears", 1),
+        ("Grizzly Bears", "Hill Giant", 0),
+        // Tied for the greatest: it has the greatest power.
+        ("Grizzly Bears", "Grizzly Bears", 1),
+    ] {
+        let mut t = TestGame::new(3);
+        t.battlefield(P0, "Kraven the Hunter");
+        let victim = t.battlefield(P1, dying);
+        t.battlefield(P1, other);
+        // Another opponent's bigger creature doesn't matter.
+        t.battlefield(P2, "Craw Wurm");
+        let hand = t.hand_size(P0);
+        t.g.destroy(victim, None);
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand + draws, "{dying} with {other}");
+    }
+}
+
+#[test]
+fn same_mana_value_as_the_revealed_card_counterbalance() {
+    ruling!(
+        "Counterbalance",
+        "the mana value of that spell takes the value of X into account"
+    );
+    compiles("Counterbalance");
+    for (top, countered) in [("Hill Giant", true), ("Grizzly Bears", false)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Counterbalance");
+        t.library_top(P0, top);
+        t.answer_yes(P0, true);
+        t.lands(P1, "Mountain", 4);
+        let wurm = t.hand(P1, "Hill Giant"); // mana value 4
+        t.set_step(P1, Step::PrecombatMain);
+        t.cast(P1, wurm).go();
+        t.resolve_all();
+        assert_eq!(
+            t.named_on_battlefield("Hill Giant").is_empty(),
+            countered,
+            "{top}"
+        );
+    }
+}
+
+#[test]
+fn cards_of_each_of_the_sacrificed_creatures_colors_mind_extraction() {
+    ruling!(
+        "Mind Extraction",
+        "all cards that share at least one color with the creature are discarded"
+    );
+    compiles("Mind Extraction");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let sac = t.battlefield(P0, "Grizzly Bears"); // green
+    t.hand(P1, "Llanowar Elves");
+    t.hand(P1, "Lightning Bolt");
+    let me = t.hand(P0, "Mind Extraction");
+    t.answer_choose(P0, &[Entity::Object(sac)]);
+    t.cast(P0, me).target(P1).go();
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+    assert!(t.in_hand(P1, "Lightning Bolt"));
+}
+
+#[test]
+fn each_spell_and_ability_your_opponents_control_whirlwind_denial() {
+    cr!("701.6b");
+    ruling!(
+        "Whirlwind Denial",
+        "only activated and triggered abilities use the stack"
+    );
+    compiles("Whirlwind Denial");
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.set_step(P1, Step::PrecombatMain);
+    t.cast(P1, bolt).target(P0).go();
+    t.lands(P0, "Island", 3);
+    let wd = t.hand(P0, "Whirlwind Denial");
+    t.cast(P0, wd).go();
+    // P1 can't pay {4}.
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn lesser_mana_value_than_the_sacrificed_creature_kethek() {
+    compiles("Kethek, Crucible Goliath");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kethek, Crucible Goliath");
+    t.battlefield(P0, "Hill Giant"); // mana value 4
+    // From the top: a 5-drop (not lesser), then a 2-drop.
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Craw Wurm");
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Hill Giant").is_empty());
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert!(t.named_on_battlefield("Craw Wurm").is_empty());
+}
+
+#[test]
+fn target_artifact_that_opponent_controls_parapet_thrasher() {
+    compiles("Parapet Thrasher");
+    let mut t = TestGame::new(3);
+    let pt = t.battlefield(P0, "Parapet Thrasher");
+    let theirs = t.battlefield(P1, "Ornithopter");
+    let other = t.battlefield(P2, "Ornithopter");
+    t.answer(
+        P0,
+        mtg_engine::testing::DecisionKind::Modes,
+        mtg_engine::decision::Answer::Indices(vec![0]),
+    );
+    // Only P1's artifact can be the target.
+    t.answer_targets(P0, &[Entity::Object(other)]);
+    t.answer_targets(P0, &[Entity::Object(theirs)]);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(pt, Entity::Player(P1))], &[]);
+    assert!(!t.on_battlefield(theirs));
+    assert!(t.on_battlefield(other));
+}

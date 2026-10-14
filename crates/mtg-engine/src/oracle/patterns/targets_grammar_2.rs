@@ -262,10 +262,13 @@ fn each_spell_and_ability(l: &str, b: &mut Builder) -> Option<Effect> {
     else {
         return None;
     };
-    let spells_or_abilities = Filter::Or(vec![
-        Filter::Spell,
-        Filter::Custom(crate::game_terms::ACTIVATED_ABILITY.into()),
-        Filter::Custom(crate::game_terms::TRIGGERED_ABILITY.into()),
+    let spells_or_abilities = Filter::and(vec![
+        Filter::InZone(ZoneKind::Stack),
+        Filter::Or(vec![
+            Filter::Spell,
+            Filter::Custom(crate::game_terms::ACTIVATED_ABILITY.into()),
+            Filter::Custom(crate::game_terms::TRIGGERED_ABILITY.into()),
+        ]),
     ]);
     let Filter::And(parts) = f else {
         return None;
