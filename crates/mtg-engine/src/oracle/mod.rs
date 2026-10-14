@@ -18,6 +18,7 @@ pub mod keywords;
 pub mod patterns;
 pub mod phrases;
 pub mod render;
+pub mod self_refs;
 pub mod statics;
 pub mod triggers;
 
@@ -146,6 +147,7 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         // A comma inside a closing quote before "where X is" belongs to the sentence:
         // `tokens with "[ability]," where X is ...` (Vren, the Relentless).
         .replace(",\" where X is ", "\", where X is ");
+    s = self_refs::thousands(&s);
     // Self references.
     let mut names: Vec<String> = vec![ctx.card_name.to_string()];
     if ctx.full_name != ctx.card_name {
@@ -173,7 +175,13 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
     }
     names.sort_by_key(|n| std::cmp::Reverse(n.len()));
     for n in &names {
-        if !n.is_empty() {
+        // A short name, or a name that's also a subtype ("Assembly-Worker"), is the card
+        // only as a whole word not used as the subtype (see `self_refs`).
+        let subtype = crate::types::subtype_kind(n).is_some();
+        if n.is_empty() {
+        } else if subtype || (n != ctx.card_name && n != ctx.full_name) {
+            s = self_refs::replace_self_name(&s, n, subtype);
+        } else {
             s = s.replace(n.as_str(), "~");
         }
     }
@@ -192,7 +200,11 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
                 s = replace_word(&s, &prefix, "~");
             }
         }
-        s = replace_word(&s, first, "~");
+        if crate::types::subtype_kind(first).is_some() {
+            s = self_refs::replace_self_name(&s, first, true);
+        } else {
+            s = replace_word(&s, first, "~");
+        }
     }
     const SELF_REFS: [&str; 23] = [
         "this creature",
@@ -222,7 +234,11 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
     for r in SELF_REFS {
         s = replace_ci(&s, r, "~");
     }
-    s
+    // A legendary character's "he", "him", "her" (CR 201.5), a plural name's "they".
+    if ctx.type_line.supertypes.contains(Supertype::Legendary) {
+        s = self_refs::neuter_pronouns(&s);
+    }
+    self_refs::singular_self(&s)
 }
 
 /// A title before a legendary character's name ("General Kudro").
@@ -246,6 +262,11 @@ fn short_first_name<'a>(ctx: &CompileContext<'a>) -> Option<&'a str> {
             .chars()
             .all(|c| c.is_alphabetic() || c == '-' || c == '\'')
         && !first.ends_with("'s")
+        // A planeswalker's own subtype is its character's name ("Garruk Relentless",
+        // "Sarkhan the Mad"); other subtypes aren't ("Sliver Queen").
+        && (crate::types::subtype_kind(first).is_none()
+            || (crate::types::subtype_kind(first) == Some(crate::types::SubtypeKind::Planeswalker)
+                && ctx.type_line.subtypes.iter().any(|s| s.as_str() == first)))
         && !matches!(
             first,
             "The"
@@ -262,8 +283,7 @@ fn short_first_name<'a>(ctx: &CompileContext<'a>) -> Option<&'a str> {
                 | "Doctor"
                 | "Professor"
                 | "Sir"
-        )
-        && crate::types::subtype_kind(first).is_none();
+        );
     ok.then_some(first)
 }
 
@@ -437,7 +457,9 @@ pub fn strip_ability_word(text: &str) -> &str {
                         | "by"
                 )
         });
-        let long_flavor_word = !head.contains(',')
+        // A flavor word may contain a comma when it's title-cased ("In You, All Things
+        // Are Possible — Whenever ...", CR 207.2d).
+        let long_flavor_word = (!head.contains(',') || title_cased)
             && ((words <= 6 && (rest.starts_with("When") || rest.starts_with("At ")))
                 || (words <= 8 && rest.starts_with('{'))
                 || (words <= 7
@@ -450,7 +472,14 @@ pub fn strip_ability_word(text: &str) -> &str {
             && !head.contains(':')
             && !head.to_lowercase().starts_with("choose")
             // ("~ Formula": a flavor word with the card's name in it.)
-            && head.chars().next().is_some_and(|c| c.is_uppercase() || c == '~')
+            // ("10,000 Needles", "... Catch", "Throw ...": a flavor word may start with a
+            // number or an ellipsis, CR 207.2d.)
+            && head
+                .trim_start_matches("...")
+                .trim_start()
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_uppercase() || c == '~' || c.is_ascii_digit())
             && !head.contains('{')
             // Not a dash inside a quoted ability ("All creatures have "Boast — ...").
             && !head.contains('"')

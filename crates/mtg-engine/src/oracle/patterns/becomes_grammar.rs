@@ -283,7 +283,7 @@ fn predicates_if_its(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "becomes grammar: [predicate] if it's a [kind] and [predicate] if it's a [kind]", priority: 1100, parse: predicates_if_its } }
 
 
-fn split_predicates(s: &str) -> Vec<&str> {
+pub(crate) fn split_predicates(s: &str) -> Vec<&str> {
     split_predicates_with(s, &[])
 }
 

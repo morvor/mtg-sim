@@ -36,6 +36,15 @@ fn grammar_amount(s: &str, ctx: &CompileContext) -> Option<Value> {
     (rest.trim().is_empty() && b.targets.is_empty()).then_some(v)
 }
 
+/// Whether the card has its own line defining `stat` ("~'s toughness is equal to ..."):
+/// separate characteristic-defining abilities for power and toughness (CR 604.3).
+fn separate_cda(ctx: &CompileContext, stat: &str) -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let name = ctx.card_name.to_lowercase();
+    raw.lines()
+        .any(|l| l.starts_with(&format!("{name}'s {stat} is equal to ")) || l.starts_with(&format!("this creature's {stat} is equal to ")))
+}
+
 fn parse_cda(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l);
     let it = Some(Sel::This);
@@ -65,17 +74,18 @@ fn parse_cda(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
             };
             return Some(vec![cda(Some(p), Some(t), text)]);
         }
-        if is_star(ctx.toughness) {
+        // A "*/*" creature with a separate CDA for each (Yavimaya Kavu, CR 604.3).
+        if is_star(ctx.toughness) && !separate_cda(ctx, "toughness") {
             return None;
         }
-        let p = parse_amount(r, it.as_ref())?;
+        let p = parse_amount(r, it.as_ref()).or_else(|| grammar_amount(r, ctx))?;
         return Some(vec![cda(Some(p), None, text)]);
     }
     if let Some(r) = l.strip_prefix("~'s toughness is equal to ") {
-        if !is_star(ctx.toughness) || is_star(ctx.power) {
+        if !is_star(ctx.toughness) || (is_star(ctx.power) && !separate_cda(ctx, "power")) {
             return None;
         }
-        let t = parse_amount(r, it.as_ref())?;
+        let t = parse_amount(r, it.as_ref()).or_else(|| grammar_amount(r, ctx))?;
         return Some(vec![cda(None, Some(t), text)]);
     }
     None
