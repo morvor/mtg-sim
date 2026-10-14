@@ -588,6 +588,7 @@ fn s_others_enter_as_copy(l: &str, text: &str, _ctx: &CompileContext) -> Option<
             action: ReplacementAction::EnterAsCopy {
                 filter: what,
                 optional: false,
+                tapped: false,
             },
             self_replacement: false,
             optional: false,

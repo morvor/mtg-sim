@@ -86,6 +86,7 @@ impl Renderer<'_> {
                 if let (Filter::In(sel), Value::CountSel(sel2)) = (filter, n) {
                     if format!("{sel:?}") == format!("{sel2:?}") {
                         let s = self.sel(sel, Case::Obj);
+                        let s = super::graveyard_this_way::chosen_cards(self, sel, s);
                         return Some((who.clone(), format!("discard {s}"), false));
                     }
                 }
@@ -399,8 +400,11 @@ impl Renderer<'_> {
 
     fn effect_inner(&mut self, e: &Effect) -> String {
         self.new_clause();
-        // Instructions worded as a whole (`effect_terms.rs`).
+        // Instructions worded as a whole (`effect_terms.rs`, `more_terms.rs`).
         if let Some(s) = self.effect_terms(e) {
+            return s;
+        }
+        if let Some(s) = self.effect_more(e) {
             return s;
         }
         // "For each {B}{B} spent to cast it, each opponent discards a card": one action on
@@ -619,6 +623,20 @@ impl Renderer<'_> {
                     return t;
                 }
                 let inner = self.effect(effect);
+                // "Each creature deals damage to itself equal to its power": each object
+                // is the source, all at once (CR 608.2f).
+                if let (Sel::All(f), Effect::DealDamage { source: Sel::Var(v), .. }) =
+                    (sel, effect.as_ref())
+                {
+                    if v == var {
+                        if let Some(rest) = inner.strip_prefix("it deals ") {
+                            let one = self.noun(f, Num::One);
+                            return format!(
+                                "{{alt:for each {s}, {inner}|each {one} deals {rest}}}"
+                            );
+                        }
+                    }
+                }
                 format!("for each {s}, {inner}")
             }
             // "Starting with you, each player chooses a creature."
@@ -678,7 +696,7 @@ impl Renderer<'_> {
             // "Each player who controls a multicolored creature draws a card."
             Effect::ForEachPlayer { who, effect }
                 if matches!(effect.as_ref(), Effect::AsPlayer { who: PlayerRef::Iterated, effect: inner }
-                    if matches!(inner.as_ref(), Effect::If { otherwise, cond: Condition::Exists(_), .. }
+                    if matches!(inner.as_ref(), Effect::If { otherwise, cond: Condition::Exists(_) | Condition::Compare(Value::Count(_), _, _), .. }
                         if matches!(otherwise.as_ref(), Effect::Noop))) =>
             {
                 let Effect::AsPlayer { effect: inner, .. } = effect.as_ref() else {
@@ -725,6 +743,39 @@ impl Renderer<'_> {
                     return self.gap("shuffle your zone");
                 };
                 format!("shuffle your {} into your library", zone_word(*z))
+            }
+            // "You lose half your life": performed once, by you.
+            Effect::ForEachPlayer {
+                who: PlayerRef::You,
+                effect,
+            } if you_alone::iterated_as_you(effect).is_some() => {
+                let e = you_alone::iterated_as_you(effect).unwrap_or_default();
+                self.effect(&e)
+            }
+            // "~ deals damage to each opponent equal to the number of lands that player
+            // controls": the amount for each player (dealt one player at a time).
+            Effect::ForEachPlayer { who, effect }
+                if matches!(effect.as_ref(), Effect::DealDamage { source: Sel::This, to: Sel::Players(PlayerRef::Iterated), .. })
+                    && matches!(who, PlayerRef::EachOpponent | PlayerRef::EachPlayer) =>
+            {
+                let inner = self.effect(effect);
+                let w = self.player(who, Case::Subj);
+                let Effect::DealDamage { source, amount, .. } = effect.as_ref() else {
+                    return format!("for {w}, {inner}");
+                };
+                let mut all = self.effect(&Effect::DealDamage {
+                    source: source.clone(),
+                    amount: amount.clone(),
+                    to: Sel::Players(who.clone()),
+                });
+                // "the number of tapped creatures that opponent controls".
+                if matches!(who, PlayerRef::EachOpponent) {
+                    all = all.replace(
+                        "{alt:that player controls|they control}",
+                        "{alt:that player controls|that opponent controls|they control}",
+                    );
+                }
+                format!("{{alt:for {w}, {inner}|{all}}}")
             }
             Effect::ForEachPlayer { who, effect } => {
                 let inner = self.effect(effect);
@@ -1077,8 +1128,8 @@ impl Renderer<'_> {
                     // it."
                     if self.revealed_hand {
                         if let Some(i) = s.find(" in ") {
-                            if s.ends_with(" hand") {
-                                s = format!("{} from it", &s[..i]);
+                            if s.ends_with(" hand") || s.ends_with(" hands") {
+                                s = super::graveyard_this_way::from_the_hand(&s[..i]);
                             }
                         }
                     }
@@ -1292,6 +1343,38 @@ impl Renderer<'_> {
                 let n = self.noun_det(&Filter::and(rest), det);
                 format!("{subj} exiles {n} from their {zone}")
             }
+            // "Each opponent exiles a card from their hand": each one chooses among their
+            // own cards.
+            Effect::Exile {
+                what:
+                    Sel::Choose {
+                        chooser: PlayerRef::Iterated,
+                        filter: Filter::And(v),
+                        count,
+                        up_to: false,
+                        store: None,
+                    },
+                face_down: false,
+                ..
+            } if v
+                .iter()
+                .any(|f| matches!(f, Filter::InZone(ZoneKind::Hand | ZoneKind::Graveyard)))
+                && v.iter().any(|f| matches!(f, Filter::OwnedBy(PlayerRel::Iterated))) =>
+            {
+                let zone = if v.iter().any(|f| matches!(f, Filter::InZone(ZoneKind::Graveyard))) {
+                    "graveyard"
+                } else {
+                    "hand"
+                };
+                let rest: Vec<Filter> = v
+                    .iter()
+                    .filter(|f| !matches!(f, Filter::InZone(_) | Filter::OwnedBy(_)))
+                    .cloned()
+                    .collect();
+                let det = self.det_for(count);
+                let n = self.noun_det(&Filter::and(rest), det);
+                format!("{{alt:that player|they}} exiles {n} from their {zone}")
+            }
             Effect::Exile {
                 what, face_down, ..
             } => {
@@ -1416,6 +1499,9 @@ impl Renderer<'_> {
                 // "Target creature deals damage to itself equal to its power."
                 if format!("{source:?}") == format!("{to:?}") && !matches!(to, Sel::This) {
                     t = "itself".into();
+                } else if matches!((source, to), (Sel::This, Sel::This)) && !t.contains('{') {
+                    // "~ deals 3 damage to itself" (cards also name it again).
+                    t = format!("{{alt:{t}|itself}}");
                 }
                 // "Whenever ~ becomes blocked by a creature, it deals 2 damage to that
                 // creature": the object itself and the other object of the event.
@@ -1483,13 +1569,28 @@ impl Renderer<'_> {
                 )
             }
             Effect::Fight { a, b } => {
+                let two_targets =
+                    matches!((a, b), (Sel::Target(x), Sel::Target(y)) if x != y);
                 let a = self.sel(a, Case::Subj);
                 let b = self.sel(b, Case::Obj);
+                // Two targets both named before: "those creatures fight each other".
+                if two_targets && !a.contains("target") && !b.contains("target") {
+                    return "{alt:those creatures|they} fight each other".into();
+                }
                 format!("{a} fights {b}")
             }
             Effect::AddCounters { what, kind, n } => {
-                let (c, w) = self.counted(n, &counter_name(kind));
-                let mut t = self.sel(what, Case::Obj);
+                // The object is named before the "where X is" clause about it ("put X
+                // +1/+1 counters on target creature, where X is that creature's power").
+                let (mut t, (c, w)) = if matches!(what, Sel::Target(_))
+                    && format!("{n:?}").contains(&format!("{what:?}"))
+                {
+                    let t = self.sel(what, Case::Obj);
+                    (t, self.counted(n, &counter_name(kind)))
+                } else {
+                    let cw = self.counted(n, &counter_name(kind));
+                    (self.sel(what, Case::Obj), cw)
+                };
                 // "put a +1/+1 counter on each of up to two target creatures".
                 if let Sel::Target(i) = what {
                     let many = self
@@ -1753,52 +1854,20 @@ impl Renderer<'_> {
                 duration,
                 uses,
             } => {
-                // Crafty Cutpurse.
-                if let (
-                    ReplacementEvent::CreateTokens(PlayerFilter::Opponent),
-                    ReplacementAction::EnterUnderControl(PlayerRef::You),
-                    Duration::EndOfTurn,
-                    None,
-                ) = (&def.event, &def.action, duration, uses)
-                {
-                    return "each token that would be created under an opponent's control this turn is created under your control instead".into();
+                let s = self.add_replacement(def, duration, uses);
+                // A replacement effect that applies only once is always said to ("the
+                // next time ... would ...", CR 614.1); a wording that doesn't say it
+                // misrepresents it. One about a particular object entering ("that
+                // creature enters with an additional +1/+1 counter") can apply only once
+                // anyway: an object that enters again is a new object (CR 400.7).
+                let one_object = matches!(
+                    &def.event,
+                    ReplacementEvent::EntersBattlefield(Filter::In(_))
+                );
+                if uses.is_some() && !one_object && !s.contains("next") {
+                    return self.gap("one-use replacement effect");
                 }
-                let s = self.replacement(def, *uses);
-                let d = self.duration(duration);
-                // "All damage that would be dealt to target creature this turn is dealt to
-                // you instead."
-                if (d == "this turn" || d == "until end of turn")
-                    && (s.starts_with("all ") || s.starts_with("the next "))
-                    && s.contains(" that would be dealt to ")
-                    && s.contains(" is dealt to ")
-                {
-                    return s.replacen(" is dealt to ", " this turn is dealt to ", 1);
-                }
-                // "If it would die this turn, exile it instead."
-                if d == "until end of turn" && s.starts_with("if ") && s.contains(" would die,") {
-                    return s.replacen(" would die,", " would die this turn,", 1);
-                }
-                // "If any source would deal 1 or more damage to a permanent or player this
-                // turn, it deals 2 damage to that permanent or player instead."
-                if d == "until end of turn" && s.starts_with("if ") && s.contains(" or more damage to ") {
-                    if let Some((ev, then)) = s.split_once(", ") {
-                        return format!("{ev} this turn, {then}");
-                    }
-                }
-                // "The next time you would draw a card this turn, ... instead": one use.
-                if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
-                    if let Some(rest) = s.strip_prefix("if ") {
-                        if let Some((ev, then)) = rest.split_once(", ") {
-                            let one_alt = ev.starts_with("{alt:")
-                                && ev.ends_with('}')
-                                && ev.matches('{').count() == 1;
-                            if !ev.contains('{') || one_alt {
-                                return format!("the next time {ev} this turn, {then}");
-                            }
-                        }
-                    }
-                }
-                join_words(&[s, d])
+                s
             }
             Effect::GainControl {
                 what,
@@ -1893,6 +1962,18 @@ impl Renderer<'_> {
                 if !mods.is_empty() {
                     let ex = self.exceptions(mods);
                     vp.push_str(&format!(", except {ex}"));
+                }
+                // "For each token you control, create a token that's a copy of that
+                // permanent": one copy of each of them.
+                if let (Sel::All(f), Value::Const(1), true, true) =
+                    (of, count, st.is_empty(), mods.is_empty())
+                {
+                    if !vp.contains('{') && matches!(controller, PlayerRef::You) {
+                        let one = self.noun(f, Num::One);
+                        vp = format!(
+                            "{{alt:{vp}|for each {one}, create a token that's a copy of {{alt:it|that permanent}}}}"
+                        );
+                    }
                 }
                 self.with_subject(controller, &vp, false)
             }
@@ -2372,7 +2453,13 @@ impl Renderer<'_> {
                 format!("{subj} shuffles {w} into their library")
             }
             Effect::ShuffleIntoLibrary { what, library } => {
-                let w = self.sel(what, Case::Obj);
+                let mut w = self.sel(what, Case::Obj);
+                // "Shuffle the cards from your hand into your library" (all of them).
+                if matches!(what, Sel::All(Filter::And(f)) if matches!(f.as_slice(), [Filter::InZone(ZoneKind::Hand), Filter::OwnedBy(_)]))
+                    && w.ends_with(" hand")
+                {
+                    w = format!("{{alt:the cards from {w}|{w}}}");
+                }
                 let p = self.possessive_for(library);
                 let vp = format!("shuffle {w} into {p} library");
                 self.with_subject(library, &vp, false)
@@ -2525,8 +2612,12 @@ impl Renderer<'_> {
                     other if *once => {
                         let t = self.trigger_text(other);
                         match t.strip_prefix("whenever you cast ") {
-                            Some(r) => format!("when you next cast {r}"),
-                            None => t,
+                            // (A one-shot delayed trigger triggers the next time, CR 603.7b.)
+                            Some(r) => format!("{{alt:when you next cast {r}|when you cast {r}}}"),
+                            None => match t.strip_prefix("whenever you play ") {
+                                Some(r) => format!("when you play {r}"),
+                                None => t,
+                            },
                         }
                     }
                     other => self.trigger_text(other),
@@ -2615,6 +2706,31 @@ impl Renderer<'_> {
             }
             Effect::KeepAndSacrificeRest { up_to: true, .. } => {
                 self.gap("keep up to some permanents, sacrifice the rest")
+            }
+            // "chooses five lands they control and sacrifices the rest".
+            Effect::KeepAndSacrificeRest {
+                who,
+                among,
+                keep,
+                up_to: false,
+            } if keep.len() > 1
+                && keep
+                    .iter()
+                    .all(|k| format!("{k:?}") == format!("{among:?}")) =>
+            {
+                let w = self.player(who, Case::Subj);
+                let n = self.noun(among, Num::Many);
+                let k = number_word(keep.len() as i32);
+                let vp = format!("choose {k} {n} you control, then sacrifice the rest");
+                if w == "you" {
+                    vp
+                } else {
+                    format!(
+                        "{w} {}",
+                        third_person(&vp.replace(" you control", " they control"))
+                            .replacen(", then sacrifice ", ", then sacrifices ", 1)
+                    )
+                }
             }
             Effect::KeepAndSacrificeRest {
                 who, among, keep, ..
@@ -3167,6 +3283,75 @@ impl Renderer<'_> {
         }
     }
 
+    /// "[Replacement effect] this turn" created by a resolving spell or ability; see the
+    /// `Effect::AddReplacement` arm of `effect_inner`.
+    fn add_replacement(
+        &mut self,
+        def: &ReplacementDef,
+        duration: &Duration,
+        uses: &Option<u32>,
+    ) -> String {
+        // Crafty Cutpurse.
+        if let (
+            ReplacementEvent::CreateTokens(PlayerFilter::Opponent),
+            ReplacementAction::EnterUnderControl(PlayerRef::You),
+            Duration::EndOfTurn,
+            None,
+        ) = (&def.event, &def.action, duration, uses)
+        {
+            return "each token that would be created under an opponent's control this turn is created under your control instead".into();
+        }
+        let s = self.replacement(def, *uses);
+        let d = self.duration(duration);
+        // "All damage that would be dealt to target creature this turn is dealt to
+        // you instead."
+        if (d == "this turn" || d == "until end of turn")
+            && (s.starts_with("all ") || s.starts_with("the next "))
+            && s.contains(" that would be dealt to ")
+            && s.contains(" is dealt to ")
+        {
+            return s.replacen(" is dealt to ", " this turn is dealt to ", 1);
+        }
+        // "If it would die this turn, exile it instead."
+        if d == "until end of turn" && s.starts_with("if ") && s.contains(" would die,") {
+            return s.replacen(" would die,", " would die this turn,", 1);
+        }
+        // "If any source would deal 1 or more damage to a permanent or player this
+        // turn, it deals 2 damage to that permanent or player instead."
+        // "If a red source you control would deal damage to a permanent or player
+        // this turn, it deals that much damage plus 2 ... instead."
+        if d == "until end of turn"
+            && uses.is_none()
+            && matches!(def.event, ReplacementEvent::Damage { .. })
+            && s.starts_with("if ")
+            && s.contains(" would deal damage")
+            && s.contains(", it deals ")
+        {
+            if let Some((ev, then)) = s.split_once(", it deals ") {
+                return format!("{ev} this turn, it deals {then}");
+            }
+        }
+        if d == "until end of turn" && s.starts_with("if ") && s.contains(" or more damage to ") {
+            if let Some((ev, then)) = s.split_once(", ") {
+                return format!("{ev} this turn, {then}");
+            }
+        }
+        // "The next time you would draw a card this turn, ... instead": one use.
+        if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
+            if let Some(rest) = s.strip_prefix("if ") {
+                if let Some((ev, then)) = rest.split_once(", ") {
+                    let one_alt = ev.starts_with("{alt:")
+                        && ev.ends_with('}')
+                        && ev.matches('{').count() == 1;
+                    if !ev.contains('{') || one_alt {
+                        return format!("the next time {ev} this turn, {then}");
+                    }
+                }
+            }
+        }
+        join_words(&[s, d])
+    }
+
     /// "The next time a source of your choice would deal damage to you this turn, prevent
     /// that damage", "Prevent all damage a source of your choice would deal this turn":
     /// a source chosen as the effect resolves (CR 609.7a: any object, wherever it is)
@@ -3210,14 +3395,26 @@ impl Renderer<'_> {
             format!("{n} of your choice")
         };
         let mut to: Vec<String> = Vec::new();
+        // "would deal damage to any target": the target, a player or an object.
+        let one_target = match (to_players, to_objects) {
+            (Some(PlayerFilter::Ref(p)), Some(Filter::In(s))) => match (p.as_ref(), s.as_ref()) {
+                (PlayerRef::Target(i), Sel::Target(j)) if i == j => Some(*i),
+                _ => None,
+            },
+            _ => None,
+        };
         match to_players {
             None => {}
+            _ if one_target.is_some() => {}
             Some(PlayerFilter::You) => to.push("you".into()),
             Some(PlayerFilter::Any) if matches!(to_objects, Some(Filter::Any)) => {}
             Some(_) => return None,
         }
         match to_objects {
             None => {}
+            Some(_) if one_target.is_some() => {
+                to.push(self.sel(&Sel::Target(one_target.unwrap_or_default()), Case::Obj))
+            }
             Some(Filter::Any) if matches!(to_players, Some(PlayerFilter::Any)) => {}
             Some(Filter::Source) => to.push(self.me()),
             Some(Filter::In(s)) => to.push(self.sel(s, Case::Obj)),
@@ -3241,6 +3438,38 @@ impl Renderer<'_> {
             {
                 "prevent that damage. You gain life equal to the damage prevented this way"
                     .to_string()
+            }
+            // "prevent half that damage, rounded down" (CR 615.1a).
+            ReplacementAction::PreventPortion(Value::Div(n, 2, up))
+                if matches!(n.as_ref(), Value::EventAmount) =>
+            {
+                let r = if *up { "up" } else { "down" };
+                format!("prevent half that damage, rounded {r}")
+            }
+            // "If damage is prevented this way, ~ deals that much damage to that source's
+            // controller" (the source of the damage, CR 614.1a).
+            ReplacementAction::PreventAndThen(
+                None,
+                e,
+            ) if matches!(e.as_ref(), Effect::DealDamage {
+                    source: Sel::This,
+                    amount: Value::EventAmount,
+                    to: Sel::Players(PlayerRef::ControllerOf(o)),
+                } if matches!(o.as_ref(), Sel::TriggerOtherObject)) =>
+            {
+                let m = self.me();
+                format!("prevent that damage. If damage is prevented this way, {m} deals that much damage to that source's controller")
+            }
+            // "Exile cards from the top of your library equal to the damage prevented this
+            // way."
+            ReplacementAction::PreventAndThen(None, e)
+                if matches!(e.as_ref(), Effect::Exile {
+                    what: Sel::TopOfLibrary(PlayerRef::You, Value::EventAmount),
+                    face_down: false,
+                    ..
+                }) =>
+            {
+                "prevent that damage. Exile cards from the top of your library equal to the damage prevented this way".to_string()
             }
             // "that source's controller": the damage event's source (CR 614.1a).
             ReplacementAction::Redirect(t) => {
@@ -3296,6 +3525,14 @@ impl Renderer<'_> {
                 }
             }
             if let Some((s, used)) = self.seq_extra(&v[i..]) {
+                parts.push(s);
+                i += used;
+                continue;
+            }
+            if let Some((s, used)) = self
+                .seq_per_owner(&v[i..])
+                .or_else(|| self.seq_rest_not_cast(v, i))
+            {
                 parts.push(s);
                 i += used;
                 continue;
@@ -4235,6 +4472,18 @@ impl Renderer<'_> {
                 let o = self.effect(otherwise);
                 format!("If {c}, {t}. Otherwise, {o}")
             }
+            // "You lose life equal to that card's mana value if ~ isn't saddled. Otherwise,
+            // each opponent loses that much life.": the same amount either way, said once.
+            _ if !else_empty && same_life_amount(then, otherwise) => {
+                let c = self.condition(cond);
+                let t = self.effect(then);
+                let mut o2: Effect = otherwise.clone();
+                if let Effect::LoseLife { n, .. } | Effect::GainLife { n, .. } = &mut o2 {
+                    *n = Value::Prev;
+                }
+                let o = self.effect(&o2);
+                format!("If {c}, {t}. Otherwise, {o}")
+            }
             _ if !else_empty => {
                 let o = self.effect(otherwise);
                 let c = self.condition(cond);
@@ -4507,6 +4756,14 @@ impl Renderer<'_> {
         optional: bool,
     ) -> String {
         let w = self.sel(what, Case::Obj);
+        // "cast a spell with mana value X from among cards exiled with ~": one of the
+        // cards an ability of this object exiled (CR 607.2a), cast as a spell.
+        let w = match w.split_once(" exiled with ~it") {
+            Some((head, "")) if !head.contains('{') && head.contains(" spell") => {
+                format!("{{alt:{w}|{head} from among cards exiled with ~}}")
+            }
+            _ => w,
+        };
         let f = if free {
             " without paying its mana cost"
         } else {
@@ -4561,6 +4818,20 @@ impl Renderer<'_> {
                 FunctionZone::Hand if to.zone != ZoneKind::Hand => w.push_str(" from your hand"),
                 FunctionZone::Exile => w.push_str(" from exile"),
                 _ => {}
+            }
+        }
+        // "Put ~ from your hand onto the battlefield": the card itself, while in your hand.
+        if let Sel::All(Filter::And(f)) = what {
+            let source = f.iter().any(|x| {
+                matches!(x, Filter::Custom(n) if n == crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT)
+            });
+            if source
+                && f.iter()
+                    .any(|x| matches!(x, Filter::InZone(ZoneKind::Hand)))
+                && to.zone != ZoneKind::Hand
+                && !w.contains(" hand")
+            {
+                w.push_str(" from your hand");
             }
         }
         // "any number of target artifact cards ... on top of their library in any order".
@@ -4776,7 +5047,21 @@ impl Renderer<'_> {
         // many; CR 701.23b: one for cards with a stated quality needn't find any, so
         // "two basic land cards" and "up to two basic land cards" are the same.
         let quantity = crate::search_rules::quantity_only(filter);
+        // "up to X basic land cards ..., where X is five minus the number of lands you
+        // control": an arithmetic count is defined after the instruction (CR 107.3).
+        let mut x_def = None;
         let det = match count {
+            other @ (Value::Diff(..) | Value::Sum(..) | Value::Max(..))
+                if self.value(other).contains(" minus ")
+                    || self.value(other).contains(" plus ") =>
+            {
+                x_def = Some(self.value(other));
+                if quantity {
+                    Det::Count("X".into())
+                } else {
+                    Det::Count("{opt:up to} X".into())
+                }
+            }
             Value::Const(1) => Det::A,
             // An unbounded count: "any number of Dragon creature cards".
             Value::Const(n) if *n >= 99 => Det::Count("any number of".into()),
@@ -4829,6 +5114,9 @@ impl Renderer<'_> {
             s.push_str(&format!(", exile {pron}{fd}"));
         } else {
             s.push_str(&format!(", put {pron} {dest}"));
+        }
+        if let Some(v) = x_def {
+            s.push_str(&format!(", where X is {v}"));
         }
         if *shuffle {
             if same_player(who, whose) {
@@ -5702,8 +5990,24 @@ impl Renderer<'_> {
                     if keywords.is_empty() && abilities.is_empty() {
                         parts.push(GRANTS.into());
                     }
+                    // "has scavenge. The scavenge cost is equal to its mana cost.": the
+                    // keyword's cost is paying the object's own mana cost.
+                    let own_mana_cost = k.cost.as_ref().is_some_and(|c| {
+                        c.mana.is_none()
+                            && matches!(c.parts.as_slice(), [CostPart::PayManaCostOf(s)] if matches!(s.as_ref(), Sel::This))
+                    });
                     let saved = std::mem::replace(&mut self.granted_keyword, true);
-                    keywords.push(self.keyword_lower(k));
+                    let kw = if own_mana_cost {
+                        let mut bare = k.clone();
+                        bare.cost = None;
+                        let plain = self.keyword_lower(&bare);
+                        let n = k.kind.name().to_lowercase();
+                        where_clauses.push(format!(". The {n} cost is equal to its mana cost"));
+                        plain
+                    } else {
+                        self.keyword_lower(k)
+                    };
+                    keywords.push(kw);
                     self.granted_keyword = saved;
                     // A granted cost keyword without a cost uses the mana cost:
                     // "gains flashback until end of turn. The flashback cost is equal to
@@ -6095,6 +6399,28 @@ impl Renderer<'_> {
         parts.retain(|p| p != GRANTS);
         // An "isn't" part moves before the rest: cards list it first.
         parts.sort_by_key(|p| !p.starts_with("isn't"));
+        // "loses hexproof, indestructible, and shroud": one verb for the abilities lost.
+        let lost = |p: &String| {
+            p.strip_prefix("loses ")
+                .filter(|r| !r.contains(['"', '{']) && !r.starts_with("all "))
+                .map(str::to_string)
+        };
+        let mut merged: Vec<String> = Vec::new();
+        let mut i = 0;
+        while i < parts.len() {
+            let mut run = Vec::new();
+            while let Some(k) = parts.get(i + run.len()).and_then(lost) {
+                run.push(k);
+            }
+            if run.len() >= 2 {
+                merged.push(format!("loses {}", join_list(&run, "and")));
+                i += run.len();
+            } else {
+                merged.push(parts[i].clone());
+                i += 1;
+            }
+        }
+        let parts = merged;
         let s = join_list(&parts, "and");
         (s, where_clauses.concat())
     }
@@ -7313,4 +7639,22 @@ fn per_mana_spent(e: &Effect) -> Option<Effect> {
         times,
         effect: Box::new(one),
     })
+}
+
+/// Two life instructions with the same amount, worded by a "where X is" clause (not a
+/// plain number), for different players.
+fn same_life_amount(a: &Effect, b: &Effect) -> bool {
+    let amount = |e: &Effect| match e {
+        Effect::LoseLife { who, n } | Effect::GainLife { who, n } => Some((who.clone(), n.clone())),
+        _ => None,
+    };
+    let (Some((wa, na)), Some((wb, nb))) = (amount(a), amount(b)) else {
+        return false;
+    };
+    format!("{na:?}") == format!("{nb:?}")
+        && format!("{wa:?}") != format!("{wb:?}")
+        && !matches!(
+            na,
+            Value::Const(_) | Value::X | Value::Prev | Value::EventAmount
+        )
 }

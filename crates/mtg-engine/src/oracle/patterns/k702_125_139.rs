@@ -317,6 +317,7 @@ fn enter_as_copy_if_embalmed(block: &str, ctx: &CompileContext) -> Option<Vec<Ab
             ReplacementAction::EnterAsCopy {
                 filter,
                 optional: true,
+                tapped: false,
             },
             false,
         ),

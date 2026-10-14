@@ -19,7 +19,7 @@ pub const ALL_TYPES: &str = "types: supertypes, card types and subtypes it has";
 pub struct TypeCounts;
 
 fn creature_types(c: &Characteristics) -> i64 {
-    if c.all_creature_types {
+    if super::changeling::every_creature_type(c) {
         return crate::types::subtype_lists().creature.len() as i64;
     }
     c.subtypes.iter().filter(|s| is_creature_type(s)).count() as i64

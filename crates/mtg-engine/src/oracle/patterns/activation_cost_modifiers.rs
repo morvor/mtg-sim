@@ -176,7 +176,9 @@ pub fn split_own_cost_sentence(eff: &str) -> Option<(&str, String)> {
     let lower = eff.to_lowercase();
     let i = lower.rfind("this ability costs ")?;
     let head = eff[..i].trim_end();
-    if !(head.is_empty() || head.ends_with('.')) {
+    // (A sentence may end in a quoted ability: `It gains "[ability]." This ability costs
+    // ...`, Llanowar Greenwidow.)
+    if !(head.is_empty() || head.ends_with('.') || head.ends_with(".\"")) {
         return None;
     }
     let sentence = end(&lower[i..]);

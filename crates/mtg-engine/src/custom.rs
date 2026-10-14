@@ -204,7 +204,10 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
                 .permanents()
                 .filter(|o| o.controller == ctx.controller && o.is_creature())
                 .collect();
-            let all = mine.iter().filter(|o| o.chars.all_creature_types).count() as i64;
+            let all = mine
+                .iter()
+                .filter(|o| crate::kw::changeling::every_creature_type(&o.chars))
+                .count() as i64;
             let types: std::collections::BTreeSet<&str> = mine
                 .iter()
                 .flat_map(|o| o.chars.subtypes.iter().map(|s| s.as_str()))

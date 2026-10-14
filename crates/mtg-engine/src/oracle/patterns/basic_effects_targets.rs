@@ -336,6 +336,15 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
             }
         }
     }
+    // "each of two other target creatures" (Betrayal at the Vault): exactly that many
+    // targets (CR 601.2c), each dealt the amount.
+    if let Some(r) = s.strip_prefix("each of ") {
+        if parse_number(r).is_some() && !r.starts_with("up to ") {
+            if let Some((sel, rest)) = one_target(r, b) {
+                return Some((sel, rest, false));
+            }
+        }
+    }
     if let Some(r) = s.strip_prefix("you") {
         if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
             return Some((Sel::Players(PlayerRef::You), r.to_string(), false));
@@ -774,12 +783,29 @@ inventory::submit! { EffectPattern { name: "basic effects: each [object] deals d
 fn targets_each_deal_their_power(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (subject, recipient) = l.split_once(" each deal damage equal to their power to ")?;
-    let (spec, tail) = parse_target(subject)?;
-    if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+    // "Any number of target enchanted creatures you control and up to one other target
+    // creature you control" (Graceful Takedown): two groups of targets, all of which deal
+    // damage.
+    let mut specs = Vec::new();
+    for part in subject.split(" and ") {
+        let (spec, tail) = parse_target(part)?;
+        if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+            return None;
+        }
+        specs.push((spec, part));
+    }
+    if specs.len() > 2 {
         return None;
     }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let slot = b.add_target(spec, subject);
+    let slots: Vec<Sel> = specs
+        .into_iter()
+        .map(|(spec, part)| Sel::Target(b.add_target(spec, part)))
+        .collect();
+    let subjects = match <[Sel; 1]>::try_from(slots) {
+        Ok([one]) => one,
+        Err(v) => Sel::Union(v),
+    };
     let restore = |b: &mut Builder| {
         b.targets.truncate(saved.0);
         b.it = saved.1.clone();
@@ -795,7 +821,7 @@ fn targets_each_deal_their_power(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     const EACH: Var = vars::USER + 3331;
     Some(Effect::ForEach {
-        sel: Sel::Target(slot),
+        sel: subjects,
         var: EACH,
         effect: Box::new(Effect::DealDamage {
             source: Sel::Var(EACH),

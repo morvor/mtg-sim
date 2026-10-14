@@ -23,6 +23,17 @@ pub(crate) struct ExtraState {
     pub life_paid: bool,
     /// How X reads after "pay any amount" when it was redefined ("twice that many").
     pub x_words: Option<&'static str>,
+    /// X in the activated ability being rendered is the number of counters removed to pay
+    /// its cost ("Remove any number of charge counters from ~: It deals that much
+    /// damage").
+    pub x_removed: bool,
+    /// What the triggering event's amount is in words, in a trigger whose event has one
+    /// ("the amount of damage it dealt to that player", "the number of cards looked at
+    /// while scrying this way").
+    pub event_amount: Option<&'static str>,
+    /// In a "whenever the Ring tempts you" trigger, whose event object is the creature
+    /// chosen as your Ring-bearer (CR 701.54a).
+    pub ring_tempts: bool,
 }
 
 /// The past tense of a past participle ("drawn" -> "drew").
@@ -586,6 +597,9 @@ impl Renderer<'_> {
     /// pay {1}{G} any number of times. When you pay this cost one or more times, ..."
     /// (the payments counted in a number, then a reflexive trigger, CR 603.12).
     pub(crate) fn seq_extra(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        if let Some(r) = self.seq_more(v) {
+            return Some(r);
+        }
         if let Some(s) = self.revealed_this_way(v) {
             return Some((s, 4));
         }
@@ -1024,6 +1038,9 @@ impl Renderer<'_> {
     /// or 3", "your team controls" (you or a teammate, CR 808.2), "from graveyards or exile"
     /// (a spell cast from there, or a card there).
     pub(crate) fn or_quality(&mut self, v: &[Filter]) -> Option<String> {
+        if let Some(q) = self.or_predicates(v) {
+            return Some(q);
+        }
         let mvs: Option<Vec<String>> = v
             .iter()
             .map(|x| match x {

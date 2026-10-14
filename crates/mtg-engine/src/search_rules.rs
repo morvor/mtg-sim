@@ -250,7 +250,8 @@ fn search_one(
     ctx: &Ctx,
 ) -> Option<Found> {
     let src = ctx.source;
-    let cant_search = g.player_restricted(p, |r| matches!(r, Restriction::CantSearch(_)));
+    let cant_search = g.player_restricted(p, |r| matches!(r, Restriction::CantSearch(_)))
+        || crate::rule_statics::caused_actions::search_forbidden(g, p, owner, ctx);
     let mut zones: Vec<ZoneKind> = spec.zones.clone();
     if cant_search {
         zones.retain(|z| *z != ZoneKind::Library);

@@ -447,6 +447,8 @@ impl Game {
                 for p in self.active_players() {
                     self.draw_cards(p, 1);
                 }
+                // "You draw a card during each opponent's draw step."
+                crate::rule_statics::opponents_steps::extra_draws(self);
             }
             Step::PrecombatMain | Step::PostcombatMain => {
                 self.turn.main_phases += 1;
