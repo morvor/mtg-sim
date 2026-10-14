@@ -198,3 +198,24 @@ fn radiant_destiny_gives_vigilance_with_the_citys_blessing() {
     t.g.recompute();
     assert!(t.obj_now(bears).chars.has_keyword(keywords::KeywordKind::Vigilance));
 }
+
+#[test]
+fn winter_reduces_opponents_hand_size_by_card_types_in_your_graveyard() {
+    cr!("402.2", "611.3a");
+    assert_supported(&["Winter, Misanthropic Guide"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Winter, Misanthropic Guide");
+    t.graveyard(P0, "Forest");
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Lightning Bolt");
+    t.g.recompute();
+    assert_eq!(t.g.player(P1).max_hand_size, Some(7));
+    t.graveyard(P0, "Divination");
+    t.g.recompute();
+    assert_eq!(t.g.player(P1).max_hand_size, Some(3));
+    // Five types: two.
+    t.graveyard(P0, "Ornithopter");
+    t.g.recompute();
+    assert_eq!(t.g.player(P1).max_hand_size, Some(2));
+    assert_eq!(t.g.player(P0).max_hand_size, Some(7));
+}
