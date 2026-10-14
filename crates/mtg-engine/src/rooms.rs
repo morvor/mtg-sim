@@ -308,7 +308,14 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
         return bad("no unlock cost");
     };
     let ctx = crate::eval::Ctx::new(Some(id), p);
-    if !crate::special_actions::pay(g, p, &cost, Some(id), &ctx) {
+    if !crate::special_actions::pay_for(
+        g,
+        p,
+        &cost,
+        Some(id),
+        &ctx,
+        Some(crate::mana::SpendPurpose::UnlockDoor),
+    ) {
         return bad("can't pay the unlock cost");
     }
     unlock(g, id, half, p);

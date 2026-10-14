@@ -78,6 +78,38 @@ pub fn x_spend(rules: &[CostRule], amount: u32) -> Option<XSpend> {
     })
 }
 
+/// "Spend only mana produced by basic lands to cast ~": the sources that may produce the
+/// mana that pays the spell's total cost.
+pub fn only_from(rules: &[CostRule]) -> Option<crate::mana::SpendFilter> {
+    rules.iter().find_map(|r| match r {
+        CostRule::OnlyManaFrom(f) => Some(f.clone()),
+        _ => None,
+    })
+}
+
+/// "Spend only mana of the chosen color to activate this ability.": the whole generic
+/// mana of the cost `generic`, payable only with mana of the color chosen for `src` (as
+/// "Spend only [color] mana on X" restricts the part X represents).
+pub fn chosen_color_spend(
+    g: &Game,
+    src: ObjectId,
+    rules: &[CostRule],
+    generic: u32,
+) -> Option<XSpend> {
+    if !rules.contains(&CostRule::OnlyChosenColor) {
+        return None;
+    }
+    let colors = g
+        .try_obj(src)
+        .and_then(|o| o.choices.color)
+        .map_or(ColorSet::NONE, ColorSet::single);
+    Some(XSpend {
+        amount: generic,
+        colors,
+        distinct: false,
+    })
+}
+
 /// "You can't spend mana to cast this spell."
 pub fn no_mana(rules: &[CostRule]) -> bool {
     rules.contains(&CostRule::NoMana)

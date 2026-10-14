@@ -306,6 +306,19 @@ impl Renderer<'_> {
                 "the number of poison counters your opponents have".into()
             }
             "players being attacked" => "the number of players being attacked".into(),
+            crate::kw::mana_grammar::UNLOCKED_DOORS => {
+                "the number of unlocked doors among Rooms you control".into()
+            }
+            n if n.starts_with(crate::kw::mana_grammar::CHROMA_GRAVEYARD) => {
+                let c = n[crate::kw::mana_grammar::CHROMA_GRAVEYARD.len()..]
+                    .chars()
+                    .next()
+                    .and_then(crate::types::Color::from_letter)
+                    .map_or("", |c| c.word());
+                format!(
+                    "the number of {c} mana symbols in the mana costs of cards in your graveyard"
+                )
+            }
             "cards_in_all_hands" => "the total number of cards in all players' hands".into(),
             "life_lost_by_opponents_this_turn" => {
                 "the total life lost by your opponents this turn".into()
@@ -762,6 +775,15 @@ impl Renderer<'_> {
                 "you may choose not to untap {} during your untap step",
                 self.me()
             ),
+            crate::kw::game_rules::NO_LOYALTY_EACH => {
+                "players can't activate planeswalkers' loyalty abilities".into()
+            }
+            crate::kw::game_rules::NO_LOYALTY_OPPONENTS => {
+                "your opponents can't activate planeswalkers' loyalty abilities".into()
+            }
+            crate::kw::game_rules::ENCHANTED_ONLY_MANA_OR_LOYALTY => {
+                "enchanted player can't activate abilities that aren't mana abilities or loyalty abilities".into()
+            }
             other => self.gap(format!("Restriction::Custom({other})")),
         }
     }
