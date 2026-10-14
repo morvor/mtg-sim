@@ -175,20 +175,27 @@ fn shadow_urchin_exiles_as_many_cards_as_counters() {
 
 #[test]
 fn namor_counts_blue_mana_symbols() {
-    cr!("107.4e");
+    cr!("107.4a", "603.2");
     compiles("Namor the Sub-Mariner");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Namor the Sub-Mariner");
-    t.lands(P0, "Island", 7);
-    // Divination and Deep Analysis each have one blue mana symbol in their mana costs.
+    t.lands(P0, "Island", 8);
+    t.lands(P0, "Mountain", 1);
+    // Divination ({2}{U}) has one blue mana symbol in its mana cost.
     let div = t.hand(P0, "Divination");
     t.cast(P0, div).go();
     t.resolve_all();
     assert_eq!(merfolk_tokens(&t), 1);
-    let opt = t.hand(P0, "Deep Analysis");
-    t.cast(P0, opt).go();
+    // Concentrate ({2}{U}{U}) has two: two tokens.
+    let conc = t.hand(P0, "Concentrate");
+    t.cast(P0, conc).go();
     t.resolve_all();
-    assert_eq!(merfolk_tokens(&t), 2, "Deep Analysis has one blue mana symbol");
+    assert_eq!(merfolk_tokens(&t), 3, "Concentrate has two blue mana symbols");
+    // No blue mana symbols: it doesn't trigger.
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(merfolk_tokens(&t), 3);
 }
 
 fn merfolk_tokens(t: &TestGame) -> usize {
@@ -354,6 +361,28 @@ fn oath_of_lim_dul_sacrifices_a_permanent_for_each_life_lost() {
         .filter(|id| t.on_battlefield(**id))
         .count();
     assert_eq!(left, 1);
+}
+
+#[test]
+fn oath_of_lim_dul_offers_the_discard_for_each_life_lost() {
+    cr!("119.3", "608.2c");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Lim-Dûl");
+    let perms = [
+        t.battlefield(P0, "Forest"),
+        t.battlefield(P0, "Grizzly Bears"),
+        t.battlefield(P0, "Llanowar Elves"),
+    ];
+    t.hand(P0, "Island");
+    // Two life: the one card in hand is discarded for the first, a permanent is sacrificed
+    // for the second.
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.g.lose_life(P0, 2);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 0);
+    let left = perms.iter().filter(|id| t.on_battlefield(**id)).count();
+    assert_eq!(left, 2);
 }
 
 #[test]
@@ -606,12 +635,16 @@ fn stabwhisker_drains_for_each_card_fewer_than_three() {
     t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
     assert_eq!(t.life(P1), 18, "one card: two fewer than three");
-    // Three or more cards: no life loss.
+    // Three or more cards in that opponent's hand: no life loss.
     for _ in 0..3 {
-        t.hand(P0, "Island");
+        t.hand(P1, "Island");
     }
     t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
+    assert!(t.hand_size(P1) >= 3);
+    assert_eq!(t.life(P1), 18);
+    // It triggers only on an opponent's upkeep.
     assert_eq!(t.life(P0), 20);
 }
 
@@ -801,4 +834,88 @@ fn quicksilver_fountain_removes_flood_counters_from_all_lands() {
     t.resolve_all();
     assert_eq!(t.counters(a, "flood"), 0);
     assert_eq!(t.counters(b, "flood"), 0);
+}
+
+#[test]
+fn sage_of_hours_takes_an_extra_turn_for_each_five_counters() {
+    cr!("602.2b", "107.1a");
+    ruling!(
+        "Sage of Hours",
+        "if you remove twelve counters to activate the ability, you'll take two extra turns"
+    );
+    compiles("Sage of Hours");
+    for (counters, turns) in [(12, 2), (3, 0)] {
+        let mut t = TestGame::new(2);
+        let sage = t.battlefield(P0, "Sage of Hours");
+        t.g.add_counters(Entity::Object(sage), "+1/+1", counters, None);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer(P0, DecisionKind::X, Answer::Number(counters as i64));
+        t.activate(P0, sage, 0, &[]).unwrap();
+        t.resolve_all();
+        assert_eq!(t.counters(sage, "+1/+1"), 0);
+        assert_eq!(t.g.extra_turns.len(), turns, "{counters} counters");
+    }
+}
+
+#[test]
+fn mutated_cultist_reduces_the_next_spell_by_the_counters_removed() {
+    cr!("608.2h", "601.2f");
+    ruling!(
+        "Mutated Cultist",
+        "If the targeted permanent or opponent has more than one kind of counter, you must remove all of them."
+    );
+    compiles("Mutated Cultist");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    t.lands(P0, "Mountain", 1);
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 2, None);
+    t.g.add_counters(Entity::Object(bear), "stun", 1, None);
+    let cultist = t.hand(P0, "Mutated Cultist");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(bear)]);
+    t.cast(P0, cultist).go();
+    t.resolve_all();
+    assert_eq!(t.counters(bear, "+1/+1"), 0);
+    assert_eq!(t.counters(bear, "stun"), 0);
+    // Three counters removed: Hill Giant ({3}{R}) costs {R}.
+    let giant = t.hand(P0, "Hill Giant");
+    t.cast(P0, giant).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(giant)));
+}
+
+#[test]
+fn varina_draws_discards_and_gains_by_the_zombies_attacking() {
+    cr!("603.2c", "508.3c");
+    ruling!(
+        "Varina, Lich Queen",
+        "The number of cards you discard and the amount of life you gain are both equal to the number of Zombies you attack with"
+    );
+    compiles("Varina, Lich Queen");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Varina, Lich Queen");
+    let a = t.battlefield(P0, "Walking Corpse");
+    let b = t.battlefield(P0, "Walking Corpse");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    t.hand(P0, "Forest");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    let hand = t.hand_size(P0);
+    let gy = t.graveyard_size(P0);
+    t.attack(
+        &[
+            (a, Entity::Player(P1)),
+            (b, Entity::Player(P1)),
+            (bear, Entity::Player(P1)),
+        ],
+        &[],
+    );
+    t.resolve_all();
+    // Two Zombies: draw two, discard two, gain 2 life.
+    assert_eq!(t.hand_size(P0), hand);
+    assert_eq!(t.graveyard_size(P0), gy + 2);
+    assert_eq!(t.life(P0), 22);
 }

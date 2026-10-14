@@ -41,7 +41,7 @@ fn devouring_greed_counts_the_spirits_sacrificed_for_its_cost() {
 
 #[test]
 fn out_of_time_counts_the_creatures_that_phased_out() {
-    cr!("702.26a", "702.26g");
+    cr!("608.2c", "702.26g");
     ruling!(
         "Out of Time",
         "If there are no creatures on the battlefield when Out of Time's triggered ability resolves"
@@ -51,9 +51,13 @@ fn out_of_time_counts_the_creatures_that_phased_out() {
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P1, "Hill Giant");
     t.g.tap(b);
+    // An Aura phases out indirectly with its creature; it isn't a creature that phased out.
+    let aura = t.battlefield(P1, "Holy Strength");
+    t.g.attach(aura, Entity::Object(b));
     let time = t.enter(P0, "Out of Time");
     t.resolve_all();
     assert!(t.g.obj(a).phased_out && t.g.obj(b).phased_out);
+    assert!(t.g.obj(aura).phased_out, "phased out indirectly");
     assert!(!t.g.obj(b).tapped, "untapped first");
     assert_eq!(t.counters(time, "time"), 2);
     // No creatures: no counters.
@@ -452,7 +456,7 @@ fn havoc_eater_counts_the_total_power_of_the_creatures_it_goaded() {
 
 #[test]
 fn ripples_of_potential_phases_out_permanents_it_proliferated() {
-    cr!("701.34a", "702.26a");
+    cr!("701.34a", "608.2c");
     compiles("Ripples of Potential");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 2);
@@ -587,7 +591,7 @@ fn bakis_curse_deals_damage_for_each_aura_on_each_creature() {
 
 #[test]
 fn sinister_waltz_returns_two_at_random_and_bottoms_the_other() {
-    cr!("701.9b", "608.2c");
+    cr!("608.2c");
     compiles("Sinister Waltz");
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 3);
@@ -613,4 +617,57 @@ fn sinister_waltz_returns_two_at_random_and_bottoms_the_other() {
         zones.iter().filter(|z| **z == object::Zone::Library(P0)).count(),
         1
     );
+}
+
+#[test]
+fn sinister_waltz_with_two_legal_targets_returns_both() {
+    cr!("608.2b");
+    ruling!(
+        "Sinister Waltz",
+        "If only one or two creatures cards are legal targets as Sinister Waltz resolves"
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    t.lands(P0, "Mountain", 2);
+    let cards: Vec<ObjectId> = ["Grizzly Bears", "Hill Giant", "Llanowar Elves"]
+        .iter()
+        .map(|c| t.graveyard(P0, c))
+        .collect();
+    let spell = t.hand(P0, "Sinister Waltz");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(
+        P0,
+        &cards.iter().map(|c| Entity::Object(*c)).collect::<Vec<_>>(),
+    );
+    t.cast(P0, spell).go();
+    // One target leaves the graveyard before it resolves.
+    t.g.move_object(cards[2], object::Zone::Exile, events::MoveCause::Effect, None);
+    let library = t.library_size(P0);
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(cards[0])));
+    assert!(t.on_battlefield(t.g.current(cards[1])));
+    assert_eq!(t.library_size(P0), library, "nothing on the bottom");
+}
+
+#[test]
+fn grim_contest_with_an_illegal_target_deals_no_damage() {
+    cr!("608.2b");
+    ruling!(
+        "Grim Contest",
+        "If either target is an illegal target as Grim Contest tries to resolve, neither creature will deal or be dealt damage."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Forest", 2);
+    let wall = t.battlefield(P0, "Indomitable Ancients");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let spell = t.hand(P0, "Grim Contest");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(wall), Entity::Object(giant)])
+        .go();
+    // The opponent's creature leaves before it resolves.
+    t.g.move_object(giant, object::Zone::Hand(P1), events::MoveCause::Effect, None);
+    t.resolve_all();
+    assert_eq!(t.g.obj(wall).damage, 0);
 }

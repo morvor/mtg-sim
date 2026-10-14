@@ -572,6 +572,18 @@ fn for_each_amount_leading(l: &str, b: &mut crate::oracle::effects::Builder) -> 
     if x.contains('"') || y.contains(" for each ") {
         return None;
     }
+    // The head of "[for each ..., instruction] unless ...", split off by the unless
+    // grammar: the repetition must include the "unless" (`for_each_amount_unless`).
+    {
+        let raw = crate::oracle::raw_text().to_lowercase();
+        if !y.contains(" unless ")
+            && raw
+                .find(y)
+                .is_some_and(|i| raw[i + y.len()..].starts_with(" unless "))
+        {
+            return None;
+        }
+    }
     // "{1}, Remove X ki counters from ~: For each counter removed, ~ gets +2/+0 until end
     // of turn.": X, the number the cost removed.
     if x == "counter removed" {
@@ -585,10 +597,15 @@ fn for_each_amount_leading(l: &str, b: &mut crate::oracle::effects::Builder) -> 
     }
     // "For each five counters removed this way": in groups of five, rounded down (an
     // amount of life or damage in groups is the value grammar's own).
-    let (group, x) = match crate::oracle::phrases::parse_number(x) {
-        Some((n, rest))
-            if n.as_const().is_some_and(|k| k > 1)
-                && rest.starts_with(' ')
+    // (The number is a word of its own: "five counters", not "5 life" or "a card".)
+    let (group, x) = match x
+        .split_once(' ')
+        .and_then(|(w, rest)| Some((crate::oracle::phrases::parse_number(w)?, rest)))
+    {
+        Some(((n, tail), rest))
+            if tail.trim().is_empty()
+                && n.as_const().is_some_and(|k| k > 1)
+                && !rest.starts_with("life")
                 && !rest.contains(" life ")
                 && !rest.contains("damage") =>
         {
@@ -631,6 +648,12 @@ fn for_each_amount_leading(l: &str, b: &mut crate::oracle::effects::Builder) -> 
         restore(b);
         return None;
     };
+    // "For each isolation counter on it, exile up to one target ...": a target for each,
+    // not one target acted on that many times.
+    if b.targets.len() != saved.0 {
+        restore(b);
+        return None;
+    }
     let times = match group {
         Some(k) => Value::Div(Box::new(times), k, false),
         None => times,
@@ -639,6 +662,21 @@ fn for_each_amount_leading(l: &str, b: &mut crate::oracle::effects::Builder) -> 
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: for each [amount], [instruction]", priority: 990, parse: for_each_amount_leading } }
+
+/// "For each 1 life you lost, sacrifice a permanent other than ~ unless you discard a
+/// card." (Oath of Lim-Dûl): the whole instruction, "unless" included, is performed for
+/// each (read before the unless grammar splits the sentence, which would put the
+/// repetition inside the "unless").
+fn for_each_amount_unless(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let r = crate::oracle::phrases::end(l).strip_prefix("for each ")?;
+    let (_, y) = r.split_once(", ")?;
+    if !y.contains(" unless ") {
+        return None;
+    }
+    for_each_amount_leading(l, b)
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: for each [amount], [instruction] unless [action]", priority: 840, parse: for_each_amount_unless } }
 
 /// The phrase with its first counted noun in the plural ("nontoken creature you
 /// controlled" → "nontoken creatures you controlled").
