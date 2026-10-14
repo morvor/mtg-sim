@@ -190,7 +190,8 @@ pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) 
             who: PlayerRef::You,
             count: Value::Const(1),
             ..
-        } if !introduced => {
+        } if !introduced && !crate::oracle::raw_text().to_lowercase().contains("that card") => {
+            // ("Return that card": the card in the graveyard, which this doesn't track.)
             b.it = Sel::Var(vars::SACRIFICED);
         }
         Effect::Search { .. } => {

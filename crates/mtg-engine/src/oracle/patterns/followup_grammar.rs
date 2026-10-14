@@ -323,8 +323,8 @@ fn if_player_did(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if you != matches!(who, PlayerRef::You) {
         return false;
     }
-    // "If you do" after "you may" is the core's.
-    if you && did == Did::Does && optional(last) {
+    // "If you do/don't" after "you may" is the core's.
+    if you && optional(last) {
         return false;
     }
     // Whether the player did it is whether they did all of it: an instruction for
@@ -466,6 +466,19 @@ fn serial_then(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let parts: Vec<&str> = head.split(", ").collect();
     if parts.len() < 2 || parts.iter().any(|p| p.is_empty() || p.starts_with("and ")) {
+        return None;
+    }
+    // Third-person verbs need a subject: "puts it onto the battlefield" isn't an
+    // instruction of its own.
+    const THIRD: &[&str] = &[
+        "puts", "shuffles", "draws", "discards", "mills", "sacrifices", "exiles", "returns",
+        "creates", "gains", "loses", "reveals", "searches", "pays", "taps", "untaps",
+    ];
+    if parts
+        .iter()
+        .chain(std::iter::once(&last))
+        .any(|p| THIRD.contains(&p.split(' ').next().unwrap_or("")))
+    {
         return None;
     }
     let saved = (
