@@ -120,8 +120,21 @@ impl Renderer<'_> {
                 };
                 format!("the number of {n} in {p} graveyard")
             }
+            // "where X is the amount of damage it dealt to that player".
+            Value::EventAmount if self.extra.event_amount.is_some() => format!(
+                "{{alt:that much|that many|{}}}",
+                self.extra.event_amount.unwrap_or_default()
+            ),
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
+            // "the amount of excess damage dealt to that creature this way": the one target
+            // creature.
+            Value::Var(vars::EXCESS)
+                if matches!(self.targets.as_slice(), [t] if matches!(&t.what, TargetKind::Object(Filter::Type(CardType::Creature)))
+                    && t.max.as_const() == Some(1)) =>
+            {
+                "{alt:the excess damage|the amount of excess damage dealt this way|the excess damage dealt this way|the amount of excess damage dealt to that creature this way}".into()
+            }
             Value::Var(vars::EXCESS) => "{alt:the excess damage|the amount of excess damage dealt this way|the excess damage dealt this way}".into(),
             // The flips of the last coin flip (CR 705.2).
             Value::Var(crate::dice::WINS) => "the number of flips you won".into(),
@@ -493,6 +506,20 @@ impl Renderer<'_> {
         // "You gain that much life": the amount of the previous instruction.
         if matches!(v, Value::Prev) {
             return ("{alt:that much|that many}".into(), None);
+        }
+        // "You gain 4 life for each creature tapped this way": a multiple of a number
+        // remembered just before, said with that number's words.
+        if let Value::Mul(k, n) = v {
+            if let (Value::Const(_), Value::Var(x)) = (k.as_ref(), n.as_ref()) {
+                if let Some(stored) = self
+                    .stored_values
+                    .iter()
+                    .find(|(y, _, used)| y == x && !used)
+                    .map(|(_, val, _)| val.clone())
+                {
+                    return self.amount(&Value::Mul(k.clone(), Box::new(stored)));
+                }
+            }
         }
         if let Some(x) = self.stored_x(v) {
             return (x, None);

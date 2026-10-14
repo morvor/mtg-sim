@@ -3,6 +3,32 @@
 use super::players::Case;
 use super::*;
 
+/// The amount of a trigger's event, in words: the damage of a "deals damage to a player"
+/// trigger, the cards looked at of a "whenever you scry" trigger (CR 701.22a).
+pub(super) fn event_amount_words(t: &TriggerCond) -> Option<&'static str> {
+    match t {
+        TriggerCond::PlayerAction { name, .. } if name == "scry" => {
+            Some("the number of cards looked at while scrying this way")
+        }
+        TriggerCond::DealsDamage {
+            source: Filter::Source | Filter::AttachedToSource,
+            to: DamageRecipient::Player(_),
+            ..
+        } => Some("the amount of damage it dealt to that player"),
+        TriggerCond::Batched {
+            trigger,
+            per: BatchPer::Player,
+        } => match trigger.as_ref() {
+            TriggerCond::DealsDamage {
+                to: DamageRecipient::Player(_),
+                ..
+            } => Some("the amount of damage those creatures dealt to that player"),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// "Choose a number from 0 to N" stored for a following instruction that uses it.
 fn chosen_number(e: &Effect) -> bool {
     matches!(

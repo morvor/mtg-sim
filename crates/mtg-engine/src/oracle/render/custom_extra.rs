@@ -27,6 +27,10 @@ pub(crate) struct ExtraState {
     /// its cost ("Remove any number of charge counters from ~: It deals that much
     /// damage").
     pub x_removed: bool,
+    /// What the triggering event's amount is in words, in a trigger whose event has one
+    /// ("the amount of damage it dealt to that player", "the number of cards looked at
+    /// while scrying this way").
+    pub event_amount: Option<&'static str>,
 }
 
 /// The past tense of a past participle ("drawn" -> "drew").

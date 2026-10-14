@@ -302,12 +302,25 @@ impl Renderer<'_> {
             Some(TargetGroup::SameController) => {
                 s.push_str(" {alt:a single player controls|controlled by the same player}")
             }
-            Some(TargetGroup::ShareCreatureType) => s.push_str(" that share a creature type"),
-            Some(TargetGroup::ShareCardType) => s.push_str(" that share a card type"),
-            Some(TargetGroup::SharePermanentType) => s.push_str(" that share a permanent type"),
             Some(g) => {
-                let w = self.target_group(g);
-                s.push_str(&format!(" {w}"));
+                let w = match g {
+                    TargetGroup::ShareCreatureType => "that share a creature type".to_string(),
+                    TargetGroup::ShareCardType => "that share a card type".to_string(),
+                    TargetGroup::SharePermanentType => "that share a permanent type".to_string(),
+                    g => self.target_group(g),
+                };
+                // "two target creature cards that share a creature type from your
+                // graveyard": the requirement may come before the zone.
+                let zone = [" in your graveyard", " in a graveyard", " in graveyards"]
+                    .into_iter()
+                    .find(|z| s.ends_with(z));
+                match zone {
+                    Some(z) if !w.contains(['{', '|']) => {
+                        let head = &s[..s.len() - z.len()];
+                        s = format!("{{alt:{head} {w}{z}|{s} {w}}}");
+                    }
+                    _ => s.push_str(&format!(" {w}")),
+                }
             }
         }
         // A relationship with the targets of an earlier instance of "target" ("another
@@ -752,6 +765,10 @@ impl Renderer<'_> {
                     (filter, count, *up_to, chooser)
                 {
                     if matches!(g.as_ref(), Sel::Var(v) if *v == vars::IT) {
+                        // "Put a deathtouch counter on either of them" (one of the two).
+                        if *n == 1 {
+                            return decline("{alt:one|either} of them".into(), case);
+                        }
                         return decline(format!("{} of them", number_word(*n)), case);
                     }
                     // "Tap up to three target creatures. Put a stun counter on one of
@@ -982,6 +999,27 @@ impl Renderer<'_> {
             {
                 let s = self.sel(sel, Case::Poss);
                 format!("{{alt:{s} controller|that player}}")
+            }
+            // "Target player or planeswalker. That player or that planeswalker's controller
+            // discards ...": the player, or the controller of the permanent (a player
+            // controls themself, as `ControllerOf` reads it).
+            PlayerRef::ControllerOf(sel)
+                if !matches!(case, Case::Poss)
+                    && matches!(sel.as_ref(), Sel::Target(i)
+                        if matches!(self.targets.get(*i as usize).map(|t| &t.what),
+                            Some(TargetKind::ObjectOrPlayer(..)))) =>
+            {
+                let Sel::Target(i) = sel.as_ref() else {
+                    return self.gap("player or controller");
+                };
+                let Some(TargetKind::ObjectOrPlayer(f, _)) =
+                    self.targets.get(*i as usize).map(|t| t.what.clone())
+                else {
+                    return self.gap("player or controller");
+                };
+                let n = self.noun(&f, Num::One);
+                let s = self.sel(sel, Case::Poss);
+                format!("{{alt:that player or that {n}'s controller|{s} controller}}")
             }
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);

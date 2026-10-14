@@ -70,7 +70,12 @@ impl Renderer<'_> {
         let saved = std::mem::replace(&mut self.attack_trigger, attack);
         let pair = super::block_pairs::is_block_pair(&t.trigger);
         let saved_pair = std::mem::replace(&mut self.block_pair_trigger, pair);
+        let saved_dealt = std::mem::replace(
+            &mut self.extra.event_amount,
+            super::more_terms::event_amount_words(&t.trigger),
+        );
         let s = self.triggered_plain_inner(t);
+        self.extra.event_amount = saved_dealt;
         self.attack_trigger = saved;
         self.block_pair_trigger = saved_pair;
         s
