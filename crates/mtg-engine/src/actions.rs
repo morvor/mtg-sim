@@ -728,6 +728,8 @@ impl Game {
                                 let ob = &mut self.objects[t.0 as usize];
                                 *ob.counters.entry(kind.clone()).or_insert(0) += n;
                                 ob.counter_timestamps.insert(kind.clone(), ts);
+                                // Its characteristics can depend on its counters.
+                                self.dirty = true;
                                 // Counters it's given as it enters are "put" on it (CR 122.6),
                                 // e.g. a Saga's first lore counter triggers chapter I (714.3a).
                                 if n > 0 {

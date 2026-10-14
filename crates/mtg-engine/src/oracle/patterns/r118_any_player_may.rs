@@ -19,6 +19,19 @@ const PAID: Var = vars::USER + 1812;
 /// choice", "sacrifice two lands of their choice", "discard three cards", "exile a card
 /// from their graveyard".
 fn any_player_cost(r: &str) -> Option<Cost> {
+    // "pay half their life, rounded up" (Temporal Extortion): the paying player's life.
+    for (p, up) in [
+        ("pay half their life, rounded up", true),
+        ("pay half their life, rounded down", false),
+    ] {
+        if r == p {
+            return Some(Cost::default().with(CostPart::PayLife(Value::Div(
+                Box::new(Value::LifeTotal(PlayerRef::Iterated)),
+                2,
+                up,
+            ))));
+        }
+    }
     if let Some(x) = r.strip_prefix("pay ") {
         return resolution_cost(x);
     }
@@ -94,6 +107,41 @@ fn any_player_may(l: &str, b: &mut Builder) -> Option<Effect> {
         )
     } else {
         let r = l.strip_prefix("any player may ")?;
+        // "any player may sacrifice two lands of their choice or have ~ deal 5 damage to
+        // that player" (Worms of the Earth): either one.
+        if let Some((a, dmg)) = r.split_once(" or have ~ deal ") {
+            let n = dmg.strip_suffix(" damage to that player")?;
+            let (n, rest) = crate::oracle::phrases::parse_number(n)?;
+            if !rest.trim().is_empty() {
+                return None;
+            }
+            let first = any_player_cost(a)?;
+            let second = Cost::default().with(CostPart::Effect(Box::new(Effect::DealDamage {
+                source: Sel::This,
+                amount: n,
+                to: Sel::Players(PlayerRef::Iterated),
+            })));
+            return Some(Effect::Seq(vec![
+                Effect::StoreValue {
+                    var: PAID,
+                    value: Value::c(0),
+                },
+                Effect::ForEachPlayer {
+                    who: PlayerRef::EachPlayer,
+                    effect: Box::new(Effect::PayOptional {
+                        who: PlayerRef::Iterated,
+                        cost: first,
+                        then: Box::new(first_payment(Effect::Noop)),
+                        otherwise: Box::new(Effect::PayOptional {
+                            who: PlayerRef::Iterated,
+                            cost: second,
+                            then: Box::new(first_payment(Effect::Noop)),
+                            otherwise: Box::new(Effect::Noop),
+                        }),
+                    }),
+                },
+            ]));
+        }
         (PlayerRef::EachPlayer, any_player_cost(r)?)
     };
     Some(Effect::Seq(vec![
@@ -133,9 +181,13 @@ inventory::submit! { EffectPattern { name: "r118 any player may pay", priority: 
 /// "If a player does, [effect]." after "any player may [cost]": the effect happens as soon
 /// as a player pays.
 fn if_a_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    let Some(r) = l.strip_prefix("if a player does, ") else {
+    let Some(r) = l
+        .strip_prefix("if a player does, ")
+        .or_else(|| l.strip_prefix("if a player does either, "))
+    else {
         return false;
     };
+    let either = l.starts_with("if a player does either, ");
     let Effect::Seq(v) = prev else {
         return false;
     };
@@ -144,9 +196,16 @@ fn if_a_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     else {
         return false;
     };
-    let Effect::PayOptional { then, .. } = &mut **effect else {
+    let Effect::PayOptional {
+        then, otherwise, ..
+    } = &mut **effect
+    else {
         return false;
     };
+    // "Either" names two payments; otherwise one.
+    if either != matches!(**otherwise, Effect::PayOptional { .. }) {
+        return false;
+    }
     // "If a player does, counter the spell." (Ice Cave): the spell that was cast.
     let r = if r == "counter the spell" && b.in_trigger {
         "counter that spell"
@@ -156,7 +215,10 @@ fn if_a_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(e) = parse_clause(r, b) else {
         return false;
     };
-    *then = Box::new(first_payment(e));
+    *then = Box::new(first_payment(e.clone()));
+    if let Effect::PayOptional { then, .. } = &mut **otherwise {
+        *then = Box::new(first_payment(e));
+    }
     true
 }
 

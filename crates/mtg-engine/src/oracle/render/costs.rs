@@ -99,6 +99,17 @@ impl Renderer<'_> {
             CostPart::Untap => "{Q}".into(),
             CostPart::PayLife(v) => {
                 let (a, w) = self.amount(v);
+                // "Pay life equal to ~'s power" (CR 119.4).
+                if let (Some(def), "X") = (
+                    w.as_deref().and_then(|w| w.strip_prefix(", where X is ")),
+                    a.as_str(),
+                ) {
+                    if !def.contains(['{', '.']) {
+                        return format!(
+                            "{{alt:pay X life, where X is {def}|pay life equal to {def}}}"
+                        );
+                    }
+                }
                 format!("pay {a} life{}", w.unwrap_or_default())
             }
             CostPart::Loyalty(n) => format!("{n}"),
@@ -431,10 +442,30 @@ impl Renderer<'_> {
                     )
                 }),
         );
-        let body = self.body(&a.body);
+        let mut body = self.body(&a.body);
         self.extra.x_removed = saved_removed;
         self.self_salient = saved_salient;
         self.cost_exiles_self = saved_exiles;
+        // "Remove all +1/+1 counters from ~: ... X ..., where X is the number of +1/+1
+        // counters removed this way": X counters removed, X being all of them.
+        let remove_all = super::tail_filters::remove_all_counters(a);
+        if let Some(kind) = &remove_all {
+            cost = cost.replacen(
+                &format!("Remove X {kind} counters"),
+                &format!("Remove all {kind} counters"),
+                1,
+            );
+            if body.split(|c: char| !c.is_alphanumeric()).any(|w| w == "X") {
+                // (Only counters of that kind were removed: "the number of counters
+                // removed this way" is the same number.)
+                let def =
+                    format!(", where X is the number of {{opt:{kind}}} counters removed this way");
+                body = match body.strip_suffix('.') {
+                    Some(b) => format!("{b}{def}."),
+                    None => format!("{body}{def}"),
+                };
+            }
+        }
         let mut restr: Vec<String> = Vec::new();
         match a.timing {
             ActivationTiming::Instant => {}
@@ -479,7 +510,7 @@ impl Renderer<'_> {
         match a
             .condition
             .as_ref()
-            .filter(|_| !solved && !boast && !x_not_zero)
+            .filter(|_| !solved && !boast && !x_not_zero && remove_all.is_none())
         {
             // "Activate only during your turn before attackers are declared."
             Some(Condition::YourTurn) => {

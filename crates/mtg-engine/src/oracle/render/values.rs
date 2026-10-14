@@ -466,6 +466,9 @@ impl Renderer<'_> {
             }
             // "X can't be negative": a count clamped at zero (CR 107.1b) reads as the count.
             Value::Max(a, b) if matches!(b.as_ref(), Value::Const(0)) => self.value(a),
+            Value::Max(a, b) if self.greatest_across_zones(a, b).is_some() => {
+                self.greatest_across_zones(a, b).unwrap_or_default()
+            }
             Value::Max(a, b) => {
                 let a = self.value(a);
                 let b = self.value(b);
@@ -1393,6 +1396,26 @@ impl Renderer<'_> {
             }
             PlayerFilter::Monarch => "is the monarch".into(),
             PlayerFilter::Poisoned => "is poisoned".into(),
+            PlayerFilter::HasInitiative => format!("{have} the initiative"),
+            PlayerFilter::AttackRelation {
+                attacking,
+                other,
+                past,
+                planeswalkers,
+            } => {
+                let o = self.player_filter_object(other);
+                let pw = if *planeswalkers {
+                    " and/or a planeswalker you control"
+                } else {
+                    ""
+                };
+                match (attacking, past) {
+                    (true, false) => format!("{{alt:is|are}} attacking {o}{pw}"),
+                    (true, true) => format!("attacked {o}{pw}"),
+                    (false, false) => format!("{{alt:is|are}} being attacked by {o}"),
+                    (false, true) => format!("{{alt:was|were}} attacked by {o}"),
+                }
+            }
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
             PlayerFilter::VotedLikeYou(true) => "voted for a choice you voted for".into(),
             PlayerFilter::VotedLikeYou(false) => "voted for a choice you didn't vote for".into(),

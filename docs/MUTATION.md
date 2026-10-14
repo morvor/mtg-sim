@@ -59,6 +59,12 @@ Each surviving mutant is classified as
 | simultaneous.rs | 171 | 18 (1/10) | 6 | 12 | 0 | 0 | 33.3% | TBD |
 | turn.rs | 234 | 24 (1/10) | 21 | 2 | 0 | 1 | 91.3% | TBD |
 | mana.rs | 228 | 23 (1/10) | 15 | 6 | 0 | 2 | 71.4% | TBD |
+| eval.rs | 268 | 27 (1/10) | 25 | 0 | 0 | 2 | 100% | 100% |
+| stack.rs | 361 | 37 (1/10) | 33 | 3 | 0 | 1 | 91.7% | TBD |
+| replacement.rs | 361 | 37 (1/10) | 28 | 6 | 0 | 3 | 82.4% | TBD |
+| triggers.rs | 474 | 48 (1/10) | 32 | 16 | 0 | 0 | 66.7% | TBD |
+| resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | TBD |
+| actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | TBD |
 
 ### sba.rs
 
@@ -230,3 +236,164 @@ Run 2026-10-14, 23 of 228 mutants (round-robin 0/10), 28 minutes.
   paying exceeded the life total and the spell couldn't be cast. Killed by
   `tests/cr/r107_004f_phyrexian_payment_backtracking.rs` ({B/G}{G/P}{G/P} from {G}{B}
   with 3 life).
+
+### eval.rs
+
+Run 2026-10-14, 27 of 268 mutants (round-robin 0/10), 39 minutes: every viable mutant was
+caught.
+
+### stack.rs
+
+Run 2026-10-14, 37 of 361 mutants (round-robin 0/10), 55 minutes.
+
+- `stack.rs:599:62: replace && with || in Game::is_legal_target` ("target spell" also
+  accepted any battlefield object the filter matches): **(b) missing test**. Killed by
+  `tests/cr/r115_001_target_spell_is_on_the_stack.rs` (Counterspell can't target
+  Grizzly Bears on the battlefield).
+- `stack.rs:740:13: replace || with && in Game::player_untargetable`: **(a) equivalent
+  (dead path)**. It changes how `Restriction::PlayerCantBeTargeted` from static abilities
+  and from resolved effects combine, but no compiled card or engine code creates that
+  restriction (players get hexproof and shroud as `PlayerModification`s, which are checked
+  before it).
+- `stack.rs:1745:9: delete match arm Filter::And(v) | Filter::Or(v) in
+  filter_mentions_attached` (CR 603.6e: an Aura's "when enchanted creature dies" trigger
+  finds the Aura card in the graveyard): **(b) missing test**. The existing test used a
+  bare "enchanted permanent" filter. Killed by
+  `tests/cr/r603_006e_aura_finds_itself_enchanted_creature_filter.rs` (the filter "a
+  creature that is the enchanted permanent").
+
+### replacement.rs
+
+Run 2026-10-14, 37 of 361 mutants (round-robin 0/10), 54 minutes.
+
+- `replacement.rs:233:18: replace > with >= in Game::replace_rec` (recursion guard at
+  depth 32): **(a) equivalent**. Each replacement effect applies to an event at most once
+  (CR 614.5), so no real chain gets near 32 levels; the guard only stops runaway loops.
+- `replacement.rs:1054:20: replace > with >= in Game::repl_event_matches` ("If you would
+  put one or more counters on a permanent or player" also matching zero counters):
+  **(a) equivalent**. The only effects compiled for that event double or halve the
+  number, and twice or half of 0 is 0; adding no counters does nothing.
+- `replacement.rs:1207:74: replace ^ with & in Game::apply_replacement` (the key that
+  identifies a player-level replacement effect loses the player): **(b) not killed**. The
+  key only names a prevention shield for "damage prevented this way"; it would matter for
+  two players' shields of the same kind preventing damage in the same event and a card
+  reading the amount, which no card in the pool combines.
+- `replacement.rs:1600:28: replace match guard ... with true in Game::apply_replacement`
+  ("it deals N damage instead" handled as "amount minus (amount minus N)"): **(a)
+  equivalent for the compiled forms**. The other `Subtract(Diff(..))` the compiler makes
+  is "deals half that damage" (amount minus (amount minus half)), and both branches give
+  half.
+- `replacement.rs:1786:9: replace <impl View for EnteringView>::controller_override ->
+  Option<PlayerId> with None`: **(b) missing test**. "Creatures your opponents control
+  enter tapped" was checked against the card's owner instead of the player it enters under
+  (CR 614.12). Killed by `tests/cr/r614_012_enters_under_another_players_control.rs`
+  (Reanimate on a creature card in the opponent's graveyard, Authority of the Consuls).
+- `replacement.rs:1875:5: replace event_amount -> Option<u32> with None`: **(b) missing
+  test**. Damage a replacement reduced to 0 stayed an event, so a later "deals that much
+  damage plus 2" turned it back into damage (CR 120.8: 0 damage isn't dealt). Killed by
+  `tests/cr/r120_008_zero_damage_isnt_dealt.rs` (Benevolent Unicorn and Torbran on Spark
+  Jolt, in both orders).
+
+### triggers.rs
+
+Run 2026-10-14, 48 of 474 mutants (round-robin 0/10), 2 hours. Most survivors delete one
+field of the `EventInfo` a trigger records (what "it", "that player", "that source" and
+so on refer to); the field is only read by abilities whose wording refers to it.
+
+- `triggers.rs:17:5: replace keyword_has_trigger -> bool with true` and
+  `triggers.rs:530:9: replace Game::check_triggers with ()`: **(a) equivalent (dead
+  code)**. Neither public function has a caller.
+- `triggers.rs:269:73: replace != with == in Game::check_batch_triggers` (which sources
+  in a batch's look-back snapshot have left the battlefield): **(b) not killed**. An object
+  that left has a new id (CR 400.7), so its old id is never live and the `!is_live` half
+  decides; the mutant differs only for a source still on the battlefield that lost the
+  triggered ability between the event and the check, which no test sets up.
+- `triggers.rs:602:29: replace && with || in Game::detect_triggers` (abilities of a
+  permanent that phases out, and of what's attached to it, that look back for the phasing
+  event): **(a) equivalent**. The extra abilities the mutant adds don't trigger on a
+  phase-out event (the phase-out triggers were added anyway), and phased-out objects aren't
+  in the source list, so nothing is added twice.
+- `triggers.rs:688:40: replace += with *= in Game::detect_triggers` (the order number of a
+  detected trigger): **(a) equivalent in practice**. Pending triggers are kept in detection
+  order and the sort by order number is stable, so equal numbers keep the same order.
+- `triggers.rs:731:43: replace == with != in Game::detect_triggers` ("at the beginning of
+  the next end step" created during that step doesn't fire in it, except in a cleanup step
+  that's followed by another, CR 514.3a): **(b) not killed**. The check only matters for a
+  delayed trigger created between a step's beginning and the trigger check for it; no
+  card creates one there.
+- `triggers.rs:1088:21` (Attacks: `objects`, all the attackers), `1272:25`
+  (IsDealtDamage: `other`, the source), `1528:25` (SpellCopied: `object`; `spell` holds the
+  same copy), `1606:25` (TokenCreated: `player`), `1650:25` (TappedForManaOfType:
+  `object`), `1758:25` (Mills: `objects`), `1843:25` (chapter abilities: `lki`): **(b) not
+  killed**: no card was found whose ability reads that field for that trigger (the "they" of
+  "whenever one or more creatures you control attack" comes from each attacker's
+  `object`, which Angelic Guardian's test checks).
+- `triggers.rs:1204:29: delete field object` (BlocksOrBecomesBlocked, the attacking
+  creature that became blocked): **(b) missing test**. Killed by
+  `tests/cr/r509_003_blocks_or_becomes_blocked_it.rs` (Raging Gorilla gets +2/-2 when it
+  blocks and when it becomes blocked).
+- `triggers.rs:1934:25: delete match arm TriggerCond::CastSpell{..} | ... in
+  player_event`: **(b) missing test**. "Their first spell each turn" stopped being per
+  player: a second opponent's first spell no longer triggered once someone else had cast
+  one. Killed by `tests/cr/r603_002_first_spell_each_turn_per_player.rs` (Esper Sentinel in
+  a three-player game).
+- `triggers.rs:2051:50: replace && with || in Game::trigger_matches_ctx` ("is dealt excess
+  damage" stopped triggering on combat damage): **(b) missing test**. The one card with an
+  excess-damage trigger that isn't "noncombat" only, Aegar, the Freezing Flame, isn't
+  supported yet, so the test uses a custom permanent. Killed by
+  `tests/cr/r120_010_excess_combat_damage_trigger.rs` (a 3/3 blocked by a 1/1 deals
+  excess combat damage).
+
+### resolve.rs
+
+Run 2026-10-14, 32 of 314 mutants (round-robin 0/10), 52 minutes.
+
+- `resolve.rs:658:31: replace += with *= in Game::exec_effect` ("that many" after putting
+  one object's counters on another stayed 0), `1317:37: delete ! in Game::exec_effect`
+  (turning a permanent face down reported "didn't happen"), `1610:43: replace && with ||
+  in Game::exec_effect` (scrying 0 reported "happened", CR 701.22b): **(b) missing
+  tests**. No card in the pool reads these results yet, but they're what "if you do" and
+  "that many" read (CR 608.2c). Killed by
+  `tests/actions/a701_022b_instruction_results.rs`.
+- `resolve.rs:2364:26: replace > with >= in Game::effect_on_entering_object` ("enters with
+  N counters" with N = 0 records an entry of 0 counters): **(a) equivalent**. Putting 0
+  counters on the entering permanent does nothing.
+- `resolve.rs:2847:9: replace Game::lock_replacement_objects -> Option<Vec<ObjectId>> with
+  None` and `3274:9: delete match arm ReplacementEvent::Where{event, ..} in
+  unlock_replacement_def`: **(b) not killed**. They concern a replacement effect created
+  by a resolving effect with an extra condition (`Where`) whose affected objects are
+  locked in as it's created (CR 611.2c); no card found produces that combination.
+- `resolve.rs:3230:35: replace < with <= in Game::choose_mana_color`: **(b) missing
+  test**. An answer one past the last offered mana type indexed out of bounds (a panic)
+  instead of getting the default. Killed by
+  `tests/cr/r106_004_mana_type_choice_answers.rs` (Selesnya Guildgate, answer `Index(2)`).
+- `resolve.rs:3407:20: replace match guard c != ctx.controller with true in
+  delayed_controller`: **(a) equivalent**. When the resolving spell's controller is the
+  same player, the mutant names that player as both the controller and the performer of
+  the delayed trigger, which is the same as naming no separate performer.
+
+### actions.rs
+
+Run 2026-10-14, 39 of 390 mutants (round-robin 0/10), 58 minutes. Three mutants
+(`87:16` in `move_objects`, `292:39` in `move_forbidden`, `339:13` in `can_move`) made the
+suite hang and count as detected (timeout).
+
+- `actions.rs:498:42: replace && with || in Game::perform_move_now` (remember a commander
+  put into a graveyard or exile for CR 704.6d): **(a) equivalent**. The state-based action
+  checks again that the object is a commander in a graveyard or exile before offering the
+  command zone, so the extra objects the mutant remembers are ignored.
+- `actions.rs:822:38: replace && with || in Game::perform_move_now` (record a permanent
+  that entered the battlefield): **(a) equivalent**. By this point an object moved to the
+  battlefield is on it (moves that can't happen were dropped before), and an object moved
+  elsewhere isn't, so both conditions agree.
+- `actions.rs:1477:35: replace += with *= in Game::perform_add_counters`
+  (`history.counters_put`): **(a) equivalent (dead state)**. Nothing reads that total.
+- `actions.rs:1561:20: delete ! in Game::gain_life` (when the player can't gain life, which
+  replaced events still happen): **(a) equivalent**. An "instead" self-replacement runs its
+  instruction while it's applied and returns no event, and a life-gain event that remains
+  is checked against "can't gain life" again when performed; CR 614.17c is pinned by
+  `tests/cr/r609_616_interaction.rs`, which passes with the mutant.
+- `actions.rs:1973:31: replace match guard spec.card.is_some() with true in
+  Game::token_entry` (a token copy of a double-faced permanent with no card of its own):
+  **(b) not killed**. Every path found that copies a double-faced permanent into a token
+  gives the token its card, so the guard's false branch isn't reached by the tests.

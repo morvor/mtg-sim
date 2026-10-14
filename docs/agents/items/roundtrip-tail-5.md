@@ -61,7 +61,8 @@ Re-run on the branch (Oct 14): 25,861 of 28,994 passed at the start; 25,983 of 2
 pass after (merged with origin, whose passing list had 25,861); 26,009 of 29,230 after merging
 the later landings. 92 of the 93 cards in the
 taken clusters pass. After review (Inquisitor Eisenhorn's optional reveal, the one-use
-limit always rendered): 26,010 of 29,230.
+limit always rendered): 26,010 of 29,230; 26,145 of 29,374 after merging the later
+landings (roundtrip-tail-4).
 
 ## Parser bugs found
 
