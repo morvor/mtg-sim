@@ -935,8 +935,37 @@ pub fn history_condition(c: &str) -> Option<Condition> {
         }
         _ => c,
     };
+    // "if your team gained life this turn": you and/or your teammates (CR 102.4).
+    if let Some(r) = c.strip_prefix("your team ") {
+        let cond = history_condition(&format!("you {r}"))?;
+        return team_condition(cond);
+    }
     let (body, w) = split_window(c)?;
     clause_or_joined(&body, &w)
+}
+
+/// A condition about your events made about your team's: each event of yours may be a
+/// teammate's too (CR 102.4: "your team" means you and/or your teammates).
+fn team_condition(cond: Condition) -> Option<Condition> {
+    fn teamed(t: &TriggerCond) -> Option<TriggerCond> {
+        let mate = match t {
+            TriggerCond::GainsLife { who: PlayerRel::You } => TriggerCond::GainsLife {
+                who: PlayerRel::Teammate,
+            },
+            TriggerCond::LosesLife { who: PlayerRel::You } => TriggerCond::LosesLife {
+                who: PlayerRel::Teammate,
+            },
+            _ => return None,
+        };
+        Some(TriggerCond::AnyOf(vec![t.clone(), mate]))
+    }
+    Some(match cond {
+        Condition::Compare(Value::EventsThisTurn(t, Tally::Events), cmp, n) => {
+            Condition::Compare(Value::EventsThisTurn(Box::new(teamed(&t)?), Tally::Events), cmp, n)
+        }
+        Condition::Not(c) => Condition::Not(Box::new(team_condition(*c)?)),
+        _ => return None,
+    })
 }
 
 inventory::submit! { super::ConditionPattern { name: "history: [subject] [past verb] [objects] this turn", priority: 900, parse: history_condition } }

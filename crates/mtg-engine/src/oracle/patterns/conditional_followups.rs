@@ -194,11 +194,15 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
     // are twenty or more counters on it"), so is the condition's "it".
     let about_source;
     // Not when the instruction names a target, which "it" may be ("you may exile target
-    // creature if it attacked or blocked this turn").
+    // creature if it attacked or blocked this turn"), or the permanent the source is
+    // attached to ("put a +1/+1 counter on enchanted creature if it attacked or blocked
+    // since your last upkeep", Shape of the Wiitigo).
     let c = if matches!(b.it, Sel::This)
         && !pronoun_free(c)
         && exiled_card.is_none()
         && !x.contains("target ")
+        && !x.contains("enchanted creature")
+        && !x.contains("equipped creature")
     {
         about_source = c
             .split(' ')

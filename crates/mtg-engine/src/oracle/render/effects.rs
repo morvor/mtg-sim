@@ -2785,7 +2785,12 @@ impl Renderer<'_> {
                 let verb = self.permission_verb();
                 // A permission for an exiled card lasts as long as it's that object (CR
                 // 400.7): "for as long as it remains exiled".
-                let d = if matches!(duration, Duration::Permanent) && self.after_exile {
+                let d = if matches!(duration, Duration::Permanent)
+                    && self.after_exile
+                    && self.any_turn_permission
+                {
+                    "{opt:for as long as {alt:it remains|they remain} exiled}".to_string()
+                } else if matches!(duration, Duration::Permanent) && self.after_exile {
                     "{alt:for as long as it remains exiled|for as long as they remain exiled}"
                         .to_string()
                 } else {
@@ -4503,6 +4508,33 @@ impl Renderer<'_> {
                     }
                 }
                 format!("{o}. If {c}, {t} instead")
+            }
+            // "It deals 2 damage to you unless it came under your control this turn": an
+            // event that didn't happen.
+            Condition::Not(inner)
+                if else_empty
+                    && matches!(
+                        inner.as_ref(),
+                        Condition::Compare(
+                            Value::EventsThisTurn(..) | Value::EventsDuring(..),
+                            _,
+                            _
+                        )
+                    ) =>
+            {
+                let Condition::Compare(a, cmp, b) = inner.as_ref() else {
+                    return String::new();
+                };
+                let neg = self.events_compare(a, *cmp, b, true);
+                let pos = self.events_compare(a, *cmp, b, false);
+                let t = self.effect(then);
+                match (neg, pos) {
+                    (Some(neg), Some(pos)) => format!("{{alt:{t} unless {pos}|if {neg}, {t}}}"),
+                    _ => {
+                        let c = self.condition(cond);
+                        format!("if {c}, {t}")
+                    }
+                }
             }
             _ => {
                 let c = self.condition(cond);

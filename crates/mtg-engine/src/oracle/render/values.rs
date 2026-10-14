@@ -825,10 +825,16 @@ impl Renderer<'_> {
                 format!("{syms} was spent to cast {}", self.me())
             }
             Condition::And(v) => {
+                if let Some(s) = self.events_joined(v, "and") {
+                    return s;
+                }
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
                 merge_subject(&parts, "and")
             }
             Condition::Or(v) => {
+                if let Some(s) = self.events_joined(v, "or") {
+                    return s;
+                }
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
                 merge_subject(&parts, "or")
             }
@@ -887,6 +893,11 @@ impl Renderer<'_> {
                     (_, Some(r)) => format!("{subj} has {r}"),
                     _ => format!("{subj} {t}"),
                 }
+            }
+            // "if ~ didn't attack this turn".
+            Condition::SelMatches(s, Filter::AttackedThisTurn) => {
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} attacked this turn")
             }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, false) {
@@ -986,6 +997,11 @@ impl Renderer<'_> {
     }
 
     fn negated_condition(&mut self, c: &Condition) -> String {
+        if let Condition::Compare(a, cmp, b) = c {
+            if let Some(s) = self.events_compare(a, *cmp, b, true) {
+                return s;
+            }
+        }
         if let Condition::Custom(n) = c {
             if let Some(s) = self.custom_condition_terms(n, true) {
                 return s;
@@ -996,6 +1012,11 @@ impl Renderer<'_> {
             Condition::YourTurn => "it's not your turn".into(),
             Condition::NotYourTurn => "it's your turn".into(),
             Condition::PrevHappened => "you don't".into(),
+            // "if ~ didn't attack this turn".
+            Condition::SelMatches(s, Filter::AttackedThisTurn) => {
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} didn't attack this turn")
+            }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, true) {
                     return c;
@@ -1454,6 +1475,9 @@ impl Renderer<'_> {
     }
 
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
+        if let Some(s) = self.events_compare(a, cmp, b, false) {
+            return s;
+        }
         if let Some(s) = self.this_turn_compare(a, cmp, b) {
             return s;
         }

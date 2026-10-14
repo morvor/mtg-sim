@@ -127,9 +127,20 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn with_play_terms(&mut self, terms: &PlayTerms, effect: &Effect) -> String {
+        // "During any turn you attacked with a token, you may play that card": as long as
+        // it happened this turn.
+        let any_turn = terms
+            .condition
+            .as_ref()
+            .and_then(|c| self.during_any_turn(c));
         let saved = self.play_terms.replace(terms.clone());
+        let saved_any = std::mem::replace(&mut self.any_turn_permission, any_turn.is_some());
         let mut s = self.effect(effect);
+        self.any_turn_permission = saved_any;
         self.play_terms = saved;
+        if let Some(u) = &any_turn {
+            s = format!("during any turn {u}, {s}");
+        }
         if terms.flash {
             s.push_str(" as though {alt:it|they} had flash");
         }
@@ -173,7 +184,7 @@ impl Renderer<'_> {
             s.push_str(". Each land played this way enters tapped");
         }
         // "you may play that card if you control a Kavu".
-        if let Some(c) = &terms.condition {
+        if let Some(c) = terms.condition.as_ref().filter(|_| any_turn.is_none()) {
             let c = self.condition(c);
             s.push_str(&format!(" {{alt:if|as long as|during any turn}} {c}"));
         }

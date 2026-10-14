@@ -28,6 +28,7 @@ mod dig;
 mod each_player;
 mod effect_terms;
 mod effects;
+mod events_happened;
 mod extremes;
 mod flashback_reduction;
 mod graveyard_this_way;
@@ -860,6 +861,9 @@ pub struct Renderer<'a> {
     pub(crate) play_terms: Option<PlayTerms>,
     /// An earlier instruction of the sequence being rendered exiled objects.
     pub(crate) after_exile: bool,
+    /// Rendering a permission given "during any turn [something happened]": the card
+    /// leaves its usual duration ("for as long as it remains exiled") unsaid.
+    pub(crate) any_turn_permission: bool,
     /// Variables an earlier instruction of the sequence being rendered filled with the
     /// objects it acted on, and what it did to them ("destroyed", "discarded"): "the
     /// number of creatures destroyed this way" (see `tail_parts.rs`).
@@ -992,6 +996,7 @@ impl<'a> Renderer<'a> {
             plural_vars: Vec::new(),
             play_terms: None,
             after_exile: false,
+            any_turn_permission: false,
             this_way: Vec::new(),
             stored_this_way: Vec::new(),
             each_target: None,
