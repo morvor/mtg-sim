@@ -169,3 +169,20 @@ fn deathpact_angel_cleric_returns_a_card_named_deathpact_angel() {
     assert!(!t.on_battlefield(cleric));
     assert_eq!(t.named_on_battlefield("Deathpact Angel").len(), 1);
 }
+
+#[test]
+fn sengir_nosferatu_bat_returns_an_exiled_card_named_sengir_nosferatu() {
+    cr!("201.2");
+    assert_supported(&["Sengir Nosferatu"]);
+    let mut t = TestGame::new(2);
+    let sengir = t.battlefield(P0, "Sengir Nosferatu");
+    t.lands(P0, "Swamp", 4);
+    t.activate(P0, sengir, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_exile("Sengir Nosferatu"));
+    let bat = t.named_on_battlefield("Bat Token")[0];
+    t.activate(P0, bat, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bat));
+    assert_eq!(t.named_on_battlefield("Sengir Nosferatu").len(), 1);
+}
