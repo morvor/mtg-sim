@@ -219,3 +219,19 @@ fn winter_reduces_opponents_hand_size_by_card_types_in_your_graveyard() {
     assert_eq!(t.g.player(P1).max_hand_size, Some(2));
     assert_eq!(t.g.player(P0).max_hand_size, Some(7));
 }
+
+#[test]
+fn strixhaven_stadium_tenth_point_counter_wins() {
+    cr!("104.3e");
+    assert_supported(&["Strixhaven Stadium"]);
+    // Three players, so the game goes on after P1 loses.
+    let mut t = TestGame::new(3);
+    let s = t.battlefield(P0, "Strixhaven Stadium");
+    t.g.add_counters(Entity::Object(s), "point", 9, None);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.has_lost(P1));
+    assert_eq!(t.counters(s, "point"), 0);
+}

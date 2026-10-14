@@ -203,3 +203,69 @@ fn player_shuffles_own_permanent(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "game rules: [player] shuffles a [permanent] they own into their library", priority: 100, parse: player_shuffles_own_permanent } }
+
+/// "Put a point counter on ~. Then if it has ten or more point counters on it, remove
+/// them all and that player loses the game." (Strixhaven Stadium): "it" is what the
+/// counter was put on, and "them" are those counters.
+fn if_counters_remove_them_all(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    fn last_counters(e: &Effect) -> Option<(Sel, crate::types::CounterKind)> {
+        match e {
+            Effect::AddCounters { what, kind, .. } => Some((what.clone(), kind.clone())),
+            Effect::Seq(v) => v.last().and_then(last_counters),
+            _ => None,
+        }
+    }
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let Some(r) = l.strip_prefix("if it has ") else {
+        return false;
+    };
+    let Some((it, put_kind)) = last_counters(prev) else {
+        return false;
+    };
+    let Some((n, r)) = crate::oracle::phrases::parse_number(r) else {
+        return false;
+    };
+    if n.as_const().is_none() {
+        return false;
+    }
+    let Some((kind, r)) = r
+        .trim_start()
+        .strip_prefix("or more ")
+        .and_then(|r| r.split_once(" counters on it, "))
+    else {
+        return false;
+    };
+    if kind != put_kind.as_str() {
+        return false;
+    }
+    let Some(rest) = r.strip_prefix("remove them all") else {
+        return false;
+    };
+    let count = Value::CountersOn(Box::new(it.clone()), Some(kind.into()));
+    let mut then = vec![Effect::RemoveCounters {
+        what: it,
+        kind: Some(kind.into()),
+        n: count.clone(),
+    }];
+    if let Some(r) = rest.strip_prefix(" and ") {
+        let Some(e) = crate::oracle::effects::parse_clause(r, b) else {
+            return false;
+        };
+        then.push(e);
+    } else if !rest.is_empty() {
+        return false;
+    }
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::Compare(count, Cmp::Ge, n),
+            then: Box::new(Effect::seq(then)),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "game rules: then if it has N or more [kind] counters on it, remove them all and [instruction]", priority: 100, apply: if_counters_remove_them_all } }
