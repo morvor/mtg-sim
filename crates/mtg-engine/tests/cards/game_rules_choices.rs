@@ -93,3 +93,27 @@ fn nicol_bolas_ultimate_spares_opponents_with_a_legendary_creature() {
     assert!(t.has_lost(P1));
     assert!(!t.has_lost(P2));
 }
+
+#[test]
+fn sycorax_commander_discard_and_draw_one_fewer_or_damage() {
+    cr!("701.55a", "107.1b");
+    assert_supported(&["Sycorax Commander"]);
+    let mut t = TestGame::new(2);
+    for _ in 0..3 {
+        t.hand(P1, "Grizzly Bears");
+    }
+    option(&mut t, P1, 0);
+    t.enter(P0, "Sycorax Commander");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), 2);
+    assert_eq!(t.graveyard_size(P1), 3);
+    // The other option: damage equal to the cards in their hand.
+    let mut t = TestGame::new(2);
+    for _ in 0..3 {
+        t.hand(P1, "Grizzly Bears");
+    }
+    option(&mut t, P1, 1);
+    t.enter(P0, "Sycorax Commander");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}
