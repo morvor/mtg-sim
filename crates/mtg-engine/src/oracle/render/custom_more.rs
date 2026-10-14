@@ -108,6 +108,13 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_static_more(&mut self, name: &str) -> Option<String> {
+        // `kw/reveal_first_draw.rs` (CR 701.20a).
+        if name == crate::kw::reveal_first_draw::EACH_TURN {
+            return Some("reveal the first card you draw each turn".into());
+        }
+        if name == crate::kw::reveal_first_draw::YOUR_TURNS {
+            return Some("reveal the first card you draw on each of your turns".into());
+        }
         // "You may cast this card from your graveyard by discarding two cards in addition
         // to paying its other costs." The cost is the one the ability's rules read
         // (`kw/cast_self_from_graveyard.rs`).

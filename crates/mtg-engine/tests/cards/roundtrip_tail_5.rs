@@ -113,3 +113,79 @@ fn underworld_fires_exiles_only_permanents_it_actually_damaged() {
     assert!(t.in_graveyard(P1, "Kor Firewalker"), "{}", t.dump_log());
     assert!(t.in_exile("Hill Giant"), "{}", t.dump_log());
 }
+
+/// Whether P0 revealed a card with this name (the game log).
+fn was_revealed(t: &TestGame, card: &str) -> bool {
+    t.dump_log().contains(&format!("P0 reveals {card}"))
+}
+
+#[test]
+fn primitive_etchings_reveals_the_first_card_drawn_whatever_it_is() {
+    cr!("701.20a", "121.1");
+    ruling!(
+        "Rowen",
+        "The first sentence is a continuous ability. You reveal the card when you draw it"
+    );
+    // "Reveal the first card you draw each turn. Whenever you reveal a creature card this
+    // way, draw a card."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Primitive Etchings");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Island");
+    t.g.draw_cards(P0, 2);
+    t.settle();
+    assert!(was_revealed(&t, "Island"), "{}", t.dump_log());
+    assert!(!was_revealed(&t, "Grizzly Bears"));
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn keranos_reveals_only_on_your_turns() {
+    cr!("701.20a", "121.1");
+    // "Reveal the first card you draw on each of your turns."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Keranos, God of Storms");
+    t.set_step(P1, Step::PrecombatMain);
+    t.library_top(P0, "Island");
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert!(!was_revealed(&t, "Island"), "{}", t.dump_log());
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn ghosts_of_the_innocent_halves_damage_rounded_down() {
+    cr!("614.1a");
+    // "If a source would deal damage to a permanent or player, it deals half that damage,
+    // rounded down, to that permanent or player instead."
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Ghosts of the Innocent");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let life = t.life(P1);
+    if let Err(e) = t.cast_with(P0, bolt, &[Entity::Player(P1)]) {
+        panic!("cast: {e:?}\n{}", t.dump_log());
+    }
+    t.resolve_all();
+    assert_eq!(t.life(P1), life - 1, "{}", t.dump_log());
+}
+
+#[test]
+fn plaguecrafter_each_player_who_cant_sacrifice_discards() {
+    cr!("701.21a", "101.4");
+    // "When this creature enters, each player sacrifices a creature or planeswalker of
+    // their choice. Each player who can't discards a card."
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.hand(P1, "Island");
+    t.hand(P2, "Island");
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    let pc = t.enter(P0, "Plaguecrafter");
+    t.answer_choose(P0, &[Entity::Object(pc)]);
+    t.settle();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    // P1 sacrificed a creature; P2 had none and discards.
+    assert_eq!(t.hand_size(P1), 1, "{}", t.dump_log());
+    assert_eq!(t.hand_size(P2), 0, "{}", t.dump_log());
+}

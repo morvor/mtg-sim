@@ -29,6 +29,22 @@ pub(super) fn event_amount_words(t: &TriggerCond) -> Option<&'static str> {
     }
 }
 
+/// The kind of card of "Whenever you reveal a [card] this way" after "Reveal the first
+/// card you draw each turn" (or "on each of your turns"): the condition on a draw trigger
+/// that it's the first card drawn this turn and of that kind.
+pub(super) fn first_draw_revealed(c: &Condition) -> Option<&Filter> {
+    let Condition::And(v) = c else {
+        return None;
+    };
+    match v.as_slice() {
+        [Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(1)), Condition::SelMatches(Sel::TriggerObject, f)]
+        | [Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(1)), Condition::SelMatches(Sel::TriggerObject, f), Condition::PlayerMatches(PlayerRef::You, PlayerFilter::Active)] => {
+            Some(f)
+        }
+        _ => None,
+    }
+}
+
 /// "Choose a number from 0 to N" stored for a following instruction that uses it.
 fn chosen_number(e: &Effect) -> bool {
     matches!(

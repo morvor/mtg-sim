@@ -32,6 +32,20 @@ fn reveal_first_draw(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
     };
     let rest = rest.strip_prefix("whenever you reveal ")?;
     let mut out = Vec::new();
+    // The reveal itself: a static ability (`kw/reveal_first_draw.rs`). "You may reveal"
+    // is asked as the card is drawn; that choice isn't modeled, the triggered abilities'
+    // effects are optional instead.
+    if !may {
+        let name = if your_turns {
+            crate::kw::reveal_first_draw::YOUR_TURNS
+        } else {
+            crate::kw::reveal_first_draw::EACH_TURN
+        };
+        out.push(AbilityDef::new(
+            AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(name.into()))),
+            block,
+        ));
+    }
     for part in rest.split(". whenever you reveal ") {
         let (desc, effect) = part.split_once(" this way, ")?;
         let desc = desc

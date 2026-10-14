@@ -1021,6 +1021,20 @@ impl Renderer<'_> {
                     Ev::new("", s)
                 }
             }
+            // "Reveal the first card you draw each turn. Whenever you reveal a creature
+            // card this way, ...": the first card you draw (each turn, or on each of your
+            // turns), revealed by the static ability next to it
+            // (`kw/reveal_first_draw.rs`), if it's that kind of card.
+            TriggerCond::Where { trigger, cond }
+                if matches!(trigger.as_ref(), TriggerCond::Draws { who: PlayerRel::You })
+                    && super::more_terms::first_draw_revealed(cond).is_some() =>
+            {
+                let f = super::more_terms::first_draw_revealed(cond)
+                    .cloned()
+                    .unwrap_or(Filter::Any);
+                let n = self.noun_det(&f, Det::A);
+                Ev::new("you", format!("reveal {n} this way"))
+            }
             // "Whenever you draw your second card each turn".
             TriggerCond::Where { trigger, cond }
                 if matches!(trigger.as_ref(), TriggerCond::Draws { .. })
