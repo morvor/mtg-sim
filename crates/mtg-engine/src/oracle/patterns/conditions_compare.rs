@@ -236,6 +236,12 @@ fn parse_inner(c: &str, b: &mut Builder) -> Option<Condition> {
             return Some(Condition::Exists(f.you_control()));
         }
     }
+    if let Some(cond) = source_state_list(c) {
+        return Some(cond);
+    }
+    if let Some(cond) = chosen_player_controls(c) {
+        return Some(cond);
+    }
     if let Some(cond) = player_comparison(c, b) {
         return Some(cond);
     }
@@ -483,6 +489,65 @@ fn player_owns(c: &str, b: &mut Builder) -> Option<Condition> {
     ))
 }
 
+/// "~ is enchanted, equipped, and has a counter on it": each of a list of states of the
+/// source.
+fn source_state_list(c: &str) -> Option<Condition> {
+    let r = c.strip_prefix("~ is ")?;
+    if !r.contains(", ") {
+        return None;
+    }
+    let r = r.replace(", and ", ", ");
+    let mut conds = vec![];
+    for item in r.split(", ") {
+        if let Some(h) = item.strip_prefix("has ") {
+            let (cmp, n, kind) = crate::oracle::patterns::statics_conditions::counters_on_it(h)?;
+            conds.push(Condition::Compare(
+                Value::CountersOn(Box::new(Sel::This), kind),
+                cmp,
+                n,
+            ));
+        } else {
+            conds.push(Condition::SelMatches(Sel::This, state_filter(item)?));
+        }
+    }
+    (conds.len() >= 2).then_some(Condition::And(conds))
+}
+
+/// "the chosen player controls a nontoken permanent of the chosen color", "the chosen
+/// player controls no nontoken permanents of the chosen color" (the player chosen as the
+/// permanent entered, CR 607.2d).
+fn chosen_player_controls(c: &str) -> Option<Condition> {
+    let r = c.strip_prefix("the chosen player controls ")?;
+    let (neg, x) = if let Some(x) = r.strip_prefix("no ") {
+        (true, x)
+    } else {
+        (false, r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?)
+    };
+    let (f, _, tail) = parse_object_phrase(x)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let cond = Condition::Exists(Filter::and(vec![f, Filter::ControlledBy(PlayerRel::Chosen)]));
+    Some(if neg {
+        Condition::Not(Box::new(cond))
+    } else {
+        cond
+    })
+}
+
+/// "When the chosen player controls no nontoken permanents of the chosen color, sacrifice
+/// ~." (Jihad): a state trigger (CR 603.8).
+fn chosen_player_state_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(r);
+    if !r.starts_with("the chosen player controls no ") {
+        return None;
+    }
+    let cond = chosen_player_controls(r)?;
+    Some((TriggerCond::State(cond), Sel::This, PlayerRef::You))
+}
+
+inventory::submit! { super::TriggerPattern { name: "state trigger: the chosen player controls no ...", priority: 100, parse: chosen_player_state_trigger } }
+
 /// A player subject: "that player", "target player", "that player or that planeswalker's
 /// controller" (the player a "target player or planeswalker" is, or the planeswalker's
 /// controller).
@@ -507,7 +572,29 @@ fn player_subject(who: &str, b: &mut Builder) -> Option<PlayerRef> {
 /// "a creature has a -1/-1 counter on it", "a creature is attacking", "another permanent
 /// with the same name is on the battlefield", "a card with the same name is in a
 /// graveyard", "a nontoken permanent with the same name is on the battlefield".
+/// Whether "it" in the triggered ability being compiled is its source: the trigger is
+/// about the source ("Whenever ~ attacks, if a card is exiled with it, ...").
+pub fn trigger_about_source(b: &Builder) -> bool {
+    match &b.it {
+        Sel::This => true,
+        Sel::TriggerObject | Sel::TriggerLki => {
+            let raw = crate::oracle::raw_text().to_lowercase();
+            let name = crate::oracle::card_name().to_lowercase();
+            !name.is_empty()
+                && ["whenever ", "when "].iter().any(|w| {
+                    raw.contains(&format!("{w}{name} ")) || raw.contains(&format!("{w}this "))
+                })
+        }
+        _ => false,
+    }
+}
+
 fn exists(c: &str, b: &mut Builder) -> Option<Condition> {
+    // "a card is exiled with it": with the source (CR 607.2a).
+    if c.ends_with(" exiled with it") && trigger_about_source(b) {
+        let c2 = format!("{}~", &c[..c.len() - 2]);
+        return crate::oracle::statics::parse_condition(&c2, b.ctx);
+    }
     let r = c
         .strip_prefix("a ")
         .or_else(|| c.strip_prefix("an "))

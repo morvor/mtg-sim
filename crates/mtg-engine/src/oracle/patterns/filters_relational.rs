@@ -479,9 +479,11 @@ fn word_end(r: &str) -> bool {
 fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     // "... that shares a creature type with the sacrificed creature and has mana value
     // equal to 1 plus that creature's mana value" (Pyre of Heroes).
+    // "creatures that each have toughness greater than their power" (Catapult Fodder).
     let r = t
         .strip_prefix("with ")
-        .or_else(|| t.strip_prefix("and has "))?;
+        .or_else(|| t.strip_prefix("and has "))
+        .or_else(|| t.strip_prefix("that each have "))?;
     // "with lesser power [than ...]"
     for (p, cmp) in [
         ("lesser ", Cmp::Lt),

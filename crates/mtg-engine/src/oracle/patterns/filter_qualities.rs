@@ -27,6 +27,9 @@ pub const TAP_ABILITY: &str = "has an activated ability with {T} in its cost";
 /// permanents or tied for most common (each permanent counts once for each of its
 /// colors, CR 105.2).
 pub const MOST_COMMON_COLOR: &str = "shares a color with the most common color among all permanents";
+/// `Filter::Custom` prefix: "that you've put one or more [kind] counters on this turn"
+/// (CR 122.6: the player who put them), followed by the kind.
+pub const COUNTERS_PUT_BY_YOU_THIS_TURN: &str = "you put counters on it this turn:";
 /// `Filter::Custom`: an object with two or more card types.
 pub const TWO_CARD_TYPES: &str = "has two or more card types";
 
@@ -102,6 +105,17 @@ fn qualities<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
         if let Some(r) = t.strip_prefix(p) {
             return Some((Filter::Custom(NO_NAME.into()), r));
         }
+    }
+    // "that you've put one or more +1/+1 counters on this turn"
+    if let Some(x) = t.strip_prefix("that you've put one or more ") {
+        let (kind, r) = x.split_once(" counters on this turn")?;
+        if kind.contains(' ') {
+            return None;
+        }
+        return Some((
+            Filter::Custom(format!("{COUNTERS_PUT_BY_YOU_THIS_TURN}{kind}").into()),
+            r,
+        ));
     }
     if let Some(r) = t.strip_prefix("with two or more card types") {
         return Some((Filter::Custom(TWO_CARD_TYPES.into()), r));

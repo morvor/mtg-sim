@@ -1516,10 +1516,7 @@ pub(crate) fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String
     // "deal damage equal to its power to you and any target" (both get that damage).
     if let Some(r) = s.strip_prefix("you and ") {
         let (other, rest) = damage_recipients(r, b)?;
-        return Some((
-            Sel::Union(vec![Sel::Players(PlayerRef::You), other]),
-            rest,
-        ));
+        return Some((Sel::Union(vec![Sel::Players(PlayerRef::You), other]), rest));
     }
     // "Whenever an opponent draws a card, ~ deals 1 damage to them.": a player.
     if let Some(who) = super::patterns::pronoun_groups::them_player(s, b) {

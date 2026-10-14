@@ -34,7 +34,6 @@ impl KeywordRules for FilterQualities {
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
         use crate::oracle::patterns::filter_qualities as q;
-        let _ = ctx;
         let c = &g.obj(id).chars;
         match name {
             // CR 201.2a, 708.2a: a face-down permanent has no name.
@@ -45,6 +44,16 @@ impl KeywordRules for FilterQualities {
             })),
             // CR 205.2a.
             q::TWO_CARD_TYPES => Some(c.card_types.count() >= 2),
+            n if n.starts_with(q::COUNTERS_PUT_BY_YOU_THIS_TURN) => {
+                let kind = &n[q::COUNTERS_PUT_BY_YOU_THIS_TURN.len()..];
+                Some(g.turn_events.iter().any(|e| {
+                    matches!(e, crate::events::Event::CountersAdded { target, kind: k, by, n, .. }
+                        if *target == Entity::Object(id)
+                            && k.as_str() == kind
+                            && *by == Some(ctx.controller)
+                            && *n > 0)
+                }))
+            }
             q::MOST_COMMON_COLOR => {
                 let mut counts = [0usize; 5];
                 for p in g.permanents() {
