@@ -508,6 +508,10 @@ pub struct TurnHistory {
     /// Recorded by `kw/block_history.rs`.
     #[serde(default)]
     pub blocks: Vec<(ObjectId, ObjectId, PlayerId)>,
+    /// The timestamp as the turn began: a permanent whose `control_since` is earlier has
+    /// been controlled continuously by its controller since the beginning of the turn.
+    #[serde(default)]
+    pub began_at: Timestamp,
     /// Attacks declared this turn: (creature, what it attacked, the defending player)
     /// ("a player it has already attacked this turn"). Recorded by `kw/block_history.rs`.
     #[serde(default)]

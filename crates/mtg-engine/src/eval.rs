@@ -619,6 +619,10 @@ impl Game {
                     cb.blockers_of(id).contains(&s) || self.left_combat_pair(s, s, id)
                 })
             }),
+            Filter::ControlledSinceTurnBegan => {
+                let o = self.obj(id);
+                !o.summoning_sick || o.control_since < self.history.began_at
+            }
             Filter::BlockRelation { rel, other, when } => {
                 let others = self.eval_sel_objects(other, ctx);
                 crate::kw::block_history::block_relation(self, id, *rel, &others, *when)
@@ -770,6 +774,10 @@ impl Game {
                 .prev
                 .is_some_and(|p| self.history.creatures_died.contains(&p)),
             Filter::AttackedThisTurn => self.history.attackers.contains(&id),
+            Filter::AttackedThisCombat => self
+                .combat
+                .as_ref()
+                .is_some_and(|c| c.declared_attackers.iter().any(|(a, _)| *a == id)),
             Filter::LinkedChosenColor => self
                 .linked_choice(ctx)
                 .and_then(|ch| ch.color)

@@ -331,6 +331,7 @@ impl Game {
         self.turn.step_log.clear();
         self.turn.attacked_players.clear();
         self.last_turn_history = std::mem::take(&mut self.history);
+        self.history.began_at = self.next_timestamp;
         self.turn_events.clear();
         for p in self.active_players() {
             self.players[p.idx()].turns_taken += 1;

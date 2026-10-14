@@ -651,6 +651,9 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("blocking {s}"));
             }
+            Filter::ControlledSinceTurnBegan => np.rel.push(
+                "{alt:its controller has controlled continuously since the beginning of the turn|that player has controlled continuously since the beginning of the turn}".into(),
+            ),
             Filter::BlockRelation { rel, other, when } => {
                 let s = self.sel(other, Case::Obj);
                 let w = match when {
@@ -853,6 +856,7 @@ impl Renderer<'_> {
             Filter::Modified => np.status.push("modified".into()),
             Filter::DiedThisTurn => np.rel.push("that died this turn".into()),
             Filter::AttackedThisTurn => np.rel.push("that attacked this turn".into()),
+            Filter::AttackedThisCombat => np.rel.push("that attacked".into()),
             // "Choose a color. ... each card of that color": the color just chosen.
             Filter::ChosenColor => np.post.push("of {alt:the chosen color|that color}".into()),
             Filter::LinkedChosenColor => np.post.push("of the chosen color".into()),
@@ -995,6 +999,7 @@ impl Renderer<'_> {
             Filter::Modified => np.status.push("unmodified".into()),
             Filter::EnteredThisTurn => np.rel.push("that didn't enter this turn".into()),
             Filter::AttackedThisTurn => np.rel.push("that didn't attack this turn".into()),
+            Filter::AttackedThisCombat => np.rel.push("that didn't attack".into()),
             // "a spell from anywhere other than your hand": a spell is cast from its
             // caster's own hand (CR 601.2a); one that isn't in a hand either (Drannith
             // Magistrate's "can't cast spells from anywhere other than their hands").

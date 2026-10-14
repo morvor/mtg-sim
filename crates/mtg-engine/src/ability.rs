@@ -1385,6 +1385,10 @@ pub enum Filter {
     /// "creature blocking it" where "it" isn't the source: blocking one of the selected
     /// creatures.
     BlockingAnyOf(Box<Sel>),
+    /// Its controller has controlled it continuously since the beginning of the turn
+    /// ("non-Wall creature the active player has controlled continuously since the
+    /// beginning of the turn"; for the active player, CR 302.6's condition).
+    ControlledSinceTurnBegan,
     /// A block relation to the selected objects, now or in this combat's or this turn's
     /// block history ("creatures blocking or blocked by target creature", "creatures
     /// that were blocked by that creature this combat", "creatures it was blocking that
@@ -1481,6 +1485,9 @@ pub enum Filter {
     DiedThisTurn,
     /// Attacked this turn.
     AttackedThisTurn,
+    /// Was declared as an attacker in the current combat (CR 508.1): "creatures that
+    /// player controls that didn't attack" as attackers are declared.
+    AttackedThisCombat,
     /// "of the chosen color": has the color chosen for the source (CR 607.2d). Matches
     /// nothing while no color is chosen (CR 607.5a).
     ChosenColor,
