@@ -2009,7 +2009,10 @@ fn dealt_damage(r: &str) -> Option<Parsed> {
                         combat_only: true,
                     },
                 ]),
-                BatchPer::Batch,
+                // Once for you and once for each planeswalker dealt damage at the same
+                // time (Vengeful Pharaoh rulings): damage to you has no object, so all of
+                // it is one group.
+                BatchPer::Object,
                 PlayerRef::ActivePlayer,
             ),
             _ => None,
