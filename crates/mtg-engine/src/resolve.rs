@@ -2658,6 +2658,10 @@ impl Game {
         {
             if let Some(m) = cost.mana.as_mut().filter(|m| m.has_x()) {
                 *m = m.with_x(ctx.x.max(0) as u32);
+                // X = 0: a cost of {0}, still a cost (CR 118.5; War Tax rulings).
+                if m.symbols.is_empty() {
+                    m.symbols.push(crate::mana::ManaSymbol::Generic(0));
+                }
             }
         }
         // A restriction on a referenced player ("target player can't play lands this

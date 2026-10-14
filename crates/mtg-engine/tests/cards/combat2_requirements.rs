@@ -188,12 +188,19 @@ fn total_war_destroys_creatures_that_stayed_home() {
     t.g.tap(tapped);
     let new = t.enter(P0, "Grizzly Bears");
     let theirs = t.battlefield(P1, "Grizzly Bears");
+    // A vigilant attacker stays untapped: it attacked.
+    let angel = t.battlefield(P0, "Serra Angel");
     t.set_step(P0, Step::BeginningOfCombat);
-    declare(&mut t, P0, &[(attacker, Entity::Player(P1))]);
+    declare(
+        &mut t,
+        P0,
+        &[(attacker, Entity::Player(P1)), (angel, Entity::Player(P1))],
+    );
     t.resolve_all();
+    assert!(!t.obj_now(angel).tapped);
     assert!(t.on_battlefield(attacker));
     assert!(!t.on_battlefield(home));
-    for alive in [wall, tapped, new, theirs] {
+    for alive in [wall, tapped, new, theirs, angel] {
         assert!(t.on_battlefield(alive));
     }
 }
@@ -212,7 +219,16 @@ fn contested_game_ball_goes_to_the_attacking_player() {
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Hill Giant");
     t.set_step(P0, Step::BeginningOfCombat);
-    t.attack(&[(a, Entity::Player(P1)), (b, Entity::Player(P1))], &[]);
+    declare(
+        &mut t,
+        P0,
+        &[(a, Entity::Player(P1)), (b, Entity::Player(P1))],
+    );
+    // Two creatures deal combat damage at once: one trigger.
+    t.advance_to(P0, Step::CombatDamage);
+    t.settle();
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert_eq!(controller(&t, ball), P0);
     assert!(!t.obj_now(ball).tapped);

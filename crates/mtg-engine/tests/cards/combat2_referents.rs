@@ -45,6 +45,85 @@ fn war_tax_taxes_each_attacking_creature_this_turn() {
 }
 
 #[test]
+fn war_tax_doesnt_tax_attackers_already_declared() {
+    cr!("508.1h", "611.2c");
+    ruling!(
+        "War Tax",
+        "It will not add costs to any attackers already announced."
+    );
+    let mut t = TestGame::new(2);
+    let tax = t.battlefield(P1, "War Tax");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let p1 = Entity::Player(P1);
+    declare(&mut t, P0, &[(a, p1)]);
+    t.lands(P1, "Island", 3);
+    t.answer(P1, DecisionKind::X, mtg_engine::decision::Answer::Number(2));
+    t.activate(P1, tax, 0, &[]).unwrap();
+    t.resolve();
+    // The tax is in force, but the Bears keep attacking for free.
+    assert_eq!(mana_value(&total_attack_cost(&t.g, &[(a, p1)])), 2);
+    to_end_of_combat(&mut t);
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn war_tax_with_x_zero_makes_attacking_optional() {
+    cr!("118.5", "508.1d");
+    ruling!(
+        "War Tax",
+        "a cost of zero is not automatically paid, so the controller can choose to not pay"
+    );
+    for x in [None, Some(0)] {
+        let mut t = TestGame::new(2);
+        let tax = t.battlefield(P1, "War Tax");
+        let jugg = t.battlefield(P0, "Juggernaut");
+        t.set_step(P0, Step::BeginningOfCombat);
+        if let Some(x) = x {
+            t.lands(P1, "Island", 1);
+            t.answer(P1, DecisionKind::X, mtg_engine::decision::Answer::Number(x));
+            t.activate(P1, tax, 0, &[]).unwrap();
+            t.resolve();
+        }
+        // Juggernaut "attacks each combat if able": with a {0} cost to attack it no
+        // longer has to (CR 508.1d), but it still may.
+        assert_eq!(legal_attack(&mut t, &[]), x.is_some(), "X: {x:?}");
+        let p1 = Entity::Player(P1);
+        assert!(legal_attack(&mut t, &[(jugg, p1)]));
+        if x.is_some() {
+            assert_eq!(declare(&mut t, P0, &[(jugg, p1)]), vec![(jugg, p1)]);
+        }
+    }
+}
+
+#[test]
+fn war_cadence_with_x_zero_makes_blocking_optional() {
+    cr!("118.5", "509.1c");
+    ruling!(
+        "War Cadence",
+        "You can use this to make your creatures unable to block an attacker."
+    );
+    for x in [None, Some(0)] {
+        let mut t = TestGame::new(2);
+        let cadence = t.battlefield(P1, "War Cadence");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let lure = t.battlefield(P0, "Lure");
+        assert!(t.g.attach(lure, Entity::Object(bears)));
+        let wall = t.battlefield(P1, "Wall of Wood");
+        t.set_step(P0, Step::BeginningOfCombat);
+        declare(&mut t, P0, &[(bears, Entity::Player(P1))]);
+        if let Some(x) = x {
+            t.lands(P1, "Mountain", 1);
+            t.answer(P1, DecisionKind::X, mtg_engine::decision::Answer::Number(x));
+            t.activate(P1, cadence, 0, &[]).unwrap();
+            t.resolve();
+        }
+        // Lure: the Wall must block, unless blocking has a cost (even {0}).
+        assert_eq!(legal_blocks(&mut t, &[]), x.is_some(), "X: {x:?}");
+        assert!(legal_blocks(&mut t, &[(wall, bears)]));
+    }
+}
+
+#[test]
 fn war_cadence_taxes_each_blocking_creature_this_turn() {
     cr!("509.1c", "509.1d", "608.2h");
     supported("War Cadence");

@@ -38,7 +38,11 @@ inventory::submit! { FilterSuffixPattern { name: "combat referents: the active p
 /// declared): not declared as attackers this combat (CR 508.1).
 fn didnt_attack_suffix<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
     let rest = r.strip_prefix("that didn't attack")?;
-    if rest.starts_with(" this turn") || rest.starts_with(" during") {
+    // "that didn't attack this turn", "... or enter this turn": another phrase.
+    if [" this turn", " during", " or ", " and "]
+        .iter()
+        .any(|p| rest.starts_with(p))
+    {
         return None;
     }
     Some((Filter::not(Filter::AttackedThisCombat), rest))
@@ -81,6 +85,11 @@ fn shared_player_subject(l: &str, b: &mut Builder) -> Option<Effect> {
                 .next()
                 .is_some_and(|w| PLAYER_VERBS.contains(&w))
         })?;
+    // "with that name" after a reveal names an object's name, not a chosen one (Legion's
+    // End): not handled here.
+    if second.contains("that name") {
+        return None;
+    }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let a = parse_clause(&format!("{subject} {}", first.trim()), b);
     // Tapping and untapping don't depend on who does it: "untap it".

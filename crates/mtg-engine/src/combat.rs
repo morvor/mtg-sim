@@ -922,6 +922,7 @@ fn attack_restrictions_ok(
 pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Option<Cost> {
     let mut total = Cost::default();
     let mut any = false;
+    let mut zero = false;
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::AttackCost {
             attackers,
@@ -952,12 +953,24 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
                 // enchantments you control": counted from the restriction's point of view
                 // as the cost is determined (CR 508.1h).
                 let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                zero |= is_written_zero(&cost);
                 crate::casting::add_cost(&mut total, &cost);
                 any = true;
             }
         }
     }
-    (any && !total.is_free()).then_some(total)
+    (any && (zero || !total.is_free())).then_some(total)
+}
+
+/// A cost of {0} an effect states (War Tax with X = 0): still a cost, which isn't paid
+/// automatically (CR 118.5), so a creature with it isn't required to attack or block
+/// (CR 508.1d, 509.1c). A scaled cost that comes to nothing ("{1} for each counter on
+/// it" with no counters) isn't one.
+pub fn is_written_zero(c: &Cost) -> bool {
+    c.parts.is_empty()
+        && c.mana
+            .as_ref()
+            .is_some_and(|m| !m.symbols.is_empty() && m.is_zero())
 }
 
 /// Total required cost to attack for a declaration (CR 508.1h).
@@ -1583,6 +1596,7 @@ fn block_restrictions_ok(
 pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
     let mut total = Cost::default();
     let mut any = false;
+    let mut zero = false;
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::BlockCost { blockers, cost } = &r {
             let mut ctx = Ctx::new(s, c);
@@ -1590,19 +1604,22 @@ pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
             if g.restriction_applies(blocker, blockers, &ctx, &locked) {
                 // Scaled amounts are counted from the restriction's point of view (CR 509.1d).
                 let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                zero |= is_written_zero(&cost);
                 crate::casting::add_cost(&mut total, &cost);
                 any = true;
             }
         }
     }
-    (any && !total.is_free()).then_some(total)
+    (any && (zero || !total.is_free())).then_some(total)
 }
 
 /// The cost required for `blocker` to block the attacking creatures `blocked` (CR 509.1d):
 /// the costs to block at all, and those keyed to what it blocks ("can't block creatures
 /// with power 2 or greater unless you pay {1}"), once each.
 pub fn block_cost_for(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Option<Cost> {
-    let mut total = required_block_cost(g, blocker).unwrap_or_default();
+    let base = required_block_cost(g, blocker);
+    let mut zero = base.is_some();
+    let mut total = base.unwrap_or_default();
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::BlockCostAgainst {
             blockers,
@@ -1616,11 +1633,12 @@ pub fn block_cost_for(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Opti
                 && blocked.iter().any(|a| g.matches(*a, attackers, &ctx))
             {
                 let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                zero |= is_written_zero(&cost);
                 crate::casting::add_cost(&mut total, &cost);
             }
         }
     }
-    (!total.is_free()).then_some(total)
+    (zero || !total.is_free()).then_some(total)
 }
 
 /// Total cost to block for each player (CR 509.1d).

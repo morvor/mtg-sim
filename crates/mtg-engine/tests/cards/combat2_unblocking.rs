@@ -143,17 +143,25 @@ fn balduvian_warlord_doesnt_unblock_a_creature_another_creature_blocked() {
     let mut t = TestGame::new(2);
     let warlord = t.battlefield(P1, "Balduvian Warlord");
     let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
     let w1 = t.battlefield(P1, "Wall of Wood");
     let w2 = t.battlefield(P1, "Wall of Wood");
     t.set_step(P0, Step::BeginningOfCombat);
-    declare(&mut t, P0, &[(a, Entity::Player(P1))]);
+    declare(
+        &mut t,
+        P0,
+        &[(a, Entity::Player(P1)), (b, Entity::Player(P1))],
+    );
     declare_blocks(&mut t, P1, &[(w1, a), (w2, a)]);
     t.g.destroy(w2, None);
     t.settle();
+    // The first Wall moves to the other Bears; the first Bears stay blocked (by no
+    // creature), so neither deals damage to P1.
+    t.answer_choose(P1, &[Entity::Object(b)]);
     t.activate(P1, warlord, 0, &[Entity::Object(w1)]).unwrap();
     t.resolve();
-    // It's still blocked (and blocked again by the first Wall, the only attacker).
     assert!(blocked(&t, a));
+    assert_eq!(blocking(&t, w1), vec![b]);
     to_end_of_combat(&mut t);
     assert_eq!(t.life(P1), 20);
 }

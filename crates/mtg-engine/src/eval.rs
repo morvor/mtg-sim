@@ -351,6 +351,11 @@ impl Game {
                     self.history
                         .attacks
                         .iter()
+                        .filter(|(_, t, _)| match t {
+                            Entity::Player(_) => true,
+                            // A battle isn't a player or a planeswalker of theirs.
+                            Entity::Object(o) => self.obj(*o).is(CardType::Planeswalker),
+                        })
                         .map(|(a, t, dp)| {
                             (self.obj(*a).controller, *dp, matches!(t, Entity::Player(_)))
                         })
