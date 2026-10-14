@@ -768,6 +768,19 @@ impl Game {
                 duration,
             } => {
                 let objects = self.lock_restriction_objects(restriction, ctx);
+                // "For as long as they control it": the players a condition about the
+                // affected objects names are those as the effect begins.
+                let duration = &match duration {
+                    Duration::WhileCondition(Condition::SelMatches(s, f))
+                        if matches!(s, Sel::Var(v) if *v == vars::AFFECTED) =>
+                    {
+                        Duration::WhileCondition(Condition::SelMatches(
+                            s.clone(),
+                            self.bind_target_players(f, ctx),
+                        ))
+                    }
+                    d => d.clone(),
+                };
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
                 // objects it applies to, "for as long as it remains tapped", is checked
                 // for them).
