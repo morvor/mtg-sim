@@ -816,6 +816,28 @@ pub fn spell_cast_with(g: &mut Game, perm: Option<&CastPermission>, spell: Objec
     }
 }
 
+/// A permission to play cards from a player's zone the effect names ("you may cast a
+/// creature spell from that player's graveyard this turn"): that player is the one the
+/// effect means as it begins (CR 608.2h), not whoever "that player" might be later.
+pub fn lock_permission_players(g: &Game, effect: &mut PlayerModification, ctx: &Ctx) {
+    let PlayerModification::PlayPermission(pp) = effect else {
+        return;
+    };
+    fn walk(g: &Game, f: &mut Filter, ctx: &Ctx) {
+        match f {
+            Filter::OwnedByPlayer(r) => {
+                if let Some(p) = g.eval_player(r, ctx) {
+                    **r = PlayerRef::Player(p);
+                }
+            }
+            Filter::And(v) | Filter::Or(v) => v.iter_mut().for_each(|x| walk(g, x, ctx)),
+            Filter::Not(x) => walk(g, x, ctx),
+            _ => {}
+        }
+    }
+    walk(g, &mut pp.what, ctx);
+}
+
 /// The permissions `g.play_grants[before..]` were just given by the effect resolving with
 /// `ctx`: they share one "way", which the effect's later instructions refer to
 /// (`ctx.nums[THIS_WAY]`, kept by the delayed triggers it creates).

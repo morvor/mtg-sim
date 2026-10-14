@@ -209,3 +209,42 @@ fn kaya_emblem_casts_a_legendary_spell_from_hand_graveyard_or_exile() {
     assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda").len(), 1);
     assert!(matches!(t.zone(theirs), Zone::Graveyard(_)));
 }
+
+#[test]
+fn whispersteel_dagger_casts_a_creature_from_the_damaged_players_graveyard() {
+    cr!("601.3", "609.4b", "608.2h");
+    assert_supported(&["Whispersteel Dagger"]);
+    let mut t = TestGame::new(3);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let dagger = t.battlefield(P0, "Whispersteel Dagger");
+    t.g.attach(dagger, Entity::Object(bear));
+    let giant = t.graveyard(P1, "Hill Giant");
+    let other = t.graveyard(P2, "Hill Giant");
+    t.attack(&[(bear, Entity::Player(P1))], &[]);
+    t.advance_to(P0, Step::PostcombatMain);
+    // Paid with black mana as though it were red.
+    t.lands(P0, "Swamp", 4);
+    assert!(t.cast(P0, other).try_go().is_err());
+    t.cast(P0, giant).go();
+    t.resolve_all();
+    let g = t.named_on_battlefield("Hill Giant");
+    assert_eq!(g.len(), 1);
+    assert_eq!(t.obj_now(g[0]).controller, P0);
+}
+
+#[test]
+fn tinybones_the_pickpocket_casts_target_card_from_that_players_graveyard() {
+    cr!("608.2g", "118.14");
+    assert_supported(&["Tinybones, the Pickpocket"]);
+    let mut t = TestGame::new(2);
+    let tb = t.battlefield(P0, "Tinybones, the Pickpocket");
+    let giant = t.graveyard(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 4);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.answer_yes(P0, true);
+    t.attack(&[(tb, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    let g = t.named_on_battlefield("Hill Giant");
+    assert_eq!(g.len(), 1);
+    assert_eq!(t.obj_now(g[0]).controller, P0);
+}

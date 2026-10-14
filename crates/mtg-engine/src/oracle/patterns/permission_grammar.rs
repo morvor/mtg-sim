@@ -83,6 +83,8 @@ pub enum From {
     HandGraveyardOwnedExile,
     /// "from each opponent's graveyard": one card from each.
     EachOpponentGraveyard,
+    /// "from that player's graveyard" (the player a triggered ability is about).
+    TriggerPlayerGraveyard,
 }
 
 /// A parsed permission phrase.
@@ -119,6 +121,8 @@ pub struct Perm {
     /// "up to two sorcery spells": how many cards of the class (cast as the effect
     /// resolves).
     pub count: Option<u32>,
+    /// "cast target ..." with "you may" already read as the choice to do it.
+    pub subjectless: bool,
 }
 
 impl Perm {
@@ -511,6 +515,8 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
         (" from your graveyard", From::Graveyard),
         (" from the top of your graveyard", From::GraveyardTop),
         (" from each opponent's graveyard", From::EachOpponentGraveyard),
+        (" from that player's graveyard", From::TriggerPlayerGraveyard),
+        (" from the triggering player's graveyard", From::TriggerPlayerGraveyard),
         (" from any graveyard", From::AnyGraveyard),
         (" from exile", From::Exile),
         (" from the top of your library", From::LibraryTop),
@@ -847,6 +853,11 @@ pub fn parse(l: &str) -> Option<Perm> {
     // paying their mana costs.": an instruction (the player chooses which, if any).
     let (who, s) = match s.strip_prefix("cast any number of ") {
         Some(_) => (Who::You, s.as_str()),
+        // "cast target ... card from that player's graveyard" after "you may" was read.
+        None if s.starts_with("cast target ") => {
+            p.subjectless = true;
+            (Who::You, s.as_str())
+        }
         None => strip_subject(&s)?,
     };
     p.who = who;
@@ -907,7 +918,13 @@ pub fn parse(l: &str) -> Option<Perm> {
         .then(|| crate::oracle::phrases::parse_target(r))
         .flatten()
     {
-        // "cast target instant or sorcery card from your graveyard this turn".
+        // "cast target instant or sorcery card from your graveyard this turn", "cast
+        // target nonland permanent card from that player's graveyard" (the zone is part of
+        // what the target is).
+        let x = x
+            .strip_prefix(" from that player's graveyard")
+            .or_else(|| x.strip_prefix(" from the triggering player's graveyard"))
+            .unwrap_or(x);
         p.obj = Obj::Target {
             phrase: r[..r.len() - x.len()].trim().to_string(),
         };
@@ -1601,6 +1618,17 @@ fn class_permission_from(
             terms.any_owner = true;
             (ZoneKind::Graveyard, false, what)
         }
+        From::TriggerPlayerGraveyard => {
+            terms.any_owner = true;
+            (
+                ZoneKind::Graveyard,
+                false,
+                Filter::and(vec![
+                    Filter::OwnedByPlayer(Box::new(PlayerRef::TriggerPlayer)),
+                    what,
+                ]),
+            )
+        }
         From::Exile => (ZoneKind::Exile, false, what),
         From::LibraryTop => (ZoneKind::Library, true, what),
         From::Hand => (ZoneKind::Hand, false, what),
@@ -2011,14 +2039,14 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
                     who: PlayerRef::You,
                     what: sel.clone(),
                     free: p.free,
-                    optional: true,
+                    optional: !p.subjectless,
                 }
             } else {
                 Effect::PlayCard {
                     who: PlayerRef::You,
                     what: sel.clone(),
                     free: p.free,
-                    optional: true,
+                    optional: !p.subjectless,
                 }
             };
             if terms.alt_cost.is_some() && p.free {
