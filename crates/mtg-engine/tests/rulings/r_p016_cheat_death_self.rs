@@ -769,3 +769,49 @@ fn demonlord_of_ashmouth_may_be_exiled_instead_of_sacrificing() {
     assert_eq!(t.zone(d), Zone::Exile);
     assert!(t.on_battlefield(bears));
 }
+
+#[test]
+fn return_this_card_from_your_graveyard_wordings_still_work() {
+    cr!("400.7", "603.6e");
+    // An activated ability of the card in the graveyard (to hand).
+    supported("Pilgrim of the Ages");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let pilgrim = t.graveyard(P0, "Pilgrim of the Ages");
+    lots(&mut t, P0);
+    crate::r_s06_common::activate_containing(&mut t, P0, pilgrim, "{6}").unwrap();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Pilgrim of the Ages"));
+    // A triggered ability of the card in the graveyard (to the battlefield).
+    supported("Bladewing's Thrall");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Bladewing's Thrall");
+    t.answer_yes(P0, true);
+    crate::r_s05_common::enter(&mut t, P0, "Shivan Dragon");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Bladewing's Thrall").len(), 1);
+    // A leaves-the-battlefield trigger of an Aura that went to the graveyard first.
+    supported("Genju of the Cedars");
+    let mut t = TestGame::new(2);
+    let forest = t.battlefield(P0, "Forest");
+    let genju = t.battlefield(P0, "Genju of the Cedars");
+    t.g.attach(genju, o(forest));
+    t.settle();
+    t.answer_yes(P0, true);
+    destroy_and_resolve(&mut t, forest);
+    assert!(t.in_hand(P0, "Genju of the Cedars"));
+    // The same, but the Genju left the graveyard and came back first: a new object.
+    let mut t = TestGame::new(2);
+    let forest = t.battlefield(P0, "Forest");
+    let genju = t.battlefield(P0, "Genju of the Cedars");
+    t.g.attach(genju, o(forest));
+    t.settle();
+    t.answer_yes(P0, true);
+    t.g.destroy(forest, None);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Genju of the Cedars"));
+    move_to(&mut t, genju, Zone::Exile);
+    move_to(&mut t, genju, Zone::Graveyard(P0));
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Genju of the Cedars"));
+}

@@ -231,22 +231,33 @@ fn etched_champion_has_protection_from_each_color() {
         "\"Protection from all colors\" means protection from white, from blue, from black, from red, and from green."
     );
     supported("Etched Champion");
-    let mut t = TestGame::new(2);
-    t.set_step(P1, Step::PrecombatMain);
-    let champ = t.battlefield(P0, "Etched Champion");
-    t.battlefield(P0, "Ornithopter");
-    t.battlefield(P0, "Ornithopter");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    // Monocolored red and black spells can't target it.
-    for name in ["Lightning Bolt", "Doom Blade"] {
-        lots(&mut t, P1);
-        let s = t.hand(P1, name);
-        let from = t.asked().len();
-        t.answer_targets(P1, &[o(bears)]);
-        t.cast(P1, s).go();
-        let offered = &target_choices(&t, P1, from, "")[0];
-        assert!(!offered.contains(&o(champ)), "{name}");
-        assert!(offered.contains(&o(bears)), "{name}");
+    // A spell of each of the five colors can't target it with metalcraft, and can
+    // without it.
+    for metalcraft in [true, false] {
+        let mut t = TestGame::new(2);
+        t.set_step(P1, Step::PrecombatMain);
+        let champ = t.battlefield(P0, "Etched Champion");
+        if metalcraft {
+            t.battlefield(P0, "Ornithopter");
+            t.battlefield(P0, "Ornithopter");
+        }
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        for name in [
+            "Swords to Plowshares",
+            "Unsummon",
+            "Doom Blade",
+            "Lightning Bolt",
+            "Giant Growth",
+        ] {
+            lots(&mut t, P1);
+            let s = t.hand(P1, name);
+            let from = t.asked().len();
+            t.answer_targets(P1, &[o(bears)]);
+            t.cast(P1, s).go();
+            let offered = &target_choices(&t, P1, from, "")[0];
+            assert_eq!(offered.contains(&o(champ)), !metalcraft, "{name}");
+            assert!(offered.contains(&o(bears)), "{name}");
+        }
     }
 }
 
