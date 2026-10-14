@@ -75,6 +75,10 @@ pub enum From {
     },
     /// "from among them", "from among those cards": the cards an earlier instruction moved.
     AmongReferent,
+    /// "from the top of your graveyard".
+    GraveyardTop,
+    /// "from any graveyard".
+    AnyGraveyard,
 }
 
 /// A parsed permission phrase.
@@ -476,6 +480,8 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
     }
     for (p, z) in [
         (" from your graveyard", From::Graveyard),
+        (" from the top of your graveyard", From::GraveyardTop),
+        (" from any graveyard", From::AnyGraveyard),
         (" from exile", From::Exile),
         (" from the top of your library", From::LibraryTop),
         (" from your hand", From::Hand),
@@ -924,6 +930,17 @@ pub fn parse(l: &str) -> Option<Perm> {
     } else if let Some(x) = rest.strip_prefix(" from exile") {
         rest = x;
     }
+    // "a card from exile with a discovery counter on it": which cards in exile.
+    if p.from == Some(From::Exile) && p.zone_filter.is_none() {
+        if let Some((d, x)) = rest
+            .strip_prefix(" with ")
+            .and_then(|r| r.split_once(" counter on it").or_else(|| r.split_once(" counters on them")))
+        {
+            let f = object_filter(&format!("card with {d} counter on it"))?;
+            p.zone_filter = Some(f);
+            rest = x;
+        }
+    }
     // "You may play that card from exile this turn" (the cards are in exile).
     if matches!(p.obj, Obj::Referent { .. }) && p.from.is_none() {
         if let Some(x) = rest.strip_prefix(" from exile") {
@@ -1366,8 +1383,11 @@ fn referent_effect(
             };
             if p.look {
                 // "You may look at and play that card ...": only the player who gets the
-                // permission looks, and only while it's exiled (CR 406.3b).
-                if p.who != Who::You || !matches!(d, Duration::Permanent) {
+                // permission looks, and only while it's exiled (CR 406.3b). ("... this
+                // turn": having looked at it, they know what it is.)
+                if p.who != Who::You
+                    || !matches!(d, Duration::Permanent | Duration::EndOfTurn)
+                {
                     return None;
                 }
                 return Some(Effect::seq(vec![
@@ -1399,8 +1419,14 @@ fn class_permission_from(
         (Some(_), _) => return None,
         (None, _) => what,
     };
+    let mut terms = terms;
     let (zone, top_only, what) = match from {
         From::Graveyard => (ZoneKind::Graveyard, false, what),
+        From::GraveyardTop => (ZoneKind::Graveyard, true, what),
+        From::AnyGraveyard => {
+            terms.any_owner = true;
+            (ZoneKind::Graveyard, false, what)
+        }
         From::Exile => (ZoneKind::Exile, false, what),
         From::LibraryTop => (ZoneKind::Library, true, what),
         From::Hand => (ZoneKind::Hand, false, what),

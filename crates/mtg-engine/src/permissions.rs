@@ -161,6 +161,9 @@ fn in_permission_zone(g: &Game, p: PlayerId, card: ObjectId, perm: &PlayPermissi
                 o.zone == Zone::Library(p)
             }
         }
+        // "from the top of your graveyard", "from any graveyard".
+        ZoneKind::Graveyard if perm.terms.any_owner => matches!(o.zone, Zone::Graveyard(_)),
+        ZoneKind::Graveyard if perm.top_only => g.player(p).graveyard.last() == Some(&card),
         ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
         ZoneKind::Exile => o.zone == Zone::Exile,
         ZoneKind::Hand => o.zone == Zone::Hand(p),
@@ -368,6 +371,14 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
                 } else {
                     g.player(p).library.clone()
                 }
+            }
+            ZoneKind::Graveyard if perm.terms.any_owner => g
+                .players
+                .iter()
+                .flat_map(|q| q.graveyard.iter().copied())
+                .collect(),
+            ZoneKind::Graveyard if perm.top_only => {
+                g.player(p).graveyard.last().copied().into_iter().collect()
             }
             ZoneKind::Graveyard => g.player(p).graveyard.clone(),
             ZoneKind::Exile => g.exile.clone(),

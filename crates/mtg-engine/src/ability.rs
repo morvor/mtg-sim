@@ -3540,6 +3540,10 @@ pub struct PlayTerms {
     /// library instead": where each spell cast with the permission goes instead (CR 614.1a).
     #[serde(default)]
     pub graveyard_instead: Option<Destination>,
+    /// "from any graveyard": a static permission's zone is every player's, not only its
+    /// player's.
+    #[serde(default)]
+    pub any_owner: bool,
     /// The effect that gave the permission (0: none recorded), which "cast this way"
     /// refers to (see `permissions::PermissionUse`).
     #[serde(default)]
@@ -3604,6 +3608,7 @@ impl PlayTerms {
                 None => f.clone(),
             });
         }
+        self.any_owner |= other.any_owner;
         if other.graveyard_instead.is_some() {
             self.graveyard_instead = other.graveyard_instead.clone();
         }
