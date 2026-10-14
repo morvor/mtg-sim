@@ -627,7 +627,17 @@ inventory::submit! { EffectPattern { name: "spell cost grammar: the next spell y
 fn spells_cost_for_a_while(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (subject, rest) = split_verb(l)?;
-    let subj = parse_subject(subject)?;
+    // "If they do, spells they cast this turn cost {2} more to cast." (Academy
+    // Loremaster): the player the text already named ("that player").
+    // Without such a player (outside a triggered ability) "they" is not understood.
+    let they = (subject.contains(" they cast")).then(|| b.it_player.clone());
+    if they.as_ref().is_some_and(|p| {
+        !b.in_trigger || super::oracle_hardening_referents::is_no_player_referent(p)
+    }) {
+        return None;
+    }
+    let subject = subject.replace(" they cast", " you cast");
+    let subj = parse_subject(&subject)?;
     if subj.ordinal.is_some() || subj.singular || !subj.conds.is_empty() {
         return None;
     }
@@ -641,6 +651,8 @@ fn spells_cost_for_a_while(l: &str, b: &mut Builder) -> Option<Effect> {
         _ => return None,
     };
     let who = match subj.who {
+        PlayerRel::You if they.is_some() => they?,
+        _ if they.is_some() => return None,
         PlayerRel::You => PlayerRef::You,
         PlayerRel::Opponent => PlayerRef::EachOpponent,
         PlayerRel::Any => PlayerRef::EachPlayer,
