@@ -473,7 +473,9 @@ impl Renderer<'_> {
                 }
                 // "an exiled card used to craft ~ at random": the quality says where.
                 (Some(ZoneKind::Exile), None)
-                    if rest.iter().any(|x| matches!(x, Filter::Custom(n) if n == crate::kw::craft::USED_TO_CRAFT)) =>
+                    if rest.iter().any(
+                        |x| matches!(x, Filter::Custom(n) if n == crate::kw::craft::USED_TO_CRAFT),
+                    ) =>
                 {
                     String::new()
                 }

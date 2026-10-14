@@ -58,7 +58,9 @@ impl Renderer<'_> {
                     "if a spell or ability{by} causes {w} to discard {c}, {may}put it {dest} {{alt:instead of putting it into your graveyard|instead of putting it anywhere else|instead}}"
                 ))
             }
-            (E::Where { event, cond }, action) => self.qualified_where_replacement(event, cond, action),
+            (E::Where { event, cond }, action) => {
+                self.qualified_where_replacement(event, cond, action)
+            }
             // "Prevent all combat damage that would be dealt by creatures other than target
             // creature this turn": the target is named here first.
             (
@@ -86,11 +88,22 @@ impl Renderer<'_> {
                 if self.introduced.get(i as usize).copied().unwrap_or(true) {
                     return None;
                 }
-                let rest = Filter::and(v.iter().filter(|x| new_target(x).is_none()).cloned().collect());
+                let rest = Filter::and(
+                    v.iter()
+                        .filter(|x| new_target(x).is_none())
+                        .cloned()
+                        .collect(),
+                );
                 let n = self.noun(&rest, Num::Many);
                 let t = self.target_mention(i, super::players::Case::Obj);
-                let kind = if *combat_only { "combat damage" } else { "damage" };
-                Some(format!("prevent all {kind} that would be dealt by {n} other than {t}"))
+                let kind = if *combat_only {
+                    "combat damage"
+                } else {
+                    "damage"
+                };
+                Some(format!(
+                    "prevent all {kind} that would be dealt by {n} other than {t}"
+                ))
             }
             // "If you would begin your draw step, you may skip that step instead. If you
             // do, you gain 2 life."
@@ -193,7 +206,9 @@ impl Renderer<'_> {
                     A::Prevent => "prevent that damage".to_string(),
                     _ => return None,
                 };
-                Some(format!("if {src} would deal {amount} damage to {to}, {then}"))
+                Some(format!(
+                    "if {src} would deal {amount} damage to {to}, {then}"
+                ))
             }
             // "If a nontoken creature would enter and it wasn't cast, exile it instead."
             (E::EntersBattlefield(f), c, A::MoveInstead(d)) if is_not_cast(c) => {
@@ -233,7 +248,9 @@ impl Renderer<'_> {
                     other => self.player_filter_object(other),
                 };
                 let e = self.effect(e);
-                Some(format!("the first time {w} would draw a card each turn, instead {e}"))
+                Some(format!(
+                    "the first time {w} would draw a card each turn, instead {e}"
+                ))
             }
             _ => None,
         }

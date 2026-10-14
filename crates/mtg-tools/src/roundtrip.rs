@@ -55,7 +55,9 @@ Each was a card the compiler accepted but misread; each is fixed and has an in-g
 | \"Whenever a player attacks one of your opponents, that attacking player ...\": \"that attacking player\" was the attacked player (\"one or more of your opponents\" also triggered once per opponent attacked) | Jolene, the Plunder Queen, Combat Calligrapher, Ellie, Brick Master, Breena, the Demagogue | `choice_grammar.rs` (the active player, as `cards-tokens-copies` fixed it too), `patterns/combat.rs` (once per attack) |\n\
 | \"Enchant artifact or non-Aura enchantment\" was read as artifact enchantments or non-Aura enchantments (tests for this and the rows below in `tests/cards/roundtrip_tail_3.rs`) | Puppet Crafting | `oracle/keywords.rs` |\n\
 | \"For each card drawn this way, discard a card unless you sacrifice a permanent\" was one choice for all the cards | Read the Runes | `unless_grammar.rs`, `unless_you_sacrifice.rs`, `hand_graveyard_grammar.rs` |\n\
-| \"N damage divided as you choose among X target creatures\" allowed one to N targets whatever X was | Meteor Swarm | `oracle/effects.rs` (divided damage) |\n\n\
+| \"N damage divided as you choose among X target creatures\" allowed one to N targets whatever X was | Meteor Swarm | `oracle/effects.rs` (divided damage) |\n\
+| \"Target opponent blights 2\": the subject tried with each player keyword action's verb left a target behind for each verb that didn't fit (six targets; tests for this and the row below in `tests/cards/roundtrip_gaps_1.rs`) | Champion of the Weird | `patterns/a701_actions.rs` (`player_verb`, `object_verb`) |\n\
+| \"At the beginning of the next end step, exile that token unless ~ is your Ring-bearer\": \"that token\" was the exiled card (the token stayed) and the condition was checked as the token was created | Sauron, the Necromancer | `patterns/created_token_delayed_unless.rs` |\n\n\
 Approximation the comparison accepts: \"cycle or discard\" triggers are compiled as discard \
 triggers; cycling discards the card (CR 702.29a) and such a trigger triggers once for a \
 cycled card (CR 702.29d), so the two are the same.\n\n";

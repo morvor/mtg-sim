@@ -109,7 +109,8 @@ impl Renderer<'_> {
                 else {
                     return None;
                 };
-                let affected = |p: &Filter| matches!(p, Filter::Custom(n) if n == "attached_to_affected");
+                let affected =
+                    |p: &Filter| matches!(p, Filter::Custom(n) if n == "attached_to_affected");
                 if !parts.iter().any(affected) {
                     return None;
                 }
@@ -141,7 +142,10 @@ impl Renderer<'_> {
                 then,
                 otherwise,
             } if matches!(otherwise.as_ref(), Effect::Noop)
-                && matches!(c.as_ref(), Condition::SelMatches(Sel::This, Filter::Custom(_))) =>
+                && matches!(
+                    c.as_ref(),
+                    Condition::SelMatches(Sel::This, Filter::Custom(_))
+                ) =>
             {
                 let neg = self.condition(&Condition::Not(c.clone()));
                 let pos = self.condition(c);
@@ -166,7 +170,11 @@ impl Renderer<'_> {
                 if !f.iter().any(top) || !matches!(otherwise.as_ref(), Effect::Noop) {
                     return None;
                 }
-                let Effect::Move { what: Sel::Var(w), to } = then.as_ref() else {
+                let Effect::Move {
+                    what: Sel::Var(w),
+                    to,
+                } = then.as_ref()
+                else {
                     return None;
                 };
                 let key = |x: &Filter| format!("{x:?}");
@@ -176,7 +184,10 @@ impl Renderer<'_> {
                     .filter(|x| !f.iter().any(|y| key(y) == key(x)))
                     .cloned()
                     .collect();
-                if w != var || !f.iter().all(|y| g.iter().any(|x| key(x) == key(y))) || extra.is_empty() {
+                if w != var
+                    || !f.iter().all(|y| g.iter().any(|x| key(x) == key(y)))
+                    || extra.is_empty()
+                {
                     return None;
                 }
                 let owner = f.iter().find_map(|x| match x {
@@ -188,7 +199,9 @@ impl Renderer<'_> {
                 q.push(Filter::Card);
                 let n = self.noun_det(&Filter::and(q), Det::A);
                 let d = self.destination_phrase(to, false, false);
-                Some(format!("if the top card of {p} graveyard is {n}, put that card {d}"))
+                Some(format!(
+                    "if the top card of {p} graveyard is {n}, put that card {d}"
+                ))
             }
             // "You may draw an additional card if ~ is enchanted": the choice and the
             // condition, either way round.
@@ -219,12 +232,13 @@ impl Renderer<'_> {
 
     fn sacrifice_one_of_each(&mut self, who: &str, kinds: &[Filter]) -> String {
         let saved = std::mem::replace(&mut self.default_head, Some("permanent"));
-        let items: Vec<String> = kinds
-            .iter()
-            .map(|k| self.noun_det(k, Det::A))
-            .collect();
+        let items: Vec<String> = kinds.iter().map(|k| self.noun_det(k, Det::A)).collect();
         self.default_head = saved;
-        let verb = if who == "you" { "sacrifice" } else { "sacrifices" };
+        let verb = if who == "you" {
+            "sacrifice"
+        } else {
+            "sacrifices"
+        };
         format!(
             "{who} {verb} {} {{opt:of their choice}}",
             join_list(&items, "and")
@@ -313,7 +327,9 @@ impl Renderer<'_> {
                 })?;
                 let rest: Vec<Filter> = gv
                     .iter()
-                    .filter(|x| !matches!(x, Filter::ControlledBy(_) | Filter::ControlledByPlayer(_)))
+                    .filter(|x| {
+                        !matches!(x, Filter::ControlledBy(_) | Filter::ControlledByPlayer(_))
+                    })
                     .cloned()
                     .collect();
                 if format!("{:?}", Filter::and(rest)) != format!("{:?}", f.as_ref()) {

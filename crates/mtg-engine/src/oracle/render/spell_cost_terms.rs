@@ -55,10 +55,7 @@ impl Renderer<'_> {
                 self.rel_subject(cm.who)
             };
             let i = s.find(" cost ")?;
-            return Some(format!(
-                "the second {n} {who} cast each turn{}",
-                &s[i..]
-            ));
+            return Some(format!("the second {n} {who} cast each turn{}", &s[i..]));
         }
         // "Each spell costs {3} more to cast except during its controller's turn".
         if let Some(base) = without(f, scg::CASTER_NOT_ACTIVE) {

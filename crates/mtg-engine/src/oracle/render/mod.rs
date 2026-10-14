@@ -10,10 +10,10 @@
 //! renderer can't put into words is recorded as a *gap* ([`Renderer::gap`]) and makes the
 //! card a mismatch: nothing is silently dropped.
 
-pub mod compare;
 mod ability_cost_terms;
-mod condition_terms;
 mod activation_triggers;
+pub mod compare;
+mod condition_terms;
 mod copy_exceptions;
 mod costs;
 mod counter_replacements;

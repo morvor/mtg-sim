@@ -388,7 +388,8 @@ impl Renderer<'_> {
             // "a land or double-faced card".
             Filter::Or(v)
                 if v.iter().any(is_double_faced)
-                    && v.iter().all(|x| is_double_faced(x) || matches!(x, Filter::Type(_))) =>
+                    && v.iter()
+                        .all(|x| is_double_faced(x) || matches!(x, Filter::Type(_))) =>
             {
                 for x in v {
                     np.alts.push(match x {
@@ -403,7 +404,8 @@ impl Renderer<'_> {
             // "an artifact card with mana cost {0} or {1}".
             Filter::Or(v) if v.len() > 1 && v.iter().all(|x| mana_cost_is(x).is_some()) => {
                 let costs: Vec<String> = v.iter().filter_map(mana_cost_is).collect();
-                np.with.push(format!("mana cost {}", join_list(&costs, "or")));
+                np.with
+                    .push(format!("mana cost {}", join_list(&costs, "or")));
             }
             // "a card named Festering Newt or Bubbling Cauldron".
             Filter::Or(v) if v.len() > 1 && v.iter().all(|x| matches!(x, Filter::Named(_))) => {
@@ -1528,7 +1530,11 @@ impl Renderer<'_> {
                 let d2 = det.clone();
                 let (a, b) = self.two_ways(|r| r.noun_det(f, det), |r| r.noun_det(&g, d2));
                 self.factoring = false;
-                return if a == b { a } else { format!("{{alt:{a}|{b}}}") };
+                return if a == b {
+                    a
+                } else {
+                    format!("{{alt:{a}|{b}}}")
+                };
             }
         }
         if let Filter::Custom(n) = f {
@@ -1860,7 +1866,11 @@ pub(crate) fn factor_or(f: &Filter) -> Filter {
         let key = |x: &Filter| format!("{x:?}");
         let common: Vec<&Filter> = parts[0]
             .iter()
-            .filter(|x| parts[1..].iter().all(|p| p.iter().any(|y| key(y) == key(x))))
+            .filter(|x| {
+                parts[1..]
+                    .iter()
+                    .all(|p| p.iter().any(|y| key(y) == key(x)))
+            })
             .copied()
             .collect();
         if common.is_empty() {

@@ -45,24 +45,26 @@ const FROM_ELSEWHERE: &str = "from anywhere other than {alt:your|their} hand";
 
 /// The filter without "came from a hand" negated, if it has that.
 fn not_from_hand(f: &Filter) -> Option<Filter> {
-    let is_it = |x: &Filter| {
-        matches!(x, Filter::Not(c) if matches!(c.as_ref(), Filter::Custom(n) if n == "came from:Hand"))
-    };
+    let is_it = |x: &Filter| matches!(x, Filter::Not(c) if matches!(c.as_ref(), Filter::Custom(n) if n == "came from:Hand"));
     let Filter::And(v) = f else {
         return None;
     };
     if !v.iter().any(is_it) {
         return None;
     }
-    Some(Filter::and(v.iter().filter(|x| !is_it(x)).cloned().collect()))
+    Some(Filter::and(
+        v.iter().filter(|x| !is_it(x)).cloned().collect(),
+    ))
 }
 
 impl Renderer<'_> {
     /// "you play a land or cast a spell from anywhere other than your hand": both events
     /// qualified the same way, said once.
     fn land_or_spell_from_elsewhere(&mut self, v: &[TriggerCond]) -> Option<(String, String)> {
-        let [TriggerCond::LandPlayed { who, filter }, TriggerCond::CastSpell { who: w2, filter: sf }] =
-            v
+        let [TriggerCond::LandPlayed { who, filter }, TriggerCond::CastSpell {
+            who: w2,
+            filter: sf,
+        }] = v
         else {
             return None;
         };
@@ -73,13 +75,16 @@ impl Renderer<'_> {
         let Filter::And(sv) = sf else {
             return None;
         };
-        let not_cast_from_hand = |x: &Filter| {
-            matches!(x, Filter::Not(c) if matches!(c.as_ref(), Filter::CastFrom(ZoneKind::Hand)))
-        };
+        let not_cast_from_hand = |x: &Filter| matches!(x, Filter::Not(c) if matches!(c.as_ref(), Filter::CastFrom(ZoneKind::Hand)));
         if !sv.iter().any(not_cast_from_hand) {
             return None;
         }
-        let spell = Filter::and(sv.iter().filter(|x| !not_cast_from_hand(x)).cloned().collect());
+        let spell = Filter::and(
+            sv.iter()
+                .filter(|x| !not_cast_from_hand(x))
+                .cloned()
+                .collect(),
+        );
         let w = self.rel_subject(*who);
         let l = self.noun_det(&land, Det::A);
         let s = self.spell_noun(&spell, Det::A);
@@ -329,12 +334,16 @@ impl Renderer<'_> {
                         format!(" on {p} turn")
                     }
                 };
-                Some((String::new(), format!("the end of the first combat phase{on}")))
+                Some((
+                    String::new(),
+                    format!("the end of the first combat phase{on}"),
+                ))
             }
             // "When a Faerie is championed with ~" (CR 702.72a).
-            (TriggerCond::Custom(n), Condition::SelMatches(Sel::TriggerLki | Sel::TriggerObject, f))
-                if n == "champion:championed with this" =>
-            {
+            (
+                TriggerCond::Custom(n),
+                Condition::SelMatches(Sel::TriggerLki | Sel::TriggerObject, f),
+            ) if n == "champion:championed with this" => {
                 let o = self.noun_det(f, Det::A);
                 let m = self.me();
                 Some((o, format!("is championed with {m}")))
@@ -361,7 +370,10 @@ impl Renderer<'_> {
                 let o = self.noun_det(other, Det::A);
                 if let Some(rest) = o.strip_prefix("a ").or_else(|| o.strip_prefix("an ")) {
                     let poss = super::nouns::possessive(&o);
-                    format!("{{alt:{poss} ability|an ability of {}}}", with_article(rest))
+                    format!(
+                        "{{alt:{poss} ability|an ability of {}}}",
+                        with_article(rest)
+                    )
                 } else {
                     format!("an ability of {o}")
                 }

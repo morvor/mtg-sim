@@ -48,7 +48,8 @@ impl Renderer<'_> {
                     let Condition::SelMatches(Sel::Target(t), f) = x else {
                         return None;
                     };
-                    if *t as usize != i || f0.is_some_and(|g| format!("{g:?}") != format!("{f:?}")) {
+                    if *t as usize != i || f0.is_some_and(|g| format!("{g:?}") != format!("{f:?}"))
+                    {
                         return None;
                     }
                     f0 = Some(f);
@@ -88,9 +89,10 @@ impl Renderer<'_> {
         }
         let saved = self.targeted_noun.replace("the creature it targets");
         let (amt, tail) = match v {
-            Value::PowerOf(_) => {
-                ("{X}".to_string(), ", where X is the power of the creature it targets".to_string())
-            }
+            Value::PowerOf(_) => (
+                "{X}".to_string(),
+                ", where X is the power of the creature it targets".to_string(),
+            ),
             Value::CountersOn(_, Some(c)) => (
                 "{1}".to_string(),
                 format!(" for each {} counter on the creature it targets", c),
