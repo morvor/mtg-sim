@@ -332,6 +332,7 @@ impl Game {
         self.turn.step_log.clear();
         self.turn.attacked_players.clear();
         self.last_turn_history = std::mem::take(&mut self.history);
+        self.history.began_at = self.next_timestamp;
         let events = std::mem::take(&mut self.turn_events);
         if let Some(players) = ended {
             crate::history_query::record_turn(self, players, events);

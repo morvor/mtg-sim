@@ -174,6 +174,10 @@ impl Renderer<'_> {
             crate::kw::game_rules::TIMES_IT_WAS_CAST => {
                 "the number of times it's been cast from the command zone this game".into()
             }
+            // Pack tactics: the attackers' power as they were declared.
+            crate::kw::pack_tactics::ATTACKED_WITH_TOTAL_POWER => {
+                "the total power of the creatures you attacked with this combat".into()
+            }
             crate::kwa::ring::TIMES_TEMPTED => {
                 "the number of times the Ring has tempted you this game".into()
             }
@@ -1020,6 +1024,9 @@ impl Renderer<'_> {
     /// or 3", "your team controls" (you or a teammate, CR 808.2), "from graveyards or exile"
     /// (a spell cast from there, or a card there).
     pub(crate) fn or_quality(&mut self, v: &[Filter]) -> Option<String> {
+        if let Some(q) = self.or_predicates(v) {
+            return Some(q);
+        }
         let mvs: Option<Vec<String>> = v
             .iter()
             .map(|x| match x {

@@ -418,6 +418,21 @@ impl Game {
                 crate::variants::command_cards_controlled_by_owners(self, &live);
             }
             if layer == Layer::L4Type {
+                // CR 205.3d: an object has only the subtypes that correspond to its card
+                // types. A creature type an effect gave it ("It's a Phyrexian in addition
+                // to its other types") is gone while it isn't a creature, and back when it
+                // is one again (Terror of Towashi rulings).
+                for id in &live {
+                    let c = &mut self.objects[id.0 as usize].chars;
+                    let types = c.card_types;
+                    if c.subtypes.iter().any(|s| !subtype_still_valid(s, types)) {
+                        c.subtypes.retain(|s| subtype_still_valid(s, types));
+                    }
+                    // The same for "every creature type" (changeling).
+                    if !types.contains(CardType::Creature) && !types.contains(CardType::Kindred) {
+                        c.all_creature_types = false;
+                    }
+                }
                 // CR 305.6: basic land types have intrinsic mana abilities. They're
                 // determined by the object's types after layer 4 (CR 305.7) and can be
                 // removed by layer 6 effects.

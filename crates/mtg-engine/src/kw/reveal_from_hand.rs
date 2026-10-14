@@ -21,6 +21,11 @@ pub const REVEALED: Var = vars::USER + 2743;
 /// its owner).
 pub const REVEAL_CHOSEN: &str = "reveal the chosen cards from hand";
 
+/// The same for "reveal any number of ... cards from your hand": revealing zero cards is
+/// still doing it, so a following "When you do, ..." triggers anyway (CR 603.12; see the
+/// rulings on Invasion of Tarkir).
+pub const REVEAL_CHOSEN_ANY: &str = "reveal any number of the chosen cards from hand";
+
 pub struct RevealFromHand;
 
 impl KeywordRules for RevealFromHand {
@@ -29,7 +34,7 @@ impl KeywordRules for RevealFromHand {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
-        if name != REVEAL_CHOSEN {
+        if name != REVEAL_CHOSEN && name != REVEAL_CHOSEN_ANY {
             return false;
         }
         let cards: Vec<ObjectId> = ctx
@@ -55,7 +60,8 @@ impl KeywordRules for RevealFromHand {
         for (p, v) in by_owner {
             crate::reveal::reveal_in(g, p, &v, Some(ctx));
         }
-        ctx.prev_happened = ctx.vars.get(&REVEALED).is_some_and(|v| !v.is_empty());
+        ctx.prev_happened = name == REVEAL_CHOSEN_ANY
+            || ctx.vars.get(&REVEALED).is_some_and(|v| !v.is_empty());
         true
     }
 }

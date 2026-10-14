@@ -2026,6 +2026,22 @@ fn restriction_predicate_core(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
         "assigns no combat damage" | "assign no combat damage" => {
             return Some(vec![Restriction::AssignsNoCombatDamage(fc)])
         }
+        // CR 609.4: evasion that doesn't stop it from blocking (see
+        // `Restriction::BlockIgnoringEvasion`).
+        "can block creatures with shadow as though they didn't have shadow" => {
+            return Some(vec![Restriction::BlockIgnoringEvasion {
+                blocker: fc,
+                attackers: Filter::Any,
+                evasion: crate::keywords::KeywordKind::Shadow,
+            }])
+        }
+        "can block creatures with landwalk abilities as though they didn't have those abilities" => {
+            return Some(vec![Restriction::BlockIgnoringEvasion {
+                blocker: fc,
+                attackers: Filter::Any,
+                evasion: crate::keywords::KeywordKind::Landwalk,
+            }])
+        }
         "attack or block each combat if able" | "attacks or blocks each combat if able" => {
             return Some(vec![
                 Restriction::MustAttack(fc.clone()),
@@ -2058,6 +2074,21 @@ fn restriction_predicate_core(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
         return Some(vec![Restriction::CantBeTargeted {
             what: fc,
             by: TargetRestriction::Sources(targeting_sources(x)?),
+        }]);
+    }
+    // "can block Dragons as though it had reach" (CR 609.4, 702.17b).
+    if let Some(x) = p
+        .strip_prefix("can block ")
+        .and_then(|r| r.strip_suffix(" as though it had reach"))
+    {
+        let (a, plural) = whole_object_phrase(x)?;
+        if !plural {
+            return None;
+        }
+        return Some(vec![Restriction::BlockIgnoringEvasion {
+            blocker: fc,
+            attackers: a,
+            evasion: crate::keywords::KeywordKind::Flying,
         }]);
     }
     // "can't block it", "can't block creatures with power 2 or greater", "Cowards can't

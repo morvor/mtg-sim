@@ -470,6 +470,18 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               your turn.",
     },
     Equivalence {
+        pattern: r"\b(?:has|have) the chosen creature type in addition to (its|their) other types\b",
+        replacement: "is the chosen type in addition to $1 other types",
+        why: "An object that has a creature type in addition to its other types is that \
+              subtype as well as what it was (CR 205.1b, 205.3).",
+    },
+    Equivalence {
+        pattern: r"\bas long as it's an extra turn\b",
+        replacement: "during extra turns",
+        why: "A static ability that applies \"as long as it's an extra turn\" applies during \
+              each extra turn (CR 500.7) and no other.",
+    },
+    Equivalence {
         pattern: r"\byour life total is less than (\d+|[a-z]+)\b",
         replacement: "you have less than $1 life",
         why: "A player's life total is the amount of life they have (CR 119.1).",
@@ -1236,6 +1248,27 @@ fn singular(w: &str) -> String {
     w.to_string()
 }
 
+/// A plural noun for objects or players that no clause starts with as its verb.
+fn is_plural_object_noun(w: &str) -> bool {
+    matches!(
+        w,
+        "creatures"
+            | "planeswalkers"
+            | "artifacts"
+            | "enchantments"
+            | "lands"
+            | "permanents"
+            | "cards"
+            | "spells"
+            | "tokens"
+            | "battles"
+            | "instants"
+            | "sorceries"
+            | "players"
+            | "opponents"
+    )
+}
+
 /// Normalizes one unit (an ability line or keyword) into comparable tokens.
 pub fn normalize_unit(text: &str) -> Vec<String> {
     let mut s = text
@@ -1252,7 +1285,22 @@ pub fn normalize_unit(text: &str) -> Vec<String> {
         // Until nothing changes (a few rounds): "each player draws two cards, then
         // discards three cards, then loses 4 life" names the subject once per clause.
         for _ in 0..6 {
-            let n = re.replace_all(&s, e.replacement).to_string();
+            let n = re
+                .replace_all(&s, |c: &regex::Captures| {
+                    // The shared-subject rewrites ("... and [verb]s"): a plural noun after
+                    // "and" lists objects, it isn't a clause ("sacrifices a creature with
+                    // the greatest mana value among creatures and planeswalkers they
+                    // control").
+                    if e.replacement.ends_with(" $6")
+                        && c.get(6).is_some_and(|w| is_plural_object_noun(w.as_str()))
+                    {
+                        return c[0].to_string();
+                    }
+                    let mut out = String::new();
+                    c.expand(e.replacement, &mut out);
+                    out
+                })
+                .to_string();
             if n == s {
                 break;
             }
@@ -1722,7 +1770,8 @@ fn leading_for_each(s: &str) -> String {
     };
     re.replace_all(s, |c: &regex::Captures| {
         let (thing, clause) = (&c[2], &c[3]);
-        let words: Vec<&str> = clause.split(' ').collect();
+        // (Words of a rendering's alternatives count too: "{alt:that creature|it}".)
+        let words: Vec<&str> = clause.split([' ', '|', '{', '}', ':']).collect();
         let refers = words.iter().any(|w| {
             matches!(
                 *w,
@@ -2561,6 +2610,19 @@ mod tests {
 
     fn units(texts: &[&str]) -> Vec<Vec<String>> {
         texts.iter().map(|t| normalize_unit(t)).collect()
+    }
+
+    /// "and planeswalkers" after a shared subject is a list of objects, not a clause
+    /// sharing the subject; "and loses 3 life" is.
+    #[test]
+    fn a_plural_noun_after_and_is_not_a_shared_subject_clause() {
+        let s = normalize_unit(
+            "Each opponent sacrifices a creature with the greatest mana value among creatures and planeswalkers they control.",
+        )
+        .join(" ");
+        assert!(!s.contains("each opponent planeswalker"), "{s}");
+        let s = normalize_unit("Each opponent sacrifices a creature and loses 3 life.").join(" ");
+        assert!(s.contains("creature each opponent lose"), "{s}");
     }
 
     /// A condition stated once for "A and B" applies to both; for "A. As long as X, B"

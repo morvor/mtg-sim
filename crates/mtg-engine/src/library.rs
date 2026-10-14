@@ -274,7 +274,9 @@ pub fn dig(
         // "Look at the top N cards": the looked-at cards are "them" for what follows.
         ctx.set_var(vars::IT, cards.iter().map(|o| Entity::Object(*o)).collect());
     }
-    place_rest(g, p, rest, rest_to, ctx);
+    crate::dig_steps::note_placed(ctx, &moved);
+    let placed = place_rest(g, p, rest, rest_to, ctx);
+    crate::dig_steps::note_placed(ctx, &placed);
 }
 
 /// Puts the cards left over from looking at or revealing cards from the top of `p`'s
@@ -287,11 +289,12 @@ pub(crate) fn place_rest(
     rest: Vec<ObjectId>,
     rest_to: &Destination,
     ctx: &mut Ctx,
-) {
+) -> Vec<ObjectId> {
     if rest_to.zone != ZoneKind::Library {
-        g.move_to_destination(rest, rest_to, ctx);
-        return;
+        return g.move_to_destination(rest, rest_to, ctx);
     }
+    // (Cards rearranged in their library stay the same objects, CR 400.7.)
+    let placed = rest.clone();
     match rest_to.position {
         LibraryPosition::Top => {
             let order = choose_order(g, p, &rest, "Order the cards to put on top (top first)");
@@ -317,6 +320,7 @@ pub(crate) fn place_rest(
         }
         LibraryPosition::Shuffled => g.shuffle_library(p),
     }
+    placed
 }
 
 /// Asks `p` to order `cards` (known to them); returns them in the chosen order.

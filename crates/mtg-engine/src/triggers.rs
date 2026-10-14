@@ -1165,8 +1165,11 @@ impl Game {
             }
             (TriggerCond::AttacksUnblocked(f), Event::AttackerUnblocked { attacker }) => {
                 if self.matches(*attacker, f, &ctx) {
+                    // "that player": the defending player (as for "whenever ~ attacks").
+                    let c = self.combat.as_ref();
                     one(EventInfo {
                         object: Some(*attacker),
+                        player: c.and_then(|c| c.defending_player_of(self, *attacker)),
                         ..Default::default()
                     })
                 } else {

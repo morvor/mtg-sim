@@ -455,6 +455,12 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         if x_defined.is_none() && s.to_lowercase().starts_with("otherwise, ") {
             super::patterns::conditional_followups::group_condition_run(&mut effects);
         }
+        // "Then repeat this process for ...", "Repeat the following process X times.":
+        // about the instructions so far (see `patterns::followup_loops`).
+        if x_defined.is_none() && super::patterns::followup_loops::sentence(&s, &mut effects, b) {
+            b.sentences += 1;
+            continue;
+        }
         // Sentences that modify the previous one ("It can't be regenerated.").
         let before_followup = (b.it.clone(), b.targets.len());
         let followed_up = match effects.last_mut() {
@@ -551,6 +557,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
             });
         }
     }
+    super::patterns::followup_loops::finish(&mut effects);
     let e = super::patterns::oracle_hardening_referents::finish_introduced(
         crate::trigger_timing::join_instructions(effects),
         b,

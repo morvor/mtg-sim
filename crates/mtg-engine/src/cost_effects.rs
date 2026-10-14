@@ -73,6 +73,18 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
         Effect::Unattach {
             what: Sel::Choose { filter, count, .. },
         } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
+        // "Put a -1/-1 counter on a creature you control" (an "unless" action, Tourach's
+        // Chant): a creature to put it on.
+        Effect::AddCounters {
+            what:
+                Sel::Choose {
+                    filter,
+                    count,
+                    up_to: false,
+                    ..
+                },
+            ..
+        } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
         // "Sacrifice that artifact" (an "unless" action, CR 118.12a): a player can
         // sacrifice only permanents they control (CR 701.21a).
         Effect::SacrificeObjects { what } => {

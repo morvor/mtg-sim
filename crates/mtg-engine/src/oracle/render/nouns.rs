@@ -655,6 +655,39 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("blocking {s}"));
             }
+            Filter::BandedWith(s) => {
+                let s = self.sel(s, Case::Obj);
+                np.post.push(format!("banded with {s}"));
+            }
+            Filter::AttackingObject(of) => {
+                let n = self.noun(of, Num::One);
+                np.post.push(format!("attacking {n}"));
+            }
+            Filter::ControlledSinceTurnBegan => np.rel.push(
+                "{alt:its controller has controlled continuously since the beginning of the turn|that player has controlled continuously since the beginning of the turn}".into(),
+            ),
+            Filter::BlockRelation { rel, other, when } => {
+                let s = self.sel(other, Case::Obj);
+                let w = match when {
+                    BlockWhen::Now => "",
+                    BlockWhen::ThisCombat => " this combat",
+                    BlockWhen::ThisTurn => " this turn",
+                };
+                let past = !matches!(when, BlockWhen::Now);
+                np.rel.push(match (rel, past) {
+                    (BlockRel::Blocking, false) => format!("blocking {s}"),
+                    (BlockRel::BlockedBy, false) => format!("blocked by {s}"),
+                    (BlockRel::BlockingOrBlockedBy, false) => format!("blocking or blocked by {s}"),
+                    (BlockRel::Blocking, true) => format!("that blocked {s}{w}"),
+                    (BlockRel::BlockedBy, true) => format!("that were blocked by {s}{w}"),
+                    (BlockRel::BlockingOrBlockedBy, true) => {
+                        format!("that blocked or were blocked by {s}{w}")
+                    }
+                    (BlockRel::BlockedOnlyBy, _) => {
+                        format!("that had become blocked by only {s}{w}")
+                    }
+                });
+            }
             Filter::TargetOf(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.rel.push(format!("targeted by {s}"));
@@ -839,6 +872,7 @@ impl Renderer<'_> {
             Filter::Modified => np.status.push("modified".into()),
             Filter::DiedThisTurn => np.rel.push("that died this turn".into()),
             Filter::AttackedThisTurn => np.rel.push("that attacked this turn".into()),
+            Filter::AttackedThisCombat => np.rel.push("that attacked".into()),
             // "Choose a color. ... each card of that color": the color just chosen.
             Filter::ChosenColor => np.post.push("of {alt:the chosen color|that color}".into()),
             Filter::LinkedChosenColor => np.post.push("of the chosen color".into()),
@@ -987,6 +1021,7 @@ impl Renderer<'_> {
             Filter::Modified => np.status.push("unmodified".into()),
             Filter::EnteredThisTurn => np.rel.push("that didn't enter this turn".into()),
             Filter::AttackedThisTurn => np.rel.push("that didn't attack this turn".into()),
+            Filter::AttackedThisCombat => np.rel.push("that didn't attack".into()),
             // "a spell from anywhere other than your hand": a spell is cast from its
             // caster's own hand (CR 601.2a); one that isn't in a hand either (Drannith
             // Magistrate's "can't cast spells from anywhere other than their hands").
@@ -1069,6 +1104,17 @@ impl Renderer<'_> {
                     "{{alt:that isn't {}|except for {many}}}",
                     with_article(&s)
                 ));
+            }
+            // "target creature other than enchanted creature", "an artifact other than
+            // ~" (in an ability an Equipment grants): one particular object, named
+            // without an article.
+            Filter::AttachedToSource => {
+                let s = self.noun(inner, Num::One);
+                np.rel.push(format!("other than {s}"));
+            }
+            Filter::Custom(n) if n == crate::granted_by::GRANTER => {
+                let s = self.noun(inner, Num::One);
+                np.rel.push(format!("other than {s}"));
             }
             other => {
                 let s = self.noun(other, Num::One);
@@ -1746,6 +1792,13 @@ impl Renderer<'_> {
         self.alt_and = true;
         let n = self.noun(f, Num::One);
         self.alt_and = saved;
+        // "for each card named ~ in each graveyard": each card in any graveyard.
+        let n = match n.strip_suffix(" in a graveyard") {
+            Some(head) if !head.contains(" in ") => {
+                format!("{head} in {{alt:a|each}} graveyard")
+            }
+            _ => n,
+        };
         if Self::counts_all_permanents(f, &n) {
             format!("{n} {{opt:on the battlefield}}")
         } else {

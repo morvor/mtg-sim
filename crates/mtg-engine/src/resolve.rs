@@ -107,6 +107,13 @@ impl Game {
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
+                    // "You may draw cards equal to its power. If you do, discard two cards":
+                    // a player may choose to draw even with too few cards in their library
+                    // (CR 121.3), and "if you do" follows that choice, however many cards
+                    // were drawn (Champion of Wits rulings).
+                    if matches!(**effect, Effect::Draw { .. }) {
+                        ctx.prev_happened = true;
+                    }
                 }
             }
             Effect::PayOptional {
@@ -769,6 +776,17 @@ impl Game {
                 duration,
             } => {
                 let objects = self.lock_restriction_objects(restriction, ctx);
+                // "For as long as they control it": the players a condition about the
+                // affected objects names are those as the effect begins.
+                let duration = &match duration {
+                    Duration::WhileCondition(Condition::SelMatches(s, f)) if matches!(s, Sel::Var(v) if *v == vars::AFFECTED) => {
+                        Duration::WhileCondition(Condition::SelMatches(
+                            s.clone(),
+                            self.bind_target_players(f, ctx),
+                        ))
+                    }
+                    d => d.clone(),
+                };
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
                 // objects it applies to, "for as long as it remains tapped", is checked
                 // for them).
@@ -1226,13 +1244,16 @@ impl Game {
                 crate::keyword_impls::phase_out(self, objs);
             }
             Effect::TurnFaceUp { what } => {
+                // "Turn ~ face up. If you can't, ..." (CR 609.3).
+                let mut turned = false;
                 for o in self.resolve_objects(what, ctx) {
-                    if self.obj(o).zone == Zone::Exile {
-                        crate::facedown::turn_exiled_face_up(self, o);
+                    turned |= if self.obj(o).zone == Zone::Exile {
+                        crate::facedown::turn_exiled_face_up(self, o)
                     } else {
-                        crate::facedown::turn_face_up(self, o, false);
-                    }
+                        crate::facedown::turn_face_up(self, o, false)
+                    };
                 }
+                ctx.prev_happened = turned;
             }
             Effect::TurnFaceDown { what } => {
                 let mut turned = Vec::new();
@@ -1248,6 +1269,20 @@ impl Game {
                 for o in self.resolve_objects(what, ctx) {
                     crate::combat::remove_from_combat(self, o);
                 }
+            }
+            Effect::BecomeUnblocked { what } => {
+                let mut any = false;
+                for o in self.resolve_objects(what, ctx) {
+                    any |= crate::combat::become_unblocked(self, o);
+                }
+                ctx.prev_happened = any;
+            }
+            Effect::BlockAttackerOfChoice { blocker } => {
+                let mut any = false;
+                for b in self.resolve_objects(blocker, ctx) {
+                    any |= crate::combat::block_attacker_of_choice(self, b, ctx.controller);
+                }
+                ctx.prev_happened = any;
             }
             Effect::Choose { who, kind } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
@@ -1353,9 +1388,18 @@ impl Game {
                 let mut drawn = Vec::new();
                 // CR 121.2c: the active player draws first, then the others in turn order.
                 let players = crate::draw_rules::draw_order(self, self.eval_players(who, ctx));
+                let n = players.len() as u32;
+                let total = |g: &Game| g.history.cards_drawn.values().sum::<u32>();
+                let before = total(self);
                 for p in players {
                     drawn.extend(self.draw_cards(p, k));
                 }
+                // "Draw four cards. When you do, ...": done only if at least that many cards
+                // were drawn (a draw from an empty library or a draw replaced by something
+                // else isn't one, CR 614.6, 603.12), counting cards drawn by replacement
+                // effects ("draw two cards instead"). See The Royal Scions rulings. ("You
+                // may draw ... If you do" is about the choice: see `Effect::May`.)
+                ctx.prev_happened = k > 0 && total(self).saturating_sub(before) >= k * n;
                 ctx.prev_value = drawn.len() as i64;
                 ctx.set_var(
                     vars::REVEALED,
@@ -1485,6 +1529,8 @@ impl Game {
                 restriction,
             } => {
                 crate::mana_abilities::resolve_add_mana(self, who, mana, restriction, ctx);
+                // "Add {R}. When you do, ..." (Rubble Rouser): adding mana is done.
+                ctx.prev_happened = true;
             }
             Effect::AddManaWithSpentTrigger {
                 add,
@@ -1532,7 +1578,11 @@ impl Game {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let players = self.eval_players(who, ctx);
                 let look = crate::scry_rules::Look::Scry;
-                crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                let looked = crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                ctx.set_var(
+                    crate::scry_rules::LOOKED_ON_TOP,
+                    looked.on_top.into_iter().map(Entity::Object).collect(),
+                );
                 // CR 701.22b, 701.22d: scrying N > 0 always happens ("When you do, ...").
                 ctx.prev_happened = k > 0 && !players.is_empty();
             }
@@ -1540,7 +1590,20 @@ impl Game {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let players = self.eval_players(who, ctx);
                 let look = crate::scry_rules::Look::Surveil;
-                crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                let looked = crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                // "If you put a ... card into your graveyard this way" (CR 701.25a).
+                ctx.set_var(
+                    crate::scry_rules::SURVEILED_TO_GRAVEYARD,
+                    looked
+                        .to_graveyard
+                        .into_iter()
+                        .map(Entity::Object)
+                        .collect(),
+                );
+                ctx.set_var(
+                    crate::scry_rules::LOOKED_ON_TOP,
+                    looked.on_top.into_iter().map(Entity::Object).collect(),
+                );
                 // CR 701.25c-d: surveilling N > 0 always happens, even with fewer cards in
                 // the library ("When you do, ...").
                 ctx.prev_happened = k > 0 && !players.is_empty();
@@ -2578,6 +2641,9 @@ impl Game {
                 // "Creatures target player controls don't untap ...": the objects that
                 // player controls, whichever they are later.
                 *f = self.bind_target_players(f, ctx);
+                // "Creatures of the creature type of your choice attack this turn if
+                // able": the type chosen as the effect began (CR 608.2h).
+                self.lock_chosen_type(f, ctx);
             }
         }
         // "Target creature blocks this creature this combat if able": both creatures are
@@ -2621,6 +2687,20 @@ impl Game {
         // can't be evaluated later.
         if let Restriction::CantCast { what, .. } = &mut r {
             self.lock_filter_amounts(what, ctx);
+        }
+        // "This turn, creatures can't attack unless their controller pays {X} for each
+        // attacking creature they control": X is fixed as the effect begins (CR 608.2h).
+        if let Restriction::AttackCost { cost, .. }
+        | Restriction::BlockCost { cost, .. }
+        | Restriction::BlockCostAgainst { cost, .. } = &mut r
+        {
+            if let Some(m) = cost.mana.as_mut().filter(|m| m.has_x()) {
+                *m = m.with_x(ctx.x.max(0) as u32);
+                // X = 0: a cost of {0}, still a cost (CR 118.5; War Tax rulings).
+                if m.symbols.is_empty() {
+                    m.symbols.push(crate::mana::ManaSymbol::Generic(0));
+                }
+            }
         }
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
@@ -2690,6 +2770,28 @@ impl Game {
         }
     }
 
+    /// Replaces "the chosen type" in a filter with the creature or basic land type chosen
+    /// for the effect's source as it begins.
+    fn lock_chosen_type(&self, f: &mut Filter, ctx: &Ctx) {
+        match f {
+            Filter::ChosenType => {
+                if let Some(t) = self
+                    .source_choices(ctx)
+                    .and_then(|ch| ch.creature_type.clone().or(ch.basic_land_type.clone()))
+                {
+                    *f = Filter::Subtype(t);
+                }
+            }
+            Filter::And(v) | Filter::Or(v) => {
+                for x in v.iter_mut() {
+                    self.lock_chosen_type(x, ctx);
+                }
+            }
+            Filter::Not(x) => self.lock_chosen_type(x, ctx),
+            _ => {}
+        }
+    }
+
     /// Replaces the amounts of a filter's comparisons that refer to the resolving spell's
     /// or ability's objects ("the same mana value as that spell", "X") with their values
     /// now (CR 608.2h).
@@ -2697,6 +2799,11 @@ impl Game {
         fn refers_to_ctx(v: &Value) -> bool {
             match v {
                 Value::X | Value::Var(_) | Value::EventAmount | Value::Chosen => true,
+                // The object the restriction is checked for (an attacker for "can't be
+                // blocked by creatures with greater power") is compared when checked.
+                Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s) if matches!(**s, Sel::Var(v) if v == vars::AFFECTED) => {
+                    false
+                }
                 Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s) => matches!(
                     **s,
                     Sel::Target(_)
@@ -3251,13 +3358,22 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         Restriction::AttackTogether { attackers, .. }
         | Restriction::MustAttackOtherThan { attackers, .. } => Some(attackers),
         Restriction::CantActivate { sources, .. } => Some(sources),
-        Restriction::ExtraBlocks { blocker, .. } => Some(blocker),
+        Restriction::ExtraBlocks { blocker, .. }
+        | Restriction::ExtraBlocksCounted { blocker, .. } => Some(blocker),
+        Restriction::AssignAsThoughUnblocked { what, .. } => Some(what),
+        Restriction::AttackOnlyWith { attackers: f, .. }
+        | Restriction::BlockOnlyWith { blockers: f, .. }
+        | Restriction::BlockCostAgainst { blockers: f, .. }
+        | Restriction::MinBlockersCounted { attacker: f, .. }
+        | Restriction::BlockIgnoringEvasion { blocker: f, .. }
+        | Restriction::CantAttackPlayerAgain(f) => Some(f),
         Restriction::MinBlockers { attacker, .. }
         | Restriction::MaxBlockedBy { attacker, .. }
         | Restriction::MustBeBlockedBy { attacker, .. }
         | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
+        | Restriction::CantAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,
     }
@@ -3285,6 +3401,9 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
             players: defender, ..
         }
         | Restriction::MaxBlockersOf { who: defender, .. }
+        | Restriction::PlayerMustAttack {
+            players: defender, ..
+        }
         | Restriction::MaxAttackersAgainst {
             player: Some(defender),
             ..

@@ -136,6 +136,15 @@ fn last_entry_effect(e: &mut Effect) -> Option<&mut Effect> {
         Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => Some(e),
         Effect::Dig { take_to, .. } if take_to.zone == ZoneKind::Battlefield => Some(e),
         Effect::CreateToken { .. } => Some(e),
+        // "Create a token that's a copy of another target attacking creature. The token
+        // enters tapped and attacking." (Thousand-Faced Shadow).
+        Effect::CreateTokenCopy { .. } => Some(e),
+        // "Populate. The token enters tapped and attacking." (Ghired, Conclave Exile).
+        Effect::KeywordAction {
+            action: KeywordAction::Populate,
+            ..
+        } => Some(e),
+        Effect::KeywordActionEx(spec) if spec.action == KeywordAction::Populate => Some(e),
         _ => None,
     }
 }
@@ -152,6 +161,20 @@ fn token_name(e: &mut Effect) -> Option<String> {
 
 /// Applies an unconditional entry modification to an instruction.
 fn modify_entry(e: &mut Effect, entry: &Entry) -> bool {
+    // The token a populate creates (CR 701.36a) enters tapped (and attacking).
+    if let Effect::KeywordAction {
+        action: KeywordAction::Populate,
+        who,
+        what,
+        n,
+    } = e
+    {
+        if !matches!(entry, Entry::Tapped | Entry::TappedAndAttacking) {
+            return false;
+        }
+        let spec = crate::kwa::Spec::new(KeywordAction::Populate, who.clone(), what.clone(), n.clone());
+        *e = spec.effect();
+    }
     match (e, entry) {
         (Effect::Move { to, .. }, Entry::Counters(k, n)) => {
             to.with_counters.push((k.clone(), n.clone()));
@@ -182,6 +205,28 @@ fn modify_entry(e: &mut Effect, entry: &Entry) -> bool {
         ) => {
             *tapped = true;
             *attacking = true;
+            true
+        }
+        (Effect::CreateTokenCopy { tapped, .. }, Entry::Tapped) => {
+            *tapped = true;
+            true
+        }
+        (
+            Effect::CreateTokenCopy {
+                tapped, attacking, ..
+            },
+            Entry::TappedAndAttacking,
+        ) => {
+            *tapped = true;
+            *attacking = true;
+            true
+        }
+        (Effect::KeywordActionEx(spec), Entry::Tapped | Entry::TappedAndAttacking)
+            if spec.action == KeywordAction::Populate =>
+        {
+            spec.tapped = true;
+            spec.attacking |= matches!(entry, Entry::TappedAndAttacking);
+            // (The populate keyword action reads these from its spec.)
             true
         }
         _ => false,

@@ -157,7 +157,9 @@ impl Renderer<'_> {
         if player_targeted(&t.trigger) {
             self.trigger_player = Some("{alt:that spell's controller|that player}");
         } else if targeted(&t.trigger) {
-            self.trigger_player = Some("that spell's controller");
+            // The event's player controls the spell or ability that targeted (CR 115.1).
+            self.trigger_player =
+                Some("{alt:that spell's controller|that spell or ability's controller}");
         } else if matches!(t.trigger, TriggerCond::PlayerAttacks(PlayerRel::Opponent)) {
             self.trigger_player = Some(super::players::OPPONENT_EVENT);
         }
@@ -922,6 +924,20 @@ impl Renderer<'_> {
                         self.trigger_event(x, det.clone())
                     })
                     .collect();
+                // "When you play a card this way": casting it as a spell or playing it
+                // as a land (CR glossary, "Play": to play a card is either).
+                if let [TriggerCond::CastSpell { who: wa, filter: fa }, TriggerCond::LandPlayed { who: wb, filter: fb }] =
+                    v.as_slice()
+                {
+                    let card = Filter::and(vec![Filter::Card, fb.clone()]);
+                    if wa == wb
+                        && format!("{fa:?}") == format!("{card:?}")
+                        && evs[0].subj == evs[1].subj
+                    {
+                        let n = self.noun_det(&card, det.clone());
+                        return Ev::new(evs[0].subj.clone(), format!("play {n}"));
+                    }
+                }
                 if evs.iter().all(|e| e.subj == evs[0].subj) && !evs[0].subj.is_empty() {
                     let vps: Vec<String> = evs.iter().map(|e| e.vp.clone()).collect();
                     // "cast or copy an instant or sorcery spell": one object for both verbs.

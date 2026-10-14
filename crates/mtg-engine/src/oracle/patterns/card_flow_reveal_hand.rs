@@ -167,7 +167,18 @@ fn discards_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let (who, rest) = player_ref(end(l), b)?;
-    if !matches!(rest.trim(), "discards that card" | "discards those cards") {
+    // "If you do, they discard it.": "they" for one player takes a plural verb.
+    if !matches!(
+        rest.trim(),
+        "discards that card"
+            | "discards those cards"
+            | "discards it"
+            | "discards them"
+            | "discard that card"
+            | "discard those cards"
+            | "discard it"
+            | "discard them"
+    ) {
         return None;
     }
     Some(Effect::Discard {

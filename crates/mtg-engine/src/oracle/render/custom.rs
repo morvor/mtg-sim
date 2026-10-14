@@ -186,7 +186,10 @@ impl Renderer<'_> {
             },
             other => match self.custom_effect_more(other) {
                 Some(s) => s,
-                None => match self.custom_effect_extra(other) {
+                None => match self
+                    .custom_effect_extra(other)
+                    .or_else(|| self.custom_effect_tail(other))
+                {
                     Some(s) => s,
                     None => return self.gap(format!("Effect::Custom({other})")),
                 },
@@ -556,6 +559,7 @@ impl Renderer<'_> {
             other => match self
                 .custom_condition_more(other)
                 .or_else(|| self.custom_condition_terms(other, false))
+                .or_else(|| self.custom_condition_tail(other))
             {
                 Some(s) => s,
                 None => self.gap(format!("Condition::Custom({other})")),

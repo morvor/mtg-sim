@@ -629,7 +629,10 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
                 return Some((Filter::AttackingPlayer(PlayerRel::You), r2));
             }
         }
-        if let Some(r2) = r.strip_prefix("them") {
+        if let Some(r2) = r
+            .strip_prefix("them")
+            .or_else(|| r.strip_prefix("that player"))
+        {
             if word_end(r2) {
                 let p = their(b)?;
                 let rel = match p {
