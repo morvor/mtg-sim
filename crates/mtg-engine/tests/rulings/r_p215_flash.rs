@@ -289,7 +289,7 @@ fn foretold_green_slime_can_be_cast_on_the_next_players_turn() {
 
 #[test]
 fn venser_returning_a_flashback_spell_exiles_it() {
-    cr!("702.34a", "608.2n");
+    cr!("702.34a");
     ruling!(
         "Venser, Shaper Savant",
         "If Venser's triggered ability targets a spell cast with flashback, that spell will be exiled instead of returning to its owner's hand."
@@ -309,7 +309,7 @@ fn venser_returning_a_flashback_spell_exiles_it() {
 
 #[test]
 fn slitherwisp_doesnt_trigger_for_spells_cast_as_though_they_had_flash() {
-    cr!("702.8a", "601.3e", "603.2");
+    cr!("702.8a", "609.4", "603.2");
     ruling!(
         "Slitherwisp",
         "If an effect allows you to cast a spell “as though” it has flash, Slitherwisp’s last ability won’t trigger."
@@ -375,7 +375,7 @@ fn valley_floodcaller_lets_flashback_sorceries_be_cast_at_instant_speed() {
 
 #[test]
 fn yeva_lets_green_creatures_on_top_of_the_library_be_cast_with_flash() {
-    cr!("702.8a", "601.3e");
+    cr!("702.8a", "609.4");
     ruling!(
         "Yeva, Nature's Herald",
         "Yeva's ability applies to green creature cards in any zone, provided something is allowing you to cast them. For example, if the top card of your library is a green creature card and you control Garruk's Horde, you can cast that card as though it had flash."

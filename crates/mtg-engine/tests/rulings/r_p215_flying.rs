@@ -126,7 +126,7 @@ fn final_iteration_pumps_every_wizard_you_control() {
 
 #[test]
 fn harbinger_and_scourge_that_lost_flying_damage_themselves() {
-    cr!("611.3a", "120.3");
+    cr!("120.3", "608.2h");
     ruling!(
         "Harbinger of the Hunt",
         "If Harbinger of the Hunt loses flying, its first activated ability will cause it to deal damage to itself."
@@ -257,16 +257,21 @@ fn soulcatcher_dealt_lethal_damage_with_another_flyer_dies_anyway() {
         "If another creature with flying is dealt lethal damage at the same time as Soulcatcher, they’ll be destroyed at the same time. Soulcatcher’s ability won’t save it."
     );
     supported("Soulcatcher");
+    // Overloaded Electrickery: 1 damage to each of P0's creatures. The 1/1 Soulcatcher and
+    // the 1/1 Suntail Hawk die together; a +1/+1 counter would have saved the Soulcatcher.
     let mut t = TestGame::new(2);
     let sc = t.battlefield(P0, "Soulcatcher");
-    let crow = t.battlefield(P0, "Storm Crow");
-    t.lands(P0, "Mountain", 2);
-    // Pyroclasm: 2 damage to each creature.
-    let p = t.hand(P0, "Pyroclasm");
-    t.cast(P0, p).go();
+    let hawk = t.battlefield(P0, "Suntail Hawk");
+    t.lands(P1, "Mountain", 2);
+    t.set_step(P1, Step::PrecombatMain);
+    let e = t.hand(P1, "Electrickery");
+    t.cast(P1, e)
+        .method(mtg_engine::object::CastMethod::Keyword(KeywordKind::Overload))
+        .go();
     t.resolve_all();
+    assert!(!t.on_battlefield(hawk));
     assert!(!t.on_battlefield(sc));
-    assert!(!t.on_battlefield(crow));
+    assert!(t.in_graveyard(P0, "Soulcatcher"));
 }
 
 #[test]

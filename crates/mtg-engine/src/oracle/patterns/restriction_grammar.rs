@@ -539,7 +539,9 @@ fn cost_and_cant_be_countered(l: &str, text: &str, ctx: &CompileContext) -> Opti
         _ => return None,
     };
     // "Spells ... you cast": cast by that player, not copies or spells whose control changed.
-    let who = if head.contains(" cast") {
+    // (Look at the subject only: the predicate always ends "less to cast".)
+    let subject = head.split(" cost").next().unwrap_or(head);
+    let who = if subject.contains(" cast") {
         Filter::CastBy(rel)
     } else {
         Filter::ControlledBy(rel)

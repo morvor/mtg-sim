@@ -179,7 +179,7 @@ fn gearshift_ace_vehicle_keeps_first_strike_even_if_ace_left() {
 
 #[test]
 fn zuko_experience_counters_go_on_the_player_and_are_all_counted() {
-    cr!("122.1", "122.8", "106.4");
+    cr!("122.1", "106.4");
     ruling!(
         "Zuko, Firebending Master",
         "The experience counter goes on you, the player, not on Zuko. You will keep that counter even if Zuko, Firebending Master dies."

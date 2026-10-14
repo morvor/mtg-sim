@@ -226,7 +226,7 @@ fn sprite_noble_bonus_affects_only_flyers_as_it_resolves() {
 
 #[test]
 fn verix_bladewing_creates_karox() {
-    cr!("111.4", "205.4d");
+    cr!("111.4");
     ruling!(
         "Verix Bladewing",
         "Verix Bladewing features a new template for creating legendary tokens. It's functionally identical to the text \"create a legendary 4/4 red Dragon creature token with flying named Karox Bladewing.\""
@@ -348,7 +348,7 @@ fn clones_that_dont_copy_are_their_printed_selves() {
 
 #[test]
 fn vesuvan_drifter_copies_the_revealed_card_plus_flying() {
-    cr!("707.2", "707.9b", "611.2b");
+    cr!("707.2", "707.9b");
     ruling!(
         "Vesuvan Drifter",
         "Vesuvan Drifter copies exactly what was printed on the original creature card and nothing else, except it has flying."

@@ -491,7 +491,7 @@ fn kraul_harpooner_target_or_no_target_first_fight_choice_on_resolution() {
 
 #[test]
 fn ulrich_target_chosen_on_trigger_fight_chosen_on_resolution() {
-    cr!("603.3d", "608.2d", "701.28a");
+    cr!("603.3d", "608.2d");
     ruling!(
         "Ulrich of the Krallenhorde // Ulrich, Uncontested Alpha",
         "You choose the target of the Ulrich, Uncontested Alpha's first ability as it goes on the stack, but you choose whether or not to fight as that ability resolves."
@@ -517,7 +517,7 @@ fn ulrich_target_chosen_on_trigger_fight_chosen_on_resolution() {
 
 #[test]
 fn kioras_emblem_exists_when_the_octopuses_enter() {
-    cr!("114.1", "603.2", "606.3");
+    cr!("114.1", "603.2");
     ruling!(
         "Kiora, Master of the Depths",
         "You will have the emblem by the time the Octopus creature tokens enter the battlefield—they’ll be looking to fight!"
@@ -574,7 +574,7 @@ fn ace_nitro_9_counter_depends_on_the_target() {
 
 #[test]
 fn curse_of_the_werefox_reflexive_trigger_targets_on_the_stack() {
-    cr!("603.12", "117.3b");
+    cr!("603.12", "603.3d");
     ruling!(
         "Curse of the Werefox",
         "You don't choose a target for the creature to fight at the time you cast this spell. Rather, a second \"reflexive\" ability triggers when you create a Monster Role token attached to the creature that was targeted by the spell. You choose a target for that ability as it goes on the stack. Each player may respond to this triggered ability as normal."
@@ -599,7 +599,7 @@ fn curse_of_the_werefox_reflexive_trigger_targets_on_the_stack() {
 
 #[test]
 fn curse_of_the_werefox_without_the_role_there_is_no_fight() {
-    cr!("603.12", "303.4d");
+    cr!("603.12", "303.4i", "702.16c");
     ruling!(
         "Curse of the Werefox",
         "If you can't attach a Monster Role token to the target creature you control when Curse of the Werefox resolves, the reflexive trigger that causes the fight won't happen."
