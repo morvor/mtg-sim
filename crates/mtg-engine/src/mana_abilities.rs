@@ -138,6 +138,19 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                 }
                 cs.iter().map(|c| vec![ManaType::from_color(c)]).collect()
             }
+            // The most mana it could make: the color with the greatest devotion (the
+            // amount depends on the color chosen as it resolves).
+            ManaProduction::DevotionToChosenColor => {
+                let (best, n) = ALL_COLORS
+                    .iter()
+                    .map(|t| {
+                        let c = t.color().expect("a color");
+                        (*t, g.eval_value(&Value::Devotion(ColorSet::single(c)), ctx))
+                    })
+                    .max_by_key(|(_, n)| *n)
+                    .expect("five colors");
+                vec![vec![best]; n.max(0) as usize]
+            }
             ManaProduction::CommanderIdentity => {
                 let t = commander_identity_types(g, ctx.controller);
                 if t.is_empty() {

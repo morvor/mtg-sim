@@ -5841,6 +5841,9 @@ impl Renderer<'_> {
             ManaProduction::CommanderIdentity => {
                 "one mana of any color in your commander's color identity".into()
             }
+            ManaProduction::DevotionToChosenColor => {
+                "an amount of mana of that color equal to your devotion to that color".into()
+            }
         }
     }
 

@@ -2097,6 +2097,7 @@ impl Renderer<'_> {
                 let a = match action {
                     ObjectAction::Untapped => "can't become untapped",
                     ObjectAction::PhasedIn => "can't phase in",
+                    ObjectAction::PhasedOut => "can't phase out",
                     ObjectAction::Equipped => "can't be equipped",
                     ObjectAction::EnchantedByOtherAuras => "can't be enchanted by other Auras",
                     ObjectAction::Suspected => "can't become suspected",

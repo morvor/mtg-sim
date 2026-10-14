@@ -10,6 +10,26 @@ use crate::types::*;
 
 const PAY_ENERGY: &str = "game rules:pay energy:";
 
+/// `Effect::Custom` names: "The player to your right/left gains control of ~." (Hithlain
+/// Rope): players sit in turn order, which passes to the left (CR 101.4), so the player
+/// to your left is the next player in the seating order and the player to your right
+/// the previous one, whatever the current turn order is.
+pub const RIGHT_GAINS_CONTROL: &str = "game rules:the player to your right gains control of ~";
+pub const LEFT_GAINS_CONTROL: &str = "game rules:the player to your left gains control of ~";
+
+/// The player in the game seated to `p`'s right (`left`: to their left).
+pub fn neighbor(g: &Game, p: PlayerId, left: bool) -> PlayerId {
+    let n = g.players.len();
+    for i in 1..=n {
+        let k = if left { p.idx() + i } else { p.idx() + n * i - i };
+        let q = PlayerId((k % n) as u8);
+        if g.player(q).in_game() {
+            return q;
+        }
+    }
+    p
+}
+
 /// `Filter::Custom` name: a loyalty ability on the stack ("target loyalty ability of a
 /// planeswalker", CR 606).
 pub const LOYALTY_ABILITY: &str = "game rules:loyalty ability on the stack";
@@ -102,6 +122,16 @@ impl KeywordRules for GameRules {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name == RIGHT_GAINS_CONTROL || name == LEFT_GAINS_CONTROL {
+            let to = neighbor(g, ctx.controller, name == LEFT_GAINS_CONTROL);
+            let e = Effect::GainControl {
+                what: Sel::This,
+                who: PlayerRef::Player(to),
+                duration: Duration::Permanent,
+            };
+            g.exec(&e, ctx);
+            return true;
+        }
         if let Some(n) = pay_energy_amount(name) {
             let p = ctx.controller;
             let cost = Cost::free().with(CostPart::PayEnergy(Value::c(n)));

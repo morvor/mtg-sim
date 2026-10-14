@@ -66,6 +66,8 @@ pub fn phase_out(g: &mut Game, objs: Vec<ObjectId>) {
     let objs: Vec<ObjectId> = objs
         .into_iter()
         .filter(|o| g.is_live(*o) && !g.obj(*o).phased_out)
+        // "can't phase out" (directly; CR 702.26).
+        .filter(|o| !crate::prohibitions::object_cant(g, *o, crate::ability::ObjectAction::PhasedOut))
         .collect();
     let indirect = attached_closure(g, &objs);
     let direct: Vec<ObjectId> = objs

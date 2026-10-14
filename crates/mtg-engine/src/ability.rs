@@ -2223,6 +2223,10 @@ pub enum ManaProduction {
     /// 702.124c: the combined identities of their commanders). Undefined without a
     /// commander, so no mana is added (CR 903.4f).
     CommanderIdentity,
+    /// "Choose a color. Add an amount of mana of that color equal to your devotion to that
+    /// color." (Nykthos, Shrine to Nyx; CR 700.5): the color is chosen as the ability
+    /// resolves, then the amount is the controller's devotion to it.
+    DevotionToChosenColor,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -2759,6 +2763,8 @@ pub enum ObjectAction {
     Untapped,
     /// "can't phase in" (CR 702.26).
     PhasedIn,
+    /// "can't phase out" (CR 702.26).
+    PhasedOut,
     /// "can't be equipped" (CR 301.5c).
     Equipped,
     /// "can't be enchanted by other Auras" (CR 303.4).
