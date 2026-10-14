@@ -289,6 +289,10 @@ impl Focus {
 /// what it hasn't done yet in the game, and records what it was offered in `usage`. It
 /// also makes some choices [`RandomAgent`] leaves to the engine (optional costs, casting
 /// methods, numbers, scry and surveil, orders) at random.
+/// How many times a yes-or-no question is answered at random in a step before the
+/// focus agent suspects a loop.
+const LOOP_AFTER: u32 = 6;
+
 pub struct FocusAgent {
     pub inner: RandomAgent,
     pub focus: Arc<Focus>,
@@ -298,8 +302,9 @@ pub struct FocusAgent {
     step: (u32, Step),
     /// Focus actions taken this turn.
     taken: Vec<Action>,
-    /// "Yes" answers in the current step.
-    yeses: u32,
+    /// Questions answered in the current step, by the source's name and the prompt: how
+    /// many times, and the answer committed to once it was asked often.
+    answers: HashMap<(String, String), (u32, bool)>,
 }
 
 impl FocusAgent {
@@ -311,7 +316,7 @@ impl FocusAgent {
             rng: StdRng::seed_from_u64(seed ^ 0xf0c5),
             step: (0, Step::Untap),
             taken: Vec::new(),
-            yeses: 0,
+            answers: HashMap::new(),
         }
     }
 
@@ -321,7 +326,7 @@ impl FocusAgent {
                 self.taken.clear();
             }
             self.step = (g.turn.number, g.turn.step);
-            self.yeses = 0;
+            self.answers.clear();
         }
     }
 
@@ -481,15 +486,35 @@ impl Agent for FocusAgent {
                 other.shuffle(&mut self.rng);
                 return Answer::Split(top, other);
             }
-            Decision::YesNo { .. } => {
-                // "You may" abilities can trigger each other without end (two Enduring
-                // Scalelords): the more often yes this step, the likelier no.
+            Decision::YesNo { source, prompt } => {
+                // "You may" abilities can trigger each other without end, by "yes" (two
+                // Enduring Scalelords) or by "no" (Charismatic Conquerors: "they may tap
+                // that permanent; if they don't, you create a token", which triggers the
+                // other player's Conquerors, maybe several). A question asked often this
+                // step gets one answer for a while, then the other for four times as
+                // long, and so on: one of them ends the loop.
                 self.new_step(g);
-                let yes = self
-                    .rng
-                    .gen_bool(0.5 * 0.85f64.powi(self.yeses.min(100) as i32));
-                self.yeses += yes as u32;
-                return Answer::Bool(yes);
+                let name = source
+                    .map(|s| g.obj(s).chars.name.to_string())
+                    .unwrap_or_default();
+                let coin = self.rng.gen_bool(0.5);
+                let e = self
+                    .answers
+                    .entry((name, prompt.clone()))
+                    .or_insert((0, coin));
+                e.0 += 1;
+                let n = e.0;
+                if n <= LOOP_AFTER {
+                    return Answer::Bool(self.rng.gen_bool(0.5));
+                }
+                // Epochs of the n-th time asked: (6, 30], (30, 126], (126, 510], ...
+                let (mut end, mut len, mut epoch) = (LOOP_AFTER + 24, 24u32, 0u32);
+                while n > end {
+                    len = len.saturating_mul(4);
+                    end = end.saturating_add(len);
+                    epoch += 1;
+                }
+                return Answer::Bool(e.1 ^ (epoch % 2 == 1));
             }
             Decision::NameCard { .. } => {
                 // A card of its own deck, so that "the chosen name" can matter.
@@ -512,5 +537,43 @@ impl Agent for FocusAgent {
             _ => {}
         }
         self.inner.decide(g, p, d)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mtg_engine::testing::TestGame;
+
+    fn answers(seed: u64, n: usize) -> Vec<bool> {
+        let t = TestGame::new(2);
+        let focus = Arc::new(Focus::new(&card("Charismatic Conqueror")));
+        let mut agent = FocusAgent::new(seed, focus, Arc::default());
+        let d = Decision::YesNo {
+            source: None,
+            prompt: "You may: tap it".into(),
+        };
+        (0..n)
+            .map(|_| match agent.decide(&t.g, PlayerId(0), &d) {
+                Answer::Bool(b) => b,
+                a => panic!("not a yes or no: {a:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_question_asked_again_and_again_gets_each_answer_for_a_while() {
+        // A loop can go on by "yes" (two Enduring Scalelords) or by "no" (two
+        // Charismatic Conquerors, each token triggering the other player's): after a few
+        // random answers, one answer 24 times in a row, then the other 96 times.
+        for seed in 0..20 {
+            let a = answers(seed, 200);
+            let first = a[6];
+            assert!(a[6..30].iter().all(|&x| x == first), "seed {seed}");
+            assert!(a[30..126].iter().all(|&x| x != first), "seed {seed}");
+            assert!(a[126..].iter().all(|&x| x == first), "seed {seed}");
+        }
+        // Different seeds start differently.
+        assert!((0..20).any(|s| answers(s, 7)[6]) && (0..20).any(|s| !answers(s, 7)[6]));
     }
 }
