@@ -544,6 +544,157 @@ fn another_card(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { super::EffectPattern { name: "followups: discard/draw another card", priority: 980, parse: another_card } }
 
+/// "For each delay counter removed this way, you lose 1 life unless you pay {1}{W}."
+/// (Delaying Shield): the punisher once for each of them, each with its own choice
+/// (CR 118.12a). The count is the one "for each [thing] this way" has without the
+/// "unless" part.
+fn for_each_this_way_unless(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("for each ") else {
+        return false;
+    };
+    let Some((thing, rest)) = r.split_once(", ") else {
+        return false;
+    };
+    if !thing.ends_with(" this way") || !rest.contains(" unless ") {
+        return false;
+    }
+    // The count, read from the same sentence with a plain instruction.
+    let mut counted = prev.clone();
+    if !crate::oracle_ext::apply_followup_ext(&format!("for each {thing}, draw a card"), &mut counted, b) {
+        return false;
+    }
+    let Effect::Seq(mut v) = counted else {
+        return false;
+    };
+    let Some(Effect::Draw {
+        who: PlayerRef::You,
+        n,
+    }) = v.pop()
+    else {
+        return false;
+    };
+    // "for each" counts with a variable the earlier instructions store.
+    if !matches!(n, Value::Var(_)) {
+        return false;
+    }
+    let Some(each) = crate::oracle::effects::parse_clause(rest, b) else {
+        return false;
+    };
+    if !matches!(each, Effect::PayOptional { .. }) {
+        return false;
+    }
+    v.push(Effect::Repeat {
+        times: n,
+        effect: Box::new(each),
+    });
+    *prev = Effect::seq(v);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups: for each [thing] this way, [effect] unless [payment]", priority: 30, apply: for_each_this_way_unless } }
+
+// ---------------------------------------------------------------------------
+// "Any opponent may have you [instruction]. If a player does, ... Otherwise, ..."
+// ---------------------------------------------------------------------------
+
+/// Whether an opponent has had you do it yet (0 or 1).
+const HAD: Var = vars::USER + 9651;
+/// The opponent who had you do it.
+const HAD_BY: Var = vars::USER + 9652;
+
+/// "Any opponent may have you put that card into your graveyard." (Sin Prodder,
+/// Distant Memories): starting with the next opponent in turn order, each opponent may
+/// have you do it, until one does (Sin Prodder ruling).
+fn any_opponent_may_have_you(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("any opponent may have you ")?;
+    let e = crate::oracle::effects::parse_clause(r, b)?;
+    Some(Effect::seq(vec![
+        Effect::StoreValue {
+            var: HAD,
+            value: Value::c(0),
+        },
+        Effect::Store {
+            var: HAD_BY,
+            sel: Sel::None,
+        },
+        Effect::InTurnOrder {
+            first: TurnOrderStart::NextOpponent,
+            who: PlayerFilter::Opponent,
+            effect: Box::new(Effect::If {
+                cond: Condition::Compare(Value::Var(HAD), Cmp::Eq, Value::c(0)),
+                then: Box::new(Effect::May {
+                    who: PlayerRef::Iterated,
+                    effect: Box::new(Effect::seq(vec![
+                        e,
+                        Effect::StoreValue {
+                            var: HAD,
+                            value: Value::c(1),
+                        },
+                        Effect::Store {
+                            var: HAD_BY,
+                            sel: Sel::Players(PlayerRef::Iterated),
+                        },
+                    ])),
+                }),
+                otherwise: Box::new(Effect::Noop),
+            }),
+            direction: SeatSide::default(),
+        },
+    ]))
+}
+
+inventory::submit! { super::EffectPattern { name: "followups: any opponent may have you [instruction]", priority: 120, parse: any_opponent_may_have_you } }
+
+fn after_had_you(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.iter().any(|x| {
+            matches!(x, Effect::StoreValue { var, .. } if *var == HAD)
+        }),
+        _ => false,
+    }
+}
+
+/// "If a player does, [effect]" / "Otherwise, [effect]" / "If no player does, [effect]"
+/// after "any opponent may have you [instruction]".
+fn if_a_player_had_you(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let (did, r) = if let Some(r) = l.strip_prefix("if a player does, ") {
+        (true, r)
+    } else if let Some(r) = l
+        .strip_prefix("otherwise, ")
+        .or_else(|| l.strip_prefix("if no player does, "))
+    {
+        (false, r)
+    } else {
+        return false;
+    };
+    if !after_had_you(prev) {
+        return false;
+    }
+    let saved = std::mem::replace(&mut b.it_player, PlayerRef::Var(HAD_BY));
+    let e = crate::oracle::effects::parse_clause(r, b);
+    b.it_player = saved;
+    let Some(e) = e else {
+        return false;
+    };
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    v.push(Effect::If {
+        cond: Condition::Compare(
+            Value::Var(HAD),
+            Cmp::Eq,
+            Value::c(if did { 1 } else { 0 }),
+        ),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    });
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups: if a player does / otherwise (had you)", priority: 30, apply: if_a_player_had_you } }
+
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::card::Layout;
