@@ -52,6 +52,7 @@ impl KeywordRules for Vanishing {
                 trigger: Box::new(TriggerCond::CountersRemoved {
                     filter: Filter::Source,
                     kind: Some(counters::TIME.into()),
+                    each: false,
                 }),
                 cond: Condition::Compare(time_counters(), Cmp::Eq, Value::c(0)),
             },

@@ -175,13 +175,26 @@ fn merge(parts: Vec<Parsed>) -> Parsed {
     let same_player = parts
         .windows(2)
         .all(|w| format!("{:?}", w[0].2) == format!("{:?}", w[1].2));
+    // "Whenever another creature you control enters or dies": the entering creature, or
+    // the one that died as it last existed (CR 603.10a). `TriggerLki` is the event's last
+    // known information when it has some and its object otherwise, so it's either.
+    let lki_or_object = |s: &Sel| matches!(s, Sel::TriggerObject | Sel::TriggerLki);
+    let mixed_lki = !same_it && parts.iter().all(|p| lki_or_object(&p.1));
     let it = if same_it {
         parts[0].1.clone()
+    } else if mixed_lki {
+        Sel::TriggerLki
     } else {
         Sel::None
     };
     let player = if same_player {
         parts[0].2.clone()
+    } else if mixed_lki
+        && parts
+            .iter()
+            .all(|p| matches!(&p.2, PlayerRef::ControllerOf(s) if lki_or_object(s)))
+    {
+        PlayerRef::ControllerOf(Box::new(Sel::TriggerLki))
     } else {
         PlayerRef::Iterated
     };

@@ -159,6 +159,18 @@ impl Renderer<'_> {
                     }
                     return format!("{head} and put {{alt:it|the revealed card}} {d}");
                 }
+                // "Exile up to one nonland card from among them": to exile a card is to
+                // put it into exile (CR 701.13a).
+                if to.zone == ZoneKind::Exile && !*reveal && !*random && each_of.is_empty() {
+                    let exiled = if *up_to && matches!(count, Some(Value::Const(1))) {
+                        format!("up to one {}", self.card_noun(filter))
+                    } else {
+                        what.clone()
+                    };
+                    return format!(
+                        "{{alt:{may}put {what} from among them {d}|exile {exiled} from among them}}"
+                    );
+                }
                 if *reveal && !d.is_empty() {
                     let it = if many {
                         "{alt:them|the revealed cards}"
