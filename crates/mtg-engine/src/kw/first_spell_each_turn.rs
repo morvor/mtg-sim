@@ -42,6 +42,12 @@ fn quality(g: &Game, src: ObjectId) -> Option<Filter> {
                 applies_to: CostTarget::Spells(Filter::And(parts)),
                 ..
             }) => parts,
+            // "You may cast the first creature spell you cast each turn as though it had
+            // flash."
+            StaticEffect::FlashPermission {
+                what: Filter::And(parts),
+                ..
+            } => parts,
             _ => return None,
         };
         if !parts.iter().any(is_marker) {
@@ -80,7 +86,13 @@ impl KeywordRules for FirstSpellEachTurn {
         let Some(q) = ctx.source.and_then(|s| quality(g, s)) else {
             return Some(false);
         };
-        let caster = ctx.controller;
+        // (The spell's caster: "The first spell each player casts during each of their
+        // turns".)
+        let caster = match g.obj(id).zone {
+            crate::object::Zone::Stack => g.obj(id).controller,
+            crate::object::Zone::Hand(p) => p,
+            _ => ctx.controller,
+        };
         for (p, s) in &g.history.spells_cast {
             if *p != caster {
                 continue;

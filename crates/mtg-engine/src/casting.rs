@@ -697,6 +697,24 @@ impl Game {
                                 opt.alt_cost = Some(c.clone());
                                 out.push(opt);
                             }
+                            // "If a creature is attacking you and you control a Forest
+                            // and a Plains, you may cast this creature without paying its
+                            // mana cost and as though it had flash." (CR 601.3c)
+                            (CostTarget::ThisSpell, CostChange::AlternativeCostWithFlash(c))
+                                if crate::spell_costs::alternative_cost_allowed(
+                                    self, p, card, s,
+                                ) =>
+                            {
+                                let mut opt = CastOption::normal(FaceState::Front);
+                                opt.method = if c.mana.is_none() && c.parts.is_empty() {
+                                    CastMethod::Free
+                                } else {
+                                    CastMethod::Alternative(a.uid)
+                                };
+                                opt.alt_cost = Some(c.clone());
+                                opt.flash = true;
+                                out.push(opt);
+                            }
                             // CR 601.3c: "You may cast this spell as though it had flash
                             // if you pay [cost] more to cast it."
                             (CostTarget::ThisSpell, CostChange::FlashForAdditionalCost(c)) => {
@@ -1394,6 +1412,14 @@ impl Game {
         // CR 307.5a: whether a sorcery could have been cast now (checked before the spell
         // is on the stack).
         let sorcery_time = !opt.any_time && self.has_priority(p) && self.is_sorcery_timing(p);
+        // Begun as though it had flash only because an effect lets spells with certain
+        // qualities be cast that way (CR 601.3b): checked again as proposed (below).
+        let by_flash_permission = !sorcery_time && !opt.any_time && !opt.flash && {
+            let c = self.option_characteristics(card, opt);
+            !c.is(CardType::Instant)
+                && !c.has_keyword(KeywordKind::Flash)
+                && self.flash_permitted(p, card, &c)
+        };
         // 601.2a: move the card to the stack.
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != card);
@@ -1725,6 +1751,17 @@ impl Game {
             || self.cast_prohibited_by_effects(p, card, &from_zone)
         {
             return Err(Illegal("the proposed spell can't be cast".into()));
+        }
+        // CR 601.3b: a spell begun as though it had flash because an effect lets spells
+        // with certain qualities be cast that way ("if X is 3 or less", "if it targets a
+        // permanent you control") must have them as proposed.
+        if by_flash_permission
+            && !proposed.has_keyword(KeywordKind::Flash)
+            && !self.flash_permitted(p, id, &proposed)
+        {
+            return Err(Illegal(
+                "the proposed spell can't be cast as though it had flash".into(),
+            ));
         }
         // The permission it's cast with must allow the spell as proposed: "a permanent
         // spell with mana value 2 or less" with the value chosen for X (CR 601.3e).

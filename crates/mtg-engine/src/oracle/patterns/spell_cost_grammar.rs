@@ -100,7 +100,7 @@ fn from_zones(z: &str) -> Option<Filter> {
 
 /// "~", "enchanted creature", "enchanted player", "a Merfolk you control": what a spell
 /// targets.
-fn targeted(s: &str) -> Option<Filter> {
+pub(crate) fn targeted(s: &str) -> Option<Filter> {
     let objects = |f: Filter| {
         Filter::StackTargets(Box::new(TargetsFilter::Targets {
             objects: Some(f),
