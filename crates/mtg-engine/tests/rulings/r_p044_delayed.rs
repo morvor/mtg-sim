@@ -330,7 +330,7 @@ fn to_next_upkeep(t: &mut TestGame) {
 
 #[test]
 fn delayed_cantrips_draw_at_the_next_upkeep() {
-    cr!("603.7a", "608.2b", "121.4");
+    cr!("603.7a", "608.2b");
     ruling!(
         "Balduvian Rage",
         "If the target creature is an illegal target by the time Balduvian Rage tries to resolve, the spell won't resolve. You won't draw a card next turn."
@@ -406,7 +406,7 @@ fn solfatara_stops_playing_lands_but_not_putting_them_onto_the_battlefield() {
 
 #[test]
 fn dazzling_beauty_blocks_unblockable_and_trampling_attackers() {
-    cr!("509.1h", "702.19e");
+    cr!("509.1h", "702.19d");
     ruling!(
         "Dazzling Beauty",
         "Works on creatures that can’t be blocked and on creatures that have special blocking requirements."
@@ -454,7 +454,7 @@ fn stangg_twin_stays_if_stangg_left_first() {
 
 #[test]
 fn zirilan_exiles_the_dragon_only_if_it_is_phased_in() {
-    cr!("702.26d", "603.7c");
+    cr!("702.26b", "702.26d", "603.7c");
     ruling!(
         "Zirilan of the Claw",
         "If the Dragon is put onto the battlefield and then phases out, the “exile it” ability will still apply."

@@ -273,7 +273,7 @@ fn chevill_looks_for_any_bounty_counter() {
 
 #[test]
 fn molder_beast_gets_its_bonus_too_late_for_that_combat() {
-    cr!("603.10a", "510.2", "702.19c");
+    cr!("603.10a", "510.2", "702.19b");
     ruling!(
         "Molder Beast",
         "If Molder Beast and an artifact creature are both involved in combat during the same combat damage step, and that artifact creature is destroyed due to lethal combat damage, Molder Beast's triggered ability will trigger — but it will get the bonus too late to affect that combat."

@@ -154,12 +154,17 @@ fn squee_must_be_in_the_graveyard_as_the_upkeep_begins() {
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert!(t.in_hand(P0, "Squee, Goblin Nabob"));
-    // In the hand as the upkeep begins: nothing (no priority before the upkeep).
+    // Put into the graveyard after the upkeep began: nothing.
     let mut t = TestGame::new(2);
-    t.hand(P0, "Squee, Goblin Nabob");
+    let squee = t.hand(P0, "Squee, Goblin Nabob");
     t.advance_to(P0, Step::Upkeep);
     t.settle();
     assert_eq!(t.stack_len(), 0);
+    t.g.move_object(squee, Zone::Graveyard(P0), MoveCause::Discard, Some(P0));
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    t.advance_to(P0, Step::Draw);
+    assert!(t.in_graveyard(P0, "Squee, Goblin Nabob"));
 }
 
 #[test]
@@ -284,12 +289,12 @@ fn hakim_returns_only_auras_that_can_enchant_him() {
     t.resolve_all();
     assert_eq!(t.g.attachments_of(Entity::Object(h)).len(), 2);
     assert_eq!(t.pt(h), (5, 7));
-    // Now he's enchanted: no more activations.
-    t.graveyard(P0, "Holy Strength");
+    // Now he's enchanted: the return ability can't be activated any more (his other
+    // ability, destroying the Auras, can).
+    let c = t.graveyard(P0, "Holy Strength");
     t.lands(P0, "Island", 2);
-    assert!(!t.g.legal_actions(P0).iter().any(|x| matches!(x,
-        Action::Activate { source, ability } if *source == h
-            && *ability == t.obj_now(h).chars.abilities.iter().find(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_))).unwrap().uid)));
+    assert!(t.activate(P0, h, 0, &[Entity::Object(c)]).is_err());
+    assert!(t.in_graveyard(P0, "Holy Strength"));
 }
 
 #[test]
@@ -389,7 +394,7 @@ fn jolrael_animates_the_lands_the_player_controls_on_resolution() {
 
 #[test]
 fn raksha_and_sun_quan_affect_themselves() {
-    cr!("109.2", "613.1f", "702.31b");
+    cr!("109.2", "613.1f");
     ruling!(
         "Raksha Golden Cub",
         "Raksha Golden Cub is a Cat, so it also gets +2/+2 and double strike if it’s equipped."
@@ -412,7 +417,7 @@ fn raksha_and_sun_quan_affect_themselves() {
 
 #[test]
 fn the_legend_rule_needs_identical_names() {
-    cr!("704.5j", "201.2");
+    cr!("704.5j");
     ruling!(
         "Ertai, Wizard Adept",
         "The Legend rule only applies to two legendary permanents with identical names."
@@ -445,7 +450,7 @@ fn the_legend_rule_needs_identical_names() {
 
 #[test]
 fn ixidor_turns_face_up_without_the_morph_cost() {
-    cr!("702.37e", "708.8");
+    cr!("708.8");
     ruling!(
         "Ixidor, Reality Sculptor",
         "When you turn a card face up, its controller does not have to pay its Morph cost."
@@ -474,7 +479,7 @@ fn ixidor_turns_face_up_without_the_morph_cost() {
 
 #[test]
 fn solkanar_doesnt_trigger_on_its_own_casting() {
-    cr!("603.2", "603.6a");
+    cr!("603.2", "113.6");
     ruling!("Sol'kanar the Swamp King", "Will not trigger off itself being cast.");
     supported("Sol'kanar the Swamp King");
     let mut t = TestGame::new(2);
@@ -556,7 +561,7 @@ fn sightless_brawler_cant_attack_alone() {
 
 #[test]
 fn reality_chip_top_card_stays_in_the_library() {
-    cr!("401.5", "305.1", "305.2", "702.34a");
+    cr!("305.1", "305.2", "113.6");
     ruling!(
         "The Reality Chip",
         "The top card of your library is still in your library and not in your hand."
@@ -592,7 +597,7 @@ fn reality_chip_top_card_stays_in_the_library() {
 
 #[test]
 fn activated_ability_stoppers_leave_triggered_abilities_alone() {
-    cr!("602.5", "113.3c", "113.3d");
+    cr!("602.5", "113.3c");
     ruling!(
         "Collector Ouphe",
         "Activated abilities contain a colon. They're generally written \"[Cost]: [Effect].\" Some keyword abilities (such as equip) are activated abilities and will have a colon in their reminder text. Triggered abilities (starting with \"when,\" \"whenever,\" or \"at\") are unaffected."
@@ -676,7 +681,7 @@ fn edifice_cant_undo_an_attack_or_an_activation() {
 
 #[test]
 fn detain_targets_can_have_different_controllers() {
-    cr!("701.35a", "115.3");
+    cr!("701.35a");
     ruling!(
         "Azorius Justiciar",
         "The two creatures can be controlled by the same opponent or by different opponents."
@@ -695,10 +700,16 @@ fn detain_targets_can_have_different_controllers() {
     t.resolve_all();
     t.set_step(P2, Step::PrecombatMain);
     assert!(!can_activate(&mut t, P2, b));
+    // P1's Bears are detained too: they can't attack on P1's turn.
+    t.set_step(P1, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(a, Entity::Player(P0))]);
+    assert!(!attacking(&t, a));
     // Archon: an artifact of P1 and a creature of P2.
     let mut t = TestGame::new(3);
     let archon = t.battlefield(P0, "Archon of the Triumvirate");
     let ring = t.battlefield(P1, "Mind Stone");
+    // (Mana for Mind Stone's draw ability, so only the detain stops it.)
+    t.lands(P1, "Wastes", 1);
     let sorc = t.battlefield(P2, "Prodigal Sorcerer");
     t.answer_targets(P0, &[Entity::Object(ring), Entity::Object(sorc)]);
     attack_with(&mut t, &[(archon, Entity::Player(P1))]);

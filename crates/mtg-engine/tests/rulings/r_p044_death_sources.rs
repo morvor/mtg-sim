@@ -234,7 +234,7 @@ fn burning_eye_zubera_counts_damage_from_all_sources() {
         "Burning-Eye Zubera’s ability counts all damage dealt to it this turn, from all sources."
     );
     supported("Burning-Eye Zubera");
-    // 2 + 2 from two sources (it survives as a 3/3? no: 4 damage kills it).
+    // 2 damage, then 2 more from another source: 4 in all (it dies of the second).
     let mut t = TestGame::new(2);
     let z = t.battlefield(P0, "Burning-Eye Zubera");
     let a = t.battlefield(P1, "Grizzly Bears");
@@ -246,7 +246,7 @@ fn burning_eye_zubera_counts_damage_from_all_sources() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Burning-Eye Zubera"));
     assert_eq!(t.life(P1), 17);
-    // Only 3 damage, then destroyed: no trigger.
+    // Only 3 damage (lethal for the 3/3): it dies, and the ability does nothing.
     let mut t = TestGame::new(2);
     let z = t.battlefield(P0, "Burning-Eye Zubera");
     let a = t.battlefield(P1, "Grizzly Bears");
@@ -258,6 +258,27 @@ fn burning_eye_zubera_counts_damage_from_all_sources() {
     kill(&mut t, z);
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
+    // Rushing-Tide Zubera (3/3; the same condition, "draw three cards"): 2 damage, then
+    // 2 (or 1) more from another source kills it.
+    ruling!(
+        "Rushing-Tide Zubera",
+        "Rushing-Tide Zubera’s ability counts all damage dealt to it this turn, from all sources."
+    );
+    supported("Rushing-Tide Zubera");
+    for (second, draws) in [(2, 3), (1, 0)] {
+        let mut t = TestGame::new(2);
+        let z = t.battlefield(P0, "Rushing-Tide Zubera");
+        let a = t.battlefield(P1, "Grizzly Bears");
+        let b = t.battlefield(P1, "Hill Giant");
+        t.g.deal_damage(a, Entity::Object(z), 2, false);
+        t.settle();
+        let hand = t.hand_size(P0);
+        t.g.deal_damage(b, Entity::Object(z), second, false);
+        t.settle();
+        assert!(t.in_graveyard(P0, "Rushing-Tide Zubera"));
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand + draws, "{second}");
+    }
 }
 
 #[test]
@@ -314,9 +335,10 @@ fn jugan_divides_its_counters_as_the_ability_is_put_on_the_stack() {
         .rev()
         .find(|(_, d)| matches!(d, Decision::Divide { .. }))
         .map(|(_, d)| d);
-    if let Some(Decision::Divide { min_each, .. }) = divide {
-        assert_eq!(min_each, 1);
-    }
+    let Some(Decision::Divide { min_each, .. }) = divide else {
+        panic!("no division asked as the ability was put on the stack");
+    };
+    assert_eq!(min_each, 1);
     kill(&mut t, bears);
     t.resolve_all();
     assert_eq!(t.counters(giant, counters::PLUS1), 3);
