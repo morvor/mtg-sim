@@ -675,7 +675,9 @@ fn damage_parts(l: &str, b: &mut Builder) -> Option<Effect> {
         let (to, r, _) = damage_recipient(&r, b)?;
         parts.push((n, to));
         rest = r;
-        let next = [", and ", ", ", " and "]
+        // A recipient phrase may hand back its rest without the leading space ("target
+        // creature and 1 damage to any target of an opponent's choice").
+        let next = [", and ", ", ", " and ", "and "]
             .iter()
             .find_map(|sep| rest.strip_prefix(sep).map(str::to_string));
         match next {
@@ -783,12 +785,29 @@ inventory::submit! { EffectPattern { name: "basic effects: each [object] deals d
 fn targets_each_deal_their_power(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (subject, recipient) = l.split_once(" each deal damage equal to their power to ")?;
-    let (spec, tail) = parse_target(subject)?;
-    if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+    // "Any number of target enchanted creatures you control and up to one other target
+    // creature you control" (Graceful Takedown): two groups of targets, all of which deal
+    // damage.
+    let mut specs = Vec::new();
+    for part in subject.split(" and ") {
+        let (spec, tail) = parse_target(part)?;
+        if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+            return None;
+        }
+        specs.push((spec, part));
+    }
+    if specs.len() > 2 {
         return None;
     }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let slot = b.add_target(spec, subject);
+    let slots: Vec<Sel> = specs
+        .into_iter()
+        .map(|(spec, part)| Sel::Target(b.add_target(spec, part)))
+        .collect();
+    let subjects = match <[Sel; 1]>::try_from(slots) {
+        Ok([one]) => one,
+        Err(v) => Sel::Union(v),
+    };
     let restore = |b: &mut Builder| {
         b.targets.truncate(saved.0);
         b.it = saved.1.clone();
@@ -804,7 +823,7 @@ fn targets_each_deal_their_power(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     const EACH: Var = vars::USER + 3331;
     Some(Effect::ForEach {
-        sel: Sel::Target(slot),
+        sel: subjects,
         var: EACH,
         effect: Box::new(Effect::DealDamage {
             source: Sel::Var(EACH),

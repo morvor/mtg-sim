@@ -172,10 +172,29 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         }
     }
     names.sort_by_key(|n| std::cmp::Reverse(n.len()));
+    // A legendary planeswalker's short name that is also its planeswalker type names the
+    // type, not the card, in "a Lukka planeswalker" and "each Garruk you control"
+    // (CR 205.3j): protect those from becoming `~`.
+    let mut protected: Vec<(String, String)> = Vec::new();
+    if let Some((short, _)) = ctx.card_name.split_once(',') {
+        if ctx.type_line.subtypes.iter().any(|t| t.as_str() == short) {
+            for suffix in [" planeswalker", " you control"] {
+                let from = format!("{short}{suffix}");
+                let to = format!("\u{1}{}\u{1}", protected.len());
+                if s.contains(&from) {
+                    s = s.replace(&from, &to);
+                    protected.push((to, from));
+                }
+            }
+        }
+    }
     for n in &names {
         if !n.is_empty() {
             s = s.replace(n.as_str(), "~");
         }
+    }
+    for (to, from) in &protected {
+        s = s.replace(to.as_str(), from);
     }
     // Legendary cards are also called by the first word(s) of their name ("Whenever Edgar
     // attacks" on Edgar Markov, "Zur" for Zur the Enchanter, "Jedit Ojanen" for Jedit
