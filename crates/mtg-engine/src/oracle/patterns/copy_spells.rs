@@ -86,6 +86,20 @@ fn new_targets_for_copy(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     ) {
         return false;
     }
+    // "Copy it if you control an artifact, then copy it if you control an enchantment. You
+    // may choose new targets for the copies." (Banish into Fable): every copy the sentence
+    // made, not only the last one.
+    if end(&l).ends_with("copies") {
+        if let Effect::Seq(v) = prev {
+            let mut any = false;
+            for e in v.iter_mut() {
+                any |= set_new_targets(e);
+            }
+            if any {
+                return true;
+            }
+        }
+    }
     set_new_targets(prev)
 }
 
