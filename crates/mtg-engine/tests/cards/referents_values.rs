@@ -593,3 +593,43 @@ fn blademane_baku_gets_a_bonus_for_each_counter_removed() {
     assert_eq!(t.counters(baku, "ki"), 1);
     assert_eq!(t.pt(baku), (1 + 4, 1));
 }
+
+#[test]
+fn stabwhisker_drains_for_each_card_fewer_than_three() {
+    cr!("710.2");
+    compiles("Nezumi Shortfang // Stabwhisker the Odious");
+    let mut t = TestGame::new(2);
+    let rat = t.battlefield(P0, "Nezumi Shortfang // Stabwhisker the Odious");
+    assert!(flip::flip(&mut t.g, rat));
+    t.g.recompute();
+    t.hand(P1, "Island");
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18, "one card: two fewer than three");
+    // Three or more cards: no life loss.
+    for _ in 0..3 {
+        t.hand(P0, "Island");
+    }
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn roiling_terrain_counts_the_lands_controllers_graveyard() {
+    cr!("608.2h");
+    compiles("Roiling Terrain");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 4);
+    let land = t.battlefield(P1, "Forest");
+    t.graveyard(P1, "Plains");
+    t.graveyard(P1, "Island");
+    t.graveyard(P1, "Lightning Bolt");
+    t.graveyard(P0, "Swamp");
+    let spell = t.hand(P0, "Roiling Terrain");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).target(Entity::Object(land)).go();
+    t.resolve_all();
+    // Plains, Island and the destroyed Forest.
+    assert_eq!(t.life(P1), 17);
+}

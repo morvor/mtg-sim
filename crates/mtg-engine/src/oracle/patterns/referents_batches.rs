@@ -388,3 +388,42 @@ fn those_you_control(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: [each of] those creatures you (don't) control", priority: 1500, parse: those_you_control } }
+
+/// "that player loses 1 life for each card fewer than three in their hand" (Nezumi
+/// Shortfang's Stabwhisker): three minus the number of cards in their hand, if positive.
+fn for_each_card_fewer_than(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, k) = l.split_once(" 1 life for each card fewer than ")?;
+    let k = k.strip_suffix(" in their hand")?;
+    if k.contains(' ') {
+        return None;
+    }
+    crate::oracle::effects::parse_sentence(
+        &format!("{head} x life, where x is {k} minus the number of cards in their hand"),
+        b,
+    )
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: N life for each card fewer than K in their hand", priority: 1500, parse: for_each_card_fewer_than } }
+
+/// "~ deals damage to that land's controller equal to the number of land cards in that
+/// player's graveyard" (Roiling Terrain): "that player" is the controller just named.
+fn that_player_the_controller_named(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let i = l.find(" that player's ")?;
+    let before = &l[..i];
+    let named: Vec<&str> = ["that land's controller", "that creature's controller", "its controller"]
+        .into_iter()
+        .filter(|p| before.contains(p))
+        .collect();
+    let [p] = named.as_slice() else {
+        return None;
+    };
+    if l[i + 1..].contains(" that player") && l[i + 1..].matches("that player").count() > 1 {
+        return None;
+    }
+    let rewritten = format!("{before} {p}'s {}", &l[i + " that player's ".len()..]);
+    crate::oracle::effects::parse_sentence(&rewritten, b)
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: that player (the controller the sentence named)", priority: 1500, parse: that_player_the_controller_named } }
