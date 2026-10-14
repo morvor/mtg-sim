@@ -1591,6 +1591,12 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     } else if let Some(r) = strip(s, "activated or triggered ability") {
         // An ability on the stack, not a spell (Stifle).
         (TargetKind::Ability(Filter::Any), r)
+    } else if let Some(r) =
+        strip(s, "loyalty ability of a planeswalker").or_else(|| strip(s, "loyalty ability"))
+    {
+        // A loyalty ability on the stack (CR 606.3; Verdant Command).
+        let f = Filter::Custom(crate::kw::game_rules::LOYALTY_ABILITY.into());
+        (TargetKind::Ability(f), r)
     } else if let Some(r) = strip(s, "activated ability") {
         let f = Filter::Custom(crate::game_terms::ACTIVATED_ABILITY.into());
         (TargetKind::Ability(f), r)
