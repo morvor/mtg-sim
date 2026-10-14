@@ -617,3 +617,70 @@ fn sarkhan_planeswalker_creatures_need_to_have_been_controlled_since_the_turn_be
         "came under P0's control this turn"
     );
 }
+
+#[test]
+fn mirkwood_trapper_attacking_only_your_planeswalker_isnt_attacking_you() {
+    cr!("508.3d", "603.4", "506.2");
+    ruling!(
+        "Mirkwood Trapper",
+        "If a player is attacking a planeswalker you control or a battle you're protecting but not attacking you, Mirkwood Trapper's last ability will still trigger."
+    );
+    supported("Mirkwood Trapper");
+    // P0 attacks only P1's planeswalker: the last ability (not the first) triggers, and
+    // P0's attacking Bears get +2/+0.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Mirkwood Trapper");
+    let pw = t.battlefield(P1, "Jace Beleren");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[obj(bears)]);
+    attack_with(&mut t, &[(bears, obj(pw))]);
+    assert_eq!(t.stack_len(), 1, "only the last ability");
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (4, 2));
+    // Attacking P1: the first ability (-2/-0 to target attacking creature) instead.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Mirkwood Trapper");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_targets(P1, &[obj(bears)]);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (0, 2));
+}
+
+#[test]
+fn imprison_abilities_are_triggered_abilities() {
+    cr!("603.1", "603.2", "508.3a");
+    ruling!(
+        "Imprison",
+        "Both abilities are triggered abilities. The first one triggers on the activating of a creature ability, and the second triggers on declaration of attacking or blocking."
+    );
+    supported("Imprison");
+    // P1's Imprison on P0's Prodigal Pyromancer: activating its {T} ability triggers it
+    // (the activation is still on the stack under the trigger); so does attacking.
+    let mut t = TestGame::new(2);
+    let pyro = t.battlefield(P0, "Prodigal Pyromancer");
+    let aura = t.battlefield(P1, "Imprison");
+    assert!(t.g.attach(aura, obj(pyro)));
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    crate::r_s06_common::activate_containing(&mut t, P0, pyro, "damage").unwrap();
+    t.settle();
+    assert_eq!(t.stack_len(), 2, "the activation and Imprison's trigger");
+    let top = crate::r_s04_common::top_of_stack(&t);
+    assert_eq!(t.obj_now(top).controller, P1);
+    t.answer_yes(P1, false);
+    t.resolve_all();
+    assert!(!t.on_battlefield(aura), "not paid: Imprison is destroyed");
+    assert_eq!(t.life(P1), 19, "the ability wasn't countered");
+    // Declared as an attacker: the second trigger.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let aura = t.battlefield(P1, "Imprison");
+    assert!(t.g.attach(aura, obj(bears)));
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert_eq!(t.stack_len(), 1);
+    t.answer_yes(P1, false);
+    t.resolve_all();
+    assert!(!t.on_battlefield(aura));
+}

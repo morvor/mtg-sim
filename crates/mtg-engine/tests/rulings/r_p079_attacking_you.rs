@@ -1,7 +1,7 @@
 //! Rulings batch P079 — "target creature [without flying] that's attacking you [or a
-//! planeswalker you control]" (pattern `r508_that_is_attacking_you`): a creature attacking
-//! a planeswalker isn't attacking you (CR 506.2, 508.1b), and the target is checked again
-//! on resolution (CR 608.2b).
+//! planeswalker you control]" and "that's attacking or blocking" (pattern
+//! `noun_phrase_predicates`): a creature attacking a planeswalker isn't attacking you
+//! (CR 506.2, 508.1b), and the target is checked again on resolution (CR 608.2b).
 
 use crate::r_p079_common::*;
 use crate::r_s01_common::{attack_with, supported};
