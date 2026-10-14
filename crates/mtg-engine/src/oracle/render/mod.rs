@@ -581,7 +581,7 @@ pub(crate) fn is_solved(c: &Condition) -> bool {
     matches!(c, Condition::Custom(n) if n == "case: is solved")
 }
 
-fn is_changeling_cda(a: &Ability) -> bool {
+pub(crate) fn is_changeling_cda(a: &Ability) -> bool {
     matches!(&a.kind, AbilityKind::Static(s) if s.is_cda && matches!(&s.effect,
         StaticEffect::Continuous { mods, .. } if mods.len() == 1 && matches!(mods[0], Modification::AllCreatureTypes)))
 }

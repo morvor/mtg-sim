@@ -453,6 +453,10 @@ pub struct GameObject {
     /// The object (and link) whose ability created this token or put this permanent onto
     /// the battlefield (CR 607.1d).
     pub created_by: Option<(ObjectId, u16)>,
+    /// The permission this spell was cast with, or this land played with (CR 601.3,
+    /// 305.1): "When you cast a spell this way" finds it (CR 400.7h, 400.7i).
+    #[serde(default)]
+    pub played_with: Option<crate::permissions::PermissionUse>,
     /// Previous incarnation of this card (before its last zone change).
     pub prev: Option<ObjectId>,
     /// Next incarnation (after it changed zones).
@@ -524,6 +528,11 @@ pub struct LeftBattlefield {
     /// existed there.
     #[serde(default)]
     pub attached: bool,
+    /// The (blocker, attacker) pairs it was part of as it left, during combat: an
+    /// ability whose source left the battlefield uses its last known information
+    /// ("target creature blocking or blocked by it", CR 113.7a, 608.2h).
+    #[serde(default)]
+    pub blocks: Vec<(ObjectId, ObjectId)>,
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability
@@ -600,6 +609,7 @@ impl GameObject {
             linked_choices: BTreeMap::new(),
             linked: BTreeMap::new(),
             created_by: None,
+            played_with: None,
             prev: None,
             next: None,
             entered_turn: 0,

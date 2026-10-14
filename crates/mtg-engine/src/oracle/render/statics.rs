@@ -1705,6 +1705,14 @@ impl Renderer<'_> {
         let subj = |me: &mut Self, f: &Filter| me.restricted_subject(f);
         match r {
             Restriction::CantAttack(f) => format!("{} can't attack", subj(self, f)),
+            Restriction::AttackOnlyNearestOpponent { side } => {
+                let d = match side {
+                    SeatSide::Left => "to the left",
+                    SeatSide::Right => "to the right",
+                    SeatSide::Chosen => "in the {alt:chosen|last chosen} direction",
+                };
+                format!("each player may attack only the nearest opponent {d} and planeswalkers controlled by that opponent")
+            }
             Restriction::CantBlock(f) => format!("{} can't block", subj(self, f)),
             Restriction::CantAttackOrBlock(f) => {
                 format!("{} can't attack or block", subj(self, f))

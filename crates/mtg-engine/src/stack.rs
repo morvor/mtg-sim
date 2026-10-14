@@ -1403,6 +1403,14 @@ impl Game {
             };
             self.exec(&effect, ctx);
         }
+        // A modal spell's other spell abilities (the paragraph after the modes: "Then
+        // return a creature card ..." of Blood on the Snow, Thermal Flux's delayed draw)
+        // are performed once, after the chosen modes (CR 608.2c). `spell_body` combines
+        // them into the effect of the modal body, whose own effect is nothing.
+        if body.modal.is_some() && !matches!(body.effect, Effect::Noop) && !chosen.is_empty() {
+            let effect = body.effect.clone();
+            self.exec(&effect, ctx);
+        }
     }
 
     /// CR 608.3g: static abilities of a resolving permanent spell that function on the

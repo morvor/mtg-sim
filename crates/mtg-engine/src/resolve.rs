@@ -162,8 +162,17 @@ impl Game {
                 // CR 101.4, 608.2e–f: what several players do at the same time.
                 crate::simultaneous::for_each_player(self, players, effect, ctx);
             }
-            Effect::InTurnOrder { first, who, effect } => {
-                crate::turn_order_choices::run(self, *first, who, effect, ctx)
+            Effect::InTurnOrder {
+                first,
+                who,
+                effect,
+                direction,
+            } => crate::turn_order_choices::run(self, *first, *direction, who, effect, ctx),
+            Effect::AddToPlayerTally { var, who, value } => {
+                let n = self.eval_value(value, ctx);
+                for p in self.eval_players(who, ctx) {
+                    ctx.add_tally(*var, p, n);
+                }
             }
             Effect::AsPlayer { who, effect } => {
                 if let Some(p) = self.eval_player(who, ctx) {
@@ -345,8 +354,10 @@ impl Game {
             }
             Effect::SacrificeObjects { what } => {
                 // "Sacrifice ~": the ability's controller sacrifices its source, which they
-                // can't do if another player controls it now (CR 701.21a).
-                let own_source = matches!(what, Sel::This);
+                // can't do if another player controls it now (CR 701.21a). The same for
+                // "sacrifice Spare Dagger" in an ability it grants (`granted_by`).
+                let own_source =
+                    matches!(what, Sel::This) || crate::granted_by::is_bound_granter(what);
                 let objs = self.resolve_objects(what, ctx);
                 let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 // Sacrificed at the same time (CR 101.4).
@@ -370,6 +381,7 @@ impl Game {
                 }
             }
             Effect::Move { what, to } => {
+                let what = &crate::attach::only_enterable(self, what, to, ctx);
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
@@ -755,13 +767,15 @@ impl Game {
                 restriction,
                 duration,
             } => {
-                // CR 611.2b: a "for as long as" duration that already ended.
-                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                let objects = self.lock_restriction_objects(restriction, ctx);
+                // CR 611.2b: a "for as long as" duration that already ended (one about the
+                // objects it applies to, "for as long as it remains tapped", is checked
+                // for them).
+                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects) {
                     return;
                 }
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
-                let objects = self.lock_restriction_objects(restriction, ctx);
                 self.rule_effects.push(RuleEffect {
                     id,
                     source: ctx.source,
@@ -836,103 +850,8 @@ impl Game {
                 what,
                 who,
                 duration,
-            } => {
-                // "If they do, ...": whether a player gained control of something.
-                ctx.prev_happened = false;
-                // CR 611.2b (Master Thief). A condition about the affected objects ("for
-                // as long as that creature is enchanted") is checked for them below.
-                let about_affected = matches!(duration, Duration::WhileCondition(_));
-                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
-                    return;
-                }
-                let objs: Vec<ObjectId> = self
-                    .resolve_objects(what, ctx)
-                    .into_iter()
-                    .filter(|o| self.is_live(*o))
-                    .collect();
-                let Some(p) = self.eval_player(who, ctx) else {
-                    return;
-                };
-                if objs.is_empty() {
-                    return;
-                }
-                if let Duration::WhileCondition(c) = duration {
-                    let mut c2 = ctx.clone();
-                    c2.set_var(
-                        vars::AFFECTED,
-                        objs.iter().map(|o| Entity::Object(*o)).collect(),
-                    );
-                    if !self.eval_cond(c, &c2) {
-                        return;
-                    }
-                }
-                // "Draw a card for each one they gained control of this way".
-                let changed: Vec<ObjectId> = objs
-                    .iter()
-                    .copied()
-                    .filter(|o| self.obj(*o).controller != p)
-                    .collect();
-                ctx.prev_happened = !changed.is_empty();
-                ctx.prev_value = changed.len() as _;
-                let id = self.new_effect_id();
-                let ts = self.new_timestamp();
-                self.effects.push(ContinuousEffect {
-                    id,
-                    source: ctx.source,
-                    controller: ctx.controller,
-                    timestamp: ts,
-                    duration: duration.clone(),
-                    affected: Affected::Objects(objs),
-                    mods: vec![Modification::SetController(player_const(p))],
-                    layer1: None,
-                    created_turn: self.turn.number,
-                });
-                self.dirty = true;
-                self.recompute();
-            }
-            Effect::ExchangeControl { a, b } => {
-                // CR 701.12a: exactly two permanents, or no part of the exchange occurs
-                // ("two target creatures" select both from one target slot). Whether it
-                // happened is what "If you do" / "If you don't or can't make an exchange"
-                // ask about (CR 701.12b: between one player's permanents it does nothing).
-                ctx.prev_happened = false;
-                let mut both: Vec<ObjectId> = Vec::new();
-                for o in self
-                    .resolve_objects(a, ctx)
-                    .into_iter()
-                    .chain(self.resolve_objects(b, ctx))
-                {
-                    if !both.contains(&o) {
-                        both.push(o);
-                    }
-                }
-                let on_battlefield =
-                    |g: &Self, o: &ObjectId| g.is_live(*o) && g.obj(*o).zone == Zone::Battlefield;
-                if both.len() == 2 && both.iter().all(|o| on_battlefield(self, o)) {
-                    let (a, b) = (both[0], both[1]);
-                    let (ca, cb) = (self.obj(a).controller, self.obj(b).controller);
-                    if ca == cb {
-                        return;
-                    }
-                    for (obj, p) in [(a, cb), (b, ca)] {
-                        let id = self.new_effect_id();
-                        let ts = self.new_timestamp();
-                        self.effects.push(ContinuousEffect {
-                            id,
-                            source: ctx.source,
-                            controller: ctx.controller,
-                            timestamp: ts,
-                            duration: Duration::Permanent,
-                            affected: Affected::Objects(vec![obj]),
-                            mods: vec![Modification::SetController(player_const(p))],
-                            layer1: None,
-                            created_turn: self.turn.number,
-                        });
-                    }
-                    self.dirty = true;
-                    ctx.prev_happened = true;
-                }
-            }
+            } => crate::control_change::gain_control(self, what, who, duration, ctx),
+            Effect::ExchangeControl { a, b } => crate::control_change::exchange(self, a, b, ctx),
             Effect::CreateToken {
                 spec,
                 count,
@@ -1019,6 +938,13 @@ impl Game {
                 ctx.prev_value = created.len() as i64;
                 // "Create a ... token. When you do, ...": whether one was created.
                 ctx.prev_happened = !created.is_empty();
+                // "Create a Monster Role token attached to target creature you control.
+                // When you do, that creature fights ..." (Curse of the Werefox): "it" /
+                // "that creature" is what the tokens were created attached to.
+                let hosts: Vec<Entity> = attach.into_iter().flatten().collect();
+                if !hosts.is_empty() {
+                    ctx.set_var(vars::IT, hosts);
+                }
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),
@@ -2064,6 +1990,7 @@ impl Game {
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let objs = self.resolve_objects(what, ctx);
+                let before = self.play_grants.len();
                 crate::casting::grant_play_permission(
                     self,
                     p,
@@ -2072,6 +1999,8 @@ impl Game {
                     *free,
                     ctx.source,
                 );
+                // "When you play a card this way" (see `permissions::PermissionUse`).
+                crate::permissions::note_way(self, before, ctx);
             }
             Effect::WithPlayTerms { terms, effect } => {
                 // The permissions the effect gives come with the terms.
@@ -2488,8 +2417,8 @@ impl Game {
                 }
                 // "gains all activated abilities of target creature until end of turn":
                 // the abilities it has as the effect is created (CR 608.2h).
-                Modification::AddAbilitiesOf { from, which } => {
-                    crate::ability_grants::snapshot(self, from, which, ctx)
+                Modification::AddAbilitiesOf { from, which, terms } => {
+                    crate::ability_grants::snapshot(self, from, which, terms, ctx)
                 }
                 other => vec![other.clone()],
             })
@@ -2641,6 +2570,10 @@ impl Game {
             if filter_references_specific(f) {
                 *f = Filter::Any;
             } else {
+                // "Creatures with power less than or equal to that number can't block this
+                // turn": the amount is fixed as the effect begins (CR 608.2h), the class
+                // isn't (CR 611.2c).
+                self.lock_filter_amounts(f, ctx);
                 // "Creatures target player controls don't untap ...": the objects that
                 // player controls, whichever they are later.
                 *f = self.bind_target_players(f, ctx);
@@ -2666,6 +2599,7 @@ impl Game {
                 if filter_references_specific(f) {
                     *f = Filter::Objects(self.named_objects(f, ctx));
                 } else {
+                    self.lock_filter_amounts(f, ctx);
                     // "creatures that player controls": the players as the effect begins.
                     *f = self.bind_target_players(f, ctx);
                 }

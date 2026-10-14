@@ -1064,6 +1064,10 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     if let Some(x) = named_possessive_player(s, b) {
         return Some(x);
     }
+    // "the player to your right" (`patterns::seats_grammar`).
+    if let Some((p, r)) = super::patterns::seats_grammar::seat_phrase(s) {
+        return Some((p, r.to_string()));
+    }
     let with_space = format!("{s} ");
     if let Some((r, spec, rest)) = parse_player(&with_space) {
         let rest = rest.to_string();
@@ -1138,6 +1142,16 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         if let Some(r) = t.strip_suffix(p) {
             return (d, r);
         }
+    }
+    // "Its activated abilities can't be activated for as long as it remains tapped"
+    // (Braided Net, CR 611.2b): about the object the effect applies to; once it untaps,
+    // the effect has ended for good.
+    if let Some(r) = t.strip_suffix(" for as long as it remains tapped") {
+        let affected = Sel::Var(vars::AFFECTED);
+        return (
+            Duration::WhileCondition(Condition::SelMatches(affected, Filter::Tapped)),
+            r,
+        );
     }
     // "for as long as that creature is enchanted" (CR 611.2b): a condition about the
     // objects the effect applies to.
@@ -1919,10 +1933,11 @@ pub fn parse_token_description(s: &str) -> Option<TokenSpec> {
         let mods = keyword_mods(r)?;
         for m in mods {
             if let Modification::AddKeyword(k) = m {
-                abilities.push(AbilityDef::new(
-                    AbilityKind::Keyword(k.clone()),
-                    k.kind.name(),
-                ));
+                // A keyword the token is created with is part of its definition: a
+                // changeling token also has the characteristic-defining ability
+                // (CR 702.73a, 604.3).
+                let name = k.kind.name();
+                abilities.extend(crate::oracle::keywords::compile_keyword(k, name));
             }
         }
     } else if !end(rest).is_empty() {
@@ -2144,9 +2159,13 @@ pub(crate) fn is_class_filter(f: &Filter) -> bool {
     match f {
         Filter::And(v) | Filter::Or(v) => v.iter().all(is_class_filter),
         Filter::Not(x) => is_class_filter(x),
-        Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {
-            matches!(**v, Value::Const(_))
-        }
+        // A constant, or an amount fixed as the effect begins ("power less than or equal
+        // to that number", "mana value X or less", CR 608.2h; see `fix_restriction` in
+        // `resolve.rs`).
+        Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => matches!(
+            **v,
+            Value::Const(_) | Value::X | Value::Var(_) | Value::EventAmount | Value::Chosen
+        ),
         // An object's stats compared with its own ("with toughness greater than its
         // power", "with total power and toughness 5 or less").
         Filter::ValueCmp(a, _, b) => own_stat_value(a) && own_stat_value(b),
