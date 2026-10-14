@@ -337,10 +337,12 @@ pub(crate) fn could_enter_unspecified(g: &mut Game, id: ObjectId, controller: Pl
     })
 }
 
-/// A choice of cards to put onto the battlefield without saying what they're attached to
+/// A choice of one card to put onto the battlefield without saying what it's attached to
 /// ("each player may put a permanent card from their hand onto the battlefield"): an Aura
 /// with nothing it could legally enchant can't be chosen (CR 303.4g; Thieves' Auction
-/// ruling). Other selections are returned as they are.
+/// ruling). A choice of several cards put onto the battlefield together is left as it is:
+/// an Aura among them may be chosen and then stays where it is if it can't enchant
+/// anything else (Eerie Ultimatum ruling). Other selections are returned as they are.
 pub fn only_enterable(g: &mut Game, what: &Sel, to: &Destination, ctx: &Ctx) -> Sel {
     let Sel::Choose {
         chooser,
@@ -352,7 +354,10 @@ pub fn only_enterable(g: &mut Game, what: &Sel, to: &Destination, ctx: &Ctx) -> 
     else {
         return what.clone();
     };
-    if to.zone != ZoneKind::Battlefield || to.attached_to.is_some() {
+    if to.zone != ZoneKind::Battlefield
+        || to.attached_to.is_some()
+        || !matches!(count, Value::Const(1))
+    {
         return what.clone();
     }
     let controller = to
