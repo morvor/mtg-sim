@@ -152,6 +152,23 @@ fn rewrite(text: &str) -> Option<String> {
     let cond_end = i + lower[i..d].find(", ")?;
     let cond = &lower[i + 3..cond_end];
     let (big, small) = sides(cond)?;
+    // "If its controller has more than four cards in hand, they exile cards from their
+    // hand equal to the difference." (Isildur's Fateful Strike): that many cards.
+    let instr = &lower[cond_end + 2..d];
+    if let Some(verb) = instr
+        .strip_prefix("they ")
+        .and_then(|r| r.strip_suffix(" cards from their hand equal to "))
+    {
+        let subject = cond.split_once(" has ").map(|(s, _)| s)?;
+        if verb.contains(' ') || !subject.starts_with("its ") {
+            return None;
+        }
+        return Some(format!(
+            "{}{subject} {verb}s X cards from their hand, where X is {big} minus {small}{}",
+            &text[..cond_end + 2],
+            &text[d + "the difference".len()..]
+        ));
+    }
     // "If that creature has greater power than ~": the condition is read in the same words
     // as the calculation, so that "that creature" names the same object in both.
     let head = if cond.starts_with("that ") && !cond.starts_with("that player ") {

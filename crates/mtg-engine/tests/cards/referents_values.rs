@@ -633,3 +633,29 @@ fn roiling_terrain_counts_the_lands_controllers_graveyard() {
     // Plains, Island and the destroyed Forest.
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn isildurs_fateful_strike_exiles_cards_down_to_four() {
+    cr!("608.2h", "107.1b");
+    compiles("Isildur's Fateful Strike");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Isamaru, Hound of Konda");
+    t.lands(P0, "Swamp", 4);
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    for _ in 0..6 {
+        t.hand(P1, "Island");
+    }
+    let spell = t.hand(P0, "Isildur's Fateful Strike");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).target(Entity::Object(bear)).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bear));
+    assert_eq!(t.hand_size(P1), 4);
+    assert_eq!(
+        t.g.exile
+            .iter()
+            .filter(|id| t.g.obj(**id).chars.name.as_str() == "Island")
+            .count(),
+        2
+    );
+}
