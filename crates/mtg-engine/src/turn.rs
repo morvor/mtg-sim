@@ -313,6 +313,7 @@ impl Game {
             .max()
             .unwrap_or(0);
         self.spells_cast_last_turn_by_active = last_spells;
+        let ended = (self.turn.number > 0).then(|| self.active_players());
         self.turn.number += 1;
         // An extra turn keeps the turn order where it was (CR 500.7).
         let position = self.turn.turn_order_position();
@@ -332,7 +333,10 @@ impl Game {
         self.turn.attacked_players.clear();
         self.last_turn_history = std::mem::take(&mut self.history);
         self.history.began_at = self.next_timestamp;
-        self.turn_events.clear();
+        let events = std::mem::take(&mut self.turn_events);
+        if let Some(players) = ended {
+            crate::history_query::record_turn(self, players, events);
+        }
         for p in self.active_players() {
             self.players[p.idx()].turns_taken += 1;
         }

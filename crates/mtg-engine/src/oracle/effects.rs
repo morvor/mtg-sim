@@ -552,7 +552,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         }
     }
     let e = super::patterns::oracle_hardening_referents::finish_introduced(
-        Effect::seq(effects),
+        crate::trigger_timing::join_instructions(effects),
         b,
         introduced,
     );

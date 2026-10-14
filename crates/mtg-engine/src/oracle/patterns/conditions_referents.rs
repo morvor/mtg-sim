@@ -43,24 +43,24 @@ use crate::discard_rules::DISCARDED;
 pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
     let c = end(c.trim());
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let r = referent_condition(c, b)
-        .or_else(|| joined(c, b))
-        .or_else(|| referent_free(c, b));
+    // A pronoun that had no antecedent isn't understood.
+    let understood = |r: Option<Condition>| {
+        let r = r?;
+        let d = serde_json::to_string(&r).unwrap_or_default();
+        let needle = format!(
+            "\"Var\":{}",
+            crate::oracle::patterns::oracle_hardening_referents::NO_REFERENT
+        );
+        (!d.contains(&needle)).then_some(r)
+    };
+    let r = understood(referent_condition(c, b))
+        .or_else(|| understood(joined(c, b)))
+        .or_else(|| understood(referent_free(c, b)));
     // Resolving a subject never changes what later pronouns mean, nor adds targets.
     b.targets.truncate(saved.0);
     b.it = saved.1;
     b.it_player = saved.2;
-    let r = r?;
-    // A pronoun that had no antecedent isn't understood.
-    let d = serde_json::to_string(&r).unwrap_or_default();
-    let needle = format!(
-        "\"Var\":{}",
-        crate::oracle::patterns::oracle_hardening_referents::NO_REFERENT
-    );
-    if d.contains(&needle) {
-        return None;
-    }
-    Some(r)
+    r
 }
 
 /// Whether a condition's "it" would mean the ability's source only by default: after an
@@ -489,15 +489,17 @@ fn referent_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     if let Some(cond) = special(c, b) {
         return Some(cond);
     }
-    let (subj, rest) = subject(c, b)?;
-    match subj {
+    let r = subject(c, b).and_then(|(subj, rest)| match subj {
         Subject::Object(sel) => object_predicate(&sel, &rest, b).or_else(|| {
             // The static-condition grammar's states of "it".
             let f = super::statics_conditions::pronoun_state(c)?;
             Some(Condition::SelMatches(sel, f))
         }),
         Subject::Player(p) => player_condition(&p, rest.trim(), b),
-    }
+    });
+    // What happened earlier, and how a spell was cast ("if it was cast", "if that
+    // creature entered this turn").
+    r.or_else(|| super::history_conditions::referent_history(c, b))
 }
 
 /// Conditions whose subject isn't the referent: "you control that creature", "an

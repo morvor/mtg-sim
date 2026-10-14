@@ -14,6 +14,8 @@
 //!   and lasts until the beginning of the following turn (CR 723.1, 723.1b); effects
 //!   affecting the same player overwrite each other (CR 723.1a). An effect may give a
 //!   player control of themselves (CR 723.9).
+//! * "The first player controls the second player during the second player's next turn"
+//!   (Cruel Entertainment): the controlling player is a target too.
 //! * Word of Command controls a player for a limited duration (CR 723.2), specifies an
 //!   action they must take and restricts the mana abilities they may activate meanwhile
 //!   (CR 723.7).
@@ -77,7 +79,7 @@ pub struct PlayerControlState {
 /// `StaticEffect::Custom` name: "You control your opponents while they're searching
 /// their libraries." (Opposition Agent, CR 723.2).
 pub const CONTROL_WHILE_SEARCHING: &str = "control opponents while searching";
-/// `Effect::Custom` prefix: "player control:<turn|combat>:<target slot>[:extra]".
+/// `Effect::Custom` prefix: "player control:<turn|combat>:<target slot>[:extra|:by<slot>]".
 pub const CONTROL_EFFECT: &str = "player control:";
 /// `Condition::Custom` name: "this spell's additional cost was paid" (an optional
 /// additional cost of the spell whose ability this is was paid).
@@ -108,6 +110,12 @@ pub fn control_effect(span: ControlSpan, slot: u8, extra_turn_after: bool) -> Ef
     )))
 }
 
+/// The effect "the player in target slot `by` controls the player in target slot `slot`
+/// during that player's next turn" (Cruel Entertainment).
+pub fn control_effect_by(slot: u8, by: u8) -> Effect {
+    Effect::Custom(SmolStr::new(format!("{CONTROL_EFFECT}turn:{slot}:by{by}")))
+}
+
 /// Parses a [`control_effect`] name: (span, slot, extra turn after).
 pub fn parse_control_effect(name: &str) -> Option<(ControlSpan, u8, bool)> {
     let rest = name.strip_prefix(CONTROL_EFFECT)?;
@@ -120,6 +128,14 @@ pub fn parse_control_effect(name: &str) -> Option<(ControlSpan, u8, bool)> {
     let slot = parts.next()?.parse().ok()?;
     let extra = parts.next() == Some("extra");
     Some((span, slot, extra))
+}
+
+/// The target slot of the controlling player of a [`control_effect_by`] name (`None`: the
+/// ability's controller).
+pub fn control_effect_by_slot(name: &str) -> Option<u8> {
+    name.strip_prefix(CONTROL_EFFECT)?
+        .split(':')
+        .find_map(|p| p.strip_prefix("by")?.parse().ok())
 }
 
 /// `controller` gains control of `player` during `player`'s next turn or combat phase.
@@ -481,13 +497,24 @@ impl KeywordRules for PlayerControlRules {
         let Some((span, slot, extra)) = parse_control_effect(name) else {
             return false;
         };
-        let players: Vec<PlayerId> = ctx
-            .targets
-            .get(slot as usize)
-            .map(|v| v.iter().filter_map(|e| e.player()).collect())
-            .unwrap_or_default();
+        let players_in = |slot: u8| -> Vec<PlayerId> {
+            ctx.targets
+                .get(slot as usize)
+                .map(|v| v.iter().filter_map(|e| e.player()).collect())
+                .unwrap_or_default()
+        };
+        let players = players_in(slot);
+        // "The first player controls the second player ...": the controller is a target
+        // (nobody gains control if that target is no longer legal, CR 608.2b).
+        let controller = match control_effect_by_slot(name) {
+            Some(by) => match players_in(by).first() {
+                Some(c) => *c,
+                None => return true,
+            },
+            None => ctx.controller,
+        };
         for p in players {
-            gain_control(g, ctx.controller, p, span, extra);
+            gain_control(g, controller, p, span, extra);
         }
         true
     }

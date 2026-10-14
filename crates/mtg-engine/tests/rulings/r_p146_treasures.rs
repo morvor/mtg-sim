@@ -53,10 +53,8 @@ fn dimir_strandcatcher_counts_opponents_as_it_resolves() {
         "The value of X is determined only once, as Dimir Strandcatcher's second ability resolves. If a player leaves the game after the ability triggers but before it resolves, they won't be counted when the ability resolves."
     );
     // "Whenever you attack, surveil X, where X is the number of opponents being
-    // attacked." (Its end step ability doesn't compile; this one does.)
-    let c = mtg_engine::card::card("Dimir Strandcatcher");
-    assert_eq!(c.unsupported_text().len(), 1);
-    assert!(c.unsupported_text()[0].starts_with("At the beginning of each end step"));
+    // attacked."
+    supported("Dimir Strandcatcher");
     let mut t = TestGame::new(3);
     let d = t.battlefield(P0, "Dimir Strandcatcher");
     let b = t.battlefield(P0, "Grizzly Bears");
