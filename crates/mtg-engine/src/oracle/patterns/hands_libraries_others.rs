@@ -885,3 +885,137 @@ fn discards_revealed_card(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "that player discards it (the revealed card) [unless ...]", priority: 100, parse: discards_revealed_card } }
+
+/// "target opponent exiles the top card of their library, a card at random from their
+/// graveyard, and a card at random from their hand" (Crabomination): one card from each
+/// zone, at the same time; "cards exiled this way" afterward.
+fn exiles_top_and_random(l: &str, b: &mut Builder) -> Option<Effect> {
+    let subject = end(l).strip_suffix(
+        " exiles the top card of their library, a card at random from their graveyard, and a card at random from their hand",
+    )?;
+    let saved = b.targets.len();
+    let (who, extra) = player_ref(subject, b)?;
+    if !extra.trim().is_empty() || !matches!(who, PlayerRef::Target(_)) {
+        b.targets.truncate(saved);
+        return None;
+    }
+    let random_in = |zone: ZoneKind| Sel::AtRandom {
+        filter: Filter::and(vec![
+            Filter::Card,
+            Filter::InZone(zone),
+            Filter::OwnedByPlayer(Box::new(who.clone())),
+        ]),
+        count: Value::c(1),
+        store: None,
+    };
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::Exile {
+        what: Sel::Union(vec![
+            Sel::TopOfLibrary(who.clone(), Value::c(1)),
+            random_in(ZoneKind::Graveyard),
+            random_in(ZoneKind::Hand),
+        ]),
+        face_down: false,
+        link: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "[player] exiles the top card of their library and cards at random from their graveyard and hand", priority: 100, parse: exiles_top_and_random } }
+
+/// "the owner of each card exiled with ~ puts that card on the bottom of their library"
+/// (Trial of a Time Lord).
+fn owners_put_exiled_on_bottom(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if end(l) != "the owner of each card exiled with ~ puts that card on the bottom of their library" {
+        return None;
+    }
+    Some(Effect::Move {
+        what: Sel::All(Filter::and(vec![
+            Filter::InZone(ZoneKind::Exile),
+            Filter::In(Box::new(Sel::Linked)),
+        ])),
+        to: Destination::library_bottom(),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "the owner of each card exiled with ~ puts that card on the bottom of their library", priority: 100, parse: owners_put_exiled_on_bottom } }
+
+/// The kind chosen by "Choose land or nonland." (1: land, 0: nonland).
+const CHOSEN_KIND: Var = vars::USER + 2335;
+
+/// "Choose land or nonland." (Abundant Harvest): a choice "a card of the chosen kind"
+/// refers to.
+fn choose_land_or_nonland(l: &str, b: &mut Builder) -> Option<Effect> {
+    // (The choice grammar reads other uses of the choice.)
+    if end(l) != "choose land or nonland"
+        || !crate::oracle::raw_text()
+            .to_lowercase()
+            .contains("a card of the chosen kind")
+    {
+        return None;
+    }
+    b.named
+        .push(("\u{1}chosen kind".to_string(), Sel::None));
+    Some(Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: vec![
+            (
+                "Land".to_string(),
+                Effect::StoreValue {
+                    var: CHOSEN_KIND,
+                    value: Value::c(1),
+                },
+            ),
+            (
+                "Nonland".to_string(),
+                Effect::StoreValue {
+                    var: CHOSEN_KIND,
+                    value: Value::c(0),
+                },
+            ),
+        ],
+    })
+}
+
+inventory::submit! { EffectPattern { name: "choose land or nonland (for a card of the chosen kind)", priority: 89, parse: choose_land_or_nonland } }
+
+/// "Reveal cards from the top of your library until you reveal a card of the chosen kind."
+/// after [`choose_land_or_nonland`].
+fn reveal_until_chosen_kind(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "reveal cards from the top of your library until you reveal a card of the chosen kind"
+    {
+        return None;
+    }
+    if !b.named.iter().any(|(n, _)| n == "\u{1}chosen kind") {
+        return None;
+    }
+    let is = |k: i32| {
+        Filter::ValueCmp(
+            Box::new(Value::Var(CHOSEN_KIND)),
+            Cmp::Eq,
+            Box::new(Value::c(k)),
+        )
+    };
+    let land = Filter::Type(crate::types::CardType::Land);
+    let filter = Filter::Or(vec![
+        Filter::and(vec![is(1), land.clone()]),
+        Filter::and(vec![is(0), Filter::not(land)]),
+    ]);
+    super::dig_grammar::keep_that_creature(b);
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::RevealUntil {
+        who: PlayerRef::You,
+        filter: Filter::and(vec![Filter::Card, filter]),
+        found_to: {
+            let mut d = Destination::library_top();
+            d.position = LibraryPosition::FromTop(0);
+            d
+        },
+        rest_to: {
+            let mut d = Destination::library_top();
+            d.position = LibraryPosition::FromTop(0);
+            d
+        },
+    })
+}
+
+inventory::submit! { EffectPattern { name: "reveal cards until you reveal a card of the chosen kind (land or nonland)", priority: 100, parse: reveal_until_chosen_kind } }

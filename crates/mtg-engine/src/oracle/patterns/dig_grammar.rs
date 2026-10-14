@@ -22,6 +22,7 @@
 
 use super::card_flow_search::card_filter;
 use crate::ability::*;
+use crate::types::{CardType, Color};
 use crate::oracle::effects::Builder;
 use crate::oracle::patterns::{EffectPattern, FollowupPattern};
 use crate::oracle::phrases::*;
@@ -1655,6 +1656,9 @@ fn rest_tail(s: &str, rest: &Sel, mut builder: Option<&mut Builder>) -> Option<V
 /// onto the battlefield and the rest into your graveyard.").
 fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
     let l = l.strip_prefix("then ").unwrap_or(l);
+    if let Some(v) = per_kind_take(l, b) {
+        return Some(v);
+    }
     let (may, r) = match l.strip_prefix("you may ") {
         Some(r) => (true, r),
         None => (false, l),
@@ -1831,6 +1835,100 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
     Some(out)
 }
 
+/// "For each card type, you may exile a card of that type from among them." (Portent of
+/// Calamity), "For each card type among noncreature spells you've cast this turn, you may
+/// put a card of that type from among the revealed cards into your hand." (Hurkyl,
+/// Master Wizard), "For each of those colors, you may exile a card of that color from
+/// among the revealed cards." (Sanar, after "X is the number of colors among permanents
+/// you control"): one card for each kind, each standing for a different one (a card of
+/// several types or colors counts as any one of them).
+fn per_kind_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
+    let r = l.strip_prefix("for each ")?;
+    let (kinds, rest) = r.split_once(", ")?;
+    let types = |extra: &dyn Fn(CardType) -> Option<Filter>| -> Vec<Filter> {
+        CardType::ALL
+            .iter()
+            .map(|t| match extra(*t) {
+                Some(e) => Filter::and(vec![Filter::Type(*t), e]),
+                None => Filter::Type(*t),
+            })
+            .collect()
+    };
+    let (each_of, noun): (Vec<Filter>, &str) = match kinds {
+        "card type" => (types(&|_| None), "type"),
+        // "among noncreature spells you've cast this turn".
+        "card type among noncreature spells you've cast this turn" => (
+            types(&|t| {
+                Some(Filter::ValueCmp(
+                    Box::new(Value::SpellsCastThisTurn(
+                        PlayerRef::You,
+                        Filter::and(vec![
+                            Filter::not(Filter::Type(CardType::Creature)),
+                            Filter::Type(t),
+                        ]),
+                    )),
+                    Cmp::Ge,
+                    Box::new(Value::c(1)),
+                ))
+            }),
+            "type",
+        ),
+        // "those colors": the colors among permanents you control, as the text defined
+        // them.
+        "of those colors"
+            if crate::oracle::raw_text()
+                .to_lowercase()
+                .contains("the number of colors among permanents you control") =>
+        {
+            (
+                Color::ALL
+                    .iter()
+                    .map(|c| {
+                        Filter::and(vec![
+                            Filter::Color(*c),
+                            Filter::ValueCmp(
+                                Box::new(Value::CountSel(Box::new(Sel::All(Filter::and(vec![
+                                    Filter::Permanent,
+                                    Filter::InZone(ZoneKind::Battlefield),
+                                    Filter::ControlledBy(PlayerRel::You),
+                                    Filter::Color(*c),
+                                ]))))),
+                                Cmp::Ge,
+                                Box::new(Value::c(1)),
+                            ),
+                        ])
+                    })
+                    .collect(),
+                "color",
+            )
+        }
+        _ => return None,
+    };
+    let r = rest.strip_prefix("you may ")?;
+    let (verb, r) = r.split_once(' ')?;
+    let after = r.strip_prefix(&format!("a card of that {noun} from among "))?;
+    let mut v = parse_take(
+        &format!("you may {verb} any number of cards from among {after}"),
+        b,
+    )?;
+    let Some(Effect::DigStep(step)) = v.first_mut() else {
+        return None;
+    };
+    let DigStep::Take {
+        each_of: e,
+        count,
+        filter,
+        ..
+    } = &mut **step
+    else {
+        return None;
+    };
+    *count = Some(Value::c(each_of.len() as i32));
+    *e = each_of;
+    *filter = Filter::Card;
+    Some(v)
+}
+
 /// Marks that cards dug were exiled face down (see [`exiled_face_down`]).
 const FACE_DOWN_MARK: &str = "\u{1}dig-face-down";
 
@@ -2001,6 +2099,26 @@ fn chooses_from_among(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     };
     let r = among_ref(r)?.strip_prefix(' ')?;
+    // "a card with flying, a card with first strike, and so on for double strike,
+    // deathtouch, ..., and vigilance": the list spelled out.
+    let expanded;
+    let r = match r.split_once(", and so on for ") {
+        Some((head, more)) => {
+            let last = head.rsplit(", ").next()?;
+            let template = last.strip_prefix("a card with ")?;
+            let _ = template;
+            let more: Vec<&str> = more
+                .split(", and ")
+                .flat_map(|p| p.split(", "))
+                .collect();
+            let mut items: Vec<String> = head.split(", ").map(str::to_string).collect();
+            items.extend(more.iter().map(|k| format!("a card with {k}")));
+            let n = items.len();
+            expanded = format!("{}, and {}", items[..n - 1].join(", "), items[n - 1]);
+            expanded.as_str()
+        }
+        None => r,
+    };
     let parts = articled_list(r)?;
     let mut each = Vec::new();
     for p in parts {
@@ -2060,6 +2178,9 @@ fn reveal_that_card(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
 fn parse_step(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     if let Some(e) = other_player_puts(l, b) {
+        return Some(e);
+    }
+    if let Some(e) = one_other_rest(l, b) {
         return Some(e);
     }
     if let Some(v) = parse_take(l, b) {
@@ -2166,6 +2287,37 @@ fn other_player_puts(l: &str, b: &mut Builder) -> Option<Effect> {
     if ordered {
         return None;
     }
+    forget_that_creature(b, &v);
+    Some(Effect::seq(v))
+}
+
+/// "Put one of the chosen cards onto the battlefield, the other chosen cards into your
+/// hand, and the rest into your graveyard." (Selective Adaptation): the cards chosen
+/// (and left where they were) split two ways, then the rest.
+fn one_other_rest(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !b.named.iter().any(|(n, _)| n == CHOSEN_MARK) {
+        return None;
+    }
+    let r = l.strip_prefix("put one of the chosen cards ")?;
+    let (d1, r) = destination(r)?;
+    let r = r.strip_prefix(", the other chosen cards ")?;
+    let (d2, r) = destination(r)?;
+    let r = r.strip_prefix(", and the rest ")?;
+    let rest = rest_step(r, &rest_sel(b))?;
+    let take = |count: Option<Value>, to: Destination| {
+        Effect::DigStep(Box::new(DigStep::Take {
+            from: Sel::Var(vars::DUG_CHOSEN),
+            chooser: PlayerRef::You,
+            filter: Filter::Any,
+            each_of: vec![],
+            count,
+            up_to: false,
+            random: false,
+            reveal: false,
+            to,
+        }))
+    };
+    let v = vec![take(Some(Value::c(1)), d1), take(None, d2), rest];
     forget_that_creature(b, &v);
     Some(Effect::seq(v))
 }
