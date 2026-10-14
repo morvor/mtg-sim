@@ -327,6 +327,10 @@ impl Renderer<'_> {
             }
         }
         let s = self.player(who, Case::Subj);
+        // "Target opponent reveals their hand. ... They discard that card."
+        if s == "that player" && matches!(who, PlayerRef::Target(_)) {
+            return format!("{{alt:that player|they}} {}", third_person(vp));
+        }
         format!("{s} {}", third_person(vp))
     }
 
@@ -1058,6 +1062,17 @@ impl Renderer<'_> {
                     match self.remember_union(var, parts) {
                         Some(s) => s,
                         None => self.gap(format!("remembering {sel:?}")),
+                    }
+                }
+                // "Choose a creature at random" (CR 608.2d): the one chosen is "it" later.
+                Sel::AtRandom { filter, count, .. } => {
+                    let det = self.det_for(count);
+                    let n = self.noun_det(filter, det);
+                    match n.split_once(" that ") {
+                        Some((head, rel)) => format!(
+                            "{{alt:choose {head} at random that {rel}|choose {n} at random}}"
+                        ),
+                        None => format!("choose {n} at random"),
                     }
                 }
                 other => self.gap(format!("remembering {other:?}")),
@@ -1965,7 +1980,13 @@ impl Renderer<'_> {
                         }
                     }
                 }
+                // "attach target Equipment to it": "it" isn't the object being attached.
+                let saved = self.other_salient;
+                if matches!(to, Sel::This) && !matches!(what, Sel::This) {
+                    self.other_salient = false;
+                }
                 let t = self.sel(to, Case::Obj);
+                self.other_salient = saved;
                 format!("attach {w} to {t}")
             }
             Effect::Unattach { what } => {
@@ -3202,9 +3223,16 @@ impl Renderer<'_> {
             {
                 if !format!("{:?}", &v[i + 2..]).contains("ChosenOpponent") {
                     let n = self.effect(next);
-                    if let Some(rest) = n.strip_prefix("the chosen opponent ") {
-                        if !rest.contains("chosen opponent") {
-                            parts.push(format!("an opponent {rest}"));
+                    // The one mention of the chosen opponent: "an opponent gains control
+                    // of ~", "look at an opponent's hand" (as "clash with an opponent"
+                    // means "choose an opponent. You and that opponent each clash", CR
+                    // 701.30b).
+                    let chosen = ["the chosen {alt:opponent|player}", "the chosen opponent"];
+                    if let Some(c) = chosen.iter().find(|c| n.matches(**c).count() == 1) {
+                        if !chosen.iter().any(|o| *o != *c && n.contains(o))
+                            && !n.contains("chosen player")
+                        {
+                            parts.push(n.replacen(c, "an opponent", 1));
                             i += 2;
                             continue;
                         }
@@ -3879,6 +3907,20 @@ impl Renderer<'_> {
             }
             // "X. If C, Y instead." (the comparison treats "If C, Y. Otherwise, X." the
             // same): the default effect comes first, so it names the targets.
+            // "If ~ is suspected, put a +1/+1 counter on it. Otherwise, suspect it.": the
+            // condition names the object first (the comparison reorders either form).
+            _ if !else_empty
+                && matches!(cond, Condition::SelMatches(Sel::This, _))
+                && [then, otherwise].iter().all(|e| {
+                    let d = format!("{e:?}");
+                    d.contains("This") && !d.contains("Target(")
+                }) =>
+            {
+                let c = self.condition(cond);
+                let t = self.effect(then);
+                let o = self.effect(otherwise);
+                format!("If {c}, {t}. Otherwise, {o}")
+            }
             _ if !else_empty => {
                 let o = self.effect(otherwise);
                 let c = self.condition(cond);
@@ -3890,6 +3932,7 @@ impl Renderer<'_> {
                     if same_sel(a, b) {
                         if let Some(head) = t
                             .strip_suffix(" to it")
+                            .or_else(|| t.strip_suffix(" to {alt:it|that permanent or player}"))
                             .or_else(|| t.strip_suffix(" to them"))
                         {
                             t = format!("{head} {{opt:to it}}");
@@ -4309,9 +4352,9 @@ impl Renderer<'_> {
                     let c = self.player(c, Case::Poss);
                     s.push_str(&format!(" under {c} control"));
                 }
-                None if !yours => {
-                    s.push_str(&format!(" under {owner} control"));
-                }
+                // No controller named: the player putting it there (CR 110.2a), whoever
+                // owns it ("return a card exiled with ~ to the battlefield").
+                None if !yours && !self.in_as_player => s.push_str(" {opt:under your control}"),
                 None => {}
             }
             if let Some(a) = &to.attached_to {
@@ -4662,18 +4705,13 @@ impl Renderer<'_> {
             self.possessive_for(who)
         };
         let top = match n {
-            Value::Const(1) => format!("the top card of {p} library"),
-            Value::Const(k) => format!("the top {} cards of {p} library", number_word(*k)),
             // "that many cards from the top of your library": the amount paid by "pay any
             // amount of ...".
             Value::X if self.extra.x_paid => format!(
                 "{{alt:the top X cards of {p} library|that many cards from the top of {p} library}}"
             ),
             // "the top X cards of your library, where X is ...".
-            other => {
-                let (v, w) = self.amount(other);
-                format!("the top {v} cards of {p} library{}", w.unwrap_or_default())
-            }
+            other => self.top_cards(other, &p),
         };
         let look = if reveal { "reveal" } else { "look at" };
         if only_look {

@@ -831,6 +831,37 @@ impl Renderer<'_> {
                 };
                 format!("{s} {dont} lose unspent mana as steps and phases end")
             }
+            // "You don't lose unspent red mana as steps and phases end" (CR 500.5).
+            n if n
+                .strip_prefix(crate::mana_abilities::KEEP_UNSPENT_MANA)
+                .is_some_and(|t| t.len() == 2 && t.starts_with(' ')) =>
+            {
+                let color = match &n[n.len() - 1..] {
+                    "W" => "white",
+                    "U" => "blue",
+                    "B" => "black",
+                    "R" => "red",
+                    "G" => "green",
+                    _ => "colorless",
+                };
+                let dont = if you || subj.ends_with('s') {
+                    "don't"
+                } else {
+                    "doesn't"
+                };
+                format!("{subj} {dont} lose unspent {color} mana as steps and phases end")
+            }
+            // Mana burn (CR 500.5 as it once was): each player affected loses life.
+            crate::kw::mana_grammar::MANA_BURN if matches!(subj, "players" | "each player") => {
+                "a player losing unspent mana causes that player to lose that much life".into()
+            }
+            crate::kw::mana_grammar::MANA_BURN => {
+                format!("{subj} losing unspent mana causes {subj} to lose that much life")
+            }
+            // CR 704.5j: the legend rule, for the permanents this player controls.
+            crate::legend_rule::NOT_FOR_YOUR_PERMANENTS if you => {
+                "the \"legend rule\" doesn't apply to permanents you control".into()
+            }
             "spend mana as though any color" => {
                 format!("{subj} may spend mana as though it were mana of any color")
             }

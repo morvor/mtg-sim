@@ -737,6 +737,8 @@ impl Renderer<'_> {
             Filter::In(s) if matches!(s.as_ref(), Sel::Linked) => {
                 np.zone_said = true;
                 np.post.push("exiled with ~it".into());
+                // The object itself was named: a later "it" may be it.
+                self.self_salient = true;
             }
             // "for each creature card exiled this way": the cards the instruction before
             // exiled.
