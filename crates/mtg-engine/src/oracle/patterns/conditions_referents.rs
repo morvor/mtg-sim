@@ -45,7 +45,8 @@ pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let r = referent_condition(c, b)
         .or_else(|| joined(c, b))
-        .or_else(|| referent_free(c, b));
+        .or_else(|| referent_free(c, b))
+        .or_else(|| super::history_conditions::referent_history(c, b));
     // Resolving a subject never changes what later pronouns mean, nor adds targets.
     b.targets.truncate(saved.0);
     b.it = saved.1;
