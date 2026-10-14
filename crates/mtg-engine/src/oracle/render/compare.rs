@@ -28,6 +28,29 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"\b(creatures?|permanents?) that (?:isn't|aren't|is not|are not) (enchanted|equipped)\b",
+        replacement: "un$2 $1",
+        why: "\"A creature that isn't enchanted\" is an unenchanted creature (CR 303.4).",
+    },
+    Equivalence {
+        pattern: r"\b(artifact|creature|enchantment|land|planeswalker|instant|sorcery|battle) card or (non-?[a-z]+ [a-z]+) card\b",
+        replacement: "$1 or $2 card",
+        why: "\"Artifact or non-Aura enchantment card\": the noun after the last alternative \
+              names both alternatives (\"artifact card or non-Aura enchantment card\").",
+    },
+    Equivalence {
+        pattern: r"\b(artifact|creature|enchantment|land|planeswalker|instant|sorcery|battle) spell or (non-?[a-z]+ [a-z]+) spell\b",
+        replacement: "$1 or $2 spell",
+        why: "\"Artifact or non-Aura enchantment spell\": the noun after the last alternative \
+              names both alternatives (\"artifact spell or non-Aura enchantment spell\").",
+    },
+    Equivalence {
+        pattern: r"\b(target|each|all) ([a-z ]*?)(creatures?) that(?:'s| is| are) attacking or blocking\b",
+        replacement: "$1 attacking or blocking $2$3",
+        why: "\"Target creature that's attacking or blocking\" is an attacking or blocking \
+              creature (CR 506.4).",
+    },
+    Equivalence {
         pattern: r"\bcan block an additional ([a-z ]*?creatures?) each combat this turn\b",
         replacement: "can block an additional $1 this turn",
         why: "\"Can block an additional creature this turn\" applies in each combat that \

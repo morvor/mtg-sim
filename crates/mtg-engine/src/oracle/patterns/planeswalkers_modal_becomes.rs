@@ -98,8 +98,14 @@ pub(crate) fn subject(text: &str, b: &Builder) -> Subject {
             matches!(*w, "land" | "lands")
                 || subtype_word(w).is_some_and(|s| is_basic_land_type(s.as_str()))
         });
-    let creatures =
-        this_is(CardType::Creature) || words.iter().any(|w| matches!(*w, "creature" | "creatures"));
+    // Only creatures attack or block (CR 506.3): "target attacking Vampire".
+    let creatures = this_is(CardType::Creature)
+        || words.iter().any(|w| {
+            matches!(
+                *w,
+                "creature" | "creatures" | "attacking" | "blocking"
+            )
+        });
     let hint = if lands {
         CardType::Land
     } else if this_is(CardType::Planeswalker) {

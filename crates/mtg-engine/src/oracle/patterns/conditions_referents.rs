@@ -875,6 +875,10 @@ fn is_state(sel: &Sel, s: &str, neg: bool, b: &mut Builder) -> Option<Condition>
         // "it's attacking a battle", "it's attacking you".
         let f = match p {
             "you" => Filter::AttackingPlayer(PlayerRel::You),
+            "a battle" => Filter::AttackingObject(Box::new(Filter::Type(CardType::Battle))),
+            "a planeswalker" => {
+                Filter::AttackingObject(Box::new(Filter::Type(CardType::Planeswalker)))
+            }
             _ => return None,
         };
         Condition::SelMatches(sel.clone(), f)
