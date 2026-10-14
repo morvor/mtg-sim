@@ -3004,6 +3004,33 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Sacrifice X Foods." with X chosen as they're sacrificed (CR 107.3f,
+            // `patterns/sacrifice_x.rs`).
+            if let (
+                Effect::Store {
+                    var,
+                    sel:
+                        Sel::Choose {
+                            chooser: PlayerRef::You,
+                            filter,
+                            up_to: true,
+                            ..
+                        },
+                },
+                Some(Effect::SetX {
+                    value: Value::CountSel(x),
+                }),
+                Some(Effect::SacrificeObjects { what: Sel::Var(w) }),
+            ) = (&v[i], v.get(i + 1), v.get(i + 2))
+            {
+                if matches!(x.as_ref(), Sel::Var(a) if a == var) && w == var {
+                    let what = self.noun(filter, Num::Many);
+                    let what = what.replacen(" you control", " {opt:you control}", 1);
+                    parts.push(format!("sacrifice X {what}"));
+                    i += 3;
+                    continue;
+                }
+            }
             // "Roll a d20. Create X Treasure tokens, where X is the result.": the number
             // X stands for is said where X is first used (CR 107.3).
             if let Effect::SetX { value } = &v[i] {

@@ -2158,6 +2158,11 @@ fn p_sacrifice(l: &str, b: &mut Builder) -> Option<Effect> {
         (p, rest.trim().strip_prefix("sacrifices ")?.to_string())
     };
     let (n, r2) = parse_number(&r)?;
+    // An X nothing defines is chosen as the player sacrifices (CR 107.3f):
+    // `patterns/sacrifice_x.rs`.
+    if matches!(n, Value::X) && !crate::oracle::patterns::tokens_x_x::x_defined(b) {
+        return None;
+    }
     let (f, _, tail) = parse_object_phrase(r2)?;
     if !end(tail).is_empty() {
         return None;
