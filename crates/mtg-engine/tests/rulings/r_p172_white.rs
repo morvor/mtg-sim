@@ -852,3 +852,30 @@ fn teysa_sacrificing_itself_doesnt_trigger_its_own_ability() {
     assert_eq!(with_subtype(&t, P0, "Spirit").len(), 1);
 }
 
+
+#[test]
+fn martyrs_soul_checks_tapped_lands_on_entering_and_on_resolution() {
+    cr!("603.4");
+    ruling!(
+        "Martyr's Soul",
+        "If you control any tapped lands as Martyr's Soul enters the battlefield, its last ability doesn't trigger at all. If you control any tapped lands as the ability resolves, you won't put two +1/+1 counters on Martyr's Soul."
+    );
+    supported("Martyr's Soul");
+    let mut t = TestGame::new(2);
+    let plains = t.battlefield(P0, "Plains");
+    t.g.tap(plains);
+    enter(&mut t, P0, "Martyr's Soul");
+    assert_eq!(t.stack_len(), 0);
+    let mut t = TestGame::new(2);
+    let plains = t.battlefield(P0, "Plains");
+    let ms = enter(&mut t, P0, "Martyr's Soul");
+    assert_eq!(t.stack_len(), 1);
+    t.g.tap(plains);
+    t.resolve_all();
+    assert_eq!(t.counters(ms, "+1/+1"), 0);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Plains");
+    let ms = enter(&mut t, P0, "Martyr's Soul");
+    t.resolve_all();
+    assert_eq!(t.counters(ms, "+1/+1"), 2);
+}

@@ -559,3 +559,44 @@ fn combine_chrysalis_can_sacrifice_a_noncreature_token() {
     assert_eq!(named_tokens(&t, P0, "Beast Token").len(), 1);
 }
 
+
+#[test]
+fn song_of_the_worldsoul_resolves_first_even_if_the_spell_is_countered() {
+    cr!("603.3", "601.2c");
+    ruling!(
+        "Song of the Worldsoul",
+        "Song of the Worldsoul's ability will resolve before the spell that caused it to trigger but after targets have been chosen for that spell. It resolves even if that spell is countered."
+    );
+    supported("Song of the Worldsoul");
+    // The spell's target was chosen before the copy existed.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Song of the Worldsoul");
+    let spirit = create_token(&mut t, P0, "Spirit");
+    let gg = t.hand(P0, "Giant Growth");
+    mana(&mut t, P0, ManaType::G, 1);
+    t.cast(P0, gg).target(spirit).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    t.resolve();
+    let spirits = named_tokens(&t, P0, "Spirit");
+    assert_eq!(spirits.len(), 2);
+    t.resolve_all();
+    let copy = *spirits.iter().find(|s| **s != spirit).unwrap();
+    assert_eq!(t.pt(spirit), (4, 4));
+    assert_eq!(t.pt(copy), (1, 1));
+    // Countered: the populate still happens.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Song of the Worldsoul");
+    let spirit = create_token(&mut t, P0, "Spirit");
+    let gg = t.hand(P0, "Giant Growth");
+    mana(&mut t, P0, ManaType::G, 1);
+    let spell = t.cast(P0, gg).target(spirit).go();
+    t.settle();
+    let cancel = t.hand(P1, "Cancel");
+    mana(&mut t, P1, ManaType::U, 3);
+    t.cast(P1, cancel).target(spell).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Giant Growth"));
+    t.resolve_all();
+    assert_eq!(named_tokens(&t, P0, "Spirit").len(), 2);
+}
