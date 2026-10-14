@@ -1353,9 +1353,14 @@ impl Game {
                 let mut drawn = Vec::new();
                 // CR 121.2c: the active player draws first, then the others in turn order.
                 let players = crate::draw_rules::draw_order(self, self.eval_players(who, ctx));
+                let n = players.len();
                 for p in players {
                     drawn.extend(self.draw_cards(p, k));
                 }
+                // "Draw four cards. When you do, ...": done only if every card was drawn
+                // (a draw from an empty library or a replaced draw isn't one, CR 121.3,
+                // 614.6, 603.12; The Royal Scions rulings).
+                ctx.prev_happened = k > 0 && drawn.len() == k as usize * n;
                 ctx.prev_value = drawn.len() as i64;
                 ctx.set_var(
                     vars::REVEALED,
