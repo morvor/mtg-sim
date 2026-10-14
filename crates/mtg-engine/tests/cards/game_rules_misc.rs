@@ -122,3 +122,27 @@ fn hall_of_echoes_suspends_the_legend_rule_this_turn() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda").len(), 2);
 }
+
+#[test]
+fn lord_of_the_nazgul_wraiths_have_protection_from_ring_bearers() {
+    cr!("702.16b", "701.54e");
+    assert_supported(&["Lord of the Nazgûl"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lord of the Nazgûl");
+    let wraith = t.battlefield(P0, "Nazgûl");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.players[1].ring_bearer = Some(bears);
+    t.g.recompute();
+    let ctx = mtg_engine::eval::Ctx::new(None, P0);
+    let prot = t
+        .obj_now(wraith)
+        .chars
+        .keywords()
+        .filter(|k| k.kind == mtg_engine::keywords::KeywordKind::Protection)
+        .filter_map(|k| k.filter.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(prot.len(), 1);
+    assert!(t.g.matches(bears, &prot[0], &ctx));
+    assert!(!t.g.matches(giant, &prot[0], &ctx));
+}

@@ -30,6 +30,10 @@ pub fn neighbor(g: &Game, p: PlayerId, left: bool) -> PlayerId {
     p
 }
 
+/// `Filter::Custom` name: a Ring-bearer, of any player ("protection from Ring-bearers",
+/// CR 701.54e).
+pub const ANY_RING_BEARER: &str = "game rules:a ring-bearer";
+
 /// `Filter::Custom` name: a loyalty ability on the stack ("target loyalty ability of a
 /// planeswalker", CR 606).
 pub const LOYALTY_ABILITY: &str = "game rules:loyalty ability on the stack";
@@ -93,6 +97,9 @@ impl KeywordRules for GameRules {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+        if name == ANY_RING_BEARER {
+            return Some(crate::kwa::ring::is_ring_bearer(g, g.obj(id).controller, id));
+        }
         if name != LOYALTY_ABILITY {
             return None;
         }
