@@ -27,6 +27,10 @@ pub struct Ctx {
     pub x_defined: bool,
     pub vars: BTreeMap<Var, Vec<Entity>>,
     pub nums: BTreeMap<Var, i64>,
+    /// Each player's own running totals ([`Effect::AddToPlayerTally`],
+    /// [`Value::PlayerTally`]): (variable, player, total).
+    #[serde(default)]
+    pub tallies: Vec<(Var, PlayerId, i64)>,
     pub event: Option<EventInfo>,
     /// Current player in a "for each player" loop.
     pub iter_player: Option<PlayerId>,
@@ -113,6 +117,29 @@ impl Ctx {
     }
     pub fn set_var(&mut self, v: Var, e: Vec<Entity>) {
         self.vars.insert(v, e);
+    }
+    /// `p`'s running total under `var` (0 if none).
+    pub fn tally(&self, var: Var, p: PlayerId) -> i64 {
+        self.tallies
+            .iter()
+            .find(|(v, q, _)| *v == var && *q == p)
+            .map_or(0, |(_, _, n)| *n)
+    }
+    /// Sets `p`'s total under `var` to `n`.
+    pub fn set_tally(&mut self, var: Var, p: PlayerId, n: i64) {
+        self.tallies.retain(|(v, q, _)| !(*v == var && *q == p));
+        self.tallies.push((var, p, n));
+    }
+    /// Adds `n` to `p`'s running total under `var`.
+    pub fn add_tally(&mut self, var: Var, p: PlayerId, n: i64) {
+        match self
+            .tallies
+            .iter_mut()
+            .find(|(v, q, _)| *v == var && *q == p)
+        {
+            Some(t) => t.2 += n,
+            None => self.tallies.push((var, p, n)),
+        }
     }
     pub fn var_objects(&self, v: Var) -> Vec<ObjectId> {
         self.vars
@@ -444,6 +471,17 @@ impl Game {
                 .collect(),
             PlayerRef::Monarch => self.monarch.into_iter().collect(),
             PlayerRef::LinkedNoted => crate::linked_notes::players(self, ctx),
+            PlayerRef::Seat { of, side, opponent } => {
+                let mut v = Vec::new();
+                for p in self.eval_players_unranged(of, ctx) {
+                    if let Some(q) = crate::seats::seat_of(self, p, *side, *opponent, ctx.source) {
+                        if !v.contains(&q) {
+                            v.push(q);
+                        }
+                    }
+                }
+                v
+            }
         }
     }
 
@@ -572,14 +610,14 @@ impl Game {
                     Entity::Object(_) => false,
                 }),
             Filter::BlockingSource => ctx.source.is_some_and(|s| {
-                self.combat
-                    .as_ref()
-                    .is_some_and(|cb| cb.blockers_of(s).contains(&id))
+                self.combat.as_ref().is_some_and(|cb| {
+                    cb.blockers_of(s).contains(&id) || self.left_combat_pair(s, id, s)
+                })
             }),
             Filter::BlockedBySource => ctx.source.is_some_and(|s| {
-                self.combat
-                    .as_ref()
-                    .is_some_and(|cb| cb.blockers_of(id).contains(&s))
+                self.combat.as_ref().is_some_and(|cb| {
+                    cb.blockers_of(id).contains(&s) || self.left_combat_pair(s, s, id)
+                })
             }),
             Filter::BlockingAnyOf(sel) => self.combat.as_ref().is_some_and(|cb| {
                 self.eval_sel_objects(sel, ctx)
@@ -793,6 +831,20 @@ impl Game {
                             })
                         })
                     })
+            }
+            Filter::CastBy(rel) => {
+                o.zone == Zone::Stack && o.stack.as_ref().is_some_and(|si| si.cast.was_cast) && {
+                    // The caster (this turn's record; otherwise its owner, who
+                    // normally cast it).
+                    let caster = self
+                        .history
+                        .spells_cast
+                        .iter()
+                        .rev()
+                        .find(|(_, s)| *s == id)
+                        .map_or(o.owner, |(p, _)| *p);
+                    self.player_rel_matches(*rel, caster, ctx)
+                }
             }
             Filter::CastFrom(z) => {
                 o.zone == Zone::Stack
@@ -1213,6 +1265,11 @@ impl Game {
             Value::EventAmount => ctx.event.as_ref().map_or(0, |e| e.amount as i64),
             Value::Prev => ctx.prev_value,
             Value::Var(v) => ctx.nums.get(v).copied().unwrap_or(0),
+            Value::PlayerTally { var, who } => self
+                .eval_players_unranged(who, ctx)
+                .into_iter()
+                .map(|p| ctx.tally(*var, p))
+                .sum(),
             Value::Devotion(colors) => {
                 let mut n = 0i64;
                 // An object about to enter is on the battlefield only hypothetically (CR
@@ -1556,5 +1613,20 @@ pub(crate) fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
         Filter::Or(v) if !v.is_empty() => v.iter().map(|x| x.zone()).collect(),
         Filter::And(v) => v.iter().find_map(alternative_zones),
         _ => None,
+    }
+}
+
+impl Game {
+    /// Whether `gone`, a permanent that has left the battlefield during this combat, was
+    /// part of the block of `blocker` and `attacker` as it last existed on the battlefield
+    /// (CR 113.7a, 608.2h): "target creature blocking or blocked by it" after the source
+    /// left.
+    pub fn left_combat_pair(&self, gone: ObjectId, blocker: ObjectId, attacker: ObjectId) -> bool {
+        !self.is_live(gone)
+            && self
+                .obj(gone)
+                .left_battlefield
+                .as_ref()
+                .is_some_and(|l| l.blocks.contains(&(blocker, attacker)))
     }
 }

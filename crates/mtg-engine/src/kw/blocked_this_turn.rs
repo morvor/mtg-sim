@@ -19,6 +19,12 @@ pub const BLOCKED_BY_REFERENT: &str = "blocked by the remembered creature this t
 /// creatures this turn.
 pub const BLOCKED_OR_BLOCKED_BY_REFERENT: &str =
     "blocked or blocked by the remembered creature this turn";
+/// `Filter::Custom`: an attacking creature the spell's target (slot 0) was declared to
+/// block this combat ("creatures that were blocked by that creature this combat", Ride
+/// Down). A creature put onto the battlefield blocking wasn't declared as a blocker and
+/// blocked nothing this way (CR 509.1a); a target that has left the battlefield is judged
+/// as it last existed there (CR 608.2h).
+pub const BLOCKED_BY_TARGET_THIS_COMBAT: &str = "blocked by the target this combat";
 
 /// The (blocker, attacker) pairs of this turn.
 fn blocks_this_turn(g: &Game) -> Vec<(ObjectId, ObjectId)> {
@@ -43,6 +49,16 @@ impl KeywordRules for BlockedThisTurn {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == BLOCKED_BY_TARGET_THIS_COMBAT {
+            let Some(c) = g.combat.as_ref() else {
+                return Some(false);
+            };
+            let targets = ctx.targets.first().map(Vec::as_slice).unwrap_or(&[]);
+            return Some(targets.iter().filter_map(|e| e.object()).any(|t| {
+                c.declared_blockers.contains(&t)
+                    && (c.blockers_of(id).contains(&t) || g.left_combat_pair(t, t, id))
+            }));
+        }
         let either = match name {
             BLOCKED_BY_REFERENT => false,
             BLOCKED_OR_BLOCKED_BY_REFERENT => true,
