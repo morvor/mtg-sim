@@ -95,6 +95,28 @@ fn parse_free(c: &str) -> Option<Condition> {
     (!d.contains(&needle) && !d.contains(&no_player)).then_some(cond)
 }
 
+/// Equivalent wordings of conditions about a referent that the referent grammar reads:
+/// "it was a Jace planeswalker spell" (a spell that has left the stack: what it was, CR
+/// 608.2h) → "it was a Jace planeswalker"; "the exiled card is a God card" → "the card is
+/// a God card"; "it entered under your control" → "you control it" (checked right after
+/// it entered).
+pub fn referent_rewording(c: &str) -> Option<String> {
+    let c = end(c.trim());
+    for p in ["it was a ", "it was an ", "that spell was a ", "that spell was an "] {
+        if let Some(r) = c.strip_prefix(p) {
+            let r = r.strip_suffix(" spell")?;
+            return Some(format!("{p}{r}"));
+        }
+    }
+    if let Some(r) = c.strip_prefix("the exiled card ") {
+        return Some(format!("the card {r}"));
+    }
+    if c == "it entered under your control" {
+        return Some("you control it".to_string());
+    }
+    None
+}
+
 /// [`parse_with`] when it adds no targets (conditions of the referent grammar,
 /// `conditions_referents::parse_condition_with`, never add targets).
 pub fn parse_without_targets(c: &str, b: &mut Builder) -> Option<Condition> {

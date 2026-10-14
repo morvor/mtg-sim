@@ -56,7 +56,11 @@ pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
     let r = understood(referent_condition(c, b))
         .or_else(|| understood(joined(c, b)))
         .or_else(|| understood(referent_free(c, b)))
-        .or_else(|| understood(super::conditions_compare::parse_without_targets(c, b)));
+        .or_else(|| understood(super::conditions_compare::parse_without_targets(c, b)))
+        .or_else(|| {
+            let c2 = super::conditions_compare::referent_rewording(c)?;
+            understood(referent_condition(&c2, b))
+        });
     // Resolving a subject never changes what later pronouns mean, nor adds targets.
     b.targets.truncate(saved.0);
     b.it = saved.1;
@@ -94,7 +98,11 @@ pub fn leading_if(l: &str, b: &mut Builder) -> Option<Effect> {
             b.it = sel;
         }
     }
-    if rest.split(' ').any(|w| matches!(w, "it" | "its")) {
+    // (Not when the instruction names another object first: "If that land is an Island,
+    // that creature doesn't untap during its controller's next untap step".)
+    let noun = |s: &str| s.strip_prefix("that ").map(|r| split_word(r).0.to_string());
+    let other_named = matches!((noun(c), noun(rest)), (Some(x), Some(y)) if x != y);
+    if !other_named && rest.split(' ').any(|w| matches!(w, "it" | "its")) {
         if let Some(sel) = named_subject(c, b) {
             b.it = sel;
         }
@@ -425,7 +433,15 @@ fn subject(c: &str, b: &mut Builder) -> Option<(Subject, String)> {
     {
         let noun = noun.trim_end_matches("'s");
         match b.targets.get(*slot as usize).map(|t| &t.what) {
-            Some(TargetKind::Object(f)) if !can_be(f, noun) => return None,
+            // In a triggered ability, the object the trigger event is about ("Whenever a
+            // land you control enters, tap target creature an opponent controls. If that
+            // land is an Island, ..."), when the trigger is about such an object.
+            Some(TargetKind::Object(f)) if !can_be(f, noun) => {
+                if !b.in_trigger || !trigger_names(noun) {
+                    return None;
+                }
+                return Some((Subject::Object(Sel::TriggerObject), rest));
+            }
             // "~ deals 1 damage to any target. If that land is a Mountain, ...": any
             // target is a creature, planeswalker, battle, or player (CR 115.4), so "that
             // land" is another object: in a triggered ability, the one the trigger event
@@ -442,6 +458,22 @@ fn subject(c: &str, b: &mut Builder) -> Option<(Subject, String)> {
         }
     }
     Some((Subject::Object(sel), rest))
+}
+
+/// Whether the triggered ability being compiled is about an object `noun` names ("Whenever
+/// a land you control enters" for "that land").
+fn trigger_names(noun: &str) -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    [
+        "whenever a ",
+        "whenever an ",
+        "whenever another ",
+        "when a ",
+        "when an ",
+        "when another ",
+    ]
+    .iter()
+        .any(|w| raw.contains(&format!("{w}{noun} ")))
 }
 
 /// Whether an object matching a target filter can be what `noun` names ("land",
@@ -1244,8 +1276,21 @@ fn shares(sel: &Sel, x: &str, b: &mut Builder) -> Option<Condition> {
     };
     // "with that permanent", "with ~".
     if let Some(other) = other_object(r, b) {
-        // Both phrases resolving to one object: one of them names something untracked.
+        // Both phrases resolving to one object: one of them names something untracked,
+        // unless "that [noun]" is the object the trigger is about ("Whenever another
+        // permanent you control enters, look at the top card of your library. If it
+        // shares a card type with that permanent, ...").
         if format!("{other:?}") == format!("{sel:?}") {
+            let noun = end(r).strip_prefix("that ").filter(|n| !n.contains(' '));
+            if b.in_trigger
+                && matches!(sel, Sel::Var(_))
+                && noun.is_some_and(trigger_names)
+            {
+                return Some(Condition::SelMatches(
+                    sel.clone(),
+                    mk(Box::new(Sel::TriggerObject)),
+                ));
+            }
             return None;
         }
         return Some(Condition::SelMatches(sel.clone(), mk(Box::new(other))));
