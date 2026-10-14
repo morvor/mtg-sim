@@ -312,7 +312,7 @@ fn unscythe_checks_the_creature_equipped_now() {
     assert_eq!(with_subtype(&t, P0, "Zombie").len(), 1);
     assert!(t.in_exile("Wall of Wood"));
     // Only the creature equipped now counts: the Lion (no longer equipped) damaged the
-    // Elves.
+    // Wall.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let lion = t.battlefield(P0, "Silvercoat Lion");
@@ -501,13 +501,15 @@ fn holy_avenger_puts_an_aura_only_if_it_could_be_attached() {
     let strength = t.hand(P0, "Holy Strength");
     let growth = t.hand(P0, "Wild Growth");
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    // First-strike damage: Holy Strength. Regular damage: trying Wild Growth (enchant
+    // land), which can't be attached to the creature.
     t.answer_choose(P0, &[Entity::Object(strength)]);
+    t.answer_choose(P0, &[Entity::Object(growth)]);
     block_and_finish(&mut t, P1, &[]);
     t.resolve_all();
     assert_eq!(attached_to(&t, strength), Some(Entity::Object(bears)));
-    // Wild Growth (enchant land) can't be attached to the creature.
     assert!(t.in_hand(P0, "Wild Growth"));
-    let _ = growth;
+    assert_eq!(t.zone(growth), mtg_engine::object::Zone::Hand(P0));
 }
 
 // ---------------------------------------------------------------------------------------

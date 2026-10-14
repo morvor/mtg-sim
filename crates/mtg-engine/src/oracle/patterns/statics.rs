@@ -239,8 +239,10 @@ fn quote_names_card_only_in_cost(normalized: &str, ctx: &CompileContext) -> bool
         }
         let anon = crate::oracle::normalize(q, &anonymous);
         match (with_name.split_once(": "), anon.split_once(": ")) {
+            // The cost must not also say "this creature" (which would be the creature,
+            // not the Equipment).
             (Some((cost, effect)), Some((anon_cost, anon_effect))) => {
-                cost != anon_cost && effect == anon_effect
+                cost != anon_cost && !anon_cost.contains('~') && effect == anon_effect
             }
             _ => false,
         }

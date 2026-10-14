@@ -353,4 +353,9 @@ fn the_dominion_bracelet_cost_is_locked_in_before_costs_are_paid() {
     assert!(t.in_exile("The Dominion Bracelet"));
     assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 0);
     assert_eq!(t.pt(bears), (2, 2));
+    // It resolves: P0 will control P1 during P1's next turn.
+    t.resolve_all();
+    let pending = &t.g.player_control.pending;
+    assert_eq!(pending.len(), 1);
+    assert_eq!((pending[0].controller, pending[0].player), (P0, P1));
 }
