@@ -89,7 +89,11 @@ fn koilos_roc_creates_a_tapped_powerstone() {
 
 #[test]
 fn squires_devotion_creates_a_lifelink_vampire() {
-    cr!("603.6a", "111.1");
+    cr!("603.6a", "111.1", "303.4a");
+    ruling!(
+        "Squire's Devotion",
+        "You need a creature for Squire's Devotion to target as you cast it."
+    );
     // "Enchanted creature gets +1/+1 and has lifelink. / When this Aura enters, create a
     // 1/1 white Vampire creature token with lifelink."
     supported("Squire's Devotion");
@@ -108,6 +112,13 @@ fn squires_devotion_creates_a_lifelink_vampire() {
     assert_eq!(t.pt(vamps[0]), (1, 1), "the Aura isn't on the token");
     assert_eq!(t.pt(bears), (3, 3));
     assert_eq!(count_subtype(&t, P1, "Vampire"), 0);
+    // Without a creature to enchant, it can't be cast at all.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    let aura = t.hand(P0, "Squire's Devotion");
+    assert!(t.cast(P0, aura).try_go().is_err());
+    assert!(t.in_hand(P0, "Squire's Devotion"));
+    assert_eq!(count_subtype(&t, P0, "Vampire"), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +163,11 @@ fn keldon_champion_deals_3_to_a_player_or_planeswalker() {
 
 #[test]
 fn oath_of_liliana_makes_each_opponent_sacrifice_a_creature() {
-    cr!("603.6a", "701.21a");
+    cr!("603.6a", "701.21a", "704.5j");
+    ruling!(
+        "Oath of Liliana",
+        "you can still cast a second Oath of Liliana to take advantage of its enters-the-battlefield ability"
+    );
     // "When Oath of Liliana enters, each opponent sacrifices a creature of their choice."
     supported("Oath of Liliana");
     let mut t = TestGame::new(3);
@@ -167,6 +182,15 @@ fn oath_of_liliana_makes_each_opponent_sacrifice_a_creature() {
     assert!(!t.on_battlefield(b));
     assert!(!t.on_battlefield(c));
     assert!(t.in_graveyard(P1, "Hill Giant") && t.in_graveyard(P2, "Hill Giant"));
+    // A second Oath still triggers, though the legend rule then puts one of the two into
+    // the graveyard.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Liliana");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    etb(&mut t, P0, "Oath of Liliana");
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(t.named_on_battlefield("Oath of Liliana").len(), 1);
+    assert!(t.in_graveyard(P0, "Oath of Liliana"));
 }
 
 #[test]
@@ -254,6 +278,10 @@ fn bespoke_bo_bounces_up_to_one_other_nonland_permanent() {
 #[test]
 fn farbog_boneflinger_gives_target_creature_minus_2_until_end_of_turn() {
     cr!("603.6a", "611.2a", "613.4c");
+    ruling!(
+        "Farbog Boneflinger",
+        "If it’s the only creature on the battlefield, you must choose it as the target"
+    );
     // "When this creature enters, target creature gets -2/-2 until end of turn."
     supported("Farbog Boneflinger");
     let mut t = TestGame::new(2);
@@ -271,6 +299,11 @@ fn farbog_boneflinger_gives_target_creature_minus_2_until_end_of_turn() {
     t.answer_targets(P0, &[obj(bears)]);
     etb(&mut t, P0, "Farbog Boneflinger");
     assert!(!t.on_battlefield(bears));
+    // The ability is mandatory: alone on the battlefield, it must target itself.
+    let mut t = TestGame::new(2);
+    let f = etb(&mut t, P0, "Farbog Boneflinger");
+    assert!(!t.on_battlefield(f));
+    assert!(t.in_graveyard(P0, "Farbog Boneflinger"));
 }
 
 #[test]
@@ -378,6 +411,10 @@ fn arashin_sunshield_exiles_up_to_two_cards_from_a_graveyard() {
 #[test]
 fn plague_mare_shrinks_opponents_creatures_until_end_of_turn() {
     cr!("603.6a", "611.2a", "611.2c", "613.4c");
+    ruling!(
+        "Plague Mare",
+        "affects only creatures your opponents control at the time it resolves"
+    );
     // "When this creature enters, creatures your opponents control get -1/-1 until end of
     // turn."
     supported("Plague Mare");
@@ -444,6 +481,10 @@ fn malakir_cullblade_grows_when_an_opponents_creature_dies() {
 #[test]
 fn deathbringer_thoctar_may_grow_when_another_creature_dies() {
     cr!("603.6c", "603.10a", "122.6");
+    ruling!(
+        "Deathbringer Thoctar",
+        "Its ability will still trigger, but it will do nothing when it resolves."
+    );
     // "Whenever another creature dies, you may put a +1/+1 counter on this creature."
     supported("Deathbringer Thoctar");
     let mut t = TestGame::new(2);
@@ -463,6 +504,17 @@ fn deathbringer_thoctar_may_grow_when_another_creature_dies() {
     t.g.destroy(third, None);
     t.resolve_all();
     assert_eq!(t.counters(th, "+1/+1"), 2, "declined");
+    // Dealt lethal damage at the same time as another creature: it still triggers, but
+    // does nothing.
+    let mut t = TestGame::new(2);
+    let th = t.battlefield(P0, "Deathbringer Thoctar");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.g.deal_damage_batch(vec![(bears, obj(th), 3), (th, obj(bears), 2)], false);
+    t.resolve_all();
+    assert!(!t.on_battlefield(th) && !t.on_battlefield(bears));
+    assert!(t.dump_log().contains("Resolving Deathbringer Thoctar ability"));
+    assert!(t.in_graveyard(P0, "Deathbringer Thoctar"));
 }
 
 #[test]
@@ -901,6 +953,18 @@ fn cenns_heir_grows_for_each_other_attacking_kithkin() {
 #[test]
 fn inferno_elemental_deals_3_to_each_creature_it_blocks_or_is_blocked_by() {
     cr!("509.1i", "509.3b", "509.3d", "120.3e");
+    ruling!(
+        "Inferno Elemental",
+        "will trigger for each creature it blocks or becomes blocked by"
+    );
+    ruling!(
+        "Inferno Elemental",
+        "that creature will be destroyed before it can deal its combat damage"
+    );
+    ruling!(
+        "Inferno Elemental",
+        "Inferno Elemental will still deal its combat damage as normal"
+    );
     // "Whenever this creature blocks or becomes blocked by a creature, this creature deals
     // 3 damage to that creature."
     supported("Inferno Elemental");
@@ -916,6 +980,15 @@ fn inferno_elemental_deals_3_to_each_creature_it_blocks_or_is_blocked_by() {
     assert!(t.on_battlefield(e), "the blockers died before dealing combat damage");
     assert_eq!(t.obj_now(e).damage, 0);
     assert_eq!(t.obj_now(idle).damage, 0);
+    // A blocker that survives the 3 damage is still dealt combat damage (and deals its
+    // own): Giant Spider (2/4) dies from 3 + 4.
+    let mut t = TestGame::new(2);
+    let e = t.battlefield(P0, "Inferno Elemental");
+    let spider = t.battlefield(P1, "Giant Spider");
+    fight(&mut t, &[e], &[(spider, e)]);
+    assert!(!t.on_battlefield(spider));
+    assert_eq!(t.obj_now(e).damage, 2, "the Spider dealt its combat damage");
+    assert_eq!(t.life(P1), 20);
     // Blocking: 3 damage to the attacker.
     let mut t = TestGame::new(2);
     let e = t.battlefield(P0, "Inferno Elemental");
@@ -1039,7 +1112,11 @@ fn the_indomitable_draws_when_your_creature_deals_combat_damage_to_a_player() {
 
 #[test]
 fn ingenious_infiltrator_draws_when_a_ninja_you_control_deals_combat_damage() {
-    cr!("510.2", "603.2");
+    cr!("510.2", "603.2", "603.10a");
+    ruling!(
+        "Ingenious Infiltrator",
+        "If Ingenious Infiltrator is dealt lethal combat damage at the same time a Ninja you control deals combat damage to a player, its ability triggers."
+    );
     // "Whenever a Ninja you control deals combat damage to a player, draw a card."
     supported("Ingenious Infiltrator");
     let mut t = TestGame::new(2);
@@ -1052,6 +1129,17 @@ fn ingenious_infiltrator_draws_when_a_ninja_you_control_deals_combat_damage() {
     assert_eq!(t.life(P1), 20 - 2 - 2 - 2);
     // One draw for each Ninja (Ingenious Infiltrator is one itself), none for the Bears.
     assert_eq!(t.hand_size(P0), 2);
+    // Dealt lethal combat damage at the same time as another Ninja hits a player, it
+    // still triggers (it "looks back").
+    let mut t = TestGame::new(2);
+    let inf = t.battlefield(P0, "Ingenious Infiltrator");
+    let ninja = t.battlefield(P0, "Ninja of the Deep Hours");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_yes(P0, false);
+    fight(&mut t, &[inf, ninja], &[(giant, inf)]);
+    assert!(!t.on_battlefield(inf));
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.hand_size(P0), 1);
     // Non-Ninjas don't draw.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Ingenious Infiltrator");
