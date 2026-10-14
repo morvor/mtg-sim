@@ -48,6 +48,7 @@ impl Renderer<'_> {
             return Some(format!("pay {}", "{E}".repeat(n.max(0) as usize)));
         }
         Some(match name {
+            crate::kwa::vote::CHOOSES_VOTES => "you choose how each player votes this turn".into(),
             // Reinterpret.
             // "equal or lesser" than the mana value of the spell's one target.
             n if n.starts_with("cast from hand free with mana value at most that of target:") => {

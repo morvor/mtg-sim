@@ -345,6 +345,9 @@ impl Game {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
             }
             PlayerFilter::MaxSpeed => self.player(p).speed.unwrap_or(0) >= 4,
+            PlayerFilter::VotedLikeYou(like) => {
+                crate::kwa::vote::voted_like(self, ctx, p) == Some(*like)
+            }
             // Twice the life total against the starting life total: no rounding.
             PlayerFilter::LessThanHalfStartingLife => {
                 2 * self.player(p).life < crate::life_totals::starting_life(self, p)

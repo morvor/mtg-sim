@@ -1179,6 +1179,10 @@ impl Renderer<'_> {
             PlayerFilter::AttackedThisTurn => "who attacked this turn".into(),
             PlayerFilter::Poisoned => "who is poisoned".into(),
             PlayerFilter::MaxSpeed => "with max speed".into(),
+            PlayerFilter::VotedLikeYou(true) => "who voted for a choice you voted for".into(),
+            PlayerFilter::VotedLikeYou(false) => {
+                "who voted for a choice you didn't vote for".into()
+            }
             PlayerFilter::LessThanHalfStartingLife => {
                 "with less than half their starting life total".into()
             }

@@ -34,6 +34,88 @@ pub const VOTED: &str = "vote";
 /// voting").
 pub const FINISHED_VOTING: &str = "finished voting";
 
+/// `Effect::Custom` name: "You choose how each player votes this turn." (Illusion of
+/// Choice): recorded among the turn's player actions; the player who most recently did
+/// so makes every player's voting choices this turn, while each player still decides
+/// whether to take an optional additional vote (Illusion of Choice's rulings).
+pub const CHOOSES_VOTES: &str = "vote: you choose how each player votes this turn";
+
+/// Who chooses how `voter` votes: the controller of the most recent "you choose how each
+/// player votes this turn" effect still in the game, or the voter.
+fn vote_chooser(g: &Game, voter: PlayerId) -> PlayerId {
+    g.history
+        .custom_actions
+        .iter()
+        .rev()
+        .find(|(p, n)| n == CHOOSES_VOTES && g.player(*p).in_game())
+        .map_or(voter, |(p, _)| *p)
+}
+
+/// The events of this turn so far, in order.
+fn events_this_turn(g: &Game) -> impl Iterator<Item = &Event> {
+    g.turn_events.iter().chain(g.events.iter())
+}
+
+/// How many votes have finished this turn.
+fn finished_votes(g: &Game) -> i32 {
+    events_this_turn(g)
+        .filter(|e| matches!(e, Event::Custom { name, .. } if name == FINISHED_VOTING))
+        .count() as i32
+}
+
+/// The votes cast in the vote that finished as the `serial`th this turn: (voter, the
+/// object voted for or the index of the word).
+fn votes_in(g: &Game, serial: i32) -> Vec<(PlayerId, i64)> {
+    let mut finished = 0;
+    let mut votes = Vec::new();
+    for e in events_this_turn(g) {
+        let Event::Custom {
+            name,
+            player: Some(p),
+            obj,
+            amount,
+        } = e
+        else {
+            continue;
+        };
+        if name == VOTED {
+            let choice = obj.map_or(*amount as i64, |o| (1i64 << 40) + o.0 as i64);
+            votes.push((*p, choice));
+        } else if name == FINISHED_VOTING {
+            finished += 1;
+            if finished == serial {
+                return votes;
+            }
+            votes.clear();
+        }
+    }
+    vec![]
+}
+
+/// For an ability that triggered on players finishing a vote (its event's amount is the
+/// vote's number this turn): whether `p` voted for a choice the ability's controller voted
+/// for (`Some(true)`), voted only for choices they didn't vote for (`Some(false)`), or
+/// didn't vote (`None`). Only that vote counts, not earlier ones (Grudge Keeper's
+/// rulings).
+pub fn voted_like(g: &Game, ctx: &Ctx, p: PlayerId) -> Option<bool> {
+    let serial = ctx.event.as_ref().map(|e| e.amount)?;
+    let votes = votes_in(g, serial);
+    let mine: Vec<i64> = votes
+        .iter()
+        .filter(|(v, _)| *v == ctx.controller)
+        .map(|(_, c)| *c)
+        .collect();
+    let theirs: Vec<i64> = votes
+        .iter()
+        .filter(|(v, _)| *v == p)
+        .map(|(_, c)| *c)
+        .collect();
+    if theirs.is_empty() {
+        return None;
+    }
+    Some(theirs.iter().any(|c| mine.contains(c)))
+}
+
 /// Result variables (`Ctx::nums` / `Ctx::vars`).
 pub const MOST_VOTES: Var = vars::USER + 1038;
 pub const CHOICES_WITH_MOST: Var = vars::USER + 1039;
@@ -113,14 +195,15 @@ impl KeywordActionRules for Vote {
                 continue;
             }
             for _ in 0..votes_of(g, voter, ctx.source) {
+                let chooser = vote_chooser(g, voter);
                 let vote = if !words.is_empty() {
-                    let i = g.ask_option(voter, ctx.source, "Vote", words.clone());
+                    let i = g.ask_option(chooser, ctx.source, "Vote", words.clone());
                     let i = i.min(words.len() - 1);
                     word_votes[i] += 1;
                     (voter, i, None)
                 } else if !objects.is_empty() {
                     let pick = g
-                        .ask_objects(voter, ctx.source, "Vote", objects.clone(), 1, 1)
+                        .ask_objects(chooser, ctx.source, "Vote", objects.clone(), 1, 1)
                         .first()
                         .copied()
                         .unwrap_or(objects[0]);
@@ -168,7 +251,10 @@ impl KeywordActionRules for Vote {
             .map(|(o, _)| Entity::Object(*o))
             .collect();
         ctx.set_var(WINNERS, winners);
-        emit(g, FINISHED_VOTING, ctx.controller, None, 0);
+        // The vote's number this turn identifies its votes for the abilities that
+        // trigger on it (`voted_like`).
+        let serial = finished_votes(g) + 1;
+        emit(g, FINISHED_VOTING, ctx.controller, None, serial);
     }
 }
 
@@ -200,6 +286,16 @@ pub struct VoteResults;
 impl crate::kw::KeywordRules for VoteResults {
     fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
         &[]
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name != CHOOSES_VOTES {
+            return false;
+        }
+        g.history
+            .custom_actions
+            .push((ctx.controller, SmolStr::new(CHOOSES_VOTES)));
+        true
     }
 
     fn custom_filter(&self, _g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {

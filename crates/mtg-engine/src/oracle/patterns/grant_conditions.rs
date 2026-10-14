@@ -17,6 +17,8 @@ use crate::types::CardType;
 
 /// "you sacrificed a [card type] this turn": evaluated by `kw/grant_conditions.rs`.
 pub const SACRIFICED_THIS_TURN: &str = "you_sacrificed_this_turn:";
+/// After [`SACRIFICED_THIS_TURN`]: a subtype rather than a card type ("a Food").
+pub const SACRIFICED_SUBTYPE: &str = "sub:";
 /// "you've surveilled this turn": a named action (`Event::Custom`) the controller
 /// performed this turn, evaluated by `kw/grant_conditions.rs`.
 pub const ACTION_THIS_TURN: &str = "you_did_this_turn:";
@@ -107,13 +109,18 @@ fn history(c: &str) -> Option<Condition> {
     let w = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
     let ty = match w {
         "permanent" => "permanent".to_string(),
-        w => {
-            let t = CardType::from_word(w)?;
-            if !t.is_permanent_type() {
-                return None;
+        w => match CardType::from_word(w) {
+            Some(t) if t.is_permanent_type() => w.to_string(),
+            Some(_) => return None,
+            // A permanent subtype: "you sacrificed a Food this turn" (Elanor Gardner).
+            None => {
+                let sub = crate::oracle::phrases::subtype_word(w)?;
+                if sub.to_lowercase() != w {
+                    return None;
+                }
+                format!("{SACRIFICED_SUBTYPE}{sub}")
             }
-            w.to_string()
-        }
+        },
     };
     Some(Condition::Custom(
         format!("{SACRIFICED_THIS_TURN}{ty}").into(),
@@ -228,6 +235,7 @@ mod tests {
             "you've surveilled this turn",
             "you sacrificed a permanent this turn",
             "you sacrificed an artifact this turn",
+            "you sacrificed a food this turn",
             "an opponent owns a card in exile",
             "it was cast",
             "two or more creatures are blocking it",
@@ -239,6 +247,7 @@ mod tests {
         for c in [
             "you've cast two creatures this turn",
             "you sacrificed an instant this turn",
+            "you sacrificed a foods this turn",
             "an opponent owns cards in exile",
         ] {
             assert!(grant_condition(c).is_none(), "{c}");
