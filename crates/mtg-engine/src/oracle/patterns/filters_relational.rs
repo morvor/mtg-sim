@@ -203,7 +203,7 @@ pub fn unresolved(a: &AbilityDef) -> bool {
                 // Searches, choices and the cards a dig takes are chosen together
                 // (`target_groups::fit_together`); so are the objects a sacrifice, discard
                 // or exile cost is paid with (`target_groups::can_choose_together`).
-                for key in ["Search", "Choose", "Dig"] {
+                for key in ["Search", "Choose", "Dig", "Take"] {
                     strip_filter(m, key);
                 }
                 if let Some(serde_json::Value::Array(parts)) = m.get_mut("parts") {

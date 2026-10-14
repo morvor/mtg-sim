@@ -823,6 +823,15 @@ pub enum DigStep {
         filter: Filter,
         count: Value,
         exile: bool,
+        /// "until they have exiled cards with total mana value 4 or greater": the cards
+        /// matching `filter` are counted by this stat (a running total) instead of one
+        /// each.
+        #[serde(default)]
+        total: Option<TotalStat>,
+        /// "until an artifact card or X cards are revealed, whichever comes first": at most
+        /// this many cards are revealed.
+        #[serde(default)]
+        cap: Option<Value>,
     },
 }
 

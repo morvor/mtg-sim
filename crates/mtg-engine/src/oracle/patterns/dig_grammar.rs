@@ -924,11 +924,33 @@ fn source_kind(e: &Effect) -> Option<bool> {
         Effect::DigStep(s) => matches!(**s, DigStep::Until { .. }).then_some(true),
         Effect::Seq(v) => v.iter().rev().find_map(source_kind),
         Effect::May { effect, .. } => source_kind(effect),
+        // "Target opponent reveals the top seven cards of their library."
+        Effect::AsPlayer { effect, .. } => source_kind(effect),
         Effect::If {
             then, otherwise, ..
         } => source_kind(then).or_else(|| source_kind(otherwise)),
         _ => None,
     }
+}
+
+/// The player another player's dig was performed by ("Target opponent reveals the top
+/// seven cards of their library": that player).
+fn dig_performer(e: &Effect) -> Option<PlayerRef> {
+    match e {
+        Effect::AsPlayer { who, effect } if source_kind(effect).is_some() => Some(who.clone()),
+        Effect::RevealUntil { who, .. } if !matches!(who, PlayerRef::You) => Some(who.clone()),
+        Effect::DigStep(s) => match &**s {
+            DigStep::Until { who, .. } if !matches!(who, PlayerRef::You) => Some(who.clone()),
+            _ => None,
+        },
+        Effect::Seq(v) => v.iter().rev().find(|x| source_kind(x).is_some()).and_then(dig_performer),
+        _ => None,
+    }
+}
+
+/// Whether the last dig of the effect revealed (or exiled) cards until some were found.
+pub(super) fn ends_with_until(e: &Effect) -> bool {
+    source_kind(e) == Some(true)
 }
 
 /// Whether the effect ends with a dig or a dig step (so the next sentence may continue
@@ -962,6 +984,12 @@ pub fn note_source(e: Option<&Effect>, b: &mut Builder) {
     };
     b.named.retain(|(n, _)| n != DIG_MARK && n != UNTIL_MARK);
     b.named.push((DIG_MARK.to_string(), rest));
+    // "Then that player puts the rest into their graveyard."
+    if let Some(p) = e.and_then(dig_performer) {
+        if matches!(b.it_player, PlayerRef::You) {
+            b.it_player = p;
+        }
+    }
     // The one card a "reveal until" looked for ("When you reveal a nonland card this way").
     if let Some(f) = e.and_then(until_one) {
         b.named.push((UNTIL_MARK.to_string(), Sel::All(f)));
@@ -982,6 +1010,7 @@ fn until_one(e: &Effect) -> Option<Filter> {
             _ => None,
         },
         Effect::Seq(v) => v.iter().rev().find_map(until_one),
+        Effect::AsPlayer { effect, .. } => until_one(effect),
         _ => None,
     }
 }
@@ -1193,10 +1222,17 @@ struct Counted {
 /// as one phrase ("a blue or artifact card", "a Knight, Aura, Equipment, or legendary
 /// artifact card", "land and/or legendary permanent cards with mana value X or less"):
 /// each kind with the qualifiers that follow "card(s)", and "with mana value N or M".
-fn dig_card_filter(desc: &str, b: &mut Builder) -> Option<Filter> {
+pub(super) fn dig_card_filter(desc: &str, b: &mut Builder) -> Option<Filter> {
     let desc = desc.trim();
     if matches!(desc, "card" | "cards") {
         return Some(Filter::Card);
+    }
+    // "creature and/or Vehicle cards with different powers": a requirement on the cards
+    // chosen together (`relational.rs`), about all of them.
+    if let Some((i, j, grp)) = find_group_phrase(desc).filter(|(_, j, _)| *j == desc.len()) {
+        let _ = j;
+        let f = dig_card_filter(&desc[..i], b)?;
+        return Some(Filter::and(vec![f, Filter::Together(grp)]));
     }
     // "a card with doctor's companion" (CR 702.124m).
     if desc == "card with doctor's companion" {
@@ -1255,10 +1291,28 @@ fn dig_card_filter(desc: &str, b: &mut Builder) -> Option<Filter> {
         }
         alts.push(card_filter(&format!("{part} {noun}{rest}"), b)?);
     }
+    // "creature and/or Vehicle cards with different powers": a requirement on the cards
+    // chosen together is about all of them, whichever kind each is (`relational.rs`).
+    let mut groups: Vec<TargetGroup> = Vec::new();
+    if alts.len() > 1 {
+        for a in alts.iter_mut() {
+            let (f, g) = crate::relational::split_groups(std::mem::replace(a, Filter::Any));
+            *a = f;
+            for x in g {
+                if !groups.iter().any(|y| format!("{y:?}") == format!("{x:?}")) {
+                    groups.push(x);
+                }
+            }
+        }
+    }
     let kinds = match alts.len() {
         0 => return None,
         1 => alts.pop()?,
-        _ => Filter::Or(alts),
+        _ => {
+            let mut parts = vec![Filter::Or(alts)];
+            parts.extend(groups.into_iter().map(Filter::Together));
+            Filter::and(parts)
+        }
     };
     Some(match mv_alts {
         Some(m) => Filter::and(vec![kinds, Filter::Or(m)]),
@@ -1409,8 +1463,13 @@ fn rest_noun(s: &str) -> Option<(bool, &str)> {
     // The cards not chosen (nor found by revealing until).
     for p in [
         "the rest of the revealed cards",
+        "the rest of the cards revealed this way",
+        "the rest of the cards exiled this way",
         "the rest of the cards",
         "the rest of the exiled cards",
+        "the rest of those exiled cards",
+        "the rest of those revealed cards",
+        "the rest of those cards",
         "the rest",
         "all other cards revealed this way",
         "all other revealed cards",
@@ -1428,6 +1487,10 @@ fn rest_noun(s: &str) -> Option<(bool, &str)> {
     // All the cards still there.
     for p in [
         "all revealed cards not cast this way",
+        "the exiled cards that weren't cast this way",
+        "the exiled cards not cast this way",
+        "the revealed cards that weren't cast this way",
+        "the revealed cards not cast this way",
         "all cards revealed this way that weren't put onto the battlefield",
         "all cards revealed this way",
         "the revealed cards",
@@ -1466,6 +1529,9 @@ fn rest_step(dest: &str, rest: &Sel) -> Option<Effect> {
 /// "[then] put the rest ...", "shuffle the rest into your library", "exile the rest".
 fn parse_rest(l: &str, rest: &Sel) -> Option<Effect> {
     let l = l.strip_prefix("then ").unwrap_or(l);
+    // "then you put the rest of those cards on the bottom of your library".
+    let you = l.strip_prefix("you put ").map(|r| format!("put {r}"));
+    let l = you.as_deref().unwrap_or(l);
     if let Some(r) = l.strip_prefix("put ") {
         let (all, r) = rest_noun(r)?;
         return rest_step(r.trim_start(), &rest_of(all, rest));
@@ -1585,6 +1651,48 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
             from = Sel::Var(vars::DUG_CHOSEN);
         }
         (counted(desc, may, b)?, after)
+    } else if let Some((desc, after)) = ["the exiled ", "the revealed "]
+        .iter()
+        .find_map(|p| r.strip_prefix(p))
+        .and_then(|x| {
+            x.split_once(" that weren't cast this way")
+                .or_else(|| x.split_once(" not cast this way"))
+        })
+        .filter(|_| !may)
+    {
+        // "put the exiled instant and sorcery cards that weren't cast this way into your
+        // hand": all those still there (a card cast has left, CR 400.7).
+        let filter = dig_card_filter(desc, b)?;
+        (
+            Counted {
+                filter,
+                each_of: vec![],
+                count: None,
+                up_to: false,
+                random: false,
+                implicit: false,
+            },
+            after,
+        )
+    } else if let Some(x) = r.strip_prefix("all of them ").filter(|_| !may) {
+        // "put all of them with that name into your hand": all the cards dug that have
+        // the quality.
+        let at = [" into ", " onto ", " on "]
+            .iter()
+            .filter_map(|p| x.find(p))
+            .min()?;
+        let filter = dig_card_filter(&format!("cards {}", &x[..at]), b)?;
+        (
+            Counted {
+                filter,
+                each_of: vec![],
+                count: None,
+                up_to: false,
+                random: false,
+                implicit: false,
+            },
+            &x[at..],
+        )
     } else {
         counted_of_them(r, may)?
     };
@@ -1680,6 +1788,27 @@ pub fn exiled_face_down(b: &Builder) -> bool {
     b.named.iter().any(|(n, _)| n == FACE_DOWN_MARK)
 }
 
+/// "the nonland card", "the creature card", "the card with the chosen name": the one card
+/// the last "reveal until" looked for (it found at most one), described again.
+fn found_card_ref<'a>(r: &'a str, b: &Builder) -> Option<&'a str> {
+    let until = b.named.iter().find_map(|(n, s)| match s {
+        Sel::All(f) if n == UNTIL_MARK => Some(f.clone()),
+        _ => None,
+    })?;
+    let x = r.strip_prefix("the ")?;
+    if let Some(rest) = x.strip_prefix("card with the chosen name") {
+        return Some(rest);
+    }
+    let (desc, rest) = x
+        .split_once(" card ")
+        .map(|(d, r)| (format!("{d} card"), r))?;
+    let _ = until;
+    // A description of the card looked for (only it was found).
+    let mut sub = Builder::new(b.ctx);
+    dig_card_filter(&desc, &mut sub)?;
+    Some(&r[r.len() - rest.len() - 1..])
+}
+
 /// "Put that card onto the battlefield and the rest on the bottom of your library in a
 /// random order", "Put those land cards onto the battlefield tapped and the rest ...",
 /// "put the revealed cards into your hand, then shuffle": the card(s) found or chosen.
@@ -1712,6 +1841,9 @@ fn parse_put_found(l: &str, b: &Builder) -> Option<Vec<Effect>> {
     .find_map(|p| r.strip_prefix(p))
     {
         (Sel::Var(vars::DUG_CHOSEN), r)
+    } else if let Some(r) = found_card_ref(r, b) {
+        // "Put the nonland card into your hand" after revealing until a nonland card.
+        (Sel::Var(vars::DUG_FOUND), r)
     } else if let Some(r) = ["the revealed cards", "the revealed card"]
         .iter()
         .find_map(|p| r.strip_prefix(p))
@@ -1847,6 +1979,9 @@ fn reveal_that_card(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
 /// One step: a selection, the found cards, or the rest.
 fn parse_step(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
+    if let Some(e) = other_player_puts(l, b) {
+        return Some(e);
+    }
     if let Some(v) = parse_take(l, b) {
         return Some(Effect::seq(v));
     }
@@ -1876,6 +2011,83 @@ fn parse_step(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         e
     })
+}
+
+/// "Then that player puts the rest into their graveyard.", "That player puts all cards
+/// revealed this way on the bottom of their library in a random order.": the player whose
+/// library was dug puts the cards somewhere. Who does it matters only for an order they
+/// choose, so ordered library positions aren't read here (the controller would order
+/// them).
+fn other_player_puts(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let r = ["that player puts ", "the player puts ", "they put "]
+        .iter()
+        .find_map(|p| l.strip_prefix(p))?;
+    if matches!(b.it_player, PlayerRef::You) {
+        return None;
+    }
+    let who = b.it_player.clone();
+    // "..., then you put the creature card onto the battlefield under your control."
+    let (r, yours) = match r.split_once(", then you put ") {
+        Some((a, c)) => (a, Some(format!("put {c}"))),
+        None => (r, None),
+    };
+    // "puts the rest of the revealed cards into their graveyard and puts the card with
+    // the chosen name on top of their library": two instructions.
+    let (r, also) = match r.split_once(" and puts ") {
+        Some((a, c)) => (a, Some(format!("put {c}"))),
+        None => (r, None),
+    };
+    let put = format!("put {r}");
+    let mut v = parse_put_found(&put, b)
+        .or_else(|| parse_rest(&put, &rest_sel(b)).map(|e| vec![e]))
+        .or_else(|| {
+            // "puts all noncreature cards revealed this way into their graveyard": all of
+            // them, no choice.
+            let v = parse_take(&put, b)?;
+            v.iter()
+                .all(|e| {
+                    matches!(e, Effect::DigStep(s) if matches!(&**s,
+                        DigStep::Take { count: None, .. } | DigStep::Rest { .. }))
+                })
+                .then_some(v)
+        })?;
+    // The player who puts a card onto the battlefield controls it (CR 110.2a).
+    for e in v.iter_mut() {
+        if let Effect::DigStep(s) = e {
+            if let DigStep::Take { to, .. } | DigStep::Rest { to, .. } = &mut **s {
+                if to.zone == ZoneKind::Battlefield {
+                    to.controller = Some(who.clone());
+                }
+            }
+        }
+    }
+    if let Some(a) = also {
+        v.extend(parse_put_found(&a, b)?);
+    }
+    if let Some(y) = yours {
+        v.extend(parse_put_found(&y, b)?);
+    }
+    let ordered = v.iter().any(|e| match e {
+        Effect::DigStep(s) => match &**s {
+            // The one card a reveal found.
+            DigStep::Take {
+                from: Sel::Var(vars::DUG_FOUND),
+                ..
+            } => false,
+            DigStep::Take { to, .. } | DigStep::Rest { to, .. } => {
+                to.zone == ZoneKind::Library
+                    && matches!(to.position, LibraryPosition::Top | LibraryPosition::Bottom)
+            }
+            DigStep::Until { .. } => false,
+        },
+        _ => false,
+    });
+    if ordered {
+        return None;
+    }
+    forget_that_creature(b, &v);
+    Some(Effect::seq(v))
 }
 
 fn step_sentence(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -2084,22 +2296,123 @@ fn library_owner(s: &str, b: &Builder) -> Option<PlayerRef> {
 /// "reveal cards from the top of your library until you reveal two land cards", "exile
 /// cards from the top of your library until you exile X permanent cards, where X is ...".
 fn until_source(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (exile, r) = if let Some(r) = l
+    let saved = b.targets.len();
+    let saved_player = b.it_player.clone();
+    let r = until_source_inner(l, b);
+    if r.is_none() {
+        b.targets.truncate(saved);
+        b.it_player = saved_player;
+    }
+    r
+}
+
+/// Who reveals (or exiles) cards until when: "reveal cards from the top of your library
+/// until you reveal ", "target opponent reveals cards from the top of their library until
+/// they reveal ", "that player reveals cards from the top of their library until [a
+/// creature card] is revealed", "each opponent exiles cards from the top of their library
+/// until they have exiled cards with total mana value 5 or greater this way". Returns the
+/// player, whether the cards are exiled, and the description of what's looked for
+/// (with "cards with total ..." and "..., whichever comes first" left in it).
+fn until_subject(l: &str, b: &mut Builder) -> Option<(PlayerRef, bool, String)> {
+    if let Some(r) = l
         .strip_prefix("reveal cards from the top of your library until you reveal ")
         .or_else(|| l.strip_prefix("reveal cards from the top of it until you reveal "))
     {
-        (false, r)
-    } else if let Some(r) =
-        l.strip_prefix("exile cards from the top of your library until you exile ")
+        return Some((PlayerRef::You, false, r.to_string()));
+    }
+    if let Some(r) = l.strip_prefix("exile cards from the top of your library until you exile ") {
+        return Some((PlayerRef::You, true, r.to_string()));
+    }
+    let (subj, exile, r) = if let Some((s, r)) =
+        l.split_once(" reveals cards from the top of their library until ")
     {
-        (true, r)
+        (s, false, r)
+    } else if let Some((s, r)) = l.split_once(" exiles cards from the top of their library until ")
+    {
+        (s, true, r)
     } else {
         return None;
     };
+    let (who, tail) = crate::oracle::effects::player_ref(subj, b)?;
+    if !tail.trim().is_empty() || matches!(who, PlayerRef::You) {
+        return None;
+    }
+    let passive = if exile { " exiled" } else { " revealed" };
+    // "until they reveal a creature card" is the player's own instruction ("reveal cards
+    // from the top of your library until you reveal ...", performed by them: the player
+    // subject grammar); the forms here have no such reading.
+    let desc = if let Some(x) = ["they have exiled ", "that player has exiled "]
+        .iter()
+        .find_map(|p| r.strip_prefix(p))
+        .filter(|x| exile && x.starts_with("cards with total "))
+    {
+        x.to_string()
+    } else if let Some(x) = r
+        .strip_suffix(&format!(" is{passive}"))
+        .or_else(|| r.strip_suffix(&format!(" are{passive}")))
+    {
+        x.to_string()
+    } else if let Some((x, _)) = r
+        .split_once(&format!(" are{passive}, whichever comes first"))
+        .filter(|(_, t)| t.is_empty())
+    {
+        format!("{x}, whichever comes first")
+    } else {
+        return None;
+    };
+    Some((who, exile, desc))
+}
+
+fn until_source_inner(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (who, exile, r) = until_subject(l, b)?;
+    let r = r.as_str();
     if super::card_flow_reveal_until::implicit_comparison_with_source(r, b) {
         return None;
     }
-    let saved = b.targets.len();
+    // "cards with total mana value 4 or greater [this way]": a running total.
+    if let Some(x) = r.strip_prefix("cards with total ") {
+        let x = x.strip_suffix(" this way").unwrap_or(x);
+        let (stat, x) = if let Some(x) = x.strip_prefix("mana value ") {
+            (TotalStat::ManaValue, x)
+        } else if let Some(x) = x.strip_prefix("power ") {
+            (TotalStat::Power, x)
+        } else {
+            return None;
+        };
+        let (n, x) = parse_number(x)?;
+        if x.trim() != "or greater" {
+            return None;
+        }
+        if format!("{n:?}").contains('X') && !x_allowed(l, b) {
+            return None;
+        }
+        keep_that_creature(b);
+        b.it = Sel::Var(vars::IT);
+        return Some(Effect::DigStep(Box::new(DigStep::Until {
+            who,
+            filter: Filter::Card,
+            count: n,
+            exile,
+            total: Some(stat),
+            cap: None,
+        })));
+    }
+    // "an artifact card or X cards are revealed, whichever comes first": a cap.
+    let (r, cap) = match r.strip_suffix(", whichever comes first") {
+        Some(x) => {
+            let (desc, c) = x.rsplit_once(" or ")?;
+            let (c, tail) = parse_number(c)?;
+            if !matches!(tail.trim(), "cards" | "card") {
+                return None;
+            }
+            if format!("{c:?}").contains('X') && !x_allowed(l, b) {
+                return None;
+            }
+            (desc, Some(c))
+        }
+        None => (r, None),
+    };
     let (n, filter) = if let Some(x) = r.strip_prefix("that many ").filter(|_| !b.in_trigger) {
         // "Exile all creatures you control, then reveal cards ... until you reveal that
         // many creature cards": as many as the previous instruction affected.
@@ -2116,7 +2429,6 @@ fn until_source(l: &str, b: &mut Builder) -> Option<Effect> {
         let (desc, v) = r.split_once(" equal to ")?;
         let (n, tail) = super::value_grammar::parse_value(v, b)?;
         if !tail.trim().is_empty() {
-            b.targets.truncate(saved);
             return None;
         }
         (n, dig_card_filter(desc, b))
@@ -2129,17 +2441,16 @@ fn until_source(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         (n, dig_card_filter(r, b))
     };
-    let Some(filter) = filter else {
-        b.targets.truncate(saved);
-        return None;
-    };
+    let filter = filter?;
     keep_that_creature(b);
     b.it = Sel::Var(vars::IT);
     Some(Effect::DigStep(Box::new(DigStep::Until {
-        who: PlayerRef::You,
+        who,
         filter: Filter::and(vec![Filter::Card, filter]),
         count: n,
         exile,
+        total: None,
+        cap,
     })))
 }
 

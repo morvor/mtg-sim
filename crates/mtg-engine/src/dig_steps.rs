@@ -60,11 +60,19 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
             filter,
             count,
             exile,
+            total,
+            cap,
         } => {
             let n = g.eval_value(count, ctx).max(0) as usize;
+            let cap = cap.as_ref().map(|c| g.eval_value(c, ctx).max(0) as usize);
             let (mut all, mut found) = (Vec::new(), Vec::new());
             for p in g.eval_players(who, ctx) {
-                let (a, f) = until(g, p, filter, n, *exile, ctx);
+                let stop = Stop {
+                    n,
+                    total: *total,
+                    cap,
+                };
+                let (a, f) = until(g, p, filter, stop, *exile, ctx);
                 all.extend(a);
                 found.extend(f);
             }
@@ -370,28 +378,49 @@ fn fit_each(
     kept
 }
 
-/// Reveals (or exiles) cards from the top of `p`'s library until `n` cards matching
-/// `filter` are revealed or the library runs out. Returns all the cards (the objects they
-/// are afterwards) and the matching ones.
+/// When a reveal-until stops: after `n` matching cards (or, with a running `total`, when
+/// the matching cards' total of that stat is `n` or more), or after `cap` cards
+/// ("whichever comes first").
+#[derive(Clone, Copy)]
+struct Stop {
+    n: usize,
+    total: Option<TotalStat>,
+    cap: Option<usize>,
+}
+
+/// Reveals (or exiles) cards from the top of `p`'s library until the stop condition is
+/// met or the library runs out. Returns all the cards (the objects they are afterwards)
+/// and the matching ones.
 fn until(
     g: &mut Game,
     p: PlayerId,
     filter: &Filter,
-    n: usize,
+    stop: Stop,
     exile: bool,
     ctx: &mut Ctx,
 ) -> (Vec<ObjectId>, Vec<ObjectId>) {
     let lib: Vec<ObjectId> = g.player(p).library.iter().rev().copied().collect();
     let mut revealed = Vec::new();
     let mut found = Vec::new();
-    if n > 0 {
+    let mut sum = 0i64;
+    if stop.n > 0 && stop.cap != Some(0) {
         for c in lib {
             revealed.push(c);
             if g.matches(c, filter, ctx) {
                 found.push(c);
-                if found.len() >= n {
+                let done = match stop.total {
+                    Some(stat) => {
+                        sum += crate::relational::total(g, stat, &[Entity::Object(c)]);
+                        sum >= stop.n as i64
+                    }
+                    None => found.len() >= stop.n,
+                };
+                if done {
                     break;
                 }
+            }
+            if stop.cap.is_some_and(|k| revealed.len() >= k) {
+                break;
             }
         }
     }
