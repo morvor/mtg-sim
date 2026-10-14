@@ -447,6 +447,18 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               your turn.",
     },
     Equivalence {
+        pattern: r"\b(?:has|have) the chosen creature type in addition to (its|their) other types\b",
+        replacement: "is the chosen type in addition to $1 other types",
+        why: "An object that has a creature type in addition to its other types is that \
+              subtype as well as what it was (CR 205.1b, 205.3).",
+    },
+    Equivalence {
+        pattern: r"\bas long as it's an extra turn\b",
+        replacement: "during extra turns",
+        why: "A static ability that applies \"as long as it's an extra turn\" applies during \
+              each extra turn (CR 500.7) and no other.",
+    },
+    Equivalence {
         pattern: r"\byour life total is less than (\d+|[a-z]+)\b",
         replacement: "you have less than $1 life",
         why: "A player's life total is the amount of life they have (CR 119.1).",
@@ -1699,7 +1711,8 @@ fn leading_for_each(s: &str) -> String {
     };
     re.replace_all(s, |c: &regex::Captures| {
         let (thing, clause) = (&c[2], &c[3]);
-        let words: Vec<&str> = clause.split(' ').collect();
+        // (Words of a rendering's alternatives count too: "{alt:that creature|it}".)
+        let words: Vec<&str> = clause.split([' ', '|', '{', '}', ':']).collect();
         let refers = words.iter().any(|w| {
             matches!(
                 *w,

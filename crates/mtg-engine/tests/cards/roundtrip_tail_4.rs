@@ -179,3 +179,92 @@ fn verdant_command_counters_only_a_loyalty_ability_of_a_planeswalker() {
         assert_eq!(t.life(P0), expected, "{still_planeswalker}\n{}", t.dump_log());
     }
 }
+
+#[test]
+fn typhoon_deals_each_opponent_damage_for_their_own_islands() {
+    cr!("120.3", "608.2c");
+    // "~ deals damage to each opponent equal to the number of Islands that player controls."
+    let mut t = TestGame::new(3);
+    t.lands(P1, "Island", 2);
+    t.lands(P2, "Island", 1);
+    t.lands(P0, "Forest", 3);
+    let spell = t.hand(P0, "Typhoon");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(
+        (t.life(P0), t.life(P1), t.life(P2)),
+        (20, 18, 19),
+        "{}",
+        t.dump_log()
+    );
+}
+
+#[test]
+fn rite_of_flame_counts_the_cards_in_every_graveyard() {
+    cr!("106.1", "608.2c");
+    // "Add {R}{R}, then add {R} for each card named Rite of Flame in each graveyard."
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Rite of Flame");
+    t.graveyard(P1, "Rite of Flame");
+    t.lands(P0, "Mountain", 1);
+    let spell = t.hand(P0, "Rite of Flame");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.g.player(P0).mana_pool.total(), 4, "{}", t.dump_log());
+}
+
+#[test]
+fn natural_balance_trims_and_fills_each_players_lands() {
+    cr!("101.4", "608.2c");
+    // "Each player who controls six or more lands chooses five lands they control and
+    // sacrifices the rest. Each player who controls four or fewer lands may search their
+    // library for up to X basic land cards and put them onto the battlefield, where X is
+    // five minus the number of lands they control. Then each player who searched their
+    // library this way shuffles."
+    let mut t = TestGame::new(2);
+    t.g.search_finds_by_default = true;
+    t.lands(P0, "Forest", 7);
+    t.lands(P1, "Plains", 3);
+    for _ in 0..4 {
+        t.library_top(P1, "Plains");
+    }
+    t.answer_yes(P1, true);
+    let library = t.library_size(P1);
+    let spell = t.hand(P0, "Natural Balance");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let lands = |t: &TestGame, p| {
+        t.g.permanents_controlled_by(p)
+            .iter()
+            .filter(|o| t.g.obj(**o).chars.card_types.contains(CardType::Land))
+            .count()
+    };
+    assert_eq!(lands(&t, P0), 5, "{}", t.dump_log());
+    assert_eq!(lands(&t, P1), 5, "{}", t.dump_log());
+    assert_eq!(t.library_size(P1), library - 2);
+}
+
+#[test]
+fn treasure_keeper_puts_the_card_not_cast_on_the_bottom_too() {
+    cr!("608.2c", "401.4");
+    // "You may cast that card without paying its mana cost. Put all revealed cards not
+    // cast this way on the bottom of your library in a random order."
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Forest");
+    let keeper = t.battlefield(P0, "Treasure Keeper");
+    t.lands(P0, "Swamp", 3);
+    let murder = t.hand(P0, "Murder");
+    t.answer_yes(P0, false);
+    t.cast(P0, murder).target(keeper).go();
+    t.resolve_all();
+    let lib: Vec<String> = t.g.players[P0.idx()]
+        .library
+        .iter()
+        .map(|o| t.g.obj(*o).chars.name.to_string())
+        .collect();
+    // Bottom first: the Bears (not cast) and the Forest.
+    let mut bottom = lib[..2].to_vec();
+    bottom.sort();
+    assert_eq!(bottom, ["Forest", "Grizzly Bears"], "{lib:?}\n{}", t.dump_log());
+}

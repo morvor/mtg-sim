@@ -14,6 +14,23 @@ use super::players::Case;
 use super::*;
 use crate::kw::each_player_collect::{COLLECT, COLLECTED, PICK};
 
+/// The condition a player must meet to be offered the opt-in choice ("each player who
+/// controls four or fewer lands may ..."), if the per-player effect is that choice.
+fn opt_in_condition(e: &Effect) -> Option<&Condition> {
+    match e {
+        Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect,
+        } => opt_in_condition(effect),
+        Effect::If {
+            cond: cond @ (Condition::Compare(Value::Count(_), _, _) | Condition::Exists(_)),
+            then,
+            otherwise,
+        } if matches!(otherwise.as_ref(), Effect::Noop) && is_opt_in(then) => Some(cond),
+        _ => None,
+    }
+}
+
 /// Whether a per-player effect is the opt-in choice.
 fn is_opt_in(e: &Effect) -> bool {
     match e {
@@ -78,7 +95,8 @@ impl Renderer<'_> {
         let Effect::ForEachPlayer { who, effect } = &v[i] else {
             return None;
         };
-        if !is_opt_in(effect) {
+        let condition = opt_in_condition(effect).cloned();
+        if !is_opt_in(effect) && condition.is_none() {
             return None;
         }
         // Those who chose to take part, maybe under another name.
@@ -96,6 +114,7 @@ impl Renderer<'_> {
             j += 1;
         }
         let mut vps = Vec::new();
+        let mut then_shuffle = false;
         while j < v.len() {
             if let Effect::Store {
                 var: COLLECTED,
@@ -111,6 +130,23 @@ impl Renderer<'_> {
                 continue;
             }
             match &v[j] {
+                // "Then each player who searched their library this way shuffles."
+                Effect::ForEachPlayer {
+                    who: PlayerRef::Var(x),
+                    effect,
+                } if opted.contains(x)
+                    && matches!(
+                        effect.as_ref(),
+                        Effect::Shuffle {
+                            who: PlayerRef::Iterated
+                        }
+                    )
+                    && !vps.is_empty()
+                    && condition.is_some() =>
+                {
+                    then_shuffle = true;
+                    j += 1;
+                }
                 Effect::ForEachPlayer {
                     who: PlayerRef::Var(x),
                     effect,
@@ -188,12 +224,26 @@ impl Renderer<'_> {
         if vps.is_empty() {
             return None;
         }
-        let w = self.player(who, Case::Subj);
-        // "... and draw seven cards" / "Each player who does draws seven cards."
-        Some((
-            j - i,
-            format!("{w} may {}", vps.join(" {alt:and|each player who does} ")),
-        ))
+        let mut w = self.player(who, Case::Subj);
+        // "Each player who controls four or fewer lands may ...".
+        if let Some(c) = &condition {
+            let saved = std::mem::replace(&mut self.in_as_player, true);
+            let c = self.condition(c);
+            self.in_as_player = saved;
+            let c = c.strip_prefix("you ")?;
+            if c.contains('{') {
+                return None;
+            }
+            let c = format!(" {} ", super::effects::third_person(c))
+                .replace(" your ", " their ")
+                .replace(" you ", " they ");
+            w = format!("{w} who {}", c.trim());
+        }
+        let mut s = format!("{w} may {}", vps.join(" {alt:and|each player who does} "));
+        if then_shuffle {
+            s.push_str(". then each player who searched their library this way shuffles");
+        }
+        Some((j - i, s))
     }
 
     /// What one player does, worded for "each player ...": "discard their hand and draw
@@ -228,6 +278,7 @@ impl Renderer<'_> {
         format!(" {inner} ")
             .replace(". you ", ". ")
             .replace(" your ", " their ")
+            .replace(" you own ", " they own ")
             .trim()
             .to_string()
     }

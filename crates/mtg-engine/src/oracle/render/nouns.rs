@@ -1757,6 +1757,13 @@ impl Renderer<'_> {
         self.alt_and = true;
         let n = self.noun(f, Num::One);
         self.alt_and = saved;
+        // "for each card named ~ in each graveyard": each card in any graveyard.
+        let n = match n.strip_suffix(" in a graveyard") {
+            Some(head) if !head.contains(" in ") => {
+                format!("{head} in {{alt:a|each}} graveyard")
+            }
+            _ => n,
+        };
         if Self::counts_all_permanents(f, &n) {
             format!("{n} {{opt:on the battlefield}}")
         } else {

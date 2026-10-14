@@ -128,7 +128,95 @@ impl Renderer<'_> {
                 face_down: false,
                 ..
             }) if w == var => Some((format!("exile {what} from each {zone}"), 3)),
-            _ => Some((format!("choose {what} in each {zone}"), 2)),
+            _ => Some((
+                format!(
+                    "{{alt:choose {what} in each {zone}|for each player, choose {what} in that player's {zone}|choose {what} in that player's {zone} for each player}}"
+                ),
+                2,
+            )),
         }
+    }
+}
+
+/// "a nonland card with mana value 3 or less" chosen from the hand just revealed or looked
+/// at: "from it" after the cards' qualities or right after the noun (cards print both:
+/// "a card from it with mana value 3 or greater", "a nonland card with mana value X or less
+/// from it"). The hand's owner, said again, is left out: it is that hand.
+pub(crate) fn from_the_hand(cards: &str) -> String {
+    let mut cards = cards;
+    for owner in [
+        " that player owns",
+        " they own",
+        " you own",
+        " its owner owns",
+    ] {
+        if let Some(c) = cards.strip_suffix(owner) {
+            cards = c;
+            break;
+        }
+    }
+    let after_noun = [" card ", " cards "].iter().find_map(|w| {
+        cards
+            .find(w)
+            .map(|i| (&cards[..i + w.len() - 1], &cards[i + w.len() - 1..]))
+    });
+    match after_noun {
+        Some((head, tail)) if !head.contains('{') && !tail.contains('{') => {
+            format!("{head} {{alt:from it{tail}|{} from it}}", tail.trim_start())
+        }
+        _ => format!("{cards} from it"),
+    }
+}
+
+/// "That player discards that card", "... discards those cards": the cards chosen just
+/// before (a remembered choice of one card, or of several), which a pronoun also names.
+pub(crate) fn chosen_cards(r: &Renderer<'_>, sel: &Sel, pronoun: String) -> String {
+    let Sel::Var(v) = sel else {
+        return pronoun;
+    };
+    let Some((_, Sel::Choose { count, .. }, _)) = r.var_defs.iter().rev().find(|(x, _, _)| x == v)
+    else {
+        return pronoun;
+    };
+    match (pronoun.as_str(), count) {
+        ("it", Value::Const(1)) => "{alt:it|that card}".into(),
+        ("them", _) | ("it", _) => format!("{{alt:{pronoun}|those cards}}"),
+        _ => pronoun,
+    }
+}
+
+impl Renderer<'_> {
+    /// At `v[i]`: "You may cast that card without paying its mana cost. Put all revealed
+    /// cards not cast this way on the bottom of your library": the revealed cards left after
+    /// the found one was cast or not are "the rest" (the cast card is on the stack, not
+    /// among them).
+    pub(crate) fn seq_rest_not_cast(&mut self, v: &[Effect], i: usize) -> Option<(String, usize)> {
+        let (Some(cast @ Effect::CastCard { .. }), Some(Effect::DigStep(step))) =
+            (v.get(i), v.get(i + 1))
+        else {
+            return None;
+        };
+        let DigStep::Rest {
+            from: Sel::Var(d), ..
+        } = step.as_ref()
+        else {
+            return None;
+        };
+        let revealed = v[..i].iter().any(|e| {
+            matches!(
+                e,
+                Effect::RevealUntil { .. } | Effect::Dig { reveal: true, .. }
+            )
+        });
+        if *d != vars::DUG || !revealed {
+            return None;
+        }
+        let c = self.effect(cast);
+        let r = self.effect(&Effect::DigStep(step.clone()));
+        let r = r.strip_prefix("put the rest ")?;
+        Some((
+            format!("{c}. put {{alt:the rest|all revealed cards not cast this way}} {r}"),
+            2,
+        ))
     }
 }

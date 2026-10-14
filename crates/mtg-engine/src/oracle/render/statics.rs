@@ -628,6 +628,12 @@ impl Renderer<'_> {
             }
             StaticEffect::AdditionalLandPlays(r, n) => {
                 let w = self.rel_subject(*r);
+                // "Each player may play an additional land on each of their turns."
+                let w = if w == "a player" {
+                    "{alt:a player|each player}".to_string()
+                } else {
+                    w
+                };
                 let p = if w == "you" { "your" } else { "their" };
                 match n {
                     1 => format!("{w} may play an additional land on each of {p} turns"),
@@ -2211,9 +2217,11 @@ impl Renderer<'_> {
             }
             Restriction::MustTarget { chooser, what } => {
                 let c = self.player_filter_object(chooser);
-                let n = self.noun_det(what, Det::A);
+                let n = self.noun(what, Num::One);
+                // The spell a player casts and the ability they activate are theirs (CR
+                // 601.2a, 602.2a); the objects chosen are permanents.
                 format!(
-                    "while {c} is choosing targets as part of casting a spell or activating an ability, that player must choose at least {n} if able"
+                    "while {c} is choosing targets as part of casting a spell {{opt:they control}} or activating an ability {{opt:they control}}, that player must choose at least one {n} {{opt:on the battlefield}} if able"
                 )
             }
             Restriction::CantBe { what, action } => {
