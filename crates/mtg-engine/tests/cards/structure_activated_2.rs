@@ -9,8 +9,8 @@ use super::structure_seed_common::*;
 use mtg_engine::ability::AbilityKind;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
-use mtg_engine::types::{CardType, Color};
 use mtg_engine::turn::Step;
+use mtg_engine::types::{CardType, Color};
 use mtg_engine::*;
 
 /// Activates the activated ability of `src` whose text contains `text` (case-insensitive),
@@ -68,7 +68,10 @@ fn treasure_trove_draws_a_card_for_mana() {
     let mut t = TestGame::new(2);
     let trove = t.battlefield(P0, "Treasure Trove");
     t.lands(P0, "Island", 3);
-    assert!(act(&mut t, P0, trove, "draw", &[]).is_err(), "{{2}}{{U}}{{U}} needs four mana");
+    assert!(
+        act(&mut t, P0, trove, "draw", &[]).is_err(),
+        "{{2}}{{U}}{{U}} needs four mana"
+    );
     t.lands(P0, "Island", 1);
     act(&mut t, P0, trove, "draw", &[]).unwrap();
     assert_eq!(untapped(&t, P0, "Island"), 0, "the cost was paid");
@@ -134,7 +137,11 @@ fn blighted_bat_gains_haste_until_end_of_turn() {
     assert!(t.obj_now(bat).has_keyword(KeywordKind::Haste));
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(bat, Entity::Player(P1))], &[]);
-    assert_eq!(t.life(P1), 18, "a summoning-sick creature with haste attacks");
+    assert_eq!(
+        t.life(P1),
+        18,
+        "a summoning-sick creature with haste attacks"
+    );
     next_turn(&mut t);
     assert!(!t.obj_now(bat).has_keyword(KeywordKind::Haste));
 }
@@ -157,7 +164,10 @@ fn wayfarers_bauble_fetches_a_basic_land_tapped() {
     let forests = t.named_on_battlefield("Forest");
     assert_eq!(forests.len(), 1);
     assert!(t.obj_now(forests[0]).tapped, "enters tapped");
-    assert!(t.named_on_battlefield("Bayou").is_empty(), "not a basic land");
+    assert!(
+        t.named_on_battlefield("Bayou").is_empty(),
+        "not a basic land"
+    );
     assert_eq!(t.library_size(P0), lib - 1);
 }
 
@@ -170,7 +180,10 @@ fn marble_chalice_gains_one_life() {
     let chalice = t.battlefield(P0, "Marble Chalice");
     act(&mut t, P0, chalice, "gain", &[]).unwrap();
     assert!(t.obj_now(chalice).tapped);
-    assert!(act(&mut t, P0, chalice, "gain", &[]).is_err(), "already tapped");
+    assert!(
+        act(&mut t, P0, chalice, "gain", &[]).is_err(),
+        "already tapped"
+    );
     t.resolve_all();
     assert_eq!(t.life(P0), 21);
     assert_eq!(t.life(P1), 20);
@@ -238,7 +251,11 @@ fn zephyr_charge_grants_flying_until_end_of_turn() {
     assert!(!t.obj_now(other).has_keyword(KeywordKind::Flying));
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(bears, Entity::Player(P1))], &[(other, bears)]);
-    assert_eq!(t.life(P1), 18, "a creature without flying or reach can't block it");
+    assert_eq!(
+        t.life(P1),
+        18,
+        "a creature without flying or reach can't block it"
+    );
     next_turn(&mut t);
     assert!(!t.obj_now(bears).has_keyword(KeywordKind::Flying));
 }
@@ -328,7 +345,10 @@ fn skinbrand_goblin_bloodrush_pumps_an_attacking_creature() {
     declare(&mut t, &[(attacker, Entity::Player(P1))]);
     go_to(&mut t, Step::DeclareAttackers);
     act(&mut t, P0, goblin, "attacking", &[Entity::Object(attacker)]).unwrap();
-    assert!(t.in_graveyard(P0, "Skinbrand Goblin"), "discarded as a cost");
+    assert!(
+        t.in_graveyard(P0, "Skinbrand Goblin"),
+        "discarded as a cost"
+    );
     t.resolve_all();
     assert_eq!(t.pt(attacker), (4, 3));
     assert_eq!(t.pt(idle), (3, 3));
@@ -346,7 +366,14 @@ fn spike_weaver_moves_a_counter_to_target_creature() {
     let spike = with_p1p1(&mut t, P0, "Spike Weaver", 1);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Wastes", 4);
-    act(&mut t, P0, spike, "on target creature", &[Entity::Object(bears)]).unwrap();
+    act(
+        &mut t,
+        P0,
+        spike,
+        "on target creature",
+        &[Entity::Object(bears)],
+    )
+    .unwrap();
     assert_eq!(t.counters(spike, "+1/+1"), 0, "removed as a cost");
     t.resolve_all();
     assert_eq!(t.counters(bears, "+1/+1"), 1);
@@ -441,7 +468,10 @@ fn iron_lance_grants_first_strike() {
     assert!(t.obj_now(bears).has_keyword(KeywordKind::FirstStrike));
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(bears, Entity::Player(P1))], &[(blocker, bears)]);
-    assert!(t.on_battlefield(bears), "first strike killed the blocker first");
+    assert!(
+        t.on_battlefield(bears),
+        "first strike killed the blocker first"
+    );
     assert!(!t.on_battlefield(blocker));
     next_turn(&mut t);
     assert!(!t.obj_now(bears).has_keyword(KeywordKind::FirstStrike));
@@ -463,10 +493,18 @@ fn armillary_sphere_puts_up_to_two_basic_lands_into_hand() {
     act(&mut t, P0, sphere, "search", &[]).unwrap();
     assert!(!t.on_battlefield(sphere));
     t.resolve_all();
-    let hand: Vec<String> = t.g.player(P0).hand.iter().map(|c| t.obj_now(*c).chars.name.to_string()).collect();
+    let hand: Vec<String> =
+        t.g.player(P0)
+            .hand
+            .iter()
+            .map(|c| t.obj_now(*c).chars.name.to_string())
+            .collect();
     assert_eq!(hand.len(), 2, "{hand:?}");
     assert!(!hand.iter().any(|n| n == "Bayou"), "only basic lands");
-    assert!(t.named_on_battlefield("Forest").is_empty(), "into the hand, not onto the battlefield");
+    assert!(
+        t.named_on_battlefield("Forest").is_empty(),
+        "into the hand, not onto the battlefield"
+    );
 }
 
 #[test]
@@ -562,7 +600,10 @@ fn blistering_dieflyn_pumps_with_hybrid_mana() {
     let mut t = TestGame::new(2);
     let d = t.battlefield(P0, "Blistering Dieflyn");
     t.lands(P0, "Island", 1);
-    assert!(act(&mut t, P0, d, "+1/+0", &[]).is_err(), "blue can't pay {{B/R}}");
+    assert!(
+        act(&mut t, P0, d, "+1/+0", &[]).is_err(),
+        "blue can't pay {{B/R}}"
+    );
     t.lands(P0, "Swamp", 1);
     t.lands(P0, "Mountain", 1);
     act(&mut t, P0, d, "+1/+0", &[]).unwrap();

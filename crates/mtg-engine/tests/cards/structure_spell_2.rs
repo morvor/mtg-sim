@@ -74,7 +74,9 @@ fn demolish_destroys_target_artifact_or_land() {
     // A creature isn't a legal target: with no artifact or land to target, it can't be cast.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Grizzly Bears");
-    t.g.players[0].mana_pool.add_type(mtg_engine::mana::ManaType::R, 4);
+    t.g.players[0]
+        .mana_pool
+        .add_type(mtg_engine::mana::ManaType::R, 4);
     let s = t.hand(P0, "Demolish");
     assert!(t.cast(P0, s).try_go().is_err());
 }
@@ -150,7 +152,10 @@ fn tremor_damages_each_creature_without_flying() {
     t.resolve_all();
     assert!(!t.on_battlefield(elf));
     assert_eq!(t.obj_now(mine).damage, 1);
-    assert!(t.on_battlefield(bat), "flying creatures aren't dealt damage");
+    assert!(
+        t.on_battlefield(bat),
+        "flying creatures aren't dealt damage"
+    );
     assert_eq!(t.obj_now(bat).damage, 0);
     assert_eq!(t.life(P0), 20);
     assert_eq!(t.life(P1), 20);
@@ -181,8 +186,7 @@ fn defeat_destroys_only_a_creature_with_power_two_or_less() {
     t.g.players[0]
         .mana_pool
         .add_type(mtg_engine::mana::ManaType::G, 1);
-    super::structure_activated_2::act(&mut t, P0, pump, "+2/+2", &[Entity::Object(bears)])
-        .unwrap();
+    super::structure_activated_2::act(&mut t, P0, pump, "+2/+2", &[Entity::Object(bears)]).unwrap();
     t.resolve_all();
     assert!(t.on_battlefield(bears));
     assert!(t.in_graveyard(P0, "Defeat"));

@@ -120,7 +120,10 @@ fn koskun_keep_filters_one_mana_into_red() {
     supported("Koskun Keep");
     let mut t = TestGame::new(2);
     let k = t.battlefield(P0, "Koskun Keep");
-    assert!(act(&mut t, P0, k, "{1}, {t}: add {r}", &[]).is_err(), "no mana for {{1}}");
+    assert!(
+        act(&mut t, P0, k, "{1}, {t}: add {r}", &[]).is_err(),
+        "no mana for {{1}}"
+    );
     let w = t.battlefield(P0, "Wastes");
     act(&mut t, P0, k, "{1}, {t}: add {r}", &[]).unwrap();
     assert!(t.obj_now(w).tapped && t.obj_now(k).tapped);
