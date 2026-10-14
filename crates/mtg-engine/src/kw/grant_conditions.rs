@@ -9,7 +9,7 @@ use crate::events::Event;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::oracle::patterns::grant_conditions::{
-    ACTION_THIS_TURN, COMMITTED_CRIME_THIS_TURN, SACRIFICED_THIS_TURN, SOURCE_CAST_FROM_EXILE,
+    ACTION_THIS_TURN, COMMITTED_CRIME_THIS_TURN, SACRIFICED_SUBTYPE, SACRIFICED_THIS_TURN, SOURCE_CAST_FROM_EXILE,
     SOURCE_DEALT_COMBAT_DAMAGE, SOURCE_DEALT_DAMAGE,
 };
 use crate::types::CardType;
@@ -93,6 +93,15 @@ impl KeywordRules for GrantConditions {
             );
         }
         let ty = name.strip_prefix(SACRIFICED_THIS_TURN)?;
+        if let Some(sub) = ty.strip_prefix(SACRIFICED_SUBTYPE) {
+            // A subtype ("a Food"): the sacrificed objects' last known information.
+            return Some(
+                g.history
+                    .sacrificed
+                    .iter()
+                    .any(|(p, o)| *p == ctx.controller && g.obj(*o).chars.has_subtype(sub)),
+            );
+        }
         let want = CardType::from_word(ty);
         // The sacrificed objects' last known information (CR 608.2h).
         Some(g.history.sacrificed.iter().any(|(p, o)| {

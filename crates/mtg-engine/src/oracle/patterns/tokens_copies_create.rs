@@ -234,10 +234,9 @@ pub(crate) fn ability_list(
     if !keywords.is_empty() {
         for m in keyword_mods(&keywords.join(", "))? {
             if let Modification::AddKeyword(k) = m {
-                out.push(AbilityDef::new(
-                    AbilityKind::Keyword(k.clone()),
-                    k.kind.name(),
-                ));
+                // A keyword the creating effect gives the token comes with its
+                // characteristic-defining ability (changeling, CR 604.3a, 702.73a).
+                out.extend(crate::oracle::keywords::compile_keyword(k.clone(), k.kind.name()));
             }
         }
     }

@@ -310,6 +310,13 @@ impl Game {
             }
             Entity::Object(_) => None,
         };
+        // "Each player may attack only the nearest opponent in the chosen direction"
+        // (CR 508.1c).
+        if let Some((p, _, is_battle)) = defender {
+            if !crate::seats::attack_allowed(self, o.controller, p, is_battle) {
+                return false;
+            }
+        }
         // Goaded creatures can't attack the goading player if able to attack another (CR 701.15b) — enforced as a requirement.
         !self
             .all_restrictions()
