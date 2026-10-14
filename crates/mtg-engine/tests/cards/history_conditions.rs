@@ -1005,3 +1005,27 @@ fn botanical_brawler_counts_only_the_first_time_each_permanent_gets_counters() {
     t.resolve_all();
     assert_eq!(t.counters(bb, "+1/+1"), before + 1);
 }
+
+#[test]
+fn frodo_wins_if_the_ring_has_tempted_you_four_or_more_times_this_game() {
+    cr!("701.54a", "104.3a");
+    assert_supported("Frodo, Sauron's Bane");
+    for (level, loses) in [(4, true), (3, false)] {
+        // Three players, so the game goes on after one loses.
+        let mut t = TestGame::new(3);
+        let frodo = t.battlefield(P0, "Frodo, Sauron's Bane");
+        t.lands(P0, "Swamp", 5);
+        t.activate(P0, frodo, 0, &[]).expect("becomes a Scout");
+        t.resolve();
+        t.activate(P0, frodo, 1, &[]).expect("becomes a Rogue");
+        t.resolve();
+        t.g.players[0].ring_level = level;
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.attack(&[(frodo, Entity::Player(P1))], &[]);
+        t.resolve_all();
+        assert_eq!(t.has_lost(P1), loses, "tempted {level} times");
+        if !loses {
+            assert_eq!(t.g.players[0].ring_level, level + 1, "otherwise, the Ring tempts you");
+        }
+    }
+}

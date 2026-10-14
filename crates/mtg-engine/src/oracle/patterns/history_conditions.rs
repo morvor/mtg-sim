@@ -1749,6 +1749,22 @@ fn nth_time_counters(c: &str, b: &mut Builder) -> Option<Condition> {
     }
 }
 
+/// "the Ring has tempted you four or more times this game" (CR 701.54).
+fn ring_tempted(c: &str) -> Option<Condition> {
+    let r = end(c).strip_prefix("the ring has tempted you ")?;
+    let (n, r) = parse_number(r)?;
+    if !matches!(r.trim(), "or more times this game" | "or more times") {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Custom(crate::kwa::ring::TIMES_TEMPTED.into()),
+        Cmp::Ge,
+        n,
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history: the Ring has tempted you N or more times this game", priority: 900, parse: ring_tempted } }
+
 #[cfg(test)]
 mod tests {
     use crate::card::Layout;
