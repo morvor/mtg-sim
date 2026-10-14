@@ -122,7 +122,7 @@ impl Renderer<'_> {
             }
             // "where X is the amount of damage it dealt to that player".
             Value::EventAmount if self.extra.event_amount.is_some() => format!(
-                "{{alt:that much|that many|{}}}",
+                "{{alt:that much|that many|that damage|{}}}",
                 self.extra.event_amount.unwrap_or_default()
             ),
             Value::EventAmount => "{alt:that much|that many}".into(),

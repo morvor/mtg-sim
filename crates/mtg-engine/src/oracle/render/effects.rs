@@ -1507,8 +1507,15 @@ impl Renderer<'_> {
             Effect::AddCounters { what, kind, n } => {
                 // The object is named before the "where X is" clause about it ("put X
                 // +1/+1 counters on target creature, where X is that creature's power").
-                let mut t = self.sel(what, Case::Obj);
-                let (c, w) = self.counted(n, &counter_name(kind));
+                let (mut t, (c, w)) = if matches!(what, Sel::Target(_))
+                    && format!("{n:?}").contains(&format!("{what:?}"))
+                {
+                    let t = self.sel(what, Case::Obj);
+                    (t, self.counted(n, &counter_name(kind)))
+                } else {
+                    let cw = self.counted(n, &counter_name(kind));
+                    (self.sel(what, Case::Obj), cw)
+                };
                 // "put a +1/+1 counter on each of up to two target creatures".
                 if let Sel::Target(i) = what {
                     let many = self
