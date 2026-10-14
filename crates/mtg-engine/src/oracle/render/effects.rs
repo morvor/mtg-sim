@@ -410,7 +410,10 @@ impl Renderer<'_> {
                 && !self.introduced.get(*i as usize).copied().unwrap_or(true)
             {
                 let subj = self.player(who, Case::Subj);
-                if let Some((_, vp, _)) = self.actor_vp(e) {
+                let saved = self.they_target.replace(*i);
+                let r = self.actor_vp(e);
+                self.they_target = saved;
+                if let Some((_, vp, _)) = r {
                     return format!("{subj} {}", third_person(&vp));
                 }
             }
@@ -1034,7 +1037,10 @@ impl Renderer<'_> {
                 // The player a delayed trigger waits for ("at the beginning of that
                 // player's next end step"): named there.
                 Sel::Players(_) => String::new(),
-                Sel::Choose { chooser, .. } => {
+                Sel::Choose { chooser, count, .. } => {
+                    if let (Value::Const(1), Effect::Store { var, .. }) = (count, e) {
+                        self.chosen_one.push(*var);
+                    }
                     let c = self.player(chooser, Case::Subj);
                     let mut s = self.sel(&strip_chooser(sel), Case::Obj);
                     // "Target opponent reveals their hand. You choose a nonland card from
@@ -1589,7 +1595,23 @@ impl Renderer<'_> {
                 what,
                 mods,
                 duration,
-            } => self.modify_effect(what, mods, duration),
+            } => {
+                let s = self.modify_effect(what, mods, duration);
+                // "~ has base power and toughness 4/2 until end of turn and gains first
+                // strike until end of turn": the duration said for each part.
+                let d = " until end of turn";
+                match (s.strip_suffix(d), s.find(" and gains ")) {
+                    (Some(head), Some(k))
+                        if head.contains(" has base power and toughness ")
+                            && !s.contains('{')
+                            && head[..k].matches(" and ").count() == 1 =>
+                    {
+                        let (a, b) = head.split_at(k);
+                        format!("{{alt:{s}|{a}{d}{b}{d}}}")
+                    }
+                    _ => s,
+                }
+            }
             Effect::AddRestriction {
                 restriction,
                 duration,

@@ -55,12 +55,19 @@ impl Renderer<'_> {
         let tp = self.target_phrase(*t);
         self.introduced[*t as usize] = true;
         self.plural_vars.push(*tv);
-        Some((
-            3,
-            format!(
-                "choose {tp}. {{alt:that player|its controller}} chooses one of {{alt:them|those creatures}}"
-            ),
-        ))
+        let who = "{alt:that player|its controller}";
+        let them = "{alt:them|those creatures}";
+        // "That player sacrifices one of them" / "Its controller chooses and sacrifices one
+        // of them".
+        if matches!(v.get(i + 3), Some(Effect::SacrificeObjects { what: Sel::Var(x) }) if x == w) {
+            return Some((
+                4,
+                format!(
+                    "choose {tp}. {who} {{alt:sacrifices|chooses and sacrifices}} one of {them}"
+                ),
+            ));
+        }
+        Some((3, format!("choose {tp}. {who} chooses one of {them}")))
     }
 }
 

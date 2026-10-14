@@ -112,7 +112,11 @@ impl Renderer<'_> {
                         .collect();
                     join_list(&names, "and/or")
                 } else {
+                    // "up to two instant and/or sorcery cards": several, of either kind.
+                    let saved = self.alt_and;
+                    self.alt_and = !matches!(count, Some(Value::Const(1)));
                     let noun = self.card_noun(filter);
+                    self.alt_and = saved;
                     match count {
                         None => format!("all {}", plural(&noun)),
                         Some(Value::Const(1)) if *random => with_article(&format!("random {noun}")),

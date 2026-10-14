@@ -274,8 +274,8 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               opponent\" does.",
     },
     Equivalence {
-        pattern: r"\bcreature that's one or more colors\b",
-        replacement: "colored creature",
+        pattern: r"\b(creature|permanent) that's one or more colors\b",
+        replacement: "colored $1",
         why: "A colored object is one that's one or more colors (CR 105.2).",
     },
     Equivalence {
@@ -655,6 +655,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 400.7: that object is the card in exile); \"Discard a card. If the \
               discarded card was a land card, ...\" and \"Reveal a card at random from \
               your hand. ... where X is the revealed card's mana value\" likewise.",
+    },
+    Equivalence {
+        pattern: r"\bthe (mana value|power|toughness) of (thatit|it)\b",
+        replacement: "$2 $1",
+        why: "Possessive: \"the mana value of the discarded card\" is that card's mana \
+              value.",
     },
     Equivalence {
         pattern: r"\bif (it|thatit|that-object|~it|~) had\b",

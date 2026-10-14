@@ -454,6 +454,10 @@ impl Renderer<'_> {
             return match case {
                 // "Target player shuffles their graveyard into their library."
                 Case::Poss => "{alt:that player's|their}".into(),
+                // "Target opponent loses life equal to the number of creatures they
+                // control": the subject, named again in the amount.
+                Case::Subj if self.they_target == Some(i) => "{alt:that player|they}".into(),
+                Case::Obj if self.they_target == Some(i) => "{alt:that player|them}".into(),
                 _ => "that player".into(),
             };
         }
@@ -811,6 +815,20 @@ impl Renderer<'_> {
             Sel::CreatorLinked => decline("the exiled card".into(), case),
             Sel::ExiledWithCardsNamed(n) => {
                 decline(format!("a card you exiled with cards named {n}"), case)
+            }
+            // "the exiled card" in another ability than the one that exiled it: the
+            // parser's alternatives for what this ability exiled (none here) and what
+            // the object's linked ability exiled (CR 607.2a).
+            Sel::Union(v)
+                if v.iter().any(is_linked_exiled)
+                    && v.iter().all(|p| {
+                        is_linked_exiled(p)
+                            || matches!(p, Sel::Var(_))
+                            || matches!(p, Sel::Matching(x, Filter::InZone(ZoneKind::Exile)) if matches!(x.as_ref(), Sel::Var(_)))
+                    }) =>
+            {
+                let linked = v.iter().find(|p| is_linked_exiled(p)).cloned().unwrap_or(Sel::None);
+                self.sel(&linked, case)
             }
             Sel::Union(v) if self.block_pair_both(v, case).is_some() => {
                 self.block_pair_both(v, case).unwrap_or_default()
@@ -1332,4 +1350,11 @@ fn unbounded_choice(filter: &Filter, count: &Value) -> bool {
         }
         _ => false,
     }
+}
+
+/// The cards exiled with this object that are still in exile (CR 607.2a).
+fn is_linked_exiled(s: &Sel) -> bool {
+    matches!(s, Sel::All(Filter::And(v)) if v.len() == 2
+        && matches!(&v[0], Filter::In(x) if matches!(x.as_ref(), Sel::Linked))
+        && matches!(v[1], Filter::InZone(ZoneKind::Exile)))
 }

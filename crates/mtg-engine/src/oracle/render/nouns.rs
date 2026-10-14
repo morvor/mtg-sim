@@ -953,6 +953,12 @@ impl Renderer<'_> {
             {
                 np.other = true
             }
+            // "Choose a creature you control. Each other creature you control ...".
+            Filter::In(s)
+                if matches!(s.as_ref(), Sel::Var(v) if self.chosen_one.contains(v)) =>
+            {
+                np.other = true
+            }
             Filter::Other => np.is_self = true,
             Filter::HasKeyword(k) => np.without.push(self.keyword_kind_word(*k)),
             Filter::HasAbilities => np.with.push("no abilities".into()),
@@ -1561,7 +1567,9 @@ impl Renderer<'_> {
             if !matches!(
                 sel.as_ref(),
                 Sel::Var(crate::kw::reveal_from_hand::REVEALED)
-            ) && self.this_way_of(sel).is_none()
+            ) && (self.this_way_of(sel).is_none()
+                || self.milled
+                    && matches!(sel.as_ref(), Sel::Var(v) if *v == crate::ability::vars::IT))
             {
                 return self.sel(sel, Case::Obj);
             }
@@ -1611,7 +1619,8 @@ impl Renderer<'_> {
             if let Some((shared, kws)) = keyword_alternatives(v) {
                 let n = self.noun_det(&shared, det.clone());
                 let k: Vec<String> = kws.iter().map(|k| self.keyword_kind_word(*k)).collect();
-                return format!("{n} with {}", join_list(&k, "or"));
+                // "with flying, deathtouch, and/or lifelink": any of them.
+                return format!("{n} with {}", join_list(&k, "{alt:or|and/or}"));
             }
             if !v.iter().all(Self::is_type_like) && !v.iter().all(|x| matches!(x, Filter::Color(_)))
             {
