@@ -50,8 +50,9 @@ impl Game {
                 // card prints creation sentences with nothing else between or around them,
                 // and a sequence with any other instruction keeps one batch per element.
                 // Being one event, it's also checked for triggers as a whole (`exec` runs
-                // it atomically, see `trigger_timing`).
-                let together = crate::trigger_timing::creates_tokens_together(v);
+                // it atomically, see `trigger_timing`). The same goes for "~ deals 3 damage
+                // to A and 3 damage to B" (`deals_damage_together`).
+                let together = crate::trigger_timing::happens_together(v);
                 if together {
                     self.end_event_batch();
                     self.batch_hold += 1;

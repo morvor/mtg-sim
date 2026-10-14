@@ -64,7 +64,7 @@ impl Clone for TriggerTiming {
 /// separate actions, each checked for triggers when it's done.
 pub fn is_sequencing(e: &Effect) -> bool {
     if let Effect::Seq(v) = e {
-        return !creates_tokens_together(v);
+        return !happens_together(v);
     }
     matches!(
         e,
@@ -102,6 +102,28 @@ pub fn creates_tokens_together(v: &[Effect]) -> bool {
                     | Effect::CreateTokenAttached { .. }
             )
         })
+}
+
+/// Whether a sequence is "~ deals 3 damage to target player and 3 damage to target
+/// creature": one instruction (one "deals") that the compiler splits into one damage
+/// effect per recipient. The source deals all that damage at the same time, as one event
+/// (CR 603.2c, 608.2c): a "whenever [a source] deals damage" ability triggers once.
+pub fn deals_damage_together(v: &[Effect]) -> bool {
+    let Some(Effect::DealDamage { source, .. }) = v.first() else {
+        return false;
+    };
+    // `Sel` has no equality; its debug form identifies it.
+    let source = format!("{source:?}");
+    v.len() > 1
+        && v.iter().all(
+            |e| matches!(e, Effect::DealDamage { source: s, .. } if format!("{s:?}") == source),
+        )
+}
+
+/// Whether the elements of a sequence are one simultaneous event (see
+/// [`creates_tokens_together`] and [`deals_damage_together`]).
+pub fn happens_together(v: &[Effect]) -> bool {
+    creates_tokens_together(v) || deals_damage_together(v)
 }
 
 impl Game {
