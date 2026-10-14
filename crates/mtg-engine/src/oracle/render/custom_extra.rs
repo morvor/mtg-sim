@@ -330,7 +330,9 @@ impl Renderer<'_> {
         // creatures": paying it zero times is choosing not to pay it.
         if c.mana.is_none() {
             if let Some(s) = self.repeated_any_number(cost, times) {
-                return Some(format!("as an additional cost to cast ~, {{opt:you may}} {s}"));
+                return Some(format!(
+                    "as an additional cost to cast ~, {{opt:you may}} {s}"
+                ));
             }
         }
         if c.mana.is_some()
@@ -415,7 +417,8 @@ fn dungeon_name(d: &str) -> String {
 /// Whether a modification list makes its objects lose all land types and all abilities
 /// ("loses all land types and abilities", CR 305.7).
 pub(crate) fn loses_land_types_and_abilities(mods: &[Modification]) -> bool {
-    mods.iter().any(|m| matches!(m, Modification::RemoveAllAbilities))
+    mods.iter()
+        .any(|m| matches!(m, Modification::RemoveAllAbilities))
         && mods.iter().any(|m| {
             matches!(m, Modification::Custom { name, .. }
                 if name.as_str() == crate::kw::grant_filters::LOSE_ALL_LAND_TYPES)
@@ -447,7 +450,12 @@ impl Renderer<'_> {
                 ))
             }
             (AggOp::Max, Value::EventsThisTurn(c, Tally::Events))
-                if matches!(c.as_ref(), TriggerCond::Draws { who: PlayerRel::Iterated }) =>
+                if matches!(
+                    c.as_ref(),
+                    TriggerCond::Draws {
+                        who: PlayerRel::Iterated
+                    }
+                ) =>
             {
                 Some(format!(
                     "the greatest number of cards {one} has drawn this turn"
@@ -499,7 +507,12 @@ impl Renderer<'_> {
                 Some(format!("{} {} this way", past_tense(verb), amount(noun)))
             }
             Value::EventsThisTurn(c, Tally::Events)
-                if matches!(c.as_ref(), TriggerCond::Draws { who: PlayerRel::Iterated }) =>
+                if matches!(
+                    c.as_ref(),
+                    TriggerCond::Draws {
+                        who: PlayerRel::Iterated
+                    }
+                ) =>
             {
                 Some(format!("drew {} this turn", amount("card")))
             }
@@ -574,14 +587,30 @@ impl Renderer<'_> {
         }
         // "An opponent chooses one of them. Put that card into your hand.": the chosen
         // card, first mentioned as "that card".
-        if let [st @ Effect::Store { var, sel: Sel::Choose { chooser: PlayerRef::Var(_), filter: Filter::In(_), count: Value::Const(1), up_to: false, .. } }, ..] = v {
+        if let [st @ Effect::Store {
+            var,
+            sel:
+                Sel::Choose {
+                    chooser: PlayerRef::Var(_),
+                    filter: Filter::In(_),
+                    count: Value::Const(1),
+                    up_to: false,
+                    ..
+                },
+        }, ..] = v
+        {
             let s = self.effect(st);
-            self.target_vars.push((*var, "{alt:that card|it}".into(), false));
+            self.target_vars
+                .push((*var, "{alt:that card|it}".into(), false));
             return Some((s, 1));
         }
         // "Choose up to two target creature cards in your graveyard. An opponent chooses
         // one of them.": the targets, then the opponent's choice among them.
-        if let [d @ Effect::Custom(n), Effect::Store { var, sel: Sel::Target(i) }, ..] = v {
+        if let [d @ Effect::Custom(n), Effect::Store {
+            var,
+            sel: Sel::Target(i),
+        }, ..] = v
+        {
             if n.starts_with(crate::kw::choice_grammar::DECIDING_OPPONENT)
                 && self.introduced.get(*i as usize) == Some(&false)
             {
@@ -610,7 +639,10 @@ impl Renderer<'_> {
             let doubled = match value {
                 Value::Sum(p) => matches!(p.as_slice(), [Value::X, Value::X]),
                 Value::Mul(a, b) => {
-                    matches!((a.as_ref(), b.as_ref()), (Value::Const(2), Value::X) | (Value::X, Value::Const(2)))
+                    matches!(
+                        (a.as_ref(), b.as_ref()),
+                        (Value::Const(2), Value::X) | (Value::X, Value::Const(2))
+                    )
                 }
                 _ => false,
             };
@@ -621,7 +653,14 @@ impl Renderer<'_> {
                 return Some((s, v.len()));
             }
         }
-        let [Effect::May { who: PlayerRef::You, effect }, Effect::If { cond, then, otherwise }, ..] = v
+        let [Effect::May {
+            who: PlayerRef::You,
+            effect,
+        }, Effect::If {
+            cond,
+            then,
+            otherwise,
+        }, ..] = v
         else {
             return None;
         };
@@ -654,8 +693,15 @@ fn paid_any_number_of_times(e: &Effect) -> Option<&Cost> {
     let Effect::Seq(v) = e else {
         return None;
     };
-    let [Effect::StoreValue { var: count, value: Value::Const(0) }, Effect::StoreValue { var: stop, value: Value::Const(0) }, Effect::Repeat { effect, .. }, Effect::SetX { value: Value::Var(x) }] =
-        v.as_slice()
+    let [Effect::StoreValue {
+        var: count,
+        value: Value::Const(0),
+    }, Effect::StoreValue {
+        var: stop,
+        value: Value::Const(0),
+    }, Effect::Repeat { effect, .. }, Effect::SetX {
+        value: Value::Var(x),
+    }] = v.as_slice()
     else {
         return None;
     };
@@ -713,11 +759,18 @@ impl Renderer<'_> {
             let r = r.replacen("|spells from among", "|a spell from among", 1);
             return Some(format!("{head}{{alt:a spell exiled with {r}"));
         }
-        let end = [" from ", " exiled with ", " without ", " {", " until ", " this turn"]
-            .iter()
-            .filter_map(|m| rest.find(m))
-            .min()
-            .unwrap_or(rest.len());
+        let end = [
+            " from ",
+            " exiled with ",
+            " without ",
+            " {",
+            " until ",
+            " this turn",
+        ]
+        .iter()
+        .filter_map(|m| rest.find(m))
+        .min()
+        .unwrap_or(rest.len());
         let (noun, tail) = rest.split_at(end);
         let one = with_article(&singular(noun));
         // "a creature spell exiled with ~" is one "from among cards exiled with ~".
@@ -774,17 +827,22 @@ impl Renderer<'_> {
             let (Some(a), Some(b)) = (a.strip_prefix("choose "), b.strip_prefix("choose ")) else {
                 return Some(format!("{a}, then {b}"));
             };
-            let mut forms = vec![format!("choose {a} and {b}"), format!("choose {a}, then choose {b}")];
+            let mut forms = vec![
+                format!("choose {a} and {b}"),
+                format!("choose {a}, then choose {b}"),
+            ];
             if let (Some(x), Some(y)) = (a.strip_suffix(" from it"), b.strip_suffix(" from it")) {
                 forms.push(format!("choose from it {x} and {y}"));
             }
             return Some(format!("{{alt:{}}}", forms.join("|")));
         }
         // Named where it's used.
-        if parts
-            .iter()
-            .all(|p| matches!(p, Sel::This | Sel::All(_) | Sel::Target(_) | Sel::TriggerObject))
-        {
+        if parts.iter().all(|p| {
+            matches!(
+                p,
+                Sel::This | Sel::All(_) | Sel::Target(_) | Sel::TriggerObject
+            )
+        }) {
             self.var_defs.push((var, Sel::Union(parts.to_vec()), false));
             return Some(String::new());
         }
@@ -797,8 +855,20 @@ impl Renderer<'_> {
     /// [effect]." (Delver of Secrets): the looked-at card optionally revealed, remembered
     /// if it was, then a check of what was revealed.
     fn revealed_this_way(&mut self, v: &[Effect]) -> Option<String> {
-        let [Effect::May { who: PlayerRef::You, effect }, Effect::If { cond: Condition::PrevHappened, then: kept, otherwise: none }, Effect::Store { sel: Sel::All(_), .. }, Effect::If { cond, then, otherwise }, ..] =
-            v
+        let [Effect::May {
+            who: PlayerRef::You,
+            effect,
+        }, Effect::If {
+            cond: Condition::PrevHappened,
+            then: kept,
+            otherwise: none,
+        }, Effect::Store {
+            sel: Sel::All(_), ..
+        }, Effect::If {
+            cond,
+            then,
+            otherwise,
+        }, ..] = v
         else {
             return None;
         };
@@ -819,8 +889,16 @@ impl Renderer<'_> {
         if to.zone != ZoneKind::Library || !matches!(otherwise.as_ref(), Effect::Noop) {
             return None;
         }
-        let (Effect::Store { var, sel: Sel::Var(_) }, Effect::Store { var: v2, sel: Sel::None }) =
-            (kept.as_ref(), none.as_ref())
+        let (
+            Effect::Store {
+                var,
+                sel: Sel::Var(_),
+            },
+            Effect::Store {
+                var: v2,
+                sel: Sel::None,
+            },
+        ) = (kept.as_ref(), none.as_ref())
         else {
             return None;
         };
@@ -854,8 +932,12 @@ impl Renderer<'_> {
     /// activated this turn.": the source of the targeted ability remembered before it's
     /// countered, then "that permanent".
     fn countered_source(&mut self, v: &[Effect]) -> Option<(String, usize)> {
-        let [Effect::Store { var, sel: Sel::All(f) }, counter @ Effect::CounterSpell { what: Sel::Target(0) }, rest @ ..] =
-            v
+        let [Effect::Store {
+            var,
+            sel: Sel::All(f),
+        }, counter @ Effect::CounterSpell {
+            what: Sel::Target(0),
+        }, rest @ ..] = v
         else {
             return None;
         };
@@ -868,11 +950,19 @@ impl Renderer<'_> {
                 if n.as_str() == "basic_effects:source of the ability in target slot 0")
         };
         if !parts.iter().any(|x| is_source(x))
-            || !parts.iter().all(|x| is_source(x) || matches!(x, Filter::Permanent))
+            || !parts
+                .iter()
+                .all(|x| is_source(x) || matches!(x, Filter::Permanent))
         {
             return None;
         }
-        let destroys = matches!(rest.first(), Some(Effect::If { cond: Condition::PrevHappened, .. }));
+        let destroys = matches!(
+            rest.first(),
+            Some(Effect::If {
+                cond: Condition::PrevHappened,
+                ..
+            })
+        );
         let that = if destroys {
             "{alt:that permanent|that artifact}"
         } else {
@@ -930,7 +1020,8 @@ impl Renderer<'_> {
                 return Some(format!("with mana value {}", join_list(&m, "or")));
             }
         }
-        if let [Filter::ControlledBy(PlayerRel::You), Filter::ControlledBy(PlayerRel::Teammate)] = v {
+        if let [Filter::ControlledBy(PlayerRel::You), Filter::ControlledBy(PlayerRel::Teammate)] = v
+        {
             return Some("your team controls".into());
         }
         // (Nested lists may have been flattened: "in a graveyard or cast from one, or in
@@ -976,7 +1067,8 @@ impl Renderer<'_> {
                 let Sel::Var(g) = g.as_ref() else {
                     return None;
                 };
-                let fresh = |v: &[(Var, String, bool)]| v.iter().any(|(x, _, used)| x == g && !used);
+                let fresh =
+                    |v: &[(Var, String, bool)]| v.iter().any(|(x, _, used)| x == g && !used);
                 if *g == vars::IT
                     || fresh(&self.target_vars)
                     || self.var_defs.iter().any(|(x, _, used)| x == g && !used)
@@ -994,18 +1086,22 @@ impl Renderer<'_> {
                 let without: Option<Vec<Var>> = parts
                     .iter()
                     .map(|p| match p {
-                        Sel::All(Filter::And(v)) if v.iter().all(|x| {
-                            matches!(x, Filter::InZone(_) | Filter::OwnedBy(_) | Filter::Not(_))
-                        }) => v.iter().find_map(|x| match x {
-                            Filter::Not(n) => match n.as_ref() {
-                                Filter::In(s) => match s.as_ref() {
-                                    Sel::Var(v) => Some(*v),
+                        Sel::All(Filter::And(v))
+                            if v.iter().all(|x| {
+                                matches!(x, Filter::InZone(_) | Filter::OwnedBy(_) | Filter::Not(_))
+                            }) =>
+                        {
+                            v.iter().find_map(|x| match x {
+                                Filter::Not(n) => match n.as_ref() {
+                                    Filter::In(s) => match s.as_ref() {
+                                        Sel::Var(v) => Some(*v),
+                                        _ => None,
+                                    },
                                     _ => None,
                                 },
                                 _ => None,
-                            },
-                            _ => None,
-                        }),
+                            })
+                        }
                         _ => None,
                     })
                     .collect();
@@ -1016,13 +1112,15 @@ impl Renderer<'_> {
                 Some(super::players::decline("the rest".into(), case))
             }
             Sel::All(f) => {
-                let rest = |f: &Filter| match f {
+                let rest = |f: &Filter| {
+                    match f {
                     Filter::And(p) => p.iter().any(|x| {
                         matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::In(s) if matches!(s.as_ref(), Sel::Var(_))))
                     }) && p.iter().all(|x| {
                         matches!(x, Filter::Not(_) | Filter::In(_))
                     }),
                     _ => false,
+                }
                 };
                 if !rest(f) {
                     return None;

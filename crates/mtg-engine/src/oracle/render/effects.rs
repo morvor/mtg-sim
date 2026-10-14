@@ -3405,7 +3405,9 @@ impl Renderer<'_> {
                     }
                 };
                 // (A group remembered with others, named by a later instruction.)
-                let later = v[i + 1..].iter().take_while(|e| matches!(e, Effect::Store { .. }));
+                let later = v[i + 1..]
+                    .iter()
+                    .take_while(|e| matches!(e, Effect::Store { .. }));
                 let named_later = v[i + 1..].iter().skip(later.count()).take(1).any(names);
                 if !next.is_some_and(names) && !named_later {
                     parts.push(self.gap("a remembered group no instruction names"));
