@@ -236,6 +236,12 @@ fn parse_inner(c: &str, b: &mut Builder) -> Option<Condition> {
             return Some(Condition::Exists(f.you_control()));
         }
     }
+    if let Some(cond) = different_values_this_way(c, b) {
+        return Some(cond);
+    }
+    if let Some(cond) = any_of_those(c, b) {
+        return Some(cond);
+    }
     if let Some(cond) = source_state_list(c) {
         return Some(cond);
     }
@@ -487,6 +493,83 @@ fn player_owns(c: &str, b: &mut Builder) -> Option<Condition> {
         cmp,
         n,
     ))
+}
+
+/// "any of those creatures have power or toughness equal to the chosen number", "none of
+/// those creatures attacked you": about the objects the trigger or an earlier instruction
+/// named as a group.
+fn any_of_those(c: &str, b: &mut Builder) -> Option<Condition> {
+    let (none, r) = if let Some(r) = c.strip_prefix("any of ") {
+        (false, r)
+    } else {
+        (true, c.strip_prefix("none of ")?)
+    };
+    let Some(Some((sel, rest))) = super::pronoun_groups::plural_object_ref(r, b) else {
+        return None;
+    };
+    let rest = rest.trim_start();
+    let pred = if let Some(x) = rest
+        .strip_prefix("have ")
+        .or_else(|| rest.strip_prefix("has "))
+    {
+        stat_list_equal(x)?
+    } else if rest == "attacked you" || rest == "is attacking you" || rest == "are attacking you" {
+        Filter::AttackingPlayer(PlayerRel::You)
+    } else {
+        return None;
+    };
+    let cond = Condition::Exists(Filter::and(vec![Filter::In(Box::new(sel)), pred]));
+    Some(if none {
+        Condition::Not(Box::new(cond))
+    } else {
+        cond
+    })
+}
+
+/// "cards with at least six different mana values are revealed this way" (Atemsis,
+/// All-Seeing): how many different mana values the cards an earlier instruction revealed
+/// have (CR 202.3).
+fn different_values_this_way(c: &str, b: &mut Builder) -> Option<Condition> {
+    let r = c.strip_prefix("cards with ")?;
+    let (cmp, n, rest) = amount_cmp(r)?;
+    let verb = rest.trim().strip_prefix("different mana values are ")?;
+    let (sel, tail) = super::value_results::this_way_sel(&format!("cards {verb}"), b)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::ManaValuesAmong(Filter::In(Box::new(sel))),
+        cmp,
+        n,
+    ))
+}
+
+/// "power or toughness equal to the chosen number", "mana value, power, or toughness
+/// equal to the chosen number": any of the stats is.
+pub fn stat_list_equal(x: &str) -> Option<Filter> {
+    let (stats, v) = x.split_once(" equal to ")?;
+    let v = match v {
+        "the chosen number" => Value::Chosen,
+        _ => {
+            let (n, rest) = parse_number(v)?;
+            if !rest.trim().is_empty() {
+                return None;
+            }
+            n
+        }
+    };
+    let stats = stats.replace(", or ", ", ").replace(" or ", ", ");
+    let mut fs = vec![];
+    for s in stats.split(", ") {
+        let v = Box::new(v.clone());
+        fs.push(match s {
+            "power" => Filter::Power(Cmp::Eq, v),
+            "toughness" => Filter::Toughness(Cmp::Eq, v),
+            "mana value" => Filter::ManaValue(Cmp::Eq, v),
+            _ => return None,
+        });
+    }
+    (fs.len() >= 2).then_some(Filter::Or(fs))
 }
 
 /// "~ is enchanted, equipped, and has a counter on it": each of a list of states of the
