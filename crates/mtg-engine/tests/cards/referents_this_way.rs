@@ -134,3 +134,126 @@ fn unstable_glyphbridge_destroys_all_creatures_except_the_chosen_ones() {
     assert!(t.on_battlefield(keep_mine) && t.on_battlefield(keep_theirs));
     assert!(!t.on_battlefield(lose_mine) && !t.on_battlefield(big));
 }
+
+#[test]
+fn spiteful_repossession_deals_each_opponent_the_difference() {
+    cr!("608.2h", "101.4");
+    compiles("Spiteful Repossession");
+    let mut t = TestGame::new(3);
+    let p2 = PlayerId(2);
+    t.lands(P0, "Mountain", 3);
+    t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P0, "Llanowar Elves");
+    t.lands(P1, "Forest", 7);
+    t.lands(p2, "Forest", 2);
+    let spell = t.hand(P0, "Spiteful Repossession");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16, "seven lands against three");
+    assert_eq!(t.life(p2), 20, "fewer lands than you");
+    let treasures = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|id| t.g.obj(**id).chars.has_subtype("Treasure"))
+        .count();
+    assert_eq!(treasures, 4, "one for each damage dealt");
+}
+
+#[test]
+fn savage_punch_gives_the_bonus_before_the_fight() {
+    cr!("701.14a");
+    ruling!(
+        "Savage Punch",
+        "Ferocious abilities of instants and sorceries that don’t use the word “instead” will provide an additional effect"
+    );
+    compiles("Savage Punch");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let giant = t.battlefield(P1, "Indomitable Ancients");
+    let spell = t.hand(P0, "Savage Punch");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(wurm), Entity::Object(giant)])
+        .go();
+    t.resolve_all();
+    // Craw Wurm 6/4 +2/+2 = 8/6 fights a 2/10: it survives the 2 damage and deals 8.
+    assert!(t.on_battlefield(wurm));
+    assert_eq!(t.g.obj(giant).damage, 8);
+}
+
+#[test]
+fn beastie_beatdown_counters_then_damage_from_the_creature_you_control() {
+    cr!("207.2c", "608.2c");
+    compiles("Beastie Beatdown");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Mountain", 1);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    for c in ["Lightning Bolt", "Grizzly Bears", "Forest", "Bonesplitter"] {
+        t.graveyard(P0, c);
+    }
+    let spell = t.hand(P0, "Beastie Beatdown");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(bear), Entity::Object(giant)])
+        .go();
+    t.resolve_all();
+    assert_eq!(t.counters(bear, "+1/+1"), 2);
+    // A 4/4 deals 4: the 3/3 dies, and the Bears isn't dealt damage (one-sided).
+    assert!(!t.on_battlefield(giant));
+    assert_eq!(t.g.obj(bear).damage, 0);
+}
+
+#[test]
+fn animists_awakening_untaps_only_the_lands_it_put_onto_the_battlefield() {
+    cr!("207.2c", "608.2c");
+    ruling!(
+        "Animist's Awakening",
+        "If the spell mastery ability applies, you untap only the lands put onto the battlefield with Animist's Awakening."
+    );
+    compiles("Animist's Awakening");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 3);
+    t.graveyard(P0, "Lightning Bolt");
+    t.graveyard(P0, "Divination");
+    for c in ["Grizzly Bears", "Plains", "Island"] {
+        t.library_top(P0, c);
+    }
+    let spell = t.hand(P0, "Animist's Awakening");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).x(2).go();
+    t.resolve_all();
+    let island = t.named_on_battlefield("Island");
+    let plains = t.named_on_battlefield("Plains");
+    assert_eq!((island.len(), plains.len()), (1, 1));
+    assert!(!t.g.obj(island[0]).tapped && !t.g.obj(plains[0]).tapped);
+    // The Forests that paid for it stay tapped.
+    assert!(t
+        .named_on_battlefield("Forest")
+        .iter()
+        .all(|f| t.g.obj(*f).tapped));
+}
+
+#[test]
+fn increasing_confusion_mills_twice_x_from_a_graveyard() {
+    cr!("702.34a", "608.2c");
+    compiles("Increasing Confusion");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    for _ in 0..10 {
+        t.library_top(P1, "Forest");
+    }
+    let spell = t.graveyard(P0, "Increasing Confusion");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell)
+        .x(2)
+        .method(object::CastMethod::Keyword(keywords::KeywordKind::Flashback))
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P1), 4);
+}

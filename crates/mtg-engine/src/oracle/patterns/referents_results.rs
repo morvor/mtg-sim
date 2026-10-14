@@ -843,3 +843,170 @@ fn n_plus_m_for_each(l: &str, b: &mut crate::oracle::effects::Builder) -> Option
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: N life plus M life for each [amount]", priority: 50, parse: n_plus_m_for_each } }
+
+/// Re-reads `rewritten` as the ability whose text is `block` (the original words kept),
+/// if the patterns can't read `block` itself.
+fn reread(block: &str, rewritten: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if standard_ok(block, ctx) {
+        return None;
+    }
+    let v = crate::oracle::parse_ability(rewritten, ctx)?;
+    let ok = v.iter().all(|a| {
+        !(super::oracle_hardening_referents::has_no_referent(a)
+            || crate::repeat_process::has_stray_repeat(a)
+            || super::filters_relational::unresolved(a))
+    });
+    if !ok {
+        return None;
+    }
+    let text = crate::oracle::strip_ability_word(block.trim());
+    Some(
+        v.into_iter()
+            .map(|a| {
+                let mut d = (*a).clone();
+                d.text = text.to_string();
+                std::sync::Arc::new(d)
+            })
+            .collect(),
+    )
+}
+
+/// "Choose target creature you control and target creature an opponent controls.
+/// Delirium — If there are four or more card types ..., put two +1/+1 counters on the
+/// creature you control. ...": an ability word inside the text, before one of its
+/// sentences, has no rules meaning (CR 207.2c).
+fn inner_ability_word(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if in_standard() {
+        return None;
+    }
+    let body = crate::oracle::strip_ability_word(block.trim());
+    let i = body.find(". ")?;
+    let j = i + 2 + body[i + 2..].find(" — ")?;
+    let word = &body[i + 2..j];
+    if word.is_empty()
+        || word.split_whitespace().count() > 3
+        || !word.starts_with(|c: char| c.is_uppercase())
+        || word.contains(['.', ',', '"', '{'])
+    {
+        return None;
+    }
+    let rewritten = format!("{}{}", &body[..i + 2], &body[j + " — ".len()..]);
+    reread(block, &rewritten, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "referents: an ability word before a later sentence", priority: 50, parse: inner_ability_word } }
+
+/// "Target creature you control fights target creature you don't control. Ferocious —
+/// The creature you control gets +2/+2 until end of turn before it fights if you control a
+/// creature with power 4 or greater." (Savage Punch): the bonus is given first, then they
+/// fight (as "Choose target creature you control and target creature you don't control.
+/// If ..., the creature you control gets +2/+2 until end of turn. Then those creatures
+/// fight each other.").
+fn bonus_before_it_fights(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if in_standard() {
+        return None;
+    }
+    let body = crate::oracle::strip_ability_word(block.trim());
+    let (first, second) = body.split_once(". ")?;
+    let (mine, theirs) = first.split_once(" fights ")?;
+    if mine != "Target creature you control" || !theirs.starts_with("target creature ") {
+        return None;
+    }
+    let second = crate::oracle::strip_ability_word(second);
+    let r = second.strip_prefix("The creature you control ")?;
+    let (bonus, cond) = r.split_once(" before it fights")?;
+    if bonus.contains('.') {
+        return None;
+    }
+    let cond = cond.strip_suffix('.')?;
+    let pump = match cond.strip_prefix(" if ") {
+        Some(c) => format!("If {c}, the creature you control {bonus}."),
+        None if cond.is_empty() => format!("The creature you control {bonus}."),
+        None => return None,
+    };
+    let rewritten = format!(
+        "Choose {} and {theirs}. {pump} Then those creatures fight each other.",
+        "target creature you control"
+    );
+    reread(block, &rewritten, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "referents: the creature you control gets a bonus before it fights", priority: 50, parse: bonus_before_it_fights } }
+
+/// "Target player mills X cards. If this spell was cast from a graveyard, that player
+/// mills twice that many cards instead." (Increasing Confusion): "that many" is the
+/// amount the instruction it replaces would use (X), not a result.
+fn twice_that_many_instead(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if in_standard() {
+        return None;
+    }
+    let body = crate::oracle::strip_ability_word(block.trim());
+    let lower = body.to_lowercase();
+    let (first, second) = lower.split_once(". ")?;
+    if !has_word(first, "x") || !second.contains(" twice that many ") || !second.ends_with(" instead.")
+    {
+        return None;
+    }
+    // The same instruction: "mills X cards" / "mills twice that many cards".
+    let verb = first.split(" x ").next()?.rsplit(' ').next()?;
+    if !second.contains(&format!(" {verb} twice that many ")) {
+        return None;
+    }
+    let rewritten = body.replacen("twice that many", "twice X", 1);
+    reread(block, &rewritten, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "referents: twice that many ... instead (the replaced amount)", priority: 50, parse: twice_that_many_instead } }
+
+/// Phrases of an instant's or sorcery's paragraph that name what an earlier paragraph
+/// chose ("Choose target creature you control and target creature an opponent controls.")
+/// or did ("untap those lands").
+const NAMED_BEFORE: [&str; 6] = [
+    "the creature you control",
+    "the creature an opponent controls",
+    "the creature you don't control",
+    "those lands",
+    "the creature they exiled",
+    "the exiled creature",
+];
+
+/// An instant's or sorcery's paragraphs are one spell ability, followed in order (CR
+/// 113.3a, 608.2c), and an ability word has no rules meaning (CR 207.2c): a paragraph
+/// that refers to what the paragraph before it chose ("Delirium — If ..., put two +1/+1
+/// counters on the creature you control. The creature you control deals damage equal to
+/// its power to the creature an opponent controls.") is read with it.
+fn join_named_followups(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String> {
+    if !ctx.is_spell() {
+        return blocks;
+    }
+    let mut out: Vec<String> = Vec::new();
+    for b in blocks {
+        let rest = crate::oracle::strip_ability_word(&b);
+        let lower = rest.to_lowercase();
+        let refers = NAMED_BEFORE.iter().any(|p| lower.contains(p));
+        let joinable = |prev: &str| {
+            prev.ends_with('.')
+                && !prev.contains('\n')
+                && !prev.contains(':')
+                && !prev.contains('•')
+                && !prev.starts_with('(')
+                && crate::oracle::strip_ability_word(prev) == prev
+        };
+        match out.last_mut() {
+            Some(prev)
+                if refers
+                    && rest.ends_with('.')
+                    && !rest.contains('\n')
+                    && !rest.contains(':')
+                    && joinable(prev) =>
+            {
+                prev.push(' ');
+                prev.push_str(rest);
+            }
+            _ => out.push(b),
+        }
+    }
+    out
+}
+
+inventory::submit! { super::BlockGroupPattern { name: "referents: a spell paragraph naming what an earlier one chose", priority: 95, group: join_named_followups } }

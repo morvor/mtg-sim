@@ -108,9 +108,39 @@ fn player_possessive(subject: &str) -> Option<String> {
     })
 }
 
+/// "~ deals damage to each opponent who controls more lands than you equal to the
+/// difference." (Spiteful Repossession): for each such player, the difference between
+/// what they control and what you control.
+fn rewrite_each_player(text: &str) -> Option<String> {
+    let lower = text.to_lowercase();
+    let i = lower.find(" deals damage to each ")?;
+    let r = &lower[i + " deals damage to each ".len()..];
+    let (who, r) = r.split_once(" who controls more ")?;
+    if !matches!(who, "opponent" | "player") {
+        return None;
+    }
+    let (noun, r) = r.split_once(" than you equal to the difference")?;
+    if noun.contains(' ') {
+        return None;
+    }
+    let start = lower[..i].rfind(". ").map_or(0, |j| j + 2);
+    let subject = &text[start..i];
+    if subject.contains(' ') && subject != "this spell" {
+        return None;
+    }
+    Some(format!(
+        "{}For each {who} who controls more {noun} than you, {subject} deals damage to that player equal to the number of {noun} that player controls minus the number of {noun} you control{}",
+        &text[..start],
+        &text[text.len() - r.len()..]
+    ))
+}
+
 /// The text with "the difference" written as the calculation the comparison before it
 /// describes: the comparison is the condition of the "if" clause the phrase follows.
 fn rewrite(text: &str) -> Option<String> {
+    if let Some(r) = rewrite_each_player(text) {
+        return Some(r);
+    }
     let lower = text.to_lowercase();
     let d = lower.find("the difference")?;
     let after = &lower[d + "the difference".len()..];
