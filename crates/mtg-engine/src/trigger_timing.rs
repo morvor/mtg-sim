@@ -120,6 +120,38 @@ pub fn deals_damage_together(v: &[Effect]) -> bool {
         )
 }
 
+/// The instructions of several sentences (or spell abilities), in order. Separate
+/// sentences are separate instructions (CR 608.2c): "~ deals 2 damage to any target. ~
+/// deals 2 damage to you." deals damage twice, while one sentence's "~ deals 3 damage to A
+/// and 3 damage to B" deals it once, as one event ([`deals_damage_together`]; Blaze
+/// Commando's ruling counts "the number of times the word 'deals' appears"). Such a
+/// sentence stays a sequence of its own, and sentences that each deal damage from the same
+/// source are kept apart, so none is merged with its neighbours into one damage event.
+pub fn join_instructions(effects: Vec<Effect>) -> Effect {
+    if effects.len() < 2 {
+        return Effect::seq(effects);
+    }
+    let mut out = Vec::new();
+    for e in effects {
+        match e {
+            Effect::Seq(v) if deals_damage_together(&v) => out.push(Effect::Seq(v)),
+            e => match Effect::seq(vec![e]) {
+                Effect::Seq(v) => out.extend(v),
+                Effect::Noop => {}
+                e => out.push(e),
+            },
+        }
+    }
+    if deals_damage_together(&out) {
+        out = out.into_iter().map(|e| Effect::Seq(vec![e])).collect();
+    }
+    match out.len() {
+        0 => Effect::Noop,
+        1 => out.pop().expect("one element"),
+        _ => Effect::Seq(out),
+    }
+}
+
 /// Whether the elements of a sequence are one simultaneous event (see
 /// [`creates_tokens_together`] and [`deals_damage_together`]).
 pub fn happens_together(v: &[Effect]) -> bool {

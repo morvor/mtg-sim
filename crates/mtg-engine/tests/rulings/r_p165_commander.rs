@@ -970,3 +970,39 @@ fn neriv_goblin_tokens_are_named_goblin_token() {
         assert_eq!(t.obj_now(tok).chars.name, "Goblin Token");
     }
 }
+
+#[test]
+fn myth_unbound_applies_when_another_player_casts_your_commander() {
+    cr!("601.2f", "903.8");
+    ruling!(
+        "Myth Unbound",
+        "If another player is somehow able to cast your commander, Myth Unbound’s first ability applies to that player’s spell."
+    );
+    supported("Hostage Taker");
+    // P0's commander Hill Giant ({3}{R}), cast once from the command zone, is exiled by
+    // P1's Hostage Taker (P0 leaves it in exile); P1 casts it for {2}{R}.
+    for (lands, ok) in [(2usize, false), (3, true)] {
+        let mut t = commander_game(2);
+        t.battlefield(P0, "Myth Unbound");
+        let c = commander_on_battlefield(&mut t, P0, "Hill Giant");
+        set_casts(&mut t, P0, "Hill Giant", 1);
+        t.answer_yes(P0, false);
+        t.answer_targets(P1, &[o(c)]);
+        t.set_step(P1, Step::PrecombatMain);
+        t.enter(P1, "Hostage Taker");
+        t.resolve_all();
+        let exiled = t.g.current(c);
+        assert_eq!(t.zone(exiled), Zone::Exile);
+        // Hostage Taker lets mana of any type pay for it.
+        t.lands(P1, "Swamp", lands);
+        assert_eq!(t.cast(P1, exiled).try_go().is_ok(), ok, "{lands} lands");
+    }
+    // P1's own commander isn't P0's commander: no reduction from P0's Myth Unbound.
+    let mut t = commander_game(2);
+    t.battlefield(P0, "Myth Unbound");
+    let c = commander_in_zone(&mut t, P1, "Hill Giant");
+    set_casts(&mut t, P1, "Hill Giant", 1);
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Mountain", 5);
+    assert!(t.cast(P1, c).try_go().is_err());
+}

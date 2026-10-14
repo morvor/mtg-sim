@@ -139,6 +139,33 @@ fn blaze_commando_triggers_once_per_deals_in_the_spell() {
     cast_new(&mut t, P0, "Pyroclasm", &[]);
     t.resolve_all();
     assert_eq!(triggers_of(&t, bc), 1);
+    // Orcish Cannonade: "deals 2 damage to any target and 3 damage to you." followed by
+    // another spell ability ("Draw a card."): still one "deals", one trigger.
+    supported("Orcish Cannonade");
+    let mut t = TestGame::new(2);
+    let bc = t.battlefield(P0, "Blaze Commando");
+    cast_new(&mut t, P0, "Orcish Cannonade", &[pl(P1)]);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (17, 18));
+    assert_eq!(triggers_of(&t, bc), 1);
+    assert_eq!(soldiers(&t, P0), 2);
+    // Two sentences, each with its own "deals": two triggers.
+    let mut t = TestGame::new(2);
+    let bc = t.battlefield(P0, "Blaze Commando");
+    let def = crate::r_s01_common::custom_card(
+        "Twin Shot",
+        "Sorcery",
+        "{R}",
+        None,
+        "Twin Shot deals 2 damage to target player. Twin Shot deals 2 damage to you.",
+    );
+    let shot = t.custom(P0, def, mtg_engine::object::Zone::Hand(P0));
+    t.battlefield(P0, "Mountain");
+    t.cast_with(P0, shot, &[pl(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (18, 18));
+    assert_eq!(triggers_of(&t, bc), 2);
+    assert_eq!(soldiers(&t, P0), 4);
 }
 
 #[test]

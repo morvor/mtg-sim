@@ -120,7 +120,8 @@ impl Game {
                         out.modal = b.modal;
                     }
                 }
-                out.effect = Effect::seq(effects);
+                // Each spell ability's instructions stay apart from the others'.
+                out.effect = crate::trigger_timing::join_instructions(effects);
                 out
             }
         }

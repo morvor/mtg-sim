@@ -7,12 +7,12 @@
 
 use crate::r_p108_common::put_counters;
 use crate::r_p189_common::{bounce, triggers_of};
-use crate::r_s01_common::{asked_since, attack_with, supported};
+use crate::r_s01_common::{asked_since, supported};
 use crate::r_s03_common::to_blockers;
 use crate::r_s06_common::{attach_new, give_control};
 use crate::r_s25_common::{cast_new, change_copy_targets, lands_for_cost, spell_copies};
 use mtg_engine::decision::{Answer, Decision};
-use mtg_engine::object::{CastMethod, Zone};
+use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -824,6 +824,6 @@ fn harmonized_crescendo_chooses_the_type_on_resolution() {
     assert!(!during
         .iter()
         .any(|(_, d)| matches!(d, Decision::Priority { .. })));
-    assert!(t.hand_size(P0) > hand);
-    let _ = (CastMethod::Normal, CardType::Creature, attack_with);
+    // Two Merfolk: two cards.
+    assert_eq!(t.hand_size(P0), hand + 2);
 }
