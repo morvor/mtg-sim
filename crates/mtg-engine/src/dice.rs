@@ -393,7 +393,7 @@ pub fn roll_dice(
         };
         dice.remove(pick);
     }
-    apply_modifiers(g, p, &mut dice, source);
+    apply_modifiers(g, p, &mut dice, source, false);
     for d in &dice {
         g.emit(Event::DieRolled {
             player: p,
@@ -418,13 +418,17 @@ pub fn roll_dice(
 /// then effects that increase or decrease results; when several could apply, the player
 /// who rolled chooses which one is considered next. Each modifier's controller decides
 /// whether to use it (and pays its cost; mana abilities can be activated while paying).
+/// For the planar die (`planar`), only rerolls that don't refer to a numerical result or
+/// a number of sides apply (CR 706.7).
 fn apply_modifiers(
     g: &mut Game,
     roller: PlayerId,
     dice: &mut [RolledDie],
     source: Option<ObjectId>,
+    planar: bool,
 ) {
-    for reroll_phase in [true, false] {
+    let phases: &[bool] = if planar { &[true] } else { &[true, false] };
+    for &reroll_phase in phases {
         let mut considered: Vec<(ObjectId, usize)> = Vec::new();
         for _ in 0..64 {
             let turn = g.turn.number;
@@ -435,6 +439,7 @@ fn apply_modifiers(
                     _ => None,
                 })
                 .filter(|(_, _, _, m)| (m.kind == ModifierKind::Reroll) == reroll_phase)
+                .filter(|(_, _, _, m)| !planar || (m.natural.is_none() && m.sides.is_none()))
                 .filter(|(src, _, i, _)| !considered.contains(&(*src, *i)))
                 .filter(|(src, ctl, i, m)| {
                     applies_to(g, m.whose, *ctl, roller)
@@ -464,7 +469,12 @@ fn apply_modifiers(
                 if !modifies(&m, d) {
                     continue;
                 }
-                let prompt = format!("{}: use it on the die showing {}?", m.text, d.result());
+                let prompt = if planar {
+                    let face = crate::planechase::face_for(d.natural as u32);
+                    format!("{}: use it on the planar die showing {face:?}?", m.text)
+                } else {
+                    format!("{}: use it on the die showing {}?", m.text, d.result())
+                };
                 if !g.ask_yes_no(ctl, Some(src), &prompt, false) {
                     continue;
                 }
@@ -508,6 +518,19 @@ fn modifies(m: &DieModifier, d: &RolledDie) -> bool {
 
 /// CR 706.7: the planar die was rolled. Abilities that trigger on rolling dice trigger,
 /// but it has no numerical result.
+/// Rolls the planar die for `p` (CR 901.9): its natural result 1–6 (see
+/// [`crate::planechase::face_for`]) after any rerolls `p` and others choose to apply
+/// (Monitor Monitor's reroll applies to any die roll, CR 706.2).
+pub fn roll_planar_natural(g: &mut Game, p: PlayerId) -> u32 {
+    let mut dice = [RolledDie {
+        sides: 6,
+        natural: natural(g, 6),
+        adjust: 0,
+    }];
+    apply_modifiers(g, p, &mut dice, None, true);
+    dice[0].natural as u32
+}
+
 pub fn planar_die_rolled(g: &mut Game, p: PlayerId) {
     g.emit(Event::DieRolled {
         player: p,
