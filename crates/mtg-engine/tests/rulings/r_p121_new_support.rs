@@ -180,3 +180,36 @@ fn braided_net_stops_untap_cost_abilities_until_it_untaps() {
     t.settle();
     assert!(!crate::r_s27_common::activatable(&mut t, P1, pili).is_empty());
 }
+
+#[test]
+fn rhuk_moves_all_or_none_of_the_equipment_when_it_attacks_or_dies() {
+    cr!("603.10a", "701.3a");
+    ruling!(
+        "Rhuk, Hexgold Nabber",
+        "If that creature has more than one Equipment attached to it, you may move all of those Equipment to Rhuk or none of those Equipment to Rhuk. You can't move some of them and leave others."
+    );
+    supported("Rhuk, Hexgold Nabber");
+    for (dies, yes) in [(false, true), (true, true), (false, false), (true, false)] {
+        let mut t = TestGame::new(2);
+        let rhuk = t.battlefield(P0, "Rhuk, Hexgold Nabber");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let a = crate::r_s06_common::attach_new(&mut t, P0, "Bonesplitter", bears);
+        let b = crate::r_s06_common::attach_new(&mut t, P0, "Short Sword", bears);
+        t.answer_yes(P0, yes);
+        if dies {
+            destroy(&mut t, bears);
+        } else {
+            attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+        }
+        t.resolve_all();
+        let on = |t: &TestGame, e: ObjectId| crate::r_s06_common::attached_to(t, e);
+        let want = if yes {
+            Some(obj(rhuk))
+        } else if dies {
+            None
+        } else {
+            Some(obj(bears))
+        };
+        assert_eq!((on(&t, a), on(&t, b)), (want, want), "dies {dies}, yes {yes}");
+    }
+}
