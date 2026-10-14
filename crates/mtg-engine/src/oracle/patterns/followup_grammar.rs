@@ -695,6 +695,64 @@ fn if_a_player_had_you(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "followups: if a player does / otherwise (had you)", priority: 30, apply: if_a_player_had_you } }
 
+/// "Then if any player pays {2}, discard three cards." (Rhystic Scrying): each player in
+/// turn order gets the option to pay; the effect happens if one does (CR 118.12).
+fn if_any_player_pays(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let r = l.strip_prefix("if any player pays ")?;
+    let (cost, rest) = r.split_once(", ")?;
+    let cost = super::counters_resources_pay::resolution_cost(cost)?;
+    let e = crate::oracle::effects::parse_clause(rest, b)?;
+    Some(Effect::PayOptional {
+        who: PlayerRef::EachPlayer,
+        cost,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "followups: if any player pays [cost], [effect]", priority: 120, parse: if_any_player_pays } }
+
+/// "Then for each blight counter on it, each opponent loses 4 life unless that player
+/// sacrifices a nonland permanent of their choice or discards a card." (Rottenmouth
+/// Viper): the instruction once for each of those counters, each time with its own
+/// choices.
+fn for_each_counter_on_it(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let r = l.strip_prefix("for each ")?;
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = r.trim_start().strip_prefix("counter on ")?;
+    let (who, rest) = if let Some(x) = r.strip_prefix("it, ") {
+        if !matches!(b.it, Sel::This | Sel::TriggerObject) {
+            return None;
+        }
+        (b.it.clone(), x)
+    } else {
+        (Sel::This, r.strip_prefix("~, ")?)
+    };
+    // Only an instruction with choices of its own each time.
+    if !rest.contains(" unless ") {
+        return None;
+    }
+    // "That player" in it is each opponent, not a player the trigger names.
+    let saved = std::mem::replace(
+        &mut b.it_player,
+        super::oracle_hardening_referents::no_player_referent(),
+    );
+    let rest = rest.replace(" unless that player ", " unless they ");
+    let e = crate::oracle::effects::parse_clause(&rest, b);
+    b.it_player = saved;
+    let e = e?;
+    Some(Effect::Repeat {
+        times: Value::CountersOn(Box::new(who), Some(kind)),
+        effect: Box::new(e),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "followups: for each [kind] counter on it, [instruction with a choice]", priority: 120, parse: for_each_counter_on_it } }
+
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::card::Layout;

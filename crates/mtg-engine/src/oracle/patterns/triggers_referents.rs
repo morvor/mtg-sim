@@ -265,7 +265,17 @@ fn trigger_with_event_body(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
     }
     let (cond_s, eff_s) = split_trigger(text)?;
     let eff = eff_s.trim();
-    if split_sentences(eff).len() != 1 {
+    let sentences = split_sentences(eff);
+    // "Put that many ribbon counters on ~. Then if there are three or more ribbon
+    // counters on ~, ..." (Prize Pig): "that many" in the first instruction of a longer
+    // body is the trigger's amount too, when no later sentence refers to an amount.
+    let first_that_many = sentences.len() > 1
+        && sentences[0].to_lowercase().contains("that many")
+        && sentences[1..].iter().all(|s| {
+            let l = s.to_lowercase();
+            !l.contains("that many") && !l.contains("that much") && !l.contains(" x ")
+        });
+    if sentences.len() != 1 && !first_that_many {
         return None;
     }
     let el = end(&eff.to_lowercase()).to_string();
@@ -279,6 +289,7 @@ fn trigger_with_event_body(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
         .collect();
     let has = |w: &str| words.contains(&w);
     if matches!(it, Sel::None)
+        && !first_that_many
         && (has("it") || has("its") || has("them") || el.contains("that creature"))
     {
         return None;
@@ -286,7 +297,12 @@ fn trigger_with_event_body(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
     if matches!(it_player, PlayerRef::Iterated) && el.contains("that player") {
         return None;
     }
-    let body = if let Some((delay, inner)) = super::triggers_delayed::split_delay(&el) {
+    let delayed = if first_that_many {
+        None
+    } else {
+        super::triggers_delayed::split_delay(&el)
+    };
+    let body = if let Some((delay, inner)) = delayed {
         let mut body = parse_trigger_body(inner, ctx, it, it_player)?;
         if body.modal.is_some() {
             return None;
@@ -306,6 +322,10 @@ fn trigger_with_event_body(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
         // Only when "that many" is in the first clause: "discard up to two cards, then
         // draw that many cards" refers to the discard instead.
         let head = &el[..i];
+        // (With several sentences, the first one's first clause.)
+        if first_that_many && head.contains('.') {
+            return None;
+        }
         // "You and that player each draw that many cards" (Xyris) is one instruction.
         let both_draw = head == "you and that player each draw ";
         if !both_draw && (head.contains(',') || head.contains(" and ") || head.contains(" then ")) {
