@@ -45,9 +45,42 @@ pub enum PermissionKind {
     Static(usize),
 }
 
+/// Which permission a spell was cast or a land played with, as recorded on the object
+/// ([`GameObject::played_with`]): "When you cast a spell this way", "If you cast a
+/// creature spell this way" (CR 400.7h, 400.7i). `way` identifies the effect that gave
+/// an effect's permission (a [`crate::casting::PlayGrant`]); 0 for a static ability's
+/// permission, identified by its source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PermissionUse {
+    pub source: Option<ObjectId>,
+    pub way: u32,
+}
+
+/// `ctx.nums[THIS_WAY]`: the permissions the resolving effect gave ("You may play that
+/// card this turn. When you play a card this way, ..."), see [`PermissionUse`].
+pub const THIS_WAY: Var = vars::USER + 7357;
+
+/// `Filter::Custom`: a spell cast (or land played) with a permission "this way" refers to:
+/// one the effect that created the (delayed) triggered ability gave (`ctx.nums[THIS_WAY]`),
+/// or else one a static ability of the source gives (Galea, Kindler of Hope).
+pub const PLAYED_THIS_WAY: &str = "played_this_way";
+
+/// Whether `id` was played with the permission "this way" means in `ctx`.
+pub fn played_this_way(g: &Game, id: ObjectId, ctx: &Ctx) -> bool {
+    let Some(u) = g.try_obj(id).and_then(|o| o.played_with) else {
+        return false;
+    };
+    match ctx.nums.get(&THIS_WAY) {
+        Some(w) => *w != 0 && u.way as i64 == *w,
+        None => u.way == 0 && u.source.is_some() && u.source == ctx.source,
+    }
+}
+
 /// A permission a player uses to play a card from where it is (CR 601.3, 305.1).
 #[derive(Clone, Debug)]
 pub struct CastPermission {
+    /// The effect that gave it (see [`PermissionUse`]).
+    pub way: u32,
     pub kind: PermissionKind,
     /// The object whose ability or effect gives it.
     pub source: Option<ObjectId>,
@@ -187,6 +220,7 @@ pub fn allowing(
             None => None,
         };
         out.push(CastPermission {
+            way: gr.terms.way,
             kind: PermissionKind::Grant(i),
             source: gr.source,
             free: gr.free,
@@ -232,6 +266,7 @@ pub fn allowing(
         }
         let (free, terms) = static_terms(perm);
         out.push(CastPermission {
+            way: 0,
             kind: PermissionKind::Static(i),
             source: Some(*src),
             free,
@@ -648,6 +683,19 @@ pub fn spell_cast_with(g: &mut Game, perm: Option<&CastPermission>, spell: Objec
     let Some(c) = perm else {
         return;
     };
+    g.objects[spell.0 as usize].played_with = Some(PermissionUse {
+        source: c.source,
+        way: c.way,
+    });
+    // "If you cast a creature spell this way, it gains haste until end of turn."
+    if let Some(e) = &c.terms.on_cast {
+        // (Its characteristics as a spell, CR 601.2a.)
+        g.recompute();
+        let mut ctx = Ctx::new(c.source, g.obj(spell).controller);
+        ctx.set_var(vars::IT, vec![Entity::Object(spell)]);
+        g.exec(e, &mut ctx);
+        g.dirty = true;
+    }
     if c.terms.exile_instead {
         let mut ctx = Ctx::new(c.source, g.obj(spell).controller);
         ctx.set_var(vars::IT, vec![Entity::Object(spell)]);
@@ -668,6 +716,33 @@ pub fn spell_cast_with(g: &mut Game, perm: Option<&CastPermission>, spell: Objec
             },
             &mut ctx,
         );
+    }
+}
+
+/// The permissions `g.play_grants[before..]` were just given by the effect resolving with
+/// `ctx`: they share one "way", which the effect's later instructions refer to
+/// (`ctx.nums[THIS_WAY]`, kept by the delayed triggers it creates).
+pub fn note_way(g: &mut Game, before: usize, ctx: &mut Ctx) {
+    if before >= g.play_grants.len() {
+        return;
+    }
+    let way = match ctx.nums.get(&THIS_WAY) {
+        Some(w) if *w > 0 => *w as u32,
+        _ => g.new_effect_id().max(1),
+    };
+    for gr in g.play_grants[before..].iter_mut() {
+        gr.terms.way = way;
+    }
+    ctx.nums.insert(THIS_WAY, way as i64);
+}
+
+/// The land `land` was just played with the permission `perm` (CR 305.1, 400.7i).
+pub fn land_played_with(g: &mut Game, perm: Option<&CastPermission>, land: ObjectId) {
+    if let Some(c) = perm {
+        g.objects[land.0 as usize].played_with = Some(PermissionUse {
+            source: c.source,
+            way: c.way,
+        });
     }
 }
 

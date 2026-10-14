@@ -2066,6 +2066,7 @@ impl Game {
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let objs = self.resolve_objects(what, ctx);
+                let before = self.play_grants.len();
                 crate::casting::grant_play_permission(
                     self,
                     p,
@@ -2074,6 +2075,8 @@ impl Game {
                     *free,
                     ctx.source,
                 );
+                // "When you play a card this way" (see `permissions::PermissionUse`).
+                crate::permissions::note_way(self, before, ctx);
             }
             Effect::WithPlayTerms { terms, effect } => {
                 // The permissions the effect gives come with the terms.

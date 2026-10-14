@@ -3302,6 +3302,16 @@ pub struct PlayTerms {
     /// that object (CR 400.7).
     #[serde(default)]
     pub exile_instead: bool,
+    /// "If you cast a creature spell this way, it gains haste until end of turn.": done as
+    /// a spell is cast with the permission (not a triggered ability), with `Var(IT)` the
+    /// spell; by CR 400.7a, what it does to a permanent spell applies to the permanent it
+    /// becomes.
+    #[serde(default)]
+    pub on_cast: Option<Box<Effect>>,
+    /// The effect that gave the permission (0: none recorded), which "cast this way"
+    /// refers to (see `permissions::PermissionUse`).
+    #[serde(default)]
+    pub way: u32,
 }
 
 impl PlayTerms {
@@ -3343,6 +3353,12 @@ impl PlayTerms {
         self.lands_enter_tapped |= other.lands_enter_tapped;
         self.spend_as_any_color |= other.spend_as_any_color;
         self.spend_any_type |= other.spend_any_type;
+        if let Some(e) = &other.on_cast {
+            self.on_cast = Some(match self.on_cast.take() {
+                Some(mine) => Box::new(Effect::seq(vec![*mine, (**e).clone()])),
+                None => e.clone(),
+            });
+        }
     }
 }
 

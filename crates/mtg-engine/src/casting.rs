@@ -542,6 +542,7 @@ impl Game {
                 continue;
             }
             let c = crate::permissions::CastPermission {
+                way: 0,
                 kind: crate::permissions::PermissionKind::Static(i),
                 source: Some(*src),
                 free: true,
@@ -1210,6 +1211,7 @@ impl Game {
         if let Some(n) = new {
             // CR 400.7i: grants to lands played this way apply to the new permanent.
             crate::zones::land_played(self, p, card, n);
+            crate::permissions::land_played_with(self, permission, n);
             self.emit(Event::LandPlayed { player: p, land: n });
         }
         self.flush_events();
