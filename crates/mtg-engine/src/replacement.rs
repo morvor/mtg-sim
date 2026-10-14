@@ -1576,6 +1576,32 @@ impl Game {
                     },
                 ]
             }
+            (
+                ReplacementAction::TokensInstead { spec },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                },
+            ) => {
+                // The tokens' characteristics are entirely replaced; how the effect creates
+                // them (tapped, attacking) still applies.
+                let instead = TokenCreate {
+                    chars: crate::tokens::token_characteristics_in(self, &spec, &ctx),
+                    card: crate::tokens::predefined_card(&spec),
+                    tapped: tokens.tapped,
+                    attacking: tokens.attacking,
+                    copy_of: None,
+                    copy_exceptions: vec![],
+                };
+                vec![ReplEvent::CreateTokens {
+                    controller,
+                    spec: Box::new(instead),
+                    count,
+                    source,
+                }]
+            }
             (ReplacementAction::Subtract(v), ev) => {
                 // The amount may depend on the event's ("half that many, rounded down").
                 let mut c = ctx.clone();

@@ -2424,6 +2424,10 @@ pub enum ReplacementAction {
     /// event also creates `count` of these tokens under the same player's control
     /// (`Value::EventAmount` is how many tokens the event creates, "that many").
     PlusTokens { spec: TokenSpec, count: Value },
+    /// "that many [token] are created instead" (CR 614.1a, Divine Visitation): the tokens
+    /// the event creates have these characteristics instead of their own; everything else
+    /// the creating effect specifies (tapped, attacking) still applies.
+    TokensInstead { spec: TokenSpec },
     /// Subtract N from the amount.
     Subtract(Value),
     /// Redirect damage to the selection.

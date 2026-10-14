@@ -600,3 +600,107 @@ fn song_of_the_worldsoul_resolves_first_even_if_the_spell_is_countered() {
     t.resolve_all();
     assert_eq!(named_tokens(&t, P0, "Spirit").len(), 2);
 }
+
+/// `p` creates a 1/1 green Soldier creature token with "{T}: Add {G}." (tapped if
+/// `tapped`), as a resolving effect would.
+fn create_soldier(t: &mut TestGame, p: PlayerId, tapped: bool) {
+    let def = crate::r_s01_common::custom_card(
+        "Soldier",
+        "Creature — Soldier",
+        "",
+        Some((1, 1)),
+        "{T}: Add {G}.",
+    );
+    let spec = TokenSpec {
+        name: Default::default(),
+        colors: ColorSet::single(Color::Green),
+        supertypes: vec![],
+        card_types: vec![CardType::Creature],
+        subtypes: vec!["Soldier".into()],
+        power: Some(1),
+        toughness: Some(1),
+        abilities: def.front().chars.abilities.clone(),
+        scryfall_name: None,
+        pt_values: None,
+    };
+    run_with(
+        t,
+        p,
+        Effect::CreateToken {
+            spec,
+            count: Value::c(2),
+            controller: PlayerRef::You,
+            tapped,
+            attacking: false,
+        },
+        &[],
+    );
+}
+
+#[test]
+fn divine_visitation_replaces_the_tokens_characteristics_only() {
+    cr!("614.1a", "111.1");
+    ruling!(
+        "Divine Visitation",
+        "The token's characteristics are entirely replaced by a 4/4 white Angel creature token with flying and vigilance. It doesn't have any abilities the token would have been created with. Anything else specified in the effect creating the token (such as tapped, attacking, \"That token gains haste,\" or \"Exile that token at end of combat\") still applies."
+    );
+    supported("Divine Visitation");
+    supported("Draconic Visitor");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Divine Visitation");
+    create_soldier(&mut t, P0, true);
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 2);
+    for id in toks {
+        let o = t.obj(id);
+        assert_eq!(o.chars.name, "Angel Token");
+        assert!(o.chars.has_subtype("Angel") && !o.chars.has_subtype("Soldier"));
+        assert_eq!(o.chars.colors, ColorSet::single(Color::White));
+        assert_eq!(t.pt(id), (4, 4));
+        assert!(o.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+        assert!(o.has_keyword(mtg_engine::keywords::KeywordKind::Vigilance));
+        assert!(o.tapped);
+        assert!(o.chars.abilities.iter().all(|a| !a.text.contains("Add {G}")));
+    }
+    // An opponent's tokens and noncreature tokens are unaffected.
+    create_soldier(&mut t, P1, false);
+    assert_eq!(named_tokens(&t, P1, "Soldier").len(), 2);
+    create_token(&mut t, P0, "Treasure");
+    assert_eq!(named_tokens(&t, P0, "Treasure").len(), 1);
+    // Draconic Visitor: artifact tokens become Dragons.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Draconic Visitor");
+    create_token(&mut t, P0, "Treasure");
+    let dragons = named_tokens(&t, P0, "Dragon");
+    assert_eq!(dragons.len(), 1);
+    assert_eq!(t.pt(dragons[0]), (5, 5));
+    assert!(named_tokens(&t, P0, "Treasure").is_empty());
+}
+
+#[test]
+fn divine_visitation_ignores_tokens_that_become_creatures_as_they_enter() {
+    cr!("614.1a", "701.7b");
+    ruling!(
+        "Divine Visitation",
+        "If you create a noncreature token that will be a creature as it enters the battlefield, perhaps because of an effect such as that of March of the Machines, Divine Visitation's effect doesn't apply to that token's creation."
+    );
+    supported("March of the Machines");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Divine Visitation");
+    t.battlefield(P0, "March of the Machines");
+    create_token(&mut t, P0, "Treasure");
+    let created: Vec<String> = t
+        .turn_events
+        .iter()
+        .chain(t.g.events.iter())
+        .filter_map(|e| match e {
+            mtg_engine::events::Event::TokenCreated { obj, .. } => {
+                Some(t.g.obj(*obj).chars.name.to_string())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(created, vec!["Treasure Token"]);
+    assert!(named_tokens(&t, P0, "Angel").is_empty());
+}
+
