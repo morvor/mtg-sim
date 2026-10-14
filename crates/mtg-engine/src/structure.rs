@@ -741,6 +741,24 @@ pub fn record_cast(g: &crate::game::Game, spell: crate::types::ObjectId) {
             record(a, &o.chars.name, "keyword");
         }
     }
+    // A keyword cast method printed on another face of the card (More Than Meets the Eye
+    // puts the card on the stack with its back face up, CR 702.162a).
+    if let CastMethod::Keyword(k) | CastMethod::FaceDown(k) = cast.method {
+        let on_spell = o
+            .chars
+            .abilities
+            .iter()
+            .any(|a| matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == k));
+        if !on_spell {
+            for face in o.card.iter().flat_map(|c| c.faces.iter()) {
+                for a in &face.chars.abilities {
+                    if matches!(&a.kind, AbilityKind::Keyword(kw) if kw.kind == k) {
+                        record(a, &face.chars.name, "keyword");
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Records that the replacement effect of static ability `uid` of `src` was applied.
