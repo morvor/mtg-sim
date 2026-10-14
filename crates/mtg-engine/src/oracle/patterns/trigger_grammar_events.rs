@@ -405,9 +405,27 @@ inventory::submit! { TriggerPattern { name: "a player who controls [object] [eve
 
 /// "one or more counters are put on [object]" (any kind), "one or more [kind] counters are
 /// put on one or more [objects]" (once per batch, CR 603.2c), "you put one or more [kind]
-/// counters on one or more [objects]", "one or more [kind] counters are removed from ~".
+/// counters on one or more [objects]", "one or more [kind] counters are removed from ~",
+/// "a [kind] counter is removed from ~" (once for each counter, Protean Hydra).
 fn counters_events(r: &str) -> Option<Parsed> {
     let r = end(r);
+    // "a +1/+1 counter is removed from ~": each counter removed is a trigger event, however
+    // it's removed.
+    if let Some(x) = r.strip_prefix("a ") {
+        if let Some((kind, rest)) = crate::oracle::costs::counter_kind(x) {
+            if rest.trim_start() == "counter is removed from ~" {
+                return Some((
+                    TriggerCond::CountersRemoved {
+                        filter: Filter::Source,
+                        kind: Some(kind),
+                        each: true,
+                    },
+                    Sel::This,
+                    PlayerRef::You,
+                ));
+            }
+        }
+    }
     // "one or more counters are put on a creature you control"
     if let Some(x) = r.strip_prefix("one or more counters are put on ") {
         let s = crate::oracle::patterns::triggers::parse_subject(x)?;
@@ -470,6 +488,7 @@ fn counters_events(r: &str) -> Option<Parsed> {
                         trigger: Box::new(TriggerCond::CountersRemoved {
                             filter: Filter::Source,
                             kind: Some(kind),
+                            each: false,
                         }),
                         per: BatchPer::Batch,
                     },

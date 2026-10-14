@@ -193,6 +193,7 @@ fn siege_ability() -> &'static Ability {
                 trigger: Box::new(TriggerCond::CountersRemoved {
                     filter: Filter::Source,
                     kind: Some(counters::DEFENSE.into()),
+                    each: false,
                 }),
                 cond: Condition::Compare(defense, Cmp::Eq, Value::c(0)),
             },
