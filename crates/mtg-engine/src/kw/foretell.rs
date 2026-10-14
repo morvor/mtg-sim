@@ -168,12 +168,13 @@ impl KeywordRules for Foretell {
         if !g.is_live(card) || !can_foretell(g, p, card) {
             return Some(Err(Illegal("can't foretell that card".into())));
         }
-        if !crate::special_actions::pay(
+        if !crate::special_actions::pay_for(
             g,
             p,
             &foretell_action_cost(g, p),
             Some(card),
             &Ctx::new(Some(card), p),
+            Some(crate::mana::SpendPurpose::Keyword(KeywordKind::Foretell)),
         ) {
             return Some(Err(Illegal("can't pay {2}".into())));
         }

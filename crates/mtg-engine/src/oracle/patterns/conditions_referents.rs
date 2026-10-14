@@ -237,13 +237,15 @@ fn any_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     referent_condition(c, b).or_else(|| crate::oracle::statics::parse_condition(c, b.ctx))
 }
 
-/// "[a] and [b]", "[a] or [b]" where at least one part is about a referent. A part that
-/// starts with a verb shares the subject of the first ("that player is your opponent and
-/// has four or more cards in hand").
+/// "[a] and [b]", "[a] or [b]", "[a] or if [b]" where at least one part is about a
+/// referent. A part that starts with a verb shares the subject of the first ("that player
+/// is your opponent and has four or more cards in hand").
 fn joined(c: &str, b: &mut Builder) -> Option<Condition> {
     for (sep, all) in [(" and ", true), (" or ", false)] {
         for (i, _) in c.match_indices(sep) {
             let (x, y) = (&c[..i], &c[i + sep.len()..]);
+            // "its power is 2 or less or if you control another Lizard": "if" repeated.
+            let y = y.strip_prefix("if ").unwrap_or(y);
             let Some(cx) = referent_condition(x, b) else {
                 if let (Some(cx), Some(cy)) = (
                     crate::oracle::statics::parse_condition(x, b.ctx),
@@ -985,6 +987,9 @@ fn has(sel: &Sel, h: &str, b: &mut Builder) -> Option<Condition> {
     if let Some(k) = KeywordKind::from_name(h) {
         return Some(Condition::SelMatches(sel.clone(), Filter::HasKeyword(k)));
     }
+    if let Some(c) = extreme_power(sel, h) {
+        return Some(c);
+    }
     for (p, stat) in [
         ("mana value ", Stat::ManaValue),
         ("power ", Stat::Power),
@@ -1032,6 +1037,37 @@ fn has(sel: &Sel, h: &str, b: &mut Builder) -> Option<Condition> {
         }
     }
     None
+}
+
+/// "the least power or is tied for least power among creatures on the battlefield",
+/// "the greatest power among creatures you control": the object's power is the least (or
+/// greatest) of the group, tied or not, checked as the condition is (CR 608.2c).
+fn extreme_power(sel: &Sel, h: &str) -> Option<Condition> {
+    let r = h.strip_prefix("the ")?;
+    let (greatest, r) = if let Some(x) = r.strip_prefix("greatest power") {
+        (true, x)
+    } else {
+        (false, r.strip_prefix("least power")?)
+    };
+    let word = if greatest { "greatest" } else { "least" };
+    let r = [
+        format!(" or is tied for {word} power"),
+        format!(" or is tied for the {word} power"),
+    ]
+    .iter()
+    .find_map(|t| r.strip_prefix(t.as_str()))
+    .unwrap_or(r);
+    let (among, plural, rest) = parse_object_phrase(r.strip_prefix(" among ")?)?;
+    if !plural || !rest.trim().is_empty() {
+        return None;
+    }
+    let ext = Value::Extreme(
+        Box::new(Stat::Power.of(&Sel::Var(vars::TESTED))),
+        Box::new(Sel::All(among)),
+        greatest,
+    );
+    let cmp = if greatest { Cmp::Ge } else { Cmp::Le };
+    Some(Condition::Compare(Stat::Power.of(sel), cmp, ext))
 }
 
 #[derive(Clone, Copy)]

@@ -230,6 +230,8 @@ fn phenomenon_sba(g: &mut Game) -> bool {
 pub fn roll_to_visit(g: &mut Game, p: PlayerId) -> i64 {
     let dice = crate::dice::roll_dice(g, p, 1, 6, crate::dice::DiceIgnore::None, 0, None);
     let result = dice.first().map_or(0, |d| d.result());
+    // CR 701.52a: each Attraction they control with that number lit up has been visited.
+    crate::kw::visit::note_visits(g, p, result);
     g.emit(Event::Custom {
         name: SmolStr::new(ROLLED_TO_VISIT),
         player: Some(p),

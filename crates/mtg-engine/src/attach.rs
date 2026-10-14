@@ -138,6 +138,36 @@ pub fn can_be_attached_where_it_is(g: &Game, obj: ObjectId, x: ObjectId) -> bool
         || enchant_zone_outside_battlefield(&g.obj(obj).chars).is_some_and(|k| z.kind() == Some(k))
 }
 
+/// The recipient of "attach them to a creature" when it's chosen as the instruction is
+/// performed: one that every object being attached can legally be attached to. If there's
+/// no such object, none is chosen and nothing becomes attached (CR 701.3b; Fumble's
+/// ruling: "they all remain on the battlefield unattached").
+pub fn recipient_for_all(g: &Game, to: &Sel, objs: &[ObjectId], ctx: &Ctx) -> Sel {
+    match to {
+        Sel::Choose {
+            chooser,
+            filter,
+            count,
+            up_to,
+            store,
+        } if !objs.is_empty() => {
+            let ok: Vec<ObjectId> = g
+                .objects_matching(filter, ctx)
+                .into_iter()
+                .filter(|c| objs.iter().all(|o| can_attach(g, *o, Entity::Object(*c))))
+                .collect();
+            Sel::Choose {
+                chooser: chooser.clone(),
+                filter: Filter::and(vec![filter.clone(), Filter::Objects(ok)]),
+                count: count.clone(),
+                up_to: *up_to,
+                store: *store,
+            }
+        }
+        other => other.clone(),
+    }
+}
+
 pub fn can_attach(g: &Game, obj: ObjectId, to: Entity) -> bool {
     can_attach_as(g, obj, to, false)
 }
