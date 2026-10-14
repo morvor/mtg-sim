@@ -94,7 +94,7 @@ fn underworld_fires_exiles_a_creature_it_damaged_that_dies() {
 
 #[test]
 fn mammoth_harness_gives_first_strike_to_the_other_creature() {
-    cr!("509.3c");
+    cr!("509.3d");
     // "Enchanted creature loses flying. Whenever enchanted creature blocks or becomes
     // blocked by a creature, the other creature gains first strike until end of turn."
     let mut t = TestGame::new(2);
@@ -306,4 +306,68 @@ fn thousand_year_elixir_lets_new_creatures_use_tap_abilities() {
         .expect("as though it had haste");
     t.resolve_all();
     assert_eq!(t.life(P1), life - 1);
+}
+
+const BLITZWING: &str = "Blitzwing, Cruel Tormentor // Blitzwing, Adaptive Assailant";
+
+/// Blitzwing, Cruel Tormentor: "At the beginning of your end step, target opponent loses
+/// life equal to the life that player lost this turn. If no life is lost this way, convert
+/// Blitzwing." `lost_before` life is lost by P1 earlier in the turn; `locked` gives P1
+/// Platinum Emperion ("Your life total can't change.").
+fn blitzwing_end_step(lost_before: u32, locked: bool) -> (TestGame, ObjectId) {
+    let mut t = TestGame::new(2);
+    let blitzwing = t.battlefield(P0, BLITZWING);
+    t.set_step(P0, Step::PrecombatMain);
+    if lost_before > 0 {
+        t.g.lose_life(P1, lost_before);
+    }
+    if locked {
+        t.battlefield(P1, "Platinum Emperion");
+    }
+    t.settle();
+    t.advance_to_step(Step::End);
+    t.resolve_all();
+    (t, blitzwing)
+}
+
+#[test]
+fn blitzwing_converts_when_the_life_loss_doesnt_happen() {
+    cr!("119.3", "608.2c", "701.28a");
+    use mtg_engine::object::FaceState;
+    // P1 lost 3 life this turn, so Blitzwing tells them to lose 3, but their life total
+    // can't change: no life is lost this way.
+    let (t, blitzwing) = blitzwing_end_step(3, true);
+    assert_eq!(t.life(P1), 17, "{}", t.dump_log());
+    assert_eq!(t.obj_now(blitzwing).face, FaceState::Back, "{}", t.dump_log());
+    // Without the lock the 3 life is lost again, and Blitzwing stays as it is.
+    let (t, blitzwing) = blitzwing_end_step(3, false);
+    assert_eq!(t.life(P1), 14, "{}", t.dump_log());
+    assert_eq!(t.obj_now(blitzwing).face, FaceState::Front);
+    // No life lost this turn: zero life is lost this way.
+    let (t, blitzwing) = blitzwing_end_step(0, false);
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.obj_now(blitzwing).face, FaceState::Back);
+}
+
+#[test]
+fn nashi_gets_a_counter_when_no_legendary_card_is_put_into_hand() {
+    cr!("608.2c");
+    // Nashi, Searcher in the Dark: "Whenever Nashi deals combat damage to a player, you
+    // mill that many cards. You may put any number of legendary and/or enchantment cards
+    // from among them into your hand. If you put no cards into your hand this way, put a
+    // +1/+1 counter on Nashi." Choosing none of the milled cards ("any number") puts no
+    // cards into your hand.
+    let mut t = TestGame::new(2);
+    let nashi = t.battlefield(P0, "Nashi, Searcher in the Dark");
+    for _ in 0..4 {
+        t.library_top(P0, "Grizzly Bears");
+    }
+    t.library_top(P0, "Isamaru, Hound of Konda");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[]);
+    t.attack(&[(nashi, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Isamaru, Hound of Konda"), "{}", t.dump_log());
+    assert!(!t.in_hand(P0, "Isamaru, Hound of Konda"));
+    assert_eq!(t.counters(nashi, "+1/+1"), 1, "{}", t.dump_log());
 }

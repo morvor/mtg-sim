@@ -4,8 +4,8 @@
 use super::players::Case;
 use super::*;
 
-/// Whether a trigger condition is "blocks or becomes blocked by a creature" (CR 509.3a,
-/// 509.3c): the triggering object is the other creature either way.
+/// Whether a trigger condition is "blocks or becomes blocked by a creature" (CR 509.3b,
+/// 509.3d): the triggering object is the other creature either way.
 pub(crate) fn is_block_pair(t: &TriggerCond) -> bool {
     let TriggerCond::AnyOf(v) = t else {
         return false;

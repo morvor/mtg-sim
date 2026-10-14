@@ -78,6 +78,17 @@ Familiar, Trial of Agony, Gev, Gorma, Visions of Glory's flashback reduction, Si
 Striker, Phytohydra, Heart of Light, Scandalmonger, Thousand-Year Elixir): all behave as
 the text says.
 
+Review: the Remaining cards were re-checked against the engine. Blitzwing's "if no life is
+lost this way" reads the life actually lost (`Game::lose_life` returns the change), so a
+player whose life total can't change makes it convert; Nashi's "if you put no cards into
+your hand this way" is false only when a card was chosen (`dig_steps::take` records the
+count); both now have in-play tests. Fevered Suspicion's cast choice keeps "nonland" in its
+filter; Mindleecher's look permission lasts while the cards stay exiled (CR 406.3,
+`zones::MAY_LOOK_AT_EXILED`); Nexus Mentality draws the number of counters actually
+removed. No parser bug found. The "enters with a counter ... plus an additional counter
+... for each" rewrite was narrowed to +1/+1 counters both times (it ignored the second
+counter kind).
+
 ## Remaining
 
 Still mismatching in the taken clusters, each checked against the AST and judged to play
