@@ -8,7 +8,7 @@
 //! * "Each player except that creature's controller creates a token that's a copy of that
 //!   creature." (CR 707.2, 111.1).
 
-use super::{EffectPattern, FollowupPattern, TriggerPattern};
+use super::{ConditionPattern, EffectPattern, FollowupPattern, TriggerPattern};
 use crate::ability::*;
 use crate::oracle::effects::{object_ref, player_ref, Builder};
 use crate::oracle::phrases::*;
@@ -50,7 +50,12 @@ fn cast_with_single_target(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 inventory::submit! { TriggerPattern { name: "casts a spell with a single target", priority: 100, parse: cast_with_single_target } }
 
 /// "that player copies that spell for each other spell, permanent, card not on the
-/// battlefield, and/or player the spell could target": every other legal target.
+/// battlefield, and/or player the spell could target": every other legal target; "copy
+/// that spell for each other creature you control that the spell could target" (Zada,
+/// Hedron Grinder), "that player copies that spell for each other creature they control
+/// that the spell could target" (Mirrorwing Dragon), "... for each other Golem that spell
+/// could target" (Precursor Golem): only the other legal targets of that kind, as seen by
+/// the player who copies it.
 fn copies_for_each_other_target(l: &str, b: &mut Builder) -> Option<Effect> {
     if !matches!(b.it, Sel::TriggerSpell) {
         return None;
@@ -60,18 +65,36 @@ fn copies_for_each_other_target(l: &str, b: &mut Builder) -> Option<Effect> {
     {
         (b.it_player.clone(), r)
     } else {
-        (
-            PlayerRef::You,
-            l.strip_prefix("copy that spell for each other ")?,
-        )
+        let r = l
+            .strip_prefix("copy that spell for each other ")
+            .or_else(|| l.strip_prefix("copy the spell for each other "))?;
+        (PlayerRef::You, r)
     };
-    if r != "spell, permanent, card not on the battlefield, and/or player the spell could target"
+    let among = if r
+        == "spell, permanent, card not on the battlefield, and/or player the spell could target"
     {
-        return None;
-    }
+        None
+    } else {
+        let kind = r
+            .strip_suffix(" that the spell could target")
+            .or_else(|| r.strip_suffix(" that that spell could target"))
+            .or_else(|| r.strip_suffix(" that spell could target"))?;
+        // "they control": the player who copies it, who is "you" as it's performed.
+        let kind = match kind.strip_suffix(" they control") {
+            Some(k) if !matches!(who, PlayerRef::You) => format!("{k} you control"),
+            Some(_) => return None,
+            None => kind.to_string(),
+        };
+        let (f, plural, tail) = parse_object_phrase(&kind)?;
+        if plural || !end(tail).is_empty() {
+            return None;
+        }
+        Some(f)
+    };
     let copy = Effect::CopySpellRetargeted {
         what: Sel::TriggerSpell,
         target: None,
+        among,
     };
     Some(match who {
         PlayerRef::You => copy,
@@ -88,10 +111,23 @@ inventory::submit! { EffectPattern { name: "copies that spell for each other tar
 /// object or player it could target: how those copies are made (CR 707.10d).
 fn each_copy_targets_a_different_one(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let l = s.to_lowercase();
-    if end(&l) != "each copy targets a different one of them" {
+    let l = end(&l);
+    if l != "each copy targets a different one of them"
+        && !l.strip_prefix("each copy targets a different one of those ").is_some_and(|k| {
+            parse_object_phrase(k).is_some_and(|(_, plural, tail)| plural && end(tail).is_empty())
+        })
+    {
         return false;
     }
-    let retargeted = |e: &Effect| matches!(e, Effect::CopySpellRetargeted { target: None, .. });
+    let retargeted = |e: &Effect| {
+        matches!(
+            e,
+            Effect::CopySpellRetargeted {
+                target: None,
+                ..
+            }
+        )
+    };
     match prev {
         Effect::AsPlayer { effect, .. } => retargeted(effect),
         e => retargeted(e),
@@ -163,3 +199,19 @@ fn each_player_creates_copy(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "each player creates a token that's a copy of", priority: 100, parse: each_player_creates_copy } }
+
+/// "if that spell targets only ~" (Ink-Treader Nephilim's intervening "if" clause, CR
+/// 603.4): the spell that triggered the ability has exactly one different object or player
+/// chosen as its targets, and it's this object (CR 115.9c).
+fn that_spell_targets_only(c: &str) -> Option<Condition> {
+    let r = end(c)
+        .strip_prefix("that spell targets only ")
+        .or_else(|| end(c).strip_prefix("the spell targets only "))?;
+    let (objects, players) = super::r115_targets::targeted_thing(r)?;
+    Some(Condition::SelMatches(
+        Sel::TriggerSpell,
+        Filter::StackTargets(Box::new(TargetsFilter::Only { objects, players })),
+    ))
+}
+
+inventory::submit! { ConditionPattern { name: "that spell targets only ~", priority: 100, parse: that_spell_targets_only } }

@@ -1700,7 +1700,13 @@ impl Renderer<'_> {
             TargetsFilter::Only { objects, players } => {
                 let mut parts = Vec::new();
                 if let Some(o) = objects {
-                    parts.push(self.noun_det(o, Det::A));
+                    // "targets only a single Golem" (but "targets only ~").
+                    let n = self.noun_det(o, Det::A);
+                    let n = match n.strip_prefix("a ").or_else(|| n.strip_prefix("an ")) {
+                        Some(r) => format!("a single {r}"),
+                        None => n,
+                    };
+                    parts.push(n);
                 }
                 if let Some(p) = players {
                     parts.push(self.player_filter_object(p));
