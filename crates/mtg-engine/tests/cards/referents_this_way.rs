@@ -414,3 +414,38 @@ fn fangs_of_kalonia_doubles_the_counters_of_what_it_put_a_counter_on() {
     assert_eq!(t.counters(bear, "+1/+1"), 6);
     assert_eq!(t.counters(other, "+1/+1"), 1);
 }
+
+#[test]
+fn kaima_counts_the_creatures_it_goaded() {
+    cr!("701.15a", "608.2c");
+    compiles("Kaima, the Fractured Calm");
+    let mut t = TestGame::new(2);
+    let kaima = t.battlefield(P0, "Kaima, the Fractured Calm");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let c = t.battlefield(P1, "Llanowar Elves");
+    for target in [a, b] {
+        let aura = t.battlefield(P0, "Pacifism");
+        t.g.attach(aura, Entity::Object(target));
+    }
+    let theirs = t.battlefield(P1, "Holy Strength");
+    t.g.attach(theirs, Entity::Object(c));
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.g.obj(a).goaded_by.contains(&P0) && t.g.obj(b).goaded_by.contains(&P0));
+    assert!(t.g.obj(c).goaded_by.is_empty());
+    assert_eq!(t.counters(kaima, "+1/+1"), 2);
+}
+
+#[test]
+fn havoc_eater_counts_the_total_power_of_the_creatures_it_goaded() {
+    cr!("701.15a", "608.2h");
+    compiles("Havoc Eater");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let eater = t.enter(P0, "Havoc Eater");
+    t.resolve_all();
+    assert!(t.g.obj(giant).goaded_by.contains(&P0));
+    assert_eq!(t.counters(eater, "+1/+1"), 3);
+}

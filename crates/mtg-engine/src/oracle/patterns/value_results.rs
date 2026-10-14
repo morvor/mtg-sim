@@ -1396,7 +1396,9 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     let head = &r[..i];
     let yours = Some(Filter::OwnedBy(PlayerRel::You));
     let theirs = their_rel(b).map(Filter::OwnedBy);
-    let verbs: [(&str, Var, Option<Filter>); 21] = [
+    let verbs: [(&str, Var, Option<Filter>); 22] = [
+        // "each creature goaded this way" (CR 701.15).
+        (" goaded", crate::kwa::goad::GOADED, None),
         // "each creature dealt damage this way" (the objects actually dealt damage).
         (" dealt damage", vars::DAMAGED, None),
         // "each creature that phased out this way" (CR 702.26).
