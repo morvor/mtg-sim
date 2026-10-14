@@ -7,6 +7,8 @@
 
 use super::structure_seed_common::*;
 use mtg_engine::ability::AbilityKind;
+use mtg_engine::decision::Decision;
+use mtg_engine::events::Event;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -36,6 +38,24 @@ pub fn act(
         .position(|a| a.contains(&text.to_lowercase()))
         .unwrap_or_else(|| panic!("no activated ability with {text:?} among {acts:?}"));
     t.activate(p, src, i, targets)
+}
+
+/// The candidates offered by each target choice asked of `p` so far, in order.
+pub fn target_choices(t: &TestGame, p: PlayerId) -> Vec<Vec<Entity>> {
+    t.asked()
+        .into_iter()
+        .filter_map(|(q, d)| match d {
+            Decision::ChooseTargets { candidates, .. } if q == p => Some(candidates),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Whether `p` shuffled their library this turn.
+pub fn shuffled(t: &TestGame, p: PlayerId) -> bool {
+    t.g.turn_events
+        .iter()
+        .any(|e| matches!(e, Event::Shuffled { player } if *player == p))
 }
 
 /// The number of `p`'s untapped permanents named `name`.
@@ -114,9 +134,12 @@ fn blossom_dryad_untaps_target_land() {
     t.g.tap(forest);
     t.g.tap(other);
     t.g.tap(bears);
-    // A creature isn't a legal target: the requested target is replaced by a land.
     act(&mut t, P0, dryad, "untap", &[Entity::Object(forest)]).unwrap();
     assert!(t.obj_now(dryad).tapped);
+    // Only lands can be targeted.
+    let c = target_choices(&t, P0).pop().unwrap();
+    assert!(c.contains(&Entity::Object(forest)) && c.contains(&Entity::Object(other)));
+    assert!(!c.contains(&Entity::Object(bears)), "a creature isn't a land");
     t.resolve_all();
     assert!(!t.obj_now(forest).tapped);
     assert!(t.obj_now(other).tapped, "only the target");
@@ -169,6 +192,7 @@ fn wayfarers_bauble_fetches_a_basic_land_tapped() {
         "not a basic land"
     );
     assert_eq!(t.library_size(P0), lib - 1);
+    assert!(shuffled(&t, P0), "then shuffle");
 }
 
 #[test]
@@ -217,7 +241,7 @@ fn hungry_ghoul_sacrifices_another_creature_for_a_counter() {
 
 #[test]
 fn staff_of_the_storyteller_removes_a_story_counter_to_draw() {
-    cr!("602.2", "118.3", "122.8");
+    cr!("602.2", "118.3");
     // "{W}, {T}, Remove a story counter from this artifact: Draw a card."
     supported("Staff of the Storyteller");
     let mut t = TestGame::new(2);
@@ -327,7 +351,7 @@ fn prized_elephant_gains_trample() {
 
 #[test]
 fn skinbrand_goblin_bloodrush_pumps_an_attacking_creature() {
-    cr!("602.2", "702.117a", "118.3");
+    cr!("602.2", "118.3");
     // "Bloodrush — {R}, Discard this card: Target attacking creature gets +2/+1 until end
     // of turn."
     supported("Skinbrand Goblin");
@@ -383,7 +407,7 @@ fn spike_weaver_moves_a_counter_to_target_creature() {
 
 #[test]
 fn thermo_alchemist_pings_each_opponent() {
-    cr!("602.2", "120.3a", "102.2");
+    cr!("602.2", "120.3a", "102.3");
     // "{T}: This creature deals 1 damage to each opponent."
     supported("Thermo-Alchemist");
     let mut t = TestGame::new(3);
@@ -479,7 +503,7 @@ fn iron_lance_grants_first_strike() {
 
 #[test]
 fn armillary_sphere_puts_up_to_two_basic_lands_into_hand() {
-    cr!("602.2", "701.23a", "701.20a");
+    cr!("602.2", "701.23a", "701.24a");
     // "{2}, {T}, Sacrifice this artifact: Search your library for up to two basic land
     // cards, reveal them, put them into your hand, then shuffle."
     supported("Armillary Sphere");
@@ -505,6 +529,7 @@ fn armillary_sphere_puts_up_to_two_basic_lands_into_hand() {
         t.named_on_battlefield("Forest").is_empty(),
         "into the hand, not onto the battlefield"
     );
+    assert!(shuffled(&t, P0), "then shuffle");
 }
 
 #[test]
@@ -540,6 +565,7 @@ fn metrognome_makes_a_gnome_artifact_creature() {
     let o = t.obj_now(g[0]);
     assert!(o.is_token() && o.is(CardType::Artifact) && o.is(CardType::Creature));
     assert!(o.chars.colors.is_colorless(), "colorless");
+    assert_eq!(o.chars.name, "Gnome Token", "named after its subtype (CR 111.4)");
     assert_eq!(t.pt(g[0]), (1, 1));
 }
 
@@ -574,7 +600,7 @@ fn crystalline_crawler_taps_to_grow() {
 
 #[test]
 fn barkform_harvester_puts_a_graveyard_card_on_the_bottom() {
-    cr!("602.2", "115.1", "401.3");
+    cr!("602.2", "115.1");
     // "{2}: Put target card from your graveyard on the bottom of your library."
     supported("Barkform Harvester");
     let mut t = TestGame::new(2);
@@ -582,14 +608,18 @@ fn barkform_harvester_puts_a_graveyard_card_on_the_bottom() {
     let mine = t.graveyard(P0, "Hill Giant");
     let theirs = t.graveyard(P1, "Grizzly Bears");
     t.lands(P0, "Wastes", 2);
-    // The opponent's graveyard card isn't a legal target: replaced by the legal one.
-    act(&mut t, P0, h, "bottom", &[Entity::Object(theirs)]).unwrap();
+    act(&mut t, P0, h, "bottom", &[Entity::Object(mine)]).unwrap();
+    let c = target_choices(&t, P0).pop().unwrap();
+    assert!(c.contains(&Entity::Object(mine)));
+    assert!(
+        !c.contains(&Entity::Object(theirs)),
+        "a card in an opponent's graveyard isn't a legal target"
+    );
     t.resolve_all();
     assert!(!t.in_graveyard(P0, "Hill Giant"));
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     let bottom = t.g.player(P0).library[0];
     assert_eq!(t.obj_now(bottom).chars.name, "Hill Giant");
-    let _ = mine;
 }
 
 #[test]
@@ -616,7 +646,7 @@ fn blistering_dieflyn_pumps_with_hybrid_mana() {
 
 #[test]
 fn brutal_deceiver_looks_at_the_top_card() {
-    cr!("602.2", "401.2");
+    cr!("602.2");
     // "{1}: Look at the top card of your library."
     supported("Brutal Deceiver");
     let mut t = TestGame::new(2);

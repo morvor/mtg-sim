@@ -1,7 +1,7 @@
 //! Structure-coverage tests (round 2): spell-ability structures shared by many cards that
 //! no other test exercised (see `docs/STRUCTURE_COVERAGE.md`).
 
-use super::structure_activated_2::next_turn;
+use super::structure_activated_2::{next_turn, target_choices};
 use super::structure_seed_common::*;
 use mtg_engine::decision::Answer;
 use mtg_engine::keywords::KeywordKind;
@@ -11,7 +11,7 @@ use mtg_engine::*;
 
 #[test]
 fn vines_of_the_recluse_pumps_grants_reach_and_untaps() {
-    cr!("608.2", "611.2a", "701.26b", "702.17b");
+    cr!("608.2", "611.2a", "701.26b");
     // "Target creature gets +1/+2 and gains reach until end of turn. Untap it."
     supported("Vines of the Recluse");
     let mut t = TestGame::new(2);
@@ -139,7 +139,7 @@ fn rain_of_embers_damages_each_creature_and_each_player() {
 
 #[test]
 fn tremor_damages_each_creature_without_flying() {
-    cr!("608.2", "120.3e", "702.9a");
+    cr!("608.2", "120.3e");
     // "Tremor deals 1 damage to each creature without flying."
     supported("Tremor");
     let mut t = TestGame::new(2);
@@ -170,9 +170,14 @@ fn defeat_destroys_only_a_creature_with_power_two_or_less() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");
     t.lands(P0, "Swamp", 4);
-    // Hill Giant (power 3) isn't a legal target: the requested target is replaced.
     let s = t.hand(P0, "Defeat");
-    t.cast(P0, s).target(giant).go();
+    t.cast(P0, s).target(bears).go();
+    let c = target_choices(&t, P0).pop().unwrap();
+    assert!(c.contains(&Entity::Object(bears)));
+    assert!(
+        !c.contains(&Entity::Object(giant)),
+        "Hill Giant (power 3) isn't a legal target"
+    );
     t.resolve_all();
     assert!(!t.on_battlefield(bears));
     assert!(t.on_battlefield(giant));
@@ -216,7 +221,7 @@ fn natural_end_destroys_an_artifact_or_enchantment_and_gains_life() {
 
 #[test]
 fn into_the_void_returns_up_to_two_creatures_to_their_owners_hands() {
-    cr!("608.2", "115.1d", "601.2c");
+    cr!("608.2", "115.1a", "601.2c");
     // "Return up to two target creatures to their owners' hands."
     supported("Into the Void");
     let mut t = TestGame::new(2);
@@ -257,6 +262,10 @@ fn tenderize_has_your_creature_deal_damage_equal_to_its_power() {
     let s = t.hand(P0, "Tenderize");
     // Two target slots: the targets are answered one per slot.
     t.cast(P0, s).target(giant).target(big).go();
+    let c = target_choices(&t, P0);
+    let (yours, opps) = (&c[c.len() - 2], &c[c.len() - 1]);
+    assert!(yours.contains(&Entity::Object(giant)) && !yours.contains(&Entity::Object(theirs)));
+    assert!(opps.contains(&Entity::Object(big)) && !opps.contains(&Entity::Object(giant)));
     t.resolve_all();
     assert_eq!(t.obj_now(big).damage, 3, "Hill Giant's power");
     assert_eq!(t.obj_now(theirs).damage, 0);
@@ -354,6 +363,9 @@ fn shield_wall_raises_toughness_of_creatures_you_control() {
     t.resolve_all();
     assert_eq!(t.pt(mine), (2, 4));
     assert_eq!(t.pt(theirs), (2, 2));
+    // Locked in at resolution (CR 611.2c).
+    let late = t.battlefield(P0, "Hill Giant");
+    assert_eq!(t.pt(late), (3, 3));
     next_turn(&mut t);
     assert_eq!(t.pt(mine), (2, 2));
 }
@@ -368,8 +380,13 @@ fn pierce_the_sky_damages_only_a_creature_with_flying() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Forest", 2);
     let s = t.hand(P0, "Pierce the Sky");
-    // Grizzly Bears has no flying: the requested target is replaced by the bat.
-    t.cast(P0, s).target(bears).go();
+    t.cast(P0, s).target(bat).go();
+    let c = target_choices(&t, P0).pop().unwrap();
+    assert!(c.contains(&Entity::Object(bat)));
+    assert!(
+        !c.contains(&Entity::Object(bears)),
+        "Grizzly Bears has no flying"
+    );
     t.resolve_all();
     assert!(!t.on_battlefield(bat));
     assert_eq!(t.obj_now(bears).damage, 0);
