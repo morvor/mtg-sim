@@ -151,19 +151,21 @@ fn equipment_spells_or_equip_abilities() {
 fn power_up_abilities_only() {
     cr!("106.6", "702.193a");
     let mut t = TestGame::new(2);
-    add_restricted(
-        &mut t,
-        P0,
-        ManaType::R,
-        1,
-        ManaRestriction::Purpose(SpendPurpose::Keyword(keywords::KeywordKind::PowerUp)),
-    );
+    let quinjet = t.battlefield(P0, "Quinjet Technician");
+    t.activate(P0, quinjet, 1, &[]).unwrap();
+    assert_eq!(pool(&t, P0), vec![ManaType::R, ManaType::R]);
     // Equip isn't power-up: Bonesplitter's equip {1} can't use it.
     let bear = t.battlefield(P0, "Grizzly Bears");
     let splitter = t.battlefield(P0, "Bonesplitter");
     assert!(t.activate(P0, splitter, 0, &[Entity::Object(bear)]).is_err());
-    assert_eq!(pool(&t, P0), vec![ManaType::R]);
-    assert_supported(&["Quinjet Technician"]);
+    assert_eq!(pool(&t, P0), vec![ManaType::R, ManaType::R]);
+    // It pays Serpent Specialist's power-up {3}{G} (with two Forests).
+    let serpent = t.battlefield(P0, "Serpent Specialist");
+    t.lands(P0, "Forest", 2);
+    t.activate(P0, serpent, 0, &[]).unwrap();
+    assert!(pool(&t, P0).is_empty());
+    t.resolve();
+    assert_eq!(t.counters(serpent, "+1/+1"), 2);
 }
 
 #[test]
@@ -243,6 +245,14 @@ fn disturb_cost_or_instant_or_sorcery() {
     let opt = t.hand(P0, "Opt");
     t.cast(P0, opt).go();
     assert_eq!(pool(&t, P0), vec![ManaType::U]);
+    t.resolve();
+    // And a disturb cost: Baithook Angler's {1}{U} from the graveyard, with the
+    // restricted {U} and the Island.
+    let angler = t.graveyard(P0, "Baithook Angler // Hook-Haunt Drifter");
+    t.cast(P0, angler)
+        .method(object::CastMethod::Keyword(keywords::KeywordKind::Disturb))
+        .go();
+    assert!(pool(&t, P0).is_empty());
 }
 
 #[test]
@@ -264,6 +274,22 @@ fn colorless_spell_ability_or_cost_with_c() {
     let ring = t.hand(P0, "Sol Ring");
     t.cast(P0, ring).go();
     assert!(pool(&t, P0).is_empty());
+    t.resolve();
+    // A cost that contains {C} of a blue permanent: Utter Insignificance's "{2}{C}: Exile
+    // enchanted creature." The {C} can be paid only with the Drone's colorless mana.
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    let aura = t.hand(P0, "Utter Insignificance");
+    t.lands(P0, "Island", 4);
+    t.cast(P0, aura).target(bear).go();
+    t.resolve();
+    let aura = t.named_on_battlefield("Utter Insignificance")[0];
+    let drone2 = t.battlefield(P0, "Cultivator Drone");
+    t.activate(P0, drone2, 0, &[]).unwrap();
+    assert_eq!(pool(&t, P0), vec![ManaType::C]);
+    t.activate(P0, aura, 0, &[]).unwrap();
+    assert!(pool(&t, P0).is_empty());
+    t.resolve();
+    assert!(!t.on_battlefield(bear));
 }
 
 #[test]
@@ -317,7 +343,7 @@ fn lists_of_spell_types() {
 
 #[test]
 fn two_mana_of_different_colors() {
-    cr!("106.1", "106.5");
+    cr!("106.1");
     let mut t = TestGame::new(2);
     let vessel = t.battlefield(P0, "Firemind Vessel");
     t.g.objects[vessel.0 as usize].tapped = false;
@@ -374,6 +400,10 @@ fn the_exiled_cards_colors() {
         "If no card is exiled with this artifact, it can’t add mana"
     );
     let mut t = TestGame::new(2);
+    // Nothing exiled with it: no mana.
+    let bare = t.battlefield(P0, "Chrome Mox");
+    let _ = t.activate(P0, bare, 0, &[]);
+    assert!(pool(&t, P0).is_empty());
     let bolt = t.hand(P0, "Lightning Bolt");
     let mox = t.hand(P0, "Chrome Mox");
     t.answer_yes(P0, true);
@@ -381,7 +411,11 @@ fn the_exiled_cards_colors() {
     t.cast(P0, mox).go();
     t.resolve_all();
     assert!(t.in_exile("Lightning Bolt"));
-    let mox = t.named_on_battlefield("Chrome Mox")[0];
+    let mox = *t
+        .named_on_battlefield("Chrome Mox")
+        .iter()
+        .find(|m| **m != bare)
+        .unwrap();
     t.activate(P0, mox, 0, &[]).unwrap();
     assert_eq!(pool(&t, P0), vec![ManaType::R]);
 }
@@ -413,9 +447,14 @@ fn chosen_player_adds_two_of_one_color() {
 #[test]
 fn each_player_adds_and_mana_burn() {
     cr!("106.4", "500.5");
+    ruling!(
+        "Yurlok of Scorch Thrash",
+        "Multiple Yurloks on the battlefield won't cause additional life loss"
+    );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let yurlok = t.battlefield(P0, "Yurlok of Scorch Thrash");
+    t.battlefield(P1, "Yurlok of Scorch Thrash");
     t.battlefield(P0, "Wastes");
     t.activate(P0, yurlok, 0, &[]).unwrap();
     let brg = vec![ManaType::B, ManaType::R, ManaType::G];
@@ -451,6 +490,10 @@ fn only_mana_from_basic_lands_or_creatures() {
         "Myr Superion",
         "Mana produced by abilities of creature cards not on the battlefield"
     );
+    ruling!(
+        "Myr Superion",
+        "can be cast only with mana produced by the abilities of one or more creatures on the battlefield"
+    );
     let mut t = TestGame::new(2);
     let saurian = t.hand(P0, "Imperiosaur");
     t.battlefield(P0, "Forest");
@@ -467,7 +510,22 @@ fn only_mana_from_basic_lands_or_creatures() {
     let myr = t.hand(P0, "Myr Superion");
     t.lands(P0, "Wastes", 2);
     assert!(t.cast(P0, myr).try_go().is_err());
+    // Elvish Spirit Guide's mana comes from a creature card in hand.
+    let guide = t.hand(P0, "Elvish Spirit Guide");
     t.battlefield(P0, "Llanowar Elves");
+    t.g.turn.priority = Some(P0);
+    let ga = t
+        .g
+        .obj(guide)
+        .chars
+        .abilities
+        .iter()
+        .find(|a| matches!(a.kind, ability::AbilityKind::Activated(_)))
+        .unwrap()
+        .uid;
+    t.g.activate_ability(P0, guide, ga).unwrap();
+    assert_eq!(pool(&t, P0), vec![ManaType::G]);
+    assert!(t.cast(P0, myr).try_go().is_err());
     t.battlefield(P0, "Fyndhorn Elves");
     let r = t.cast(P0, myr).try_go();
     assert!(r.is_ok(), "{r:?}");
@@ -493,6 +551,11 @@ fn only_mana_of_the_chosen_color_to_activate() {
     let elves = t.hand(P0, "Llanowar Elves");
     t.cast(P0, elves).go();
     assert_eq!(pool(&t, P0), vec![ManaType::G; 3]);
+    // Not for a green and white spell, even with a Plains for its {W}.
+    t.battlefield(P0, "Plains");
+    let wolf = t.hand(P0, "Watchwolf");
+    assert!(t.cast(P0, wolf).try_go().is_err());
+    assert_eq!(pool(&t, P0), vec![ManaType::G; 3]);
 }
 
 #[test]
@@ -500,13 +563,12 @@ fn mana_of_any_type_for_its_own_abilities() {
     cr!("118.14");
     let mut t = TestGame::new(2);
     let sharkey = t.battlefield(P0, "Sharkey, Tyrant of the Shire");
-    // P1's Mishra's Factory gives Sharkey "{1}: ... becomes an Assembly-Worker" and
-    // "{T}: Target Assembly-Worker gets +1/+1": the colorless cost; and a colored one
-    // from an Ancient Den? Use Kher Keep's "{1}{R}, {T}: Create a 0/1 red Kobold".
+    // P1's Kher Keep gives Sharkey "{1}{R}, {T}: Create a 0/1 red Kobold creature token
+    // named Kobolds of Kher Keep."
     t.battlefield(P1, "Kher Keep");
     t.g.recompute();
     t.lands(P0, "Island", 2);
-    // {1}{R} paid with blue mana.
+    // {1}{R} paid with blue mana (two Islands, nothing else).
     let n = t
         .obj_now(sharkey)
         .chars
@@ -556,7 +618,12 @@ fn destroy_a_land_that_could_produce_colorless() {
 
 #[test]
 fn chroma_counts_symbols_of_cards_in_your_graveyard() {
-    cr!("207.2c", "107.4e");
+    cr!("202.1", "107.4e");
+    ruling!(
+        "Umbra Stalker",
+        "Chroma abilities count hybrid mana symbols of the appropriate color"
+    );
+    ruling!("Umbra Stalker", "Chroma abilities check only mana costs");
     let mut t = TestGame::new(2);
     let stalker = t.battlefield(P0, "Umbra Stalker");
     t.graveyard(P0, "Phyrexian Arena"); // {1}{B}{B}
@@ -564,6 +631,10 @@ fn chroma_counts_symbols_of_cards_in_your_graveyard() {
     t.graveyard(P1, "Dark Ritual"); // not yours
     t.g.recompute();
     assert_eq!(t.pt(stalker), (2, 2));
+    // Deathrite Shaman: its {B/G} counts; the {B} in its text doesn't.
+    t.graveyard(P0, "Deathrite Shaman");
+    t.g.recompute();
+    assert_eq!(t.pt(stalker), (3, 3));
 }
 
 #[test]
@@ -608,6 +679,12 @@ fn any_type_the_sacrificed_land_could_produce() {
     t.answer_choose(P0, &[Entity::Object(forest)]);
     t.activate(P0, res, 0, &[]).unwrap();
     assert!(!t.on_battlefield(forest));
+    assert_eq!(pool(&t, P0), vec![ManaType::G]);
+    // A land with no mana ability can be sacrificed, for no mana.
+    let maze = t.battlefield(P0, "Maze of Ith");
+    t.answer_choose(P0, &[Entity::Object(maze)]);
+    t.activate(P0, res, 0, &[]).unwrap();
+    assert!(!t.on_battlefield(maze));
     assert_eq!(pool(&t, P0), vec![ManaType::G]);
 }
 
@@ -692,4 +769,30 @@ fn misty_salon_counts_unlocked_doors() {
         .collect();
     assert_eq!(spirits.len(), 1);
     assert_eq!(t.pt(spirits[0]), (2, 2));
+}
+
+#[test]
+fn blood_sun_removes_enters_tapped_and_etb_trigger_abilities() {
+    cr!("613.1f", "614.12");
+    ruling!(
+        "Blood Sun",
+        "it will lose that ability before it applies"
+    );
+    ruling!("Blood Sun", "it will lose that ability before it triggers");
+    ruling!("Blood Sun", "Land cards not on the battlefield");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P1, "Blood Sun");
+    let cove = t.hand(P0, "Tranquil Cove");
+    t.g.recompute();
+    // In hand it keeps its abilities.
+    assert!(t.obj_now(cove).chars.abilities.len() >= 3);
+    t.play_land(P0, cove).unwrap();
+    t.settle();
+    let cove = t.named_on_battlefield("Tranquil Cove")[0];
+    assert!(!t.obj_now(cove).tapped);
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.life(P0), 20);
+    t.activate(P0, cove, 0, &[]).unwrap();
+    assert_eq!(t.g.player(P0).mana_pool.total(), 1);
 }
