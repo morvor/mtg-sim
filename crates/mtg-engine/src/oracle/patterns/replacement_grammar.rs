@@ -512,6 +512,29 @@ pub(crate) fn source(s: &str, b: &mut OneShot) -> Option<Src> {
         _ => {}
     }
     if let Some(bb) = b.as_deref_mut() {
+        // "that creature and each creature blocking it" (Feint): either source.
+        if let Some((_, others)) = s
+            .split_once(" and each ")
+            .filter(|(one, _)| matches!(*one, "it" | "that creature"))
+        {
+            // The one object "it" names (not a group the previous instruction acted on).
+            let it = super::pronoun_groups::singular_it(bb);
+            if is_no_referent(&it) || !super::filters_relational::names_one_object(&it) {
+                return None;
+            }
+            let first = Filter::In(Box::new(it));
+            let saved = bb.targets.len();
+            let (sel, rest) = crate::oracle::effects::object_ref(&format!("each {others}"), bb)?;
+            let Sel::All(f) = sel else { return None };
+            if !rest.trim().is_empty() || bb.targets.len() != saved {
+                bb.targets.truncate(saved);
+                return None;
+            }
+            return Some(Src {
+                filter: Filter::Or(vec![first, f]),
+                pre,
+            });
+        }
         if matches!(s, "it" | "that creature") && !is_no_referent(&bb.it) {
             return Some(Src {
                 filter: Filter::In(Box::new(bb.it.clone())),
@@ -1593,10 +1616,16 @@ fn prevent_all(
             if x.starts_with("to and ") {
                 return None;
             }
+            // "that would be dealt this turn by [source]"
+            let (tt0, x) = match x.strip_prefix("this turn ") {
+                Some(r) if r.starts_with("by ") => (true, r),
+                _ => (false, x),
+            };
             match x.strip_prefix("by ") {
                 // "that would be dealt by [source] [this turn]"
                 Some(src) => {
                     let (tt, src) = this_turn(src);
+                    let tt = tt || tt0;
                     format!(
                         "{src} would deal {kind}{}",
                         if tt { " this turn" } else { "" }
