@@ -864,3 +864,54 @@ pub(crate) fn names_it(e: &Effect, var: Var) -> bool {
     matches!(e, Effect::Custom(n) if n.as_str() == crate::zones::MAY_LOOK_AT_EXILED)
         && var == vars::IT
 }
+
+impl Renderer<'_> {
+    /// Alternative qualities of one noun, said as one quality after it: "with mana value 2
+    /// or 3", "your team controls" (you or a teammate, CR 808.2), "from graveyards or exile"
+    /// (a spell cast from there, or a card there).
+    pub(crate) fn or_quality(&mut self, v: &[Filter]) -> Option<String> {
+        let mvs: Option<Vec<String>> = v
+            .iter()
+            .map(|x| match x {
+                Filter::ManaValue(Cmp::Eq, n) => match n.as_ref() {
+                    Value::Const(n) => Some(n.to_string()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        if let Some(m) = mvs {
+            if m.len() >= 2 {
+                return Some(format!("with mana value {}", join_list(&m, "or")));
+            }
+        }
+        if let [Filter::ControlledBy(PlayerRel::You), Filter::ControlledBy(PlayerRel::Teammate)] = v {
+            return Some("your team controls".into());
+        }
+        // (Nested lists may have been flattened: "in a graveyard or cast from one, or in
+        // exile or cast from there".)
+        let flat: Vec<&Filter> = v
+            .iter()
+            .flat_map(|x| match x {
+                Filter::Or(p) => p.iter().collect::<Vec<_>>(),
+                other => vec![other],
+            })
+            .collect();
+        let zones: Option<Vec<&str>> = flat
+            .chunks(2)
+            .map(|pair| match pair {
+                [Filter::InZone(a), Filter::CastFrom(b)] if a == b => match a {
+                    ZoneKind::Graveyard => Some("graveyards"),
+                    ZoneKind::Exile => Some("exile"),
+                    ZoneKind::Library => Some("libraries"),
+                    ZoneKind::Hand => Some("hands"),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        let zones = zones.filter(|z| z.len() >= 2)?;
+        let z: Vec<String> = zones.iter().map(|s| s.to_string()).collect();
+        Some(format!("from {}", join_list(&z, "or")))
+    }
+}
