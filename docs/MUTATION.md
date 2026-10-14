@@ -323,10 +323,9 @@ so on refer to); the field is only read by abilities whose wording refers to it.
   (IsDealtDamage: `other`, the source), `1528:25` (SpellCopied: `object`; `spell` holds the
   same copy), `1606:25` (TokenCreated: `player`), `1650:25` (TappedForManaOfType:
   `object`), `1758:25` (Mills: `objects`), `1843:25` (chapter abilities: `lki`): **(b) not
-  killed**: no card in the pool reads that field for that trigger (the "they" of "whenever
-  one or more creatures you control attack" is built from each attacker's `object`, and
-  Pinned by Angelic Guardian's test; Infesting Radroach's "mills a nonland card" compiles
-  to a zone-change trigger).
+  killed**: no card was found whose ability reads that field for that trigger (the "they" of
+  "whenever one or more creatures you control attack" comes from each attacker's
+  `object`, which Angelic Guardian's test checks).
 - `triggers.rs:1204:29: delete field object` (BlocksOrBecomesBlocked, the attacking
   creature that became blocked): **(b) missing test**. Killed by
   `tests/cr/r509_003_blocks_or_becomes_blocked_it.rs` (Raging Gorilla gets +2/-2 when it
