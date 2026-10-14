@@ -1961,11 +1961,6 @@ inventory::submit! { super::ConditionPattern { name: "history: the Ring has temp
 
 #[cfg(test)]
 mod tests {
-    use crate::card::Layout;
-    use crate::oracle::effects::Builder;
-    use crate::oracle::CompileContext;
-    use crate::types::TypeLine;
-
     use crate::ability::*;
 
     fn cond(c: &str) -> Condition {

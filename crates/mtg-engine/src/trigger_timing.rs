@@ -64,7 +64,7 @@ impl Clone for TriggerTiming {
 /// separate actions, each checked for triggers when it's done.
 pub fn is_sequencing(e: &Effect) -> bool {
     if let Effect::Seq(v) = e {
-        return !creates_tokens_together(v);
+        return !happens_together(v);
     }
     matches!(
         e,
@@ -102,6 +102,60 @@ pub fn creates_tokens_together(v: &[Effect]) -> bool {
                     | Effect::CreateTokenAttached { .. }
             )
         })
+}
+
+/// Whether a sequence is "~ deals 3 damage to target player and 3 damage to target
+/// creature": one instruction (one "deals") that the compiler splits into one damage
+/// effect per recipient. The source deals all that damage at the same time, as one event
+/// (CR 603.2c, 608.2c): a "whenever [a source] deals damage" ability triggers once.
+pub fn deals_damage_together(v: &[Effect]) -> bool {
+    let Some(Effect::DealDamage { source, .. }) = v.first() else {
+        return false;
+    };
+    // `Sel` has no equality; its debug form identifies it.
+    let source = format!("{source:?}");
+    v.len() > 1
+        && v.iter().all(
+            |e| matches!(e, Effect::DealDamage { source: s, .. } if format!("{s:?}") == source),
+        )
+}
+
+/// The instructions of several sentences (or spell abilities), in order. Separate
+/// sentences are separate instructions (CR 608.2c): "~ deals 2 damage to any target. ~
+/// deals 2 damage to you." deals damage twice, while one sentence's "~ deals 3 damage to A
+/// and 3 damage to B" deals it once, as one event ([`deals_damage_together`]; Blaze
+/// Commando's ruling counts "the number of times the word 'deals' appears"). Such a
+/// sentence stays a sequence of its own, and sentences that each deal damage from the same
+/// source are kept apart, so none is merged with its neighbours into one damage event.
+pub fn join_instructions(effects: Vec<Effect>) -> Effect {
+    if effects.len() < 2 {
+        return Effect::seq(effects);
+    }
+    let mut out = Vec::new();
+    for e in effects {
+        match e {
+            Effect::Seq(v) if deals_damage_together(&v) => out.push(Effect::Seq(v)),
+            e => match Effect::seq(vec![e]) {
+                Effect::Seq(v) => out.extend(v),
+                Effect::Noop => {}
+                e => out.push(e),
+            },
+        }
+    }
+    if deals_damage_together(&out) {
+        out = out.into_iter().map(|e| Effect::Seq(vec![e])).collect();
+    }
+    match out.len() {
+        0 => Effect::Noop,
+        1 => out.pop().expect("one element"),
+        _ => Effect::Seq(out),
+    }
+}
+
+/// Whether the elements of a sequence are one simultaneous event (see
+/// [`creates_tokens_together`] and [`deals_damage_together`]).
+pub fn happens_together(v: &[Effect]) -> bool {
+    creates_tokens_together(v) || deals_damage_together(v)
 }
 
 impl Game {

@@ -2110,6 +2110,11 @@ impl Game {
                 continue;
             }
             let ctx = Ctx::new(Some(src), ctl);
+            // CR 607.5a: a trigger condition with an undefined choice in it ("no
+            // permanents of the chosen color" when no color was chosen) never holds.
+            if crate::choices::condition_refers_to_undefined_choice(c, self.source_choices(&ctx)) {
+                continue;
+            }
             if self.eval_cond(c, &ctx) {
                 self.state_triggers_active.insert(key);
                 self.trigger_order += 1;
