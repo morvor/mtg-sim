@@ -94,7 +94,21 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
     let manual_ok = !NO_MANUAL.with(|c| c.get());
-    for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {
+    let blocks = crate::oracle_ext::group_blocks(split_abilities(&norm), ctx);
+    // The same blocks with gendered and plural self-references made neuter and singular,
+    // tried for a block that doesn't parse as written.
+    let neuter_norm = normalize_neuter(text, ctx);
+    let neuter_blocks = if neuter_norm == norm {
+        vec![]
+    } else {
+        crate::oracle_ext::group_blocks(split_abilities(&neuter_norm), ctx)
+    };
+    let neuter_blocks = if neuter_blocks.len() == blocks.len() {
+        neuter_blocks
+    } else {
+        vec![]
+    };
+    for (bi, block) in blocks.into_iter().enumerate() {
         // A genuinely unique ability written by hand (compile-first policy, see `cards`).
         if let Some(m) = manual_ok
             .then(|| crate::cards::lookup(ctx.full_name, ctx.face_index, &block))
@@ -106,12 +120,18 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
         }
         // A pronoun left without an antecedent, or an instruction to repeat a process
         // outside any process, means the text wasn't understood.
-        let parsed = parse_ability(&block, ctx).filter(|v| {
+        let understood = |v: &Vec<Ability>| {
             !v.iter().any(|a| {
                 patterns::oracle_hardening_referents::has_no_referent(a)
                     || crate::repeat_process::has_stray_repeat(a)
                     || patterns::filters_relational::unresolved(a)
             })
+        };
+        let parsed = parse_ability(&block, ctx).filter(understood).or_else(|| {
+            let alt = neuter_blocks.get(bi).filter(|b| **b != block)?;
+            parse_ability(alt, ctx)
+                .filter(understood)
+                .map(|v| v.into_iter().map(|a| with_text(a, &block)).collect())
         });
         match parsed {
             Some(mut abilities) => out.abilities.append(&mut abilities),
@@ -131,6 +151,15 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     }
     CARD_NAME.with(|r| *r.borrow_mut() = prev_name);
     out
+}
+
+/// `a` with the block text `text` (an ability parsed from another wording of its block
+/// keeps the block's own text).
+fn with_text(a: Ability, text: &str) -> Ability {
+    if a.text == text {
+        return a;
+    }
+    AbilityDef::with_link(a.kind.clone(), text, a.link)
 }
 
 /// Normalizes oracle text for parsing.
@@ -234,7 +263,14 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
     for r in SELF_REFS {
         s = replace_ci(&s, r, "~");
     }
-    // A legendary character's "he", "him", "her" (CR 201.5), a plural name's "they".
+    s
+}
+
+/// [`normalize`], with a legendary character's "he", "him" and "her" (CR 201.5) and a
+/// plural name's verbs and "they" (see `self_refs`) in their neuter singular forms: the
+/// text a block that doesn't parse as written is parsed from instead.
+pub fn normalize_neuter(text: &str, ctx: &CompileContext) -> String {
+    let mut s = normalize(text, ctx);
     if ctx.type_line.supertypes.contains(Supertype::Legendary) {
         s = self_refs::neuter_pronouns(&s);
     }

@@ -98,11 +98,16 @@ pub fn replace_self_name(s: &str, name: &str, subtype: bool) -> String {
             && ((before.is_some_and(|c| c == ' ')
                 && SUBTYPE_DETERMINERS.contains(&prev_word.as_str()))
                 || (rest.starts_with(' ') && SUBTYPE_NOUNS.contains(&next_word)));
-        // "Icingdeath, Frost Tongue": another name that starts with this one.
-        let other_name = rest
+        // "Icingdeath, Frost Tongue", "a card named Nissa's Chosen": another name that
+        // starts with this one.
+        let other_name = (rest
             .strip_prefix(", ")
             .is_some_and(|r| r.starts_with(|c: char| c.is_uppercase()))
-            && !rest.starts_with(", ~");
+            && !rest.starts_with(", ~"))
+            || rest
+                .strip_prefix("'s ")
+                .is_some_and(|r| r.starts_with(|c: char| c.is_uppercase()))
+            || s[..start].ends_with("named ");
         out.push_str(&s[i..start]);
         if before.is_some_and(is_word) || after.is_some_and(is_word) || as_subtype || other_name {
             out.push_str(name);
@@ -117,9 +122,10 @@ pub fn replace_self_name(s: &str, name: &str, subtype: bool) -> String {
 
 /// A word after "her" that makes it an object ("on her.", "attach her to", "her and"),
 /// not a possessive ("her power").
-const AFTER_OBJECT_HER: [&str; 22] = [
+const AFTER_OBJECT_HER: [&str; 32] = [
     "to", "into", "onto", "from", "on", "and", "or", "with", "this", "until", "for", "as", "at",
-    "if", "unless", "then", "where", "instead", "gains", "the", "a", "an",
+    "if", "unless", "then", "where", "instead", "gains", "the", "a", "an", "deal", "assign",
+    "attack", "block", "become", "fight", "gain", "lose", "enter", "get",
 ];
 
 /// Replaces a legendary character's gendered pronouns by the neuter ones (CR 201.5:
@@ -209,7 +215,16 @@ pub fn singular_self(s: &str) -> String {
             }
             let mut l = line.to_string();
             for (p, r) in VERBS {
-                l = l.replace(p, r);
+                // Not a bare infinitive ("you may have ~ deal 3 damage").
+                let mut out = String::new();
+                let mut rest = l.as_str();
+                while let Some(i) = rest.find(p) {
+                    out.push_str(&rest[..i]);
+                    out.push_str(if rest[..i].ends_with("have ") { p } else { r });
+                    rest = &rest[i + p.len()..];
+                }
+                out.push_str(rest);
+                l = out;
             }
             let mut out = String::new();
             let mut rest = l.as_str();

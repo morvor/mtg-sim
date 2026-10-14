@@ -9,11 +9,14 @@
 //! * [`face_up`]: "[permanents] can't be turned face up" (CR 708.7).
 //! * [`sacrifice_causes`]: "Spells and abilities your opponents control can't cause you
 //!   to sacrifice permanents" (CR 701.21).
+//! * [`caused_actions`]: "... can't cause you to discard cards", "... can't cause their
+//!   controller to search their library" (CR 701.9, 701.23).
 //! * [`payment`]: "Players can't pay life or sacrifice [permanents] to cast spells or
 //!   activate abilities" (CR 118.3, 119.4).
 //! * [`turns_taken`]: "your first, second, or third turn of the game".
 
 pub mod cant_be_copied;
+pub mod caused_actions;
 pub mod cleanup_damage;
 pub mod counters_remain;
 pub mod face_up;

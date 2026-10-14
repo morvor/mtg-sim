@@ -1066,6 +1066,11 @@ impl Game {
         if self.obj(card).zone != Zone::Hand(p) {
             return None;
         }
+        // "Spells and abilities your opponents control can't cause you to discard cards."
+        let cause = crate::rule_statics::caused_actions::discard_cause(self, source);
+        if crate::rule_statics::caused_actions::discard_forbidden(self, p, cause) {
+            return None;
+        }
         let owner = self.obj(card).owner;
         let new = self.move_object_ev(MoveEv {
             obj: card,

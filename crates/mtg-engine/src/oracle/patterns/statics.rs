@@ -1723,6 +1723,20 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
         }
         return m(vec![Modification::AllCreatureTypes]);
     }
+    // "is every land type in addition to its other types" (Omo, Queen of Vesuva): each
+    // land type of CR 205.3i.
+    if r == "every land type in addition to its other types" || r == "every land type" {
+        if !subj.lands {
+            return None;
+        }
+        let mut types: Vec<Subtype> = crate::types::subtype_lists()
+            .land
+            .iter()
+            .map(|t| Subtype::from(t.as_str()))
+            .collect();
+        types.sort();
+        return m(vec![Modification::AddSubtypes(types)]);
+    }
     if r == "every nonbasic land type" {
         // "~ is every nonbasic land type." (Planar Nexus): the land types of CR 205.3i
         // other than the basic ones; a land gets them, a nonland object can't (205.3d).

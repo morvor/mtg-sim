@@ -37,7 +37,7 @@ thread_local! {
 /// The verbs that start a predicate, in their singular and plural forms.
 const VERBS: &[&str] = &[
     "gets ", "get ", "gains ", "gain ", "has ", "have ", "loses ", "lose ", "becomes ",
-    "become ", "isn't ", "aren't ", "is no longer ", "are no longer ",
+    "become ", "isn't ", "aren't ", "is no longer ", "are no longer ", "can't have ",
 ];
 
 fn starts_with_verb(s: &str) -> bool {
@@ -469,7 +469,11 @@ fn names_linked_card(sel: &Sel) -> bool {
 fn base_pt_each_equal(s: &str, b: &mut Builder) -> Option<Value> {
     let r = s
         .strip_prefix("base power and toughness each equal to ")
-        .or_else(|| s.strip_prefix("base power and base toughness each equal to "))?;
+        .or_else(|| s.strip_prefix("base power and base toughness each equal to "))
+        // "becomes a Human Soldier creature with power and toughness each equal to the
+        // number of loyalty counters on him" (Gideon, Champion of Justice): its base
+        // power and toughness (layer 7b).
+        .or_else(|| s.strip_prefix("power and toughness each equal to "))?;
     let (v, rest) = crate::oracle::statics::parse_value_phrase(r, b)?;
     rest.trim().is_empty().then_some(v)
 }
@@ -625,11 +629,48 @@ pub(crate) fn predicate_mods(
             return isnt_mods(r);
         }
     }
+    // "can't have hexproof or shroud" (Arcane Lighthouse): they can't have or gain those
+    // abilities while the effect lasts (CR 613.1f, layer 6).
+    if let Some(r) = p.strip_prefix("can't have ") {
+        let mut out = Vec::new();
+        for k in r.split(" or ").flat_map(|x| x.split(", ")) {
+            out.push(Modification::CantHaveKeyword(
+                crate::keywords::KeywordKind::from_name(k.trim())?,
+            ));
+        }
+        return (!out.is_empty()).then_some(out);
+    }
     let r = p
         .strip_prefix("becomes ")
         .or_else(|| p.strip_prefix("become "))?;
     if let Some(m) = color_mods(r) {
         return Some(m);
+    }
+    // "a Treefolk creature with haste and base power and toughness equal to ~'s power
+    // and toughness" (Woodcaller Automaton): the object's power and toughness as the
+    // effect begins (CR 608.2h).
+    if let Some((head, w)) = r.split_once(" with ").filter(|(h, _)| !h.contains('~')) {
+        let (kws, obj) = match w.split_once(" and base power and toughness equal to ") {
+            Some((k, o)) => (Some(k), o),
+            None => (None, w.strip_prefix("base power and toughness equal to ").unwrap_or("")),
+        };
+        if let Some(o) = obj.strip_suffix("'s power and toughness") {
+            let saved = b.targets.len();
+            let (sel, rest) = object_ref(o, b)?;
+            if !rest.trim().is_empty() || b.targets.len() != saved || matches!(sel, Sel::None) {
+                b.targets.truncate(saved);
+                return None;
+            }
+            let mut m = type_predicate_mods(head, subj)?;
+            if let Some(k) = kws {
+                m.extend(keyword_mods(k)?);
+            }
+            m.push(Modification::SetPT(
+                Some(Value::PowerOf(Box::new(sel.clone()))),
+                Some(Value::ToughnessOf(Box::new(sel))),
+            ));
+            return Some(m);
+        }
     }
     let r = name_as_type(r, b)?;
     // "a 4/4 Spirit artifact creature that's no longer an Equipment"
@@ -1556,7 +1597,14 @@ fn still_a_card_type(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     else {
         return false;
     };
-    if !matches!(t, "enchantment" | "artifact") {
+    // "It's still a Cave land." (Cavernous Maw): a land with its land types.
+    let land_with_types = t.strip_suffix(" land").is_some_and(|ts| {
+        ts.split(' ').all(|w| {
+            crate::oracle::phrases::subtype_word(w)
+                .is_some_and(|st| subtype_kind(st.as_str()) == Some(SubtypeKind::Land))
+        })
+    });
+    if !matches!(t, "enchantment" | "artifact") && !land_with_types {
         return false;
     }
     let Some(mods) = last_modify(prev) else {
