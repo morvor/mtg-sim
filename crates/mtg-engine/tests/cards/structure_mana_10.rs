@@ -2,19 +2,12 @@
 //! that no other test exercised (see `docs/STRUCTURE_COVERAGE.md`).
 
 use super::structure_activated_2::{act, untapped};
+use super::structure_mana_2::{pool, pool_size};
 use super::structure_seed_common::*;
 use mtg_engine::decision::Answer;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::*;
-
-fn pool(t: &TestGame, p: PlayerId, m: ManaType) -> u32 {
-    t.g.player(p).mana_pool.count(m) as u32
-}
-
-fn pool_size(t: &TestGame, p: PlayerId) -> usize {
-    t.g.player(p).mana_pool.mana.len()
-}
 
 #[test]
 fn bog_initiate_filters_generic_mana_into_black() {

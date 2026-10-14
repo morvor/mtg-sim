@@ -4,6 +4,7 @@
 
 use super::structure_activated_2::{act, next_turn, shuffled, target_choices, untapped, with_p1p1};
 use super::structure_activated_6::entity_choices;
+use super::structure_activated_8::damage_sources;
 use super::structure_seed_common::*;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::events::Event;
@@ -13,22 +14,6 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::{CardType, Color, ColorSet};
 use mtg_engine::*;
-
-/// The sources and amounts of the damage dealt to `target` this turn.
-fn damage_sources(t: &TestGame, target: Entity) -> Vec<(ObjectId, u32)> {
-    t.g.turn_events
-        .iter()
-        .filter_map(|e| match e {
-            Event::Damage {
-                source,
-                target: tg,
-                amount,
-                ..
-            } if *tg == target => Some((*source, *amount)),
-            _ => None,
-        })
-        .collect()
-}
 
 /// The ids of `p`'s graveyard cards named `name`.
 fn in_yard(t: &TestGame, p: PlayerId, name: &str) -> Vec<ObjectId> {
@@ -95,7 +80,7 @@ fn stampeding_scurryfoot_exhausts_for_a_counter_and_an_elephant() {
 
 #[test]
 fn deathless_ancient_returns_by_tapping_three_vampires() {
-    cr!("602.2", "118.3", "602.2a");
+    cr!("602.2", "118.3", "113.6m");
     // "Tap three untapped Vampires you control: Return this card from your graveyard to
     // your hand."
     supported("Deathless Ancient");
@@ -244,7 +229,7 @@ fn whirlermaker_makes_a_flying_thopter() {
 
 #[test]
 fn bonebind_orator_exiles_itself_to_return_another_creature_card() {
-    cr!("602.2", "602.2a", "115.1", "118.3");
+    cr!("602.2", "113.6m", "115.1", "118.3");
     // "{3}{B}, Exile this card from your graveyard: Return another target creature card
     // from your graveyard to your hand."
     supported("Bonebind Orator");
@@ -653,7 +638,8 @@ fn archangel_elspeth_makes_a_lifelink_soldier() {
     assert_eq!(t.pt(s[0]), (1, 1));
     assert!(act(&mut t, P0, e, "lifelink", &[]).is_err(), "once per turn");
     // Its lifelink works.
-    t.g.objects[s[0].0 as usize].summoning_sick = false;
+    next_turn(&mut t);
+    t.advance_to(P0, Step::PrecombatMain);
     t.attack(&[(s[0], Entity::Player(P1))], &[]);
     assert_eq!((t.life(P0), t.life(P1)), (21, 19));
 }
@@ -826,6 +812,18 @@ fn visara_destroys_a_creature_that_cant_be_regenerated() {
         t.in_graveyard(P1, "Drudge Skeletons"),
         "the regeneration shield doesn't apply"
     );
+    // Without "can't be regenerated", the same shield saves it.
+    let mut t = TestGame::new(2);
+    let sk = t.battlefield(P1, "Drudge Skeletons");
+    t.lands(P1, "Swamp", 1);
+    act(&mut t, P1, sk, "regenerate", &[]).unwrap();
+    t.resolve_all();
+    t.lands(P0, "Swamp", 3);
+    let m = t.hand(P0, "Murder");
+    t.cast(P0, m).target(sk).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(sk), "regenerated");
+    assert!(t.obj_now(sk).tapped);
 }
 
 #[test]
@@ -879,7 +877,7 @@ fn icatian_infantry_gains_banding_until_end_of_turn() {
 
 #[test]
 fn birthing_boughs_makes_a_changeling_shapeshifter() {
-    cr!("602.2", "111.1", "702.73a", "700.8a");
+    cr!("602.2", "111.1", "702.73a", "700.8a", "604.3a", "613.1d", "613.1f");
     // "{4}, {T}: Create a 2/2 colorless Shapeshifter creature token with changeling."
     supported("Birthing Boughs");
     let mut t = TestGame::new(2);
@@ -902,6 +900,16 @@ fn birthing_boughs_makes_a_changeling_shapeshifter() {
     // defining ability) is a Rogue, Warrior or Wizard for the party (CR 700.8).
     let arch = t.battlefield(P0, "Archpriest of Iona");
     assert_eq!(t.pt(arch).0, 2, "the Cleric and the changeling token");
+    // Changeling the creating effect gave the token is a characteristic-defining ability
+    // (CR 604.3a): it applied in layer 4, so losing all abilities in layer 6 leaves the
+    // token every creature type (CR 613.1d, 613.1f).
+    t.lands(P0, "Island", 2);
+    let o = t.hand(P0, "Ovinize");
+    t.cast(P0, o).target(s[0]).go();
+    t.resolve_all();
+    assert!(!t.obj_now(s[0]).has_keyword(KeywordKind::Changeling));
+    assert!(t.obj_now(s[0]).chars.has_subtype("Goblin"));
+    assert_eq!(t.pt(s[0]), (1, 2), "base 0/1, still pumped by the Goblin King");
 }
 
 #[test]
@@ -1042,7 +1050,7 @@ fn bloodpyre_elemental_sacrifices_for_four_damage_as_a_sorcery() {
 
 #[test]
 fn frostwalla_snow_pump_once_each_turn() {
-    cr!("602.2", "107.4h", "602.5b", "611.2a", "514.2");
+    cr!("602.2", "107.4h", "611.2a", "514.2");
     // "{S}: This creature gets +2/+2 until end of turn. Activate only once each turn."
     supported("Frostwalla");
     let mut t = TestGame::new(2);
