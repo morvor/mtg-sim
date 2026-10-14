@@ -2062,6 +2062,16 @@ mod tests {
                         }
                     }
                     println!("S {c}: {:?}", bad);
+                    if std::env::var("HC_AST").is_ok() {
+                        if let Some(bad) = &bad {
+                            let k = parts.iter().position(|p| p == bad).unwrap_or(0);
+                            if k > 0 {
+                                let t = parts[..k].join(". ");
+                                let t = if t.ends_with('.') { t } else { format!("{t}.") };
+                                println!("  AST {:?}", crate::oracle::compile(&t, &ctx).abilities);
+                            }
+                        }
+                    }
                 }
             } else if let Some(c) = line.strip_prefix("U: ") {
                 let def = crate::card::card(c);
