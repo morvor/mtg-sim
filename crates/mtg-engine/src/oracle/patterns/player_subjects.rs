@@ -313,7 +313,8 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
                 split_word(r).0,
                 "discard" | "draw" | "mill" | "search" | "shuffle" | "sacrifice" | "pay"
                     | "investigate" | "scry" | "surveil" | "create"
-            );
+            ) || (matches!(split_word(r).0, "lose" | "gain")
+                && (r.ends_with(" life") || r.contains(" life ")));
             if p == "they "
                 && !players_only
                 && (b.group.is_some()

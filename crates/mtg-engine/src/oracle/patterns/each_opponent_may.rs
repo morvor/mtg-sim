@@ -181,7 +181,13 @@ mod tests {
         ));
         // Without "each opponent may", no opponent "does" anything.
         assert!(!compiles("Draw a card. For each opponent who does, you gain 2 life."));
+        // A choice nobody was given (each player draws).
         assert!(!compiles(
+            "Each player draws a card. For each opponent who does, you gain 2 life."
+        ));
+        // After "each player may", the opponents among the players who accepted (Noble
+        // Heritage).
+        assert!(compiles(
             "Each player may draw a card. For each opponent who does, you gain 2 life."
         ));
         // "Each player who searched a library this way" includes you only after you
