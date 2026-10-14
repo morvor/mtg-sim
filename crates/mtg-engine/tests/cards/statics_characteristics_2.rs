@@ -453,16 +453,23 @@ fn fires_of_invention_limits_spells_to_two_on_your_turn() {
     ruling!("Fires of Invention", "will look at the entire turn");
     assert_supported("Fires of Invention");
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Fires of Invention");
     t.lands(P0, "Mountain", 3);
-    for _ in 0..2 {
-        let b = t.hand(P0, "Lightning Bolt");
-        t.cast(P0, b).target(P1).go();
-        t.resolve();
-    }
+    // A spell cast before Fires of Invention was on the battlefield counts.
+    let b = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, b).target(P1).go();
+    t.resolve();
+    t.battlefield(P0, "Fires of Invention");
+    let b = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, b).target(P1).go();
+    t.resolve();
     let third = t.hand(P0, "Lightning Bolt");
     assert!(t.cast(P0, third).target(P1).try_go().is_err());
     assert_eq!(t.life(P1), 14);
+    // Not during an opponent's turn, even an instant.
+    t.set_step(P1, Step::PrecombatMain);
+    t.g.turn.number += 1;
+    t.g.turn.priority = Some(P0);
+    assert!(t.cast(P0, third).target(P1).try_go().is_err());
 }
 
 #[test]
@@ -526,6 +533,7 @@ fn nowhere_to_run_lets_you_target_hexproof_creatures_and_stops_ward() {
     t.lands(P0, "Mountain", 1);
     let bolt = t.hand(P0, "Lightning Bolt");
     t.cast(P0, bolt).target(warded).go();
+    t.settle();
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert!(!t.on_battlefield(warded));
@@ -540,13 +548,11 @@ fn detection_tower_ignores_hexproof_until_end_of_turn() {
     let tower = t.battlefield(P0, "Detection Tower");
     let hexproof = t.battlefield(P1, "Gladecover Scout");
     t.lands(P0, "Mountain", 2);
-    let bears = t.battlefield(P1, "Grizzly Bears");
     let bolt = t.hand(P0, "Lightning Bolt");
     // Without the effect, the hexproof creature isn't a legal target.
-    t.cast(P0, bolt).target(hexproof).go();
+    t.cast(P0, bolt).target(P1).go();
     assert!(!last_target_candidates(&t, P0).contains(&Entity::Object(hexproof)));
     t.resolve_all();
-    let _ = bears;
     t.activate(P0, tower, 1, &[]).unwrap();
     t.resolve_all();
     assert!(has_kw(&mut t, hexproof, KeywordKind::Hexproof));
@@ -593,7 +599,7 @@ fn omo_lands_with_everything_counters_are_every_land_type() {
 
 #[test]
 fn names_that_are_subtypes_pronouns_and_flavor_words() {
-    cr!("201.5", "207.2c", "207.2d");
+    cr!("201.5", "207.2d");
     for name in [
         "Gideon of the Trials",
         "Garruk Relentless",
@@ -893,13 +899,9 @@ fn new_blood_changes_a_creature_type_to_vampire() {
     assert_supported("New Blood");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
-    let bear_i = subtype_lists()
-        .creature
-        .iter()
-        .position(|x| x == "Bear")
-        .unwrap();
+    // "Replace which word?": the creature types on it are offered first (Bear); "With
+    // which word?" offers only Vampire.
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
-    let _ = bear_i;
     t.lands(P0, "Swamp", 4);
     t.battlefield(P0, "Vampire Interloper");
     let nb = t.hand(P0, "New Blood");
@@ -966,11 +968,20 @@ fn katabatic_winds_stops_flyers_tap_abilities() {
     assert!(t.activate(P0, birds, 0, &[]).is_err());
     assert!(t.activate(P0, elves, 0, &[]).is_ok());
     assert!(!t.g.obj(birds).tapped);
-    let growth = t.hand(P0, "Giant Growth");
     t.g.players[0].mana_pool = Default::default();
+    let growth = t.hand(P0, "Giant Growth");
+    // The tapped Elves can't pay; the Birds may not.
+    assert!(t.cast(P0, growth).target(elves).try_go().is_err());
+    assert!(!t.g.obj(birds).tapped);
     t.g.objects[elves.0 as usize].tapped = false;
     t.cast(P0, growth).target(elves).go();
+    assert!(t.g.obj(elves).tapped);
     assert!(!t.g.obj(birds).tapped);
+    // Creatures with flying can't attack.
+    let drake = t.battlefield(P0, "Wind Drake");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(drake, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 20);
 }
 
 #[test]
@@ -999,14 +1010,23 @@ fn captain_america_shield_counter_gives_hexproof() {
     cr!("702.11b", "702.11c");
     assert_supported("Captain America, Super-Soldier");
     let mut t = TestGame::new(2);
+    let hero = t.battlefield(P0, "Ms. Marvel, Kamala Khan");
+    let their_hero = t.battlefield(P1, "Ms. Marvel, Kamala Khan");
     let cap = t.battlefield(P0, "Captain America, Super-Soldier");
+    let player_hexproof =
+        |t: &TestGame| t.g.player(P0).has_mod(|m| matches!(m, ability::PlayerModification::Hexproof));
+    // Put onto the battlefield without entering through the replacement: no counter yet.
+    t.g.objects[cap.0 as usize].counters.remove("shield");
+    t.g.dirty = true;
+    assert!(!has_kw(&mut t, hero, KeywordKind::Hexproof));
+    assert!(!player_hexproof(&t));
     t.g.objects[cap.0 as usize].counters.insert("shield".into(), 1);
     t.g.dirty = true;
-    assert!(has_kw(&mut t, cap, KeywordKind::Hexproof) || {
-        t.g.recompute();
-        true
-    });
-    assert!(t.g.player(P0).has_mod(|m| matches!(m, ability::PlayerModification::Hexproof)));
+    assert!(has_kw(&mut t, hero, KeywordKind::Hexproof));
+    assert!(player_hexproof(&t));
+    // Other Heroes you control: not Captain America himself, nor an opponent's Hero.
+    assert!(!has_kw(&mut t, cap, KeywordKind::Hexproof));
+    assert!(!has_kw(&mut t, their_hero, KeywordKind::Hexproof));
 }
 
 #[test]

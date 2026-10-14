@@ -42,6 +42,17 @@ pub fn discard_forbidden(g: &Game, p: PlayerId, by: Option<PlayerId>) -> bool {
     active(g, CANT_CAUSE_YOU_TO_DISCARD).any(|c| c == p && g.are_opponents(c, by))
 }
 
+/// Whether `p` may discard cards to pay a cost paid with `ctx`: not when the resolving
+/// spell or ability asking for it ("... unless that player discards a card") can't cause
+/// `p` to discard cards. Costs of casting spells and activating abilities aren't caused by
+/// a spell or ability.
+pub fn may_discard_for_cost(g: &Game, p: PlayerId, ctx: &Ctx) -> bool {
+    let by = super::sacrifice_causes::cost_cause(ctx)
+        .filter(|c| c.obj.is_some())
+        .and_then(|c| c.by);
+    !discard_forbidden(g, p, by)
+}
+
 /// Whether `searcher` can't search `owner`'s library as `ctx`'s spell or ability
 /// instructs.
 pub fn search_forbidden(g: &Game, searcher: PlayerId, owner: PlayerId, ctx: &Ctx) -> bool {
