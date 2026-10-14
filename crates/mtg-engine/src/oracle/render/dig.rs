@@ -170,6 +170,10 @@ impl Renderer<'_> {
                     // "from among the milled cards" after milling.
                     let among = if self.milled {
                         "{alt:from among them|from among the milled cards}"
+                    } else if count.is_none()
+                        && self.this_way_of(from).is_some_and(|(v, _, _)| v == "revealed")
+                    {
+                        "{alt:from among them|revealed this way}"
                     } else {
                         "from among them"
                     };
