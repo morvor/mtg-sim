@@ -1174,3 +1174,49 @@ fn maarika_needs_excess_damage_dealt_to_that_creature_this_turn() {
         assert_eq!(left == 0, sacrifices, "{blocker}: {}", t.dump_log());
     }
 }
+
+fn treasures(t: &TestGame, p: PlayerId) -> usize {
+    t.g.permanents_controlled_by(p)
+        .into_iter()
+        .filter(|o| t.g.obj(*o).chars.has_subtype("Treasure"))
+        .count()
+}
+
+#[test]
+fn marut_makes_a_treasure_for_each_treasure_mana_spent_on_it() {
+    cr!("400.7d", "603.4");
+    assert_supported("Marut");
+    for (n_treasures, made) in [(2, 2), (0, 0)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        t.lands(P0, "Plains", 8 - n_treasures);
+        for _ in 0..n_treasures {
+            treasure(&mut t, P0);
+        }
+        let m = t.hand(P0, "Marut");
+        t.cast(P0, m).go();
+        t.resolve_all();
+        assert_eq!(t.named_on_battlefield("Marut").len(), 1, "{}", t.dump_log());
+        assert_eq!(treasures(&t, P0), made, "{n_treasures}: {}", t.dump_log());
+    }
+}
+
+#[test]
+fn hallowed_respite_checks_who_controls_the_returned_creature() {
+    cr!("608.2c", "400.7");
+    assert_supported("Hallowed Respite");
+    for (owner, counter) in [(P0, true), (P1, false)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let c = t.battlefield(owner, "Grizzly Bears");
+        t.lands(P0, "Plains", 1);
+        t.lands(P0, "Island", 1);
+        let hr = t.hand(P0, "Hallowed Respite");
+        t.cast(P0, hr).target(c).go();
+        t.resolve_all();
+        let b = t.named_on_battlefield("Grizzly Bears");
+        assert_eq!(b.len(), 1, "{}", t.dump_log());
+        assert_eq!(t.counters(b[0], "+1/+1"), counter as u32, "{}", t.dump_log());
+        assert_eq!(t.g.obj(b[0]).tapped, !counter);
+    }
+}

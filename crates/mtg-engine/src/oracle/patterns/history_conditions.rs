@@ -964,6 +964,19 @@ pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Opt
     {
         return Some(cond);
     }
+    // "Exile target creature, then return it to the battlefield under its owner's control.
+    // If it entered under your control, ...": the permanent the instruction just put onto
+    // the battlefield, under whose control it entered (it's checked right away).
+    if matches!(
+        c,
+        "it entered under your control" | "it entered the battlefield under your control"
+    ) && matches!(b.it, Sel::Var(vars::IT))
+    {
+        return Some(Condition::SelMatches(
+            b.it.clone(),
+            Filter::ControlledBy(PlayerRel::You),
+        ));
+    }
     if c.contains('~') || split_window(c).is_none() {
         return None;
     }
@@ -1454,6 +1467,47 @@ fn mana_spent(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
     };
     Some(cond)
 }
+
+/// "create a Treasure token for each mana from a Treasure spent to cast it" (Marut, in
+/// "When ~ enters, ..."): as many as that mana (CR 400.7d: the permanent knows what was
+/// spent to cast the spell it was).
+fn for_each_mana_from(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, r) = l.split_once(" for each mana from ")?;
+    let (kind, whose) = r.split_once(" spent to cast ")?;
+    let own = whose == "~" || (whose == "it" && self_trigger(b));
+    if !own {
+        return None;
+    }
+    let what = match kind {
+        "a treasure" => "source subtype:Treasure",
+        "a creature" | "creatures" => "source type:Creature",
+        _ => return None,
+    };
+    let saved = b.targets.len();
+    let e = crate::oracle::effects::parse_clause(head, b);
+    match e {
+        Some(Effect::CreateToken {
+            spec,
+            count: Value::Const(1),
+            controller,
+            tapped,
+            attacking,
+        }) => Some(Effect::CreateToken {
+            spec,
+            count: spent_value("self", what),
+            controller,
+            tapped,
+            attacking,
+        }),
+        _ => {
+            b.targets.truncate(saved);
+            None
+        }
+    }
+}
+
+inventory::submit! { super::EffectPattern { name: "history: [create a token] for each mana from [a kind] spent to cast it", priority: 900, parse: for_each_mana_from } }
 
 /// "Some of [group] [condition]": each condition about the group made about some object of
 /// it.
