@@ -68,8 +68,11 @@ impl Renderer<'_> {
     fn triggered_plain(&mut self, t: &TriggeredAbility) -> String {
         let attack = format!("{:?}", t.trigger).contains("PlayerAttack");
         let saved = std::mem::replace(&mut self.attack_trigger, attack);
+        let pair = super::block_pairs::is_block_pair(&t.trigger);
+        let saved_pair = std::mem::replace(&mut self.block_pair_trigger, pair);
         let s = self.triggered_plain_inner(t);
         self.attack_trigger = saved;
+        self.block_pair_trigger = saved_pair;
         s
     }
 

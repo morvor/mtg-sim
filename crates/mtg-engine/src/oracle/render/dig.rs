@@ -179,6 +179,17 @@ impl Renderer<'_> {
                     } else {
                         "from among them"
                     };
+                    // "You may put one of them back on top of your library": the cards looked
+                    // at came from the top of that library.
+                    if !*reveal
+                        && what == "a card"
+                        && among == "from among them"
+                        && d.starts_with("on top of ")
+                    {
+                        return format!(
+                            "{may}put {{alt:a card from among them|one of them back}} {d}"
+                        );
+                    }
                     if d.is_empty() {
                         format!("{may}{verb} {what} {among}")
                     } else {

@@ -554,7 +554,11 @@ impl Renderer<'_> {
                 np.post.push(format!("{w} {v}"));
             }
             Filter::AttachedToAnyOf(s) => {
-                let w = self.sel(s, Case::Obj);
+                // "attached to a creature": attached to any one of them.
+                let w = match s.as_ref() {
+                    Sel::All(f) => self.noun_det(f, Det::A),
+                    _ => self.sel(s, Case::Obj),
+                };
                 np.post.push(format!("attached to {w}"));
             }
             // "with toughness greater than its power": a value of the object itself
@@ -778,7 +782,11 @@ impl Renderer<'_> {
                 np.kind.get_or_insert("card");
             }
             // "for each permanent destroyed this way".
-            Filter::In(s) if self.this_way_of(s).is_some() => {
+            Filter::In(s)
+                if self.this_way_of(s).is_some()
+                    && !(self.milled
+                        && matches!(s.as_ref(), Sel::Var(v) if *v == crate::ability::vars::IT)) =>
+            {
                 let (verb, card, ty) = self.this_way_of(s).unwrap_or(("", false, None));
                 np.post.push(format!("{verb} this way"));
                 if let (Some(t), true) = (ty, np.types.is_empty()) {
@@ -1364,6 +1372,10 @@ impl Renderer<'_> {
             (Some(z), owner) if !matches!(z, ZoneKind::Battlefield | ZoneKind::Stack) => {
                 s.push(' ');
                 s.push_str(&self.zone_phrase(z, owner, num));
+            }
+            // "a creature you control but don't own".
+            (_, Some(PlayerRel::NotYou)) if s.ends_with(" you control") => {
+                s.push_str(" {alt:but don't own|you don't own}");
             }
             (_, Some(o)) => {
                 s.push(' ');

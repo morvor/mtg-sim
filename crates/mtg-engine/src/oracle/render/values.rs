@@ -74,7 +74,16 @@ impl Renderer<'_> {
             }
             Value::ManaValueOf(s) => {
                 let s = self.sel(s, Case::Poss);
-                format!("{s} mana value")
+                // "its mana value" / "the mana value of the discarded card".
+                let of = match s.as_str() {
+                    "its" => Some("it".to_string()),
+                    "their" => Some("them".to_string()),
+                    _ => None,
+                };
+                match of {
+                    Some(o) => format!("{{alt:{s} mana value|the mana value of {o}}}"),
+                    None => format!("{s} mana value"),
+                }
             }
             Value::LoyaltyOf(s) => {
                 let s = self.sel(s, Case::Poss);
@@ -969,8 +978,8 @@ impl Renderer<'_> {
             // "If it's not their turn" (the active player's turn, CR 102.1).
             Condition::PlayerMatches(p, PlayerFilter::Active) if !matches!(p, PlayerRef::You) => {
                 let poss = self.player(p, Case::Poss);
-                let poss = if poss.starts_with("{alt:") {
-                    "their".to_string()
+                let poss = if poss.starts_with("{alt:") || poss == "their" {
+                    "{alt:their|that player's}".to_string()
                 } else {
                     poss
                 };
@@ -1264,6 +1273,18 @@ impl Renderer<'_> {
                         }
                     }
                 }
+            }
+        }
+        // "you have at least 7 life more than your starting life total".
+        if let PlayerFilter::Life(Cmp::Ge, Value::Sum(xs)) = pf {
+            if let [Value::StartingLife, Value::Const(n)] = xs.as_slice() {
+                let n = number_word(*n);
+                let life = format!("at least {n} life more than your starting life total");
+                return if negated {
+                    format!("doesn't have {life}")
+                } else {
+                    format!("{have} {life}")
+                };
             }
         }
         match pf {

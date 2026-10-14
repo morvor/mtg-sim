@@ -273,6 +273,24 @@ impl Renderer<'_> {
                     s.push_str(" a single player owns");
                 }
             }
+            // "two target creatures controlled by the same opponent".
+            Some(TargetGroup::SameController)
+                if s.contains(" {alt:an opponent controls|your opponents control}")
+                    || s.ends_with(" your opponents control")
+                    || s.ends_with(" an opponent controls") =>
+            {
+                for c in [
+                    " {alt:an opponent controls|your opponents control}",
+                    " your opponents control",
+                    " an opponent controls",
+                ] {
+                    if let Some(head) = s.strip_suffix(c) {
+                        s = head.to_string();
+                        break;
+                    }
+                }
+                s.push_str(" {alt:controlled by the same opponent|a single opponent controls}")
+            }
             Some(TargetGroup::SameController) => {
                 s.push_str(" {alt:a single player controls|controlled by the same player}")
             }
@@ -581,6 +599,10 @@ impl Renderer<'_> {
             // Another object while "it" is the object itself (named again since the
             // trigger condition): cards say "that creature" (`that-object`, which matches
             // only that wording, see `compare::token_eq`).
+            // "the other creature" of a block.
+            Sel::TriggerObject if self.block_pair_trigger => {
+                self.block_pair_other(case).unwrap_or_default()
+            }
             Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell
                 if self.self_salient && !self.other_salient && !self.trigger_is_self =>
             {
@@ -740,6 +762,17 @@ impl Renderer<'_> {
             Sel::AtRandom { filter, count, .. } => {
                 let det = self.det_for(count);
                 let s = self.noun_det(filter, det);
+                // "a card at random from your graveyard".
+                if let Some((head, zone)) = s.split_once(" in your ") {
+                    if !head.contains('{') && !zone.contains(' ') {
+                        return decline(
+                            format!(
+                                "{{alt:{s} chosen at random|{head} at random from your {zone}}}"
+                            ),
+                            case,
+                        );
+                    }
+                }
                 decline(format!("{s} chosen at random"), case)
             }
             Sel::Linked => decline("each card exiled with ~it".into(), case),
@@ -778,6 +811,9 @@ impl Renderer<'_> {
             Sel::CreatorLinked => decline("the exiled card".into(), case),
             Sel::ExiledWithCardsNamed(n) => {
                 decline(format!("a card you exiled with cards named {n}"), case)
+            }
+            Sel::Union(v) if self.block_pair_both(v, case).is_some() => {
+                self.block_pair_both(v, case).unwrap_or_default()
             }
             Sel::Union(v) => {
                 let mut parts: Vec<String> = v.iter().map(|x| self.sel(x, Case::Obj)).collect();
@@ -1169,6 +1205,16 @@ impl Renderer<'_> {
             PlayerFilter::Or(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.player_quality(x)).collect();
                 join_list(&parts, "or")
+            }
+            // "Each opponent discards a card. ... each opponent who can't": who owns none
+            // of the cards discarded this way. Discarding is mandatory, so a player who
+            // discarded nothing couldn't (CR 701.9a).
+            PlayerFilter::Not(x)
+                if matches!(x.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(),
+                    PlayerRef::OwnerOf(s) if matches!(s.as_ref(), Sel::All(Filter::In(v))
+                        if matches!(v.as_ref(), Sel::Var(crate::discard_rules::DISCARDED))))) =>
+            {
+                "who {alt:can't|didn't discard a card this way}".into()
             }
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);
