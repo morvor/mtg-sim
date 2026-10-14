@@ -619,7 +619,7 @@ impl Game {
         let rm: Vec<u32> = self
             .rule_effects
             .iter()
-            .filter(|e| gone(&e.duration, e.source, e.controller, self))
+            .filter(|e| self.rule_effect_expired(&e.duration, e.source, e.controller, &e.objects))
             .map(|e| e.id)
             .collect();
         let pm: Vec<u32> = self
@@ -694,6 +694,28 @@ impl Game {
             }),
             Duration::WhileCondition(c) => !self.eval_cond(c, &Ctx::new(source, controller)),
             _ => false,
+        }
+    }
+
+    /// [`Self::effect_expired`] for a rule effect locked to `objects`: a condition about
+    /// the objects it applies to ("for as long as it remains tapped") is checked for them.
+    pub(crate) fn rule_effect_expired(
+        &self,
+        d: &Duration,
+        source: Option<ObjectId>,
+        controller: PlayerId,
+        objects: &Option<Vec<ObjectId>>,
+    ) -> bool {
+        match (d, objects) {
+            (Duration::WhileCondition(c), Some(v)) => {
+                let mut ctx = Ctx::new(source, controller);
+                ctx.set_var(
+                    vars::AFFECTED,
+                    v.iter().map(|o| Entity::Object(*o)).collect(),
+                );
+                !self.eval_cond(c, &ctx)
+            }
+            _ => self.effect_expired(d, source, controller),
         }
     }
 

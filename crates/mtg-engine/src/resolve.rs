@@ -755,13 +755,15 @@ impl Game {
                 restriction,
                 duration,
             } => {
-                // CR 611.2b: a "for as long as" duration that already ended.
-                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                let objects = self.lock_restriction_objects(restriction, ctx);
+                // CR 611.2b: a "for as long as" duration that already ended (one about the
+                // objects it applies to, "for as long as it remains tapped", is checked
+                // for them).
+                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects) {
                     return;
                 }
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
-                let objects = self.lock_restriction_objects(restriction, ctx);
                 self.rule_effects.push(RuleEffect {
                     id,
                     source: ctx.source,
@@ -2641,6 +2643,10 @@ impl Game {
             if filter_references_specific(f) {
                 *f = Filter::Any;
             } else {
+                // "Creatures with power less than or equal to that number can't block this
+                // turn": the amount is fixed as the effect begins (CR 608.2h), the class
+                // isn't (CR 611.2c).
+                self.lock_filter_amounts(f, ctx);
                 // "Creatures target player controls don't untap ...": the objects that
                 // player controls, whichever they are later.
                 *f = self.bind_target_players(f, ctx);
@@ -2666,6 +2672,7 @@ impl Game {
                 if filter_references_specific(f) {
                     *f = Filter::Objects(self.named_objects(f, ctx));
                 } else {
+                    self.lock_filter_amounts(f, ctx);
                     // "creatures that player controls": the players as the effect begins.
                     *f = self.bind_target_players(f, ctx);
                 }
