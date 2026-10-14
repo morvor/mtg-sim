@@ -143,11 +143,25 @@ fn each_opponent_chooses_in_turn_order_each_repetition() {
     assert_eq!(t.life(P1), 17);
     assert_eq!(t.life(P2), 14);
     assert!(t.on_battlefield(b2));
+
+    // The actions of one repetition happen together: P1's Falkenrath Noble ("Whenever
+    // this creature or another creature dies") sacrificed by P1 sees the Grizzly Bears P2
+    // sacrifices in the same repetition.
+    supported("Falkenrath Noble");
+    let mut t = TestGame::new(3);
+    let noble = t.battlefield(P1, "Falkenrath Noble");
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    sacrifice(&mut t, P1, noble);
+    sacrifice(&mut t, P2, bears);
+    hailfire(&mut t, 1);
+    t.settle();
+    assert!(!t.on_battlefield(noble) && !t.on_battlefield(bears));
+    assert_eq!(crate::r_s25_common::abilities_from(&t, noble).len(), 2);
 }
 
 #[test]
 fn two_headed_giant_both_opponents_choose_each_time() {
-    cr!("810.7", "101.4");
+    cr!("810.9", "101.4");
     ruling!(
         "Torment of Hailfire",
         "In a Two-Headed Giant game, Torment of Hailfire causes both opponents to sacrifice a nonland permanent, discard a card, or lose 3 life X times. Your opponents can choose the same torment or different ones each time."

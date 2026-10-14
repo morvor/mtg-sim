@@ -274,3 +274,63 @@ fn the_controller_sees_what_the_player_sees_but_not_their_sideboard() {
     assert!(!t.in_hand(P1, "Lava Spike"));
     assert_eq!(t.zone(outside), Zone::Outside(P1));
 }
+
+#[test]
+fn the_second_target_is_another_player() {
+    cr!("601.2c");
+    supported("Cruel Entertainment");
+    let mut t = TestGame::new(2);
+    lands_for_cost(&mut t, P0, "Cruel Entertainment");
+    let ce = t.hand(P0, "Cruel Entertainment");
+    t.answer_targets(P0, &[pl(P1)]);
+    t.answer_targets(P0, &[pl(P1)]);
+    let r = t.cast(P0, ce).try_go();
+    t.clear_answers();
+    if let Ok(s) = r {
+        let targets = crate::r_s25_common::targets_of(&t, s);
+        assert_eq!(targets.len(), 2, "{targets:?}");
+        assert_ne!(targets[0], targets[1], "the same player twice: {targets:?}");
+    }
+}
+
+#[test]
+fn an_illegal_target_controls_nobody_and_is_controlled_by_nobody() {
+    cr!("608.2b");
+    supported("Cruel Entertainment");
+    supported("Leyline of Sanctity");
+    let mut t = TestGame::new(3);
+    lands_for_cost(&mut t, P0, "Cruel Entertainment");
+    let ce = t.hand(P0, "Cruel Entertainment");
+    t.answer_targets(P0, &[pl(P1)]);
+    t.answer_targets(P0, &[pl(P2)]);
+    t.cast(P0, ce).go();
+    t.clear_answers();
+    // P2 gains hexproof before it resolves: P2 is an illegal target.
+    t.battlefield(P2, "Leyline of Sanctity");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Cruel Entertainment"));
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(decider(&t.g, P1), P1, "P2, an illegal target, doesn't control P1");
+    t.advance_to(P2, Step::Upkeep);
+    assert_eq!(decider(&t.g, P2), P2, "P2 isn't controlled either");
+}
+
+#[test]
+fn the_last_effect_on_a_player_is_the_one_that_works() {
+    cr!("723.1a");
+    ruling!(
+        "Cruel Entertainment",
+        "Multiple player-controlling effects that affect the same player overwrite each other. The last one to be created is the one that works."
+    );
+    // First: P1 and P2 control each other. Then: P0 and P2 control each other. P2's next
+    // turn is controlled by P0 (the later effect); P1's by P2 (not overwritten).
+    let mut t = TestGame::new(3);
+    entertain(&mut t, P1, P2);
+    entertain(&mut t, P0, P2);
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(decider(&t.g, P1), P2);
+    t.advance_to(P2, Step::Upkeep);
+    assert_eq!(decider(&t.g, P2), P0);
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(decider(&t.g, P0), P2);
+}

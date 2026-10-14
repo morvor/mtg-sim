@@ -1,5 +1,5 @@
 //! Rulings batch P109 — putting several lands onto the battlefield: values fixed as the
-//! ability resolves (CR 608.2h), "up to" and "any number" choices (CR 107.1c, 701.23d),
+//! ability resolves (CR 608.2h), "up to" and "any number" choices (CR 107.1c, 701.23b),
 //! names of double-faced cards in the library (CR 712.8a, 201.2), and additional land
 //! plays (CR 305.2).
 
@@ -89,7 +89,7 @@ fn summer_bloom_lets_you_play_three_more_lands_normally() {
 
 #[test]
 fn genesis_wave_may_put_nothing_onto_the_battlefield() {
-    cr!("107.1c", "701.20a");
+    cr!("107.1c");
     ruling!(
         "Genesis Wave",
         "You don't have to put permanent cards revealed this way onto the battlefield if you choose not to, regardless of their mana values."
@@ -137,7 +137,7 @@ fn patron_of_the_moon_puts_zero_one_or_two_lands() {
 
 #[test]
 fn omenpath_journey_lands_with_different_names() {
-    cr!("701.23d", "201.2", "712.8a");
+    cr!("701.23b", "201.2", "712.8a");
     ruling!(
         "Omenpath Journey",
         "You may search your library for only one land card and exile it, if you like."

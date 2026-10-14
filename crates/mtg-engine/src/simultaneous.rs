@@ -13,6 +13,9 @@
 //!   how they enter are made only then, in APNAP order (CR 616.1);
 //! * the permanents they sacrifice are sacrificed together (CR 701.21a);
 //! * the cards they discard are discarded once all of them have chosen;
+//! * "[effect] unless they pay [life / sacrifice ... / discard ...]": each decides whether
+//!   to pay and chooses what to pay with, then the payments are made with the others'
+//!   actions (CR 101.4, 118.12; Killing Wave, Torment of Hailfire);
 //! * damage dealt to each of them is dealt at once, so a source with lifelink causes one
 //!   life gain event (CR 120.3f, 608.2f);
 //! * a search: each searches, then the cards found are moved together;
@@ -626,10 +629,17 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
             then,
             otherwise,
         } => {
-            life_amount(cost).is_some()
+            let payers = g.eval_players(who, ctx);
+            // "Each opponent loses 3 life unless that player sacrifices a nonland
+            // permanent or discards a card" (Torment of Hailfire): each player chooses
+            // what to sacrifice or discard, then it's done together (CR 101.4).
+            let own_objects = choice_cost(cost).is_some() && p.is_some_and(|p| payers == vec![p]);
+            (life_amount(cost).is_some() || own_objects)
                 && matches!(**then, Effect::Noop)
-                && g.eval_players(who, ctx).len() == 1
-                && plannable(g, otherwise, ctx, p)
+                && payers.len() == 1
+                // "... loses 3 life unless ...": the amount is fixed as it's planned.
+                && (plannable(g, otherwise, ctx, p)
+                    || matches!(**otherwise, Effect::LoseLife { .. } | Effect::GainLife { .. }))
         }
         Effect::Search { who, whose, .. } => {
             p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
@@ -644,6 +654,73 @@ fn life_amount(cost: &Cost) -> Option<Value> {
     match (&cost.mana, cost.parts.as_slice()) {
         (None, [CostPart::PayLife(v)]) => Some(v.clone()),
         _ => None,
+    }
+}
+
+/// A cost that is only sacrificing or discarding chosen objects: its one part.
+fn choice_cost(cost: &Cost) -> Option<&CostPart> {
+    match (&cost.mana, cost.parts.as_slice()) {
+        (None, [part @ (CostPart::Sacrifice { .. } | CostPart::Discard { random: false, .. })]) => {
+            Some(part)
+        }
+        _ => None,
+    }
+}
+
+/// `q`'s choice of what to sacrifice or discard to pay `part` (see [`choice_cost`]), as
+/// paying it would choose (`Game::pay_cost`), made now and performed with the other
+/// players' actions.
+fn plan_choice_cost(g: &mut Game, q: PlayerId, part: &CostPart, ctx: &Ctx) -> Plan {
+    match part {
+        CostPart::Sacrifice { filter, count } => {
+            let n = g.eval_value(count, ctx).max(0) as u32;
+            let cands: Vec<ObjectId> = g
+                .objects_matching(filter, ctx)
+                .into_iter()
+                .filter(|o| g.obj(*o).controller == q && g.may_sacrifice_for_cost(*o, ctx))
+                .collect();
+            let pick = crate::target_groups::choose_together(
+                g,
+                q,
+                ctx.source,
+                "Choose permanents to sacrifice (cost)",
+                filter,
+                cands,
+                n,
+                n,
+                ctx,
+            );
+            g.record_apnap_choice(q, pick.clone());
+            Plan::Sacrifice {
+                what: pick.into_iter().map(|o| (o, q)).collect(),
+                chosen: false,
+            }
+        }
+        CostPart::Discard { filter, count, .. } => {
+            let n = g.eval_value(count, ctx).max(0) as u32;
+            let cands: Vec<ObjectId> = g
+                .player(q)
+                .hand
+                .iter()
+                .copied()
+                .filter(|c| crate::draw_rules::usable_for_cost(g, *c, filter, ctx))
+                .collect();
+            let cards = crate::target_groups::choose_together(
+                g,
+                q,
+                ctx.source,
+                "Choose cards to discard (cost)",
+                filter,
+                cands,
+                n,
+                n,
+                ctx,
+            );
+            // CR 101.4a: cards chosen in a hand stay face down until discarded.
+            g.record_apnap_choice(q, cards.clone());
+            Plan::Discard { player: q, cards }
+        }
+        _ => Plan::Nothing,
     }
 }
 
@@ -897,6 +974,27 @@ fn plan(
             otherwise,
             ..
         } if plannable(g, e, ctx, p) => {
+            if let (Some(q), Some(part)) = (g.eval_player(who, ctx), choice_cost(cost)) {
+                let can = !crate::multiplayer::cant_pay(g, q)
+                    && crate::entry_costs::can_pay(g, q, cost, ctx);
+                let pays = can
+                    && g.ask_yes_no(
+                        q,
+                        ctx.source,
+                        &format!("Pay {}?", crate::resolve::describe_cost(cost)),
+                        false,
+                    );
+                ctx.prev_happened = pays;
+                return if pays {
+                    plan_choice_cost(g, q, part, ctx)
+                } else {
+                    // CR 732.6: declining the [B] of "[A] unless [B]".
+                    if can {
+                        crate::shortcuts::declined_unless(g);
+                    }
+                    plan(g, otherwise, ctx, p, earlier)
+                };
+            }
             let (Some(q), Some(n)) = (g.eval_player(who, ctx), life_amount(cost)) else {
                 return Plan::Nothing;
             };
