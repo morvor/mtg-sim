@@ -1223,13 +1223,16 @@ impl Game {
                 crate::keyword_impls::phase_out(self, objs);
             }
             Effect::TurnFaceUp { what } => {
+                // "Turn ~ face up. If you can't, ..." (CR 609.3).
+                let mut turned = false;
                 for o in self.resolve_objects(what, ctx) {
-                    if self.obj(o).zone == Zone::Exile {
-                        crate::facedown::turn_exiled_face_up(self, o);
+                    turned |= if self.obj(o).zone == Zone::Exile {
+                        crate::facedown::turn_exiled_face_up(self, o)
                     } else {
-                        crate::facedown::turn_face_up(self, o, false);
-                    }
+                        crate::facedown::turn_face_up(self, o, false)
+                    };
                 }
+                ctx.prev_happened = turned;
             }
             Effect::TurnFaceDown { what } => {
                 let mut turned = Vec::new();
