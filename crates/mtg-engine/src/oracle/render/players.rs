@@ -933,6 +933,17 @@ impl Renderer<'_> {
                 let p = self.player(p, Case::Poss);
                 decline(format!("the top card of {p} graveyard"), case)
             }
+            Sel::BottomOfLibrary(p, n) => {
+                let p = self.player(p, Case::Poss);
+                let s = match n {
+                    Value::Const(1) => format!("the bottom card of {p} library"),
+                    other => {
+                        let v = self.value(other);
+                        format!("the bottom {v} cards of {p} library")
+                    }
+                };
+                decline(s, case)
+            }
             Sel::TopOfLibrary(p, n) => {
                 let p = self.player(p, Case::Poss);
                 let s = match n {

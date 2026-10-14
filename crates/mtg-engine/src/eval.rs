@@ -815,6 +815,10 @@ impl Game {
                 .iter()
                 .filter_map(|e| e.object())
                 .all(|a| crate::attach::can_attach(self, a, Entity::Object(id))),
+            Filter::CouldAttachTo(sel) => {
+                let to = self.eval_sel(sel, ctx);
+                !to.is_empty() && to.iter().all(|e| crate::attach::can_attach(self, id, *e))
+            }
             Filter::Enchanted => self
                 .attachments_of(Entity::Object(id))
                 .iter()
@@ -1276,6 +1280,21 @@ impl Game {
                 self.eval_players(r, ctx)
                     .into_iter()
                     .flat_map(|p| crate::library::top_cards(self, p, k as u32))
+                    .map(Entity::Object)
+                    .collect()
+            }
+            Sel::BottomOfLibrary(r, n) => {
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                self.eval_players(r, ctx)
+                    .into_iter()
+                    .flat_map(|p| {
+                        self.player(p)
+                            .library
+                            .iter()
+                            .take(k)
+                            .copied()
+                            .collect::<Vec<_>>()
+                    })
                     .map(Entity::Object)
                     .collect()
             }

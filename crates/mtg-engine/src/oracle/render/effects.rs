@@ -5856,7 +5856,7 @@ impl Renderer<'_> {
                 _ => None,
             },
             Sel::All(f) | Sel::Choose { filter: f, .. } => f.zone(),
-            Sel::TopOfLibrary(..) => Some(ZoneKind::Library),
+            Sel::TopOfLibrary(..) | Sel::BottomOfLibrary(..) => Some(ZoneKind::Library),
             _ => None,
         }
     }
@@ -7396,7 +7396,7 @@ pub(crate) fn is_plural_sel(s: &Sel) -> bool {
     match s {
         Sel::All(_) | Sel::TriggerObjects | Sel::Linked | Sel::Union(_) | Sel::AllTargets => true,
         Sel::Choose { count, .. } => !matches!(count, Value::Const(1)),
-        Sel::TopOfLibrary(_, n) => !matches!(n, Value::Const(1)),
+        Sel::TopOfLibrary(_, n) | Sel::BottomOfLibrary(_, n) => !matches!(n, Value::Const(1)),
         _ => false,
     }
 }
