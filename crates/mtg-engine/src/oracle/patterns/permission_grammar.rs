@@ -81,6 +81,8 @@ pub enum From {
     AnyGraveyard,
     /// "from your hand, from your graveyard, or from among cards you own in exile".
     HandGraveyardOwnedExile,
+    /// "from each opponent's graveyard": one card from each.
+    EachOpponentGraveyard,
 }
 
 /// A parsed permission phrase.
@@ -500,6 +502,7 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
     for (p, z) in [
         (" from your graveyard", From::Graveyard),
         (" from the top of your graveyard", From::GraveyardTop),
+        (" from each opponent's graveyard", From::EachOpponentGraveyard),
         (" from any graveyard", From::AnyGraveyard),
         (" from exile", From::Exile),
         (" from the top of your library", From::LibraryTop),
@@ -1296,6 +1299,16 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
             p.zone_filter.clone()?,
         ]),
         From::LibraryTop => Filter::In(Box::new(Sel::TopOfLibrary(PlayerRef::You, Value::c(1)))),
+        // "a spell from each opponent's graveyard": one from each, in turn (below).
+        From::EachOpponentGraveyard => {
+            if !single || p.lands {
+                return None;
+            }
+            Filter::and(vec![
+                Filter::InZone(ZoneKind::Graveyard),
+                Filter::OwnedBy(PlayerRel::Iterated),
+            ])
+        }
         From::HandGraveyardOwnedExile => Filter::and(vec![
             Filter::Or(vec![
                 Filter::InZone(ZoneKind::Hand),
@@ -1350,6 +1363,15 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
         },
         None => cast,
     };
+    if p.from == Some(From::EachOpponentGraveyard) {
+        if terms.spend_any_type {
+            return None;
+        }
+        return Some(Effect::ForEachPlayer {
+            who: PlayerRef::EachOpponent,
+            effect: Box::new(cast),
+        });
+    }
     // "..., and mana of any type can be spent to cast that spell" (CR 118.14): for the
     // cards it may be cast from among.
     if terms.spend_any_type {
@@ -1563,7 +1585,9 @@ fn class_permission_from(
             }
             (ZoneKind::Exile, false, Filter::and(v))
         }
-        From::AmongReferent | From::HandGraveyardOwnedExile => return None,
+        From::AmongReferent | From::HandGraveyardOwnedExile | From::EachOpponentGraveyard => {
+            return None
+        }
     };
     // Spells cast from the hand "without paying their mana costs" are offered that cost
     // by `casting.rs`; nothing else changes how they're cast from there.
@@ -2092,6 +2116,19 @@ fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             return true;
         }
     }
+    // "you may cast a spell from each opponent's graveyard ...": each spell cast.
+    let prev = match prev {
+        Effect::ForEachPlayer { effect, .. } if ends_casting(effect) => effect.as_mut(),
+        Effect::Seq(v)
+            if matches!(v.last(), Some(Effect::ForEachPlayer { effect, .. }) if ends_casting(effect)) =>
+        {
+            match v.last_mut() {
+                Some(Effect::ForEachPlayer { effect, .. }) => effect.as_mut(),
+                _ => return false,
+            }
+        }
+        other => other,
+    };
     if ends_casting(prev) {
         let mut filter = Filter::In(Box::new(Sel::Var(vars::IT)));
         if let Some(q) = quality {
@@ -2101,7 +2138,8 @@ fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             def: ReplacementDef {
                 event: ReplacementEvent::ZoneChange {
                     filter,
-                    from: None,
+                    // (Only a spell: "it" may still be the cards if none was cast.)
+                    from: Some(ZoneKind::Stack),
                     to: Some(ZoneKind::Graveyard),
                 },
                 action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),

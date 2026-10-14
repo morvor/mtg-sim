@@ -119,3 +119,63 @@ fn ziatoras_envoy_plays_a_land_from_the_top() {
     assert_eq!(t.named_on_battlefield("Forest").len(), 1);
     assert_eq!(t.zone(t.g.current(land)), Zone::Battlefield);
 }
+
+#[test]
+fn jadzi_casts_the_revealed_card_for_one_mana() {
+    cr!("118.9", "608.2g");
+    assert_supported(&["Jadzi, Oracle of Arcavios // Journey to the Oracle"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Jadzi, Oracle of Arcavios // Journey to the Oracle");
+    t.lands(P0, "Island", 2);
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Craw Wurm");
+    let opt = t.hand(P0, "Opt");
+    // Craw Wurm is revealed as Opt is cast (the trigger resolves first).
+    t.answer_yes(P0, true);
+    t.cast(P0, opt).go();
+    t.resolve_all();
+    // Craw Wurm ({4}{G}{G}) cast for {1}: both Islands are tapped (Opt and the {1}).
+    assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
+}
+
+#[test]
+fn infamous_cruelclaw_casts_by_discarding_a_card() {
+    cr!("118.9", "608.2g");
+    assert_supported(&["The Infamous Cruelclaw"]);
+    let mut t = TestGame::new(2);
+    let c = t.battlefield(P0, "The Infamous Cruelclaw");
+    let land = t.hand(P0, "Island");
+    t.library_top(P0, "Craw Wurm");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(land)]);
+    t.attack(&[(c, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
+    assert!(t.in_graveyard(P0, "Island"));
+}
+
+#[test]
+fn jetsam_casts_a_spell_from_each_opponents_graveyard_and_exiles_it() {
+    cr!("608.2g", "614.1a");
+    assert_supported(&["Flotsam // Jetsam"]);
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Island", 6);
+    let j = t.hand(P0, "Flotsam // Jetsam");
+    let b1 = t.graveyard(P1, "Lightning Bolt");
+    let b2 = t.graveyard(P2, "Lightning Bolt");
+    t.answer_choose(P0, &[Entity::Object(b1)]);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[Entity::Object(b2)]);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P2)]);
+    t.cast(P0, j)
+        .method(mtg_engine::object::CastMethod::Half(1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P2), 17);
+    assert!(!t.in_graveyard(P1, "Lightning Bolt"));
+    assert!(!t.in_graveyard(P2, "Lightning Bolt"));
+    assert!(t.in_exile("Lightning Bolt"));
+}
