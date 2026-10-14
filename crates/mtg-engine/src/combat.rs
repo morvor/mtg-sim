@@ -76,6 +76,11 @@ pub struct CombatState {
     /// attacking (e.g. for ninjutsu, CR 702.49c).
     #[serde(default)]
     pub removed_attack_targets: Vec<(ObjectId, Entity)>,
+    /// Attackers removed from combat, with the creatures blocking them then: the
+    /// creatures "blocking it" by its last known information (CR 608.2h), once it has
+    /// left the battlefield.
+    #[serde(default)]
+    pub removed_blocked_by: Vec<(ObjectId, Vec<ObjectId>)>,
 }
 
 impl CombatState {
@@ -96,6 +101,24 @@ impl CombatState {
     pub fn blockers_of(&self, attacker: ObjectId) -> Vec<ObjectId> {
         self.attacker(attacker)
             .map(|a| a.blockers.clone())
+            .unwrap_or_default()
+    }
+    /// The creatures blocking `attacker`, or, for an attacker that was removed from
+    /// combat, those that were blocking it then (and still are blocking creatures).
+    pub fn blockers_of_last_known(&self, attacker: ObjectId) -> Vec<ObjectId> {
+        if self.attacker(attacker).is_some() {
+            return self.blockers_of(attacker);
+        }
+        self.removed_blocked_by
+            .iter()
+            .rev()
+            .find(|(id, _)| *id == attacker)
+            .map(|(_, bs)| {
+                bs.iter()
+                    .copied()
+                    .filter(|b| self.blockers.iter().any(|x| x.id == *b))
+                    .collect()
+            })
             .unwrap_or_default()
     }
     pub fn blocking(&self, blocker: ObjectId) -> Vec<ObjectId> {
@@ -2307,6 +2330,10 @@ pub fn remove_from_combat(g: &mut Game, id: ObjectId) {
     }
     if let Some(t) = c.attack_target(id) {
         c.removed_attack_targets.push((id, t));
+    }
+    if let Some(a) = c.attacker(id) {
+        let bs = a.blockers.clone();
+        c.removed_blocked_by.push((id, bs));
     }
     c.attackers.retain(|a| a.id != id);
     for a in c.attackers.iter_mut() {

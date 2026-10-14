@@ -435,9 +435,6 @@ pub fn blocking_it(f: Filter, rest: &str, b: &mut Builder) -> Option<(Filter, St
             || x.starts_with("enchanted creature")
             || x.starts_with("equipped creature")
     }) {
-        if crate::oracle::raw_text().to_lowercase().contains("sacrifice") {
-            return None;
-        }
         let (sel, tail) = crate::oracle::effects::object_ref(x, b)?;
         let one = match &sel {
             Sel::AttachedTo => true,
@@ -460,11 +457,8 @@ pub fn blocking_it(f: Filter, rest: &str, b: &mut Builder) -> Option<(Filter, St
     }
     // Once "it" has left the battlefield (sacrificed as a cost or by an earlier
     // instruction: "{B}, Sacrifice ~: Destroy target creature blocking it."), the creatures
-    // that were blocking it are known only from its last known information, which combat
-    // doesn't keep.
-    if crate::oracle::raw_text().to_lowercase().contains("sacrifice") {
-        return None;
-    }
+    // that were blocking it are those of its last known information, which combat keeps
+    // (`CombatState::blockers_of_last_known`).
     let blocking = match singular_it(b) {
         Sel::This => Filter::BlockingSource,
         sel @ (Sel::TriggerObject | Sel::AttachedTo) => Filter::BlockingAnyOf(Box::new(sel)),

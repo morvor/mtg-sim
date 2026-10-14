@@ -569,9 +569,16 @@ impl Game {
                     Entity::Object(_) => false,
                 }),
             Filter::BlockingSource => ctx.source.is_some_and(|s| {
-                self.combat
-                    .as_ref()
-                    .is_some_and(|cb| cb.blockers_of(s).contains(&id))
+                self.combat.as_ref().is_some_and(|cb| {
+                    // The source as it last existed, once it has left the battlefield
+                    // ("{B}, Sacrifice ~: Destroy target creature blocking it").
+                    let bs = if self.is_live(s) {
+                        cb.blockers_of(s)
+                    } else {
+                        cb.blockers_of_last_known(s)
+                    };
+                    bs.contains(&id)
+                })
             }),
             Filter::BlockedBySource => ctx.source.is_some_and(|s| {
                 self.combat
@@ -579,9 +586,14 @@ impl Game {
                     .is_some_and(|cb| cb.blockers_of(id).contains(&s))
             }),
             Filter::BlockingAnyOf(sel) => self.combat.as_ref().is_some_and(|cb| {
-                self.eval_sel_objects(sel, ctx)
-                    .into_iter()
-                    .any(|a| cb.blockers_of(a).contains(&id))
+                self.eval_sel_objects(sel, ctx).into_iter().any(|a| {
+                    let bs = if self.is_live(a) {
+                        cb.blockers_of(a)
+                    } else {
+                        cb.blockers_of_last_known(a)
+                    };
+                    bs.contains(&id)
+                })
             }),
             Filter::TargetOf(sel) => self.eval_sel_objects(sel, ctx).into_iter().any(|s| {
                 self.obj(s).stack.as_ref().is_some_and(|si| {

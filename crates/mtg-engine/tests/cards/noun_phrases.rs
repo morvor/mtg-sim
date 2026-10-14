@@ -518,3 +518,94 @@ fn spell_or_nonland_permanent_isnt_narrowed_to_permanent_spells() {
     t.resolve();
     assert!(t.in_hand(P1, "Divination"));
 }
+
+/// P0 attacks with `attacker`; P1 blocks with `blockers`; the game waits in the declare
+/// blockers step with P0 holding priority (the "becomes blocked" triggers on the stack).
+fn blocked_by(t: &mut TestGame, attacker: ObjectId, blockers: &[ObjectId]) {
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(attacker, Entity::Player(P1))]),
+    );
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(blockers.iter().map(|b| (*b, attacker)).collect()),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+}
+
+#[test]
+fn sacrificed_attackers_blockers_are_known_from_last_known_information() {
+    cr!("608.2h", "509.1h", "601.2h");
+    assert_supported(&["Urborg Panther"]);
+    let mut t = TestGame::new(2);
+    let panther = t.battlefield(P0, "Urborg Panther");
+    t.lands(P0, "Swamp", 1);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let idle = t.battlefield(P1, "Grizzly Bears");
+    blocked_by(&mut t, panther, &[giant]);
+    let from = t.asked().len();
+    t.activate(P0, panther, 0, &[Entity::Object(giant)]).unwrap();
+    let c = &target_candidates(&t, from)[0];
+    assert!(!c.contains(&Entity::Object(idle)));
+    // The Panther is gone; the Giant is still a creature that was blocking it.
+    assert!(t.in_graveyard(P0, "Urborg Panther"));
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert!(t.on_battlefield(idle));
+}
+
+#[test]
+fn sacrificed_aura_destroys_non_wall_creatures_blocking_enchanted_creature() {
+    cr!("608.2h", "303.4", "509.1h");
+    assert_supported(&["Coils of the Medusa"]);
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let coils = t.battlefield(P0, "Coils of the Medusa");
+    t.g.attach(coils, Entity::Object(wurm));
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let wall = t.battlefield(P1, "Wall of Wood");
+    let idle = t.battlefield(P1, "Savannah Lions");
+    blocked_by(&mut t, wurm, &[bears, wall]);
+    t.activate(P0, coils, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.on_battlefield(wall));
+    assert!(t.on_battlefield(idle));
+}
+
+#[test]
+fn sacrificed_goblin_deals_damage_to_each_creature_blocking_it() {
+    cr!("608.2h", "603.10a", "509.1h");
+    ruling!(
+        "Ib Halfheart, Goblin Tactician",
+        "If you don’t actually sacrifice the Goblin"
+    );
+    assert_supported(&["Ib Halfheart, Goblin Tactician"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ib Halfheart, Goblin Tactician");
+    let goblin = t.battlefield(P0, "Raging Goblin");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let idle = t.battlefield(P1, "Hill Giant");
+    blocked_by(&mut t, goblin, &[wurm, bears]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Raging Goblin"));
+    // 4 damage to each: the 6/4 Wurm and the Bears die.
+    assert!(!t.on_battlefield(wurm));
+    assert!(t.in_graveyard(P1, "Craw Wurm") && t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.obj_now(idle).damage, 0);
+
+    // Removed before the ability resolves: nothing is sacrificed, no damage is dealt.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ib Halfheart, Goblin Tactician");
+    let goblin = t.battlefield(P0, "Raging Goblin");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    blocked_by(&mut t, goblin, &[wurm]);
+    t.settle();
+    t.g.move_object(goblin, Zone::Exile, MoveCause::Effect, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.obj_now(wurm).damage, 0);
+}
