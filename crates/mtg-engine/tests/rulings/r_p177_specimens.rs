@@ -85,7 +85,7 @@ fn two_gather_specimens_cancel_out() {
 
 #[test]
 fn aethersnatch_can_target_a_spell_without_targets() {
-    cr!("115.1", "110.2a");
+    cr!("115.1", "608.3a");
     ruling!(
         "Aethersnatch",
         "Aethersnatch can target any spell, even one without targets."

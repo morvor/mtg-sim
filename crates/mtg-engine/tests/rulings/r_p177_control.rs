@@ -179,8 +179,8 @@ fn vedalken_shackles_checks_power_and_islands_only_on_activation_and_resolution(
     t.activate(P0, shackles, 0, &[obj(bears)]).unwrap();
     t.resolve_all();
     assert_eq!(controller(&mut t, bears), P0);
-    // The Bears get bigger, P0 loses an Island, the Bears stop being a creature: P0 keeps
-    // control while the Shackles stay tapped.
+    // The Bears get bigger, P0 loses an Island, the Bears' characteristics change
+    // (Lignify): P0 keeps control while the Shackles stay tapped.
     cast_resolve(&mut t, P0, "Giant Growth", &[obj(bears)]);
     destroy(&mut t, islands[0]);
     assert_eq!(controller(&mut t, bears), P0);
