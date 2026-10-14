@@ -32,8 +32,14 @@ fn abzan_falconer_gives_your_creatures_with_counters_flying() {
     let theirs = with_p1p1(&mut t, P1, "Grizzly Bears", 1);
     assert!(t.obj_now(bears).has_keyword(KeywordKind::Flying));
     assert!(!t.obj_now(other).has_keyword(KeywordKind::Flying));
-    assert!(!t.obj_now(f).has_keyword(KeywordKind::Flying), "no counter on it");
-    assert!(!t.obj_now(theirs).has_keyword(KeywordKind::Flying), "you control");
+    assert!(
+        !t.obj_now(f).has_keyword(KeywordKind::Flying),
+        "no counter on it"
+    );
+    assert!(
+        !t.obj_now(theirs).has_keyword(KeywordKind::Flying),
+        "you control"
+    );
     // A counter put on later counts at once.
     t.g.add_counters(obj(other), counters::PLUS1, 1, None);
     t.g.recompute();
@@ -57,7 +63,7 @@ fn dralnus_crusade_pumps_all_goblins() {
 
 #[test]
 fn grasping_scoundrel_gets_plus_1_while_attacking() {
-    cr!("611.3a", "613.4c", "506.4");
+    cr!("611.3a", "613.4c", "511.3");
     // "This creature gets +1/+0 as long as it's attacking."
     supported("Grasping Scoundrel");
     let mut t = TestGame::new(2);
@@ -270,7 +276,11 @@ fn bloodcrazed_paladin_enters_with_a_counter_per_creature_that_died_this_turn() 
     kill(&mut t, b);
     kill(&mut t, land);
     let p = etb(&mut t, P0, "Bloodcrazed Paladin");
-    assert_eq!(t.counters(p, counters::PLUS1), 2, "both players' creatures, not the land");
+    assert_eq!(
+        t.counters(p, counters::PLUS1),
+        2,
+        "both players' creatures, not the land"
+    );
     assert_eq!(t.pt(p), (3, 3));
     assert_eq!(t.counters(p0, counters::PLUS1), 0, "it doesn't grow");
     // A new turn: nothing died this turn.

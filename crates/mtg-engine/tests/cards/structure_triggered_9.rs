@@ -241,12 +241,13 @@ fn mogg_war_marshal_makes_a_goblin_when_it_enters_or_dies() {
     assert_eq!(g.len(), 1);
     assert_eq!(t.pt(g[0]), (1, 1));
     assert!(t.obj_now(g[0]).chars.colors.contains(Color::Red));
-    kill(&mut t, m);
-    assert_eq!(tokens(&t, P0, "Goblin").len(), 2);
-    assert!(tokens(&t, P1, "Goblin").is_empty());
-    // A Goblin token dying doesn't trigger it (it's gone, and it's "this creature").
+    // Another creature (here its Goblin token) dying doesn't trigger it: "this creature".
     kill(&mut t, g[0]);
+    assert_eq!(waiting(&t), 0);
+    assert!(tokens(&t, P0, "Goblin").is_empty());
+    kill(&mut t, m);
     assert_eq!(tokens(&t, P0, "Goblin").len(), 1);
+    assert!(tokens(&t, P1, "Goblin").is_empty());
 }
 
 #[test]

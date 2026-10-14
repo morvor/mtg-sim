@@ -66,7 +66,13 @@ fn raging_regisaur_deals_1_damage_to_any_target_when_it_attacks() {
     assert_eq!(t.obj_now(bears).damage, 0);
     assert_eq!(t.life(P1), 16);
     let offered = &target_choices(&t, P0)[0];
-    for e in [obj(goblin), obj(bears), obj(r), Entity::Player(P0), Entity::Player(P1)] {
+    for e in [
+        obj(goblin),
+        obj(bears),
+        obj(r),
+        Entity::Player(P0),
+        Entity::Player(P1),
+    ] {
         assert!(offered.contains(&e), "{e:?}");
     }
     // At a player.
@@ -197,7 +203,11 @@ fn angelic_exaltation_pumps_a_lone_attacker_by_your_creature_count() {
     t.battlefield(P0, "Hill Giant");
     t.battlefield(P1, "Grizzly Bears");
     fight(&mut t, &[bears], &[]);
-    assert_eq!(t.pt(bears), (5, 5), "three creatures you control, not the opponent's");
+    assert_eq!(
+        t.pt(bears),
+        (5, 5),
+        "three creatures you control, not the opponent's"
+    );
     assert_eq!(t.life(P1), 15);
     next_turn(&mut t);
     assert_eq!(t.pt(bears), (2, 2));
@@ -299,7 +309,11 @@ fn yuan_ti_malison_ventures_into_the_dungeon() {
     // "Whenever this creature deals combat damage to a player, venture into the dungeon."
     supported("Yuan-Ti Malison");
     let mut t = TestGame::new(2);
-    t.custom(P0, (*card("Tomb of Annihilation")).clone(), Zone::Outside(P0));
+    t.custom(
+        P0,
+        (*card("Tomb of Annihilation")).clone(),
+        Zone::Outside(P0),
+    );
     let y = t.battlefield(P0, "Yuan-Ti Malison");
     fight(&mut t, &[y], &[]);
     let (d, room) = dungeons::marker(&t.g, P0).expect("ventured");
@@ -308,12 +322,18 @@ fn yuan_ti_malison_ventures_into_the_dungeon() {
     // Its first room: "Each player loses 1 life."
     assert_eq!((t.life(P0), t.life(P1)), (19, 17));
     assert!(dungeons::marker(&t.g, P1).is_none());
-    // Blocked: no venture.
+    // Blocked (it can be blocked when it isn't attacking alone): no venture.
     let mut t = TestGame::new(2);
-    t.custom(P0, (*card("Tomb of Annihilation")).clone(), Zone::Outside(P0));
-    let y = t.battlefield(P0, "Shortcut Seeker");
+    t.custom(
+        P0,
+        (*card("Tomb of Annihilation")).clone(),
+        Zone::Outside(P0),
+    );
+    let y = t.battlefield(P0, "Yuan-Ti Malison");
+    let bears = t.battlefield(P0, "Grizzly Bears");
     let wall = t.battlefield(P1, "Wall of Stone");
-    fight(&mut t, &[y], &[(wall, y)]);
+    fight(&mut t, &[y, bears], &[(wall, y)]);
+    assert_eq!(t.life(P1), 18, "the unblocked Bears' damage");
     assert!(dungeons::marker(&t.g, P0).is_none());
 }
 
