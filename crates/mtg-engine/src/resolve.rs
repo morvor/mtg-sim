@@ -839,8 +839,10 @@ impl Game {
             } => {
                 // "If they do, ...": whether a player gained control of something.
                 ctx.prev_happened = false;
-                // CR 611.2b (Master Thief).
-                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                // CR 611.2b (Master Thief). A condition about the affected objects ("for
+                // as long as that creature is enchanted") is checked for them below.
+                let about_affected = matches!(duration, Duration::WhileCondition(_));
+                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
                 }
                 let objs: Vec<ObjectId> = self
@@ -853,6 +855,16 @@ impl Game {
                 };
                 if objs.is_empty() {
                     return;
+                }
+                if let Duration::WhileCondition(c) = duration {
+                    let mut c2 = ctx.clone();
+                    c2.set_var(
+                        vars::AFFECTED,
+                        objs.iter().map(|o| Entity::Object(*o)).collect(),
+                    );
+                    if !self.eval_cond(c, &c2) {
+                        return;
+                    }
                 }
                 // "Draw a card for each one they gained control of this way".
                 let changed: Vec<ObjectId> = objs
@@ -1349,7 +1361,11 @@ impl Game {
                     });
                 }
             }
-            Effect::CopySpellRetargeted { what, target } => {
+            Effect::CopySpellRetargeted {
+                what,
+                target,
+                among,
+            } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
                     match &targets {
@@ -1362,7 +1378,12 @@ impl Game {
                             );
                         }
                         None => {
-                            crate::copy_rules::copy_for_each_target(self, o, ctx.controller);
+                            crate::copy_rules::copy_for_each_target(
+                                self,
+                                o,
+                                ctx.controller,
+                                among.as_ref().map(|f| (f, &*ctx)),
+                            );
                         }
                     }
                 }
@@ -3081,6 +3102,23 @@ impl Game {
                     cs = cs.union(self.obj(o).chars.colors);
                 }
                 cs.iter().map(ManaType::from_color).collect()
+            }
+            ManaProduction::DevotionToChosenColor => {
+                let c = self.choose_mana_color(
+                    p,
+                    ctx,
+                    &[
+                        ManaType::W,
+                        ManaType::U,
+                        ManaType::B,
+                        ManaType::R,
+                        ManaType::G,
+                    ],
+                );
+                let k = c.color().map_or(0, |col| {
+                    self.eval_value(&Value::Devotion(ColorSet::single(col)), ctx)
+                });
+                vec![c; k.max(0) as usize]
             }
             ManaProduction::CommanderIdentity => {
                 // CR 903.4f: undefined without a commander; no mana.

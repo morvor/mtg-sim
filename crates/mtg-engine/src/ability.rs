@@ -2253,6 +2253,10 @@ pub enum ManaProduction {
     /// 702.124c: the combined identities of their commanders). Undefined without a
     /// commander, so no mana is added (CR 903.4f).
     CommanderIdentity,
+    /// "Choose a color. Add an amount of mana of that color equal to your devotion to that
+    /// color." (Nykthos, Shrine to Nyx; CR 700.5): the color is chosen as the ability
+    /// resolves, then the amount is the controller's devotion to it.
+    DevotionToChosenColor,
 }
 
 /// Replacement effect definitions (CR 614–616).
@@ -2789,6 +2793,8 @@ pub enum ObjectAction {
     Untapped,
     /// "can't phase in" (CR 702.26).
     PhasedIn,
+    /// "can't phase out" (CR 702.26).
+    PhasedOut,
     /// "can't be equipped" (CR 301.5c).
     Equipped,
     /// "can't be enchanted by other Auras" (CR 303.4).
@@ -4505,6 +4511,11 @@ pub enum Effect {
     CopySpellRetargeted {
         what: Sel,
         target: Option<Sel>,
+        /// "for each other [creature you control] that spell could target": only the
+        /// other legal targets that are objects matching this filter (evaluated for the
+        /// player who copies), not every other object or player.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        among: Option<Filter>,
     },
     /// "Copy [card]": a copy of each selected card, created in the zone the card is in
     /// (CR 707.12); "create a copy of the card with the chosen/noted name" (`named`):

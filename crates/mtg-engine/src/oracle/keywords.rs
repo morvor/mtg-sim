@@ -266,8 +266,17 @@ fn parse_one_keyword(part: &str, ctx: &CompileContext) -> Option<Vec<Keyword>> {
                 }
             }
             // "Equip {2}", "Equip legendary creature {3}", "Equip—Pay 3 life.", "Equip—{2},
-            // Pay 2 life."
-            if let Some(i) = rest.find('{') {
+            // Pay 2 life.", "Equip—Pay {E}{E}." (a cost, not a quality).
+            let quality_then_cost = |i: &usize| {
+                !rest[..*i]
+                    .trim()
+                    .trim_start_matches('—')
+                    .trim()
+                    .split(' ')
+                    .next()
+                    .is_some_and(|w| w == "pay")
+            };
+            if let Some(i) = rest.find('{').filter(quality_then_cost) {
                 let pre = rest[..i].trim().trim_start_matches('—').trim();
                 if !pre.is_empty() {
                     // CR 702.6c: "Equip [quality]" / "Equip [quality] creature".

@@ -12,8 +12,12 @@ impl Renderer<'_> {
 
     /// A number as a noun phrase ("3", "X", "the number of creatures you control").
     pub(crate) fn value(&mut self, v: &Value) -> String {
+        if let Some(s) = self.value_extra(v) {
+            return s;
+        }
         match v {
             Value::Const(n) => n.to_string(),
+            Value::X if self.extra.x_words.is_some() => self.extra.x_words.unwrap_or("X").into(),
             Value::X => "X".into(),
             // "for each card discarded this way": the objects the instruction before
             // affected.
@@ -326,6 +330,9 @@ impl Renderer<'_> {
                 format!("the number of colors of mana spent to cast {}", self.me())
             }
             Value::ManaSpent => format!("the amount of mana spent to cast {}", self.me()),
+            // The number "pay any amount of life" as the permanent entered chose (see
+            // `kw/pay_any_amount_of_life.rs`).
+            Value::Chosen if self.extra.life_paid => "the life paid as ~it entered".into(),
             Value::Chosen => "the chosen number".into(),
             Value::TimesKicked => format!("the number of times {} was kicked", self.me()),
             Value::Speed(p) => {
@@ -532,6 +539,11 @@ impl Renderer<'_> {
         match v {
             Value::Const(1) => (with_article(noun), None),
             Value::Const(n) => (format!("{} {}", number_word(*n), plural(noun)), None),
+            // The amount paid by "pay any amount of ..." ("draw that many cards").
+            Value::X if self.extra.x_paid => {
+                let w = self.extra.x_words.unwrap_or("that many");
+                (format!("{w} {}", plural(noun)), None)
+            }
             Value::X => (format!("X {}", plural(noun)), None),
             Value::EventAmount | Value::Prev | Value::Var(_) => {
                 (format!("that many {}", plural(noun)), None)
@@ -803,6 +815,16 @@ impl Renderer<'_> {
                     .collect();
                 let subj = self.sel(s, Case::Subj);
                 format!("{subj} is {}", join_list(&words, "or"))
+            }
+            // "if that spell targets only ~", "if it has a single target".
+            Condition::SelMatches(s, Filter::StackTargets(tf)) => {
+                let subj = self.sel(s, Case::Subj);
+                let t = self.targets_filter(tf);
+                match (t.strip_prefix("that "), t.strip_prefix("with ")) {
+                    (Some(r), _) => format!("{subj} {r}"),
+                    (_, Some(r)) => format!("{subj} has {r}"),
+                    _ => format!("{subj} {t}"),
+                }
             }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, false) {

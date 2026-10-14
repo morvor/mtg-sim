@@ -78,13 +78,39 @@ inventory::submit! { EffectPattern { name: "levels_classes_sagas: when you next 
 /// delayed triggered ability that copies the next spell its controller casts this turn
 /// (CR 603.7b, 707.10). A following "You may choose new targets for the copy." is applied
 /// by the follow-up pattern below.
+/// "copy the next instant or sorcery spell you cast this turn when you cast it" (Tzaangor
+/// Shaman): the same, for the next spell of that kind.
 fn p_copy_next_spell(l: &str, _b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    if l != "copy the next spell you cast this turn when you cast it" {
+    let spell = l
+        .strip_prefix("copy the next ")?
+        .strip_suffix(" you cast this turn when you cast it")?;
+    if !spell.ends_with("spell") || spell.contains(" or activate ") {
         return None;
     }
-    let (trigger, _, _) =
-        crate::oracle::triggers::parse_trigger_condition("whenever you cast a spell")?;
+    let article = if spell.starts_with(['a', 'e', 'i', 'o', 'u']) {
+        "an"
+    } else {
+        "a"
+    };
+    let (trigger, _, _) = crate::oracle::triggers::parse_trigger_condition(&format!(
+        "whenever you cast {article} {spell}"
+    ))?;
+    let cast = |t: &TriggerCond| {
+        matches!(
+            t,
+            TriggerCond::CastSpell {
+                who: PlayerRel::You,
+                ..
+            }
+        )
+    };
+    if !match &trigger {
+        TriggerCond::Where { trigger: t, .. } => cast(t),
+        t => cast(t),
+    } {
+        return None;
+    }
     Some(Effect::DelayedTrigger {
         trigger: TriggerCond::ThisTurn(Box::new(trigger)),
         body: Box::new(Body::effect(Effect::CopySpell {

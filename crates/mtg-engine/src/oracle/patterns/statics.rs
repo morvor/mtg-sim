@@ -505,7 +505,10 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     }
     if let Some(r) = s.strip_prefix("commanders") {
         if r.is_empty() || r.starts_with(' ') {
-            let probe = format!("permanents{r}");
+            // Commanders in another zone ("commanders from the command zone") are cards.
+            let t = r.trim_start();
+            let elsewhere = t.starts_with("from ") || t.starts_with("in ");
+            let probe = format!("{}{r}", if elsewhere { "cards" } else { "permanents" });
             let (f, _, rest) = object_phrase(&probe)?;
             let rest = &r[r.len() - rest.len()..];
             return Some((Filter::and(vec![Filter::Commander, f]), true, rest));
