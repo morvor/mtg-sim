@@ -41,7 +41,10 @@ fn split_if(l: &str) -> Option<(&str, Did, &str)> {
         (" can't", Did::Cant),
     ] {
         if let Some(s) = head.strip_suffix(suffix) {
-            if matches!(s, "you" | "they" | "that player" | "the player" | "that opponent") {
+            if matches!(
+                s,
+                "you" | "they" | "that player" | "the player" | "that opponent"
+            ) {
                 return Some((s, did, rest));
             }
         }
@@ -134,7 +137,11 @@ fn delay_inside(e: &mut Effect) {
         }
         _ => return,
     };
-    let Effect::AtNext { step, effect: inner } = at else {
+    let Effect::AtNext {
+        step,
+        effect: inner,
+    } = at
+    else {
         return;
     };
     let mut out = stores;
@@ -258,11 +265,7 @@ fn follow(x: Effect, did: Did, then: Effect) -> Option<Effect> {
         } if matches!(*otherwise, Effect::Noop) => Effect::If {
             cond: c,
             then: Box::new(follow(*t, did, then.clone())?),
-            otherwise: Box::new(if did == Did::Does {
-                Effect::Noop
-            } else {
-                then
-            }),
+            otherwise: Box::new(if did == Did::Does { Effect::Noop } else { then }),
         },
         x => gated(x),
     })
@@ -367,7 +370,14 @@ fn if_player_did(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Some(Effect::Exile { what, .. }) | Some(Effect::Move { what, .. })
             if matches!(what, Sel::Choose { .. }) =>
         {
-            if !matches!(what, Sel::Choose { count: Value::Const(1), up_to: false, .. }) {
+            if !matches!(
+                what,
+                Sel::Choose {
+                    count: Value::Const(1),
+                    up_to: false,
+                    ..
+                }
+            ) {
                 return false;
             }
         }
@@ -471,8 +481,22 @@ fn serial_then(l: &str, b: &mut Builder) -> Option<Effect> {
     // Third-person verbs need a subject: "puts it onto the battlefield" isn't an
     // instruction of its own.
     const THIRD: &[&str] = &[
-        "puts", "shuffles", "draws", "discards", "mills", "sacrifices", "exiles", "returns",
-        "creates", "gains", "loses", "reveals", "searches", "pays", "taps", "untaps",
+        "puts",
+        "shuffles",
+        "draws",
+        "discards",
+        "mills",
+        "sacrifices",
+        "exiles",
+        "returns",
+        "creates",
+        "gains",
+        "loses",
+        "reveals",
+        "searches",
+        "pays",
+        "taps",
+        "untaps",
     ];
     if parts
         .iter()
@@ -528,7 +552,10 @@ fn mana_of_that_color(l: &str, b: &mut Builder) -> Option<Effect> {
     if !raw.contains(&format!("choose a color. {first} mana of that color")) {
         return None;
     }
-    crate::oracle::effects::parse_clause(&l.replace(" mana of that color", " mana of the chosen color"), b)
+    crate::oracle::effects::parse_clause(
+        &l.replace(" mana of that color", " mana of the chosen color"),
+        b,
+    )
 }
 
 inventory::submit! { super::EffectPattern { name: "followups: add mana of that color (the chosen color)", priority: 980, parse: mana_of_that_color } }
@@ -574,7 +601,11 @@ fn for_each_this_way_unless(l: &str, prev: &mut Effect, b: &mut Builder) -> bool
     }
     // The count, read from the same sentence with a plain instruction.
     let mut counted = prev.clone();
-    if !crate::oracle_ext::apply_followup_ext(&format!("for each {thing}, draw a card"), &mut counted, b) {
+    if !crate::oracle_ext::apply_followup_ext(
+        &format!("for each {thing}, draw a card"),
+        &mut counted,
+        b,
+    ) {
         return false;
     }
     let Effect::Seq(mut v) = counted else {
@@ -661,9 +692,9 @@ inventory::submit! { super::EffectPattern { name: "followups: any opponent may h
 
 fn after_had_you(e: &Effect) -> bool {
     match e {
-        Effect::Seq(v) => v.iter().any(|x| {
-            matches!(x, Effect::StoreValue { var, .. } if *var == HAD)
-        }),
+        Effect::Seq(v) => v
+            .iter()
+            .any(|x| matches!(x, Effect::StoreValue { var, .. } if *var == HAD)),
         _ => false,
     }
 }
@@ -695,11 +726,7 @@ fn if_a_player_had_you(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     v.push(Effect::If {
-        cond: Condition::Compare(
-            Value::Var(HAD),
-            Cmp::Eq,
-            Value::c(if did { 1 } else { 0 }),
-        ),
+        cond: Condition::Compare(Value::Var(HAD), Cmp::Eq, Value::c(if did { 1 } else { 0 })),
         then: Box::new(e),
         otherwise: Box::new(Effect::Noop),
     });
@@ -758,10 +785,138 @@ fn for_each_counter_on_it(l: &str, b: &mut Builder) -> Option<Effect> {
     let e = crate::oracle::effects::parse_clause(&rest, b);
     b.it_player = saved;
     let e = e?;
+    let times = Value::CountersOn(Box::new(who), Some(kind));
+    // A punisher whose payments are sacrifices or discards: each player makes all the
+    // choices first (each time a card or permanent not chosen before, or neither), then
+    // makes the chosen payments and takes the penalty for each time they chose neither,
+    // all at once (Rottenmouth Viper ruling). Other instructions are simply repeated.
+    if let Some(e) = choose_all_then_act(&e, &times) {
+        return Some(e);
+    }
+    if format!("{e:?}").contains("PayOptional") {
+        return None;
+    }
     Some(Effect::Repeat {
-        times: Value::CountersOn(Box::new(who), Some(kind)),
+        times,
         effect: Box::new(e),
     })
+}
+
+/// How many times a repeated punisher's choice is made ([`choose_all_then_act`]).
+const PUNISH_TIMES: Var = vars::USER + 9657;
+/// The cards and permanents chosen to pay with.
+const PUNISH_PICKED: Var = vars::USER + 9658;
+/// How many times the player chose neither.
+const PUNISH_NEITHER: Var = vars::USER + 9659;
+
+/// "[players] [penalty] unless that player sacrifices [permanent] or discards a card",
+/// made `times` times: each player chooses, `times` times, a card or permanent they
+/// haven't chosen yet to pay with or neither; then they sacrifice and discard all the
+/// chosen ones and take the penalty once for each time they chose neither.
+fn choose_all_then_act(e: &Effect, times: &Value) -> Option<Effect> {
+    let Effect::ForEachPlayer { who, effect } = e else {
+        return None;
+    };
+    let Effect::AsPlayer {
+        who: PlayerRef::Iterated,
+        effect: inner,
+    } = &**effect
+    else {
+        return None;
+    };
+    // The chain of payments, then the penalty.
+    let mut payable: Vec<Filter> = Vec::new();
+    let mut cur: &Effect = inner;
+    let penalty = loop {
+        match cur {
+            Effect::PayOptional {
+                who: PlayerRef::You,
+                cost,
+                then,
+                otherwise,
+            } if matches!(**then, Effect::Noop) && cost.mana.is_none() && cost.parts.len() == 1 => {
+                match &cost.parts[0] {
+                    CostPart::Sacrifice {
+                        filter,
+                        count: Value::Const(1),
+                    } if format!("{filter:?}").contains("ControlledBy(You)") => {
+                        payable.push(filter.clone())
+                    }
+                    CostPart::Discard {
+                        filter,
+                        count: Value::Const(1),
+                        random: false,
+                    } => payable.push(Filter::and(vec![
+                        filter.clone(),
+                        Filter::InZone(ZoneKind::Hand),
+                        Filter::OwnedBy(PlayerRel::You),
+                    ])),
+                    _ => return None,
+                }
+                cur = otherwise;
+            }
+            Effect::PayOptional { .. } => return None,
+            pen => break pen.clone(),
+        }
+    };
+    if payable.is_empty() || format!("{penalty:?}").contains("PayOptional") {
+        return None;
+    }
+    let picked = Sel::Var(PUNISH_PICKED);
+    let body = Effect::seq(vec![
+        Effect::Store {
+            var: PUNISH_PICKED,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: Filter::Or(payable),
+                count: Value::Var(PUNISH_TIMES),
+                up_to: true,
+                store: None,
+            },
+        },
+        Effect::StoreValue {
+            var: PUNISH_NEITHER,
+            value: Value::Diff(
+                Box::new(Value::Var(PUNISH_TIMES)),
+                Box::new(Value::CountSel(Box::new(picked.clone()))),
+            ),
+        },
+        Effect::SacrificeObjects {
+            what: Sel::Matching(
+                Box::new(picked.clone()),
+                Filter::InZone(ZoneKind::Battlefield),
+            ),
+        },
+        Effect::Discard {
+            who: PlayerRef::You,
+            n: Value::CountSel(Box::new(Sel::Matching(
+                Box::new(picked.clone()),
+                Filter::InZone(ZoneKind::Hand),
+            ))),
+            random: false,
+            filter: Filter::In(Box::new(Sel::Matching(
+                Box::new(picked),
+                Filter::InZone(ZoneKind::Hand),
+            ))),
+        },
+        Effect::Repeat {
+            times: Value::Var(PUNISH_NEITHER),
+            effect: Box::new(penalty),
+        },
+    ]);
+    Some(Effect::seq(vec![
+        Effect::StoreValue {
+            var: PUNISH_TIMES,
+            value: times.clone(),
+        },
+        Effect::ForEachPlayer {
+            who: who.clone(),
+            effect: Box::new(Effect::AsPlayer {
+                who: PlayerRef::Iterated,
+                effect: Box::new(body),
+            }),
+        },
+    ]))
 }
 
 inventory::submit! { super::EffectPattern { name: "followups: for each [kind] counter on it, [instruction with a choice]", priority: 120, parse: for_each_counter_on_it } }
@@ -773,12 +928,36 @@ inventory::submit! { super::EffectPattern { name: "followups: for each [kind] co
 /// ability resolves (CR 608.2d).
 fn either_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
     const VERBS: &[&str] = &[
-        "tap", "untap", "return", "unlock", "put", "remove", "exile", "destroy", "draw",
-        "create", "sacrifice", "gain", "lose", "discard", "mill", "search",
+        "tap",
+        "untap",
+        "return",
+        "unlock",
+        "put",
+        "remove",
+        "exile",
+        "destroy",
+        "draw",
+        "create",
+        "sacrifice",
+        "gain",
+        "lose",
+        "discard",
+        "mill",
+        "search",
     ];
     let l = end(l);
     let first = l.split(' ').next()?;
     if !VERBS.contains(&first) || l.contains('"') {
+        return None;
+    }
+    // Not when a condition or a payment follows the whole sentence ("draw a card, or
+    // draw two cards if you control an artifact": the condition is the second
+    // instruction's), or is part of either instruction.
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if [" if ", " unless ", " instead", " then ", " where "]
+        .iter()
+        .any(|w| l.contains(w) || raw.contains(&format!("{l}{w}")))
+    {
         return None;
     }
     for sep in [", or ", " or "] {
@@ -788,7 +967,12 @@ fn either_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
             if !VERBS.contains(&verb) {
                 continue;
             }
-            let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.group.clone());
+            let saved = (
+                b.targets.len(),
+                b.it.clone(),
+                b.it_player.clone(),
+                b.group.clone(),
+            );
             let ea = crate::oracle::effects::parse_clause(a, b);
             let ec = ea
                 .as_ref()
@@ -807,8 +991,6 @@ fn either_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "followups: [instruction] or [instruction]", priority: 985, parse: either_instruction } }
-
-
 
 /// The selections "Simultaneously untap ... and tap ..." acts on, fixed before either
 /// happens.
@@ -991,6 +1173,27 @@ pub(crate) mod tests {
         // Nothing records whether a life gain was "done".
         assert!(compiled("Sorcery", "You gain 2 life. If you can't, draw a card.").is_none());
         // "Can't" doesn't follow a choice.
-        assert!(compiled("Sorcery", "You may draw a card. If you can't, you gain 2 life.").is_none());
+        assert!(compiled(
+            "Sorcery",
+            "You may draw a card. If you can't, you gain 2 life."
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn either_instruction() {
+        assert!(compiled("Sorcery", "Draw a card or gain 3 life.")
+            .is_some_and(|a| a.contains("ChooseOne")));
+        // A condition on the whole sentence or on one instruction isn't a choice
+        // between two plain instructions.
+        for text in [
+            "Draw a card, or draw two cards if you control an artifact.",
+            "Draw two cards if you control a Wizard or gain 3 life.",
+        ] {
+            assert!(
+                !compiled("Sorcery", text).is_some_and(|a| a.contains("ChooseOne")),
+                "{text}"
+            );
+        }
     }
 }
