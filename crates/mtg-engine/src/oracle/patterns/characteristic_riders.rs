@@ -597,7 +597,7 @@ fn bundle_modes(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<
                 Some(r) => ("Until end of turn, ", r),
                 None => ("", instr_l),
             };
-            let subj = subj.strip_suffix(
+            subj.strip_suffix(
                 " has that base power and toughness, becomes that creature type, and gains that ability",
             )?;
             let subj = &instr[instr.len() - instr_l.len() - (instr.len() - instr.trim_end_matches('.').len())..];
