@@ -61,6 +61,48 @@ fn excess_to_controller(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
     Some(out)
 }
 
+/// "Target creature you control deals damage equal to its power to target creature you
+/// don't control. If the creature you control has trample, excess damage is dealt to that
+/// creature's controller instead." (Ram Through): the excess goes to the damaged
+/// creature's controller only if the source has the keyword as the spell resolves
+/// (CR 120.4a, 608.2c).
+fn conditional_excess_to_controller(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let (rest, cond) = t.split_once(" If the creature you control has ")?;
+    let kw = cond.strip_suffix(", excess damage is dealt to that creature's controller instead.")?;
+    let kw = crate::keywords::KeywordKind::from_name(kw)?;
+    let [a] = &crate::oracle::parse_ability(rest, ctx)?[..] else {
+        return None;
+    };
+    let AbilityKind::Spell(mut s) = a.kind.clone() else {
+        return None;
+    };
+    // The single damage event: from a target creature you control to another target.
+    let Effect::DealDamage { source, amount, to } = s.body.effect.clone() else {
+        return None;
+    };
+    let (Sel::Target(src_slot), Sel::Target(_)) = (&source, &to) else {
+        return None;
+    };
+    if s.body.targets.get(*src_slot as usize)?.text != "target creature you control" {
+        return None;
+    }
+    let excess = Effect::DealDamageExcess {
+        source: source.clone(),
+        amount: amount.clone(),
+        to: to.clone(),
+        excess_to: Sel::Players(PlayerRef::ControllerOf(Box::new(to.clone()))),
+    };
+    s.body.effect = Effect::If {
+        cond: Condition::SelMatches(source.clone(), Filter::HasKeyword(kw)),
+        then: Box::new(excess),
+        otherwise: Box::new(Effect::DealDamage { source, amount, to }),
+    };
+    Some(vec![AbilityDef::with_link(AbilityKind::Spell(s), t, a.link)])
+}
+
+inventory::submit! { AbilityPattern { name: "conditional excess damage to controller", priority: 0, parse: conditional_excess_to_controller } }
+
 /// "[objects] is dealt excess [noncombat] damage" (CR 120.10).
 fn dealt_excess(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let r = end(r);

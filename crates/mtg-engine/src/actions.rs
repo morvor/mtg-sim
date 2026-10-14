@@ -728,6 +728,8 @@ impl Game {
                                 let ob = &mut self.objects[t.0 as usize];
                                 *ob.counters.entry(kind.clone()).or_insert(0) += n;
                                 ob.counter_timestamps.insert(kind.clone(), ts);
+                                // Its characteristics can depend on its counters.
+                                self.dirty = true;
                                 // Counters it's given as it enters are "put" on it (CR 122.6),
                                 // e.g. a Saga's first lore counter triggers chapter I (714.3a).
                                 if n > 0 {
@@ -1066,6 +1068,11 @@ impl Game {
         if self.obj(card).zone != Zone::Hand(p) {
             return None;
         }
+        // "Spells and abilities your opponents control can't cause you to discard cards."
+        let cause = crate::rule_statics::caused_actions::discard_cause(self, source);
+        if crate::rule_statics::caused_actions::discard_forbidden(self, p, cause) {
+            return None;
+        }
         let owner = self.obj(card).owner;
         let new = self.move_object_ev(MoveEv {
             obj: card,
@@ -1154,7 +1161,9 @@ impl Game {
 
     pub fn tap_ex(&mut self, obj: ObjectId, for_mana: bool) -> bool {
         let o = self.obj(obj);
-        if o.zone != Zone::Battlefield || o.tapped {
+        // Only a permanent: an object that has left the battlefield keeps its zone as
+        // last known information, but it's no longer there to tap (CR 400.7).
+        if !self.is_in_zone(obj, Zone::Battlefield) || o.tapped {
             return false;
         }
         self.objects[obj.0 as usize].tapped = true;
@@ -1165,7 +1174,7 @@ impl Game {
 
     pub fn untap(&mut self, obj: ObjectId) -> bool {
         let o = self.obj(obj);
-        if o.zone != Zone::Battlefield || !o.tapped {
+        if !self.is_in_zone(obj, Zone::Battlefield) || !o.tapped {
             return false;
         }
         // CR 122.1d: a stun counter's replacement effect.

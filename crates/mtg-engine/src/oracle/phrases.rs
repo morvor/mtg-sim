@@ -78,12 +78,37 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         other => {
             if let Ok(n) = other.parse::<i32>() {
                 n
+            } else if let Some(n) = hyphenated_number(other) {
+                n
             } else {
                 return None;
             }
         }
     };
     Some((Value::Const(n), rest))
+}
+
+/// "twenty-five", "forty-two" (CR 107.1).
+fn hyphenated_number(w: &str) -> Option<i32> {
+    let (t, o) = w.split_once('-')?;
+    let tens = match t {
+        "twenty" => 20,
+        "thirty" => 30,
+        "forty" => 40,
+        "fifty" => 50,
+        "sixty" => 60,
+        "seventy" => 70,
+        "eighty" => 80,
+        "ninety" => 90,
+        _ => return None,
+    };
+    let ones = [
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    ]
+    .iter()
+    .position(|x| *x == o)? as i32
+        + 1;
+    Some(tens + ones)
 }
 
 /// Splits off the first word.
@@ -1757,10 +1782,16 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     } else if let Some(r) = strip(s, "activated or triggered ability") {
         // An ability on the stack, not a spell (Stifle).
         (TargetKind::Ability(Filter::Any), r)
-    } else if let Some(r) =
-        strip(s, "loyalty ability of a planeswalker").or_else(|| strip(s, "loyalty ability"))
-    {
-        // A loyalty ability on the stack (CR 606.3; Verdant Command).
+    } else if let Some(r) = strip(s, "loyalty ability of a planeswalker") {
+        // A loyalty ability on the stack whose source is a planeswalker (Verdant Command):
+        // other permanents can have loyalty abilities (CR 606.2).
+        let f = Filter::and(vec![
+            Filter::Custom(crate::kw::game_rules::LOYALTY_ABILITY.into()),
+            Filter::AbilityFrom(Box::new(Filter::Type(CardType::Planeswalker))),
+        ]);
+        (TargetKind::Ability(f), r)
+    } else if let Some(r) = strip(s, "loyalty ability") {
+        // A loyalty ability on the stack (CR 606.3).
         let f = Filter::Custom(crate::kw::game_rules::LOYALTY_ABILITY.into());
         (TargetKind::Ability(f), r)
     } else if let Some(r) = strip(s, "activated ability") {

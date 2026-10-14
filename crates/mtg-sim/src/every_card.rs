@@ -238,7 +238,7 @@ const STOP_WORDS: [&str; 8] = [
 
 /// Phrases of a card's text, and a phrase of the text of other cards that make them
 /// matter in a game: "whenever you discard" wants discard effects, and so on.
-const PHRASES: [(&str, &str); 16] = [
+const PHRASES: [(&str, &str); 18] = [
     ("spell that targets", "target creature gets +"),
     ("becomes the target", "target creature"),
     ("discard", "discards"),
@@ -255,6 +255,13 @@ const PHRASES: [(&str, &str); 16] = [
     ("tapped", "tap target"),
     ("lose life", "loses"),
     ("counter target", "counter target"),
+    // "When ~ dies", "when enchanted creature dies", "whenever a land is put into a
+    // graveyard from the battlefield": removal.
+    ("dies", "destroy target"),
+    (
+        "put into a graveyard from the battlefield",
+        "destroy target",
+    ),
 ];
 
 impl<'a> Picker<'a> {
@@ -395,15 +402,21 @@ impl<'a> Picker<'a> {
                 }
             }
         }
+        picks.shuffle(rng);
+        // What its text cares about ("whenever you cast a spell that targets ~") comes
+        // before the types and keywords it names.
+        let mut wanted: Vec<Vec<usize>> = Vec::new();
         for (k, (wants, _)) in PHRASES.iter().enumerate() {
             if x.text.contains(wants) {
                 let fit = self.fitting(&self.by_phrase[k], mask);
-                if !fit.is_empty() {
-                    picks.push(fit);
+                if !fit.is_empty() && !wanted.contains(&fit) {
+                    wanted.push(fit);
                 }
             }
         }
-        picks.shuffle(rng);
+        wanted.shuffle(rng);
+        wanted.truncate(2);
+        picks.splice(0..0, wanted);
         let mut out = Vec::new();
         let mut used: HashSet<usize> = HashSet::new();
         for from in picks.iter().take(4) {
@@ -565,14 +578,17 @@ impl<'a> Picker<'a> {
         if x.is(CardType::Conspiracy) {
             sideboard.push(x.def.clone());
         }
+        let mv = if x.is_land() { 0 } else { x.mana_value };
+        // Enough lands for its activated abilities too (Abomination, Terrifying Titan's
+        // "Power-up — {5}{R/G}{R/G}: ...", embalm, a land's "{4}{G}, {T}: ...").
+        let target = mv.max(crate::coverage::activation_mana_value(&x.def).min(10));
         let n_lands = if x.is_land() {
-            16
-        } else if x.mana_value >= 5 {
+            16 + 2 * target.saturating_sub(4) as usize
+        } else if target >= 5 {
             24
         } else {
             22
         };
-        let mv = if x.is_land() { 0 } else { x.mana_value };
         let copies = if x.is(CardType::Conspiracy) {
             0
         } else {
@@ -622,7 +638,7 @@ impl<'a> Picker<'a> {
                 }
             }
             for d in 0..10 {
-                if lands < (mv as usize + 1).max(5) && lands < n_lands {
+                if lands < (target as usize + 1).max(5) && lands < n_lands {
                     top.push(land(lands));
                     lands += 1;
                 } else if d % 3 == 2 && copies_left > 0 {

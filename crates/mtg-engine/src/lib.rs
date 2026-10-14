@@ -51,6 +51,7 @@ pub mod cost_choices;
 pub mod cost_effects;
 pub mod cost_rules;
 pub mod counter_rules;
+pub mod counts_as_named;
 pub mod create_rules;
 pub mod custom;
 pub mod decision;

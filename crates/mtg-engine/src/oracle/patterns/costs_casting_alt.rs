@@ -22,9 +22,11 @@ fn cost_action(s: &str) -> Option<Cost> {
     let s = end(s);
     // "reveal your hand" (Land Grant): revealing is the whole cost (CR 701.20).
     if s == "reveal your hand" {
-        return Some(Cost::free().with(CostPart::Effect(Box::new(Effect::RevealHand {
-            who: PlayerRef::You,
-        }))));
+        return Some(
+            Cost::free().with(CostPart::Effect(Box::new(Effect::RevealHand {
+                who: PlayerRef::You,
+            }))),
+        );
     }
     if let Some(m) = s.strip_prefix("pay {") {
         let m = ManaCost::parse(&format!("{{{m}"))?;
@@ -117,8 +119,17 @@ fn own_alternative_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     };
     // "you may cast ~ without paying its mana cost" (CR 118.9): an alternative cost of
     // nothing.
+    let mut flash = false;
     let (cost, tail) = match body.strip_prefix("cast ~ without paying its mana cost") {
-        Some(tail) => (Cost::free(), tail),
+        // "... and as though it had flash" (Qasali Ambusher): with flash only when cast
+        // this way (CR 601.3c).
+        Some(tail) => match tail.strip_prefix(" and as though it had flash") {
+            Some(tail) => {
+                flash = true;
+                (Cost::free(), tail)
+            }
+            None => (Cost::free(), tail),
+        },
         None => match body.split_once(" rather than pay ~'s mana cost") {
             Some((cost_s, tail)) => (plain_cost(cost_s)?, tail),
             // "you may pay {B/R} to cast ~" (an alternative cost, CR 118.9).
@@ -133,11 +144,12 @@ fn own_alternative_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>
         (Some(a), Some(b)) => Some(Condition::And(vec![a, b])),
         (a, b) => a.or(b),
     };
-    Some(vec![this_spell_cost_ability(
-        CostChange::AlternativeCost(cost),
-        cond,
-        text,
-    )])
+    let change = if flash {
+        CostChange::AlternativeCostWithFlash(cost)
+    } else {
+        CostChange::AlternativeCost(cost)
+    };
+    Some(vec![this_spell_cost_ability(change, cond, text)])
 }
 
 inventory::submit! { AbilityPattern { name: "costs_casting: rather than pay this spell's mana cost", priority: 80, parse: own_alternative_cost } }

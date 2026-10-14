@@ -163,6 +163,7 @@ fn clone_chooses_before_entering_and_enters_as_the_copy() {
             ReplacementAction::EnterAsCopy {
                 filter: Filter::creature(),
                 optional: true,
+                tapped: false,
             },
         )],
     );

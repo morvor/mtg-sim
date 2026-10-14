@@ -76,6 +76,10 @@ pub struct CombatState {
     /// attacking (e.g. for ninjutsu, CR 702.49c).
     #[serde(default)]
     pub removed_attack_targets: Vec<(ObjectId, Entity)>,
+    /// The power each creature had as it was declared as an attacker ("if you attacked
+    /// with creatures with total power 6 or greater this combat").
+    #[serde(default)]
+    pub declared_attack_power: Vec<(ObjectId, i32)>,
     /// Every (blocker, attacker) pair that existed this combat, in order (declared or by
     /// an effect), kept when creatures leave combat ("creatures that were blocked by that
     /// creature this combat"). Recorded by `kw/block_history.rs`.
@@ -1240,10 +1244,18 @@ fn perform_attack_declaration(
             }
         }
     }
+    if g.dirty {
+        g.recompute();
+    }
+    let powers: Vec<(ObjectId, i32)> = final_decl
+        .iter()
+        .map(|(a, _)| (*a, g.obj(*a).power()))
+        .collect();
     let c = g.combat.get_or_insert_with(CombatState::default);
     c.attackers_declared = true;
     c.had_to_attack = had_to_attack.to_vec();
     c.declared_attackers = final_decl.clone();
+    c.declared_attack_power = powers;
     if !final_decl.is_empty() {
         c.any_attackers = true;
     }
@@ -2221,8 +2233,13 @@ fn assign_attacker_damage(
         .iter()
         .map(|b| crate::kw::trample::lethal_damage(g, id, *b, pending))
         .collect();
-    // CR 702.22j: another player may divide its damage freely among its blockers.
+    // CR 702.22j: another player may divide its damage freely among its blockers. With
+    // trample, that player also makes the trample choices (Defensive Formation ruling): any
+    // damage beyond lethal to all blockers may go to the attacked player or permanent.
     if let Some(p) = crate::kw::combat_damage_assigner(g, id) {
+        if trample {
+            return assign_trample_damage(g, id, p, power, &blockers, lethal, target, spill);
+        }
         return divide_freely(g, id, p, power, &blockers, lethal);
     }
     if !trample {
@@ -2278,7 +2295,19 @@ fn assign_trample_damage(
         target: target.is_some(),
         spill: target.is_some() && spill.is_some(),
     };
-    let default = shape.default_assignment(power);
+    let mut default = shape.default_assignment(power);
+    if controller != g.obj(id).controller && nb > 0 {
+        // The defending player assigning it (CR 702.22j) keeps it all on the blockers
+        // unless they choose otherwise.
+        let blockers_only = TrampleShape {
+            lethal: lethal[..nb].to_vec(),
+            blockers: nb,
+            target: false,
+            spill: false,
+        };
+        default = blockers_only.default_assignment(power);
+        default.resize(recipients.len(), 0);
+    }
     let ans = g.ask(
         controller,
         Decision::AssignCombatDamage {
@@ -2574,6 +2603,12 @@ pub fn put_onto_battlefield_attacking(g: &mut Game, id: ObjectId, target: Entity
     if g.combat.is_none() {
         return;
     }
+    // Whether it's a creature as it enters counts what it enters with: a permanent that's
+    // a creature only while it has loyalty counters (Kaito, Bane of Nightmares) enters
+    // with them (CR 306.5b) and so enters attacking.
+    if g.dirty {
+        g.recompute();
+    }
     let o = g.obj(id);
     // CR 506.3b: only a creature controlled by an attacking player.
     if !attacking_players(g).contains(&o.controller) {
@@ -2652,7 +2687,11 @@ pub fn choose_attack_target_preferring(
 
 /// Puts a creature onto the battlefield blocking `attacker` (CR 509.4): called as it enters.
 pub fn put_onto_battlefield_blocking(g: &mut Game, id: ObjectId, attacker: ObjectId) {
-    // CR 506.3a, 506.3f: only a creature that isn't a battle.
+    // CR 506.3a, 506.3f: only a creature that isn't a battle (counting what it entered
+    // with).
+    if g.dirty {
+        g.recompute();
+    }
     let o = g.obj(id);
     if !o.is_creature() || o.is(CardType::Battle) {
         return;

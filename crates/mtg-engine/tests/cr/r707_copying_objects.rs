@@ -96,6 +96,7 @@ fn cloner(name: &str, p: i32, t: i32, colors: ColorSet, except: Vec<Effect>) -> 
         ReplacementAction::EnterAsCopy {
             filter: Filter::creature(),
             optional: true,
+            tapped: false,
         },
         false,
     )];
@@ -250,6 +251,7 @@ fn a_static_copy_effect_copies_values_as_it_starts_to_apply() {
         ReplacementAction::EnterAsCopy {
             filter: Filter::Source,
             optional: false,
+            tapped: false,
         },
         false,
     ));

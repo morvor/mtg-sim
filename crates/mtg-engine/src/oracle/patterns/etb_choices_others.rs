@@ -115,6 +115,7 @@ fn others_enter_as_copy_of_this(block: &str, ctx: &CompileContext) -> Option<Vec
         action: ReplacementAction::EnterAsCopy {
             filter: Filter::Source,
             optional: false,
+            tapped: false,
         },
         self_replacement: false,
         optional: false,
@@ -357,9 +358,8 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if !end(tail).is_empty() {
         return None;
     }
-    // "Enter tapped as a copy" is one effect; its "tapped" part is applied first (as a
-    // self-replacement, CR 616.1a) so it isn't lost when the permanent becomes a copy
-    // and loses this ability.
+    // "Enter tapped as a copy" is one effect: it enters tapped only if it copies
+    // something (Vesuva's, Echoing Deeps's, Callidus Assassin's rulings).
     let rep = |action, self_replacement| {
         AbilityDef::new(
             AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
@@ -377,12 +377,10 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         ReplacementAction::EnterAsCopy {
             filter: f,
             optional: true,
+            tapped,
         },
         false,
     )];
-    if tapped {
-        out.push(rep(ReplacementAction::EnterTapped, true));
-    }
     if !exceptions.is_empty() || !extras.is_empty() {
         let mut v = Vec::new();
         if !exceptions.is_empty() {

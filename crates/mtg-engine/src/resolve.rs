@@ -397,8 +397,12 @@ impl Game {
                     .collect();
                 let res = self.move_to_destination(objs, to, ctx);
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
-                let res = crate::merge::found_all(self, res);
+                let mut res = crate::merge::found_all(self, res);
                 if to.zone == ZoneKind::Battlefield {
+                    // A card put somewhere else instead (Containment Priest, CR 614.6)
+                    // didn't enter: "it" and "if you do" refer only to what's on the
+                    // battlefield.
+                    res.retain(|o| self.obj(*o).zone == Zone::Battlefield);
                     self.link_to_creator(ctx, &res);
                 }
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
@@ -1479,9 +1483,15 @@ impl Game {
             Effect::Mill { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut all = Vec::new();
+                // "Mill three cards. When you do, ...": only if each player milled that
+                // many (CR 701.17b; Wick's Patrol's ruling).
+                let mut each_did = k > 0;
                 for p in self.eval_players(who, ctx) {
-                    all.extend(self.mill(p, k));
+                    let milled = self.mill(p, k);
+                    each_did &= milled.len() as u32 >= k;
+                    all.extend(milled);
                 }
+                ctx.prev_happened = each_did;
                 ctx.prev_value = all.len() as i64;
                 // "From among them", "the milled cards" (`dig_steps.rs`).
                 crate::dig_steps::set_dug(ctx, all.iter().map(|o| Entity::Object(*o)).collect());

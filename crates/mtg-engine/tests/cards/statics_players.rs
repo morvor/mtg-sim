@@ -65,11 +65,12 @@ fn cant_be_the_target_of_spells_only() {
     assert_eq!(t.pt(bears), (2, 4));
     t.lands(P1, "Mountain", 1);
     let bolt = t.hand(P1, "Lightning Bolt");
-    let pinger = t.battlefield(P1, "Prodigal Pyromancer");
     t.set_step(P1, Step::PrecombatMain);
+    // Bears can't be chosen (the harness falls back to another target, a player).
     let _ = t.cast(P1, bolt).target(bears).try_go();
     t.resolve_all();
     assert_eq!(t.obj_now(bears).damage, 0);
+    let pinger = t.battlefield(P1, "Prodigal Pyromancer");
     t.clear_answers();
     t.activate(P1, pinger, 0, &[Entity::Object(bears)]).unwrap();
     t.resolve_all();
