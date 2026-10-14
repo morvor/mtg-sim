@@ -3,6 +3,7 @@
 //! a real card's ability does what its text says.
 
 use super::structure_activated_2::{act, next_turn, shuffled, target_choices, untapped, with_p1p1};
+use super::structure_activated_6::entity_choices;
 use super::structure_seed_common::*;
 use mtg_engine::combat::{block_declaration_legal, block_options};
 use mtg_engine::decision::{Answer, Decision};
@@ -13,17 +14,6 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::{CardType, Color, ColorSet};
 use mtg_engine::*;
-
-/// The candidates offered by each "choose entities" decision asked of `p` so far.
-fn entity_choices(t: &TestGame, p: PlayerId) -> Vec<Vec<Entity>> {
-    t.asked()
-        .into_iter()
-        .filter_map(|(q, d)| match d {
-            Decision::ChooseEntities { candidates, .. } if q == p => Some(candidates),
-            _ => None,
-        })
-        .collect()
-}
 
 /// The sources of the damage dealt to `target` this turn.
 fn damage_sources(t: &TestGame, target: Entity) -> Vec<(ObjectId, u32)> {
@@ -320,6 +310,8 @@ fn noose_constrictor_discards_a_card_to_pump_itself() {
     let toss = t.hand(P0, "Island");
     t.answer_choose(P0, &[Entity::Object(toss)]);
     act(&mut t, P0, n, "discard", &[]).unwrap();
+    let c = entity_choices(&t, P0).pop().expect("you choose the card");
+    assert!(c.contains(&Entity::Object(keep)) && c.contains(&Entity::Object(toss)));
     assert!(t.in_graveyard(P0, "Island"));
     assert_eq!(t.zone(keep), Zone::Hand(P0));
     t.resolve_all();

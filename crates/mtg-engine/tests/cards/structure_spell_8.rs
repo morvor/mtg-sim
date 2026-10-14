@@ -3,6 +3,8 @@
 //! real card's spell does what its text says.
 
 use super::structure_activated_2::{next_turn, shuffled, target_choices};
+use super::structure_activated_6::entity_choices;
+use super::structure_spell_6::hand_names;
 use super::structure_seed_common::*;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
@@ -11,22 +13,6 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::CardType;
 use mtg_engine::*;
-
-/// The names of the cards in `p`'s hand.
-fn hand_names(t: &TestGame, p: PlayerId) -> Vec<String> {
-    t.g.player(p)
-        .hand
-        .iter()
-        .map(|id| t.obj(*id).chars.name.to_string())
-        .collect()
-}
-
-/// Whether anyone was asked to choose entities (e.g. which card to discard).
-fn chose_entities(t: &TestGame, p: PlayerId) -> bool {
-    t.asked()
-        .iter()
-        .any(|(q, d)| *q == p && matches!(d, Decision::ChooseEntities { .. }))
-}
 
 #[test]
 fn unnatural_speed_grants_haste_until_end_of_turn() {
@@ -108,7 +94,11 @@ fn romantic_rendezvous_discards_then_draws_two() {
     t.answer_choose(P0, &[Entity::Object(toss)]);
     t.cast(P0, s).go();
     t.resolve_all();
-    assert!(chose_entities(&t, P0), "the caster chooses the discard");
+    // Discard first, then draw: only the two cards already in hand are offered.
+    let offered = entity_choices(&t, P0);
+    assert_eq!(offered.len(), 1, "the caster chooses the discard");
+    assert_eq!(offered[0].len(), 2);
+    assert!(offered[0].contains(&Entity::Object(keep)) && offered[0].contains(&Entity::Object(toss)));
     assert!(t.in_graveyard(P0, "Hill Giant"));
     assert_eq!(t.zone(keep), Zone::Hand(P0));
     let mut h = hand_names(&t, P0);
@@ -224,7 +214,7 @@ fn windstorm_damages_each_creature_with_flying() {
 
 #[test]
 fn sungold_barrage_destroys_only_a_creature_with_toughness_four_or_more() {
-    cr!("608.2", "115.1", "701.8a", "608.2b");
+    cr!("608.2", "115.1", "701.8a");
     // "Destroy target creature with toughness 4 or greater."
     supported("Sungold Barrage");
     let mut t = TestGame::new(2);
@@ -329,16 +319,27 @@ fn infinite_obliteration_exiles_the_chosen_cards_with_the_named_creature_name() 
         assert!(shuffled(&t, P1));
         assert!(!shuffled(&t, P0));
     }
-    // Infinite Obliteration names a creature card: a land name isn't a legal choice.
-    let mut t = TestGame::new(2);
-    let forest = t.hand(P1, "Forest");
-    t.lands(P0, "Swamp", 3);
-    let s = t.hand(P0, "Infinite Obliteration");
-    t.answer(P0, DecisionKind::Name, Answer::Text("Forest".into()));
-    t.answer_choose(P0, &[Entity::Object(forest)]);
-    t.cast(P0, s).target(Entity::Player(P1)).go();
-    t.resolve_all();
-    assert_eq!(t.zone(forest), Zone::Hand(P1), "Forest isn't a creature card name");
+    // The name must match the spell's description (CR 201.4a): Infinite Obliteration
+    // names a creature card, Slaughter Games a nonland card. A land name is neither; a
+    // noncreature spell's name is only Slaughter Games's.
+    for (spell, name, legal) in [
+        ("Infinite Obliteration", "Forest", false),
+        ("Slaughter Games", "Forest", false),
+        ("Infinite Obliteration", "Lightning Bolt", false),
+        ("Slaughter Games", "Lightning Bolt", true),
+    ] {
+        let mut t = TestGame::new(2);
+        let card = t.hand(P1, name);
+        t.lands(P0, "Swamp", 2);
+        t.lands(P0, "Mountain", 2);
+        let s = t.hand(P0, spell);
+        t.answer(P0, DecisionKind::Name, Answer::Text(name.into()));
+        t.answer_choose(P0, &[Entity::Object(card)]);
+        t.cast(P0, s).target(Entity::Player(P1)).go();
+        t.resolve_all();
+        let want = if legal { Zone::Exile } else { Zone::Hand(P1) };
+        assert_eq!(t.zone(t.g.current(card)), want, "{spell} naming {name}");
+    }
 }
 
 #[test]
@@ -445,7 +446,14 @@ fn magic_damper_pumps_hexproofs_and_untaps_your_creature() {
     assert_eq!(t.pt(bears), (3, 3));
     assert!(t.obj_now(bears).has_keyword(KeywordKind::Hexproof));
     assert!(!t.obj_now(other).has_keyword(KeywordKind::Hexproof));
-    // The opponent can't target it now; its controller still can.
+    // Its controller can still target it; the opponent can't.
+    t.lands(P0, "Forest", 1);
+    let growth = t.hand(P0, "Giant Growth");
+    t.cast(P0, growth).target(bears).go();
+    let c = target_choices(&t, P0).pop().unwrap();
+    assert!(c.contains(&Entity::Object(bears)), "hexproof doesn't stop its controller");
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (6, 6));
     t.lands(P1, "Mountain", 1);
     let bolt = t.hand(P1, "Lightning Bolt");
     t.set_step(P1, Step::PrecombatMain);
@@ -455,7 +463,7 @@ fn magic_damper_pumps_hexproofs_and_untaps_your_creature() {
     assert!(c.contains(&Entity::Object(other)));
     t.resolve_all();
     next_turn(&mut t);
-    assert_eq!(t.pt(bears), (2, 2));
+    assert_eq!(t.pt(bears), (2, 2), "both pumps ended");
     assert!(!t.obj_now(bears).has_keyword(KeywordKind::Hexproof));
 }
 
@@ -519,7 +527,10 @@ fn hymn_to_tourach_discards_two_cards_at_random() {
     assert_eq!(t.hand_size(P1), 1);
     assert_eq!(t.graveyard_size(P1), 2);
     assert_eq!(t.zone(mine), Zone::Hand(P0));
-    assert!(!chose_entities(&t, P0) && !chose_entities(&t, P1), "at random");
+    assert!(
+        entity_choices(&t, P0).is_empty() && entity_choices(&t, P1).is_empty(),
+        "at random"
+    );
     // With one card, it discards just that.
     let mut t = TestGame::new(2);
     t.hand(P1, "Forest");
@@ -535,7 +546,7 @@ const CHANDRA: &str = "Chandra, Bold Pyromancer";
 
 #[test]
 fn chandras_outburst_finds_chandra_in_the_graveyard_or_library() {
-    cr!("608.2", "701.23a", "701.20a", "701.24a");
+    cr!("608.2", "701.23a", "701.24a");
     // "Chandra's Outburst deals 4 damage to target player or planeswalker. Search your
     // library and/or graveyard for a card named Chandra, Bold Pyromancer, reveal it, and
     // put it into your hand. If you search your library this way, shuffle."
