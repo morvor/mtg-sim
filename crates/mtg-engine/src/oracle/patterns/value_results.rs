@@ -1488,7 +1488,19 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     // 400.7); the noun says what they were ("the permanent exiled this way", "spells
     // countered this way"), and their characteristics are those they last had (CR
     // 608.2h). The destroyed, sacrificed or tapped permanents are kept as they were.
-    let from = if [vars::IT, DISCARDED].contains(&var) {
+    let from = if var == vars::IT && head.contains(" put into ") && head.contains("graveyard") {
+        // "Put into a graveyard this way": the cards the instruction moved (or a dig's
+        // selections and "the rest" put there) that are in a graveyard: not a milled card
+        // a replacement effect exiled instead (CR 614.1a, 701.17c), nor the card a dig put
+        // into a hand.
+        Sel::Before(Box::new(Sel::Matching(
+            Box::new(Sel::Union(vec![
+                Sel::Var(vars::IT),
+                Sel::Var(crate::dig_steps::DUG_PLACED),
+            ])),
+            Filter::InZone(ZoneKind::Graveyard),
+        )))
+    } else if [vars::IT, DISCARDED].contains(&var) {
         Sel::Before(Box::new(Sel::Var(var)))
     } else if head.ends_with(" revealed") {
         // The cards a reveal instruction revealed: a whole hand, the cards revealed
@@ -1911,6 +1923,11 @@ pub fn note_sacrificed(e: &Effect, b: &mut Builder) {
             _ => false,
         }
     }
+    // ("you may sacrifice another creature": the same, if you do.)
+    let e = match e {
+        Effect::May { effect, .. } => effect.as_ref(),
+        e => e,
+    };
     let sacrifices_one = match e {
         Effect::Sacrifice {
             who, count, filter, ..

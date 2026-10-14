@@ -120,8 +120,21 @@ impl Renderer<'_> {
                 };
                 format!("the number of {n} in {p} graveyard")
             }
+            // "where X is the amount of damage it dealt to that player".
+            Value::EventAmount if self.extra.event_amount.is_some() => format!(
+                "{{alt:that much|that many|that damage|{}}}",
+                self.extra.event_amount.unwrap_or_default()
+            ),
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
+            // "the amount of excess damage dealt to that creature this way": the one target
+            // creature.
+            Value::Var(vars::EXCESS)
+                if matches!(self.targets.as_slice(), [t] if matches!(&t.what, TargetKind::Object(Filter::Type(CardType::Creature)))
+                    && t.max.as_const() == Some(1)) =>
+            {
+                "{alt:the excess damage|the amount of excess damage dealt this way|the excess damage dealt this way|the amount of excess damage dealt to that creature this way}".into()
+            }
             Value::Var(vars::EXCESS) => "{alt:the excess damage|the amount of excess damage dealt this way|the excess damage dealt this way}".into(),
             // The flips of the last coin flip (CR 705.2).
             Value::Var(crate::dice::WINS) => "the number of flips you won".into(),
@@ -330,6 +343,10 @@ impl Renderer<'_> {
                 let n = self.noun(f, Num::Many);
                 format!("the number of differently named {n}")
             }
+            Value::LargestSameNameGroup(f) => {
+                let n = self.noun(f, Num::Many);
+                format!("the number of {n} with the same name as one another")
+            }
             Value::ColorsSpent => {
                 format!("the number of colors of mana spent to cast {}", self.me())
             }
@@ -453,6 +470,9 @@ impl Renderer<'_> {
             }
             // "X can't be negative": a count clamped at zero (CR 107.1b) reads as the count.
             Value::Max(a, b) if matches!(b.as_ref(), Value::Const(0)) => self.value(a),
+            Value::Max(a, b) if self.greatest_across_zones(a, b).is_some() => {
+                self.greatest_across_zones(a, b).unwrap_or_default()
+            }
             Value::Max(a, b) => {
                 let a = self.value(a);
                 let b = self.value(b);
@@ -491,11 +511,34 @@ impl Renderer<'_> {
         if matches!(v, Value::EventAmount) {
             return ("{alt:that much|that many}".into(), None);
         }
+        // "You gain that much life": the amount of the previous instruction.
         if matches!(v, Value::Prev) {
-            return ("that many".into(), None);
+            return ("{alt:that much|that many}".into(), None);
+        }
+        // "You gain 4 life for each creature tapped this way": a multiple of a number
+        // remembered just before, said with that number's words.
+        if let Value::Mul(k, n) = v {
+            if let (Value::Const(_), Value::Var(x)) = (k.as_ref(), n.as_ref()) {
+                if let Some(stored) = self
+                    .stored_values
+                    .iter()
+                    .find(|(y, _, used)| y == x && !used)
+                    .map(|(_, val, _)| val.clone())
+                {
+                    return self.amount(&Value::Mul(k.clone(), Box::new(stored)));
+                }
+            }
         }
         if let Some(x) = self.stored_x(v) {
             return (x, None);
+        }
+        // "Pay any amount of {E}. ~ deals that much damage": the amount paid; "Remove any
+        // number of counters: It deals that much damage": the number removed.
+        if matches!(v, Value::X) && (self.extra.x_paid || self.extra.x_removed) {
+            return match self.extra.x_words {
+                Some(w) if self.extra.x_paid => (w.into(), None),
+                _ => ("{alt:that much|that many|X}".into(), None),
+            };
         }
         // A number stored earlier: "that many", or the X the text already defined.
         if matches!(v, Value::Var(n) if *n != vars::EXCESS) {
@@ -649,6 +692,9 @@ impl Renderer<'_> {
         }
         if let Some(v) = self.vote_condition(c) {
             return v;
+        }
+        if let Some(s) = self.condition_more(c) {
+            return s;
         }
         match c {
             Condition::Always => self.gap("Condition::Always"),
@@ -1043,6 +1089,19 @@ impl Renderer<'_> {
             };
         }
         let (ctrl, rest) = split_controller(f);
+        // "you control the creature with the greatest power or tied for the greatest
+        // power": one of yours has power at least the greatest among all creatures.
+        if let (Some(PlayerRel::You), Filter::And(v), false) = (ctrl, &rest, negated) {
+            if let [t @ Filter::Type(_), Filter::Power(Cmp::Ge, p)] = v.as_slice() {
+                if matches!(p.as_ref(), Value::GreatestPower(g) if format!("{g:?}") == format!("{t:?}"))
+                {
+                    let n = self.noun(t, Num::One);
+                    return format!(
+                        "you control the {n} with the greatest power or tied for the greatest power"
+                    );
+                }
+            }
+        }
         let zone = f.zone();
         match (ctrl, zone) {
             // "your opponents control no creatures": no opponent controls one.
@@ -1121,6 +1180,7 @@ impl Renderer<'_> {
             matches!(
                 a,
                 Filter::Card
+                    | Filter::PermanentCard
                     | Filter::Type(_)
                     | Filter::Subtype(_)
                     | Filter::Supertype(_)
@@ -1340,6 +1400,26 @@ impl Renderer<'_> {
             }
             PlayerFilter::Monarch => "is the monarch".into(),
             PlayerFilter::Poisoned => "is poisoned".into(),
+            PlayerFilter::HasInitiative => format!("{have} the initiative"),
+            PlayerFilter::AttackRelation {
+                attacking,
+                other,
+                past,
+                planeswalkers,
+            } => {
+                let o = self.player_filter_object(other);
+                let pw = if *planeswalkers {
+                    " and/or a planeswalker you control"
+                } else {
+                    ""
+                };
+                match (attacking, past) {
+                    (true, false) => format!("{{alt:is|are}} attacking {o}{pw}"),
+                    (true, true) => format!("attacked {o}{pw}"),
+                    (false, false) => format!("{{alt:is|are}} being attacked by {o}"),
+                    (false, true) => format!("{{alt:was|were}} attacked by {o}"),
+                }
+            }
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
             PlayerFilter::VotedLikeYou(true) => "voted for a choice you voted for".into(),
             PlayerFilter::VotedLikeYou(false) => "voted for a choice you didn't vote for".into(),

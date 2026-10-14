@@ -95,6 +95,7 @@ fn chosen_quality_static(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
             "choose a creature type",
         ),
         "type in addition to their other creature types"
+        | "type in addition to their other types"
         | "creature type in addition to its other types"
         | "creature type in addition to their other types" => {
             (vec![Modification::AddChosenType], "choose a creature type")

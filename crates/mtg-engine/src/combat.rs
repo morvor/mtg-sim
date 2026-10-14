@@ -76,6 +76,15 @@ pub struct CombatState {
     /// attacking (e.g. for ninjutsu, CR 702.49c).
     #[serde(default)]
     pub removed_attack_targets: Vec<(ObjectId, Entity)>,
+    /// The power each creature had as it was declared as an attacker ("if you attacked
+    /// with creatures with total power 6 or greater this combat").
+    #[serde(default)]
+    pub declared_attack_power: Vec<(ObjectId, i32)>,
+    /// Every (blocker, attacker) pair that existed this combat, in order (declared or by
+    /// an effect), kept when creatures leave combat ("creatures that were blocked by that
+    /// creature this combat"). Recorded by `kw/block_history.rs`.
+    #[serde(default)]
+    pub block_history: Vec<(ObjectId, ObjectId)>,
 }
 
 impl CombatState {
@@ -317,6 +326,16 @@ impl Game {
                 return false;
             }
         }
+        // "can't attack a player it has already attacked this turn" (CR 508.6).
+        if let Entity::Player(p) = target {
+            if self.restricted_obj(id, |r| match r {
+                Restriction::CantAttackPlayerAgain(f) => Some(f),
+                _ => None,
+            }) && crate::kw::block_history::players_attacked_by(self, id).contains(&p)
+            {
+                return false;
+            }
+        }
         // Goaded creatures can't attack the goading player if able to attack another (CR 701.15b) — enforced as a requirement.
         !self
             .all_restrictions()
@@ -395,6 +414,7 @@ impl Game {
         if ak.has_keyword(KeywordKind::Flying)
             && !bk.has_keyword(KeywordKind::Flying)
             && !bk.has_keyword(KeywordKind::Reach)
+            && !self.blocks_ignoring(blocker, attacker, KeywordKind::Flying)
         {
             return false;
         }
@@ -420,8 +440,9 @@ impl Game {
             return false;
         }
         // Landwalk (702.14c)
+        let ignore_landwalk = self.blocks_ignoring(blocker, attacker, KeywordKind::Landwalk);
         for kw in ak.keywords_of(KeywordKind::Landwalk) {
-            if crate::kw::landwalk::landwalk_ignored(self, kw) {
+            if ignore_landwalk || crate::kw::landwalk::landwalk_ignored(self, kw) {
                 continue;
             }
             if let Some(f) = &kw.filter {
@@ -437,9 +458,11 @@ impl Game {
         if self.protected_from(attacker, blocker) {
             return false;
         }
-        // Restrictions from effects.
+        // Restrictions from effects. ("can't be blocked by creatures with greater power":
+        // greater than the attacker's, `vars::AFFECTED`.)
         for (s, c, r, locked) in self.all_restrictions() {
-            let ctx = Ctx::new(s, c);
+            let mut ctx = Ctx::new(s, c);
+            ctx.set_var(vars::AFFECTED, vec![Entity::Object(attacker)]);
             match &r {
                 Restriction::CantBeBlocked(f)
                     if self.restriction_applies(attacker, f, &ctx, &locked) =>
@@ -466,10 +489,35 @@ impl Game {
         crate::keyword_impls::extra_block_restrictions(self, blocker, attacker)
     }
 
+    /// Whether `blocker` can block `attacker` as though `attacker` didn't have the evasion
+    /// ability `evasion` ("can block Dragons as though it had reach", CR 609.4).
+    pub fn blocks_ignoring(
+        &self,
+        blocker: ObjectId,
+        attacker: ObjectId,
+        evasion: KeywordKind,
+    ) -> bool {
+        self.all_restrictions()
+            .iter()
+            .any(|(s, c, r, locked)| match r {
+                Restriction::BlockIgnoringEvasion {
+                    blocker: bf,
+                    attackers,
+                    evasion: e,
+                } => {
+                    let ctx = Ctx::new(*s, *c);
+                    *e == evasion
+                        && self.restriction_applies(blocker, bf, &ctx, locked)
+                        && self.matches(attacker, attackers, &ctx)
+                }
+                _ => false,
+            })
+    }
+
     /// The blocker's controller must be defending against the attacker (CR 509.1a): the
     /// attacker is attacking them, a planeswalker they control, or a battle they protect.
     /// With shared team turns, any player on the defending team (CR 805.10d).
-    fn could_block_pair(&self, blocker: ObjectId, attacker: ObjectId) -> bool {
+    pub(crate) fn could_block_pair(&self, blocker: ObjectId, attacker: ObjectId) -> bool {
         let Some(c) = &self.combat else { return false };
         let Some(dp) = c.defending_player_of(self, attacker) else {
             return false;
@@ -497,6 +545,13 @@ impl Game {
                         None => return None,
                         Some(k) => n += k,
                     }
+                }
+            }
+            // "for each Equipment attached to ~": counted as blockers are declared.
+            if let Restriction::ExtraBlocksCounted { blocker: bf, n: v } = &r {
+                let ctx = Ctx::new(s, c);
+                if self.restriction_applies(blocker, bf, &ctx, &locked) {
+                    n += self.eval_value(v, &ctx).max(0) as u32;
                 }
             }
         }
@@ -529,6 +584,13 @@ impl Game {
             if let Restriction::MinBlockers { attacker: af, n: k } = &r {
                 if self.restriction_applies(attacker, af, &Ctx::new(s, c), &locked) {
                     n = n.max(*k);
+                }
+            }
+            // "can't be blocked unless all creatures defending player controls block it".
+            if let Restriction::MinBlockersCounted { attacker: af, n: v } = &r {
+                let ctx = Ctx::new(s, c);
+                if self.restriction_applies(attacker, af, &ctx, &locked) {
+                    n = n.max(self.eval_value(v, &ctx).max(0) as u32);
                 }
             }
         }
@@ -674,15 +736,33 @@ pub enum AttackRequirement {
     /// "if one of [others] attacks, [creature] attacks if able": obeyed if it attacks or
     /// none of the others do.
     AttacksIfAnyAttacks(ObjectId, Vec<ObjectId>),
+    /// "[player] must attack [you or a planeswalker you control] with at least one creature
+    /// if able": obeyed if a creature that player controls attacks (one of `targets`, if
+    /// given).
+    AttacksWithAny {
+        player: PlayerId,
+        targets: Option<Vec<Entity>>,
+    },
 }
 
 impl AttackRequirement {
-    pub fn creature(&self) -> ObjectId {
+    /// The creature the requirement is about (none for a requirement on a player's
+    /// declaration as a whole).
+    pub fn creature(&self) -> Option<ObjectId> {
         match self {
             AttackRequirement::Attacks(c)
             | AttackRequirement::AttacksPlayerOtherThan(c, _)
             | AttackRequirement::AttacksPlayer(c, _)
-            | AttackRequirement::AttacksIfAnyAttacks(c, _) => *c,
+            | AttackRequirement::AttacksIfAnyAttacks(c, _) => Some(*c),
+            AttackRequirement::AttacksWithAny { .. } => None,
+        }
+    }
+    fn obeyed_in(&self, g: &Game, decl: &[(ObjectId, Entity)]) -> bool {
+        match self {
+            AttackRequirement::AttacksWithAny { player, targets } => decl.iter().any(|(a, t)| {
+                g.obj(*a).controller == *player && targets.as_ref().is_none_or(|v| v.contains(t))
+            }),
+            other => other.obeyed(decl),
         }
     }
     fn obeyed(&self, decl: &[(ObjectId, Entity)]) -> bool {
@@ -697,6 +777,8 @@ impl AttackRequirement {
             AttackRequirement::AttacksIfAnyAttacks(c, others) => {
                 decl.iter().any(|(a, _)| a == c) || !decl.iter().any(|(a, _)| others.contains(a))
             }
+            // Needs the game (`obeyed_in`).
+            AttackRequirement::AttacksWithAny { .. } => false,
         }
     }
 }
@@ -779,8 +861,12 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
     out
 }
 
-fn obeyed_attack_requirements(reqs: &[AttackRequirement], decl: &[(ObjectId, Entity)]) -> u32 {
-    reqs.iter().filter(|r| r.obeyed(decl)).count() as u32
+fn obeyed_attack_requirements(
+    g: &Game,
+    reqs: &[AttackRequirement],
+    decl: &[(ObjectId, Entity)],
+) -> u32 {
+    reqs.iter().filter(|r| r.obeyed_in(g, decl)).count() as u32
 }
 
 /// Restrictions that apply to the declaration as a whole (CR 508.1c).
@@ -840,6 +926,7 @@ fn attack_restrictions_ok(
 pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Option<Cost> {
     let mut total = Cost::default();
     let mut any = false;
+    let mut zero = false;
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::AttackCost {
             attackers,
@@ -870,12 +957,24 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
                 // enchantments you control": counted from the restriction's point of view
                 // as the cost is determined (CR 508.1h).
                 let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                zero |= is_written_zero(&cost);
                 crate::casting::add_cost(&mut total, &cost);
                 any = true;
             }
         }
     }
-    (any && !total.is_free()).then_some(total)
+    (any && (zero || !total.is_free())).then_some(total)
+}
+
+/// A cost of {0} an effect states (War Tax with X = 0): still a cost, which isn't paid
+/// automatically (CR 118.5), so a creature with it isn't required to attack or block
+/// (CR 508.1d, 509.1c). A scaled cost that comes to nothing ("{1} for each counter on
+/// it" with no counters) isn't one.
+pub fn is_written_zero(c: &Cost) -> bool {
+    c.parts.is_empty()
+        && c.mana
+            .as_ref()
+            .is_some_and(|m| !m.symbols.is_empty() && m.is_zero())
 }
 
 /// Total required cost to attack for a declaration (CR 508.1h).
@@ -911,13 +1010,19 @@ pub fn best_attack(
             )
         })
         .collect();
-    let mut best = (obeyed_attack_requirements(reqs, &[]), Vec::new());
+    let mut best = (obeyed_attack_requirements(g, reqs, &[]), Vec::new());
     let space: f64 = free.iter().map(|(_, t)| (t.len() + 1) as f64).product();
     if space <= 100_000.0 {
         // Requirements still obeyable by creatures from index i on (for pruning).
-        let mut suffix = vec![0u32; free.len() + 1];
+        // Requirements on a player's declaration as a whole may still be obeyed by any
+        // creature left.
+        let whole = reqs.iter().filter(|r| r.creature().is_none()).count() as u32;
+        let mut suffix = vec![whole; free.len() + 1];
         for i in (0..free.len()).rev() {
-            let n = reqs.iter().filter(|r| r.creature() == free[i].0).count() as u32;
+            let n = reqs
+                .iter()
+                .filter(|r| r.creature() == Some(free[i].0))
+                .count() as u32;
             suffix[i] = suffix[i + 1] + n;
         }
         let mut cur = Vec::new();
@@ -929,7 +1034,7 @@ pub fn best_attack(
         let mut decl = Vec::new();
         for (c, ts) in &free {
             let mine: Vec<&AttackRequirement> =
-                reqs.iter().filter(|r| r.creature() == *c).collect();
+                reqs.iter().filter(|r| r.creature() == Some(*c)).collect();
             if mine.is_empty() {
                 continue;
             }
@@ -941,7 +1046,7 @@ pub fn best_attack(
                 decl.push((*c, t));
             }
         }
-        let n = obeyed_attack_requirements(reqs, &decl);
+        let n = obeyed_attack_requirements(g, reqs, &decl);
         if n > best.0 && attack_restrictions_ok(g, &rules, options, &decl) {
             best = (n, decl);
         }
@@ -961,7 +1066,7 @@ fn attack_dfs(
     cur: &mut Vec<(ObjectId, Entity)>,
     best: &mut (u32, Vec<(ObjectId, Entity)>),
 ) {
-    let now = obeyed_attack_requirements(reqs, cur);
+    let now = obeyed_attack_requirements(g, reqs, cur);
     if i == free.len() {
         if now > best.0 && attack_restrictions_ok(g, rules, options, cur) {
             *best = (now, cur.clone());
@@ -1002,7 +1107,7 @@ pub(crate) fn attack_declaration_legal_with(
 ) -> bool {
     let rules = attack_rules(g, options);
     attack_restrictions_ok(g, &rules, options, decl)
-        && obeyed_attack_requirements(reqs, decl) >= max
+        && obeyed_attack_requirements(g, reqs, decl) >= max
 }
 
 /// Declare attackers step turn-based action (CR 508.1).
@@ -1039,7 +1144,7 @@ pub fn declare_attackers_step(g: &mut Game) {
         }
     };
     let had_to: Vec<ObjectId> = {
-        let mut v: Vec<ObjectId> = reqs.iter().map(|r| r.creature()).collect();
+        let mut v: Vec<ObjectId> = reqs.iter().filter_map(|r| r.creature()).collect();
         v.dedup();
         v
     };
@@ -1139,10 +1244,18 @@ fn perform_attack_declaration(
             }
         }
     }
+    if g.dirty {
+        g.recompute();
+    }
+    let powers: Vec<(ObjectId, i32)> = final_decl
+        .iter()
+        .map(|(a, _)| (*a, g.obj(*a).power()))
+        .collect();
     let c = g.combat.get_or_insert_with(CombatState::default);
     c.attackers_declared = true;
     c.had_to_attack = had_to_attack.to_vec();
     c.declared_attackers = final_decl.clone();
+    c.declared_attack_power = powers;
     if !final_decl.is_empty() {
         c.any_attackers = true;
     }
@@ -1495,6 +1608,7 @@ fn block_restrictions_ok(
 pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
     let mut total = Cost::default();
     let mut any = false;
+    let mut zero = false;
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::BlockCost { blockers, cost } = &r {
             let mut ctx = Ctx::new(s, c);
@@ -1502,12 +1616,41 @@ pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
             if g.restriction_applies(blocker, blockers, &ctx, &locked) {
                 // Scaled amounts are counted from the restriction's point of view (CR 509.1d).
                 let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                zero |= is_written_zero(&cost);
                 crate::casting::add_cost(&mut total, &cost);
                 any = true;
             }
         }
     }
-    (any && !total.is_free()).then_some(total)
+    (any && (zero || !total.is_free())).then_some(total)
+}
+
+/// The cost required for `blocker` to block the attacking creatures `blocked` (CR 509.1d):
+/// the costs to block at all, and those keyed to what it blocks ("can't block creatures
+/// with power 2 or greater unless you pay {1}"), once each.
+pub fn block_cost_for(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Option<Cost> {
+    let base = required_block_cost(g, blocker);
+    let mut zero = base.is_some();
+    let mut total = base.unwrap_or_default();
+    for (s, c, r, locked) in g.all_restrictions() {
+        if let Restriction::BlockCostAgainst {
+            blockers,
+            attackers,
+            cost,
+        } = &r
+        {
+            let mut ctx = Ctx::new(s, c);
+            ctx.set_var(vars::AFFECTED, vec![Entity::Object(blocker)]);
+            if g.restriction_applies(blocker, blockers, &ctx, &locked)
+                && blocked.iter().any(|a| g.matches(*a, attackers, &ctx))
+            {
+                let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                zero |= is_written_zero(&cost);
+                crate::casting::add_cost(&mut total, &cost);
+            }
+        }
+    }
+    (zero || !total.is_free()).then_some(total)
 }
 
 /// Total cost to block for each player (CR 509.1d).
@@ -1517,7 +1660,12 @@ pub fn block_costs_by_player(g: &Game, decl: &[(ObjectId, ObjectId)]) -> Vec<(Pl
     blockers.dedup();
     let mut out: Vec<(PlayerId, Cost)> = Vec::new();
     for b in blockers {
-        if let Some(c) = required_block_cost(g, b) {
+        let blocked: Vec<ObjectId> = decl
+            .iter()
+            .filter(|(x, _)| *x == b)
+            .map(|(_, a)| *a)
+            .collect();
+        if let Some(c) = block_cost_for(g, b, &blocked) {
             let p = g.obj(b).controller;
             match out.iter_mut().find(|(q, _)| *q == p) {
                 Some((_, t)) => crate::casting::add_cost(t, &c),
@@ -1542,6 +1690,12 @@ pub fn best_blocks(
         .iter()
         .map(|(b, atts)| {
             let mut sets: Vec<Vec<ObjectId>> = Vec::new();
+            // Attackers it can block only by paying a cost aren't required blocks either.
+            let atts: Vec<ObjectId> = atts
+                .iter()
+                .copied()
+                .filter(|a| block_cost_for(g, *b, &[*a]).is_none())
+                .collect();
             if required_block_cost(g, *b).is_none() {
                 let max = rules
                     .max_blocks
@@ -2079,8 +2233,13 @@ fn assign_attacker_damage(
         .iter()
         .map(|b| crate::kw::trample::lethal_damage(g, id, *b, pending))
         .collect();
-    // CR 702.22j: another player may divide its damage freely among its blockers.
+    // CR 702.22j: another player may divide its damage freely among its blockers. With
+    // trample, that player also makes the trample choices (Defensive Formation ruling): any
+    // damage beyond lethal to all blockers may go to the attacked player or permanent.
     if let Some(p) = crate::kw::combat_damage_assigner(g, id) {
+        if trample {
+            return assign_trample_damage(g, id, p, power, &blockers, lethal, target, spill);
+        }
         return divide_freely(g, id, p, power, &blockers, lethal);
     }
     if !trample {
@@ -2136,7 +2295,19 @@ fn assign_trample_damage(
         target: target.is_some(),
         spill: target.is_some() && spill.is_some(),
     };
-    let default = shape.default_assignment(power);
+    let mut default = shape.default_assignment(power);
+    if controller != g.obj(id).controller && nb > 0 {
+        // The defending player assigning it (CR 702.22j) keeps it all on the blockers
+        // unless they choose otherwise.
+        let blockers_only = TrampleShape {
+            lethal: lethal[..nb].to_vec(),
+            blockers: nb,
+            target: false,
+            spill: false,
+        };
+        default = blockers_only.default_assignment(power);
+        default.resize(recipients.len(), 0);
+    }
     let ans = g.ask(
         controller,
         Decision::AssignCombatDamage {
@@ -2432,6 +2603,12 @@ pub fn put_onto_battlefield_attacking(g: &mut Game, id: ObjectId, target: Entity
     if g.combat.is_none() {
         return;
     }
+    // Whether it's a creature as it enters counts what it enters with: a permanent that's
+    // a creature only while it has loyalty counters (Kaito, Bane of Nightmares) enters
+    // with them (CR 306.5b) and so enters attacking.
+    if g.dirty {
+        g.recompute();
+    }
     let o = g.obj(id);
     // CR 506.3b: only a creature controlled by an attacking player.
     if !attacking_players(g).contains(&o.controller) {
@@ -2510,7 +2687,11 @@ pub fn choose_attack_target_preferring(
 
 /// Puts a creature onto the battlefield blocking `attacker` (CR 509.4): called as it enters.
 pub fn put_onto_battlefield_blocking(g: &mut Game, id: ObjectId, attacker: ObjectId) {
-    // CR 506.3a, 506.3f: only a creature that isn't a battle.
+    // CR 506.3a, 506.3f: only a creature that isn't a battle (counting what it entered
+    // with).
+    if g.dirty {
+        g.recompute();
+    }
     let o = g.obj(id);
     if !o.is_creature() || o.is(CardType::Battle) {
         return;
@@ -2614,6 +2795,47 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
             add_block(g, blocker, m, entered);
         }
     }
+}
+
+/// "[it] blocks an attacking creature of your choice": `chooser` picks an attacking
+/// creature `blocker` could block (CR 509.1a: attacking its controller, a planeswalker
+/// they control or a battle they protect; not one it's already blocking) and it blocks it
+/// (CR 509.3). Returns true if it did.
+pub fn block_attacker_of_choice(g: &mut Game, blocker: ObjectId, chooser: PlayerId) -> bool {
+    let o = g.obj(blocker);
+    if !g.is_live(blocker) || o.zone != Zone::Battlefield || !o.is_creature() {
+        return false;
+    }
+    let cands: Vec<ObjectId> = g
+        .attackers()
+        .into_iter()
+        .filter(|a| {
+            g.could_block_pair(blocker, *a)
+                && !g
+                    .combat
+                    .as_ref()
+                    .is_some_and(|c| c.blockers_of(*a).contains(&blocker))
+        })
+        .collect();
+    let chosen = match cands.len() {
+        0 => return false,
+        1 => cands[0],
+        _ => match g
+            .ask_objects(
+                chooser,
+                Some(blocker),
+                "Choose the attacking creature it blocks",
+                cands.clone(),
+                1,
+                1,
+            )
+            .first()
+        {
+            Some(a) if cands.contains(a) => *a,
+            _ => cands[0],
+        },
+    };
+    block_by_effect(g, blocker, chosen)
 }
 
 /// "[attacking creature] becomes unblocked" (CR 509.1h): an effect makes a blocked

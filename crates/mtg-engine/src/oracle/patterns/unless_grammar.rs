@@ -195,6 +195,10 @@ fn known_payability(e: &Effect) -> bool {
             what: Sel::Choose { up_to: false, .. },
             ..
         } => true,
+        Effect::AddCounters {
+            what: Sel::Choose { up_to: false, .. },
+            ..
+        } => true,
         _ => false,
     }
 }
@@ -224,6 +228,24 @@ fn action_payment(a: &str, b: &mut Builder) -> Option<Vec<Payment>> {
         {
             return None;
         }
+        return single(Cost::default().with(CostPart::Effect(Box::new(e))));
+    }
+    // "have you draw a card" (Decoy Gambit, Research // Development): the player paying
+    // has the source's controller perform the instruction.
+    if let Some(r) = a.strip_prefix("have you ") {
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let e = parse_clause(&format!("you {r}"), b);
+        let new_targets = b.targets.len() != saved.0;
+        (b.it, b.it_player) = (saved.1, saved.2);
+        b.targets.truncate(saved.0);
+        let e = e.filter(|e| !new_targets && matches!(e, Effect::Draw { who: PlayerRef::You, .. }))?;
+        let Effect::Draw { n, .. } = e else {
+            return None;
+        };
+        let e = Effect::Draw {
+            who: PlayerRef::ControllerOf(Box::new(Sel::This)),
+            n,
+        };
         return single(Cost::default().with(CostPart::Effect(Box::new(e))));
     }
     // "sacrifice it", "sacrifice that artifact": that object, if they control it.
@@ -402,7 +424,7 @@ enum PayerPhrase<'a> {
 }
 
 fn payer_phrase(r: &str) -> Option<PayerPhrase<'_>> {
-    for p in ["they ", "that player ", "that opponent "] {
+    for p in ["they ", "that player ", "that opponent ", "the player "] {
         if let Some(rest) = r.strip_prefix(p) {
             return Some(PayerPhrase::Pronoun(rest));
         }
@@ -499,7 +521,85 @@ fn split_unless(eff: &str, rest: &str, b: &mut Builder) -> Option<Effect> {
         }
     };
     let pays = payments(action, b)?;
+    // "For each opponent, choose up to one target creature that player controls, then
+    // return that creature to its owner's hand unless its controller has you draw a card":
+    // each targeted object's controller decides for that object.
+    if let PlayerRef::ControllerOf(sel) = &who {
+        if let Sel::Target(n) = **sel {
+            let several = b.targets.get(n as usize).is_some_and(|t| {
+                t.per_player.is_some() || !matches!(t.max, Value::Const(1))
+            });
+            if several {
+                return per_target(n, pays, effect);
+            }
+        }
+    }
     Some(unless_paid(who, pays, effect))
+}
+
+/// "[effect] unless its controller [pays]" about target slot `n` that has several
+/// objects (one for each player): performed for each of them, its own controller
+/// deciding (see [`per_target`]).
+pub(crate) fn unless_for_each_target(e: Effect, n: u8) -> Effect {
+    let pays_for_target = matches!(&e, Effect::PayOptional { who: PlayerRef::ControllerOf(s), .. }
+        if matches!(**s, Sel::Target(k) if k == n));
+    if !pays_for_target {
+        return e;
+    }
+    let each = super::iteration_grammar::EACH;
+    let mut j = match serde_json::to_value(&e) {
+        Ok(j) => j,
+        Err(_) => return e,
+    };
+    replace_target(&mut j, n, each);
+    match serde_json::from_value(j) {
+        Ok(inner) => Effect::ForEach {
+            sel: Sel::Target(n),
+            var: each,
+            effect: Box::new(inner),
+        },
+        Err(_) => e,
+    }
+}
+
+fn replace_target(j: &mut serde_json::Value, n: u8, var: Var) {
+    if *j == serde_json::json!({ "Target": n }) {
+        *j = serde_json::json!({ "Var": var });
+        return;
+    }
+    match j {
+        serde_json::Value::Object(m) => m.values_mut().for_each(|x| replace_target(x, n, var)),
+        serde_json::Value::Array(a) => a.iter_mut().for_each(|x| replace_target(x, n, var)),
+        _ => {}
+    }
+}
+
+/// [`unless_paid`] for each object chosen for target slot `n`, with its controller
+/// paying.
+fn per_target(n: u8, pays: Vec<Payment>, effect: Effect) -> Option<Effect> {
+    let each = super::iteration_grammar::EACH;
+    let from = serde_json::json!({ "Target": n });
+    let to = serde_json::json!({ "Var": each });
+    fn walk(j: &mut serde_json::Value, from: &serde_json::Value, to: &serde_json::Value) {
+        if j == from {
+            *j = to.clone();
+            return;
+        }
+        match j {
+            serde_json::Value::Object(m) => m.values_mut().for_each(|x| walk(x, from, to)),
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, from, to)),
+            _ => {}
+        }
+    }
+    let who = PlayerRef::ControllerOf(Box::new(Sel::Target(n)));
+    let mut j = serde_json::to_value(unless_paid(who, pays, effect)).ok()?;
+    walk(&mut j, &from, &to);
+    let effect: Effect = serde_json::from_value(j).ok()?;
+    Some(Effect::ForEach {
+        sel: Sel::Target(n),
+        var: each,
+        effect: Box::new(effect),
+    })
 }
 
 /// "Draw a card, then discard a card unless ...": "unless" belongs to the last step only,
@@ -516,11 +616,27 @@ fn unless_player_does(l: &str, b: &mut Builder) -> Option<Effect> {
     if let Some(r) = l.strip_prefix("unless ") {
         let (cond, eff) = r.split_once(", ")?;
         let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        // "Unless target player pays {3}, that player loses 5 life": the player is named
+        // first; "unless you sacrifice an Island, sacrifice ~".
+        let named = match payer_phrase(&format!("{cond} ")) {
+            Some(PayerPhrase::Phrase(p, action)) => player_ref(p, b)
+                .filter(|(_, tail)| tail.trim().is_empty())
+                .map(|(who, _)| {
+                    if !matches!(who, PlayerRef::You) {
+                        b.it_player = who.clone();
+                    }
+                    (who, action.trim().to_string())
+                }),
+            _ => None,
+        };
         let effect = parse_clause(eff, b);
         let r = effect.and_then(|effect| {
-            let (who, action) = match payer_phrase(&format!("{cond} "))? {
-                PayerPhrase::Any(who, action) => (who, action.trim().to_string()),
-                _ => return None,
+            let (who, action) = match named {
+                Some(n) => n,
+                None => match payer_phrase(&format!("{cond} "))? {
+                    PayerPhrase::Any(who, action) => (who, action.trim().to_string()),
+                    _ => return None,
+                },
             };
             let pays = payments(&action, b)?;
             Some(unless_paid(who, pays, effect))

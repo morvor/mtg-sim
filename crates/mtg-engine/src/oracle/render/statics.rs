@@ -622,12 +622,26 @@ impl Renderer<'_> {
                 let p = if w == "you" { "your" } else { "their" };
                 format!("{w} may look at the top card of {p} library any time")
             }
+            // "Players play with the top card of their libraries revealed": each player
+            // with their own.
+            StaticEffect::RevealTopCard(PlayerRel::Any) => {
+                "players play with the top card of their libraries revealed".into()
+            }
+            StaticEffect::RevealTopCard(PlayerRel::Opponent) => {
+                "your opponents play with the top card of their libraries revealed".into()
+            }
             StaticEffect::RevealTopCard(r) => {
                 let p = self.rel_possessive(*r, Num::One);
                 format!("play with the top card of {p} library revealed")
             }
             StaticEffect::AdditionalLandPlays(r, n) => {
                 let w = self.rel_subject(*r);
+                // "Each player may play an additional land on each of their turns."
+                let w = if w == "a player" {
+                    "{alt:a player|each player}".to_string()
+                } else {
+                    w
+                };
                 let p = if w == "you" { "your" } else { "their" };
                 match n {
                     1 => format!("{w} may play an additional land on each of {p} turns"),
@@ -1109,7 +1123,15 @@ impl Renderer<'_> {
         };
         let mut parts = Vec::new();
         if ap.instant_timing {
-            parts.push("any time you could cast an instant".to_string());
+            // Loyalty abilities are otherwise activated only on your turn (CR 606.3); an
+            // instant can be cast on any player's turn (CR 117.1a).
+            if matches!(ap.scope.class, AbilityClass::Loyalty) {
+                parts.push(
+                    "{opt:on any player's turn} any time you could cast an instant".to_string(),
+                );
+            } else {
+                parts.push("any time you could cast an instant".to_string());
+            }
         }
         if let Some(n) = ap.loyalty_per_turn {
             let t = match n {
@@ -1837,6 +1859,33 @@ impl Renderer<'_> {
                     ),
                 }
             }
+            Restriction::ExtraBlocksCounted { blocker, n } => {
+                let b = subj(self, blocker);
+                match n {
+                    Value::Count(f) => {
+                        let f = self.for_each_noun(f);
+                        format!("{b} can block an additional creature each combat for each {f}")
+                    }
+                    other => {
+                        let v = self.value(other);
+                        format!("{b} can block X additional creatures each combat, where X is {v}")
+                    }
+                }
+            }
+            Restriction::AssignAsThoughUnblocked { what, may } => match (what, may) {
+                (Filter::AttachedToSource, true) => {
+                    let w = self.sel(&Sel::AttachedTo, Case::Poss);
+                    format!("{w} controller may have it assign its combat damage as though it weren't blocked")
+                }
+                (_, true) => {
+                    let n = self.noun(what, Num::One);
+                    format!("for each {n}, you may have that creature assign its combat damage as though it weren't blocked")
+                }
+                (_, false) => {
+                    let w = subj(self, what);
+                    format!("{w} assigns its combat damage as though it weren't blocked")
+                }
+            },
             Restriction::CanBlockOnly { blocker, attackers } => {
                 let b = subj(self, blocker);
                 let a = self.noun(attackers, Num::Many);
@@ -1950,6 +1999,84 @@ impl Renderer<'_> {
                 let c = self.cost(cost);
                 format!("{b} can't block unless their controller pays {c} for each blocking creature they control")
             }
+            Restriction::BlockCostAgainst {
+                blockers,
+                attackers,
+                cost,
+            } => {
+                let b = subj(self, blockers);
+                let a = self.noun(attackers, Num::Many);
+                if matches!(blockers, Filter::Source) {
+                    let pay = self.cost_as_payment(cost);
+                    return format!("{b} can't block {a} unless you {pay}");
+                }
+                let c = self.cost(cost);
+                format!("{b} can't block {a} unless their controller pays {c} for each blocking creature they control")
+            }
+            Restriction::AttackOnlyWith {
+                attackers,
+                companion,
+            } => {
+                let a = subj(self, attackers);
+                let c = self.noun(companion, Num::One);
+                format!("{a} can't attack unless {c} also attacks")
+            }
+            Restriction::BlockOnlyWith {
+                blockers,
+                companion,
+            } => {
+                let b = subj(self, blockers);
+                let c = self.noun(companion, Num::One);
+                format!("{b} can't block unless {c} also blocks")
+            }
+            Restriction::PlayerMustAttack {
+                players,
+                defender,
+                planeswalkers,
+            } => {
+                let p = self.player_filter_subject(players);
+                let d = match defender {
+                    Some(d) => {
+                        let d = self.player_filter_object(d);
+                        if *planeswalkers {
+                            format!(" {d} or a planeswalker you control")
+                        } else {
+                            format!(" {d}")
+                        }
+                    }
+                    None => String::new(),
+                };
+                format!("{p} must attack{d} with at least one creature each combat if able")
+            }
+            Restriction::MinBlockersCounted { attacker, n } => {
+                let a = subj(self, attacker);
+                let v = self.value(n);
+                format!("{a} can't be blocked except by X or more creatures, where X is {v}")
+            }
+            Restriction::BlockIgnoringEvasion {
+                blocker,
+                attackers,
+                evasion,
+            } => {
+                let b = subj(self, blocker);
+                match evasion {
+                    crate::keywords::KeywordKind::Flying => {
+                        let a = self.noun(attackers, Num::Many);
+                        format!("{b} can block {a} as though it had reach")
+                    }
+                    crate::keywords::KeywordKind::Shadow => {
+                        format!("{b} can block creatures with shadow as though they didn't have shadow")
+                    }
+                    crate::keywords::KeywordKind::Landwalk => format!(
+                        "{b} can block creatures with landwalk abilities as though they didn't have those abilities"
+                    ),
+                    other => self.gap(format!("block ignoring {other:?}")),
+                }
+            }
+            Restriction::CantAttackPlayerAgain(f) => {
+                let a = subj(self, f);
+                format!("{a} can't attack a player it has already attacked this turn")
+            }
             Restriction::CantBeTargeted { what, by } => {
                 let w = subj(self, what);
                 let by = self.target_restriction(by);
@@ -1963,6 +2090,10 @@ impl Renderer<'_> {
             Restriction::CantCast { who, what } => {
                 let w = self.player_filter_subject(who);
                 let s = self.spell_noun_plural(what);
+                // "Spells with the chosen name can't be cast": by no player.
+                if matches!(who, PlayerFilter::Any) {
+                    return format!("{{alt:{w} can't cast {s}|{s} can't be cast}}");
+                }
                 format!("{w} can't cast {s}")
             }
             Restriction::CantActivate {
@@ -2211,9 +2342,11 @@ impl Renderer<'_> {
             }
             Restriction::MustTarget { chooser, what } => {
                 let c = self.player_filter_object(chooser);
-                let n = self.noun_det(what, Det::A);
+                let n = self.noun(what, Num::One);
+                // The spell a player casts and the ability they activate are theirs (CR
+                // 601.2a, 602.2a); the objects chosen are permanents.
                 format!(
-                    "while {c} is choosing targets as part of casting a spell or activating an ability, that player must choose at least {n} if able"
+                    "while {c} is choosing targets as part of casting a spell {{opt:they control}} or activating an ability {{opt:they control}}, that player must choose at least one {n} {{opt:on the battlefield}} if able"
                 )
             }
             Restriction::CantBe { what, action } => {
@@ -2418,12 +2551,24 @@ impl Renderer<'_> {
                         format!("~ escapes with {c} on {it}{}", w.unwrap_or_default())
                     }
                     A::AsEnters(e) => self.as_enters(&subj, e),
-                    A::EnterAsCopy { filter, optional } => {
+                    A::EnterAsCopy {
+                        filter,
+                        optional,
+                        tapped,
+                    } => {
                         // A copy of a permanent (CR 707.5): "any creature on the
                         // battlefield", "any creature on the battlefield with mana value 3
-                        // or less", "a creature you control".
+                        // or less", "a creature you control"; or of a card in another zone
+                        // ("any land card in a graveyard", CR 707.2).
                         let noun = self.noun(filter, Num::One);
-                        let mut alts = vec![format!("any {noun} on the battlefield")];
+                        let elsewhere = filter
+                            .zone()
+                            .is_some_and(|z| z != crate::ability::ZoneKind::Battlefield);
+                        let mut alts = vec![if elsewhere {
+                            format!("any {noun}")
+                        } else {
+                            format!("any {noun} on the battlefield")
+                        }];
                         if let Some((head, rest)) = noun.split_once(" with ") {
                             alts.push(format!("any {head} on the battlefield with {rest}"));
                         }
@@ -2442,10 +2587,11 @@ impl Renderer<'_> {
                         } else {
                             format!("{{alt:{}}}", alts.join("|"))
                         };
+                        let t = if *tapped { " tapped" } else { "" };
                         if *optional {
-                            format!("you may have {subj} enter as a copy of {n}")
+                            format!("you may have {subj} enter{t} as a copy of {n}")
                         } else {
-                            format!("{subj} enters as a copy of {n}")
+                            format!("{subj} enters{t} as a copy of {n}")
                         }
                     }
                     A::EnterUnderControl(p) => {
@@ -2886,7 +3032,14 @@ impl Renderer<'_> {
                 format!("skip {p} {s}")
             }
             (E::ProduceMana(f), action) => {
-                let n = self.noun_det(f, Det::A);
+                // "If you tap a permanent for mana": only its controller can (CR 602.2).
+                let n = match self.yours_tapped(f) {
+                    Some(y) => {
+                        let a = self.noun_det(f, Det::A);
+                        format!("{{alt:{a} is tapped|you tap {y}}}")
+                    }
+                    None => format!("{} is tapped", self.noun_det(f, Det::A)),
+                };
                 let then = match action {
                     A::Multiply(2) => "it produces twice as much of that mana instead".to_string(),
                     A::Multiply(3) => {
@@ -2901,7 +3054,7 @@ impl Renderer<'_> {
                     }
                     other => self.replacement_then(other, "it"),
                 };
-                format!("if {n} is tapped for mana, {then}")
+                format!("if {n} for mana, {then}")
             }
             (E::UntapDuringUntapStep(f), A::Prevent) => {
                 let s = self.affected_subject(f);
@@ -3268,6 +3421,7 @@ impl Renderer<'_> {
                 format!("{v} of that damage is dealt to {t} instead")
             }
             A::PreventAndThen(amount, e) => {
+                let e = &crate::prevention::that_damage_as_event_amount(e);
                 let p = match amount {
                     None => "prevent that damage".to_string(),
                     Some(v) => {
@@ -3381,7 +3535,7 @@ impl Renderer<'_> {
                 }
             }
             A::PreventAndThen(amount, e) => {
-                let e = self.effect(e);
+                let e = self.effect(&crate::prevention::that_damage_as_event_amount(e));
                 let p = match amount {
                     None => "prevent that damage".to_string(),
                     Some(v) => {
@@ -3432,9 +3586,32 @@ impl Renderer<'_> {
                         };
                         format!("it deals that much damage plus {v}{to_that} instead")
                     }
+                    // "it deals half that damage, rounded down, to that permanent or player
+                    // instead": that much minus the other half.
+                    A::Subtract(Value::Diff(a, b))
+                        if matches!(a.as_ref(), Value::EventAmount)
+                            && matches!(b.as_ref(), Value::Div(n, 2, _) if matches!(n.as_ref(), Value::EventAmount)) =>
+                    {
+                        let Value::Div(_, _, up) = b.as_ref() else {
+                            return self.gap("half that damage");
+                        };
+                        // That much minus (that much minus half of it) is half of it.
+                        let r = if *up { "up" } else { "down" };
+                        let to_that = if anything {
+                            " {opt:to that permanent or player}"
+                        } else {
+                            to_that
+                        };
+                        format!("it deals half that damage, rounded {r},{to_that} instead")
+                    }
                     A::Subtract(v) => {
                         let v = self.value(v);
-                        format!("it deals that much damage minus {v} instead")
+                        let to_that = if anything {
+                            " {opt:to that permanent or player}"
+                        } else {
+                            to_that
+                        };
+                        format!("it deals that much damage minus {v}{to_that} instead")
                     }
                     A::Redirect(sel) => {
                         let t = self.sel(sel, Case::Obj);

@@ -98,7 +98,7 @@ fn step_words(s: &str) -> Option<Vec<TriggerStep>> {
         "upkeep" | "upkeep step" => vec![Upkeep],
         "draw step" => vec![Draw],
         "cleanup step" => vec![Cleanup],
-        "combat" => vec![BeginningOfCombat],
+        "combat" | "combat phase" => vec![BeginningOfCombat],
         "declare attackers step" => vec![DeclareAttackers],
         // CR 505.1: "your next main phase" is whichever main phase of yours comes next.
         "main phase" => vec![PrecombatMain, PostcombatMain],
@@ -1134,6 +1134,15 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
             restore(b, saved);
             continue;
         };
+        // "Return target permanent card ... to the battlefield. When that permanent
+        // enters, ..." (Jailbreak): the captured referent is the object the creating
+        // ability named, and the permanent that enters is a new object (CR 400.7), which
+        // has already entered by the time the delayed ability is created. Not read.
+        if matches!(trigger, TriggerCond::EntersBattlefield(_)) {
+            b.targets.truncate(n0);
+            restore(b, saved);
+            return None;
+        }
         let Some(amount_eff) = event_amount_text(eff, &trigger) else {
             b.targets.truncate(n0);
             restore(b, saved);

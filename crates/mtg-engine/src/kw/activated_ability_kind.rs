@@ -15,9 +15,9 @@
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
 use crate::eval::Ctx;
+use crate::events::Event;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
-use crate::events::Event;
 use crate::object::{EventInfo, StackKind};
 use crate::types::{Entity, ObjectId, PlayerId};
 
@@ -48,7 +48,12 @@ fn event_ability(g: &Game, ctx: &Ctx) -> Option<ActivatedAbility> {
     }
     // A mana ability: the last one recorded for its source.
     let src = info.object?;
-    let (_, _, uid) = g.history.activated.iter().rev().find(|(_, s, _)| *s == src)?;
+    let (_, _, uid) = g
+        .history
+        .activated
+        .iter()
+        .rev()
+        .find(|(_, s, _)| *s == src)?;
     g.obj(src)
         .chars
         .abilities
@@ -168,18 +173,39 @@ impl KeywordRules for ActivatedAbilityKind {
         }
         if name == ATTACKING_YOU_OR_YOUR_PLANESWALKER {
             let you = ctx.controller;
-            return Some(
-                g.combat
+            // A creature that left the battlefield is judged by what it was attacking
+            // before it left (last known information); one removed from combat but still
+            // on the battlefield isn't attacking anything.
+            let target = g.combat.as_ref().and_then(|c| {
+                let cur = g.current(id);
+                if let Some(a) = c.attacker(cur) {
+                    return a.target;
+                }
+                if g.is_live(cur) && g.obj(cur).zone == crate::object::Zone::Battlefield {
+                    return None;
+                }
+                // It must still have been attacking as it left: one removed from combat
+                // before it left wasn't.
+                if !g
+                    .obj(id)
+                    .left_battlefield
                     .as_ref()
-                    .and_then(|c| c.attack_target(id))
-                    .is_some_and(|t| match t {
-                        Entity::Player(p) => p == you,
-                        Entity::Object(o) => {
-                            g.obj(o).is(crate::types::CardType::Planeswalker)
-                                && g.obj(o).controller == you
-                        }
-                    }),
-            );
+                    .is_some_and(|s| s.attacking)
+                {
+                    return None;
+                }
+                c.removed_attack_targets
+                    .iter()
+                    .rev()
+                    .find(|(o, _)| *o == id)
+                    .map(|(_, t)| *t)
+            });
+            return Some(target.is_some_and(|t| match t {
+                Entity::Player(p) => p == you,
+                Entity::Object(o) => {
+                    g.obj(o).is(crate::types::CardType::Planeswalker) && g.obj(o).controller == you
+                }
+            }));
         }
         if name == HAS_MANA_ABILITY {
             return Some(

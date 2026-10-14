@@ -488,6 +488,11 @@ pub struct TurnHistory {
     /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
     #[serde(default)]
     pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
+    /// Cards revealed as they were drawn by "You may reveal the first card you draw each
+    /// turn as you draw it" (Inquisitor Eisenhorn): "Whenever you reveal ... this way"
+    /// triggers only for them. Recorded by `kw/reveal_first_draw.rs`.
+    #[serde(default)]
+    pub first_draws_revealed: Vec<ObjectId>,
     /// Named actions players performed this turn, from [`Event::Custom`] events with a
     /// player ("surveil", "scry"): "as long as you've surveilled this turn". Recorded by
     /// `kw/grant_conditions.rs`.
@@ -503,6 +508,19 @@ pub struct TurnHistory {
     pub milled: Vec<ObjectId>,
     #[serde(default)]
     pub discarded: Vec<(PlayerId, ObjectId)>,
+    /// Every (blocker, attacker) pair that existed this turn, with the attacker's
+    /// controller at the time ("creatures that were blocked by target Wall this turn").
+    /// Recorded by `kw/block_history.rs`.
+    #[serde(default)]
+    pub blocks: Vec<(ObjectId, ObjectId, PlayerId)>,
+    /// The timestamp as the turn began: a permanent whose `control_since` is earlier has
+    /// been controlled continuously by its controller since the beginning of the turn.
+    #[serde(default)]
+    pub began_at: Timestamp,
+    /// Attacks declared this turn: (creature, what it attacked, the defending player)
+    /// ("a player it has already attacked this turn"). Recorded by `kw/block_history.rs`.
+    #[serde(default)]
+    pub attacks: Vec<(ObjectId, Entity, PlayerId)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

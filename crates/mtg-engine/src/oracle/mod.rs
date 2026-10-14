@@ -18,6 +18,7 @@ pub mod keywords;
 pub mod patterns;
 pub mod phrases;
 pub mod render;
+pub mod self_refs;
 pub mod statics;
 pub mod triggers;
 
@@ -93,7 +94,21 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     let mut out = Compiled::default();
     let norm = normalize(text, ctx);
     let manual_ok = !NO_MANUAL.with(|c| c.get());
-    for block in crate::oracle_ext::group_blocks(split_abilities(&norm), ctx) {
+    let blocks = crate::oracle_ext::group_blocks(split_abilities(&norm), ctx);
+    // The same blocks with gendered and plural self-references made neuter and singular,
+    // tried for a block that doesn't parse as written.
+    let neuter_norm = normalize_neuter(text, ctx);
+    let neuter_blocks = if neuter_norm == norm {
+        vec![]
+    } else {
+        crate::oracle_ext::group_blocks(split_abilities(&neuter_norm), ctx)
+    };
+    let neuter_blocks = if neuter_blocks.len() == blocks.len() {
+        neuter_blocks
+    } else {
+        vec![]
+    };
+    for (bi, block) in blocks.into_iter().enumerate() {
         // A genuinely unique ability written by hand (compile-first policy, see `cards`).
         if let Some(m) = manual_ok
             .then(|| crate::cards::lookup(ctx.full_name, ctx.face_index, &block))
@@ -105,12 +120,18 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
         }
         // A pronoun left without an antecedent, or an instruction to repeat a process
         // outside any process, means the text wasn't understood.
-        let parsed = parse_ability(&block, ctx).filter(|v| {
+        let understood = |v: &Vec<Ability>| {
             !v.iter().any(|a| {
                 patterns::oracle_hardening_referents::has_no_referent(a)
                     || crate::repeat_process::has_stray_repeat(a)
                     || patterns::filters_relational::unresolved(a)
             })
+        };
+        let parsed = parse_ability(&block, ctx).filter(understood).or_else(|| {
+            let alt = neuter_blocks.get(bi).filter(|b| **b != block)?;
+            parse_ability(alt, ctx)
+                .filter(understood)
+                .map(|v| v.into_iter().map(|a| with_text(a, &block)).collect())
         });
         match parsed {
             Some(mut abilities) => out.abilities.append(&mut abilities),
@@ -132,8 +153,23 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
     out
 }
 
+/// `a` with the block text `text` (an ability parsed from another wording of its block
+/// keeps the block's own text).
+fn with_text(a: Ability, text: &str) -> Ability {
+    if a.text == text {
+        return a;
+    }
+    AbilityDef::with_link(a.kind.clone(), text, a.link)
+}
+
 /// Normalizes oracle text for parsing.
 pub fn normalize(text: &str, ctx: &CompileContext) -> String {
+    normalize_impl(text, ctx, false)
+}
+
+/// [`normalize`]; `alt`: also a planeswalker's first name that's its own subtype
+/// ("Garruk" on Garruk Relentless), for blocks that don't parse otherwise.
+fn normalize_impl(text: &str, ctx: &CompileContext, alt: bool) -> String {
     let mut s = strip_reminder(text);
     s = s
         .replace('\u{2212}', "-")
@@ -146,6 +182,7 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         // A comma inside a closing quote before "where X is" belongs to the sentence:
         // `tokens with "[ability]," where X is ...` (Vren, the Relentless).
         .replace(",\" where X is ", "\", where X is ");
+    s = self_refs::thousands(&s);
     // Self references.
     let mut names: Vec<String> = vec![ctx.card_name.to_string()];
     if ctx.full_name != ctx.card_name {
@@ -172,15 +209,34 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
         }
     }
     names.sort_by_key(|n| std::cmp::Reverse(n.len()));
+    // In a quoted ability granted to other objects, "named [the card's name]" is that name,
+    // not a reference to the object that has the ability (Food Fight: "permanents named
+    // Food Fight").
+    // (A quote's text normalized on its own counts as quoted.)
+    let quoted_alone =
+        !s.contains('"') && RAW_TEXT.with(|r| r.borrow().contains(&format!("\"{}", text.trim())));
+    let protected = if quoted_alone {
+        let (inner, kept) = self_refs::protect_names_in_quotes(&format!("\"{s}\""), &names);
+        (inner[1..inner.len() - 1].to_string(), kept)
+    } else {
+        self_refs::protect_names_in_quotes(&s, &names)
+    };
+    s = protected.0;
     for n in &names {
-        if !n.is_empty() {
+        // A short name, or a name that's also a subtype ("Assembly-Worker"), is the card
+        // only as a whole word not used as the subtype (see `self_refs`).
+        let subtype = crate::types::subtype_kind(n).is_some();
+        if n.is_empty() {
+        } else if subtype || (n != ctx.card_name && n != ctx.full_name) {
+            s = self_refs::replace_self_name(&s, n, subtype);
+        } else {
             s = s.replace(n.as_str(), "~");
         }
     }
     // Legendary cards are also called by the first word(s) of their name ("Whenever Edgar
     // attacks" on Edgar Markov, "Zur" for Zur the Enchanter, "Jedit Ojanen" for Jedit
     // Ojanen of Efrava): the longest such prefix first.
-    if let Some(first) = short_first_name(ctx) {
+    if let Some(first) = short_first_name(ctx, alt) {
         let words: Vec<&str> = ctx.card_name.split(' ').collect();
         for k in (2..words.len()).rev() {
             let prefix = words[..k].join(" ");
@@ -192,7 +248,11 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
                 s = replace_word(&s, &prefix, "~");
             }
         }
-        s = replace_word(&s, first, "~");
+        if crate::types::subtype_kind(first).is_some() {
+            s = self_refs::replace_self_name(&s, first, true);
+        } else {
+            s = replace_word(&s, first, "~");
+        }
     }
     const SELF_REFS: [&str; 23] = [
         "this creature",
@@ -222,7 +282,20 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
     for r in SELF_REFS {
         s = replace_ci(&s, r, "~");
     }
-    s
+    self_refs::restore_names(&s, &protected.1)
+}
+
+/// [`normalize`], with a planeswalker's first name that's its subtype read as its name
+/// where it isn't used as the subtype, a legendary character's "he", "him" and "her"
+/// (CR 201.5) and a plural name's verbs and "they" (see `self_refs`) in their neuter
+/// singular forms: the text a block that doesn't parse as written is parsed from
+/// instead.
+pub fn normalize_neuter(text: &str, ctx: &CompileContext) -> String {
+    let mut s = normalize_impl(text, ctx, true);
+    if ctx.type_line.supertypes.contains(Supertype::Legendary) {
+        s = self_refs::neuter_pronouns(&s);
+    }
+    self_refs::singular_self(&s)
 }
 
 /// A title before a legendary character's name ("General Kudro").
@@ -235,7 +308,7 @@ fn is_title(w: &str) -> bool {
 
 /// The first word of a legendary card's name when it can stand for the card: not a
 /// subtype ("Ajani", "Sliver"), a title ("Captain", "General") or an article.
-fn short_first_name<'a>(ctx: &CompileContext<'a>) -> Option<&'a str> {
+fn short_first_name<'a>(ctx: &CompileContext<'a>, alt: bool) -> Option<&'a str> {
     if !ctx.type_line.supertypes.contains(Supertype::Legendary) || ctx.card_name.contains(',') {
         return None;
     }
@@ -246,6 +319,12 @@ fn short_first_name<'a>(ctx: &CompileContext<'a>) -> Option<&'a str> {
             .chars()
             .all(|c| c.is_alphabetic() || c == '-' || c == '\'')
         && !first.ends_with("'s")
+        // A planeswalker's own subtype is its character's name ("Garruk Relentless",
+        // "Sarkhan the Mad"); other subtypes aren't ("Sliver Queen").
+        && (crate::types::subtype_kind(first).is_none()
+            || (alt
+                && crate::types::subtype_kind(first) == Some(crate::types::SubtypeKind::Planeswalker)
+                && ctx.type_line.subtypes.iter().any(|s| s.as_str() == first)))
         && !matches!(
             first,
             "The"
@@ -262,8 +341,7 @@ fn short_first_name<'a>(ctx: &CompileContext<'a>) -> Option<&'a str> {
                 | "Doctor"
                 | "Professor"
                 | "Sir"
-        )
-        && crate::types::subtype_kind(first).is_none();
+        );
     ok.then_some(first)
 }
 
@@ -437,7 +515,9 @@ pub fn strip_ability_word(text: &str) -> &str {
                         | "by"
                 )
         });
-        let long_flavor_word = !head.contains(',')
+        // A flavor word may contain a comma when it's title-cased ("In You, All Things
+        // Are Possible — Whenever ...", CR 207.2d).
+        let long_flavor_word = (!head.contains(',') || title_cased)
             && ((words <= 6 && (rest.starts_with("When") || rest.starts_with("At ")))
                 || (words <= 8 && rest.starts_with('{'))
                 || (words <= 7
@@ -450,7 +530,14 @@ pub fn strip_ability_word(text: &str) -> &str {
             && !head.contains(':')
             && !head.to_lowercase().starts_with("choose")
             // ("~ Formula": a flavor word with the card's name in it.)
-            && head.chars().next().is_some_and(|c| c.is_uppercase() || c == '~')
+            // ("10,000 Needles", "... Catch", "Throw ...": a flavor word may start with a
+            // number or an ellipsis, CR 207.2d.)
+            && head
+                .trim_start_matches("...")
+                .trim_start()
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_uppercase() || c == '~' || c.is_ascii_digit())
             && !head.contains('{')
             // Not a dash inside a quoted ability ("All creatures have "Boast — ...").
             && !head.contains('"')
@@ -657,12 +744,33 @@ fn activated_zone(cost: &str, effect: &str) -> FunctionZone {
 }
 
 /// Whether a cost or effect moves cards to or from a library (drawing, milling, searching,
-/// surveilling, putting cards into a library, ...).
+/// surveilling, putting cards into a library, ...). A triggered ability the effect creates
+/// ("When you do, mill two cards.") is a separate ability: Shaun & Rebecca, Agents' "{T}:
+/// Add {C}. When you do, mill two cards." is a mana ability (its ruling).
 fn touches_library(cost: &Cost, effect: &Effect) -> bool {
+    fn own_part(v: serde_json::Value) -> serde_json::Value {
+        use serde_json::Value as J;
+        match v {
+            J::Object(m)
+                if m.len() == 1
+                    && ["Reflexive", "DelayedTrigger"]
+                        .iter()
+                        .any(|k| m.contains_key(*k)) =>
+            {
+                J::Null
+            }
+            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, own_part(v))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(own_part).collect()),
+            other => other,
+        }
+    }
+    let effect = serde_json::to_value(effect)
+        .map(own_part)
+        .unwrap_or_default();
     let text = format!(
         "{} {}",
         serde_json::to_string(cost).unwrap_or_default(),
-        serde_json::to_string(effect).unwrap_or_default()
+        effect
     );
     ["Library", "Draw", "Mill", "Search", "Surveil", "Explore"]
         .iter()

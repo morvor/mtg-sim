@@ -43,6 +43,12 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
             return Some((Value::Sum(vec![Value::X, Value::Const(n)]), rest));
         }
     }
+    // "up to one hundred target creatures" (Baldin, Century Herdmaster).
+    if let Some(rest) = s.strip_prefix("one hundred") {
+        if rest.is_empty() || rest.starts_with(' ') {
+            return Some((Value::Const(100), rest.trim_start()));
+        }
+    }
     let (w, rest) = split_word(s);
     let n = match w {
         "a" | "an" | "one" | "1" => 1,
@@ -78,12 +84,37 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         other => {
             if let Ok(n) = other.parse::<i32>() {
                 n
+            } else if let Some(n) = hyphenated_number(other) {
+                n
             } else {
                 return None;
             }
         }
     };
     Some((Value::Const(n), rest))
+}
+
+/// "twenty-five", "forty-two" (CR 107.1).
+fn hyphenated_number(w: &str) -> Option<i32> {
+    let (t, o) = w.split_once('-')?;
+    let tens = match t {
+        "twenty" => 20,
+        "thirty" => 30,
+        "forty" => 40,
+        "fifty" => 50,
+        "sixty" => 60,
+        "seventy" => 70,
+        "eighty" => 80,
+        "ninety" => 90,
+        _ => return None,
+    };
+    let ones = [
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    ]
+    .iter()
+    .position(|x| *x == o)? as i32
+        + 1;
+    Some(tens + ones)
 }
 
 /// Splits off the first word.
@@ -295,6 +326,10 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "token" => Filter::Token,
         "historic" => Filter::Historic,
         "face-down" => Filter::FaceDown,
+        // CR 406.3, 708: a face-up permanent or exiled card.
+        "face-up" => Filter::not(Filter::FaceDown),
+        // CR 712.1.
+        "double-faced" => Filter::Custom(crate::kw::dig_filters::DOUBLE_FACED.into()),
         "enchanted" => Filter::Enchanted,
         "equipped" => Filter::Equipped,
         "modified" => Filter::Modified,
@@ -438,8 +473,44 @@ fn own_alternative(
     heads.push(alt);
 }
 
+/// "basic, Sphere, or Locus land card", "the basic, Sphere, and Locus lands you
+/// control": a list of alternatives whose first item is an adjective (a supertype) and the
+/// others subtypes, sharing the noun after the last item. Each item is an alternative.
+fn adjective_first_in_list(s: &str) -> Option<(Filter, bool, &str)> {
+    let s = s.trim_start();
+    let (w, r) = split_word(s);
+    let adj = w.strip_suffix(',')?;
+    if !matches!(adjective(adj)?, Filter::Supertype(_)) {
+        return None;
+    }
+    let first_of_rest = split_word(r).0.trim_end_matches(',');
+    if !matches!(head_noun(first_of_rest), Some(Filter::Subtype(_))) {
+        return None;
+    }
+    let (f_rest, plural, rest) = parse_object_phrase(r)?;
+    let consumed = r[..r.len() - rest.len()].trim_end();
+    // The last item ("Locus land card") and the noun all items share ("land card").
+    let last = [" or ", " and ", " and/or "]
+        .iter()
+        .filter_map(|sep| consumed.rfind(sep).map(|i| &consumed[i + sep.len()..]))
+        .min_by_key(|x| x.len())?;
+    let shared = split_word(last).1.trim();
+    if shared.is_empty() {
+        return None;
+    }
+    let phrase = format!("{adj} {shared}");
+    let (f_adj, _, rest2) = parse_object_phrase(&phrase)?;
+    if !rest2.trim().is_empty() {
+        return None;
+    }
+    Some((Filter::Or(vec![f_adj, f_rest]), plural, rest))
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     if let Some(r) = two_phrases_same_head(s) {
+        return Some(r);
+    }
+    if let Some(r) = adjective_first_in_list(s) {
         return Some(r);
     }
     let mut s = s.trim_start();
@@ -843,6 +914,16 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // Internal form of "that player controls" after "for each opponent," (see
             // `patterns::per_player_targets`).
             (Filter::ControlledBy(PlayerRel::Iterated), r)
+        } else if let Some(r) = t.strip_prefix("you don't own") {
+            (Filter::not(Filter::OwnedBy(PlayerRel::You)), r)
+        } else if let Some(r) = t.strip_prefix("the referenced player owns") {
+            // Internal form of "that player owns" (see `patterns::filter_qualities`).
+            (
+                Filter::OwnedByPlayer(Box::new(PlayerRef::Var(
+                    crate::oracle::patterns::filter_qualities::REFERENCED_PLAYER,
+                ))),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
         } else if let Some(r) = t.strip_prefix("an opponent owns") {
@@ -1668,6 +1749,13 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
 /// Parses a target phrase. Returns (spec, rest).
 pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     let mut s = s.trim_start();
+    // "each of X target creatures": X targets (CR 601.2c), each of which the instruction
+    // affects.
+    if let Some(r) = strip(s, "each of ") {
+        if parse_number(r).is_some_and(|(_, r2)| strip(r2, "target ").is_some()) {
+            s = r;
+        }
+    }
     let mut min = Value::Const(1);
     let mut max = Value::Const(1);
     let mut another = false;
@@ -1757,10 +1845,16 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     } else if let Some(r) = strip(s, "activated or triggered ability") {
         // An ability on the stack, not a spell (Stifle).
         (TargetKind::Ability(Filter::Any), r)
-    } else if let Some(r) =
-        strip(s, "loyalty ability of a planeswalker").or_else(|| strip(s, "loyalty ability"))
-    {
-        // A loyalty ability on the stack (CR 606.3; Verdant Command).
+    } else if let Some(r) = strip(s, "loyalty ability of a planeswalker") {
+        // A loyalty ability on the stack whose source is a planeswalker (Verdant Command):
+        // other permanents can have loyalty abilities (CR 606.2).
+        let f = Filter::and(vec![
+            Filter::Custom(crate::kw::game_rules::LOYALTY_ABILITY.into()),
+            Filter::AbilityFrom(Box::new(Filter::Type(CardType::Planeswalker))),
+        ]);
+        (TargetKind::Ability(f), r)
+    } else if let Some(r) = strip(s, "loyalty ability") {
+        // A loyalty ability on the stack (CR 606.3).
         let f = Filter::Custom(crate::kw::game_rules::LOYALTY_ABILITY.into());
         (TargetKind::Ability(f), r)
     } else if let Some(r) = strip(s, "activated ability") {
@@ -1814,6 +1908,7 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
             (TargetKind::Object(f), r)
         }
     };
+    let (what, rest) = player_alternatives(what, &s[..s.len() - rest.len()], rest);
     // "any target of an opponent's choice" (CR 115.1, 601.2c): an opponent chooses it.
     let (chosen_by_opponent, rest) = match rest.trim_start().strip_prefix("of an opponent's choice")
     {
@@ -1868,6 +1963,58 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     Some((spec, rest))
 }
 
+/// Players among the kinds a target may be: "target creature token, player, or
+/// planeswalker", "any number of target creatures, planeswalkers, and/or players", "any
+/// number of target players or planeswalkers" (CR 115.1, 115.4).
+fn player_alternatives<'a>(
+    what: TargetKind,
+    consumed: &str,
+    rest: &'a str,
+) -> (TargetKind, &'a str) {
+    let planeswalker_alt = |r: &'a str| -> Option<&'a str> {
+        let r = r.trim_start();
+        let r = r.strip_prefix(", ").unwrap_or(r);
+        let r = r
+            .strip_prefix("and/or ")
+            .or_else(|| r.strip_prefix("or "))?;
+        strip(r, "planeswalkers").or_else(|| strip(r, "planeswalker"))
+    };
+    match what {
+        TargetKind::Object(f) => {
+            let c = consumed.trim_end();
+            let listed = c.ends_with(',') || c.ends_with(" or") || c.ends_with(" and/or");
+            let r = rest.trim_start();
+            let after = if listed {
+                strip(r, "players").or_else(|| strip(r, "player"))
+            } else {
+                None
+            };
+            match after {
+                Some(r2) => {
+                    // "player, or planeswalker": another object kind after the player.
+                    let (f, r3) = match planeswalker_alt(r2) {
+                        Some(r3) => (
+                            Filter::Or(vec![f, Filter::Type(CardType::Planeswalker)]),
+                            r3,
+                        ),
+                        None => (f, r2),
+                    };
+                    (TargetKind::ObjectOrPlayer(f, PlayerFilter::Any), r3)
+                }
+                None => (TargetKind::Object(f), rest),
+            }
+        }
+        TargetKind::Player(pf) => match planeswalker_alt(rest) {
+            Some(r) => (
+                TargetKind::ObjectOrPlayer(Filter::Type(CardType::Planeswalker), pf),
+                r,
+            ),
+            None => (TargetKind::Player(pf), rest),
+        },
+        w => (w, rest),
+    }
+}
+
 /// A requirement on several targets taken together, after their object phrase ("two
 /// target creature cards that share a creature type from your graveyard", "up to three
 /// target cards from a single graveyard"; see `target_groups.rs`). `consumed` is the
@@ -1897,6 +2044,20 @@ fn target_group_suffix<'a>(
     let Some((rest, grp)) = group_phrase(t) else {
         return Some((f, r));
     };
+    // "... a different mana value X or less": each also has mana value X or less.
+    let mut bound = None;
+    let rest = match (&grp, parse_number(rest)) {
+        (TargetGroup::DifferentManaValues, Some((n, r2))) => {
+            match r2.trim_start().strip_prefix("or less") {
+                Some(r3) => {
+                    bound = Some(Filter::ManaValue(Cmp::Le, Box::new(n)));
+                    r3
+                }
+                None => rest,
+            }
+        }
+        _ => rest,
+    };
     *together = Some(grp);
     // The object phrase's own suffixes may follow ("... from your graveyard"): parsed
     // after a stand-in noun, which is then dropped.
@@ -1904,6 +2065,7 @@ fn target_group_suffix<'a>(
     let (more, _, tail) = parse_object_phrase(&probe)?;
     let rest = &rest[rest.len() - tail.len()..];
     let mut parts = vec![f];
+    parts.extend(bound);
     match more {
         Filter::Card => {}
         Filter::And(v) => parts.extend(v.into_iter().filter(|x| !matches!(x, Filter::Card))),
@@ -1934,6 +2096,12 @@ pub fn group_phrase(t: &str) -> Option<(&str, TargetGroup)> {
         ("with different names", TargetGroup::DifferentNames),
         (
             "with different mana values",
+            TargetGroup::DifferentManaValues,
+        ),
+        // "any number of target creature cards that each have a different mana value X
+        // or less" (Agadeem's Awakening).
+        (
+            "that each have a different mana value",
             TargetGroup::DifferentManaValues,
         ),
         ("with different powers", TargetGroup::DifferentPowers),
@@ -2009,8 +2177,11 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
 /// "its controller", "its owner", "defending player". Returns (ref, target spec if any, rest).
 pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
-    let pairs: [(&str, PlayerRef); 14] = [
+    let pairs: [(&str, PlayerRef); 16] = [
         ("you ", PlayerRef::You),
+        // CR 506.2: the active player is the attacking player.
+        ("the attacking player ", PlayerRef::ActivePlayer),
+        ("attacking player ", PlayerRef::ActivePlayer),
         // Internal form of "that player" in an ability linked to one that targeted a
         // player (CR 607.1, see `patterns::r607_linked_targets`).
         ("the noted player ", PlayerRef::LinkedNoted),

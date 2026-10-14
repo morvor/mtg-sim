@@ -16,6 +16,19 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
         .find_map(|(c, e)| parse_triggered_at(text, c, e, ctx))
 }
 
+/// Whether "that player" in the effect may mean the trigger's player: not when each use
+/// follows "each opponent"/"each player" in its sentence ("each opponent loses 4 life
+/// unless that player sacrifices ...", where it's each of them).
+fn that_player_is_the_triggers(eff: &str) -> bool {
+    let l = eff.to_lowercase();
+    super::effects::split_sentences(&l).iter().any(|s| {
+        s.match_indices("that player").any(|(i, _)| {
+            let before = &s[..i];
+            !(before.contains("each opponent ") || before.contains("each player "))
+        })
+    })
+}
+
 /// The triggered ability `text`, read as the trigger condition `cond_s` followed by
 /// `eff_s`.
 fn parse_triggered_at(
@@ -186,7 +199,7 @@ fn parse_triggered_at(
     } else {
         it
     };
-    if matches!(it_player, PlayerRef::Iterated) && eff.to_lowercase().contains("that player") {
+    if matches!(it_player, PlayerRef::Iterated) && that_player_is_the_triggers(eff) {
         return None;
     }
     // "Whenever ~ becomes blocked by a creature, the blocking creature gets -1/-1 until
@@ -711,7 +724,14 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             } else {
                 PlayerRef::TriggerPlayer
             };
-            return Some((t, obj(), it_player));
+            // "Whenever you attack, ... put a quest counter on it": no object triggered
+            // it, so "it" is the source.
+            let it = if matches!(t, TriggerCond::PlayerAttacks(_)) {
+                Sel::This
+            } else {
+                obj()
+            };
+            return Some((t, it, it_player));
         }
     }
     if r == "you sacrifice a permanent" {
@@ -769,6 +789,7 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         if !end(tail).is_empty() {
             return None;
         }
+        let f = super::patterns::filter_qualities::they_as_tested_controller(f);
         // "it" is the creature that died: its last known information for values ("its
         // power"), and the card it became for actions ("return it", CR 400.7e).
         return Some((

@@ -53,8 +53,14 @@ fn damage_amount(x: &str, prev: &Effect) -> Option<Effect> {
         .iter()
         .find_map(|p| x.strip_prefix(p))
         .or(named_again)?;
-    // "twice that much damage": twice the amount it would have dealt.
-    if r.trim() == "twice that much damage" {
+    // "twice that much damage": twice the amount it would have dealt ("to itself" when it
+    // deals the damage to itself, Cut Propulsion).
+    let r = match r.trim().strip_suffix(" to itself") {
+        Some(x) if format!("{source:?}") == format!("{to:?}") => x,
+        Some(_) => return None,
+        None => r,
+    };
+    if matches!(r.trim(), "twice that much damage" | "double that damage") {
         return Some(Effect::DealDamage {
             source: source.clone(),
             amount: Value::Mul(Box::new(Value::Const(2)), Box::new(amount.clone())),

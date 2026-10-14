@@ -41,7 +41,10 @@ impl KeywordRules for Shadow {
     fn block_allowed(&self, g: &Game, blocker: ObjectId, attacker: ObjectId) -> bool {
         let mut attacker_shadow = g.obj(attacker).has_keyword(KeywordKind::Shadow);
         let mut blocker_shadow = g.obj(blocker).has_keyword(KeywordKind::Shadow);
-        if attacker_shadow && has_static(g, blocker, BLOCKS_SHADOW_AS_THOUGH_THEY_DIDNT) {
+        if attacker_shadow
+            && (has_static(g, blocker, BLOCKS_SHADOW_AS_THOUGH_THEY_DIDNT)
+                || g.blocks_ignoring(blocker, attacker, KeywordKind::Shadow))
+        {
             attacker_shadow = false;
         }
         if attacker_shadow && has_static(g, blocker, BLOCKS_SHADOW_AS_THOUGH_IT_HAD_SHADOW) {

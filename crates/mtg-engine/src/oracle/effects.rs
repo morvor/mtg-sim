@@ -455,6 +455,12 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         if x_defined.is_none() && s.to_lowercase().starts_with("otherwise, ") {
             super::patterns::conditional_followups::group_condition_run(&mut effects);
         }
+        // "Then repeat this process for ...", "Repeat the following process X times.":
+        // about the instructions so far (see `patterns::followup_loops`).
+        if x_defined.is_none() && super::patterns::followup_loops::sentence(&s, &mut effects, b) {
+            b.sentences += 1;
+            continue;
+        }
         // Sentences that modify the previous one ("It can't be regenerated.").
         let before_followup = (b.it.clone(), b.targets.len());
         let followed_up = match effects.last_mut() {
@@ -551,6 +557,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
             });
         }
     }
+    super::patterns::followup_loops::finish(&mut effects);
     let e = super::patterns::oracle_hardening_referents::finish_introduced(
         crate::trigger_timing::join_instructions(effects),
         b,
@@ -926,6 +933,12 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 {
                     return None;
                 }
+                // A character's "he", "him" and "her" are the card itself (CR 201.5), not
+                // a target or a spell the text mentioned last ("That creature deals damage
+                // equal to its power to him.", Garruk Relentless).
+                if personal && matches!(it, Sel::Target(_) | Sel::TriggerSpell) {
+                    return Some((Sel::This, rest.to_string()));
+                }
                 return Some((it, rest.to_string()));
             }
         }
@@ -1249,7 +1262,7 @@ fn signed_value(s: &str) -> Option<Value> {
 pub fn parse_simple(l: &str, b: &mut Builder) -> Option<Effect> {
     // "it" in an object qualifier ("search for a creature card with lesser mana value")
     // means what "it" meant as the clause began (see `patterns::filters_relational`).
-    let it = super::patterns::pronoun_groups::singular_it(b);
+    let it = super::patterns::filters_relational::qualifier_it(b);
     let e = parse_simple_clause(l, b)?;
     let e = super::patterns::filters_relational::resolve_clause(e, &it);
     super::patterns::filters_relational::note_sacrificed(&e, b);
@@ -1512,6 +1525,11 @@ pub(crate) fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String
                 rest.to_string(),
             ));
         }
+    }
+    // "deal damage equal to its power to you and any target" (both get that damage).
+    if let Some(r) = s.strip_prefix("you and ") {
+        let (other, rest) = damage_recipients(r, b)?;
+        return Some((Sel::Union(vec![Sel::Players(PlayerRef::You), other]), rest));
     }
     // "Whenever an opponent draws a card, ~ deals 1 damage to them.": a player.
     if let Some(who) = super::patterns::pronoun_groups::them_player(s, b) {

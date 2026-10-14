@@ -74,7 +74,13 @@ impl Renderer<'_> {
             return s;
         };
         if t.chosen_by_opponent {
-            s.push_str(" of an opponent's choice");
+            // "target creature of an opponent's choice they control": the chosen player
+            // is the opponent who chooses it (CR 601.2c).
+            if let Some((head, tail)) = s.split_once(" the chosen player controls") {
+                s = format!("{head}{tail} of an opponent's choice they control");
+            } else {
+                s.push_str(" of an opponent's choice");
+            }
         }
         // "target creature of their choice": another player chooses it (CR 601.2c).
         if let Some(p) = &t.chosen_by {
@@ -296,12 +302,25 @@ impl Renderer<'_> {
             Some(TargetGroup::SameController) => {
                 s.push_str(" {alt:a single player controls|controlled by the same player}")
             }
-            Some(TargetGroup::ShareCreatureType) => s.push_str(" that share a creature type"),
-            Some(TargetGroup::ShareCardType) => s.push_str(" that share a card type"),
-            Some(TargetGroup::SharePermanentType) => s.push_str(" that share a permanent type"),
             Some(g) => {
-                let w = self.target_group(g);
-                s.push_str(&format!(" {w}"));
+                let w = match g {
+                    TargetGroup::ShareCreatureType => "that share a creature type".to_string(),
+                    TargetGroup::ShareCardType => "that share a card type".to_string(),
+                    TargetGroup::SharePermanentType => "that share a permanent type".to_string(),
+                    g => self.target_group(g),
+                };
+                // "two target creature cards that share a creature type from your
+                // graveyard": the requirement may come before the zone.
+                let zone = [" in your graveyard", " in a graveyard", " in graveyards"]
+                    .into_iter()
+                    .find(|z| s.ends_with(z));
+                match zone {
+                    Some(z) if !w.contains(['{', '|']) => {
+                        let head = &s[..s.len() - z.len()];
+                        s = format!("{{alt:{head} {w}{z}|{s} {w}}}");
+                    }
+                    _ => s.push_str(&format!(" {w}")),
+                }
             }
         }
         // A relationship with the targets of an earlier instance of "target" ("another
@@ -373,6 +392,8 @@ impl Renderer<'_> {
                 match n.as_str() {
                     "stack:activated ability" => base = "activated ability".into(),
                     "stack:triggered ability" => base = "triggered ability".into(),
+                    // CR 606.2.
+                    crate::kw::game_rules::LOYALTY_ABILITY => base = "loyalty ability".into(),
                     _ => {}
                 }
             }
@@ -386,9 +407,26 @@ impl Renderer<'_> {
                 };
                 // "activated or triggered ability": both kinds, what an ability on the
                 // stack is (CR 113.1).
-                !kind(x) && !matches!(x, Filter::Or(v) if v.iter().all(kind))
+                !kind(x)
+                    && !matches!(x, Filter::Or(v) if v.iter().all(kind))
+                    && !matches!(x, Filter::Custom(n) if n == crate::kw::game_rules::LOYALTY_ABILITY)
             })
             .collect();
+        // "loyalty ability of a planeswalker": its source is one.
+        let flat: Vec<&Filter> = if base == "loyalty ability" {
+            flat.into_iter()
+                .filter(|x| {
+                    let of_pw = matches!(x, Filter::AbilityFrom(f)
+                        if matches!(f.as_ref(), Filter::Type(CardType::Planeswalker)));
+                    if of_pw {
+                        base = "loyalty ability of a planeswalker".into();
+                    }
+                    !of_pw
+                })
+                .collect()
+        } else {
+            flat
+        };
         for x in flat {
             match x {
                 Filter::Spell | Filter::SpellOnStack | Filter::Any => {}
@@ -493,6 +531,9 @@ impl Renderer<'_> {
     /// A selection of objects/players.
     pub(crate) fn sel(&mut self, s: &Sel, case: Case) -> String {
         if let Some(r) = self.sel_extra(s, case) {
+            return r;
+        }
+        if let Some(r) = self.graveyard_this_way(s, case) {
             return r;
         }
         let it = |case: Case| match case {
@@ -746,6 +787,10 @@ impl Renderer<'_> {
                     (filter, count, *up_to, chooser)
                 {
                     if matches!(g.as_ref(), Sel::Var(v) if *v == vars::IT) {
+                        // "Put a deathtouch counter on either of them" (one of the two).
+                        if *n == 1 {
+                            return decline("{alt:one|either} of them".into(), case);
+                        }
                         return decline(format!("{} of them", number_word(*n)), case);
                     }
                     // "Tap up to three target creatures. Put a stun counter on one of
@@ -980,6 +1025,27 @@ impl Renderer<'_> {
             {
                 let s = self.sel(sel, Case::Poss);
                 format!("{{alt:{s} controller|that player}}")
+            }
+            // "Target player or planeswalker. That player or that planeswalker's controller
+            // discards ...": the player, or the controller of the permanent (a player
+            // controls themself, as `ControllerOf` reads it).
+            PlayerRef::ControllerOf(sel)
+                if !matches!(case, Case::Poss)
+                    && matches!(sel.as_ref(), Sel::Target(i)
+                        if matches!(self.targets.get(*i as usize).map(|t| &t.what),
+                            Some(TargetKind::ObjectOrPlayer(..)))) =>
+            {
+                let Sel::Target(i) = sel.as_ref() else {
+                    return self.gap("player or controller");
+                };
+                let Some(TargetKind::ObjectOrPlayer(f, _)) =
+                    self.targets.get(*i as usize).map(|t| t.what.clone())
+                else {
+                    return self.gap("player or controller");
+                };
+                let n = self.noun(&f, Num::One);
+                let s = self.sel(sel, Case::Poss);
+                format!("{{alt:that player or that {n}'s controller|{s} controller}}")
             }
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
@@ -1246,7 +1312,28 @@ impl Renderer<'_> {
             PlayerFilter::Defending => "who is the defending player".into(),
             PlayerFilter::Active => "whose turn it is".into(),
             PlayerFilter::AttackedThisTurn => "who attacked this turn".into(),
+            PlayerFilter::CastSpellThisTurn => "who cast a spell this turn".into(),
             PlayerFilter::Poisoned => "who is poisoned".into(),
+            PlayerFilter::HasInitiative => "who has the initiative".into(),
+            PlayerFilter::AttackRelation {
+                attacking,
+                other,
+                past,
+                planeswalkers,
+            } => {
+                let o = self.player_filter_object(other);
+                let pw = if *planeswalkers {
+                    " and/or a planeswalker they control"
+                } else {
+                    ""
+                };
+                match (attacking, past) {
+                    (true, false) => format!("who is attacking {o}{pw}"),
+                    (true, true) => format!("who attacked {o}{pw}"),
+                    (false, false) => format!("being attacked by {o}"),
+                    (false, true) => format!("who was attacked by {o}"),
+                }
+            }
             PlayerFilter::MaxSpeed => "with max speed".into(),
             PlayerFilter::VotedLikeYou(true) => "who voted for a choice you voted for".into(),
             PlayerFilter::VotedLikeYou(false) => {
@@ -1276,6 +1363,16 @@ impl Renderer<'_> {
                         if matches!(v.as_ref(), Sel::Var(crate::discard_rules::DISCARDED))))) =>
             {
                 "who {alt:can't|didn't discard a card this way}".into()
+            }
+            // "Each opponent sacrifices a creature of their choice. Each opponent who
+            // can't ...": who controlled none of the permanents sacrificed this way.
+            // Sacrificing is mandatory, so a player who sacrificed nothing couldn't (CR
+            // 701.21a).
+            PlayerFilter::Not(x)
+                if matches!(x.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(),
+                    PlayerRef::ControllerOf(s) if matches!(s.as_ref(), Sel::Var(vars::SACRIFICED)))) =>
+            {
+                "who {alt:can't|didn't sacrifice a permanent this way}".into()
             }
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);

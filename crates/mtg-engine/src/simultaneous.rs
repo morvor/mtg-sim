@@ -510,7 +510,15 @@ impl Frames {
         // (CR 608.2c: later text refers to what the earlier instructions did).
         // The same for the tokens each player created ("Each player creates a Treasure
         // token. Tap those tokens.").
-        for var in [vars::IT, vars::CREATED] {
+        // Likewise the cards each player discarded and the permanents each sacrificed
+        // ("Each player may discard a card. If a creature card was discarded this way,
+        // ...").
+        for var in [
+            vars::IT,
+            vars::CREATED,
+            crate::discard_rules::DISCARDED,
+            vars::SACRIFICED,
+        ] {
             if !matches!(self.frames.first().map(|f| f.item), Some(Item::Player(_)))
                 || !self.local_vars.contains(&var)
             {
@@ -604,6 +612,12 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
         Effect::If {
             then, otherwise, ..
         } => plannable(g, then, ctx, p) && plannable(g, otherwise, ctx, p),
+        // "Its owner puts it on their choice of the top or bottom of their library": the
+        // option is chosen first, then the chosen action is performed with the others
+        // (CR 101.4, 401.4; Aetherspouts).
+        Effect::ChooseOne { options, .. } => {
+            !options.is_empty() && options.iter().all(|(_, e)| plannable(g, e, ctx, p))
+        }
         Effect::Move { what, to } => {
             let mut sels = vec![what];
             if let Some(a) = &to.attached_to {
@@ -783,6 +797,15 @@ fn plan(
                     ctx.prev_happened = false;
                 }
                 plan(g, otherwise, ctx, p, earlier)
+            }
+        }
+        Effect::ChooseOne { who, options } if plannable(g, e, ctx, p) => {
+            let chooser = g.eval_player(who, ctx).unwrap_or(ctx.controller);
+            let labels = options.iter().map(|(l, _)| l.clone()).collect();
+            let i = g.ask_option(chooser, ctx.source, "Choose one", labels);
+            match options.get(i) {
+                Some((_, chosen)) => plan(g, chosen, ctx, p, earlier),
+                None => Plan::Nothing,
             }
         }
         Effect::Move { what, to } if plannable(g, e, ctx, p) => {

@@ -687,14 +687,18 @@ impl Game {
                 if let AbilityKind::Static(s) = &a.kind {
                     if let StaticEffect::CostModifier(cm) = &s.effect {
                         match (&cm.applies_to, &cm.change) {
-                            (CostTarget::ThisSpell, CostChange::AlternativeCost(c))
-                                if crate::spell_costs::alternative_cost_allowed(
-                                    self, p, card, s,
-                                ) =>
-                            {
+                            (
+                                CostTarget::ThisSpell,
+                                CostChange::AlternativeCost(c)
+                                | CostChange::AlternativeCostWithFlash(c),
+                            ) if crate::spell_costs::alternative_cost_allowed(self, p, card, s) => {
                                 let mut opt = CastOption::normal(FaceState::Front);
                                 opt.method = CastMethod::Alternative(a.uid);
                                 opt.alt_cost = Some(c.clone());
+                                // CR 601.3c: "... and as though it had flash" (Qasali
+                                // Ambusher): only when cast this way.
+                                opt.flash =
+                                    matches!(cm.change, CostChange::AlternativeCostWithFlash(_));
                                 out.push(opt);
                             }
                             // CR 601.3c: "You may cast this spell as though it had flash
@@ -1696,7 +1700,14 @@ impl Game {
             && !opt.method.eq(&CastMethod::FaceDown(KeywordKind::Morph))
         {
             // CR 303.4a / 115.1b: an Aura spell targets what it will enchant.
-            if let Some(spec) = crate::attach::aura_target_spec(&chars) {
+            if let Some(mut spec) = crate::attach::aura_target_spec(&chars) {
+                // "You can't choose an untapped creature as ~'s target as you cast it."
+                if let (Some(no), TargetKind::Object(f)) = (
+                    crate::oracle::patterns::targets_grammar_2::cast_target_forbidden(&chars),
+                    &spec.what,
+                ) {
+                    spec.what = TargetKind::Object(Filter::and(vec![f.clone(), Filter::not(no)]));
+                }
                 if body.targets.is_empty() {
                     body.targets.push(spec);
                 }
@@ -2975,6 +2986,13 @@ impl Game {
                     })
                     .collect();
                 crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
+            }
+            // "... can't cause you to discard cards": nor choose to, to pay a cost such a
+            // spell or ability asks for (Tamiyo, Collector of Tales rulings).
+            CostPart::DiscardSelf | CostPart::Discard { .. } | CostPart::DiscardHand
+                if !crate::rule_statics::caused_actions::may_discard_for_cost(self, p, ctx) =>
+            {
+                false
             }
             CostPart::DiscardSelf => so.is_some_and(|o| o.zone == Zone::Hand(p)),
             CostPart::Discard { filter, count, .. } => {

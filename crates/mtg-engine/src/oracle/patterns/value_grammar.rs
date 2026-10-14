@@ -629,7 +629,10 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
                 return Some((Filter::AttackingPlayer(PlayerRel::You), r2));
             }
         }
-        if let Some(r2) = r.strip_prefix("them") {
+        if let Some(r2) = r
+            .strip_prefix("them")
+            .or_else(|| r.strip_prefix("that player"))
+        {
             if word_end(r2) {
                 let p = their(b)?;
                 let rel = match p {
@@ -712,24 +715,8 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     }
     // "lands you control named Wastes": a card name (CR 201.2).
     if let Some(r) = t.strip_prefix("named ") {
-        let (name, rest) = match r.find([',', '.']) {
-            Some(i) => (&r[..i], &r[i..]),
-            None => (r, ""),
-        };
-        let title: Vec<String> = name
-            .split(' ')
-            .map(|w| {
-                let mut c = w.chars();
-                c.next()
-                    .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
-                    .unwrap_or_default()
-            })
-            .collect();
-        let title = title.join(" ");
-        if crate::card::CardDb::global().get(&title).is_some() {
-            return Some((Filter::Named(title.into()), rest));
-        }
-        return None;
+        let (name, rest) = literal_card_name(r)?;
+        return Some((Filter::Named(name.into()), rest));
     }
     // "[player] controls", "[player] owns".
     let (p, r) = player_word(t, b)?;
@@ -747,6 +734,43 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
         return None;
     }
     Some((controlled_by(&p), r))
+}
+
+/// The card name at the start of `r` (lowercase): the longest run of words before a comma
+/// or period that names a card ("food fight you control": "Food Fight"), and the rest.
+pub(crate) fn literal_card_name(r: &str) -> Option<(String, &str)> {
+    let (name, rest) = match r.find([',', '.']) {
+        Some(i) => (&r[..i], &r[i..]),
+        None => (r, ""),
+    };
+    let words: Vec<&str> = name.split(' ').collect();
+    for k in (1..=words.len()).rev() {
+        let title: Vec<String> = words[..k]
+            .iter()
+            .map(|w| {
+                let mut c = w.chars();
+                c.next()
+                    .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                    .unwrap_or_default()
+            })
+            .collect();
+        let title = title.join(" ");
+        // (A name check only: looking the card up would compile it, and a card may name
+        // itself, Food Fight.)
+        if let Some(c) = mtg_data::cards().by_name(&title) {
+            let consumed: usize = words[..k].iter().map(|w| w.len() + 1).sum::<usize>() - 1;
+            let rest = if k == words.len() { rest } else { &r[consumed..] };
+            // The exact name (a face's, for a card with two faces).
+            let name = c
+                .name
+                .split(" // ")
+                .find(|n| n.eq_ignore_ascii_case(&title))
+                .unwrap_or(&title)
+                .to_string();
+            return Some((name, rest));
+        }
+    }
+    None
 }
 
 /// "named ~": the card's name (CR 201.2).

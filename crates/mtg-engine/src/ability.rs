@@ -1169,8 +1169,24 @@ pub enum PlayerFilter {
     /// A player who attacked with creatures this turn ("target player who attacked this
     /// turn"): only the active player declares attackers (CR 508.1).
     AttackedThisTurn,
+    /// A player who cast a spell this turn ("each opponent who cast a spell this turn").
+    CastSpellThisTurn,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
+    /// CR 508.6: a player who is attacking (controls a creature attacking) a player
+    /// matching `other`, or with `past` has attacked one (declared one or more creatures
+    /// as attackers attacking them this turn); with `planeswalkers`, attacking a
+    /// planeswalker that player controls counts too. With `attacking: false`, the other
+    /// way around: a player being attacked (or who was attacked) by a player matching
+    /// `other` ("players being attacked", "a player you're attacking").
+    AttackRelation {
+        attacking: bool,
+        other: Box<PlayerFilter>,
+        past: bool,
+        planeswalkers: bool,
+    },
+    /// The player who has the initiative (CR 725).
+    HasInitiative,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
     /// In the vote the ability triggered on ("whenever players finish voting", CR
@@ -1383,12 +1399,32 @@ pub enum Filter {
     /// "attacking you", "attacking your opponents": attacking that player, not a
     /// planeswalker they control or a battle they protect (CR 506.2, 508.1b).
     AttackingPlayer(PlayerRel),
+    /// "creatures banded with ~": the other attacking creatures in the band of one of the
+    /// selected creatures (CR 702.22).
+    BandedWith(Box<Sel>),
+    /// "attacking a battle", "attacking a planeswalker": attacking a permanent that
+    /// matches the filter (CR 506.2, 508.1b).
+    AttackingObject(Box<Filter>),
     /// "creature blocking it", "creature blocked by it" relative to the source.
     BlockingSource,
     BlockedBySource,
     /// "creature blocking it" where "it" isn't the source: blocking one of the selected
     /// creatures.
     BlockingAnyOf(Box<Sel>),
+    /// Its controller has controlled it continuously since the beginning of the turn
+    /// ("non-Wall creature the active player has controlled continuously since the
+    /// beginning of the turn"; for the active player, CR 302.6's condition).
+    ControlledSinceTurnBegan,
+    /// A block relation to the selected objects, now or in this combat's or this turn's
+    /// block history ("creatures blocking or blocked by target creature", "creatures
+    /// that were blocked by that creature this combat", "creatures it was blocking that
+    /// had become blocked by only that creature this combat", "creatures that were
+    /// blocked by target Wall this turn"; CR 509.1g-h, 506.4).
+    BlockRelation {
+        rel: BlockRel,
+        other: Box<Sel>,
+        when: BlockWhen,
+    },
     /// A target of one of the selected spells or abilities ("those creatures" after
     /// "whenever you cast a spell that targets one or more creatures"), as last known
     /// if the spell has left the stack.
@@ -1475,6 +1511,9 @@ pub enum Filter {
     DiedThisTurn,
     /// Attacked this turn.
     AttackedThisTurn,
+    /// Was declared as an attacker in the current combat (CR 508.1): "creatures that
+    /// player controls that didn't attack" as attackers are declared.
+    AttackedThisCombat,
     /// "of the chosen color": has the color chosen for the source (CR 607.2d). Matches
     /// nothing while no color is chosen (CR 607.5a).
     ChosenColor,
@@ -1671,6 +1710,11 @@ pub enum Value {
     /// "the number of differently named [objects]": the most objects matching the filter
     /// that have different names (CR 201.2b). Objects with no name don't count.
     DistinctNames(Filter),
+    /// "[N or more objects] with the same name (as one another)": the most matching
+    /// objects that all have one name in common (CR 201.2a; an object with all names of
+    /// nonlegendary creature cards has each of them, CR 612.7). Objects with no name don't
+    /// count.
+    LargestSameNameGroup(Filter),
     /// "the number of different mana values among [objects]": how many distinct mana
     /// values the matching objects have (CR 202.3; a land card's is 0, X is 0 off the
     /// stack, CR 202.3e).
@@ -2488,8 +2532,13 @@ pub enum ReplacementAction {
     /// enters. Conditional ETB replacements ("enters tapped unless ...") are expressed as
     /// `AsEnters(If { .. })`.
     AsEnters(Box<Effect>),
-    /// Enters as a copy of (chosen) object (CR 707.9).
-    EnterAsCopy { filter: Filter, optional: bool },
+    /// Enters as a copy of (chosen) object (CR 707.9). `tapped`: "enter tapped as a copy
+    /// of": it enters tapped only if it copies something (Vesuva's rulings).
+    EnterAsCopy {
+        filter: Filter,
+        optional: bool,
+        tapped: bool,
+    },
     /// Enters under another player's control.
     EnterUnderControl(PlayerRef),
     /// Put into a different zone instead ("exile it instead").
@@ -2846,8 +2895,99 @@ pub enum Restriction {
         who: PlayerFilter,
         n: u32,
     },
+    /// "For each creature you control, you may have that creature assign its combat damage
+    /// as though it weren't blocked" (`may`: its controller chooses for each creature just
+    /// before it assigns combat damage), "X target blocked creatures assign their combat
+    /// damage this turn as though they weren't blocked" (no choice): a rule, not an ability
+    /// the creatures have (CR 510.1c; see `kw::assign_as_though_unblocked`).
+    AssignAsThoughUnblocked {
+        what: Filter,
+        may: bool,
+    },
+    /// "~ can block an additional creature each combat for each Equipment attached to ~":
+    /// a number of additional blocks counted as blockers are declared (CR 509.1a).
+    ExtraBlocksCounted {
+        blocker: Filter,
+        n: Value,
+    },
+    /// "~ can't attack unless a black or green creature also attacks" (CR 508.1c): each
+    /// such creature can attack only if another creature matching `companion` (relative
+    /// to the source) attacks too (Scarred Puma ruling: "other than itself").
+    AttackOnlyWith {
+        attackers: Filter,
+        companion: Filter,
+    },
+    /// "~ can't block unless a creature with greater power also blocks" (CR 509.1b).
+    BlockOnlyWith {
+        blockers: Filter,
+        companion: Filter,
+    },
+    /// "~ can't block creatures with power 2 or greater unless you pay {1}", "Nonblue
+    /// creatures can't block creatures you control unless their controller pays 1 life for
+    /// each blocking creature they control", "Enchanted creature can't be blocked unless
+    /// defending player pays {1} for each creature they control that's blocking it": each
+    /// creature matching `blockers` that blocks a creature matching `attackers` costs its
+    /// controller `cost` (once per blocking creature; CR 509.1c-d).
+    BlockCostAgainst {
+        blockers: Filter,
+        attackers: Filter,
+        cost: Cost,
+    },
+    /// "Each opponent must attack [you or a planeswalker you control] with at least one
+    /// creature each combat if able": a requirement on the attacking player's declaration
+    /// as a whole (CR 508.1d): at least one of their creatures attacks (with `defender`,
+    /// attacks that player, or with `planeswalkers` a planeswalker they control).
+    PlayerMustAttack {
+        players: PlayerFilter,
+        defender: Option<PlayerFilter>,
+        planeswalkers: bool,
+    },
+    /// "~ can't be blocked unless all creatures defending player controls block it": it
+    /// can't be blocked except by at least `n` creatures (menace-like, CR 509.1b).
+    MinBlockersCounted {
+        attacker: Filter,
+        n: Value,
+    },
+    /// "~ can block Dragons as though it had reach", "can block creatures with landwalk
+    /// abilities as though they didn't have those abilities", "can block creatures with
+    /// shadow as though they didn't have shadow" (CR 509.1b with 609.4): the evasion
+    /// ability `evasion` of attackers matching `attackers` doesn't stop it from blocking
+    /// them.
+    BlockIgnoringEvasion {
+        blocker: Filter,
+        attackers: Filter,
+        evasion: crate::keywords::KeywordKind,
+    },
+    /// "~ can't attack a player it has already attacked this turn" (CR 508.1c, 508.6).
+    CantAttackPlayerAgain(Filter),
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
+}
+
+/// How an object relates to others in combat ([`Filter::BlockRelation`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BlockRel {
+    /// It blocks (or blocked) one of them.
+    Blocking,
+    /// It's (or was) blocked by one of them.
+    BlockedBy,
+    /// Either.
+    BlockingOrBlockedBy,
+    /// An attacking creature that has become blocked only by them: blocked by one of them
+    /// and by no other creature (in the history the relation looks at).
+    BlockedOnlyBy,
+}
+
+/// When a [`Filter::BlockRelation`] holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BlockWhen {
+    /// Now (current blocks).
+    Now,
+    /// At some point in the current combat, even if a creature was removed from combat
+    /// or left the battlefield since.
+    ThisCombat,
+    /// At some point this turn.
+    ThisTurn,
 }
 
 /// Something that can't happen to an object ([`Restriction::CantBe`]).
@@ -4219,6 +4359,18 @@ pub enum Effect {
     /// Remove from combat.
     RemoveFromCombat {
         what: Sel,
+    },
+    /// "[attacking creatures] become unblocked": blocked attacking creatures become
+    /// unblocked creatures (an exception to CR 509.1h an effect states).
+    BecomeUnblocked {
+        what: Sel,
+    },
+    /// "[it] blocks an attacking creature of your choice": the effect's controller chooses
+    /// an attacking creature the creature could block (one attacking its controller, a
+    /// planeswalker they control or a battle they protect, CR 509.1a) and it blocks it
+    /// (CR 509.3); nothing happens if there's none.
+    BlockAttackerOfChoice {
+        blocker: Sel,
     },
     /// "Choose a color/creature type/card name/number" — stored on the source object.
     Choose {
