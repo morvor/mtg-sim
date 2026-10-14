@@ -3381,6 +3381,7 @@ impl Renderer<'_> {
                 format!("{v} of that damage is dealt to {t} instead")
             }
             A::PreventAndThen(amount, e) => {
+                let e = &crate::prevention::that_damage_as_event_amount(e);
                 let p = match amount {
                     None => "prevent that damage".to_string(),
                     Some(v) => {
@@ -3494,7 +3495,7 @@ impl Renderer<'_> {
                 }
             }
             A::PreventAndThen(amount, e) => {
-                let e = self.effect(e);
+                let e = self.effect(&crate::prevention::that_damage_as_event_amount(e));
                 let p = match amount {
                     None => "prevent that damage".to_string(),
                     Some(v) => {

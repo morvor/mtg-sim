@@ -1298,6 +1298,7 @@ impl Game {
                     });
                     info.amount = prevented as i32;
                     c.event = Some(info);
+                    c.nums.insert(crate::prevention::THAT_DAMAGE, amount as i64);
                     // Applied to simultaneous damage events, a prevention effect is
                     // applied once: its instruction happens once, for all the damage
                     // (once for each recipient if it's about the recipient).
@@ -1318,6 +1319,10 @@ impl Game {
                                 if let Some(ev) = first.event.as_mut() {
                                     ev.amount += prevented as i32;
                                 }
+                                *first
+                                    .nums
+                                    .entry(crate::prevention::THAT_DAMAGE)
+                                    .or_insert(0) += amount as i64;
                             }
                             None => list.push((key, c, e)),
                         },
