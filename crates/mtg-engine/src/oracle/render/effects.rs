@@ -5135,6 +5135,11 @@ impl Renderer<'_> {
         // "equipped creature".
         let equipment = spec.subtypes.iter().any(|s| s.as_str() == "Equipment");
         for a in &spec.abilities {
+            // A changeling token's "is every creature type" CDA is the keyword's meaning
+            // (CR 702.73a), compiled next to it; it isn't printed separately.
+            if super::is_changeling_cda(a) {
+                continue;
+            }
             match &a.kind {
                 AbilityKind::Keyword(k) => kws.push(self.keyword_lower(k)),
                 _ => {
