@@ -59,6 +59,24 @@ fn parse_cda(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
         if !is_star(ctx.power) {
             return None;
         }
+        // "~'s power is equal to the total power of the exiled cards and its toughness is
+        // equal to their total toughness" (Sutured Ghoul): the cards its linked ability
+        // exiled (CR 607.2a).
+        if r == "the total power of the exiled cards and its toughness is equal to their total toughness" {
+            if !is_star(ctx.toughness) {
+                return None;
+            }
+            let exiled = Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Linked)),
+                Filter::InZone(ZoneKind::Exile),
+            ]));
+            let total = |s: Stat| Value::Aggregate(AggOp::Sum, s, Box::new(exiled.clone()));
+            return Some(vec![cda(
+                Some(total(Stat::Power)),
+                Some(total(Stat::Toughness)),
+                text,
+            )]);
+        }
         // "... and its toughness is equal to that number plus N"
         if let Some((a, b)) = r.split_once(" and its toughness is equal to ") {
             if !is_star(ctx.toughness) {

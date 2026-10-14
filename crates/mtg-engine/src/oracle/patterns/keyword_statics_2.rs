@@ -277,6 +277,7 @@ fn conditional_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
         if !r.trim().is_empty() || matches!(what, Sel::None) {
             return None;
         }
+        let after_subject = b.targets.len();
         let it = if matches!(what, Sel::All(_)) {
             subj_text.to_string()
         } else {
@@ -327,7 +328,7 @@ fn conditional_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
                 });
             }
         }
-        if conditional == 0 || b.targets.len() != saved.0 {
+        if conditional == 0 || b.targets.len() != after_subject {
             return None;
         }
         b.it = what;
@@ -461,3 +462,161 @@ fn capitalize(s: &str) -> String {
 }
 
 inventory::submit! { AbilityPattern { name: "keyword statics: [static]. otherwise, [static] / [anthem]. it gets [p/t] instead ...", priority: 49, parse: otherwise_statics } }
+
+/// "As long as the top card of your library is a creature card, creatures you control
+/// that share a color with that card get +1/+1." (Crown of Convergence): the top card of
+/// the library as the referent of a static ability, checked continuously.
+fn top_card_static(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if ctx.is_spell() || text.contains('\n') {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let r = end(&lower).strip_prefix("as long as the top card of your library is ")?;
+    let (kind, rest) = r.split_once(", ")?;
+    let kind = kind.strip_prefix("a ").or_else(|| kind.strip_prefix("an "))?;
+    let (kf, plural, tail) = parse_object_phrase(kind)?;
+    if plural || !end(tail).trim().is_empty() {
+        return None;
+    }
+    let (subj, pt) = rest.split_once(" that share a color with that card get ")?;
+    let (f, _, tail) = parse_object_phrase(subj)?;
+    if !end(tail).trim().is_empty() {
+        return None;
+    }
+    let (p, t, tail) = crate::oracle::effects::parse_pt_mod(pt)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let top = Sel::TopOfLibrary(PlayerRef::You, Value::c(1));
+    let mut st = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::and(vec![f, Filter::SharesColor(Box::new(top.clone()))]),
+        mods: vec![Modification::ModifyPT(p, t)],
+    });
+    st.condition = Some(Condition::SelMatches(top, kf));
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+inventory::submit! { AbilityPattern { name: "keyword statics: as long as the top card of your library is [a card], [objects] that share a color with that card get +N/+N", priority: 40, parse: top_card_static } }
+
+/// "Until end of turn, target creature with defender gains haste, can attack as though it
+/// didn't have defender, and assigns combat damage equal to its toughness rather than its
+/// power." (Walking Bulwark), "... gets +1/+0, gains \"[ability]\", and can attack as
+/// though it didn't have defender." (The Pride of Hull Clade): predicates that change the
+/// object (layers) joined with ones that change rules for it (CR 613.11), each read as the
+/// sentence it would be about the same object, for the same duration.
+fn mixed_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !(l.contains(" can attack as though it didn't have defender")
+        || l.contains(" assigns combat damage equal to its toughness rather than its power"))
+    {
+        return None;
+    }
+    let (masked, quotes) = super::statics::mask_quotes(l)?;
+    let (lead, core) = match masked.strip_prefix("until end of turn, ") {
+        Some(r) => ("until end of turn, ", r.to_string()),
+        None => ("", masked.clone()),
+    };
+    let verbs = [" gets ", " gains ", " can attack ", " assigns "];
+    let i = verbs.iter().filter_map(|v| core.find(v)).min()?;
+    let subj = core[..i].to_string();
+    // Split the predicates at the commas and "and"s before a verb.
+    let rest = &core[i + 1..];
+    let mut preds: Vec<String> = Vec::new();
+    let mut from = 0;
+    let mut k = 0;
+    while k < rest.len() {
+        let tail = &rest[k..];
+        let sep = [", and ", ", ", " and "].into_iter().find(|s| {
+            tail.starts_with(s)
+                && ["gets ", "gains ", "can attack ", "assigns "]
+                    .iter()
+                    .any(|v| tail[s.len()..].starts_with(v))
+        });
+        match sep {
+            Some(s) => {
+                preds.push(rest[from..k].to_string());
+                k += s.len();
+                from = k;
+            }
+            None => k += tail.chars().next().map_or(1, char::len_utf8),
+        }
+    }
+    preds.push(rest[from..].to_string());
+    if preds.len() < 2 {
+        return None;
+    }
+    // Put the quotes back.
+    let unmask = |s: &str| -> String {
+        let mut out = s.to_string();
+        for (n, q) in quotes.iter().enumerate() {
+            out = out.replace(&format!("\"#{n}\""), &format!("\"{q}\""));
+        }
+        out
+    };
+    let saved = (b.targets.len(), b.it.clone());
+    let result = (|| {
+        let (what, r) = crate::oracle::effects::object_ref(&unmask(&subj), b)?;
+        if !r.trim().is_empty() || matches!(what, Sel::None | Sel::All(_)) {
+            return None;
+        }
+        let after_subject = b.targets.len();
+        let mut out = Vec::new();
+        for p in &preds {
+            b.it = what.clone();
+            let clause = if lead.is_empty() {
+                format!("it {}", unmask(p))
+            } else {
+                format!("{lead}it {}", unmask(p))
+            };
+            out.push(crate::oracle::effects::parse_clause(&clause, b)?);
+        }
+        if b.targets.len() != after_subject {
+            return None;
+        }
+        b.it = what;
+        Some(Effect::seq(out))
+    })();
+    if result.is_none() {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+    }
+    result
+}
+
+inventory::submit! { super::EffectPattern { name: "keyword statics: [subject] gains [kw], can attack as though it didn't have defender, and assigns combat damage ...", priority: 1090, parse: mixed_predicates } }
+
+/// "That enchantment gains \"Cumulative upkeep {1}.\"" (Balduvian Shaman): a keyword
+/// ability granted in quotes is that keyword (CR 702.24 for cumulative upkeep).
+fn gains_quoted_keyword(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, q) = l.split_once(" gains \"").or_else(|| l.split_once(" gain \""))?;
+    let (inner, tail) = q.split_once('"')?;
+    let inner = inner.trim_end_matches('.');
+    if inner.contains('"') || inner.contains(':') {
+        return None;
+    }
+    // Only a keyword line.
+    let kws = crate::oracle::effects::keyword_mods(inner)?;
+    if kws.is_empty() {
+        return None;
+    }
+    let verb = if l.contains(" gains \"") { "gains" } else { "gain" };
+    crate::oracle::effects::parse_clause(&format!("{head} {verb} {inner}{tail}"), b)
+}
+
+inventory::submit! { super::EffectPattern { name: "keyword statics: [object] gains \"[keyword]\"", priority: 1090, parse: gains_quoted_keyword } }
+
+/// "That enchantment gains ..." after an instruction about a target enchantment: "that
+/// enchantment" is what "it" refers to.
+fn that_noun_is_it(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let rest = ["that enchantment ", "that artifact ", "that land "]
+        .iter()
+        .find_map(|p| l.strip_prefix(p))?;
+    if matches!(b.it, Sel::None | Sel::This) || b.sentences == 0 {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&format!("it {rest}"), b)
+}
+
+inventory::submit! { super::EffectPattern { name: "keyword statics: that enchantment [predicate] (it)", priority: 1095, parse: that_noun_is_it } }

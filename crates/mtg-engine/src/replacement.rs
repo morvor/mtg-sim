@@ -818,6 +818,20 @@ impl Game {
                 created_turn: self.turn.number,
             });
         }
+        // What an effect says the permanent "is" as it enters (CR 611.3c, 614.1c).
+        if let Some((source, ctl, mods)) = &m.etb.with_mods {
+            self.effects.push(ContinuousEffect {
+                id: 0,
+                source: *source,
+                controller: *ctl,
+                timestamp: saved_next_ts + 1,
+                duration: Duration::Permanent,
+                affected: Affected::Objects(vec![id]),
+                mods: mods.clone(),
+                layer1: None,
+                created_turn: self.turn.number,
+            });
+        }
         self.compute_characteristics(false);
         self.statics.replacements = saved_statics.replacements.clone();
         self.statics.restrictions = saved_statics.restrictions.clone();

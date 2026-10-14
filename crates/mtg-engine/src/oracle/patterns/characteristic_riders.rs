@@ -12,8 +12,9 @@
 //! (CR 611.2c, 611.3c, 614.1c). It's read as the "becomes" sentence it amounts to ("it
 //! becomes a Spirit Detective", CR 205.1a: new subtypes replace the old ones of their
 //! kind) and kept as the destination's modifications (`Destination::with_mods`).
-//! A sentence that makes the permanent an Aura isn't read: an Aura put onto the
-//! battlefield is attached as it enters (CR 303.4f), which these modifications don't do.
+//! A permanent that enters as an Aura this way is attached to an object its controller
+//! chooses as it enters (CR 303.4f; see `attach::entry_attachment`), and stays where it is
+//! if it can't legally enchant anything (CR 303.4g).
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -111,11 +112,14 @@ fn rider_mods(l: &str, b: &mut Builder) -> Option<Vec<Modification>> {
                 }
             }
         }
-        if b.targets.len() != saved.0 || mods.is_empty() || makes_aura(&mods) {
+        if b.targets.len() != saved.0 || mods.is_empty() {
             b.targets.truncate(saved.0);
             b.it = saved.1;
             return None;
         }
+        return Some(mods);
+    }
+    if let Some(mods) = bundle_with_quotes(&sentence, b) {
         return Some(mods);
     }
     let e = crate::oracle::effects::parse_sentence(&format!("it {sentence}"), b);
@@ -132,7 +136,7 @@ fn rider_mods(l: &str, b: &mut Builder) -> Option<Vec<Modification>> {
         restore(b);
         return None;
     };
-    if b.targets.len() != saved.0 || mods.is_empty() || makes_aura(&mods) {
+    if b.targets.len() != saved.0 || mods.is_empty() {
         restore(b);
         return None;
     }
@@ -140,15 +144,67 @@ fn rider_mods(l: &str, b: &mut Builder) -> Option<Vec<Modification>> {
     Some(mods)
 }
 
-/// Whether the modifications make the object an Aura (CR 303.4f: it must be attached as
-/// it enters).
-fn makes_aura(mods: &[Modification]) -> bool {
-    mods.iter().any(|m| match m {
-        Modification::SetTypes { subtypes, .. } | Modification::AddSubtypes(subtypes) => {
-            subtypes.iter().any(|s| s == "Aura")
+/// "becomes an Aura enchantment with enchant creature you control and \"[ability]\" and
+/// loses all other abilities": the bundle's modifications, with its quoted abilities
+/// granted to the object itself (layer 6 after the abilities it loses, CR 613.1f).
+fn bundle_with_quotes(sentence: &str, b: &mut Builder) -> Option<Vec<Modification>> {
+    let (masked, quotes) = super::statics::mask_quotes(sentence)?;
+    let mut rest = masked.trim_end_matches(',').to_string();
+    let mut lose = false;
+    for tail in [", and loses all other abilities", " and loses all other abilities"] {
+        if let Some(r) = rest.strip_suffix(tail) {
+            rest = r.trim_end_matches(',').to_string();
+            lose = true;
+            break;
         }
-        _ => false,
-    })
+    }
+    let mut idx = Vec::new();
+    for k in 0..quotes.len() {
+        let q = format!("\"#{k}\"");
+        let mut found = false;
+        for sep in [", and ", " and ", ", "] {
+            let pat = format!("{sep}{q}");
+            if let Some(i) = rest.find(&pat) {
+                rest.replace_range(i..i + pat.len(), "");
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return None;
+        }
+        idx.push(k);
+    }
+    if idx.is_empty() || rest.contains('"') {
+        return None;
+    }
+    let subj = Subject {
+        filter: Filter::Any,
+        it: Some(Sel::This),
+        hint: CardType::Enchantment,
+        lands: false,
+        creatures: true,
+    };
+    let saved = b.targets.len();
+    let mut mods = Vec::new();
+    if lose {
+        mods.push(Modification::RemoveAllAbilities);
+    }
+    for p in super::becomes_grammar::split_predicates(&rest) {
+        mods.extend(super::becomes_grammar::predicate_mods(p, &subj, b)?);
+    }
+    if b.targets.len() != saved {
+        b.targets.truncate(saved);
+        return None;
+    }
+    let hint = if mods.iter().any(|m| matches!(m, Modification::SetTypes { types, .. } if types.contains(&CardType::Creature))) {
+        CardType::Creature
+    } else {
+        CardType::Enchantment
+    };
+    let granted = super::grant_grammar::compile_quotes(&idx, &quotes, hint, true, b)?;
+    mods.extend(granted.into_iter().map(Modification::AddAbility));
+    Some(mods)
 }
 
 /// "[return it to the battlefield]. It's [characteristics]."
@@ -588,3 +644,88 @@ fn gains_and_loses_all_other(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "characteristic riders: [subject] gains [abilities] and loses all other abilities", priority: 1090, parse: gains_and_loses_all_other } }
+
+/// "If X is 6 or more, those permanents are 4/4 creatures in addition to their other
+/// types." (Dance of the Manse): a rider that applies only if its condition holds; the
+/// permanents enter that way then (CR 611.3c).
+fn conditional_rider(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some((cond, rider)) = l.strip_prefix("if ").and_then(|r| r.split_once(", ")) else {
+        return false;
+    };
+    let rider = rider
+        .replacen("those permanents are ", "they're ", 1)
+        .replacen("those creatures are ", "they're ", 1);
+    {
+        let Some(to) = last_battlefield_move(prev) else {
+            return false;
+        };
+        if !to.with_mods.is_empty() {
+            return false;
+        }
+    }
+    let Some(c) = super::conditions_referents::parse_condition_with(cond, b)
+        .or_else(|| crate::oracle::statics::parse_condition(cond, b.ctx))
+    else {
+        return false;
+    };
+    let Some(mods) = rider_mods(&rider, b) else {
+        return false;
+    };
+    // The instruction with the rider when the condition holds, without it otherwise.
+    let Some(i) = last_move_index(prev) else {
+        return false;
+    };
+    let plain = take_at(prev, &i);
+    let mut with = plain.clone();
+    if let Some(to) = last_battlefield_move(&mut with) {
+        to.with_mods = mods;
+    }
+    put_at(
+        prev,
+        &i,
+        Effect::If {
+            cond: c,
+            then: Box::new(with),
+            otherwise: Box::new(plain),
+        },
+    );
+    true
+}
+
+/// The path to the last battlefield move of `e` (indices into nested sequences).
+fn last_move_index(e: &Effect) -> Option<Vec<usize>> {
+    match e {
+        Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => Some(vec![]),
+        Effect::Seq(v) => {
+            let n = v.len().checked_sub(1)?;
+            let mut p = last_move_index(&v[n])?;
+            p.insert(0, n);
+            Some(p)
+        }
+        _ => None,
+    }
+}
+
+fn take_at(e: &mut Effect, path: &[usize]) -> Effect {
+    match path.split_first() {
+        None => e.clone(),
+        Some((i, rest)) => match e {
+            Effect::Seq(v) => take_at(&mut v[*i], rest),
+            _ => e.clone(),
+        },
+    }
+}
+
+fn put_at(e: &mut Effect, path: &[usize], new: Effect) {
+    match path.split_first() {
+        None => *e = new,
+        Some((i, rest)) => {
+            if let Effect::Seq(v) = e {
+                put_at(&mut v[*i], rest, new);
+            }
+        }
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "characteristic riders: if [condition], those permanents are [characteristics]", priority: 1150, apply: conditional_rider } }
