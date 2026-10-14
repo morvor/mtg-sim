@@ -345,3 +345,63 @@ fn additional_votes_are_cumulative() {
     plea(&mut t);
     assert_eq!(voters(&t), vec![P0, P1, P1]);
 }
+
+/// Who was asked each "Vote" choice.
+fn vote_choosers(t: &TestGame) -> Vec<PlayerId> {
+    t.asked()
+        .iter()
+        .filter(|(_, d)| {
+            matches!(d, mtg_engine::decision::Decision::ChooseOption { prompt, .. } if prompt == "Vote")
+        })
+        .map(|(p, _)| *p)
+        .collect()
+}
+
+fn illusion(t: &mut TestGame, p: PlayerId) {
+    let ic = t.hand(p, "Illusion of Choice");
+    mana(t, p, ManaType::U, 1);
+    t.cast(p, ic).go();
+    t.resolve_all();
+}
+
+#[test]
+fn illusion_of_choice_chooses_votes_but_not_whether_to_vote_again() {
+    cr!("701.38a", "701.38d");
+    ruling!(
+        "Illusion of Choice",
+        "If another player controls Ballot Broker, that player first takes their “normal” vote with you choosing the result, then that player decides whether they are taking the additional vote. If there is an additional vote, you again choose the result."
+    );
+    supported("Illusion of Choice");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Ballot Broker");
+    illusion(&mut t, P0);
+    t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
+    let from = t.asked().len();
+    plea(&mut t);
+    assert_eq!(voters(&t), vec![P0, P1, P1]);
+    assert_eq!(vote_choosers(&t), vec![P0, P0, P0]);
+    let extra: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(extra, vec![P1]);
+    // Without it, each player chooses their own vote.
+    let mut t = TestGame::new(2);
+    plea(&mut t);
+    assert_eq!(vote_choosers(&t), vec![P0, P1]);
+}
+
+#[test]
+fn illusion_of_choice_most_recent_one_wins() {
+    cr!("701.38a");
+    ruling!(
+        "Illusion of Choice",
+        "If multiple players cast Illusion of Choice during the same turn, the controller of the one that resolved most recently will choose how each player votes that turn."
+    );
+    let mut t = TestGame::new(2);
+    illusion(&mut t, P0);
+    illusion(&mut t, P1);
+    plea(&mut t);
+    assert_eq!(vote_choosers(&t), vec![P1, P1]);
+}

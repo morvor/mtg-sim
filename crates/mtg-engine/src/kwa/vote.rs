@@ -34,6 +34,23 @@ pub const VOTED: &str = "vote";
 /// voting").
 pub const FINISHED_VOTING: &str = "finished voting";
 
+/// `Effect::Custom` name: "You choose how each player votes this turn." (Illusion of
+/// Choice): recorded among the turn's player actions; the player who most recently did
+/// so makes every player's voting choices this turn, while each player still decides
+/// whether to take an optional additional vote (Illusion of Choice's rulings).
+pub const CHOOSES_VOTES: &str = "vote: you choose how each player votes this turn";
+
+/// Who chooses how `voter` votes: the controller of the most recent "you choose how each
+/// player votes this turn" effect still in the game, or the voter.
+fn vote_chooser(g: &Game, voter: PlayerId) -> PlayerId {
+    g.history
+        .custom_actions
+        .iter()
+        .rev()
+        .find(|(p, n)| n == CHOOSES_VOTES && g.player(*p).in_game())
+        .map_or(voter, |(p, _)| *p)
+}
+
 /// Result variables (`Ctx::nums` / `Ctx::vars`).
 pub const MOST_VOTES: Var = vars::USER + 1038;
 pub const CHOICES_WITH_MOST: Var = vars::USER + 1039;
@@ -113,14 +130,15 @@ impl KeywordActionRules for Vote {
                 continue;
             }
             for _ in 0..votes_of(g, voter, ctx.source) {
+                let chooser = vote_chooser(g, voter);
                 let vote = if !words.is_empty() {
-                    let i = g.ask_option(voter, ctx.source, "Vote", words.clone());
+                    let i = g.ask_option(chooser, ctx.source, "Vote", words.clone());
                     let i = i.min(words.len() - 1);
                     word_votes[i] += 1;
                     (voter, i, None)
                 } else if !objects.is_empty() {
                     let pick = g
-                        .ask_objects(voter, ctx.source, "Vote", objects.clone(), 1, 1)
+                        .ask_objects(chooser, ctx.source, "Vote", objects.clone(), 1, 1)
                         .first()
                         .copied()
                         .unwrap_or(objects[0]);
@@ -200,6 +218,16 @@ pub struct VoteResults;
 impl crate::kw::KeywordRules for VoteResults {
     fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
         &[]
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name != CHOOSES_VOTES {
+            return false;
+        }
+        g.history
+            .custom_actions
+            .push((ctx.controller, SmolStr::new(CHOOSES_VOTES)));
+        true
     }
 
     fn custom_filter(&self, _g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
