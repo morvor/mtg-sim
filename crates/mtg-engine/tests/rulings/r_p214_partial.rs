@@ -32,6 +32,7 @@ fn has_ability(name: &str, needle: &str) {
 
 /// Asserts that `name`'s only unsupported text is the one block containing `needle` (an
 /// ability the rulings tested here don't concern).
+#[allow(dead_code)]
 fn only_unsupported(name: &str, needle: &str) {
     let c = card(name);
     let u = c.unsupported_text();
