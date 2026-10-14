@@ -19,8 +19,8 @@ pub fn matching_faces(g: &Game, card: ObjectId, f: &Filter, ctx: &Ctx) -> Vec<Fa
     // of the filter doesn't apply.
     let f = &crate::casting::as_spell_filter(f);
     let faces = crate::casting::castable_faces(g, card);
-    // A card exiled face down (Scarlet Witch, Chaotic Avenger) is cast face up: what it
-    // would be as a spell is its face's characteristics, not the face-down object's.
+    // CR 406.3b: a face-down card in exile has no characteristics; it's the spell it
+    // would become that must have them.
     if faces.len() < 2 && !g.obj(card).face_down {
         return if g.matches(card, f, ctx) {
             faces

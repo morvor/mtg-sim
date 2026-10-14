@@ -264,6 +264,10 @@ pub fn dig(
     crate::zones::looked_then_exiled(g, ctx.controller, &moved);
     ctx.set_var(vars::IT, moved.iter().map(|o| Entity::Object(*o)).collect());
     ctx.prev_affected = moved.iter().map(|o| Entity::Object(*o)).collect();
+    // "If you didn't put a card into your hand this way, ...": whether a card was taken.
+    if take > 0 {
+        ctx.prev_happened = !moved.is_empty();
+    }
     if take == 0 {
         // "Look at the top N cards": the looked-at cards are "them" for what follows.
         ctx.set_var(vars::IT, cards.iter().map(|o| Entity::Object(*o)).collect());

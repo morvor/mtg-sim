@@ -2211,10 +2211,12 @@ pub fn pay_mana(
     idxs.sort_unstable_by(|a, b| b.cmp(a));
     let mut riders = Vec::new();
     let mut snow = 0;
+    let mut sources = Vec::new();
     for i in idxs {
         let m = g.players[p.idx()].mana_pool.mana.remove(i);
         spent.push(m.ty);
         snow += m.snow as u32;
+        sources.extend(m.source);
         if let Some(r) = m.rider {
             riders.push(r);
         }
@@ -2223,6 +2225,8 @@ pub fn pay_mana(
     if let (true, Some(spell)) = (spend.is_spell, spend.source) {
         crate::kw::snow_mana::record(g, spell, snow);
     }
+    // "If mana from a Treasure was spent to cast it / to activate this ability".
+    crate::kw::cast_history::record_payment(g, spend, &spent, sources);
     // "When that mana is spent to cast ..." (CR 106.6): the delayed triggers trigger now
     // and are put on the stack the next time a player would receive priority. "... or
     // activate an ability": the ability on the stack whose cost it paid.

@@ -43,24 +43,24 @@ use crate::discard_rules::DISCARDED;
 pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
     let c = end(c.trim());
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let r = referent_condition(c, b)
-        .or_else(|| joined(c, b))
-        .or_else(|| referent_free(c, b));
+    // A pronoun that had no antecedent isn't understood.
+    let understood = |r: Option<Condition>| {
+        let r = r?;
+        let d = serde_json::to_string(&r).unwrap_or_default();
+        let needle = format!(
+            "\"Var\":{}",
+            crate::oracle::patterns::oracle_hardening_referents::NO_REFERENT
+        );
+        (!d.contains(&needle)).then_some(r)
+    };
+    let r = understood(referent_condition(c, b))
+        .or_else(|| understood(joined(c, b)))
+        .or_else(|| understood(referent_free(c, b)));
     // Resolving a subject never changes what later pronouns mean, nor adds targets.
     b.targets.truncate(saved.0);
     b.it = saved.1;
     b.it_player = saved.2;
-    let r = r?;
-    // A pronoun that had no antecedent isn't understood.
-    let d = serde_json::to_string(&r).unwrap_or_default();
-    let needle = format!(
-        "\"Var\":{}",
-        crate::oracle::patterns::oracle_hardening_referents::NO_REFERENT
-    );
-    if d.contains(&needle) {
-        return None;
-    }
-    Some(r)
+    r
 }
 
 /// Whether a condition's "it" would mean the ability's source only by default: after an
@@ -423,10 +423,21 @@ fn subject(c: &str, b: &mut Builder) -> Option<(Subject, String)> {
         (c.strip_prefix("that ").map(|r| split_word(r).0), &sel)
     {
         let noun = noun.trim_end_matches("'s");
-        if let Some(TargetKind::Object(f)) = b.targets.get(*slot as usize).map(|t| &t.what) {
-            if !can_be(f, noun) {
-                return None;
+        match b.targets.get(*slot as usize).map(|t| &t.what) {
+            Some(TargetKind::Object(f)) if !can_be(f, noun) => return None,
+            // "~ deals 1 damage to any target. If that land is a Mountain, ...": any
+            // target is a creature, planeswalker, battle, or player (CR 115.4), so "that
+            // land" is another object: in a triggered ability, the one the trigger event
+            // is about ("Whenever a land you control enters").
+            Some(TargetKind::AnyTarget)
+                if !matches!(noun, "creature" | "planeswalker" | "battle" | "permanent" | "player") =>
+            {
+                if !b.in_trigger {
+                    return None;
+                }
+                return Some((Subject::Object(Sel::TriggerObject), rest));
             }
+            _ => {}
         }
     }
     Some((Subject::Object(sel), rest))
@@ -478,15 +489,17 @@ fn referent_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     if let Some(cond) = special(c, b) {
         return Some(cond);
     }
-    let (subj, rest) = subject(c, b)?;
-    match subj {
+    let r = subject(c, b).and_then(|(subj, rest)| match subj {
         Subject::Object(sel) => object_predicate(&sel, &rest, b).or_else(|| {
             // The static-condition grammar's states of "it".
             let f = super::statics_conditions::pronoun_state(c)?;
             Some(Condition::SelMatches(sel, f))
         }),
         Subject::Player(p) => player_condition(&p, rest.trim(), b),
-    }
+    });
+    // What happened earlier, and how a spell was cast ("if it was cast", "if that
+    // creature entered this turn").
+    r.or_else(|| super::history_conditions::referent_history(c, b))
 }
 
 /// Conditions whose subject isn't the referent: "you control that creature", "an

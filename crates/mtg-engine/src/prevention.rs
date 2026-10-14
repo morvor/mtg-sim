@@ -233,6 +233,14 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
                 Value::Const(g.eval_value(n, ctx) as i32),
             )
         }
+        // "{X}, {T}: If a source you control would deal noncombat damage ... this turn, it
+        // deals that much damage plus X instead": the ability's X is locked in (CR 107.3,
+        // 608.2h); it has no value once the ability has left the stack.
+        ReplacementAction::Add(n)
+            if serde_json::to_string(n).is_ok_and(|j| j.contains("\"X\"")) =>
+        {
+            ReplacementAction::Add(Value::Const(g.eval_value(n, ctx) as i32))
+        }
         other => other.clone(),
     };
     ReplacementDef {
