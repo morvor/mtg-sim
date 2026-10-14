@@ -30,7 +30,7 @@ fn obj(id: ObjectId) -> Entity {
 
 #[test]
 fn proud_wildbonder_assigns_to_the_player_despite_protection() {
-    cr!("510.1c", "702.16b");
+    cr!("510.1c");
     ruling!(
         "Proud Wildbonder",
         "You can decide to assign combat damage to the defending player or planeswalker even if the blocking creature has protection from green or other damage prevention effects applying to it."
@@ -123,7 +123,9 @@ fn damage_on_a_vanilla_creature_can_become_lethal_later() {
     modify(
         &mut t,
         bears,
-        vec![Modification::AddKeyword(mtg_engine::keywords::KeywordKind::Flying.into())],
+        vec![Modification::AddKeyword(
+            mtg_engine::keywords::KeywordKind::Flying.into(),
+        )],
     );
     t.settle();
     assert!(!t.on_battlefield(bears));
@@ -504,4 +506,3 @@ fn grudge_keeper_with_additional_votes() {
     assert_eq!(t.life(P1), 20);
     assert_eq!(t.life(P2), 18);
 }
-

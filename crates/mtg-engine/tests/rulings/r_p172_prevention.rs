@@ -7,10 +7,10 @@ use crate::r_p076_common::mana;
 use crate::r_p117_common::modify;
 use crate::r_s01_common::{attack_with, supported};
 use crate::r_s03_common::{respond, to_blockers};
-use mtg_engine::decision::{Answer, Decision};
 use crate::r_s05_common::move_to;
 use crate::r_s06_common::damage;
 use mtg_engine::ability::*;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::events::Event;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
@@ -66,7 +66,7 @@ fn damage_by(t: &TestGame, name: &str) -> Vec<(Entity, u32, bool)> {
 
 #[test]
 fn acolytes_reward_prevents_the_next_damage_from_any_source_and_deals_it() {
-    cr!("615.7", "615.5", "115.1d");
+    cr!("615.7", "615.5", "115.1a");
     ruling!(
         "Acolyte's Reward",
         "Acolyte's Reward has two targets: the creature that would be dealt damage and the permanent or player that Acolyte's Reward will deal damage to. These targets are chosen as you cast Acolyte's Reward."
@@ -87,7 +87,10 @@ fn acolytes_reward_prevents_the_next_damage_from_any_source_and_deals_it() {
     let spell = cast_reward(&mut t, giant, Entity::Player(P1));
     // Both targets were chosen as it was cast.
     let si = t.obj(spell).stack.as_ref().unwrap();
-    assert_eq!(si.chosen[0].targets, vec![vec![obj(giant)], vec![Entity::Player(P1)]]);
+    assert_eq!(
+        si.chosen[0].targets,
+        vec![vec![obj(giant)], vec![Entity::Player(P1)]]
+    );
     t.resolve_all();
     // 2 from one source: all prevented and dealt to P1.
     damage(&mut t, bears, 2, giant);
@@ -118,7 +121,11 @@ fn acolytes_reward_after_it_resolves_target_legality_doesnt_matter() {
     let src = t.battlefield(P1, "Grizzly Bears");
     cast_reward(&mut t, giant, obj(wurm));
     t.resolve_all();
-    modify(&mut t, wurm, vec![Modification::AddKeyword(KeywordKind::Hexproof.into())]);
+    modify(
+        &mut t,
+        wurm,
+        vec![Modification::AddKeyword(KeywordKind::Hexproof.into())],
+    );
     damage(&mut t, src, 2, giant);
     assert_eq!(damage_of(&t, giant), 0);
     assert_eq!(damage_of(&t, wurm), 2);
@@ -138,7 +145,7 @@ fn acolytes_reward_after_it_resolves_target_legality_doesnt_matter() {
 
 #[test]
 fn acolytes_reward_with_illegal_targets() {
-    cr!("608.2b", "115.1d");
+    cr!("608.2b", "115.1a");
     ruling!(
         "Acolyte's Reward",
         "As Acolyte's Reward tries to resolve, if only the first target is illegal, Acolyte's Reward won't prevent any damage that would be dealt to that creature and, because of this, Acolyte's Reward won't deal damage to the second target. If only the second target is illegal, damage that would be dealt to the first target will be prevented, but Acolyte's Reward won't deal damage. If both targets are illegal, Acolyte's Reward won't resolve."
@@ -207,7 +214,16 @@ fn acolytes_reward_deals_its_damage_before_the_spell_resumes() {
     let events: Vec<&Event> = t.turn_events.iter().chain(t.g.events.iter()).collect();
     let dealt = events
         .iter()
-        .position(|e| matches!(e, Event::Damage { target: Entity::Player(P1), amount: 3, .. }))
+        .position(|e| {
+            matches!(
+                e,
+                Event::Damage {
+                    target: Entity::Player(P1),
+                    amount: 3,
+                    ..
+                }
+            )
+        })
         .expect("Acolyte's Reward dealt damage");
     let gained = events
         .iter()

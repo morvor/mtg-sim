@@ -118,13 +118,12 @@ fn cut_short_activating_an_emblems_ability_doesnt_activate_a_planeswalker() {
     add_loyalty(&mut t, first, 8);
     t.activate(P0, first, 2, &[]).unwrap();
     t.resolve_all();
-    let emblem = t
-        .g
-        .objects
-        .iter()
-        .find(|o| o.zone == Zone::Command && o.controller == P0)
-        .map(|o| o.id)
-        .expect("emblem");
+    let emblem =
+        t.g.objects
+            .iter()
+            .find(|o| o.zone == Zone::Command && o.controller == P0)
+            .map(|o| o.id)
+            .expect("emblem");
     // Another Ob Nixilis (not activated this turn); the emblem's ability is activated.
     let ob = t.battlefield(P0, "Ob Nixilis of the Black Oath");
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -300,8 +299,16 @@ fn guardians_pledge_is_locked_in_as_it_resolves() {
     assert_eq!(t.pt(lions), (4, 3));
     assert_eq!(t.pt(bears), (2, 2));
     let later = t.battlefield(P0, "Savannah Lions");
-    modify(&mut t, lions, vec![Modification::SetColors(ColorSet::single(Color::Blue))]);
-    modify(&mut t, bears, vec![Modification::SetColors(ColorSet::single(Color::White))]);
+    modify(
+        &mut t,
+        lions,
+        vec![Modification::SetColors(ColorSet::single(Color::Blue))],
+    );
+    modify(
+        &mut t,
+        bears,
+        vec![Modification::SetColors(ColorSet::single(Color::White))],
+    );
     assert_eq!(t.pt(lions), (4, 3));
     assert_eq!(t.pt(bears), (2, 2));
     assert_eq!(t.pt(later), (2, 1));
@@ -357,7 +364,11 @@ fn view_from_above_returns_to_hand_only_if_it_resolves() {
         "If you control a white permanent, View from Above moves from the stack to your hand as part of its resolution. It never hits the graveyard. If you don’t control a white permanent, View from Above is put into the graveyard from the stack as normal."
     );
     supported("View from Above");
-    for (white, bounce, hand) in [(true, false, true), (false, false, false), (true, true, false)] {
+    for (white, bounce, hand) in [
+        (true, false, true),
+        (false, false, false),
+        (true, true, false),
+    ] {
         let mut t = TestGame::new(2);
         if white {
             t.battlefield(P0, "Savannah Lions");
@@ -373,7 +384,13 @@ fn view_from_above_returns_to_hand_only_if_it_resolves() {
         assert_eq!(t.in_hand(P0, "View from Above"), hand);
         assert_eq!(t.in_graveyard(P0, "View from Above"), !hand);
         let to_graveyard = t.turn_events.iter().chain(t.g.events.iter()).any(|e| {
-            matches!(e, mtg_engine::events::Event::ZoneChange { to: Zone::Graveyard(_), .. })
+            matches!(
+                e,
+                mtg_engine::events::Event::ZoneChange {
+                    to: Zone::Graveyard(_),
+                    ..
+                }
+            )
         });
         assert_eq!(to_graveyard, !hand);
         if !bounce {
@@ -532,10 +549,7 @@ fn devotion_counts_battles_and_auras_you_control() {
     let battle = t.enter(P0, "Invasion of Gobakhan // Lightshield Array");
     t.g.flush_events();
     t.resolve_all();
-    assert_eq!(
-        mtg_engine::battle::protector(&t.g, battle),
-        Some(P1)
-    );
+    assert_eq!(mtg_engine::battle::protector(&t.g, battle), Some(P1));
     assert_eq!(t.obj_now(battle).controller, P0);
     assert_eq!(t.pt(daxos), (2, 3));
 }
@@ -808,7 +822,11 @@ fn bounce_creatures_choose_what_to_return_on_resolution() {
     // resolves.
     let mut t = TestGame::new(2);
     let crow = t.battlefield(P0, "Storm Crow");
-    modify(&mut t, crow, vec![Modification::AddKeyword(KeywordKind::Shroud.into())]);
+    modify(
+        &mut t,
+        crow,
+        vec![Modification::AddKeyword(KeywordKind::Shroud.into())],
+    );
     let from = t.asked().len();
     t.answer_choose(P0, &[obj(crow)]);
     let harpy = enter(&mut t, P0, "Cavern Harpy");
@@ -851,7 +869,6 @@ fn teysa_sacrificing_itself_doesnt_trigger_its_own_ability() {
     assert!(!t.on_battlefield(bears));
     assert_eq!(with_subtype(&t, P0, "Spirit").len(), 1);
 }
-
 
 #[test]
 fn martyrs_soul_checks_tapped_lands_on_entering_and_on_resolution() {
@@ -946,15 +963,32 @@ fn ephara_ignores_a_noncreature_permanent_that_becomes_a_creature() {
     );
     fn animated(t: &mut TestGame) {
         let stone = enter(t, P0, "Mind Stone");
-        modify(
-            t,
-            stone,
-            vec![
-                Modification::AddTypes(vec![CardType::Creature]),
-                Modification::SetPT(Some(Value::c(2)), Some(Value::c(2))),
-            ],
+        // Indefinitely, so it's still a creature at the next upkeep: only how it entered
+        // matters.
+        let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+        ctx.targets = vec![vec![obj(stone)]];
+        t.g.exec(
+            &Effect::Modify {
+                what: Sel::Target(0),
+                mods: vec![
+                    Modification::AddTypes(vec![CardType::Creature]),
+                    Modification::SetPT(Some(Value::c(2)), Some(Value::c(2))),
+                ],
+                duration: Duration::Permanent,
+            },
+            &mut ctx,
         );
+        t.g.recompute();
+        t.settle();
         assert!(t.obj_now(stone).is(CardType::Creature));
     }
     assert_eq!(ephara_next_upkeep(animated), (0, 0));
+    // It's still a creature at that upkeep.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Ephara, God of the Polis");
+    animated(&mut t);
+    t.advance_to(P1, Step::Upkeep);
+    let stone = t.named_on_battlefield("Mind Stone")[0];
+    assert!(t.obj_now(stone).is(CardType::Creature));
 }

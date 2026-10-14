@@ -154,7 +154,10 @@ fn additional_tokens_share_how_the_tokens_are_created_but_not_their_abilities() 
         "Worldwalker Helm",
         "The additional Map token won't have any abilities the other tokens were created with. Anything else specified in the effect creating the token (such as tapped or \"Exile that token at end of combat\") applies to both the original tokens and the Map."
     );
-    for (card, extra, abilities) in [("Quina, Qu Gourmet", "Frog Token", 0), ("Worldwalker Helm", "Map", 1)] {
+    for (card, extra, abilities) in [
+        ("Quina, Qu Gourmet", "Frog Token", 0),
+        ("Worldwalker Helm", "Map", 1),
+    ] {
         supported(card);
         let mut t = TestGame::new(2);
         t.battlefield(P0, card);
@@ -380,7 +383,10 @@ fn full_flowering_populates_one_at_a_time_and_triggers_wait() {
         "Full Flowering",
         "Any abilities that trigger while you're populating won't be put onto the stack until after you've finished populating X times."
     );
-    ruling!("Full Flowering", "The tokens enter the battlefield one at a time.");
+    ruling!(
+        "Full Flowering",
+        "The tokens enter the battlefield one at a time."
+    );
     supported("Full Flowering");
     supported("Daxos, Blessed by the Sun");
     let mut t = TestGame::new(2);
@@ -396,7 +402,10 @@ fn full_flowering_populates_one_at_a_time_and_triggers_wait() {
     let life = t.life(P0);
     t.resolve();
     // The second populate can copy the token the first one created.
-    let lens: Vec<usize> = choice_candidates(&t, from).iter().map(|c| c.len()).collect();
+    let lens: Vec<usize> = choice_candidates(&t, from)
+        .iter()
+        .map(|c| c.len())
+        .collect();
     assert_eq!(lens, vec![2, 3]);
     assert_eq!(tokens(&t, P0).len(), 4);
     // Both Daxos triggers wait until it's done.
@@ -559,7 +568,6 @@ fn combine_chrysalis_can_sacrifice_a_noncreature_token() {
     assert_eq!(named_tokens(&t, P0, "Beast Token").len(), 1);
 }
 
-
 #[test]
 fn song_of_the_worldsoul_resolves_first_even_if_the_spell_is_countered() {
     cr!("603.3", "601.2c");
@@ -660,7 +668,11 @@ fn divine_visitation_replaces_the_tokens_characteristics_only() {
         assert!(o.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
         assert!(o.has_keyword(mtg_engine::keywords::KeywordKind::Vigilance));
         assert!(o.tapped);
-        assert!(o.chars.abilities.iter().all(|a| !a.text.contains("Add {G}")));
+        assert!(o
+            .chars
+            .abilities
+            .iter()
+            .all(|a| !a.text.contains("Add {G}")));
     }
     // An opponent's tokens and noncreature tokens are unaffected.
     create_soldier(&mut t, P1, false);
@@ -704,7 +716,6 @@ fn divine_visitation_ignores_tokens_that_become_creatures_as_they_enter() {
     assert!(named_tokens(&t, P0, "Angel").is_empty());
 }
 
-
 #[test]
 fn divine_visitation_and_effects_that_change_control_of_the_tokens() {
     cr!("614.1a", "616.1", "614.12");
@@ -745,4 +756,95 @@ fn divine_visitation_and_effects_that_change_control_of_the_tokens() {
     create_soldier(&mut t, P0, false);
     assert!(tokens(&t, P0).is_empty());
     assert_eq!(named_tokens(&t, P1, "Angel").len(), 2);
+}
+
+#[test]
+fn divine_visitation_angels_keep_what_the_effect_does_to_the_token() {
+    cr!("614.1a", "603.7c");
+    ruling!(
+        "Divine Visitation",
+        "Anything else specified in the effect creating the token (such as tapped, attacking, \"That token gains haste,\" or \"Exile that token at end of combat\") still applies."
+    );
+    supported("Kiki-Jiki, Mirror Breaker");
+    // Kiki-Jiki's copy becomes an Angel, and "Sacrifice it at the beginning of the next end
+    // step" still sacrifices it.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Divine Visitation");
+    let kiki = t.battlefield(P0, "Kiki-Jiki, Mirror Breaker");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.activate(P0, kiki, 0, &[obj(bears)]).unwrap();
+    t.resolve_all();
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 1);
+    assert_eq!(t.obj(toks[0]).chars.name, "Angel Token");
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(tokens(&t, P0).is_empty());
+}
+
+#[test]
+fn crafty_cutpurse_applies_before_the_opponents_token_doubler() {
+    cr!("614.1a", "616.1b");
+    ruling!(
+        "Crafty Cutpurse",
+        "if an opponent controls Anointed Procession, your Crafty Cutpurse"
+    );
+    supported("Crafty Cutpurse");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Anointed Procession");
+    enter(&mut t, P0, "Crafty Cutpurse");
+    t.resolve_all();
+    create_token(&mut t, P1, "Soldier");
+    assert_eq!(tokens(&t, P0).len(), 1);
+    assert!(tokens(&t, P1).is_empty());
+    // Its own controller's doubler applies after it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Anointed Procession");
+    enter(&mut t, P0, "Crafty Cutpurse");
+    t.resolve_all();
+    create_token(&mut t, P1, "Soldier");
+    assert_eq!(tokens(&t, P0).len(), 2);
+}
+
+#[test]
+fn crafty_cutpurse_effects_of_both_players_each_apply_once() {
+    cr!("614.5", "616.1");
+    ruling!(
+        "Crafty Cutpurse",
+        "If two or more players each have resolved Crafty Cutpurse"
+    );
+    ruling!(
+        "Crafty Cutpurse",
+        "if each player in a two-player game has resolved Crafty Cutpurse"
+    );
+    let mut t = TestGame::new(2);
+    enter(&mut t, P0, "Crafty Cutpurse");
+    enter(&mut t, P1, "Crafty Cutpurse");
+    t.resolve_all();
+    create_token(&mut t, P0, "Soldier");
+    assert_eq!(tokens(&t, P0).len(), 1);
+    assert!(tokens(&t, P1).is_empty());
+}
+
+#[test]
+fn crafty_cutpurse_tapped_and_attacking_tokens_dont_attack_for_you() {
+    cr!("508.4", "111.2");
+    ruling!(
+        "Crafty Cutpurse",
+        "that token is created tapped but not attacking"
+    );
+    supported("Hero of Bladehold");
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    enter(&mut t, P0, "Crafty Cutpurse");
+    t.resolve_all();
+    let hero = t.battlefield(P1, "Hero of Bladehold");
+    crate::r_s01_common::attack_with(&mut t, &[(hero, Entity::Player(P0))]);
+    t.resolve_all();
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 2);
+    assert!(toks
+        .iter()
+        .all(|i| t.obj(*i).tapped && !crate::r_s10_common::attacking(&t, *i)));
 }
