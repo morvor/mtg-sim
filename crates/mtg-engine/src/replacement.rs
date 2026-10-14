@@ -818,6 +818,20 @@ impl Game {
                 created_turn: self.turn.number,
             });
         }
+        // What an effect says the permanent "is" as it enters (CR 611.3c, 614.1c).
+        if let Some((source, ctl, mods)) = &m.etb.with_mods {
+            self.effects.push(ContinuousEffect {
+                id: 0,
+                source: *source,
+                controller: *ctl,
+                timestamp: saved_next_ts + 1,
+                duration: Duration::Permanent,
+                affected: Affected::Objects(vec![id]),
+                mods: mods.clone(),
+                layer1: None,
+                created_turn: self.turn.number,
+            });
+        }
         self.compute_characteristics(false);
         self.statics.replacements = saved_statics.replacements.clone();
         self.statics.restrictions = saved_statics.restrictions.clone();
@@ -1298,6 +1312,7 @@ impl Game {
                     });
                     info.amount = prevented as i32;
                     c.event = Some(info);
+                    c.nums.insert(crate::prevention::THAT_DAMAGE, amount as i64);
                     // Applied to simultaneous damage events, a prevention effect is
                     // applied once: its instruction happens once, for all the damage
                     // (once for each recipient if it's about the recipient).
@@ -1318,6 +1333,10 @@ impl Game {
                                 if let Some(ev) = first.event.as_mut() {
                                     ev.amount += prevented as i32;
                                 }
+                                *first
+                                    .nums
+                                    .entry(crate::prevention::THAT_DAMAGE)
+                                    .or_insert(0) += amount as i64;
                             }
                             None => list.push((key, c, e)),
                         },

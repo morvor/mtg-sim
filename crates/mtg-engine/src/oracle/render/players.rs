@@ -1318,6 +1318,7 @@ impl Renderer<'_> {
             PlayerFilter::Defending => "who is the defending player".into(),
             PlayerFilter::Active => "whose turn it is".into(),
             PlayerFilter::AttackedThisTurn => "who attacked this turn".into(),
+            PlayerFilter::CastSpellThisTurn => "who cast a spell this turn".into(),
             PlayerFilter::Poisoned => "who is poisoned".into(),
             PlayerFilter::HasInitiative => "who has the initiative".into(),
             PlayerFilter::AttackRelation {

@@ -26,7 +26,7 @@ fn change_text(l: &str, b: &mut Builder) -> Option<Effect> {
             TextWords::ColorOrBasicLandType
         }
         "one creature type with another" => TextWords::CreatureType,
-        _ => return None,
+        w => return fixed_word(w, what, duration, b),
     };
     let (spec, tail) = parse_target(what)?;
     if !end(tail).is_empty() {
@@ -37,6 +37,39 @@ fn change_text(l: &str, b: &mut Builder) -> Option<Effect> {
         what: Sel::Target(slot),
         words,
         exclude: vec![],
+        duration,
+    })
+}
+
+/// "Change the text of that creature by replacing all instances of one creature type with
+/// Vampire." (New Blood): the new word is fixed, so every other creature type is excluded
+/// as the new word. "that creature" is an object the effect already refers to.
+fn fixed_word(words: &str, what: &str, duration: Duration, b: &mut Builder) -> Option<Effect> {
+    let to = words.strip_prefix("one creature type with ")?;
+    let to = crate::oracle::phrases::subtype_word(to)?;
+    if !crate::types::is_creature_type(&to) {
+        return None;
+    }
+    let sel = match what {
+        "that creature" | "it" if !matches!(b.it, Sel::None) => b.it.clone(),
+        _ => {
+            let (spec, tail) = parse_target(what)?;
+            if !end(tail).is_empty() {
+                return None;
+            }
+            Sel::Target(b.add_target(spec, what))
+        }
+    };
+    let exclude = crate::types::subtype_lists()
+        .creature
+        .iter()
+        .filter(|t| t.as_str() != to.as_str())
+        .map(|t| SmolStr::new(t.as_str()))
+        .collect();
+    Some(Effect::ChangeText {
+        what: sel,
+        words: TextWords::CreatureType,
+        exclude,
         duration,
     })
 }

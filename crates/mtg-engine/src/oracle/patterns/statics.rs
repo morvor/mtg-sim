@@ -437,6 +437,12 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((Filter::SameNameAs(Box::new(Sel::This)), r));
         }
     }
+    // "named Sound the Call" (a card's name kept in a quoted ability, CR 201.2).
+    if let Some(r) = t.strip_prefix("named ") {
+        if let Some((name, rest)) = super::value_grammar::literal_card_name(r) {
+            return Some((Filter::Named(name.into()), rest));
+        }
+    }
     // "with power greater than the number of cards in your hand", "with power less than
     // the number of Islands you control"
     for (p, cmp) in [
@@ -1692,7 +1698,7 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
     // (CR 201.2), in the card's own capitalization.
     if let Some((x, name)) = r.rsplit_once(" named ") {
         let name = name.trim();
-        if !name.is_empty() && !name.contains(['"', '~', ',']) && name.split(' ').count() <= 4 {
+        if !name.is_empty() && !name.contains(['"', '~']) && name.split(' ').count() <= 6 {
             let raw = crate::oracle::raw_text();
             let original = (raw.len() == raw.to_lowercase().len())
                 .then(|| {
@@ -1700,6 +1706,16 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
                     raw.get(i..i + name.len()).map(str::to_string)
                 })
                 .flatten()?;
+            // A name with a comma ("Mileva, the Stalwart", "Everflame, Heroes' Legacy"):
+            // its words are capitalized but for "the" and "of", so it's one name rather than
+            // a list.
+            let title = |w: &str| {
+                w.starts_with(|c: char| c.is_uppercase()) || matches!(w, "the" | "of")
+            };
+            if name.contains(',') && !original.split([' ', ',']).filter(|w| !w.is_empty()).all(title)
+            {
+                return None;
+            }
             let mut out = type_predicate(x, subj)?;
             out.push(Out::Mod(Modification::SetName(original.into())));
             return Some(out);
@@ -1722,6 +1738,20 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
             return None;
         }
         return m(vec![Modification::AllCreatureTypes]);
+    }
+    // "is every land type in addition to its other types" (Omo, Queen of Vesuva): each
+    // land type of CR 205.3i.
+    if r == "every land type in addition to its other types" || r == "every land type" {
+        if !subj.lands {
+            return None;
+        }
+        let mut types: Vec<Subtype> = crate::types::subtype_lists()
+            .land
+            .iter()
+            .map(|t| Subtype::from(t.as_str()))
+            .collect();
+        types.sort();
+        return m(vec![Modification::AddSubtypes(types)]);
     }
     if r == "every nonbasic land type" {
         // "~ is every nonbasic land type." (Planar Nexus): the land types of CR 205.3i
