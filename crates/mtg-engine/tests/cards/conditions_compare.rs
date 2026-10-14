@@ -22,16 +22,15 @@ fn compiles(name: &str) {
 /// Whether `p` may activate the `index`th activated ability of `src` now.
 fn can(t: &mut TestGame, p: PlayerId, src: ObjectId, index: usize) -> bool {
     t.g.recompute();
-    let uid = t
-        .g
-        .obj(src)
-        .chars
-        .abilities
-        .iter()
-        .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
-        .nth(index)
-        .map(|a| a.uid)
-        .expect("no such ability");
+    let uid =
+        t.g.obj(src)
+            .chars
+            .abilities
+            .iter()
+            .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+            .nth(index)
+            .map(|a| a.uid)
+            .expect("no such ability");
     t.g.turn.priority = Some(p);
     t.g.legal_actions(p).iter().any(
         |a| matches!(a, Action::Activate { source, ability, .. } if *source == src && *ability == uid),
@@ -205,6 +204,26 @@ fn eight_artifacts_with_the_same_name_as_one_another() {
     // Seven plus the copy: eight.
     let t = setup(7);
     assert!(t.has_lost(P1));
+    // Six artifacts plus the copy, and a nonartifact permanent with the same name: only
+    // seven of the eight are artifacts.
+    let mut t = TestGame::new(2);
+    let thopters: Vec<ObjectId> = (0..6).map(|_| t.battlefield(P0, "Ornithopter")).collect();
+    let types: CardTypeSet = [CardType::Creature].into_iter().collect();
+    let def = mtg_engine::card::CardDef::custom(mtg_engine::object::Characteristics {
+        name: "Ornithopter".into(),
+        card_types: types,
+        power: Some(0),
+        toughness: Some(2),
+        rules_text: std::sync::Arc::from(""),
+        ..Default::default()
+    });
+    t.custom(P0, def, mtg_engine::object::Zone::Battlefield);
+    let mp = t.battlefield(P0, "Mechanized Production");
+    t.g.attach(mp, Entity::Object(thopters[0]));
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 8);
+    assert!(!t.has_lost(P1));
 }
 
 #[test]
@@ -249,9 +268,24 @@ fn fewer_creatures_than_each_opponent() {
     t.battlefield(P2, "Grizzly Bears");
     assert!(can_cast(&mut t, P0, spell));
     // One opponent controls as many as you: not fewer than each opponent.
-    t.battlefield(P0, "Grizzly Bears");
-    t.battlefield(P1, "Grizzly Bears");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
     assert!(!can_cast(&mut t, P0, spell));
+    // Cast while you control fewer; by the time it resolves you control more: it still
+    // resolves (the restriction applies only as it's cast, CR 601.3).
+    t.g.destroy(mine, None);
+    t.g.destroy(theirs, None);
+    t.settle();
+    t.cast(P0, spell).go();
+    for _ in 0..3 {
+        t.battlefield(P0, "Grizzly Bears");
+    }
+    t.resolve();
+    let soldiers =
+        t.g.permanents()
+            .filter(|o| o.chars.subtypes.iter().any(|s| s == "Soldier"))
+            .count();
+    assert_eq!(soldiers, 3);
 }
 
 #[test]

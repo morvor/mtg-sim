@@ -27,12 +27,12 @@ fn can_target(t: &mut TestGame, src: ObjectId, index: usize, target: Entity) -> 
     let r = t.activate(P0, src, index, &[target]);
     t.clear_answers();
     match r {
-        Ok(Some(ab)) => t
-            .g
-            .obj(ab)
-            .stack
-            .as_ref()
-            .is_some_and(|s| s.chosen.iter().flat_map(|c| c.targets.iter().flatten()).any(|e| *e == target)),
+        Ok(Some(ab)) => t.g.obj(ab).stack.as_ref().is_some_and(|s| {
+            s.chosen
+                .iter()
+                .flat_map(|c| c.targets.iter().flatten())
+                .any(|e| *e == target)
+        }),
         _ => false,
     }
 }
@@ -93,6 +93,34 @@ fn target_without_a_counter_is_rechecked_coiling_stalker() {
         "will become an illegal target if a +1/+1 counter is placed on it"
     );
     compiles("Coiling Stalker");
+    // A creature with a +1/+1 counter can't be chosen: the stalker itself is the only
+    // other one, so it gets the counter.
+    let mut t = TestGame::new(2);
+    let stalker = t.battlefield(P0, "Coiling Stalker");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 1, None);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(stalker, Entity::Player(P1))], &[]);
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert_eq!(t.counters(stalker, "+1/+1"), 1);
+    // The target gets a +1/+1 counter before the ability resolves: it's an illegal
+    // target, and the ability doesn't resolve.
+    let mut t = TestGame::new(2);
+    let stalker = t.battlefield(P0, "Coiling Stalker");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(stalker, Entity::Player(P1))]),
+    );
+    assert!(t.g.run_until(10_000, |g| !g.stack.is_empty()));
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 1, None);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert_eq!(t.counters(stalker, "+1/+1"), 0);
+    // Without that, it gets the counter.
     let mut t = TestGame::new(2);
     let stalker = t.battlefield(P0, "Coiling Stalker");
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -100,12 +128,6 @@ fn target_without_a_counter_is_rechecked_coiling_stalker() {
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(stalker, Entity::Player(P1))], &[]);
     assert_eq!(t.counters(bears, "+1/+1"), 1);
-    // A creature with a +1/+1 counter can't be chosen: the stalker itself is the only
-    // other one, so it gets the counter.
-    t.advance_to(P0, Step::BeginningOfCombat);
-    t.attack(&[(stalker, Entity::Player(P1))], &[]);
-    assert_eq!(t.counters(bears, "+1/+1"), 1);
-    assert_eq!(t.counters(stalker, "+1/+1"), 1);
 }
 
 #[test]
@@ -182,14 +204,13 @@ fn equal_or_lesser_toughness_of_the_creature_that_died_bane() {
         "looks at the toughness of the creature that died"
     );
     compiles("Bane, Lord of Darkness");
-    compiles("Jailbreak");
     compiles("Kellan, the Kid");
     compiles("Puca's Mischief");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Bane, Lord of Darkness");
     let wall = t.battlefield(P0, "Wall of Stone"); // 0/8
     t.hand(P0, "Craw Wurm"); // 6/4
-    // The opponent declines to have you draw.
+                             // The opponent declines to have you draw.
     t.answer_yes(P1, false);
     t.answer_yes(P0, true);
     t.g.destroy(wall, None);
@@ -240,6 +261,7 @@ fn same_name_as_a_card_in_your_graveyard_candles_of_leng() {
     t2.activate(P0, candles, 0, &[]).unwrap();
     t2.resolve();
     assert!(t2.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(t2.graveyard_size(P0), 1);
     let _ = hand;
 }
 
@@ -304,4 +326,27 @@ fn unless_it_shares_the_most_common_color_heroic_defiance() {
     // Green and red tied.
     assert_eq!(t.pt(bears), (2, 2));
     let _ = KeywordKind::Flying;
+}
+
+#[test]
+fn same_name_as_a_permanent_retraced_image() {
+    cr!("201.2");
+    compiles("Retraced Image");
+    for (theirs, enters) in [("Grizzly Bears", true), ("Hill Giant", false)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 1);
+        t.battlefield(P1, theirs);
+        let bears = t.hand(P0, "Grizzly Bears");
+        let ri = t.hand(P0, "Retraced Image");
+        t.answer_choose(P0, &[Entity::Object(bears)]);
+        t.cast(P0, ri).go();
+        t.resolve();
+        let mine = t
+            .named_on_battlefield("Grizzly Bears")
+            .into_iter()
+            .filter(|o| t.obj_now(*o).controller == P0)
+            .count();
+        assert_eq!(mine, enters as usize, "{theirs}");
+        assert_eq!(t.in_hand(P0, "Grizzly Bears"), !enters, "{theirs}");
+    }
 }

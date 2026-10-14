@@ -22,22 +22,13 @@ fn compiles(name: &str) {
 fn what_a_countered_spell_was_jaces_defeat() {
     cr!("608.2h");
     compiles("Jace's Defeat");
-    for (spell, scry) in [("Jace Beleren", true), ("Counterspell", false)] {
+    // A blue Jace planeswalker spell, and a blue spell that isn't one.
+    for (spell, scry) in [("Jace Beleren", true), ("Mahamoti Djinn", false)] {
         let mut t = TestGame::new(2);
-        t.lands(P1, "Island", 5);
+        t.lands(P1, "Island", 6);
         let s = t.hand(P1, spell);
         t.set_step(P1, Step::PrecombatMain);
-        if spell == "Counterspell" {
-            // A blue spell to counter that isn't a Jace: an Island-cost creature.
-            let _ = s;
-        }
-        let target = if spell == "Jace Beleren" {
-            t.cast(P1, s).go()
-        } else {
-            let c = t.hand(P1, "Mahamoti Djinn");
-            t.lands(P1, "Island", 1);
-            t.cast(P1, c).go()
-        };
+        let target = t.cast(P1, s).go();
         t.lands(P0, "Island", 2);
         let jd = t.hand(P0, "Jace's Defeat");
         t.cast(P0, jd).target(target).go();
@@ -47,6 +38,7 @@ fn what_a_countered_spell_was_jaces_defeat() {
             .iter()
             .any(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::Scry { .. }));
         assert_eq!(scried, scry, "{spell}");
+        assert!(t.in_graveyard(P1, spell));
     }
 }
 
@@ -100,10 +92,7 @@ fn none_of_those_creatures_attacked_you_firemane_commando() {
         let def = if attack_me { P0 } else { P2 };
         t.advance_to(P1, Step::BeginningOfCombat);
         let hand = t.hand_size(P1);
-        t.attack(
-            &[(a, Entity::Player(P2)), (b, Entity::Player(def))],
-            &[],
-        );
+        t.attack(&[(a, Entity::Player(P2)), (b, Entity::Player(def))], &[]);
         t.hand_size(P1) - hand
     };
     assert_eq!(run(false), 1);
@@ -121,9 +110,7 @@ fn any_attacker_with_power_or_toughness_equal_to_the_chosen_number_squall() {
     for (n, hit) in [(2, true), (5, false)] {
         let mut t = TestGame::new(2);
         let squall = t.battlefield(P0, "Squall, Gunblade Duelist");
-        t.g.objects[squall.0 as usize]
-            .choices
-            .number = Some(n);
+        t.g.objects[squall.0 as usize].choices.number = Some(n);
         let bears = t.battlefield(P0, "Grizzly Bears");
         t.set_step(P0, Step::BeginningOfCombat);
         t.attack(&[(bears, Entity::Player(P1))], &[]);
@@ -167,6 +154,8 @@ fn the_chosen_player_controls_a_permanent_of_the_chosen_color_jihad() {
     t.g.objects[j.0 as usize].choices.player = Some(P1);
     let knight = t.battlefield(P0, "White Knight");
     let bears = t.battlefield(P1, "Grizzly Bears");
+    // A green permanent another player controls doesn't count.
+    t.battlefield(P0, "Llanowar Elves");
     t.g.recompute();
     assert_eq!(t.pt(knight), (4, 3));
     // No more green nontoken permanents: Jihad is sacrificed.
@@ -234,6 +223,18 @@ fn power_compared_with_the_enchanted_creatures_toughness_ironclaw_curse() {
     // A 2-power attacker is less than 7: the Wall can block it.
     t.attack(&[(bears, Entity::Player(P1))], &[(wall, bears)]);
     assert_eq!(t.life(P1), 20);
+    // Enchanting a 2/2 (now 2/1): it can't block a 3-power attacker.
+    let mut t = TestGame::new(2);
+    let blocker = t.battlefield(P1, "Grizzly Bears");
+    let curse = t.battlefield(P0, "Ironclaw Curse");
+    t.g.attach(curse, Entity::Object(blocker));
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.g.recompute();
+    assert_eq!(t.pt(blocker), (2, 1));
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(giant, Entity::Player(P1))], &[(blocker, giant)]);
+    assert_eq!(t.life(P1), 17);
+    assert!(t.on_battlefield(blocker));
 }
 
 #[test]
@@ -279,6 +280,32 @@ fn different_mana_values_x_or_less_agadeems_awakening() {
     assert_eq!(t.named_on_battlefield("Llanowar Elves").len(), 1);
     assert!(t.in_graveyard(P0, "Hill Giant"));
     let _ = b;
+    // Mana value 4 is greater than X = 2: Hill Giant can't be a target.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 5);
+    let a = t.graveyard(P0, "Grizzly Bears");
+    let b = t.graveyard(P0, "Hill Giant");
+    let aw = t.hand(P0, "Agadeem's Awakening // Agadeem, the Undercrypt");
+    let _ = t
+        .cast(P0, aw)
+        .x(2)
+        .targets(&[Entity::Object(a), Entity::Object(b)])
+        .try_go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+    // Two cards with the same mana value can't both be targets.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 5);
+    let c = t.graveyard(P0, "Llanowar Elves");
+    let d = t.graveyard(P0, "Llanowar Elves");
+    let aw = t.hand(P0, "Agadeem's Awakening // Agadeem, the Undercrypt");
+    let _ = t
+        .cast(P0, aw)
+        .x(2)
+        .targets(&[Entity::Object(c), Entity::Object(d)])
+        .try_go();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Llanowar Elves").len() <= 1);
 }
 
 #[test]
@@ -326,6 +353,19 @@ fn same_mana_value_as_the_revealed_card_counterbalance() {
             "{top}"
         );
     }
+    // A spell with X: Blaze with X = 3 has mana value 4.
+    for (top, countered) in [("Hill Giant", true), ("Grizzly Bears", false)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Counterbalance");
+        t.library_top(P0, top);
+        t.answer_yes(P0, true);
+        t.lands(P1, "Mountain", 4);
+        let blaze = t.hand(P1, "Blaze");
+        t.set_step(P1, Step::PrecombatMain);
+        t.cast(P1, blaze).x(3).target(Entity::Player(P0)).go();
+        t.resolve_all();
+        assert_eq!(t.life(P0) == 20, countered, "Blaze, {top}");
+    }
 }
 
 #[test]
@@ -367,15 +407,33 @@ fn each_spell_and_ability_your_opponents_control_whirlwind_denial() {
     // P1 can't pay {4}.
     t.resolve_all();
     assert_eq!(t.life(P0), 20);
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    // An activated ability is countered too.
+    let mut t = TestGame::new(2);
+    let sorcerer = t.battlefield(P1, "Prodigal Sorcerer");
+    t.set_step(P1, Step::PrecombatMain);
+    t.activate(P1, sorcerer, 0, &[Entity::Player(P0)]).unwrap();
+    t.lands(P0, "Island", 3);
+    let wd = t.hand(P0, "Whirlwind Denial");
+    t.cast(P0, wd).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    // (Without it, the ability deals 1 damage.)
+    let mut t = TestGame::new(2);
+    let sorcerer = t.battlefield(P1, "Prodigal Sorcerer");
+    t.set_step(P1, Step::PrecombatMain);
+    t.activate(P1, sorcerer, 0, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 19);
 }
 
 #[test]
 fn lesser_mana_value_than_the_sacrificed_creature_kethek() {
     compiles("Kethek, Crucible Goliath");
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Kethek, Crucible Goliath");
+    t.battlefield(P0, "Kethek, Crucible Goliath"); // mana value 4
     t.battlefield(P0, "Hill Giant"); // mana value 4
-    // From the top: a 5-drop (not lesser), then a 2-drop.
+                                     // From the top: a 6-drop (not lesser), then a 2-drop.
     t.library_top(P0, "Grizzly Bears");
     t.library_top(P0, "Craw Wurm");
     t.answer_yes(P0, true);
@@ -384,6 +442,17 @@ fn lesser_mana_value_than_the_sacrificed_creature_kethek() {
     assert!(t.named_on_battlefield("Hill Giant").is_empty());
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert!(t.named_on_battlefield("Craw Wurm").is_empty());
+    // Compared with the sacrificed creature, not Kethek: sacrificing Craw Wurm (6), a
+    // Hill Giant (4, as Kethek) is lesser.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kethek, Crucible Goliath");
+    t.battlefield(P0, "Craw Wurm");
+    t.library_top(P0, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Craw Wurm").is_empty());
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
 }
 
 #[test]
@@ -444,4 +513,228 @@ fn if_the_token_is_an_aura_yenna() {
     t.g.objects[yenna.0 as usize].tapped = false;
     t.lands(P0, "Forest", 2);
     assert!(t.activate(P0, yenna, 0, &[Entity::Object(anthem)]).is_err());
+}
+
+#[test]
+fn delayed_enters_trigger_of_a_returned_permanent_isnt_read_jailbreak() {
+    // "Return target permanent card ... to the battlefield under their control. When that
+    // permanent enters, ...": the permanent that enters is a new object (CR 400.7), which
+    // the delayed trigger's captured referent can't follow. Rejected rather than compiled
+    // into a trigger that never fires.
+    assert!(!card("Jailbreak").unsupported_text().is_empty());
+}
+
+#[test]
+fn equal_or_lesser_than_the_triggering_spell_kellan() {
+    ruling!(
+        "Kellan, the Kid",
+        "X is the value chosen as that spell was cast for the purpose of determining its mana value"
+    );
+    compiles("Kellan, the Kid");
+    // A spell cast from the graveyard (Think Twice by flashback, mana value 2): a
+    // permanent spell with mana value 2 or less from your hand, not one with Kellan's own
+    // 3.
+    for (in_hand, cast) in [("Grizzly Bears", true), ("Centaur Courser", false)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Kellan, the Kid");
+        t.lands(P0, "Island", 3);
+        let tt = t.graveyard(P0, "Think Twice");
+        let c = t.hand(P0, in_hand);
+        t.set_step(P0, Step::PrecombatMain);
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[Entity::Object(c)]);
+        t.cast(P0, tt)
+            .method(mtg_engine::object::CastMethod::Keyword(
+                KeywordKind::Flashback,
+            ))
+            .go();
+        t.resolve_all();
+        assert_eq!(
+            t.named_on_battlefield(in_hand).len(),
+            cast as usize,
+            "{in_hand}"
+        );
+    }
+    // An X spell cast from the top of the library (Future Sight): its X counts. Blaze
+    // with X = 2 has mana value 3.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kellan, the Kid");
+    t.battlefield(P0, "Future Sight");
+    t.lands(P0, "Mountain", 3);
+    let blaze = t.library_top(P0, "Blaze");
+    let c = t.hand(P0, "Centaur Courser");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(c)]);
+    t.cast(P0, blaze).x(2).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Centaur Courser").len(), 1);
+}
+
+#[test]
+fn exchange_with_equal_or_lesser_mana_value_pucas_mischief() {
+    ruling!(
+        "Puca's Mischief",
+        "You choose two targets such that as a set, all of the targeting conditions are met"
+    );
+    compiles("Puca's Mischief");
+    // Only a 6-drop opposite your 2- and 4-drops: no legal pair.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Puca's Mischief");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.answer_yes(P0, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.obj_now(wurm).controller, P1);
+    assert_eq!(t.obj_now(bears).controller, P0);
+    // An Elves (1) is lesser than the Bears (2).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Puca's Mischief");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Craw Wurm");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(elves)]);
+    t.answer_yes(P0, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.obj_now(elves).controller, P0);
+    assert_eq!(t.obj_now(bears).controller, P1);
+}
+
+#[test]
+fn lesser_mana_value_than_the_creature_that_died_deaths_oasis() {
+    ruling!(
+        "Death's Oasis",
+        "Use the mana value of the creature as it last existed on the battlefield"
+    );
+    compiles("Death's Oasis");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Death's Oasis"); // mana value 3
+    let giant = t.battlefield(P0, "Hill Giant"); // mana value 4
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    t.graveyard(P0, "Craw Wurm"); // 6
+    t.graveyard(P0, "Centaur Courser"); // 3
+    t.g.destroy(giant, None);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Centaur Courser"));
+    assert!(t.in_graveyard(P0, "Craw Wurm"));
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+}
+
+#[test]
+fn creatures_that_each_have_toughness_greater_than_their_power_catapult_fodder() {
+    ruling!(
+        "Catapult Fodder // Catapult Captain",
+        "each of the three creatures must have toughness greater than its own power"
+    );
+    let run = |second_wall: bool| {
+        let mut t = TestGame::new(2);
+        let f = t.battlefield(P0, "Catapult Fodder // Catapult Captain"); // 1/5
+        t.battlefield(P0, "Wall of Stone"); // 0/8
+                                            // 3/3: toughness isn't greater than its power (the total toughness of the three
+                                            // is).
+        t.battlefield(P0, "Hill Giant");
+        if second_wall {
+            t.battlefield(P0, "Wall of Stone");
+        }
+        t.set_step(P0, Step::PrecombatMain);
+        t.advance_to(P0, Step::BeginningOfCombat);
+        t.resolve_all();
+        t.obj_now(f).chars.name.to_string()
+    };
+    assert_eq!(run(false), "Catapult Fodder");
+    assert_eq!(run(true), "Catapult Captain");
+}
+
+#[test]
+fn mana_value_power_or_toughness_equal_to_the_chosen_number_talion() {
+    ruling!(
+        "Talion, the Kindly Lord",
+        "use the value chosen for X to determine if the spell's mana value is the chosen number"
+    );
+    compiles("Talion, the Kindly Lord");
+    let setup = |n: i32| {
+        let mut t = TestGame::new(2);
+        let tal = t.battlefield(P0, "Talion, the Kindly Lord");
+        t.g.objects[tal.0 as usize].choices.number = Some(n);
+        t.lands(P1, "Mountain", 4);
+        t.set_step(P1, Step::PrecombatMain);
+        t
+    };
+    // Hill Giant: mana value 4, power and toughness 3.
+    for (n, hit) in [(3, true), (4, true), (2, false)] {
+        let mut t = setup(n);
+        let hand = t.hand_size(P0);
+        let g = t.hand(P1, "Hill Giant");
+        t.cast(P1, g).go();
+        t.resolve_all();
+        assert_eq!(t.life(P1), if hit { 18 } else { 20 }, "chosen {n}");
+        assert_eq!(t.hand_size(P0), hand + hit as usize, "chosen {n}");
+    }
+    // Blaze with X = 3: mana value 4.
+    let mut t = setup(4);
+    let blaze = t.hand(P1, "Blaze");
+    t.cast(P1, blaze).x(3).target(Entity::Player(P0)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn more_creatures_of_the_chosen_type_than_each_other_player_peer_pressure() {
+    compiles("Peer Pressure");
+    let idx = mtg_engine::types::subtype_lists()
+        .creature
+        .iter()
+        .position(|s| s == "Bear")
+        .unwrap();
+    for (theirs, gain) in [(1, true), (2, false)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 4);
+        t.battlefield(P0, "Grizzly Bears");
+        t.battlefield(P0, "Grizzly Bears");
+        // Creatures of another type don't count.
+        t.battlefield(P1, "Hill Giant");
+        t.battlefield(P1, "Hill Giant");
+        let bears: Vec<ObjectId> = (0..theirs)
+            .map(|_| t.battlefield(P1, "Grizzly Bears"))
+            .collect();
+        let pp = t.hand(P0, "Peer Pressure");
+        t.answer(
+            P0,
+            DecisionKind::Option,
+            mtg_engine::decision::Answer::Index(idx),
+        );
+        t.cast(P0, pp).go();
+        t.resolve();
+        let ctl = if gain { P0 } else { P1 };
+        assert!(
+            bears.iter().all(|b| t.obj_now(*b).controller == ctl),
+            "{theirs}"
+        );
+        assert!(t
+            .named_on_battlefield("Hill Giant")
+            .iter()
+            .all(|g| t.obj_now(*g).controller == P1));
+    }
+}
+
+#[test]
+fn if_the_token_is_an_aura_untap_yenna() {
+    compiles("Yenna, Redtooth Regent");
+    let mut t = TestGame::new(2);
+    let yenna = t.battlefield(P0, "Yenna, Redtooth Regent");
+    t.lands(P0, "Forest", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let aura = t.battlefield(P0, "Rancor");
+    t.g.attach(aura, Entity::Object(bears));
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.activate(P0, yenna, 0, &[Entity::Object(aura)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Rancor").len(), 2);
+    assert!(!t.obj_now(yenna).tapped);
 }
