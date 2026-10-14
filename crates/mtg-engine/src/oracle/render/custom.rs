@@ -186,7 +186,10 @@ impl Renderer<'_> {
             },
             other => match self.custom_effect_more(other) {
                 Some(s) => s,
-                None => return self.gap(format!("Effect::Custom({other})")),
+                None => match self.custom_effect_extra(other) {
+                    Some(s) => s,
+                    None => return self.gap(format!("Effect::Custom({other})")),
+                },
             },
         };
         s
@@ -248,10 +251,13 @@ impl Renderer<'_> {
                 let cost = &n[crate::kw::offered_costs::PAID_OFFERED_COST.len()..];
                 (false, format!("for which you chose to {cost}"))
             }
-            other => {
-                let g = self.gap(format!("Filter::Custom({other})"));
-                (false, g)
-            }
+            other => match self.custom_filter_extra(other) {
+                Some(q) => q,
+                None => {
+                    let g = self.gap(format!("Filter::Custom({other})"));
+                    (false, g)
+                }
+            },
         }
     }
 
@@ -332,7 +338,10 @@ impl Renderer<'_> {
             "bushido:points of bushido it has" => "the number of points of bushido it has".into(),
             other => match self.custom_value_more(other) {
                 Some(s) => s,
-                None => self.gap(format!("Value::Custom({other})")),
+                None => match self.custom_value_extra(other) {
+                    Some(s) => s,
+                    None => self.gap(format!("Value::Custom({other})")),
+                },
             },
         }
     }
@@ -340,6 +349,9 @@ impl Renderer<'_> {
     /// A comparison of a custom value with a number, as cards word it ("{U} was spent to
     /// cast ~", "you've cast two or more spells this turn").
     pub(crate) fn custom_compare(&mut self, name: &str, cmp: Cmp, n: i32) -> Option<String> {
+        if let Some(s) = self.custom_compare_extra(name, cmp, n) {
+            return Some(s);
+        }
         // Thresholds: "N or more".
         let min = match (cmp, n) {
             (Cmp::Ge, n) => n,
@@ -754,7 +766,10 @@ impl Renderer<'_> {
             ),
             other => match self.custom_static_more(other) {
                 Some(s) => s,
-                None => self.gap(format!("StaticEffect::Custom({other})")),
+                None => match self.custom_static_extra(other) {
+                    Some(s) => s,
+                    None => self.gap(format!("StaticEffect::Custom({other})")),
+                },
             },
         }
     }
@@ -775,6 +790,15 @@ impl Renderer<'_> {
                 "you may choose not to untap {} during your untap step",
                 self.me()
             ),
+            crate::kw::game_rules::NO_LOYALTY_EACH => {
+                "players can't activate planeswalkers' loyalty abilities".into()
+            }
+            crate::kw::game_rules::NO_LOYALTY_OPPONENTS => {
+                "your opponents can't activate planeswalkers' loyalty abilities".into()
+            }
+            crate::kw::game_rules::ENCHANTED_ONLY_MANA_OR_LOYALTY => {
+                "enchanted player can't activate abilities that aren't mana abilities or loyalty abilities".into()
+            }
             other => self.gap(format!("Restriction::Custom({other})")),
         }
     }
@@ -783,7 +807,10 @@ impl Renderer<'_> {
     pub(crate) fn custom_modification(&mut self, name: &str) -> String {
         match self.custom_modification_more(name) {
             Some(s) => s,
-            None => self.gap(format!("Modification::Custom({name})")),
+            None => match self.custom_modification_extra(name) {
+                Some(s) => s,
+                None => self.gap(format!("Modification::Custom({name})")),
+            },
         }
     }
 

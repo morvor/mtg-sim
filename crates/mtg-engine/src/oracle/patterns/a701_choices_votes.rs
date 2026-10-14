@@ -17,8 +17,14 @@ use smol_str::SmolStr;
 /// One option of a villainous choice, with "they" / "that player" / "that opponent" as the
 /// player facing it and "you" as the controller.
 fn villainous_option(text: &str, b: &mut Builder) -> Option<Effect> {
-    let t = text.trim();
-    let t = if let Some(r) = t.strip_prefix("you ") {
+    // "that opponent" is the player facing the choice wherever it appears ("Each artifact
+    // creature you control deals 2 damage to that opponent").
+    let replaced = text.trim().replace("that opponent", "that player");
+    let t = replaced.as_str();
+    let t = if t.starts_with("you may ") {
+        // "you may put a Construct ... onto the battlefield": an optional instruction.
+        t.to_string()
+    } else if let Some(r) = t.strip_prefix("you ") {
         r.to_string()
     } else if let Some(r) = t.strip_prefix("they ") {
         // "they lose 2 life" is "that player loses 2 life".

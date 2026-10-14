@@ -50,6 +50,7 @@ fn object_action(x: &str) -> Option<ObjectAction> {
     Some(match x {
         "become untapped" => ObjectAction::Untapped,
         "phase in" => ObjectAction::PhasedIn,
+        "phase out" => ObjectAction::PhasedOut,
         "be equipped" => ObjectAction::Equipped,
         "be enchanted by other auras" => ObjectAction::EnchantedByOtherAuras,
         "become suspected" => ObjectAction::Suspected,

@@ -300,6 +300,9 @@ impl Renderer<'_> {
                 format!("pay {s} mana cost")
             }
             CostPart::Repeated { cost, times } => {
+                if let Some(s) = self.repeated_any_number(cost, times) {
+                    return s;
+                }
                 let c = self.cost(cost);
                 let t = match times {
                     Value::Count(f) => {
@@ -569,7 +572,7 @@ impl Renderer<'_> {
     }
 }
 
-trait OwnerYou {
+pub(crate) trait OwnerYou {
     fn and_owner_you(self) -> Filter;
 }
 
