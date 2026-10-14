@@ -73,6 +73,18 @@ impl KeywordRules for Ascend {
             return false;
         }
         let p = ctx.controller;
+        // The spell's ascend keyword is what this spell ability stands for: performing it
+        // exercises the keyword (see `structure`).
+        if let Some(src) = ctx.source.filter(|_| crate::structure::enabled()) {
+            let c = &g.obj(src).chars;
+            if let Some(a) = c
+                .abilities
+                .iter()
+                .find(|a| a.keyword().is_some_and(|k| k.kind == KeywordKind::Ascend))
+            {
+                crate::structure::record(a, &c.name, "keyword");
+            }
+        }
         if controls_ten_permanents(g, p) {
             get_blessing(g, p);
         }
