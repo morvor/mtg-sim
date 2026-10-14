@@ -79,6 +79,9 @@ fn choose_one_of_the_piles(l: &str, _b: &mut Builder) -> Option<Effect> {
     (end(l) == "an opponent chooses one of the piles").then(|| {
         Effect::Piles(Box::new(PileAction::Choose {
             chooser: PlayerRef::EachOpponent,
+            picked_by: None,
+            of: None,
+            at_random: false,
         }))
     })
 }

@@ -17,11 +17,22 @@ use crate::oracle::phrases::*;
 use crate::piles::{PileAction, CHOSEN, OTHER};
 
 fn separate(what: Sel, separator: PlayerRef) -> Effect {
-    Effect::Piles(Box::new(PileAction::Separate { what, separator }))
+    Effect::Piles(Box::new(PileAction::Separate {
+        what,
+        separator,
+        count: 0,
+        face_down: false,
+        own: false,
+    }))
 }
 
 fn choose(chooser: PlayerRef) -> Effect {
-    Effect::Piles(Box::new(PileAction::Choose { chooser }))
+    Effect::Piles(Box::new(PileAction::Choose {
+        chooser,
+        picked_by: None,
+        of: None,
+        at_random: false,
+    }))
 }
 
 fn to_zone(var: crate::ability::Var, zone: ZoneKind) -> Effect {

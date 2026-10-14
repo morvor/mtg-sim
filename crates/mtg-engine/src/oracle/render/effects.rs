@@ -2919,24 +2919,85 @@ impl Renderer<'_> {
                         format!("{s} {}", third_person(&vp))
                     }
                 }
-                crate::piles::PileAction::Separate { what, separator } => {
+                crate::piles::PileAction::Separate {
+                    what,
+                    separator,
+                    count,
+                    face_down,
+                    own,
+                } => {
                     let w = self.sel(what, Case::Obj);
                     let s = self.some_player(separator);
-                    let vp = format!("separate {w} into two piles");
-                    if s == "you" {
-                        vp
+                    let n = if *count == 3 { "three" } else { "two" };
+                    let piles = if *face_down {
+                        format!("{n} face-down piles")
                     } else {
-                        format!("{s} separates {w} into two piles")
+                        format!("{n} piles")
+                    };
+                    let _ = own;
+                    if s == "you" {
+                        format!("separate {w} into {piles}")
+                    } else {
+                        format!("{s} separates {w} into {piles}")
                     }
                 }
-                crate::piles::PileAction::Choose { chooser } => {
+                crate::piles::PileAction::Choose {
+                    chooser,
+                    picked_by,
+                    of,
+                    at_random,
+                } => {
                     let c = self.some_player(chooser);
-                    if c == "you" {
-                        "choose one of those piles".to_string()
+                    let piles = if of.is_some() { "their piles" } else { "those piles" };
+                    if *at_random {
+                        format!("{c} chooses one of {piles} at random")
+                    } else if picked_by.is_some() {
+                        format!("one of {piles} is chosen by {c} of their choice")
+                    } else if c == "you" {
+                        format!("choose one of {piles}")
                     } else {
                         format!("{c} chooses one of {{alt:those|the}} piles")
                     }
                 }
+                crate::piles::PileAction::ExileAsPile {
+                    what,
+                    pile,
+                    face_down,
+                    ..
+                } => {
+                    let w = self.sel(what, Case::Obj);
+                    let kind = if *face_down { "face-down" } else { "face-up" };
+                    let a = if *pile > 0 { "another" } else { "a" };
+                    format!("exile {w} in {a} {kind} pile")
+                }
+                crate::piles::PileAction::Look { what } => {
+                    format!("look at {}", self.sel(what, Case::Obj))
+                }
+                crate::piles::PileAction::TurnFaceUp { chooser } => {
+                    let c = self.some_player(chooser);
+                    if c == "you" {
+                        "turn a pile of your choice face up".to_string()
+                    } else {
+                        format!("{c} turns a pile face up")
+                    }
+                }
+                crate::piles::PileAction::Recall { .. } => String::new(),
+                crate::piles::PileAction::Shuffle { what } => {
+                    format!("shuffle {}", self.sel(what, Case::Obj))
+                }
+                crate::piles::PileAction::Top { from } => {
+                    format!("the top card of {}", self.sel(from, Case::Obj))
+                }
+                crate::piles::PileAction::PutOnLibrary { what } => {
+                    format!(
+                        "put {} on top of your library",
+                        self.sel(what, Case::Obj)
+                    )
+                }
+                crate::piles::PileAction::SearchPile { what } => format!(
+                    "search {} for a card, put it into your hand, then shuffle the rest of that pile into your library",
+                    self.sel(what, Case::Obj)
+                ),
             },
             Effect::Exchange(x) => self.exchange(x),
             Effect::Custom(name) => self.custom_effect(name),
@@ -3274,7 +3335,7 @@ impl Renderer<'_> {
                     // "Choose one of those piles. Put that pile ..." is "put one pile ..."
                     // when you choose.
                     let you_chose = i > 0
-                        && matches!(&v[i - 1], Effect::Piles(p) if matches!(p.as_ref(), crate::piles::PileAction::Choose { chooser: PlayerRef::You }));
+                        && matches!(&v[i - 1], Effect::Piles(p) if matches!(p.as_ref(), crate::piles::PileAction::Choose { chooser: PlayerRef::You, at_random: false, .. }));
                     if you_chose
                         && parts
                             .last()
