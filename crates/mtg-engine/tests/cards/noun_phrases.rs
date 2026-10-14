@@ -56,7 +56,7 @@ fn land_or_nonblack_creature_names_two_complete_alternatives() {
 
 #[test]
 fn black_creature_or_black_planeswalker_and_her_controller() {
-    cr!("115.1", "608.2h", "306.4");
+    cr!("115.1", "608.2h", "205.3j");
     assert_supported(&["Liliana's Defeat"]);
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 1);
@@ -90,7 +90,7 @@ fn black_creature_or_black_planeswalker_and_her_controller() {
 
 #[test]
 fn spell_or_nonland_permanent_goes_on_top_or_bottom_of_its_owners_library() {
-    cr!("115.1", "401.4");
+    cr!("115.1");
     ruling!(
         "Sudden Setback",
         "The spell or permanent's owner chooses whether to put it on the top or bottom of their library."
@@ -122,7 +122,7 @@ fn spell_or_nonland_permanent_goes_on_top_or_bottom_of_its_owners_library() {
 
 #[test]
 fn token_thats_red_green_and_white() {
-    cr!("111.4", "105.2");
+    cr!("111.3", "105.2");
     assert_supported(&["Godsire"]);
     let mut t = TestGame::new(2);
     let godsire = t.battlefield(P0, "Godsire");
@@ -144,7 +144,7 @@ fn token_thats_red_green_and_white() {
 
 #[test]
 fn either_group_and_life_for_each_creature_that_died() {
-    cr!("608.2d", "700.4", "701.19c");
+    cr!("608.2d", "700.4");
     assert_supported(&["Reign of Terror", "Catastrophe"]);
     for (choice, dead) in [(0usize, 2), (1, 1)] {
         let mut t = TestGame::new(2);
@@ -164,6 +164,7 @@ fn either_group_and_life_for_each_creature_that_died() {
         assert_eq!(t.life(P0), 20 - 2 * dead, "choice {choice}");
     }
     // Catastrophe: lands or creatures, chosen as it resolves.
+    ruling!("Catastrophe", "You choose land or creatures when the spell resolves.");
     let mut t = TestGame::new(2);
     t.lands(P0, "Plains", 6);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -222,7 +223,7 @@ fn damage_to_each_of_two_other_target_creatures() {
 
 #[test]
 fn feint_taps_blockers_and_prevents_their_and_the_attackers_combat_damage() {
-    cr!("509.1h", "615.1", "506.4");
+    cr!("509.1g", "615.1");
     assert_supported(&["Feint"]);
     for cast in [false, true] {
         let mut t = TestGame::new(2);
@@ -279,26 +280,53 @@ fn searing_blaze_landfall_replaces_both_damage_parts() {
 
 #[test]
 fn target_attacking_vampire_that_isnt_a_demon_becomes_one() {
-    cr!("205.1b", "508.1");
+    cr!("205.1b", "508.1", "115.1");
     assert_supported(&["Clavileño, First of the Blessed"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Clavileño, First of the Blessed");
     let vamp = t.battlefield(P0, "Vampire Interloper");
+    // Already a Demon (a Vampire Demon), and not a Vampire: not legal targets.
+    let demon = t.battlefield(P0, "Bloodletter of Aclazotz");
+    let bears = t.battlefield(P0, "Grizzly Bears");
     t.answer(
         P0,
         DecisionKind::Attackers,
-        Answer::Attackers(vec![(vamp, Entity::Player(P1))]),
+        Answer::Attackers(vec![
+            (vamp, Entity::Player(P1)),
+            (demon, Entity::Player(P1)),
+            (bears, Entity::Player(P1)),
+        ]),
     );
     t.answer_targets(P0, &[Entity::Object(vamp)]);
+    let from = t.asked().len();
     t.advance_to(P0, Step::DeclareAttackers);
     t.resolve_all();
+    let c = &target_candidates(&t, from)[0];
+    assert!(c.contains(&Entity::Object(vamp)));
+    assert!(!c.contains(&Entity::Object(demon)));
+    assert!(!c.contains(&Entity::Object(bears)));
     let c = &t.obj_now(vamp).chars;
     assert!(c.has_subtype("Demon") && c.has_subtype("Vampire"));
+    // It gained "When this creature dies, draw a card and create a tapped 4/3 ... token".
+    t.library_top(P0, "Forest");
+    let hand = t.hand_size(P0);
+    t.g.move_object(vamp, Zone::Graveyard(P0), MoveCause::Effect, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    let token = t
+        .g
+        .permanents()
+        .find(|o| o.is_token() && o.chars.has_subtype("Demon"))
+        .map(|o| o.id)
+        .expect("a Vampire Demon token");
+    assert_eq!(t.pt(token), (4, 3));
+    assert!(t.obj_now(token).tapped);
 }
 
 #[test]
 fn hunting_kavu_exiles_a_creature_without_flying_attacking_you() {
-    cr!("115.1", "506.4", "608.2b");
+    cr!("115.1", "508.1b", "608.2b");
     ruling!(
         "Hunting Kavu",
         "Being “without flying” is a targeting restriction."
@@ -537,7 +565,7 @@ fn blocked_by(t: &mut TestGame, attacker: ObjectId, blockers: &[ObjectId]) {
 
 #[test]
 fn sacrificed_attackers_blockers_are_known_from_last_known_information() {
-    cr!("608.2h", "509.1h", "601.2h");
+    cr!("608.2h", "509.1g", "601.2h");
     assert_supported(&["Urborg Panther"]);
     let mut t = TestGame::new(2);
     let panther = t.battlefield(P0, "Urborg Panther");
@@ -558,7 +586,7 @@ fn sacrificed_attackers_blockers_are_known_from_last_known_information() {
 
 #[test]
 fn sacrificed_aura_destroys_non_wall_creatures_blocking_enchanted_creature() {
-    cr!("608.2h", "303.4", "509.1h");
+    cr!("608.2h", "303.4", "509.1g");
     assert_supported(&["Coils of the Medusa"]);
     let mut t = TestGame::new(2);
     let wurm = t.battlefield(P0, "Craw Wurm");
@@ -577,7 +605,7 @@ fn sacrificed_aura_destroys_non_wall_creatures_blocking_enchanted_creature() {
 
 #[test]
 fn sacrificed_goblin_deals_damage_to_each_creature_blocking_it() {
-    cr!("608.2h", "603.10a", "509.1h");
+    cr!("608.2h", "509.1g");
     ruling!(
         "Ib Halfheart, Goblin Tactician",
         "If you don’t actually sacrifice the Goblin"
@@ -608,4 +636,47 @@ fn sacrificed_goblin_deals_damage_to_each_creature_blocking_it() {
     t.g.flush_events();
     t.resolve_all();
     assert_eq!(t.obj_now(wurm).damage, 0);
+}
+
+#[test]
+fn scarlet_witch_casts_a_hero_or_noncreature_card_she_exiled() {
+    cr!("115.1", "205.3m", "601.2");
+    assert_supported(&["Scarlet Witch, Chaotic Avenger"]);
+    for (other, castable) in [("Divination", true), ("K'un-Lun Warrior", true), ("Hill Giant", false)] {
+        let mut t = TestGame::new(2);
+        let witch = t.battlefield(P0, "Scarlet Witch, Chaotic Avenger");
+        t.library_top(P0, "Grizzly Bears");
+        t.library_top(P0, other);
+        t.answer(
+            P0,
+            DecisionKind::Attackers,
+            Answer::Attackers(vec![(witch, Entity::Player(P1))]),
+        );
+        let from = t.asked().len();
+        t.advance_to(P0, Step::PostcombatMain);
+        let names: Vec<Vec<String>> = t.asked()[from..]
+            .iter()
+            .filter_map(|(_, d)| match d {
+                Decision::ChooseEntities { candidates, .. } => Some(
+                    candidates
+                        .iter()
+                        .filter_map(|e| match e {
+                            Entity::Object(o) => Some(
+                                // Exiled face down: the card's own name.
+                                t.g.face_characteristics(*o, object::FaceState::Front)
+                                    .name
+                                    .to_string(),
+                            ),
+                            _ => None,
+                        })
+                        .collect(),
+                ),
+                _ => None,
+            })
+            .collect();
+        let offered: Vec<&String> = names.iter().flatten().collect();
+        // A Hero spell or a noncreature spell; Grizzly Bears is neither.
+        assert!(!offered.iter().any(|n| *n == "Grizzly Bears"), "{names:?}");
+        assert_eq!(offered.iter().any(|n| *n == other), castable, "{other}: {names:?}");
+    }
 }

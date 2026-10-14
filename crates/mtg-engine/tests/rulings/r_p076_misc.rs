@@ -436,6 +436,31 @@ fn esper_increases_apply_before_the_reduction() {
 }
 
 #[test]
+fn esper_chaos_makes_white_blue_black_creatures_artifacts_then_grants_keywords() {
+    cr!("311.7", "608.2c", "205.1b");
+    let mut t = on_plane("Esper");
+    let lions = t.battlefield(P0, "Savannah Lions");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let thopter = t.battlefield(P0, "Ornithopter");
+    let theirs = t.battlefield(P1, "Black Knight");
+    crate::r_s19_common::chaos(&mut t, P0);
+    t.resolve_all();
+    use mtg_engine::keywords::KeywordKind as K;
+    let lions_now = t.obj_now(lions);
+    // A white creature becomes an artifact (keeping its other types), then, being an
+    // artifact creature, gains the keywords.
+    assert!(lions_now.is(CardType::Artifact) && lions_now.is_creature());
+    for k in [K::Vigilance, K::Menace, K::Lifelink] {
+        assert!(lions_now.has_keyword(k), "{k:?}");
+        assert!(t.obj_now(thopter).has_keyword(k), "{k:?}");
+    }
+    // A green creature, and a creature an opponent controls, aren't affected.
+    assert!(!t.obj_now(bears).is(CardType::Artifact));
+    assert!(!t.obj_now(bears).has_keyword(K::Vigilance));
+    assert!(!t.obj_now(theirs).is(CardType::Artifact));
+}
+
+#[test]
 fn gavony_indestructible_stays_after_a_control_change() {
     cr!("611.2c", "311.7");
     ruling!(
