@@ -202,6 +202,8 @@ impl Renderer<'_> {
             crate::kw::haunt::HAUNTED => "the creature ~it haunts".into(),
             // CR 702.95: "both creatures have flying" / "each of those creatures has ...".
             crate::kw::soulbond::THE_PAIR => "{alt:each of those creatures|both creatures}".into(),
+            // In a granted ability: the object granting it, by its name.
+            crate::granted_by::GRANTER => "~".into(),
             _ => return None,
         })
     }
@@ -491,6 +493,9 @@ impl Renderer<'_> {
             }
             "card_left_your_graveyard_this_turn" => "a card left your graveyard this turn".into(),
             "you_lost_life_last_turn" => "you lost life last turn".into(),
+            crate::oracle::patterns::r603_entered_last_turn::CREATURE_ENTERED_LAST_TURN => {
+                "you had another creature enter the battlefield under your control last turn".into()
+            }
             "turn:this dealt damage to an opponent" => {
                 format!("{} dealt damage to an opponent this turn", me(self))
             }
@@ -543,9 +548,15 @@ impl Renderer<'_> {
             }
             n if n.starts_with(crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN) => {
                 let t = &n[crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN.len()..];
+                let t = t
+                    .strip_prefix(crate::oracle::patterns::grant_conditions::SACRIFICED_SUBTYPE)
+                    .unwrap_or(t);
                 format!("you've sacrificed {} this turn", with_article(t))
             }
-            other => match self.custom_condition_more(other) {
+            other => match self
+                .custom_condition_more(other)
+                .or_else(|| self.custom_condition_terms(other, false))
+            {
                 Some(s) => s,
                 None => self.gap(format!("Condition::Custom({other})")),
             },

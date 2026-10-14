@@ -385,6 +385,28 @@ impl Renderer<'_> {
                 let flat = flatten_or(f);
                 self.collect(&flat, np)
             }
+            // "a land or double-faced card".
+            Filter::Or(v)
+                if v.iter().any(is_double_faced)
+                    && v.iter()
+                        .all(|x| is_double_faced(x) || matches!(x, Filter::Type(_))) =>
+            {
+                for x in v {
+                    np.alts.push(match x {
+                        Filter::Type(t) => t.word().to_lowercase(),
+                        _ => "double-faced".to_string(),
+                    });
+                }
+                if np.kind.is_none() {
+                    np.kind = Some("card");
+                }
+            }
+            // "an artifact card with mana cost {0} or {1}".
+            Filter::Or(v) if v.len() > 1 && v.iter().all(|x| mana_cost_is(x).is_some()) => {
+                let costs: Vec<String> = v.iter().filter_map(mana_cost_is).collect();
+                np.with
+                    .push(format!("mana cost {}", join_list(&costs, "or")));
+            }
             // "a card named Festering Newt or Bubbling Cauldron".
             Filter::Or(v) if v.len() > 1 && v.iter().all(|x| matches!(x, Filter::Named(_))) => {
                 let names: Vec<String> = v
@@ -873,6 +895,11 @@ impl Renderer<'_> {
                             np.zone_said = true;
                         }
                         Q::Implied => {}
+                        Q::AdjRelInExile(a, s) => {
+                            np.status.push(a.to_string());
+                            np.rel.push(s);
+                            np.zone_said = true;
+                        }
                         Q::Kind(k) => np.kind = Some(k),
                         Q::Adj(a) => np.status.push(a.to_string()),
                     }
@@ -1012,6 +1039,15 @@ impl Renderer<'_> {
                 let w = self.shared_with(x);
                 np.rel
                     .push(format!("that {{alt:doesn't|don't}} share {what} with {w}"));
+            }
+            // "each creature except for tokens you control": the same objects.
+            other @ Filter::And(_) => {
+                let s = self.noun(other, Num::One);
+                let many = self.noun(other, Num::Many);
+                np.rel.push(format!(
+                    "{{alt:that isn't {}|except for {many}}}",
+                    with_article(&s)
+                ));
             }
             other => {
                 let s = self.noun(other, Num::One);
@@ -1489,6 +1525,22 @@ impl Renderer<'_> {
 
     /// A determiner + noun phrase.
     pub(crate) fn noun_det(&mut self, f: &Filter, det: Det) -> String {
+        // "Auras you control and Equipment you control" or "Auras and Equipment you
+        // control": cards say the shared qualities once or for each alternative.
+        if !self.factoring {
+            let g = factor_or(f);
+            if format!("{g:?}") != format!("{f:?}") {
+                self.factoring = true;
+                let d2 = det.clone();
+                let (a, b) = self.two_ways(|r| r.noun_det(f, det), |r| r.noun_det(&g, d2));
+                self.factoring = false;
+                return if a == b {
+                    a
+                } else {
+                    format!("{{alt:{a}|{b}}}")
+                };
+            }
+        }
         if let Filter::Custom(n) = f {
             if let Some(s) = self.custom_noun(n) {
                 return s;
@@ -1702,7 +1754,13 @@ impl Renderer<'_> {
             TargetsFilter::Only { objects, players } => {
                 let mut parts = Vec::new();
                 if let Some(o) = objects {
-                    parts.push(self.noun_det(o, Det::A));
+                    // "targets only a single Golem" (but "targets only ~").
+                    let n = self.noun_det(o, Det::A);
+                    let n = match n.strip_prefix("a ").or_else(|| n.strip_prefix("an ")) {
+                        Some(r) => format!("a single {r}"),
+                        None => n,
+                    };
+                    parts.push(n);
                 }
                 if let Some(p) = players {
                     parts.push(self.player_filter_object(p));
@@ -1784,12 +1842,108 @@ fn is_outlaw(v: &[Filter]) -> bool {
     v.len() == 5 && names == ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]
 }
 
+/// A double-faced card (CR 712.1).
+fn is_double_faced(f: &Filter) -> bool {
+    matches!(f, Filter::Custom(n) if n == crate::kw::dig_filters::DOUBLE_FACED)
+}
+
+/// "with mana cost {0}" (`kw/spell_cost_grammar.rs`): the mana cost.
+fn mana_cost_is(f: &Filter) -> Option<String> {
+    match f {
+        Filter::Custom(n) => n
+            .strip_prefix(crate::kw::spell_cost_grammar::MANA_COST_IS)
+            .map(str::to_string),
+        _ => None,
+    }
+}
+
+/// The qualities every alternative of a union of conjunctions has, said once for all of
+/// them: "Auras you control or Equipment you control" is "Auras and Equipment you
+/// control"; "an artifact card with mana cost {0} or an artifact card with mana cost {1}"
+/// is "an artifact card with mana cost {0} or {1}". The same objects either way.
+pub(crate) fn factor_or(f: &Filter) -> Filter {
+    let factor = |alts: &[Filter]| -> Option<(Filter, Vec<Filter>)> {
+        if alts.len() < 2 {
+            return None;
+        }
+        let parts: Vec<Vec<&Filter>> = alts
+            .iter()
+            .map(|a| match a {
+                Filter::And(v) => v.iter().collect(),
+                other => vec![other],
+            })
+            .collect();
+        let key = |x: &Filter| format!("{x:?}");
+        let common: Vec<&Filter> = parts[0]
+            .iter()
+            .filter(|x| {
+                parts[1..]
+                    .iter()
+                    .all(|p| p.iter().any(|y| key(y) == key(x)))
+            })
+            .copied()
+            .collect();
+        if common.is_empty() {
+            return None;
+        }
+        let rest: Vec<Filter> = parts
+            .iter()
+            .map(|p| {
+                Filter::and(
+                    p.iter()
+                        .filter(|x| !common.iter().any(|c| key(c) == key(x)))
+                        .map(|x| (*x).clone())
+                        .collect(),
+                )
+            })
+            .collect();
+        // Each alternative keeps one quality of its own, and it's one a list of
+        // alternatives says before the shared ones (a type, or the mana cost).
+        let simple = |x: &Filter| {
+            Renderer::is_type_like(x) || mana_cost_is(x).is_some() || is_double_faced(x)
+        };
+        if !rest.iter().all(simple) {
+            return None;
+        }
+        Some((Filter::Or(rest), common.into_iter().cloned().collect()))
+    };
+    match f {
+        Filter::Or(alts) => match factor(alts) {
+            Some((or, mut common)) => {
+                common.insert(0, or);
+                Filter::and(common)
+            }
+            None => f.clone(),
+        },
+        Filter::And(v) => {
+            let mut out = Vec::new();
+            for x in v {
+                match x {
+                    Filter::Or(alts) => match factor(alts) {
+                        Some((or, common)) => {
+                            out.push(or);
+                            out.extend(common);
+                        }
+                        None => out.push(x.clone()),
+                    },
+                    other => out.push(other.clone()),
+                }
+            }
+            Filter::and(out)
+        }
+        other => other.clone(),
+    }
+}
+
 fn distribute_or(f: &Filter) -> Filter {
     let Filter::And(v) = f else {
         return f.clone();
     };
     let complex = |x: &Filter| {
         matches!(x, Filter::Or(alts) if !alts.iter().all(Renderer::is_type_like)
+            && !alts.iter().all(|a| mana_cost_is(a).is_some())
+            && !(alts.iter().any(is_double_faced)
+                && alts.iter().all(|a| is_double_faced(a) || matches!(a, Filter::Type(_))))
             && !alts.iter().all(|a| matches!(a, Filter::Color(_)))
             && !alts.iter().all(|a| matches!(a, Filter::Named(_)))
             && !alts.iter().all(|a| matches!(a, Filter::Attacking | Filter::Blocking | Filter::Tapped | Filter::Untapped | Filter::Blocked | Filter::Unblocked)))

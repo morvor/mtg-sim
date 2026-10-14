@@ -21,7 +21,7 @@ fn attack(t: &mut TestGame, ap: PlayerId, defender: PlayerId, attackers: &[Objec
 }
 
 /// The candidates offered by each "choose entities" decision asked of `p` so far.
-fn entity_choices(t: &TestGame, p: PlayerId) -> Vec<Vec<Entity>> {
+pub fn entity_choices(t: &TestGame, p: PlayerId) -> Vec<Vec<Entity>> {
     t.asked()
         .into_iter()
         .filter_map(|(q, d)| match d {

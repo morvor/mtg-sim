@@ -10,7 +10,10 @@
 //! renderer can't put into words is recorded as a *gap* ([`Renderer::gap`]) and makes the
 //! card a mismatch: nothing is silently dropped.
 
+mod ability_cost_terms;
+mod activation_triggers;
 pub mod compare;
+mod condition_terms;
 mod copy_exceptions;
 mod costs;
 mod counter_replacements;
@@ -21,6 +24,7 @@ mod custom_filters;
 mod custom_more;
 mod dig;
 mod each_player;
+mod effect_terms;
 mod effects;
 mod extremes;
 mod history_values;
@@ -31,6 +35,8 @@ mod once_each_turn;
 mod outcomes;
 mod play_terms;
 mod players;
+mod replacement_terms;
+mod spell_cost_terms;
 mod statics;
 mod tail_parts;
 mod this_turn;
@@ -185,6 +191,15 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
                 }
             }
             out.lines.push(format!("Gift {what}"));
+            continue;
+        }
+        // "Equip {10}. This ability costs {X} less to activate, where X is ...".
+        if let Some(line) = abilities
+            .get(i + 1)
+            .and_then(|next| r.keyword_with_own_cost(a, next))
+        {
+            out.lines.push(line);
+            skip = 1;
             continue;
         }
         let line = r.ability(a);
@@ -732,6 +747,9 @@ pub struct Renderer<'a> {
     /// cards refer to it as "it": rendered as `~it`, which the comparison matches with
     /// either "~" or "it".
     pub(crate) self_salient: bool,
+    /// The activation cost of the ability being rendered exiles the object itself
+    /// ("Exile ~ from your hand: ..."), so the card the cost moved is "~".
+    pub(crate) cost_exiles_self: bool,
     /// Another object (one the trigger condition named, "it" for the triggering object)
     /// is what "it" refers to: the object itself is "~" until it's named again.
     pub(crate) other_salient: bool,
@@ -829,6 +847,16 @@ pub struct Renderer<'a> {
     /// objects it acted on, and what it did to them ("destroyed", "discarded"): "the
     /// number of creatures destroyed this way" (see `tail_parts.rs`).
     pub(crate) this_way: Vec<(Var, &'static str, Option<CardType>)>,
+    /// The target contexts outside the current one ([`Renderer::with_targets`]): a
+    /// number remembered as an ability resolves can be about its targets, and be said in
+    /// a delayed ability created then.
+    pub(crate) target_stack: Vec<(Vec<TargetSpec>, Vec<bool>)>,
+    /// What a target slot of the ability a cost change is about is called ("the
+    /// creature it targets"), while a cost change of that ability is rendered.
+    pub(crate) targeted_noun: Option<&'static str>,
+    /// Rendering a noun phrase both with and without its shared qualities factored out
+    /// (see `nouns::factor_or`).
+    pub(crate) factoring: bool,
     /// The target an effect done "for each" target is about (a single target).
     pub(crate) each_target: Option<u8>,
     /// Targets remembered in variables, first mentioned through them: (variable, target
@@ -898,6 +926,7 @@ impl<'a> Renderer<'a> {
             static_if: false,
             zone: FunctionZone::Battlefield,
             self_salient: false,
+            cost_exiles_self: false,
             other_salient: false,
             self_named_in_clause: false,
             attached_left: false,
@@ -935,6 +964,9 @@ impl<'a> Renderer<'a> {
             this_way: Vec::new(),
             each_target: None,
             target_vars: Vec::new(),
+            target_stack: Vec::new(),
+            targeted_noun: None,
+            factoring: false,
         }
     }
 
@@ -954,7 +986,9 @@ impl<'a> Renderer<'a> {
     ) -> T {
         let saved_t = std::mem::replace(&mut self.targets, targets.to_vec());
         let saved_i = std::mem::replace(&mut self.introduced, vec![false; targets.len()]);
+        self.target_stack.push((saved_t.clone(), saved_i.clone()));
         let out = f(self);
+        self.target_stack.pop();
         // Targets that the effect never mentions still have to appear.
         let missing: Vec<usize> = (0..self.targets.len())
             .filter(|i| !self.introduced[*i])
@@ -1114,6 +1148,7 @@ impl<'a> Renderer<'a> {
         let self_named = self.self_salient;
         let s = self.with_targets(&b.targets, |r| {
             let s = r.effect_sentences(&b.effect);
+            let s = r.choose_unmentioned_targets(s);
             r.define_stored_x(s)
         });
         let s = where_x_self_pronoun(&s, self_named);
@@ -1143,7 +1178,7 @@ impl<'a> Renderer<'a> {
         match defs.as_slice() {
             [] => s,
             [v] => {
-                let w = self.value(v);
+                let w = self.outer_value(v);
                 if w == "X" || s.contains(&format!(", where X is {w}")) {
                     return s;
                 }

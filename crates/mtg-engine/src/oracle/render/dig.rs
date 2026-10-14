@@ -39,6 +39,9 @@ impl Renderer<'_> {
                 if !matches!(c, PlayerRef::You) {
                     let p = self.player(c, super::players::Case::Poss);
                     d.push_str(&format!(" under {p} control"));
+                } else if to.tapped && to.attacking {
+                    // "onto the battlefield under your control tapped and attacking".
+                    d = "onto the battlefield {alt:tapped and attacking {opt:under your control}|under your control tapped and attacking}".into();
                 } else {
                     // The player putting it there controls it (CR 110.2a): cards may say
                     // so.
@@ -175,10 +178,24 @@ impl Renderer<'_> {
                         "{alt:it|the revealed card}"
                     };
                     format!("{may}reveal {what} from among them and put {it} {d}")
-                } else if d.is_empty() {
-                    format!("{may}{verb} {what} from among them")
                 } else {
-                    format!("{may}{verb} {what} from among them {d}")
+                    // "from among the milled cards" after milling.
+                    let among = if self.milled {
+                        "{alt:from among them|from among the milled cards}"
+                    } else if count.is_none()
+                        && self
+                            .this_way_of(from)
+                            .is_some_and(|(v, _, _)| v == "revealed")
+                    {
+                        "{alt:from among them|revealed this way}"
+                    } else {
+                        "from among them"
+                    };
+                    if d.is_empty() {
+                        format!("{may}{verb} {what} {among}")
+                    } else {
+                        format!("{may}{verb} {what} {among} {d}")
+                    }
                 }
             }
             DigStep::Rest { to, .. } => {
