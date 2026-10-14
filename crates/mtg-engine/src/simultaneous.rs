@@ -188,6 +188,8 @@ fn adds_to_collected(e: &Effect) -> bool {
     }
     match e {
         Effect::Custom(_) => true,
+        // Each player's own piles (`piles.rs`).
+        Effect::Piles(a) => a.collects(),
         Effect::Store { var, sel } => mentions(sel, *var),
         Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => adds_to_collected(effect),
         Effect::If {

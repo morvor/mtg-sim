@@ -539,7 +539,12 @@ impl Renderer<'_> {
                 _ => s = join_words(&[s, restriction]),
             }
         }
-        if a.any_player {
+        // "Any player may activate this ability but only as a sorcery."
+        let sorcery_only = " Activate only as a sorcery.";
+        if a.any_player && s.ends_with(sorcery_only) {
+            s.truncate(s.len() - sorcery_only.len());
+            s.push_str(" Any player may activate this ability but only as a sorcery.");
+        } else if a.any_player {
             s.push_str(" Any player may activate this ability.");
         }
         if a.only_opponents {

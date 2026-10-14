@@ -59,6 +59,10 @@ pub struct Spec {
     /// the same time.
     #[serde(default)]
     pub secret: bool,
+    /// The permanents the action puts onto the battlefield enter tapped ("..., then cloak
+    /// those cards. They enter tapped.").
+    #[serde(default)]
+    pub tapped: bool,
 }
 
 impl Spec {
@@ -72,6 +76,7 @@ impl Spec {
             options: vec![],
             undo: false,
             secret: false,
+            tapped: false,
         }
     }
     pub fn effect(self) -> Effect {
