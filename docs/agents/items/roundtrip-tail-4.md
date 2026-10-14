@@ -46,3 +46,57 @@ test in `tests/cards/roundtrip_tail_4.rs` that fails on the old code + a row in 
 the parser), or a CR-justified equivalence. Add "Parser bugs found" and "Remaining" sections
 (each still-mismatching card with its reason). Regenerate docs/ROUNDTRIP.md and
 docs/roundtrip-passing.txt; `roundtrip --check` must pass.
+
+## Parser bugs found
+
+Tests in `crates/mtg-engine/tests/cards/roundtrip_tail_4.rs`; each fails on the old code
+(checked by running them before the fix).
+
+- Liliana's Indignation, Song of Blood, Coerced Confession (and every "[cards] put into
+  [a/your/their] graveyard this way" count after a mill): the count included milled cards a
+  replacement effect exiled instead (Rest in Peace, Leyline of the Void). Now only those in
+  a graveyard (`value_results::this_way_sel`).
+- Discerning Taste: "Put one of them into your hand and the rest into your graveyard. You
+  gain life equal to the greatest power among creature cards put into your graveyard this
+  way" measured the card put into the hand. A dig now records every card it put somewhere
+  (`dig_steps::DUG_PLACED`).
+- King Narfi's Betrayal: "exile a creature or planeswalker card from each graveyard" exiled
+  one card in all. Now one chosen from each player's graveyard (`Cards::per_owner` in
+  `hand_graveyard_grammar.rs`); chapter II can cast them (test).
+- Verdant Command: "Counter target loyalty ability of a planeswalker" could target the
+  loyalty ability of a permanent that isn't a planeswalker (CR 606.2). Now `AbilityFrom` a
+  planeswalker (`phrases.rs`).
+
+Checked in play because the rendering changed (all behave as the text says): Song of Blood
+(delayed trigger count), Typhoon in a 3-player game (each opponent's own Islands), Rite of
+Flame (every graveyard), Natural Balance (trim to five, search up to five minus lands,
+shuffle), Treasure Keeper (the card not cast goes to the bottom too).
+
+## Remaining
+
+Of the 84 cards in the taken clusters, these still mismatch; each was checked against the
+AST and plays as the text says (wording only):
+
+- Sapling of Colfenor: "gain life equal to ..., lose life equal to its power" — the
+  comparison's "life equal to" rewrite reaches only the first clause of the sentence.
+- Havengul Lich: "When you cast it this turn" (the one card the permission is for) rendered
+  "a spell this way"; "that card" as "that object".
+- Garruk's Harbinger, Sanctum of Shattered Heights: "a creature card or Garruk planeswalker
+  card" as "a creature or Garruk planeswalker card" (same filter).
+- Psionic Entity, Reckless Embermage: "and 3 damage to itself" — the merged second damage
+  instruction still names ~.
+- Kaho, Jeleva, Shell of the Last Kappa: "a spell from among cards exiled with ~" as "a
+  spell exiled with ~" (the cast choice is rendered through the up-to-one cast path).
+- Flare of Malice, Soul Shatter, Break Under Pressure: "among creatures and planeswalkers
+  they control" — the comparison's shared-subject rewrite reads "planeswalkers" as a verb
+  on the Oracle side; the filter is per opponent (checked in the AST).
+- Lightstall Inquisitor: sentence order of the two permission terms and the repeated
+  subject of "may play".
+- Wolverine, Crumbling Sanctuary: "instead that damage is dealt, but ... is healed";
+  "exiles that many cards from the top" as "the top X cards".
+- Neera, Wild Mage: "the rest" after the cast permission (the reveal is in an "if you do"
+  branch, so the not-cast wording isn't offered).
+- Renewed Solidarity: "for each token ... create a token that's a copy of it" with a
+  chosen-type filter ("that type" alternative breaks the for-each form).
+- Plague of Vermin: `loop totals` payment and "repeat this process until no one pays life"
+  wording.

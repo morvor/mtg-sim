@@ -279,6 +279,7 @@ impl Renderer<'_> {
             .replace(". you ", ". ")
             .replace(" your ", " their ")
             .replace(" you own ", " they own ")
+            .replace(" you control", " they control")
             .trim()
             .to_string()
     }
