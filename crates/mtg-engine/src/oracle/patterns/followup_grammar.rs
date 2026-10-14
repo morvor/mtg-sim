@@ -753,6 +753,50 @@ fn for_each_counter_on_it(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { super::EffectPattern { name: "followups: for each [kind] counter on it, [instruction with a choice]", priority: 120, parse: for_each_counter_on_it } }
 
+/// "Tap all untapped permanents of the chosen type target player controls, or untap all
+/// tapped permanents of that type that player controls." (Turnabout), "return an
+/// enchantment card from your graveyard to your hand or unlock a locked door of a Room
+/// you control" (Ghostly Dancers): the controller chooses one of the instructions as the
+/// ability resolves (CR 608.2d).
+fn either_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
+    const VERBS: &[&str] = &[
+        "tap", "untap", "return", "unlock", "put", "remove", "exile", "destroy", "draw",
+        "create", "sacrifice", "gain", "lose", "discard", "mill", "search",
+    ];
+    let l = end(l);
+    let first = l.split(' ').next()?;
+    if !VERBS.contains(&first) || l.contains('"') {
+        return None;
+    }
+    for sep in [", or ", " or "] {
+        for (i, _) in l.match_indices(sep) {
+            let (a, c) = (&l[..i], &l[i + sep.len()..]);
+            let verb = c.split(' ').next().unwrap_or("");
+            if !VERBS.contains(&verb) {
+                continue;
+            }
+            let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.group.clone());
+            let ea = crate::oracle::effects::parse_clause(a, b);
+            let ec = ea
+                .as_ref()
+                .and_then(|_| crate::oracle::effects::parse_clause(c, b));
+            if let (Some(ea), Some(ec)) = (ea, ec) {
+                return Some(Effect::ChooseOne {
+                    who: PlayerRef::You,
+                    options: vec![(a.to_string(), ea), (c.to_string(), ec)],
+                });
+            }
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player, b.group) = (saved.1, saved.2, saved.3);
+        }
+    }
+    None
+}
+
+inventory::submit! { super::EffectPattern { name: "followups: [instruction] or [instruction]", priority: 985, parse: either_instruction } }
+
+
+
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::card::Layout;

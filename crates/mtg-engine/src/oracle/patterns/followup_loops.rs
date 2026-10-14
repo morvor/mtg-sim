@@ -253,6 +253,10 @@ fn more_times(r: &str) -> Option<Value> {
 /// A sentence about the instructions before it (`effects`), which become its process.
 /// Returns true if it understood the sentence.
 pub fn sentence(s: &str, effects: &mut Vec<Effect>, b: &mut Builder) -> bool {
+    if let Some(e) = and_if_or_whenever(s, b) {
+        effects.push(e);
+        return true;
+    }
     let lower = s.to_lowercase();
     let l = end(&lower);
     let l = l.strip_prefix("then ").unwrap_or(l);
@@ -340,6 +344,35 @@ pub fn sentence(s: &str, effects: &mut Vec<Effect>, b: &mut Builder) -> bool {
     }
     false
 }
+
+/// "you may cast spells from your graveyard this turn, and if a card would be put into
+/// your graveyard from anywhere this turn, exile it instead" (Walk-In Closet), "you may
+/// cast Dinosaur spells this turn as though they had flash, and whenever you cast a
+/// Dinosaur spell this turn, it gains ..." (Cherished Hatchling): two instructions of
+/// different kinds joined by ", and", each read as a sentence of its own.
+pub(crate) fn and_if_or_whenever(s: &str, b: &mut Builder) -> Option<Effect> {
+    let lower = s.to_lowercase();
+    let l = end(&lower);
+    for sep in [", and if ", ", and whenever "] {
+        let Some(i) = l.find(sep) else {
+            continue;
+        };
+        let (a, c) = (&l[..i], &l[i + ", and ".len()..]);
+        if a.contains('"') {
+            return None;
+        }
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        let ea = crate::oracle::effects::parse_sentence(a, b);
+        let ec = ea.as_ref().and_then(|_| crate::oracle::effects::parse_sentence(c, b));
+        if let (Some(ea), Some(ec)) = (ea, ec) {
+            return Some(Effect::seq(vec![ea, ec]));
+        }
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+    }
+    None
+}
+
 
 fn is_header(e: &Effect) -> bool {
     matches!(e, Effect::Repeat { effect, .. } | Effect::InTurnOrder { effect, .. } if matches!(**effect, Effect::Noop))
