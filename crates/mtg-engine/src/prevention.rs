@@ -47,6 +47,14 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
         Filter::And(v) => Filter::And(v.iter().map(|x| lock_filter(g, x, ctx)).collect()),
         Filter::Or(v) => Filter::Or(v.iter().map(|x| lock_filter(g, x, ctx)).collect()),
         Filter::Not(x) => Filter::Not(Box::new(lock_filter(g, x, ctx))),
+        // "each creature blocking it" (Feint): the creatures blocking that object as the
+        // effect is created (the object is known only then).
+        Filter::BlockingAnyOf(sel) if !matches!(**sel, Sel::This) => Filter::Objects(
+            g.permanents()
+                .map(|o| o.id)
+                .filter(|&o| g.matches(o, f, ctx))
+                .collect(),
+        ),
         // "creatures target opponent controls": that player, whoever controls what later.
         Filter::ControlledBy(PlayerRel::Target(k)) => {
             let ps = ctx

@@ -18,8 +18,19 @@ pub(crate) fn reflexive_body(text: &str, b: &Builder) -> Option<Body> {
 
 /// [`reflexive_body`] where "it" is `it`.
 pub(crate) fn reflexive_body_about(text: &str, b: &Builder, it: Sel) -> Option<Body> {
-    let original = text;
-    let text = text
+    // "You may sacrifice another creature. When you do, ... equal to that creature's
+    // power": the sacrificed creature as it last existed on the battlefield (CR 608.2h),
+    // not the card it became in the graveyard.
+    let sacrificed = b.named.iter().any(|(n, s)| {
+        n == "that creature" && matches!(s, Sel::Var(v) if *v == vars::SACRIFICED)
+    });
+    let original = if sacrificed {
+        text.replace("that creature's power", "the sacrificed creature's power")
+            .replace("that creature's toughness", "the sacrificed creature's toughness")
+    } else {
+        text.to_string()
+    };
+    let text = original
         .replace("that creature's power", "its power")
         .replace("that creature's toughness", "its toughness");
     // The rewritten "its" still means "that creature" (see `Builder::its_is_it`).

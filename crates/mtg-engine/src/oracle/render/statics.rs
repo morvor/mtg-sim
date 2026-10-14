@@ -1843,6 +1843,33 @@ impl Renderer<'_> {
                     ),
                 }
             }
+            Restriction::ExtraBlocksCounted { blocker, n } => {
+                let b = subj(self, blocker);
+                match n {
+                    Value::Count(f) => {
+                        let f = self.for_each_noun(f);
+                        format!("{b} can block an additional creature each combat for each {f}")
+                    }
+                    other => {
+                        let v = self.value(other);
+                        format!("{b} can block X additional creatures each combat, where X is {v}")
+                    }
+                }
+            }
+            Restriction::AssignAsThoughUnblocked { what, may } => match (what, may) {
+                (Filter::AttachedToSource, true) => {
+                    let w = self.sel(&Sel::AttachedTo, Case::Poss);
+                    format!("{w} controller may have it assign its combat damage as though it weren't blocked")
+                }
+                (_, true) => {
+                    let n = self.noun(what, Num::One);
+                    format!("for each {n}, you may have that creature assign its combat damage as though it weren't blocked")
+                }
+                (_, false) => {
+                    let w = subj(self, what);
+                    format!("{w} assigns its combat damage as though it weren't blocked")
+                }
+            },
             Restriction::CanBlockOnly { blocker, attackers } => {
                 let b = subj(self, blocker);
                 let a = self.noun(attackers, Num::Many);
@@ -1955,6 +1982,84 @@ impl Renderer<'_> {
                 }
                 let c = self.cost(cost);
                 format!("{b} can't block unless their controller pays {c} for each blocking creature they control")
+            }
+            Restriction::BlockCostAgainst {
+                blockers,
+                attackers,
+                cost,
+            } => {
+                let b = subj(self, blockers);
+                let a = self.noun(attackers, Num::Many);
+                if matches!(blockers, Filter::Source) {
+                    let pay = self.cost_as_payment(cost);
+                    return format!("{b} can't block {a} unless you {pay}");
+                }
+                let c = self.cost(cost);
+                format!("{b} can't block {a} unless their controller pays {c} for each blocking creature they control")
+            }
+            Restriction::AttackOnlyWith {
+                attackers,
+                companion,
+            } => {
+                let a = subj(self, attackers);
+                let c = self.noun(companion, Num::One);
+                format!("{a} can't attack unless {c} also attacks")
+            }
+            Restriction::BlockOnlyWith {
+                blockers,
+                companion,
+            } => {
+                let b = subj(self, blockers);
+                let c = self.noun(companion, Num::One);
+                format!("{b} can't block unless {c} also blocks")
+            }
+            Restriction::PlayerMustAttack {
+                players,
+                defender,
+                planeswalkers,
+            } => {
+                let p = self.player_filter_subject(players);
+                let d = match defender {
+                    Some(d) => {
+                        let d = self.player_filter_object(d);
+                        if *planeswalkers {
+                            format!(" {d} or a planeswalker you control")
+                        } else {
+                            format!(" {d}")
+                        }
+                    }
+                    None => String::new(),
+                };
+                format!("{p} must attack{d} with at least one creature each combat if able")
+            }
+            Restriction::MinBlockersCounted { attacker, n } => {
+                let a = subj(self, attacker);
+                let v = self.value(n);
+                format!("{a} can't be blocked except by X or more creatures, where X is {v}")
+            }
+            Restriction::BlockIgnoringEvasion {
+                blocker,
+                attackers,
+                evasion,
+            } => {
+                let b = subj(self, blocker);
+                match evasion {
+                    crate::keywords::KeywordKind::Flying => {
+                        let a = self.noun(attackers, Num::Many);
+                        format!("{b} can block {a} as though it had reach")
+                    }
+                    crate::keywords::KeywordKind::Shadow => {
+                        format!("{b} can block creatures with shadow as though they didn't have shadow")
+                    }
+                    crate::keywords::KeywordKind::Landwalk => format!(
+                        "{b} can block creatures with landwalk abilities as though they didn't have those abilities"
+                    ),
+                    other => self.gap(format!("block ignoring {other:?}")),
+                }
+            }
+            Restriction::CantAttackPlayerAgain(f) => {
+                let a = subj(self, f);
+                format!("{a} can't attack a player it has already attacked this turn")
             }
             Restriction::CantBeTargeted { what, by } => {
                 let w = subj(self, what);
