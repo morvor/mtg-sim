@@ -950,6 +950,7 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
     if let Some(r) = s.strip_prefix("each ").or_else(|| s.strip_prefix("all ")) {
         let (f, _, rest) = parse_object_phrase(r)?;
         let f = super::patterns::filters_relational::resolve_referent(f, b)?;
+        let f = super::patterns::noun_phrase_predicates::other_than_trigger_subject(f, b);
         // "each creature blocking it"
         let (f, rest) = match super::patterns::pronoun_groups::blocking_it(f.clone(), rest, b) {
             Some((f, r)) => (f, r),

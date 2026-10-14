@@ -218,7 +218,16 @@ fn amount_phrase<'a>(s: &'a str, where_x: &Option<Value>) -> Option<(Value, &'a 
         let x = where_x.clone().unwrap_or(Value::X);
         return Some((Value::Mul(Box::new(Value::c(2)), Box::new(x)), r));
     }
+    // "and an additional 1 damage to each green creature" (Kaervek's Hex), "and 1
+    // additional damage to each blue creature" (Tropical Storm): more damage, dealt to
+    // those recipients too.
+    let s = s.strip_prefix("an additional ").unwrap_or(s);
     let (n, r) = parse_number(s)?;
+    let r = r
+        .trim_start()
+        .strip_prefix("additional ")
+        .filter(|r| r.starts_with("damage"))
+        .unwrap_or(r);
     // "a" isn't an amount of damage ("deals a damage" doesn't occur).
     if s.starts_with("a ") || s.starts_with("an ") {
         return None;
@@ -402,7 +411,9 @@ fn recipient_item(
             .or_else(|| word(t, "that player controls"))
             .or_else(|| word(t, "that player or that planeswalker's controller controls"))
         {
-            let rel = players_of(prev, b)?;
+            // In a later damage part ("3 damage to target player and 1 damage to each
+            // creature that player controls"): the player the text named.
+            let rel = players_of(prev, b).or_else(|| it_player_rel(b))?;
             (
                 Filter::and(vec![f, Filter::ControlledBy(rel)]),
                 r2.to_string(),
@@ -411,6 +422,41 @@ fn recipient_item(
             (f, rest)
         };
         return Some((Sel::All(f), rest));
+    }
+    // "any target of an opponent's choice" (CR 601.2c: an opponent chooses it).
+    if let Some(r) = word(s, "any target of an opponent's choice") {
+        let mut spec = TargetSpec::any_target();
+        spec.chosen_by_opponent = true;
+        let slot = b.add_target(spec, "any target of an opponent's choice");
+        return Some((Sel::Target(slot), r.to_string()));
+    }
+    // "target creature that player controls", "up to one target creature that player or
+    // that planeswalker's controller controls": the player (or the controller of the
+    // planeswalker) an earlier target is (CR 115.1: chosen in order, so the earlier
+    // target is known as this one is chosen).
+    for sfx in [
+        " that player or that planeswalker's controller controls",
+        " that player controls",
+    ] {
+        let Some(i) = s.find(sfx) else { continue };
+        let (head, r) = (&s[..i], &s[i + sfx.len()..]);
+        if !(head.starts_with("target ") || head.starts_with("up to ")) {
+            continue;
+        }
+        let (Some(rel), Some((mut spec, tail))) = (it_player_rel(b), parse_target(head)) else {
+            continue;
+        };
+        let TargetKind::Object(f) = &spec.what else {
+            continue;
+        };
+        if !end(tail).is_empty() {
+            continue;
+        }
+        spec.what = TargetKind::Object(Filter::and(vec![f.clone(), Filter::ControlledBy(rel)]));
+        let player = b.it_player.clone();
+        let slot = b.add_target(spec, &s[..i + sfx.len()]);
+        b.it_player = player;
+        return Some((Sel::Target(slot), r.to_string()));
     }
     let before = b.targets.len();
     let (sel, rest) = object_ref(s, b)?;
@@ -426,6 +472,22 @@ fn recipient_item(
         }
     }
     Some((sel, rest))
+}
+
+/// The player "that player" names, as a relation an object's controller can have: a
+/// target player, or the controller of a target planeswalker ("that player or that
+/// planeswalker's controller").
+fn it_player_rel(b: &Builder) -> Option<PlayerRel> {
+    match &b.it_player {
+        PlayerRef::ControllerOf(sel) => match **sel {
+            Sel::Target(n) => match b.targets.get(n as usize)?.what {
+                TargetKind::ObjectOrPlayer(..) => Some(PlayerRel::TargetOrController(n)),
+                _ => None,
+            },
+            _ => None,
+        },
+        p => player_rel_of(p),
+    }
 }
 
 /// Whether `s` begins another recipient (after "and"), as opposed to another damage part.
@@ -453,8 +515,19 @@ fn starts_recipient(s: &str) -> bool {
 fn recipients(s: &str, src: &Sel, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim_start();
     if let Some(r) = s.strip_prefix("each of ") {
-        let (spec, _, rest) = counted_targets(r)?;
-        let text = format!("each of {}", &r[..r.len() - rest.len()]);
+        // "each of up to two other targets": other than the earlier targets.
+        let other_targets = r.contains(" other targets");
+        let probe = r.replacen(" other targets", " targets", 1);
+        let (mut spec, _, rest) = counted_targets(&probe)?;
+        if other_targets {
+            if !matches!(spec.what, TargetKind::AnyTarget) || b.targets.is_empty() {
+                return None;
+            }
+            spec.distinct_from = (0..b.targets.len() as u8).collect();
+        }
+        let r = &r[r.len() - rest.len()..];
+        let rest = r;
+        let text = format!("each of {}", &s["each of ".len()..s.len() - rest.len()]);
         let slot = b.add_target(spec, text.trim());
         return Some((Sel::Target(slot), rest.to_string()));
     }

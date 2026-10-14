@@ -142,6 +142,11 @@ fn singular(w: &str) -> String {
     w.to_string()
 }
 
+/// A noun whose plural is spelled like its singular ("Equipment", "Spacecraft").
+fn invariant_plural(w: &str) -> bool {
+    matches!(w, "equipment" | "spacecraft")
+}
+
 fn capitalize(w: &str) -> String {
     let mut c = w.chars();
     match c.next() {
@@ -222,6 +227,8 @@ pub fn head_noun(w: &str) -> Option<Filter> {
         // Tokens and copies aren't cards (CR 108.2, 108.2b).
         "card" => return Some(Filter::Card),
         "token" => return Some(Filter::Token),
+        // CR 903.3: "all commanders".
+        "commander" => return Some(Filter::Commander),
         // CR 700.12.
         "outlaw" => return Some(crate::game_terms::outlaw_filter()),
         _ => {}
@@ -467,17 +474,23 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 let next = head_noun(split_word(r).0.trim_end_matches(','));
                 let types = matches!(heads.last(), Some(Filter::Type(_)))
                     && matches!(next, Some(Filter::Type(_)));
-                if (plural && next.is_some()) || types {
+                // "each Scout, Pirate, and Rogue you control": a list of subtypes names
+                // objects with any of them.
+                let subtypes = matches!(heads.last(), Some(Filter::Subtype(_)))
+                    && matches!(next, Some(Filter::Subtype(_)));
+                if (plural && next.is_some()) || types || subtypes {
                     s = r;
                 }
             }
             continue;
         }
-        // "artifacts and enchantments": plural nouns joined by "and" name a union.
+        // "artifacts and enchantments": plural nouns joined by "and" name a union (also
+        // a noun whose plural is the same word: "creatures and Spacecraft", "Auras and
+        // Equipment").
         if plural {
             if let Some(r) = t.strip_prefix("and ") {
                 let nw = split_word(r).0.trim_end_matches(',');
-                if nw.ends_with('s') && head_noun(nw).is_some() {
+                if (nw.ends_with('s') || invariant_plural(nw)) && head_noun(nw).is_some() {
                     s = r;
                     continue;
                 }
@@ -579,9 +592,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 s = crest;
                 ends_in_card = true;
             }
-            // allow "creature card or artifact card"
+            // allow "creature card or artifact card", "artifact creature and/or Vehicle"
             let t = s.trim_start();
-            if let Some(r) = t.strip_prefix("or ") {
+            if let Some(r) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
                 // "basic land card or Gate card": adjectives before a complete "... card"
                 // phrase describe only that phrase, not the alternative after "or" (but
                 // "nontoken artifact creature or Vehicle" is one description).
@@ -676,6 +689,18 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 Filter::and(vec![
                     Filter::ControlledBy(PlayerRel::NotYou),
                     Filter::not(Filter::OwnedBy(PlayerRel::You)),
+                ]),
+                r,
+            )
+        } else if let Some(r) = t
+            .strip_prefix("you own or control")
+            .or_else(|| t.strip_prefix("you control or own"))
+        {
+            // "target permanent you own or control" (Telim'Tor's Edict).
+            (
+                Filter::Or(vec![
+                    Filter::OwnedBy(PlayerRel::You),
+                    Filter::ControlledBy(PlayerRel::You),
                 ]),
                 r,
             )
@@ -883,9 +908,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
             .or_else(|| t.strip_prefix("that is attacking"))
+            .filter(|r| !continues_predicate(r))
         {
             (Filter::Attacking, r)
-        } else if let Some(r) = t.strip_prefix("that's blocking") {
+        } else if let Some(r) = t
+            .strip_prefix("that's blocking")
+            .filter(|r| !continues_predicate(r))
+        {
             (Filter::Blocking, r)
         } else if let Some((f, r)) = t.strip_prefix("that's ").and_then(color_list_suffix) {
             // "target creature or planeswalker that's black or red" (Devout Decree).
@@ -992,6 +1021,27 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     // "each other creature that shares a color with it": other than "it".
     let f = super::patterns::filters_relational::other_than_referent(Filter::and(parts));
     Some((f, plural, s))
+}
+
+/// Whether the text after "that's attacking" / "that's blocking" goes on with the
+/// predicate ("that's attacking or blocking", "that's attacking you", "that's blocking
+/// equipped creature"): read by `patterns::noun_phrase_predicates` and the blocking
+/// grammar instead.
+fn continues_predicate(r: &str) -> bool {
+    let w = r.trim_start().split([' ', ',', '.']).next().unwrap_or("");
+    r.starts_with(' ')
+        && matches!(
+            w,
+            "or" | "and/or"
+                | "you"
+                | "a"
+                | "an"
+                | "one"
+                | "your"
+                | "target"
+                | "enchanted"
+                | "equipped"
+        )
 }
 
 /// "target player controls" / "target opponent controls" after an object phrase. The
@@ -1251,6 +1301,23 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
                     ))
             {
                 return Some((Filter::HasCounter(Some(kind.into())), tail));
+            }
+        }
+    }
+    // "with islandwalk": one landwalk ability (CR 702.14), not every landwalk.
+    {
+        let n = rest
+            .find(|c: char| !c.is_ascii_alphabetic())
+            .unwrap_or(rest.len());
+        let w = &rest[..n];
+        if let Some(stem) = w.strip_suffix("walk").filter(|s| !s.is_empty()) {
+            let is_land_type = crate::types::subtype_lists()
+                .land
+                .iter()
+                .any(|t| t.eq_ignore_ascii_case(stem));
+            if is_land_type && !rest[n..].starts_with(" or") && !rest[n..].starts_with(',') {
+                let f = Filter::Custom(format!("{}{w}", crate::kw::landwalk::HAS_LANDWALK).into());
+                return Some((if negate { Filter::not(f) } else { f }, &rest[n..]));
             }
         }
     }

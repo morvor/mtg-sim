@@ -415,9 +415,45 @@ pub fn them_player(s: &str, b: &Builder) -> Option<PlayerRef> {
 /// about ("Whenever a Beast becomes blocked, it gets +1/+1 until end of turn for each
 /// creature blocking it"), the permanent the source is attached to, or a single target.
 /// Returns the filter narrowed to such blockers and the rest of the text.
-pub fn blocking_it(f: Filter, rest: &str, b: &Builder) -> Option<(Filter, String)> {
+pub fn blocking_it(f: Filter, rest: &str, b: &mut Builder) -> Option<(Filter, String)> {
     let r = rest.trim_start();
+    // "target creature it's blocking" (Goblin Snowman): the creature the source blocks.
+    if let Some(r) = r.strip_prefix("it's blocking").filter(|r| {
+        (r.is_empty() || r.starts_with(' ') || r.starts_with(','))
+            && matches!(singular_it(b), Sel::This)
+    }) {
+        if crate::oracle::raw_text().to_lowercase().contains("sacrifice") {
+            return None;
+        }
+        return Some((Filter::and(vec![f, Filter::BlockedBySource]), r.to_string()));
+    }
     let r = r.strip_prefix("that's ").unwrap_or(r);
+    // "creatures blocking target attacking creature" (Feint), "creatures blocking enchanted
+    // creature": the blockers of another object the text names.
+    if let Some(x) = r.strip_prefix("blocking ").filter(|x| {
+        x.starts_with("target ")
+            || x.starts_with("enchanted creature")
+            || x.starts_with("equipped creature")
+    }) {
+        if crate::oracle::raw_text().to_lowercase().contains("sacrifice") {
+            return None;
+        }
+        let (sel, tail) = crate::oracle::effects::object_ref(x, b)?;
+        let one = match &sel {
+            Sel::AttachedTo => true,
+            Sel::Target(slot) => b.targets.get(*slot as usize).is_some_and(|t| {
+                t.max.as_const() == Some(1) && matches!(t.what, TargetKind::Object(_))
+            }),
+            _ => false,
+        };
+        if !one {
+            return None;
+        }
+        return Some((
+            Filter::and(vec![f, Filter::BlockingAnyOf(Box::new(sel))]),
+            tail,
+        ));
+    }
     let r = r.strip_prefix("blocking it")?;
     if !(r.is_empty() || r.starts_with(' ') || r.starts_with(',')) {
         return None;
