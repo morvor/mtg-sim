@@ -427,3 +427,47 @@ fn that_player_the_controller_named(l: &str, b: &mut Builder) -> Option<Effect> 
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: that player (the controller the sentence named)", priority: 1500, parse: that_player_the_controller_named } }
+
+/// "Put a double strike counter on target creature, then goad each creature that had a
+/// double strike counter put on it this way." (Spectacular Showdown), "Goad each creature
+/// that had counters put on it this way." (Agitator Ant): the objects the counter
+/// instruction just before put counters on (recorded as its result, CR 608.2c).
+fn had_counters_put_on_it(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let i = l.find(" that had ")?;
+    let j = i + l[i..].find(" put on it this way")?;
+    let what = &l[i + " that had ".len()..j];
+    let counters = what == "counters"
+        || what.ends_with(" counter") && (what.starts_with("a ") || what.starts_with("an "));
+    if !counters {
+        return None;
+    }
+    // "each creature" / "each permanent" just before.
+    let k = l[..i].rfind("each ")?;
+    let noun = &l[k + "each ".len()..i];
+    let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(noun)?;
+    if plural || !tail.trim().is_empty() {
+        return None;
+    }
+    // Only right after an instruction that puts counters ("..., then goad ...", or the
+    // sentence before).
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let before = &raw[..raw.find("put on it this way")?];
+    let last = before.rfind(['.', '\n']).map_or(before, |x| &before[..x]);
+    let recent = before[last.len()..].contains(" counter") && before[last.len()..].contains("put ")
+        || last.rsplit(['.', '\n']).next().is_some_and(|s| s.contains("put ") && s.contains(" counter"));
+    if !recent {
+        return None;
+    }
+    let key = "the objects that got counters this way".to_string();
+    let rewritten = format!("{}{key}{}", &l[..k], &l[j + " put on it this way".len()..]);
+    b.named.push((
+        key.clone(),
+        Sel::Matching(Box::new(Sel::Var(vars::IT)), f),
+    ));
+    let e = crate::oracle::effects::parse_clause(&rewritten, b);
+    b.named.retain(|(p, _)| *p != key);
+    e
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: each creature that had counters put on it this way", priority: 1500, parse: had_counters_put_on_it } }

@@ -357,3 +357,60 @@ fn sudden_salvation_draws_for_each_opponent_who_controls_a_returned_permanent() 
     // One opponent controls returned permanents: one card (the spell left the hand).
     assert_eq!(t.hand_size(P0), hand - 1 + 1);
 }
+
+#[test]
+fn spectacular_showdown_goads_the_creature_that_got_the_counter() {
+    cr!("701.15a", "608.2c");
+    compiles("Spectacular Showdown");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let other = t.battlefield(P1, "Hill Giant");
+    let spell = t.hand(P0, "Spectacular Showdown");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).target(Entity::Object(theirs)).go();
+    t.resolve_all();
+    assert_eq!(t.counters(theirs, "double strike"), 1);
+    assert!(t.g.obj(theirs).goaded_by.contains(&P0));
+    assert!(t.g.obj(other).goaded_by.is_empty());
+}
+
+#[test]
+fn agitator_ant_goads_each_creature_that_got_counters() {
+    cr!("701.15a", "101.4");
+    compiles("Agitator Ant");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Agitator Ant");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let skipped = t.battlefield(P1, "Hill Giant");
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    // You decline; the opponent puts counters on the Bears.
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[Entity::Object(theirs)]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.counters(theirs, "+1/+1"), 2);
+    assert!(t.g.obj(theirs).goaded_by.contains(&P0));
+    assert!(t.g.obj(skipped).goaded_by.is_empty());
+    assert!(t.g.obj(mine).goaded_by.is_empty());
+}
+
+#[test]
+fn fangs_of_kalonia_doubles_the_counters_of_what_it_put_a_counter_on() {
+    cr!("122.8", "608.2c");
+    compiles("Fangs of Kalonia");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let other = t.battlefield(P0, "Hill Giant");
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 2, None);
+    t.g.add_counters(Entity::Object(other), "+1/+1", 1, None);
+    let spell = t.hand(P0, "Fangs of Kalonia");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).target(Entity::Object(bear)).go();
+    t.resolve_all();
+    // 2 + 1 = 3, doubled to 6; the other creature keeps its counter.
+    assert_eq!(t.counters(bear, "+1/+1"), 6);
+    assert_eq!(t.counters(other, "+1/+1"), 1);
+}
