@@ -107,6 +107,13 @@ impl Game {
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
+                    // "You may draw cards equal to its power. If you do, discard two cards":
+                    // a player may choose to draw even with too few cards in their library
+                    // (CR 121.3), and "if you do" follows that choice, however many cards
+                    // were drawn (Champion of Wits rulings).
+                    if matches!(**effect, Effect::Draw { .. }) {
+                        ctx.prev_happened = true;
+                    }
                 }
             }
             Effect::PayOptional {
@@ -1353,18 +1360,18 @@ impl Game {
                 let mut drawn = Vec::new();
                 // CR 121.2c: the active player draws first, then the others in turn order.
                 let players = crate::draw_rules::draw_order(self, self.eval_players(who, ctx));
-                let n = players.len();
+                let n = players.len() as u32;
+                let total = |g: &Game| g.history.cards_drawn.values().sum::<u32>();
+                let before = total(self);
                 for p in players {
                     drawn.extend(self.draw_cards(p, k));
                 }
-                // "Draw four cards. When you do, ...": done only if every card was drawn
-                // (a draw from an empty library or a replaced draw isn't one, CR 121.3,
-                // 614.6, 603.12; The Royal Scions rulings).
-                // (Drawing zero cards leaves it as it was: "you may draw cards equal to its
-                // power. If you do, ..." with power 0, Champion of Wits.)
-                if k > 0 {
-                    ctx.prev_happened = drawn.len() == k as usize * n;
-                }
+                // "Draw four cards. When you do, ...": done only if at least that many cards
+                // were drawn (a draw from an empty library or a draw replaced by something
+                // else isn't one, CR 614.6, 603.12), counting cards drawn by replacement
+                // effects ("draw two cards instead"). See The Royal Scions rulings. ("You
+                // may draw ... If you do" is about the choice: see `Effect::May`.)
+                ctx.prev_happened = k > 0 && total(self).saturating_sub(before) >= k * n;
                 ctx.prev_value = drawn.len() as i64;
                 ctx.set_var(
                     vars::REVEALED,

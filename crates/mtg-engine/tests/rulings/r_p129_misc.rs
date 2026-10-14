@@ -391,3 +391,83 @@ fn pyroclastic_hellion_in_two_headed_giant() {
     assert_eq!(t.life(P3), before - 4);
     let _ = ManaType::R;
 }
+
+#[test]
+fn royal_scions_reflexive_ability_triggers_once_when_replacements_draw_more() {
+    cr!("603.12", "614.1a");
+    ruling!(
+        "The Royal Scions",
+        "If replacement effects cause you to draw five or more cards while resolving the last ability of The Royal Scions, its reflexive triggered ability still triggers only once"
+    );
+    let mut t = TestGame::new(2);
+    let scions = t.battlefield(P0, "The Royal Scions");
+    // "If you would draw a card, draw two cards instead.": eight cards are drawn.
+    t.battlefield(P0, "Thought Reflection");
+    loyalty(&mut t, scions, 8);
+    stack_library(&mut t, P0, &["Island"; 10]);
+    let hand = t.hand_size(P0);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.activate(P0, scions, 2, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.hand_size(P0), hand + 8);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20 - (hand as i32 + 8));
+}
+
+#[test]
+fn you_may_draw_if_you_do_follows_the_choice_even_if_a_draw_is_replaced() {
+    cr!("603.5", "702.52a", "614.6");
+    ruling!(
+        "Champion of Wits",
+        "If you use the ability, you discard two cards regardless of how many cards you draw."
+    );
+    // "You may draw cards equal to its power. If you do, discard two cards." The first of
+    // the two draws is replaced by dredge: one card is drawn, two are still discarded.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    stack_library(&mut t, P0, &["Island"; 6]);
+    t.graveyard(P0, "Life from the Loam");
+    for _ in 0..2 {
+        t.hand(P0, "Island");
+    }
+    t.answer_yes(P0, true); // use the ability
+    t.answer_yes(P0, true); // dredge the first draw
+    t.enter(P0, "Champion of Wits");
+    t.settle();
+    let hand = t.hand_size(P0);
+    let gy = t.graveyard_size(P0);
+    t.resolve_all();
+    // +1 Life from the Loam, +1 drawn card, -2 discarded.
+    assert_eq!(t.hand_size(P0), hand);
+    // +3 milled, -1 Life from the Loam, +2 discarded.
+    assert_eq!(t.graveyard_size(P0), gy + 4);
+}
+
+#[test]
+fn only_creatures_and_kindred_objects_have_creature_types() {
+    cr!("205.3d", "205.3m", "308.2");
+    ruling!(
+        "Erebos, God of the Dead",
+        "If a God stops being a creature, it loses the type creature and the creature type God."
+    );
+    let mut t = TestGame::new(2);
+    let erebos = t.battlefield(P0, "Erebos, God of the Dead");
+    // Devotion to black below five: not a creature, not a God.
+    assert!(!is_creature_now(&t, erebos));
+    assert!(!has_subtype(&t, erebos, "God"));
+    for _ in 0..3 {
+        t.battlefield(P0, "Phyrexian Arena");
+    }
+    t.g.recompute();
+    assert!(is_creature_now(&t, erebos));
+    assert!(has_subtype(&t, erebos, "God"));
+    // A noncreature kindred permanent keeps its creature type (Bitterblossom, a Kindred
+    // Enchantment — Faerie), and a kindred card with changeling has every creature type.
+    let bb = t.battlefield(P0, "Bitterblossom");
+    assert!(!is_creature_now(&t, bb));
+    assert!(has_subtype(&t, bb, "Faerie"));
+    let inv = t.hand(P0, "Nameless Inversion");
+    t.g.recompute();
+    assert!(has_subtype(&t, inv, "Goblin"));
+}

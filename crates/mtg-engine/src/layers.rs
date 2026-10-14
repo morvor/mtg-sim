@@ -428,6 +428,10 @@ impl Game {
                     if c.subtypes.iter().any(|s| !subtype_still_valid(s, types)) {
                         c.subtypes.retain(|s| subtype_still_valid(s, types));
                     }
+                    // The same for "every creature type" (changeling).
+                    if !types.contains(CardType::Creature) && !types.contains(CardType::Kindred) {
+                        c.all_creature_types = false;
+                    }
                 }
                 // CR 305.6: basic land types have intrinsic mana abilities. They're
                 // determined by the object's types after layer 4 (CR 305.7) and can be

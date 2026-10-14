@@ -30,7 +30,7 @@ fn nevinyrral_destroys_only_after_the_reflexive_ability_resolves() {
 
 #[test]
 fn nevinyrral_has_hexproof_from_artifacts_creatures_and_enchantments() {
-    cr!("702.11d", "702.11e");
+    cr!("702.11d");
     ruling!(
         "Nevinyrral, Urborg Tyrant",
         "Nevinyrral can't be the target of abilities of artifacts, creatures, or enchantments your opponents control."
@@ -44,6 +44,18 @@ fn nevinyrral_has_hexproof_from_artifacts_creatures_and_enchantments() {
     assert!(!ability_targets(&mut t, theirs, 0).contains(&obj(nev)));
     let mine = t.battlefield(P0, "Prodigal Sorcerer");
     assert!(ability_targets(&mut t, mine, 0).contains(&obj(nev)));
+    // An opponent's Aura spell (an enchantment spell) can't target it; its controller's
+    // can.
+    let aura_targets = |t: &mut TestGame, p: PlayerId| {
+        let aura = t.hand(p, "Pacifism");
+        t.g.recompute();
+        let chars = t.g.obj(aura).chars.clone();
+        let spec = mtg_engine::attach::aura_target_spec(&chars).expect("Aura without enchant");
+        let ctx = mtg_engine::eval::Ctx::new(Some(aura), p);
+        t.g.legal_target_candidates(&spec, &ctx, aura)
+    };
+    assert!(!aura_targets(&mut t, P1).contains(&obj(nev)));
+    assert!(aura_targets(&mut t, P0).contains(&obj(nev)));
 }
 
 #[test]
