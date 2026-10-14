@@ -667,60 +667,67 @@ fn choice_cost(cost: &Cost) -> Option<&CostPart> {
     }
 }
 
-/// `q`'s choice of what to sacrifice or discard to pay `part` (see [`choice_cost`]), as
-/// paying it would choose (`Game::pay_cost`), made now and performed with the other
-/// players' actions.
-fn plan_choice_cost(g: &mut Game, q: PlayerId, part: &CostPart, ctx: &Ctx) -> Plan {
-    match part {
-        CostPart::Sacrifice { filter, count } => {
-            let n = g.eval_value(count, ctx).max(0) as u32;
-            let cands: Vec<ObjectId> = g
-                .objects_matching(filter, ctx)
+/// What `q` may sacrifice or discard to pay `part` (see [`choice_cost`]), as paying it
+/// would offer (`Game::pay_cost`): the candidates and how many to choose, if enough of
+/// them can be chosen.
+fn choice_cost_candidates(
+    g: &Game,
+    q: PlayerId,
+    part: &CostPart,
+    ctx: &Ctx,
+) -> Option<(Vec<ObjectId>, u32)> {
+    let (filter, n, cands): (&Filter, u32, Vec<ObjectId>) = match part {
+        CostPart::Sacrifice { filter, count } => (
+            filter,
+            g.eval_value(count, ctx).max(0) as u32,
+            g.objects_matching(filter, ctx)
                 .into_iter()
                 .filter(|o| g.obj(*o).controller == q && g.may_sacrifice_for_cost(*o, ctx))
-                .collect();
-            let pick = crate::target_groups::choose_together(
-                g,
-                q,
-                ctx.source,
-                "Choose permanents to sacrifice (cost)",
-                filter,
-                cands,
-                n,
-                n,
-                ctx,
-            );
-            g.record_apnap_choice(q, pick.clone());
-            Plan::Sacrifice {
-                what: pick.into_iter().map(|o| (o, q)).collect(),
-                chosen: false,
-            }
-        }
-        CostPart::Discard { filter, count, .. } => {
-            let n = g.eval_value(count, ctx).max(0) as u32;
-            let cands: Vec<ObjectId> = g
-                .player(q)
+                .collect(),
+        ),
+        CostPart::Discard { filter, count, .. } => (
+            filter,
+            g.eval_value(count, ctx).max(0) as u32,
+            g.player(q)
                 .hand
                 .iter()
                 .copied()
                 .filter(|c| crate::draw_rules::usable_for_cost(g, *c, filter, ctx))
-                .collect();
-            let cards = crate::target_groups::choose_together(
-                g,
-                q,
-                ctx.source,
-                "Choose cards to discard (cost)",
-                filter,
-                cands,
-                n,
-                n,
-                ctx,
-            );
-            // CR 101.4a: cards chosen in a hand stay face down until discarded.
-            g.record_apnap_choice(q, cards.clone());
-            Plan::Discard { player: q, cards }
-        }
-        _ => Plan::Nothing,
+                .collect(),
+        ),
+        _ => return None,
+    };
+    crate::target_groups::can_choose_together(g, filter, &cands, n as usize, ctx)
+        .then_some((cands, n))
+}
+
+/// `q`'s choice among `cands` of what to sacrifice or discard to pay `part`, made now and
+/// performed with the other players' actions.
+fn plan_choice_cost(
+    g: &mut Game,
+    q: PlayerId,
+    part: &CostPart,
+    (cands, n): (Vec<ObjectId>, u32),
+    ctx: &Ctx,
+) -> Plan {
+    let (filter, prompt) = match part {
+        CostPart::Sacrifice { filter, .. } => (filter, "Choose permanents to sacrifice (cost)"),
+        CostPart::Discard { filter, .. } => (filter, "Choose cards to discard (cost)"),
+        _ => return Plan::Nothing,
+    };
+    let pick =
+        crate::target_groups::choose_together(g, q, ctx.source, prompt, filter, cands, n, n, ctx);
+    // CR 101.4a: cards chosen in a hand stay face down until discarded.
+    g.record_apnap_choice(q, pick.clone());
+    match part {
+        CostPart::Sacrifice { .. } => Plan::Sacrifice {
+            what: pick.into_iter().map(|o| (o, q)).collect(),
+            chosen: false,
+        },
+        _ => Plan::Discard {
+            player: q,
+            cards: pick,
+        },
     }
 }
 
@@ -975,8 +982,11 @@ fn plan(
             ..
         } if plannable(g, e, ctx, p) => {
             if let (Some(q), Some(part)) = (g.eval_player(who, ctx), choice_cost(cost)) {
-                let can = !crate::multiplayer::cant_pay(g, q)
-                    && crate::entry_costs::can_pay(g, q, cost, ctx);
+                let cands = (!crate::multiplayer::cant_pay(g, q)
+                    && crate::entry_costs::can_pay(g, q, cost, ctx))
+                .then(|| choice_cost_candidates(g, q, part, ctx))
+                .flatten();
+                let can = cands.is_some();
                 let pays = can
                     && g.ask_yes_no(
                         q,
@@ -985,14 +995,15 @@ fn plan(
                         false,
                     );
                 ctx.prev_happened = pays;
-                return if pays {
-                    plan_choice_cost(g, q, part, ctx)
-                } else {
-                    // CR 732.6: declining the [B] of "[A] unless [B]".
-                    if can {
-                        crate::shortcuts::declined_unless(g);
+                return match cands.filter(|_| pays) {
+                    Some(cands) => plan_choice_cost(g, q, part, cands, ctx),
+                    None => {
+                        // CR 732.6: declining the [B] of "[A] unless [B]".
+                        if can {
+                            crate::shortcuts::declined_unless(g);
+                        }
+                        plan(g, otherwise, ctx, p, earlier)
                     }
-                    plan(g, otherwise, ctx, p, earlier)
                 };
             }
             let (Some(q), Some(n)) = (g.eval_player(who, ctx), life_amount(cost)) else {
