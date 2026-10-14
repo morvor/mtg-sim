@@ -149,3 +149,161 @@ fn trial_of_agony_controller_picks_the_creature_dealt_damage() {
     assert!(t.on_battlefield(a));
     assert!(!t.on_battlefield(b), "{}", t.dump_log());
 }
+
+#[test]
+fn gev_counts_each_opponent_who_lost_life_once() {
+    cr!("614.1c");
+    ruling!(
+        "Gev, Scaled Scorch",
+        "cares whether opponents lost life this turn"
+    );
+    // "Other creatures you control enter with an additional +1/+1 counter on them for each
+    // opponent who lost life this turn."
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Gev, Scaled Scorch");
+    t.g.lose_life(P1, 1);
+    t.g.lose_life(P1, 2);
+    t.g.lose_life(P2, 1);
+    t.settle();
+    let bears = t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.counters(bears, "+1/+1"), 2, "{}", t.dump_log());
+}
+
+#[test]
+fn gorma_counts_creatures_that_died_under_your_control() {
+    cr!("614.1c", "700.4");
+    // "Nontoken creatures you control enter with an additional +1/+1 counter on them for
+    // each creature that died under your control this turn."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Gorma, the Gullet");
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    let theirs = t.battlefield(P1, "Llanowar Elves");
+    t.g.sacrifice(mine, P0);
+    t.g.sacrifice(theirs, P1);
+    t.settle();
+    t.resolve_all();
+    let bears = t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.counters(bears, "+1/+1"), 1, "{}", t.dump_log());
+}
+
+#[test]
+fn visions_flashback_costs_less_by_your_commanders_mana_value() {
+    cr!("601.2f", "702.34a");
+    // Visions of Glory: "Flashback {8}{W}{W}. This spell costs {X} less to cast this way,
+    // where X is the greatest mana value of a commander you own on the battlefield or in
+    // the command zone."
+    let mut t = TestGame::new(2);
+    let cmd = t.command(P0, "Hill Giant");
+    t.g.obj_mut(cmd).is_commander = true;
+    let visions = t.graveyard(P0, "Visions of Glory");
+    t.lands(P0, "Plains", 6);
+    t.battlefield(P0, "Grizzly Bears");
+    let r = t
+        .cast(P0, visions)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Flashback,
+        ))
+        .try_go();
+    assert!(r.is_ok(), "{{4}}{{W}}{{W}} with six Plains: {r:?}\n{}", t.dump_log());
+    t.resolve_all();
+    // One Human for each creature you control (the Bears).
+    assert_eq!(t.named_on_battlefield("Human Token").len(), 1, "{}", t.dump_log());
+}
+
+#[test]
+fn siege_striker_gets_a_bonus_for_each_creature_tapped_this_way() {
+    cr!("701.26a");
+    // "Whenever this creature attacks, you may tap any number of untapped creatures you
+    // control. This creature gets +1/+1 until end of turn for each creature tapped this
+    // way."
+    let mut t = TestGame::new(2);
+    let striker = t.battlefield(P0, "Siege Striker");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    let already = t.battlefield(P0, "Llanowar Elves");
+    t.g.obj_mut(already).tapped = true;
+    let (p, q) = t.pt(striker);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.attack(&[(striker, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.obj_now(a).tapped && t.obj_now(b).tapped, "{}", t.dump_log());
+    assert_eq!(t.pt(striker), (p + 2, q + 2));
+}
+
+#[test]
+fn phytohydra_turns_damage_into_counters() {
+    cr!("614.1a");
+    // "If damage would be dealt to this creature, put that many +1/+1 counters on it
+    // instead."
+    let mut t = TestGame::new(2);
+    let hydra = t.battlefield(P0, "Phytohydra");
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    if let Err(e) = t.cast_with(P1, bolt, &[Entity::Object(hydra)]) {
+        panic!("cast: {e:?}\n{}", t.dump_log());
+    }
+    t.resolve_all();
+    assert_eq!(t.counters(hydra, "+1/+1"), 3);
+    assert_eq!(t.obj_now(hydra).damage, 0);
+}
+
+#[test]
+fn heart_of_light_prevents_damage_dealt_by_and_to_the_creature() {
+    cr!("615.1a");
+    // "Prevent all damage that would be dealt to and dealt by enchanted creature."
+    let mut t = TestGame::new(2);
+    let pyro = t.battlefield(P0, "Prodigal Pyromancer");
+    let heart = t.battlefield(P0, "Heart of Light");
+    assert!(t.g.attach(heart, Entity::Object(pyro)));
+    let life = t.life(P1);
+    t.activate(P0, pyro, 0, &[Entity::Player(P1)])
+        .expect("activate");
+    t.resolve_all();
+    assert_eq!(t.life(P1), life, "{}", t.dump_log());
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    if let Err(e) = t.cast_with(P1, bolt, &[Entity::Object(pyro)]) {
+        panic!("cast: {e:?}\n{}", t.dump_log());
+    }
+    t.resolve_all();
+    assert!(t.on_battlefield(pyro));
+}
+
+#[test]
+fn scandalmonger_any_player_activates_on_their_own_turn() {
+    cr!("602.5d");
+    // "{2}: Target player discards a card. Any player may activate this ability but only
+    // as a sorcery."
+    let mut t = TestGame::new(2);
+    let monger = t.battlefield(P0, "Scandalmonger");
+    t.lands(P1, "Swamp", 2);
+    t.hand(P0, "Grizzly Bears");
+    t.set_step(P0, Step::PrecombatMain);
+    assert!(
+        t.activate(P1, monger, 0, &[Entity::Player(P0)]).is_err(),
+        "not on another player's turn"
+    );
+    t.set_step(P1, Step::PrecombatMain);
+    t.activate(P1, monger, 0, &[Entity::Player(P0)])
+        .expect("its own main phase");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"), "{}", t.dump_log());
+}
+
+#[test]
+fn thousand_year_elixir_lets_new_creatures_use_tap_abilities() {
+    cr!("302.6");
+    // "You may activate abilities of creatures you control as though those creatures had
+    // haste."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thousand-Year Elixir");
+    let pyro = t.battlefield_sick(P0, "Prodigal Pyromancer");
+    let life = t.life(P1);
+    t.activate(P0, pyro, 0, &[Entity::Player(P1)])
+        .expect("as though it had haste");
+    t.resolve_all();
+    assert_eq!(t.life(P1), life - 1);
+}
