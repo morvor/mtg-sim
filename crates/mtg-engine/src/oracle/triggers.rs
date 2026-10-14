@@ -711,7 +711,14 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             } else {
                 PlayerRef::TriggerPlayer
             };
-            return Some((t, obj(), it_player));
+            // "Whenever you attack, ... put a quest counter on it": no object triggered
+            // it, so "it" is the source.
+            let it = if matches!(t, TriggerCond::PlayerAttacks(_)) {
+                Sel::This
+            } else {
+                obj()
+            };
+            return Some((t, it, it_player));
         }
     }
     if r == "you sacrifice a permanent" {

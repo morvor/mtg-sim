@@ -438,8 +438,44 @@ fn own_alternative(
     heads.push(alt);
 }
 
+/// "basic, Sphere, or Locus land card", "the basic, Sphere, and Locus lands you
+/// control": a list of alternatives whose first item is an adjective (a supertype) and the
+/// others subtypes, sharing the noun after the last item. Each item is an alternative.
+fn adjective_first_in_list(s: &str) -> Option<(Filter, bool, &str)> {
+    let s = s.trim_start();
+    let (w, r) = split_word(s);
+    let adj = w.strip_suffix(',')?;
+    if !matches!(adjective(adj)?, Filter::Supertype(_)) {
+        return None;
+    }
+    let first_of_rest = split_word(r).0.trim_end_matches(',');
+    if !matches!(head_noun(first_of_rest), Some(Filter::Subtype(_))) {
+        return None;
+    }
+    let (f_rest, plural, rest) = parse_object_phrase(r)?;
+    let consumed = r[..r.len() - rest.len()].trim_end();
+    // The last item ("Locus land card") and the noun all items share ("land card").
+    let last = [" or ", " and ", " and/or "]
+        .iter()
+        .filter_map(|sep| consumed.rfind(sep).map(|i| &consumed[i + sep.len()..]))
+        .min_by_key(|x| x.len())?;
+    let shared = split_word(last).1.trim();
+    if shared.is_empty() {
+        return None;
+    }
+    let phrase = format!("{adj} {shared}");
+    let (f_adj, _, rest2) = parse_object_phrase(&phrase)?;
+    if !rest2.trim().is_empty() {
+        return None;
+    }
+    Some((Filter::Or(vec![f_adj, f_rest]), plural, rest))
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     if let Some(r) = two_phrases_same_head(s) {
+        return Some(r);
+    }
+    if let Some(r) = adjective_first_in_list(s) {
         return Some(r);
     }
     let mut s = s.trim_start();

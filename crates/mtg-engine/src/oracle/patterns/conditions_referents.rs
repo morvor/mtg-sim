@@ -55,7 +55,8 @@ pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
     };
     let r = understood(referent_condition(c, b))
         .or_else(|| understood(joined(c, b)))
-        .or_else(|| understood(referent_free(c, b)));
+        .or_else(|| understood(referent_free(c, b)))
+        .or_else(|| understood(super::conditions_compare::parse_without_targets(c, b)));
     // Resolving a subject never changes what later pronouns mean, nor adds targets.
     b.targets.truncate(saved.0);
     b.it = saved.1;
