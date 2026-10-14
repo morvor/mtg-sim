@@ -13,11 +13,7 @@ use mtg_engine::*;
 /// `p` casts the real spell `name` (with the mana for it), with the given targets, and
 /// everything resolves.
 pub fn cast_spell(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
-    supported(name);
-    give_mana_for(t, p, name);
-    let s = t.hand(p, name);
-    t.g.turn.priority = Some(p);
-    t.cast(p, s).targets(targets).go();
+    let s = cast_only(t, p, name, targets);
     t.resolve_all();
     s
 }
@@ -71,4 +67,33 @@ pub fn dies_with_its_controller(t: &mut TestGame, p: PlayerId, x: i64) {
     let s = t.hand(P1, "Earthquake");
     t.cast(P1, s).x(x).go();
     t.resolve_all();
+}
+
+/// `p` casts the real spell `name` (with the mana for it) with the given targets, leaving
+/// it on the stack.
+pub fn cast_only(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
+    supported(name);
+    give_mana_for(t, p, name);
+    let s = t.hand(p, name);
+    t.g.turn.priority = Some(p);
+    // (No queued target answer for a spell without targets: it would be left over.)
+    let b = t.cast(p, s);
+    let b = if targets.is_empty() {
+        b
+    } else {
+        b.targets(targets)
+    };
+    b.go()
+}
+
+/// Destroys a permanent outside of any spell (as a response would) and settles.
+pub fn kill(t: &mut TestGame, id: ObjectId) {
+    let id = t.g.current(id);
+    t.g.destroy(id, None);
+    t.settle();
+}
+
+/// Number of `kind` counters player `p` has.
+pub fn player_counters(t: &TestGame, p: PlayerId, kind: &str) -> u32 {
+    t.g.player(p).counters.get(kind).copied().unwrap_or(0)
 }
