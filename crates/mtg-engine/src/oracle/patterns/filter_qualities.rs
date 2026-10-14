@@ -30,6 +30,41 @@ pub const MOST_COMMON_COLOR: &str = "shares a color with the most common color a
 /// `Filter::Custom`: an object with two or more card types.
 pub const TWO_CARD_TYPES: &str = "has two or more card types";
 
+/// The player "that player" refers to in "a card that player owns", until the effect
+/// parser puts in what it means there ([`that_player_owns`]).
+pub const REFERENCED_PLAYER: Var = vars::USER + 9330;
+
+/// "You may put a card that has an Adventure that player owns from exile into that
+/// player's graveyard", "remove a hit counter from a card that player owns in exile": the
+/// player the text named before.
+fn that_player_owns(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    use super::oracle_hardening_referents::is_no_player_referent;
+    let l = end(l);
+    if !l.contains("that player owns") || is_no_player_referent(&b.it_player) {
+        return None;
+    }
+    let who = match &b.it_player {
+        PlayerRef::You => return None,
+        p => p.clone(),
+    };
+    // A card that player owns goes to its owner's graveyard: that player's.
+    let s = l
+        .replace("that player owns", "the referenced player owns")
+        .replace("into that player's graveyard", "into its owner's graveyard");
+    let saved = b.targets.len();
+    let e = crate::oracle::effects::parse_clause(&s, b)?;
+    let needle = serde_json::to_string(&PlayerRef::Var(REFERENCED_PLAYER)).ok()?;
+    let with = serde_json::to_string(&who).ok()?;
+    let j = serde_json::to_string(&e).ok()?;
+    if !j.contains(&needle) {
+        b.targets.truncate(saved);
+        return None;
+    }
+    serde_json::from_str(&j.replace(&needle, &with)).ok()
+}
+
+inventory::submit! { super::EffectPattern { name: "[instruction about objects] that player owns", priority: 40, parse: that_player_owns } }
+
 fn tested() -> Sel {
     Sel::Var(vars::TESTED)
 }

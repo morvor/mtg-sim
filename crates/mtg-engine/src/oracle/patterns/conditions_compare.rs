@@ -239,6 +239,9 @@ fn parse_inner(c: &str, b: &mut Builder) -> Option<Condition> {
     if let Some(cond) = player_comparison(c, b) {
         return Some(cond);
     }
+    if let Some(cond) = player_owns(c, b) {
+        return Some(cond);
+    }
     if let Some(cond) = exists(c, b) {
         return Some(cond);
     }
@@ -450,6 +453,34 @@ fn player_comparison(c: &str, b: &mut Builder) -> Option<Condition> {
     };
     let p = player_subject(who, b)?;
     Some(Condition::PlayerMatches(p, f))
+}
+
+/// "they own three or more exiled cards with hit counters on them": how many objects
+/// matching the phrase the player owns.
+fn player_owns(c: &str, b: &mut Builder) -> Option<Condition> {
+    let (who, r) = c
+        .split_once(" own ")
+        .or_else(|| c.split_once(" owns "))?;
+    let (cmp, n, rest) = amount_cmp(r)?;
+    let (f, _, tail) = parse_object_phrase(rest.trim())?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let p = match who {
+        "they" => {
+            if is_no_player_referent(&b.it_player) || matches!(b.it_player, PlayerRef::You) {
+                return None;
+            }
+            b.it_player.clone()
+        }
+        "you" => PlayerRef::You,
+        _ => player_subject(who, b)?,
+    };
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![f, Filter::OwnedByPlayer(Box::new(p))])),
+        cmp,
+        n,
+    ))
 }
 
 /// A player subject: "that player", "target player", "that player or that planeswalker's

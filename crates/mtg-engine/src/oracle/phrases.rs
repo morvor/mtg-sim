@@ -301,6 +301,8 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "token" => Filter::Token,
         "historic" => Filter::Historic,
         "face-down" => Filter::FaceDown,
+        // An object in exile ("exiled cards with hit counters on them", CR 406).
+        "exiled" => Filter::InZone(ZoneKind::Exile),
         // CR 406.3, 708: a face-up permanent or exiled card.
         "face-up" => Filter::not(Filter::FaceDown),
         // CR 712.1.
@@ -889,6 +891,16 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // Internal form of "that player controls" after "for each opponent," (see
             // `patterns::per_player_targets`).
             (Filter::ControlledBy(PlayerRel::Iterated), r)
+        } else if let Some(r) = t.strip_prefix("you don't own") {
+            (Filter::not(Filter::OwnedBy(PlayerRel::You)), r)
+        } else if let Some(r) = t.strip_prefix("the referenced player owns") {
+            // Internal form of "that player owns" (see `patterns::filter_qualities`).
+            (
+                Filter::OwnedByPlayer(Box::new(PlayerRef::Var(
+                    crate::oracle::patterns::filter_qualities::REFERENCED_PLAYER,
+                ))),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("you own") {
             (Filter::OwnedBy(PlayerRel::You), r)
         } else if let Some(r) = t.strip_prefix("an opponent owns") {
