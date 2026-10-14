@@ -815,6 +815,16 @@ impl Renderer<'_> {
                 let subj = self.sel(s, Case::Subj);
                 format!("{subj} is {}", join_list(&words, "or"))
             }
+            // "if that spell targets only ~", "if it has a single target".
+            Condition::SelMatches(s, Filter::StackTargets(tf)) => {
+                let subj = self.sel(s, Case::Subj);
+                let t = self.targets_filter(tf);
+                match (t.strip_prefix("that "), t.strip_prefix("with ")) {
+                    (Some(r), _) => format!("{subj} {r}"),
+                    (_, Some(r)) => format!("{subj} has {r}"),
+                    _ => format!("{subj} {t}"),
+                }
+            }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, false) {
                     return c;
