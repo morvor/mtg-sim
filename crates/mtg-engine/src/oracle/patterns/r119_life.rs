@@ -12,6 +12,14 @@ use crate::oracle::CompileContext;
 /// A player phrase used as the subject of a sentence, adding a target slot for "target
 /// player"/"target opponent".
 fn subject(s: &str, b: &mut Builder) -> Option<PlayerRef> {
+    // "that player": the player the text named earlier ("If target player has ..., exchange
+    // life totals with that player").
+    if s.trim() == "that player" {
+        use super::oracle_hardening_referents::is_no_player_referent;
+        if !is_no_player_referent(&b.it_player) && !matches!(b.it_player, PlayerRef::You) {
+            return Some(b.it_player.clone());
+        }
+    }
     let phrase = format!("{} ", s.trim());
     let (r, spec, rest) = parse_player(&phrase)?;
     if !rest.trim().is_empty() {

@@ -1972,6 +1972,11 @@ pub fn note_sacrificed(e: &Effect, b: &mut Builder) {
             _ => false,
         }
     }
+    // ("you may sacrifice another creature": the same, if you do.)
+    let e = match e {
+        Effect::May { effect, .. } => effect.as_ref(),
+        e => e,
+    };
     let sacrifices_one = match e {
         Effect::Sacrifice {
             who, count, filter, ..

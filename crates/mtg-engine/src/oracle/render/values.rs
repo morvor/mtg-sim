@@ -343,6 +343,10 @@ impl Renderer<'_> {
                 let n = self.noun(f, Num::Many);
                 format!("the number of differently named {n}")
             }
+            Value::LargestSameNameGroup(f) => {
+                let n = self.noun(f, Num::Many);
+                format!("the number of {n} with the same name as one another")
+            }
             Value::ColorsSpent => {
                 format!("the number of colors of mana spent to cast {}", self.me())
             }

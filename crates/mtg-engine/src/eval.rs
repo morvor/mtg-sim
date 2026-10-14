@@ -1552,6 +1552,11 @@ impl Game {
                 let objs = self.objects_matching(f, ctx);
                 crate::names::distinct_name_count(objs.iter().map(|o| &self.obj(*o).chars)) as i64
             }
+            Value::LargestSameNameGroup(f) => {
+                let objs = self.objects_matching(f, ctx);
+                crate::names::largest_same_name_group(objs.iter().map(|o| &self.obj(*o).chars))
+                    as i64
+            }
             Value::ManaValuesAmong(f) => {
                 let objs = self.objects_matching(f, ctx);
                 let mvs: std::collections::BTreeSet<u32> =
