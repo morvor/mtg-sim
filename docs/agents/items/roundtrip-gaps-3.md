@@ -34,3 +34,92 @@ parser bug. For the one-use replacement gap: a card whose text has no "the next 
 equivalent) limit but whose AST has one is a parser bug. Add "Parser bugs found" and
 "Remaining" sections (each still-mismatching card with its reason). Regenerate
 docs/ROUNDTRIP.md and docs/roundtrip-passing.txt; `roundtrip --check` must pass.
+
+## Result
+
+26,145 of 29,374 fully supported cards passed at the start (ae5c399); 26,312 of 29,374
+pass on the branch before merging the later landings, 26,342 of 29,462 after (origin's
+passing list had 26,145 + the cards those landings made pass). 141 of the 152 cards in the
+taken clusters pass.
+
+Renderer (new files `events_happened.rs`, `cast_history_terms.rs`, `opt_in.rs`,
+`next_time.rs`, `remembered_groups.rs`; small hooks elsewhere): comparisons of this
+turn's (or last turn's, this combat's, since your last upkeep's) events as past-tense
+clauses ("if ~ didn't attack or come under your control this turn", "if three or more
+cards were put into your graveyard from anywhere other than the battlefield this turn",
+"if an opponent lost 3 or more life this turn", "if you attacked with three or more Merfolk
+this turn", "if a source you controlled dealt 5 or more damage this turn", "during any turn
+you attacked with a token"), "unless it came under your control this turn"; how a spell was
+cast and paid for ("if it wasn't cast", "if one or more of them entered from a graveyard or
+was cast from a graveyard", "if mana from a Treasure was spent to cast it", "if this ability
+has been activated four or more times this turn", "if it's the second creature spell you
+cast this turn"); opt-in choices and their follow-ups ("each player who doesn't loses 3
+life", "for each opponent who does, ..."); one-use damage replacements ("the next time ...
+would deal damage this turn, prevent that damage. You gain life equal to the damage
+prevented this way"); "it's the first combat phase of the turn"; die triggers ("a natural
+20", "your third die each turn"); "simultaneously untap all tapped creatures and tap all
+untapped creatures"; "if you put a Cave onto the battlefield this way"; Rottenmouth Viper's
+"for each blight counter on it, ... unless that player sacrifices ... or discards a card";
+a reflexive trigger's "that permanent" (the creating ability's target, checked in play);
+"the first player controls the second player during the second player's next turn"; "no
+longer goaded"; Blood Sun's and Invasion Plans' rules. A condition about a target the
+instruction names is offered in both orders ("Counter target spell if it was kicked").
+Speculative renderings are wrapped in `attempt`, which undoes target mentions and gaps when
+a wording doesn't apply. The comparison's trailing-"if" rewrite now treats a rendering's
+`{alt:...}` as one piece.
+
+## Parser bugs found
+
+Each has an in-game test in `crates/mtg-engine/tests/cards/roundtrip_gaps_3.rs` that fails
+on the old code (checked by reverting the parser files) and a row in the bug table:
+
+- Shape of the Wiitigo: "put a +1/+1 counter on enchanted creature if it attacked or
+  blocked since your last upkeep": "it" was the Aura (which never attacks), so the counter
+  was always removed. `conditional_followups::trailing_if` no longer reads "it" as the
+  source after an instruction naming the enchanted or equipped creature.
+- Regna, the Redeemer: "if your team gained life this turn" looked only at your own life
+  gain (CR 102.4). `history_conditions::team_condition` (you or a teammate; tested in
+  Two-Headed Giant, both a teammate's and an opponent's gain).
+- Prized Amalgam (and Grist, Voracious Larva, Archfiend's Vessel, Fblthp, the Lost):
+  "if it entered from your graveyard or you cast it from your graveyard" accepted any
+  graveyard, so a creature an opponent reanimated from their own graveyard returned
+  Prized Amalgam. "your [zone]" is now owned by you (CR 400.3; Breathless Knight's "a
+  graveyard" stays any).
+- Tempt with Glory: "For each opponent who does" didn't count an opponent who accepted but
+  controlled no creatures (CR 118.12, the tempting offer ruling: the number of opponents
+  who accepted). `followup_each_player::done_cond`: putting counters on each of a group can
+  always be done.
+
+Checked in play (tests pass on the old code too): Mog, Moogle Warrior (the cards every
+player discarded), Behemoth of Vault 0 (the reflexive trigger destroys the dies trigger's
+target), Fyndhorn Druid and Wave of Rats (a dies trigger remembers what the creature did),
+Samut, Vizier of Naktamun ("that creature entered this turn"), Barrin, Tolarian Archmage
+("a permanent was put into your hand from the battlefield").
+
+## Remaining
+
+- Tangle Kelp, Shape of the Wiitigo (after the fix): pronoun placement. The condition is
+  rendered before the instruction ("as long as enchanted creature attacked ..., enchanted
+  creature doesn't untap"; "X. If C, Y instead" with the names swapped), so the card's "it"
+  lands on the other mention. Same meaning.
+- Rock Jockey: "You can't cast ~ if you've played a land this turn" is compiled as a
+  restriction on any player (`CantCast { who: Any }`) with the condition about you; "you"
+  for a card not on the battlefield is the player who would cast it (CR 109.5), so the two
+  differ only if another player could cast your Rock Jockey. Rendered "players can't cast".
+- Grist, the Plague Swarm: "For each creature card in your graveyard, create a token that's
+  a copy of it" wording (the −6, outside the taken gap).
+- Malamet Battle Glyph: "Choose target creature you control and target creature you don't
+  control. If the creature you control entered this turn, ..." — the targets are named in
+  the condition and the fight rather than chosen up front.
+- Robber of the Rich: "the top card of their library" rendered "defending player's".
+- Imprison: the second ability's "creatures it was blocking that had become blocked by only
+  that creature" rendered "each attacking creature that had become blocked by only it"
+  (the same creatures).
+- Extraordinary Journey: "For each of those cards, its owner may play it" wording (first
+  ability).
+- Wolverine, Best There Is: "Double all damage ~ would deal" rendered as the replacement
+  ("if ~ would deal damage, it deals double that damage instead").
+- Professor Onyx: "If they don't, they lose 3 life. Repeat this process six more times."
+  rendered "each opponent who doesn't loses 3 life", and the repetition as the sequence
+  again "six times".
+- Plague of Vermin: the `loop totals` payment (as in roundtrip-tail-4).

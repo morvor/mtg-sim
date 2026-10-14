@@ -4715,9 +4715,13 @@ impl Renderer<'_> {
             otherwise,
         } = effect
         {
+            // (Only a condition about a target the instruction names.)
+            let mut probe = self.clone();
+            let _ = probe.condition(cond);
             if matches!(otherwise.as_ref(), Effect::Noop)
                 && !matches!(cond, Condition::PrevHappened)
                 && !matches!(then.as_ref(), Effect::Reflexive { .. })
+                && probe.introduced != self.introduced
             {
                 let p = self.player(who, Case::Subj);
                 let t = self.effect(then);
