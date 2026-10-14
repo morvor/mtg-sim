@@ -416,7 +416,23 @@ impl Renderer<'_> {
                 .iter()
                 .any(|p| matches!(p, CostPart::ExileSelf)),
         );
+        // "Remove any number of charge counters from ~: It deals that much damage": X is
+        // the number removed.
+        let saved_removed = std::mem::replace(
+            &mut self.extra.x_removed,
+            !a.is_loyalty
+                && a.cost.parts.iter().any(|p| {
+                    matches!(
+                        p,
+                        CostPart::RemoveCounters {
+                            count: Value::X,
+                            ..
+                        }
+                    )
+                }),
+        );
         let body = self.body(&a.body);
+        self.extra.x_removed = saved_removed;
         self.self_salient = saved_salient;
         self.cost_exiles_self = saved_exiles;
         let mut restr: Vec<String> = Vec::new();

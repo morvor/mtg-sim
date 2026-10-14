@@ -1505,8 +1505,10 @@ impl Renderer<'_> {
                 format!("{a} fights {b}")
             }
             Effect::AddCounters { what, kind, n } => {
-                let (c, w) = self.counted(n, &counter_name(kind));
+                // The object is named before the "where X is" clause about it ("put X
+                // +1/+1 counters on target creature, where X is that creature's power").
                 let mut t = self.sel(what, Case::Obj);
+                let (c, w) = self.counted(n, &counter_name(kind));
                 // "put a +1/+1 counter on each of up to two target creatures".
                 if let Sel::Target(i) = what {
                     let many = self
@@ -4243,6 +4245,18 @@ impl Renderer<'_> {
                 let c = self.condition(cond);
                 let t = self.effect(then);
                 let o = self.effect(otherwise);
+                format!("If {c}, {t}. Otherwise, {o}")
+            }
+            // "You lose life equal to that card's mana value if ~ isn't saddled. Otherwise,
+            // each opponent loses that much life.": the same amount either way, said once.
+            _ if !else_empty && same_life_amount(then, otherwise) => {
+                let c = self.condition(cond);
+                let t = self.effect(then);
+                let mut o2: Effect = otherwise.clone();
+                if let Effect::LoseLife { n, .. } | Effect::GainLife { n, .. } = &mut o2 {
+                    *n = Value::Prev;
+                }
+                let o = self.effect(&o2);
                 format!("If {c}, {t}. Otherwise, {o}")
             }
             _ if !else_empty => {
@@ -7345,4 +7359,22 @@ fn per_mana_spent(e: &Effect) -> Option<Effect> {
         times,
         effect: Box::new(one),
     })
+}
+
+/// Two life instructions with the same amount, worded by a "where X is" clause (not a
+/// plain number), for different players.
+fn same_life_amount(a: &Effect, b: &Effect) -> bool {
+    let amount = |e: &Effect| match e {
+        Effect::LoseLife { who, n } | Effect::GainLife { who, n } => Some((who.clone(), n.clone())),
+        _ => None,
+    };
+    let (Some((wa, na)), Some((wb, nb))) = (amount(a), amount(b)) else {
+        return false;
+    };
+    format!("{na:?}") == format!("{nb:?}")
+        && format!("{wa:?}") != format!("{wb:?}")
+        && !matches!(
+            na,
+            Value::Const(_) | Value::X | Value::Prev | Value::EventAmount
+        )
 }

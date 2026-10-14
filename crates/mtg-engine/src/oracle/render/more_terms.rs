@@ -48,6 +48,37 @@ impl Renderer<'_> {
                     plural(&counter_name(k))
                 ))
             }
+            // "The owner of target nonland permanent puts it into their library second from
+            // the top or on the bottom": the owner chooses where.
+            Effect::ChooseOne {
+                who: PlayerRef::OwnerOf(o),
+                options,
+            } => {
+                let [(_, Effect::Move { what: a, to: x }), (_, Effect::Move { what: b, to: y })] =
+                    options.as_slice()
+                else {
+                    return None;
+                };
+                let same = |s: &Sel| format!("{s:?}") == format!("{o:?}");
+                let lib = |d: &Destination, p: LibraryPosition| {
+                    d.zone == ZoneKind::Library
+                        && format!("{:?}", d.position) == format!("{p:?}")
+                        && d.controller.is_none()
+                        && !d.face_down
+                };
+                if !(same(a)
+                    && same(b)
+                    && lib(x, LibraryPosition::FromTop(1))
+                    && lib(y, LibraryPosition::Bottom))
+                {
+                    return None;
+                }
+                let t = self.sel(o, Case::Obj);
+                let poss = super::nouns::possessive(&t);
+                Some(format!(
+                    "{{alt:the owner of {t}|{poss} owner}} puts it into their library second from the top or on the bottom"
+                ))
+            }
             _ => None,
         }
     }

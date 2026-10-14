@@ -23,6 +23,10 @@ pub(crate) struct ExtraState {
     pub life_paid: bool,
     /// How X reads after "pay any amount" when it was redefined ("twice that many").
     pub x_words: Option<&'static str>,
+    /// X in the activated ability being rendered is the number of counters removed to pay
+    /// its cost ("Remove any number of charge counters from ~: It deals that much
+    /// damage").
+    pub x_removed: bool,
 }
 
 /// The past tense of a past participle ("drawn" -> "drew").

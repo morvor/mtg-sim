@@ -497,6 +497,14 @@ impl Renderer<'_> {
         if let Some(x) = self.stored_x(v) {
             return (x, None);
         }
+        // "Pay any amount of {E}. ~ deals that much damage": the amount paid; "Remove any
+        // number of counters: It deals that much damage": the number removed.
+        if matches!(v, Value::X) && (self.extra.x_paid || self.extra.x_removed) {
+            return match self.extra.x_words {
+                Some(w) if self.extra.x_paid => (w.into(), None),
+                _ => ("{alt:that much|that many|X}".into(), None),
+            };
+        }
         // A number stored earlier: "that many", or the X the text already defined.
         if matches!(v, Value::Var(n) if *n != vars::EXCESS) {
             return ("{alt:that many|X}".into(), None);
@@ -1043,6 +1051,19 @@ impl Renderer<'_> {
             };
         }
         let (ctrl, rest) = split_controller(f);
+        // "you control the creature with the greatest power or tied for the greatest
+        // power": one of yours has power at least the greatest among all creatures.
+        if let (Some(PlayerRel::You), Filter::And(v), false) = (ctrl, &rest, negated) {
+            if let [t @ Filter::Type(_), Filter::Power(Cmp::Ge, p)] = v.as_slice() {
+                if matches!(p.as_ref(), Value::GreatestPower(g) if format!("{g:?}") == format!("{t:?}"))
+                {
+                    let n = self.noun(t, Num::One);
+                    return format!(
+                        "you control the {n} with the greatest power or tied for the greatest power"
+                    );
+                }
+            }
+        }
         let zone = f.zone();
         match (ctrl, zone) {
             // "your opponents control no creatures": no opponent controls one.
