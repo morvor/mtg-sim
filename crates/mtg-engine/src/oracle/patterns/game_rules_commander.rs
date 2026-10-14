@@ -268,3 +268,31 @@ fn commander_costs_less(l: &str, text: &str, _ctx: &CompileContext) -> Option<Ve
 }
 
 inventory::submit! { super::StaticPattern { name: "game rules: your commander costs less for each time it's been cast", priority: 100, parse: commander_costs_less } }
+
+/// "cast your commander from the command zone without paying its mana cost" (Geode
+/// Golem, after "you may"): one of your commanders there, cast as the ability resolves
+/// (CR 608.2g); the commander tax is still paid (CR 903.8, 118.9d).
+fn cast_your_commander_free(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if end(l) != "cast your commander from the command zone without paying its mana cost" {
+        return None;
+    }
+    Some(Effect::CastCard {
+        who: PlayerRef::You,
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                Filter::Commander,
+                Filter::Card,
+                Filter::OwnedBy(PlayerRel::You),
+                Filter::InZone(ZoneKind::Command),
+            ]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        free: true,
+        optional: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "game rules: cast your commander from the command zone for free", priority: 100, parse: cast_your_commander_free } }

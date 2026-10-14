@@ -272,3 +272,23 @@ fn myth_unbound_offsets_part_of_the_commander_tax() {
     t.lands(P0, "Mountain", 1);
     t.cast(P0, giant).go();
 }
+
+#[test]
+fn geode_golem_casts_your_commander_paying_only_the_tax() {
+    cr!("903.8", "118.9d");
+    assert_supported(&["Geode Golem"]);
+    let mut t = commander_game();
+    let golem = t.battlefield(P0, "Geode Golem");
+    let giant = commander_in_zone(&mut t, P0, "Hill Giant");
+    t.g.players[0]
+        .commander_casts
+        .insert("Hill Giant".into(), 1);
+    // The {2} tax only.
+    let lands = t.lands(P0, "Mountain", 2);
+    t.answer_yes(P0, true);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(golem, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(giant)));
+    assert!(lands.iter().all(|l| t.obj_now(*l).tapped));
+}
