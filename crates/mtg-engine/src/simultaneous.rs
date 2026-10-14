@@ -647,6 +647,7 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
             }
         }
         Effect::Move { what, to } if plannable(g, e, ctx, p) => {
+            let what = &crate::attach::only_enterable(g, what, to, ctx);
             let objs: Vec<ObjectId> = g
                 .resolve_objects(what, ctx)
                 .into_iter()

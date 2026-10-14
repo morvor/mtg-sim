@@ -125,6 +125,11 @@ impl Ctx {
             .find(|(v, q, _)| *v == var && *q == p)
             .map_or(0, |(_, _, n)| *n)
     }
+    /// Sets `p`'s total under `var` to `n`.
+    pub fn set_tally(&mut self, var: Var, p: PlayerId, n: i64) {
+        self.tallies.retain(|(v, q, _)| !(*v == var && *q == p));
+        self.tallies.push((var, p, n));
+    }
     /// Adds `n` to `p`'s running total under `var`.
     pub fn add_tally(&mut self, var: Var, p: PlayerId, n: i64) {
         match self

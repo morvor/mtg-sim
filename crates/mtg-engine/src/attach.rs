@@ -337,6 +337,43 @@ pub(crate) fn could_enter_unspecified(g: &mut Game, id: ObjectId, controller: Pl
     })
 }
 
+/// A choice of cards to put onto the battlefield without saying what they're attached to
+/// ("each player may put a permanent card from their hand onto the battlefield"): an Aura
+/// with nothing it could legally enchant can't be chosen (CR 303.4g; Thieves' Auction
+/// ruling). Other selections are returned as they are.
+pub fn only_enterable(g: &mut Game, what: &Sel, to: &Destination, ctx: &Ctx) -> Sel {
+    let Sel::Choose {
+        chooser,
+        filter,
+        count,
+        up_to,
+        store,
+    } = what
+    else {
+        return what.clone();
+    };
+    if to.zone != ZoneKind::Battlefield || to.attached_to.is_some() {
+        return what.clone();
+    }
+    let controller = to
+        .controller
+        .as_ref()
+        .and_then(|p| g.eval_player(p, ctx))
+        .unwrap_or(ctx.controller);
+    let cands = g.objects_matching(filter, ctx);
+    let ok: Vec<ObjectId> = cands
+        .into_iter()
+        .filter(|o| could_enter_unspecified(g, *o, controller))
+        .collect();
+    Sel::Choose {
+        chooser: chooser.clone(),
+        filter: Filter::and(vec![filter.clone(), Filter::Objects(ok)]),
+        count: count.clone(),
+        up_to: *up_to,
+        store: *store,
+    }
+}
+
 /// Decides what a permanent entering the battlefield is attached to, adjusting the move
 /// (CR 301.5e, 303.4f–i, 310.10). Returns false if it can't enter: an Aura with no legal
 /// object or player to enchant, or one put onto the battlefield attached to something it

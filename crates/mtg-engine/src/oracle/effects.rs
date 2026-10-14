@@ -1064,6 +1064,10 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     if let Some(x) = named_possessive_player(s, b) {
         return Some(x);
     }
+    // "the player to your right" (`patterns::seats_grammar`).
+    if let Some((p, r)) = super::patterns::seats_grammar::seat_phrase(s) {
+        return Some((p, r.to_string()));
+    }
     let with_space = format!("{s} ");
     if let Some((r, spec, rest)) = parse_player(&with_space) {
         let rest = rest.to_string();

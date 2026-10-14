@@ -12,8 +12,9 @@ use crate::ability::{vars, Var};
 pub const LIFE_PAID: Var = vars::USER + 9608;
 /// The mana each player paid this way.
 pub const MANA_PAID: Var = vars::USER + 9609;
-/// The cards each player revealed this way.
-pub const REVEALED: Var = vars::USER + 9610;
+/// The number of cards each player's latest card action affected ("for each card they
+/// revealed this way"; recorded with `kw::hand_graveyard_actions::RECORD_THAT_MANY`).
+pub const CARDS_ACTED_ON: Var = vars::USER + 9610;
 /// Set (to 1) during a pass of a process in which some player did the optional
 /// instruction ("Repeat this process until no one puts a card onto the battlefield").
 pub const SOMEONE_DID: Var = vars::USER + 9611;
@@ -23,7 +24,7 @@ pub fn words(var: Var) -> &'static str {
     match var {
         LIFE_PAID => "the life they paid this way",
         MANA_PAID => "the amount of mana they paid this way",
-        REVEALED => "the number of cards they revealed this way",
+        CARDS_ACTED_ON => "the number of cards they revealed this way",
         _ => "their total",
     }
 }

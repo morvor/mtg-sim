@@ -379,6 +379,7 @@ impl Game {
                 }
             }
             Effect::Move { what, to } => {
+                let what = &crate::attach::only_enterable(self, what, to, ctx);
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
