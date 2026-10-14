@@ -370,3 +370,39 @@ fn for_each_search_same_name(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! {
     EffectPattern { name: "for each [object], search for a card with the same name as that [object]", priority: 89, parse: for_each_search_same_name }
 }
+
+/// "that shares a land type with a land you control", "that doesn't share a land type
+/// with a land you control" (Hiveheart Shaman): a land type (CR 205.3i) the card has and
+/// one of those objects has.
+fn shares_land_type<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let (negate, r) = if let Some(r) = t.strip_prefix("that shares a land type with ") {
+        (false, r)
+    } else {
+        (true, t.strip_prefix("that doesn't share a land type with ")?)
+    };
+    let (sel, rest) = super::filters_relational::object_in(r)?;
+    let Sel::All(objs) = sel else {
+        return None;
+    };
+    let alts: Vec<Filter> = crate::types::land_types()
+        .into_iter()
+        .map(|lt| {
+            let st = crate::types::Subtype::new(lt.as_str());
+            Filter::and(vec![
+                Filter::Subtype(st.clone()),
+                Filter::ValueCmp(
+                    Box::new(Value::CountSel(Box::new(Sel::All(Filter::and(vec![
+                        objs.clone(),
+                        Filter::Subtype(st),
+                    ]))))),
+                    Cmp::Ge,
+                    Box::new(Value::c(1)),
+                ),
+            ])
+        })
+        .collect();
+    let f = Filter::Or(alts);
+    Some((if negate { Filter::not(f) } else { f }, rest))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "that shares / doesn't share a land type with [objects]", priority: 100, parse: shares_land_type } }

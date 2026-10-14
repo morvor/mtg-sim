@@ -137,6 +137,16 @@ fn self_and(s: &str, b: &mut Builder) -> Option<Sel> {
     }
     // "put ~ and each creature blocking or blocked by it on top of their owners'
     // libraries" (Vortex Elemental).
+    // "put ~ and each creature it's blocking on top of their owners' libraries" (Gomazoa).
+    if r == "each creature it's blocking" {
+        return Some(Sel::Union(vec![
+            Sel::This,
+            Sel::All(Filter::and(vec![
+                Filter::Type(crate::types::CardType::Creature),
+                Filter::BlockedBySource,
+            ])),
+        ]));
+    }
     if r == "each creature blocking or blocked by it" {
         return Some(Sel::Union(vec![
             Sel::This,

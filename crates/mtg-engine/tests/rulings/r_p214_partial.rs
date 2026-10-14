@@ -53,7 +53,9 @@ fn rohirrim_chargers_is_exerted_as_it_is_declared_as_an_attacker() {
         "You can exert Rohirrim Chargers as you declare it as an attacking creature. You can't do so later in combat, and creatures put onto the battlefield attacking can't be exerted. Any abilities that trigger on exerting an attacking creature will resolve before blockers are declared."
     );
     has_ability("Rohirrim Chargers", "exert");
-    only_unsupported("Rohirrim Chargers", "reveal cards from the top of your library until");
+    // Its other ability (reveal until an Equipment card) is supported too
+    // (`cards2-zones-dig`).
+    supported("Rohirrim Chargers");
     supported("Trueheart Twins");
     // Rohirrim Chargers (4/4): "You may exert this creature as it attacks." Trueheart Twins:
     // "Whenever you exert a creature, creatures you control get +1/+0 until end of turn."
@@ -115,7 +117,9 @@ fn tap_and_freeze_and_stun_counters_dont_exert_rohirrim_chargers() {
         "You can't exert a creature unless an effect allows you to do so. Similar effects that \"tap and freeze\" a creature or put stun counters on a creature don't exert that creature."
     );
     has_ability("Rohirrim Chargers", "exert");
-    only_unsupported("Rohirrim Chargers", "reveal cards from the top of your library until");
+    // Its other ability (reveal until an Equipment card) is supported too
+    // (`cards2-zones-dig`).
+    supported("Rohirrim Chargers");
     supported("Decision Paralysis");
     // Trueheart Twins would see an exert.
     let mut t = TestGame::new(2);

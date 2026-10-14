@@ -534,3 +534,354 @@ fn reveals_the_chosen_card(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "that player reveals the chosen card", priority: 100, parse: reveals_the_chosen_card } }
+
+// ---------------------------------------------------------------------------
+// Scroll Rack, Dream Cache, Psychotic Episode, Eladamri
+// ---------------------------------------------------------------------------
+
+/// The cards an exile from a hand set aside (Scroll Rack's "the exiled cards").
+const SET_ASIDE: Var = vars::USER + 2331;
+
+/// "Put that many cards from the top of your library into your hand." after cards were
+/// exiled (Scroll Rack): as many as the previous instruction exiled; "the exiled cards"
+/// are still those.
+fn that_many_from_top_into_hand(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if end(l) != "put that many cards from the top of your library into your hand" {
+        return false;
+    }
+    // The exile, possibly followed by records of how many ("that many").
+    let exiles = match &*prev {
+        Effect::Exile { .. } => true,
+        Effect::Seq(v) => v
+            .iter()
+            .rev()
+            .find(|e| {
+                !matches!(
+                    e,
+                    Effect::StoreValue { .. } | Effect::Store { .. } | Effect::Custom(_)
+                )
+            })
+            .is_some_and(|e| matches!(e, Effect::Exile { .. })),
+        _ => false,
+    };
+    if !exiles {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::Store {
+            var: SET_ASIDE,
+            sel: Sel::Var(vars::IT),
+        },
+        Effect::Move {
+            what: Sel::TopOfLibrary(
+                PlayerRef::You,
+                Value::CountSel(Box::new(Sel::Var(SET_ASIDE))),
+            ),
+            to: Destination::zone(ZoneKind::Hand),
+        },
+    ]);
+    b.named
+        .push(("the exiled cards".to_string(), Sel::Var(SET_ASIDE)));
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "put that many cards from the top of your library into your hand (after an exile)", priority: 95, apply: that_many_from_top_into_hand } }
+
+/// "Then look at the exiled cards and put them on top of your library in any order."
+/// (Scroll Rack): the cards set aside (the player who exiled them face down may look at
+/// them, CR 406.3).
+fn put_exiled_back_on_top(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if l != "look at the exiled cards and put them on top of your library in any order" {
+        return None;
+    }
+    let what = b
+        .named
+        .iter()
+        .rev()
+        .find_map(|(n, s)| (n == "the exiled cards").then(|| s.clone()))?;
+    if !matches!(what, Sel::Var(SET_ASIDE)) {
+        return None;
+    }
+    Some(Effect::Move {
+        what,
+        to: Destination::library_top(),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "look at the exiled cards and put them on top of your library in any order", priority: 100, parse: put_exiled_back_on_top } }
+
+/// The cards chosen from a hand to put into a library.
+const FROM_HAND_TO_LIBRARY: Var = vars::USER + 2332;
+
+/// "put two cards from your hand both on top of your library or both on the bottom of
+/// your library" (Dream Cache): the player chooses the cards, then one position for both.
+fn both_top_or_both_bottom(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("put ")?;
+    let (n, r) = crate::oracle::phrases::parse_number(r)?;
+    let r = r.trim_start().strip_prefix("cards from your hand ")?;
+    if r != "both on top of your library or both on the bottom of your library" {
+        return None;
+    }
+    let _ = b;
+    let mut to = Destination::library_top();
+    to.position_choice = vec![LibraryPosition::Top, LibraryPosition::Bottom];
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: FROM_HAND_TO_LIBRARY,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: Filter::and(vec![
+                    Filter::Card,
+                    Filter::InZone(ZoneKind::Hand),
+                    Filter::OwnedBy(PlayerRel::You),
+                ]),
+                count: n,
+                up_to: false,
+                store: None,
+            },
+        },
+        Effect::Move {
+            what: Sel::Var(FROM_HAND_TO_LIBRARY),
+            to,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "put N cards from your hand both on top of your library or both on the bottom", priority: 100, parse: both_top_or_both_bottom } }
+
+/// The cards revealed from a hand and a library ("a card revealed this way").
+const REVEALED_HAND_AND_TOP: Var = vars::USER + 2333;
+
+/// "Target player reveals their hand and the top card of their library. You choose a card
+/// revealed this way. That player puts the chosen card on the bottom of their library."
+/// (Psychotic Episode).
+fn reveals_hand_and_top(l: &str, b: &mut Builder) -> Option<Effect> {
+    let subject = end(l).strip_suffix(" reveals their hand and the top card of their library")?;
+    let saved = b.targets.len();
+    let (who, extra) = player_ref(subject, b)?;
+    if !extra.trim().is_empty() || !matches!(who, PlayerRef::Target(_)) {
+        b.targets.truncate(saved);
+        return None;
+    }
+    let top = Sel::TopOfLibrary(who.clone(), Value::c(1));
+    b.it_player = who.clone();
+    b.named.push((
+        "\u{1}revealed hand and top".to_string(),
+        Sel::Var(REVEALED_HAND_AND_TOP),
+    ));
+    Some(Effect::seq(vec![
+        Effect::RevealHand { who: who.clone() },
+        crate::kw::zones_dig_effects::reveal_effect(&top)?,
+        Effect::Store {
+            var: REVEALED_HAND_AND_TOP,
+            sel: Sel::Union(vec![
+                Sel::All(Filter::and(vec![
+                    Filter::Card,
+                    Filter::InZone(ZoneKind::Hand),
+                    Filter::OwnedByPlayer(Box::new(who)),
+                ])),
+                top,
+            ]),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "[player] reveals their hand and the top card of their library", priority: 100, parse: reveals_hand_and_top } }
+
+/// "You choose a card revealed this way." after [`reveals_hand_and_top`].
+fn choose_a_card_revealed(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "you choose a card revealed this way" {
+        return None;
+    }
+    let revealed = b
+        .named
+        .iter()
+        .find_map(|(n, s)| (n == "\u{1}revealed hand and top").then(|| s.clone()))?;
+    b.named
+        .push(("the chosen card".to_string(), Sel::Var(FROM_HAND)));
+    b.it = Sel::Var(FROM_HAND);
+    Some(Effect::Store {
+        var: FROM_HAND,
+        sel: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::In(Box::new(revealed)),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+    })
+}
+
+inventory::submit! { EffectPattern { name: "you choose a card revealed this way (a hand and a library's top card)", priority: 100, parse: choose_a_card_revealed } }
+
+/// The card revealed from a hand or the top of a library.
+const REVEALED_ONE: Var = vars::USER + 2334;
+
+/// "Reveal a card from your hand or the top card of your library." (Eladamri, Korvecdal):
+/// one of them, chosen and revealed; "it" afterward.
+fn reveal_from_hand_or_top(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "reveal a card from your hand or the top card of your library" {
+        return None;
+    }
+    // The cards it may be (a card in hand, the top card of the library).
+    let choices = Sel::Union(vec![
+        Sel::All(Filter::and(vec![
+            Filter::Card,
+            Filter::InZone(ZoneKind::Hand),
+            Filter::OwnedBy(PlayerRel::You),
+        ])),
+        Sel::TopOfLibrary(PlayerRef::You, Value::c(1)),
+    ]);
+    let choose = Sel::Choose {
+        chooser: PlayerRef::You,
+        filter: Filter::In(Box::new(Sel::Var(REVEALED_ONE))),
+        count: Value::c(1),
+        up_to: false,
+        store: None,
+    };
+    b.it = Sel::Var(REVEALED_ONE);
+    b.named
+        .push(("\u{1}revealed one".to_string(), Sel::Var(REVEALED_ONE)));
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: REVEALED_ONE,
+            sel: choices,
+        },
+        Effect::Store {
+            var: REVEALED_ONE,
+            sel: choose,
+        },
+        crate::kw::zones_dig_effects::reveal_effect(&Sel::Var(REVEALED_ONE))?,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "reveal a card from your hand or the top card of your library", priority: 100, parse: reveal_from_hand_or_top } }
+
+/// "If you reveal a creature card this way, put it onto the battlefield." after
+/// [`reveal_from_hand_or_top`].
+fn if_you_reveal_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if you reveal ") else {
+        return false;
+    };
+    let Some((desc, rest)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    let Some(one) = b
+        .named
+        .iter()
+        .find_map(|(n, s)| (n == "\u{1}revealed one").then(|| s.clone()))
+    else {
+        return false;
+    };
+    let Some(desc) = desc.strip_prefix("a ").or_else(|| desc.strip_prefix("an ")) else {
+        return false;
+    };
+    let Some(f) = super::card_flow_search::card_filter(desc, b) else {
+        return false;
+    };
+    b.it = one.clone();
+    let Some(then) = crate::oracle::effects::parse_clause(rest, b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::SelMatches(one, f),
+            then: Box::new(then),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "if you reveal a [card] this way, [effect] (a card from a hand or a library)", priority: 95, apply: if_you_reveal_this_way } }
+
+// ---------------------------------------------------------------------------
+// Cards with a name in a hand and graveyard
+// ---------------------------------------------------------------------------
+
+/// "Then that player reveals their hand and exiles all cards with that name from their
+/// hand and graveyard." (Legion's End), "its controller reveals their hand and exiles all
+/// cards from it with the same name as that creature" (Hour of Glory): the cards named
+/// like the object the text targeted (as it last existed, CR 201.2).
+fn reveals_hand_and_exiles_named(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (subject, r) = l.split_once(" reveals their hand and exiles all cards ")?;
+    let zones: Vec<ZoneKind> = match r {
+        "with that name from their hand and graveyard" => {
+            vec![ZoneKind::Hand, ZoneKind::Graveyard]
+        }
+        "from it with the same name as that creature" => vec![ZoneKind::Hand],
+        _ => return None,
+    };
+    // The object named: the target.
+    let slot = b.targets.len().checked_sub(1)? as u8;
+    if !matches!(b.targets[slot as usize].what, TargetKind::Object(_)) {
+        return None;
+    }
+    let (who, extra) = player_ref(subject, b)?;
+    if !extra.trim().is_empty() {
+        return None;
+    }
+    let in_zones = Filter::Or(zones.into_iter().map(Filter::InZone).collect());
+    Some(Effect::seq(vec![
+        Effect::RevealHand { who: who.clone() },
+        Effect::Exile {
+            what: Sel::All(Filter::and(vec![
+                Filter::Card,
+                in_zones,
+                Filter::OwnedByPlayer(Box::new(who)),
+                Filter::SameNameAs(Box::new(Sel::Target(slot))),
+            ])),
+            face_down: false,
+            link: false,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "[player] reveals their hand and exiles all cards with that name from it", priority: 100, parse: reveals_hand_and_exiles_named } }
+
+/// "that player discards it unless they pay 1 life" about a card revealed from their
+/// hand (Wand of Ith): that card.
+fn discards_revealed_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !matches!(b.it, Sel::Var(vars::IT)) {
+        return None;
+    }
+    let l = end(l);
+    let (head, tail) = [" discards it", " discards that card"]
+        .iter()
+        .find_map(|p| l.split_once(p))?;
+    if !tail.is_empty() && !tail.starts_with(" unless ") {
+        return None;
+    }
+    let mut e = crate::oracle::effects::parse_clause(&format!("{head} discards a card{tail}"), b)?;
+    fn fix(e: &mut Effect) -> usize {
+        match e {
+            Effect::Discard {
+                n, random, filter, ..
+            } if !*random => {
+                *n = Value::CountSel(Box::new(Sel::Var(vars::IT)));
+                *filter = Filter::In(Box::new(Sel::Var(vars::IT)));
+                1
+            }
+            Effect::Seq(v) => v.iter_mut().map(fix).sum(),
+            Effect::PayOptional {
+                then, otherwise, ..
+            }
+            | Effect::If {
+                then, otherwise, ..
+            } => fix(then) + fix(otherwise),
+            Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => fix(effect),
+            _ => 0,
+        }
+    }
+    (fix(&mut e) == 1).then_some(e)
+}
+
+inventory::submit! { EffectPattern { name: "that player discards it (the revealed card) [unless ...]", priority: 100, parse: discards_revealed_card } }
