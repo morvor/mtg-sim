@@ -774,12 +774,33 @@ inventory::submit! { EffectPattern { name: "basic effects: each [object] deals d
 fn targets_each_deal_their_power(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (subject, recipient) = l.split_once(" each deal damage equal to their power to ")?;
-    let (spec, tail) = parse_target(subject)?;
-    if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+    // "Target creature you control and up to one other target legendary creature you
+    // control each deal ...": several target phrases (Friendly Rivalry).
+    let mut phrases = vec![];
+    match parse_target(subject) {
+        Some((spec, tail)) if end(tail).is_empty() => phrases.push((spec, subject)),
+        _ => {
+            let (a, c) = subject.split_once(" and ")?;
+            for p in [a, c] {
+                let (spec, tail) = parse_target(p)?;
+                if !end(tail).is_empty() {
+                    return None;
+                }
+                phrases.push((spec, p));
+            }
+        }
+    }
+    if phrases
+        .iter()
+        .any(|(spec, _)| !matches!(spec.what, TargetKind::Object(_)))
+    {
         return None;
     }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let slot = b.add_target(spec, subject);
+    let slots: Vec<u8> = phrases
+        .into_iter()
+        .map(|(spec, text)| b.add_target(spec, text))
+        .collect();
     let restore = |b: &mut Builder| {
         b.targets.truncate(saved.0);
         b.it = saved.1.clone();
@@ -794,8 +815,13 @@ fn targets_each_deal_their_power(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     const EACH: Var = vars::USER + 3331;
+    let sel = if slots.len() == 1 {
+        Sel::Target(slots[0])
+    } else {
+        Sel::Union(slots.into_iter().map(Sel::Target).collect())
+    };
     Some(Effect::ForEach {
-        sel: Sel::Target(slot),
+        sel,
         var: EACH,
         effect: Box::new(Effect::DealDamage {
             source: Sel::Var(EACH),

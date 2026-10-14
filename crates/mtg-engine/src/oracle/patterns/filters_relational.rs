@@ -272,6 +272,24 @@ pub fn value_in(t: &str) -> Option<(Value, &str)> {
             return Some((Value::EventAmount, r));
         }
     }
+    // "the number of lands that player controls" in a qualifier of objects a player
+    // does something with ("Each opponent can't cast noncreature spells with mana value
+    // greater than the number of lands that player controls"): that object's controller.
+    if let Some(x) = t.strip_prefix("the number of ") {
+        if let Some((f, true, r)) = parse_object_phrase(x) {
+            if let Some(rest) = r.trim_start().strip_prefix("that player controls") {
+                if word_end(rest) && !mentions_referent(&f) {
+                    let theirs = Filter::and(vec![
+                        f,
+                        Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(
+                            Box::new(Sel::Var(vars::TESTED)),
+                        ))),
+                    ]);
+                    return Some((Value::Count(theirs), rest));
+                }
+            }
+        }
+    }
     if let Some((v, rest)) = with_builder(|b| super::r107_numbers::value_phrase(t, b)) {
         // A value naming an object ("the number of counters on it") ends at the object.
         let rest = tail_of(t, &rest)?;
@@ -301,11 +319,20 @@ fn exiled_with_source() -> Filter {
 /// of them), "creatures you control".
 pub fn object_in(t: &str) -> Option<(Sel, &str)> {
     let t = t.trim_start();
+    // "the enchanted creature's toughness": the enchanted creature.
+    if let Some(r) = t
+        .strip_prefix("the ")
+        .filter(|r| r.starts_with("enchanted ") || r.starts_with("equipped "))
+    {
+        return object_in(r);
+    }
     let word_end = |r: &str| r.is_empty() || r.starts_with([' ', ',', '.', '\'']);
     for (p, sel) in [
         ("the sacrificed creature", Sel::Var(vars::SACRIFICED)),
         ("the sacrificed permanent", Sel::Var(vars::SACRIFICED)),
         ("the sacrificed artifact", Sel::Var(vars::SACRIFICED)),
+        // "than the creature that died" (a dies trigger's object, as it last existed).
+        ("the creature that died", Sel::Var(REFERENT_THAT)),
         // Cards a linked ability of the source exiled (CR 607.2a).
         ("the exiled card", Sel::All(exiled_with_source())),
         ("a card exiled with ~", Sel::All(exiled_with_source())),
@@ -386,6 +413,11 @@ pub fn tested(stat: Stat) -> Value {
 
 /// An object whose stat compares with the value.
 pub fn stat_filter(stat: Stat, cmp: Cmp, v: Value) -> Filter {
+    // A value about the object itself (its controller's lands): compared with it bound.
+    let tested_needle = format!("{{\"Var\":{}}}", vars::TESTED);
+    if serde_json::to_string(&v).is_ok_and(|j| j.contains(&tested_needle)) {
+        return Filter::ValueCmp(Box::new(tested(stat)), cmp, Box::new(v));
+    }
     let v = Box::new(v);
     match stat {
         Stat::Power => Filter::Power(cmp, v),
@@ -399,6 +431,8 @@ fn cmp_phrase(t: &str) -> Option<(Cmp, &str)> {
     for (p, c) in [
         ("less than or equal to ", Cmp::Le),
         ("greater than or equal to ", Cmp::Ge),
+        ("equal to or less than ", Cmp::Le),
+        ("equal to or greater than ", Cmp::Ge),
         ("less than ", Cmp::Lt),
         ("greater than ", Cmp::Gt),
         ("equal to ", Cmp::Eq),

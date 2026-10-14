@@ -43,6 +43,12 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
             return Some((Value::Sum(vec![Value::X, Value::Const(n)]), rest));
         }
     }
+    // "up to one hundred target creatures" (Baldin, Century Herdmaster).
+    if let Some(rest) = s.strip_prefix("one hundred") {
+        if rest.is_empty() || rest.starts_with(' ') {
+            return Some((Value::Const(100), rest.trim_start()));
+        }
+    }
     let (w, rest) = split_word(s);
     let n = match w {
         "a" | "an" | "one" | "1" => 1,
@@ -1708,6 +1714,13 @@ fn parse_stat_suffix(t: &str) -> Option<(Filter, &str)> {
 /// Parses a target phrase. Returns (spec, rest).
 pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
     let mut s = s.trim_start();
+    // "each of X target creatures": X targets (CR 601.2c), each of which the instruction
+    // affects.
+    if let Some(r) = strip(s, "each of ") {
+        if parse_number(r).is_some_and(|(_, r2)| strip(r2, "target ").is_some()) {
+            s = r;
+        }
+    }
     let mut min = Value::Const(1);
     let mut max = Value::Const(1);
     let mut another = false;
@@ -1854,6 +1867,7 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
             (TargetKind::Object(f), r)
         }
     };
+    let (what, rest) = player_alternatives(what, &s[..s.len() - rest.len()], rest);
     // "any target of an opponent's choice" (CR 115.1, 601.2c): an opponent chooses it.
     let (chosen_by_opponent, rest) = match rest.trim_start().strip_prefix("of an opponent's choice")
     {
@@ -1906,6 +1920,58 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         chosen_by: None,
     };
     Some((spec, rest))
+}
+
+/// Players among the kinds a target may be: "target creature token, player, or
+/// planeswalker", "any number of target creatures, planeswalkers, and/or players", "any
+/// number of target players or planeswalkers" (CR 115.1, 115.4).
+fn player_alternatives<'a>(
+    what: TargetKind,
+    consumed: &str,
+    rest: &'a str,
+) -> (TargetKind, &'a str) {
+    let planeswalker_alt = |r: &'a str| -> Option<&'a str> {
+        let r = r.trim_start();
+        let r = r.strip_prefix(", ").unwrap_or(r);
+        let r = r
+            .strip_prefix("and/or ")
+            .or_else(|| r.strip_prefix("or "))?;
+        strip(r, "planeswalkers").or_else(|| strip(r, "planeswalker"))
+    };
+    match what {
+        TargetKind::Object(f) => {
+            let c = consumed.trim_end();
+            let listed = c.ends_with(',') || c.ends_with(" or") || c.ends_with(" and/or");
+            let r = rest.trim_start();
+            let after = if listed {
+                strip(r, "players").or_else(|| strip(r, "player"))
+            } else {
+                None
+            };
+            match after {
+                Some(r2) => {
+                    // "player, or planeswalker": another object kind after the player.
+                    let (f, r3) = match planeswalker_alt(r2) {
+                        Some(r3) => (
+                            Filter::Or(vec![f, Filter::Type(CardType::Planeswalker)]),
+                            r3,
+                        ),
+                        None => (f, r2),
+                    };
+                    (TargetKind::ObjectOrPlayer(f, PlayerFilter::Any), r3)
+                }
+                None => (TargetKind::Object(f), rest),
+            }
+        }
+        TargetKind::Player(pf) => match planeswalker_alt(rest) {
+            Some(r) => (
+                TargetKind::ObjectOrPlayer(Filter::Type(CardType::Planeswalker), pf),
+                r,
+            ),
+            None => (TargetKind::Player(pf), rest),
+        },
+        w => (w, rest),
+    }
 }
 
 /// A requirement on several targets taken together, after their object phrase ("two
