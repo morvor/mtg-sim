@@ -869,6 +869,8 @@ pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Opt
     }
     if let Some(cond) = cast_condition(c, b)
         .or_else(|| their_last_turn(c, Some(b)))
+        .or_else(|| source_to_referent(c, b))
+        .or_else(|| nth_time_counters(c, b))
         .or_else(|| phase_condition(c))
         .or_else(|| resolved_ordinal(c))
         .or_else(|| nth_spell(c, b))
@@ -1676,6 +1678,76 @@ fn their_last_turn_free(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "history: a player [did] during their last turn", priority: 900, parse: their_last_turn_free } }
+
+/// "~ dealt damage to it this turn" (the source to a referent): the damage events whose
+/// recipient is that object.
+fn source_to_referent(c: &str, b: &mut Builder) -> Option<Condition> {
+    if !c.starts_with("~ ") || !c.contains(" to it ") {
+        return None;
+    }
+    let sel = match &b.it {
+        Sel::This => return None,
+        it if super::oracle_hardening_referents::is_no_referent(it) => return None,
+        it => it.clone(),
+    };
+    let cond = history_condition(&c.replacen(" to it ", " to a permanent ", 1))?;
+    let mut json = serde_json::to_value(&cond).ok()?;
+    let with = serde_json::to_value(DamageRecipient::Object(Filter::In(Box::new(sel)))).ok()?;
+    let mut n = 0;
+    fn walk(v: &mut serde_json::Value, with: &serde_json::Value, n: &mut usize) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, x) in m.iter_mut() {
+                    if k == "to" && x.get("Object").is_some() {
+                        *x = with.clone();
+                        *n += 1;
+                    } else {
+                        walk(x, with, n);
+                    }
+                }
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, with, n)),
+            _ => {}
+        }
+    }
+    walk(&mut json, &with, &mut n);
+    if n != 1 {
+        return None;
+    }
+    serde_json::from_value(json).ok()
+}
+
+/// "it's the first time +1/+1 counters have been put on that permanent this turn": the
+/// times counters of that kind were put on it this turn (each event one time), this one
+/// included.
+fn nth_time_counters(c: &str, b: &mut Builder) -> Option<Condition> {
+    let r = c.strip_prefix("it's the ")?;
+    let (w, r) = split_word(r);
+    let n = ordinal(w)?;
+    let r = r.strip_prefix("time ")?;
+    let (kind, r) = r.split_once(" counters have been put on ")?;
+    let who = r.strip_suffix(" this turn")?;
+    let before = b.targets.len();
+    let saved = b.it.clone();
+    let got = crate::oracle::effects::object_ref(who, b);
+    b.it = saved;
+    let (sel, rest) = got?;
+    if b.targets.len() != before || !rest.trim().is_empty() {
+        b.targets.truncate(before);
+        return None;
+    }
+    let cond = trigger_of(&format!("one or more {kind} counters are put on ~"))?;
+    let cond = Condition::Compare(
+        Value::EventsThisTurn(Box::new(cond), Tally::Events),
+        Cmp::Eq,
+        Value::c(n),
+    );
+    if matches!(sel, Sel::This) {
+        Some(cond)
+    } else {
+        about(cond, &sel)
+    }
+}
 
 #[cfg(test)]
 mod tests {

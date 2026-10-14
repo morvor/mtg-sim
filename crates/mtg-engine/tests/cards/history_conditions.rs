@@ -960,3 +960,48 @@ fn avenge_costs_full_price_without_an_attack() {
     let avenge = t.hand(P0, "Avenge");
     assert!(t.cast(P0, avenge).try_go().is_err());
 }
+
+#[test]
+fn hawkeye_draws_for_creatures_it_dealt_damage_to_this_turn() {
+    cr!("603.4", "603.10a");
+    assert_supported("Hawkeye, Avenging Archer");
+    let mut t = TestGame::new(2);
+    let hawk = t.battlefield(P0, "Hawkeye, Avenging Archer");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.g.deal_damage(hawk, Entity::Object(a), 1, false);
+    t.g.flush_events();
+    let hand = t.hand_size(P0);
+    t.g.destroy(a, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // Damage from another source doesn't count.
+    let src = t.battlefield(P0, "Grizzly Bears");
+    t.g.deal_damage(src, Entity::Object(b), 1, false);
+    t.g.destroy(b, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn botanical_brawler_counts_only_the_first_time_each_permanent_gets_counters() {
+    cr!("603.4", "122.6");
+    assert_supported("Botanical Brawler");
+    let mut t = TestGame::new(2);
+    let bb = t.enter(P0, "Botanical Brawler");
+    let bb = t.g.current(bb);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let before = t.counters(bb, "+1/+1");
+    assert_eq!(before, 2);
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(bb, "+1/+1"), before + 1);
+    // The second time this turn: nothing.
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 2, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(bb, "+1/+1"), before + 1);
+}
