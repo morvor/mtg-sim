@@ -2175,6 +2175,29 @@ mod tests {
                         }
                     }
                 }
+            } else if let Some((n, c)) = line.strip_prefix("K: ").and_then(|l| l.split_once('|')) {
+                let tl = TypeLine::parse("Legendary Creature — Test");
+                let ctx = CompileContext {
+                    card_name: n,
+                    full_name: n,
+                    type_line: &tl,
+                    layout: Layout::Normal,
+                    face_index: 0,
+                    keywords: &[],
+                    power: None,
+                    toughness: None,
+                };
+                let r = crate::oracle::compile(c, &ctx);
+                println!(
+                    "K {c}\n  unsupported={:?}\n  {:?}",
+                    r.unsupported, r.abilities
+                );
+            } else if let Some(c) = line.strip_prefix("T: ") {
+                let r = crate::oracle::compile(c, &ctx);
+                println!(
+                    "T {c}\n  unsupported={:?}\n  {:?}",
+                    r.unsupported, r.abilities
+                );
             } else if let Some(c) = line.strip_prefix("D: ") {
                 let def = crate::card::card(c);
                 for a in &def.faces[0].chars.abilities {
