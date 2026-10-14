@@ -38,7 +38,7 @@ pub const CASTER_NOT_ACTIVE: &str = "spell cost:caster isn't the active player";
 pub const CASTER_ENCHANTED: &str = "spell cost:caster is enchanted player";
 const TARGETS_PREFIX: &str = "spell cost:targets of type:";
 const PAID_TIMES: &str = "spell cost:times paid:";
-const MANA_COST_IS: &str = "spell cost:mana cost is:";
+pub const MANA_COST_IS: &str = "spell cost:mana cost is:";
 const PAY_ANY: &str = "spell cost:pay any amount:";
 const UNLOCK_LESS: &str = "spell cost:unlock costs less:";
 

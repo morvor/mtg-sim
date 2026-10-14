@@ -202,6 +202,8 @@ impl Renderer<'_> {
             crate::kw::haunt::HAUNTED => "the creature ~it haunts".into(),
             // CR 702.95: "both creatures have flying" / "each of those creatures has ...".
             crate::kw::soulbond::THE_PAIR => "{alt:each of those creatures|both creatures}".into(),
+            // In a granted ability: the object granting it, by its name.
+            crate::granted_by::GRANTER => "~".into(),
             _ => return None,
         })
     }
@@ -545,7 +547,10 @@ impl Renderer<'_> {
                 let t = &n[crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN.len()..];
                 format!("you've sacrificed {} this turn", with_article(t))
             }
-            other => match self.custom_condition_more(other) {
+            other => match self
+                .custom_condition_more(other)
+                .or_else(|| self.custom_condition_terms(other, false))
+            {
                 Some(s) => s,
                 None => self.gap(format!("Condition::Custom({other})")),
             },

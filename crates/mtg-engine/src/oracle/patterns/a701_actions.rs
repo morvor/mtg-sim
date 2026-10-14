@@ -34,6 +34,16 @@ fn pronoun_subject(l: &str) -> String {
 /// "[subject] [verb](s)[ rest]": the subject (an object reference) and what follows the
 /// verb.
 fn object_verb(l: &str, verb: &str, b: &mut Builder) -> Option<(Sel, String)> {
+    // A subject that turns out not to go with this verb leaves no target behind.
+    let saved = b.targets.len();
+    let r = object_verb_inner(l, verb, b);
+    if r.is_none() {
+        b.targets.truncate(saved);
+    }
+    r
+}
+
+fn object_verb_inner(l: &str, verb: &str, b: &mut Builder) -> Option<(Sel, String)> {
     let l = pronoun_subject(end(l));
     let (sel, rest) = object_ref(&l, b)?;
     let rest = rest.trim_start();
@@ -49,6 +59,17 @@ fn object_verb(l: &str, verb: &str, b: &mut Builder) -> Option<(Sel, String)> {
 /// "[player] [verb](s)[ rest]" with an optional player subject ("you recruit", "each
 /// opponent blights 1", "blight 1").
 fn player_verb(l: &str, verb: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
+    // A subject that turns out not to go with this verb leaves no target behind ("target
+    // opponent blights 2" tried with each player keyword action's verb).
+    let saved = b.targets.len();
+    let r = player_verb_inner(l, verb, b);
+    if r.is_none() {
+        b.targets.truncate(saved);
+    }
+    r
+}
+
+fn player_verb_inner(l: &str, verb: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     let l = end(l);
     if let Some(r) = l.strip_prefix(verb) {
         if r.is_empty() || r.starts_with(' ') {

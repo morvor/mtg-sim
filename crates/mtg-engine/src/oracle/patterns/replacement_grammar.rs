@@ -1143,7 +1143,9 @@ pub(crate) fn damage_action(
             return restated(&tail).then_some((ReplacementAction::Subtract(v), false));
         }
         // "that source deals 3 damage to that permanent or player instead": the amount
-        // becomes N (only with "N or more damage" in the event).
+        // becomes N (only with "M or more damage" in the event); the amount minus
+        // (the amount minus N), which can be more than the amount ("1 or more ... deals
+        // 2 instead", see `replacement.rs`).
         if let Some((n, tail)) = parse_number(r) {
             let tail = tail.strip_prefix("damage")?;
             if matches!(n, Value::Const(_))
