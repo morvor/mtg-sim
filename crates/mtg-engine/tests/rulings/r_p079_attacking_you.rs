@@ -152,3 +152,84 @@ fn hunting_kavu_target_that_gains_flying_makes_it_not_resolve() {
         "the ability didn't resolve: the Kavu stays too"
     );
 }
+
+#[test]
+fn surge_of_righteousness_life_gain_needs_a_legal_target_not_a_destroyed_one() {
+    cr!("608.2b", "702.12b", "506.4");
+    ruling!(
+        "Surge of Righteousness",
+        "However, if the creature becomes an illegal target before Surge of Righteousness resolves, it won’t resolve and none of its effects will happen. You won’t gain life."
+    );
+    ruling!(
+        "Surge of Righteousness",
+        "If Surge of Righteousness resolves but the creature isn’t destroyed (perhaps because it regenerated or it has indestructible), you’ll still gain 2 life."
+    );
+    supported("Surge of Righteousness");
+    // (attacker, removed from combat before it resolves, P1's life after, destroyed)
+    let cases = [
+        ("Hill Giant", false, 22, true),
+        ("Hill Giant", true, 20, false),
+        ("Grizzly Bears", false, 20, false), // green: never a legal target
+        ("Darksteel Myr", false, 22, false), // colorless: never a legal target
+    ];
+    for (name, removed, life, destroyed) in cases {
+        let mut t = TestGame::new(2);
+        let a = t.battlefield(P0, name);
+        attack_with(&mut t, &[(a, Entity::Player(P1))]);
+        let r = cast_card(&mut t, P1, "Surge of Righteousness", &[obj(a)]);
+        if !["Hill Giant"].contains(&name) {
+            assert!(r.is_err(), "{name} isn't black or red");
+            continue;
+        }
+        r.unwrap();
+        if removed {
+            mtg_engine::combat::remove_from_combat(&mut t.g, a);
+        }
+        t.resolve_all();
+        assert_eq!(t.life(P1), life, "{name} removed: {removed}");
+        assert_eq!(!t.on_battlefield(a), destroyed);
+    }
+    // The red attacker regenerates (P0's Regenerate in response): P1 still gains 2 life.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Hill Giant");
+    attack_with(&mut t, &[(a, Entity::Player(P1))]);
+    cast_card(&mut t, P1, "Surge of Righteousness", &[obj(a)]).unwrap();
+    cast_card(&mut t, P0, "Regenerate", &[obj(a)]).unwrap();
+    t.resolve_all();
+    assert!(t.on_battlefield(a), "regenerated");
+    assert_eq!(t.life(P1), 22);
+}
+
+#[test]
+fn gideons_defeat_exiles_a_white_attacking_or_blocking_creature() {
+    cr!("506.4", "608.2h");
+    supported("Gideon's Defeat");
+    // A white attacker is exiled; a white creature not in combat isn't a legal target.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Savannah Lions");
+    let idle = t.battlefield(P0, "Savannah Lions");
+    attack_with(&mut t, &[(a, Entity::Player(P1))]);
+    let c = crate::r_s04_common::spell_targets(&mut t, P1, "Gideon's Defeat");
+    assert!(c.contains(&obj(a)) && !c.contains(&obj(idle)));
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Savannah Lions");
+    attack_with(&mut t, &[(a, Entity::Player(P1))]);
+    cast_card(&mut t, P1, "Gideon's Defeat", &[obj(a)]).unwrap();
+    t.resolve_all();
+    assert!(t.in_exile("Savannah Lions"));
+    assert_eq!(t.life(P1), 20, "not a Gideon planeswalker");
+    // An attacking Gideon planeswalker (Gideon, Ally of Zendikar, animated by its +1): the
+    // caster gains 5 life.
+    supported("Gideon, Ally of Zendikar");
+    let mut t = TestGame::new(2);
+    let gideon = t.battlefield(P0, "Gideon, Ally of Zendikar");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    crate::r_s06_common::activate_containing(&mut t, P0, gideon, "becomes").unwrap();
+    t.resolve_all();
+    assert!(crate::r_s04_common::is_creature(&t, gideon));
+    attack_with(&mut t, &[(gideon, Entity::Player(P1))]);
+    cast_card(&mut t, P1, "Gideon's Defeat", &[obj(gideon)]).unwrap();
+    t.resolve_all();
+    assert!(t.in_exile("Gideon, Ally of Zendikar"));
+    assert_eq!(t.life(P1), 25);
+}

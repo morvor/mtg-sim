@@ -894,8 +894,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
             .or_else(|| t.strip_prefix("that is attacking"))
-            // "that's attacking you": `patterns::r508_that_is_attacking_you`.
-            .filter(|r| !r.starts_with(" you"))
+            // "that's attacking you", "that's attacking or blocking":
+            // `patterns::r508_that_is_attacking_you`.
+            .filter(|r| !r.starts_with(" you") && !r.starts_with(" or blocking"))
         {
             (Filter::Attacking, r)
         } else if let Some(r) = t.strip_prefix("that's blocking") {

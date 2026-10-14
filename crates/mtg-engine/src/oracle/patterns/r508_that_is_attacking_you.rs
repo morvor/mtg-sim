@@ -3,7 +3,8 @@
 //! without flying that's attacking you" (Hunting Kavu, Ice Floe), "target creature that's
 //! attacking you or a planeswalker you control" (Soul Snare). A creature attacking a
 //! planeswalker isn't attacking you; one whose planeswalker left combat is attacking
-//! neither (CR 506.4c).
+//! neither (CR 506.4c). Also "[creature] that's attacking or blocking" (Surge of
+//! Righteousness): an attacking creature or a blocking creature (CR 506.4).
 
 use crate::ability::*;
 
@@ -28,3 +29,16 @@ fn that_is_attacking_you<'a>(t: &'a str, f: &Filter) -> Option<(Filter, &'a str)
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "r508: that's attacking you [or a planeswalker you control]", priority: 100, parse: that_is_attacking_you } }
+
+fn that_is_attacking_or_blocking<'a>(t: &'a str, f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("that's attacking or blocking")?;
+    if !(r.is_empty() || r.starts_with([',', '.'])) {
+        return None;
+    }
+    if !serde_json::to_string(f).is_ok_and(|s| s.contains("\"Creature\"")) {
+        return None;
+    }
+    Some((Filter::Or(vec![Filter::Attacking, Filter::Blocking]), r))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "r506: that's attacking or blocking", priority: 100, parse: that_is_attacking_or_blocking } }
