@@ -441,13 +441,22 @@ fn special_quality_keyword(part: &str, own: bool, b: &mut Builder) -> Option<Mod
             if !own || kind != Protection {
                 return None;
             }
-            let saved = b.targets.len();
-            let (sel, rest) = object_ref(obj, b)?;
-            if !rest.is_empty() || b.targets.len() != saved || !names_linked_card(&sel) {
-                b.targets.truncate(saved);
-                return None;
+            // "the exiled card" of a static ability: the card its linked ability exiled
+            // (CR 607.2a; Mirror Golem).
+            if obj == "the exiled card" && STATIC_CONTEXT.with(|c| c.get()) {
+                Filter::SharesCardType(Box::new(Sel::All(Filter::and(vec![
+                    Filter::In(Box::new(Sel::Linked)),
+                    Filter::InZone(ZoneKind::Exile),
+                ]))))
+            } else {
+                let saved = b.targets.len();
+                let (sel, rest) = object_ref(obj, b)?;
+                if !rest.is_empty() || b.targets.len() != saved || !names_linked_card(&sel) {
+                    b.targets.truncate(saved);
+                    return None;
+                }
+                Filter::SharesCardType(Box::new(sel))
             }
-            Filter::SharesCardType(Box::new(sel))
         }
     };
     let mut k = Keyword::new(kind);

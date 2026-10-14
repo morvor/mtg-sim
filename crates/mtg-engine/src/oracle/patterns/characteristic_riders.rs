@@ -278,3 +278,313 @@ mod tests {
         }
     }
 }
+
+/// "[subject] is a Dragon with base power and toughness 4/4, flying, and \"[ability]\""
+/// (Goddric, Cloaked Reveler), "Enchanted creature loses all abilities and is a Citizen
+/// with base power and toughness 1/1 and \"{T}: Add {C}\" named Humble Merchant."
+/// (Honest Work): a static characteristic bundle whose quoted abilities the objects have
+/// (layer 6, after the abilities they lose, CR 613.1f), with its name (layer 3), types
+/// (layer 4) and base power and toughness (layer 7b).
+fn static_bundle_with_quotes(
+    l: &str,
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    if ctx.is_spell() || !l.contains('"') {
+        return None;
+    }
+    let (masked, quotes) = super::statics::mask_quotes(end(l))?;
+    // The quoted abilities in the bundle: ", and \"#k\"", " and \"#k\"", ", \"#k\"".
+    let mut rest = masked.clone();
+    let mut idx = Vec::new();
+    for k in 0..quotes.len() {
+        let q = format!("\"#{k}\"");
+        let mut found = false;
+        for sep in [", and ", " and ", ", "] {
+            let pat = format!("{sep}{q}");
+            if let Some(i) = rest.find(&pat) {
+                rest.replace_range(i..i + pat.len(), "");
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return None;
+        }
+        idx.push(k);
+    }
+    if rest.contains('"') {
+        return None;
+    }
+    let (subj_text, pred) = rest.split_once(" is ")?;
+    let (subj_text, lose) = match subj_text.strip_suffix(" loses all abilities and") {
+        Some(s) => (s, true),
+        None => (subj_text, false),
+    };
+    let subj = super::statics::parse_subject(subj_text, Some(&Sel::This), ctx)?;
+    let mut b = Builder::new(ctx);
+    let mut mods = Vec::new();
+    if lose {
+        mods.push(Modification::RemoveAllAbilities);
+    }
+    mods.extend(super::becomes_grammar::predicate_mods(
+        &format!("becomes {pred}"),
+        &subj,
+        &mut b,
+    )?);
+    if !b.targets.is_empty() {
+        return None;
+    }
+    let to_source = matches!(subj.filter, Filter::Source);
+    let granted = super::grant_grammar::compile_quotes(&idx, &quotes, subj.hint, to_source, &b)?;
+    mods.extend(granted.into_iter().map(Modification::AddAbility));
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected: subj.filter,
+            mods,
+        })),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "characteristic riders: [objects] is [types with base p/t, keywords and \"abilities\"] [named ...]", priority: 1090, parse: static_bundle_with_quotes } }
+
+/// "If ~ is a Detective, it becomes a legendary creature named Mileva, the Stalwart, it
+/// has base power and toughness 5/5, and it gains \"[ability]\"." (Tenth District Hero):
+/// one characteristic-changing effect whose predicates repeat their subject, and whose
+/// last predicate grants quoted abilities (layer 6, CR 613.1f).
+fn becomes_it_has_it_gains(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains(" becomes ") || !(l.contains(", it has ") || l.contains(", and it gains ")) {
+        return None;
+    }
+    let (masked, quotes) = super::statics::mask_quotes(l)?;
+    let mut core = masked
+        .replace(", it has ", ", has ")
+        .replace(", and it gains ", ", and gains ");
+    // Trailing quoted abilities: ", and gains \"#0\"" / " and \"#1\"".
+    let mut idx = Vec::new();
+    loop {
+        let Some(k) = core
+            .strip_suffix('"')
+            .and_then(|r| r.rsplit_once("\"#"))
+            .and_then(|(_, n)| n.parse::<usize>().ok())
+        else {
+            break;
+        };
+        let q = format!("\"#{k}\"");
+        let head = core.strip_suffix(q.as_str())?;
+        let head = head
+            .strip_suffix(", and gains ")
+            .or_else(|| head.strip_suffix(" and gains "))
+            .or_else(|| head.strip_suffix(" and "))
+            .or_else(|| head.strip_suffix(", "))?;
+        idx.insert(0, k);
+        core = head.to_string();
+        if !core.ends_with('"') {
+            break;
+        }
+    }
+    if core.contains('"') {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let mut e = crate::oracle::effects::parse_sentence(&core, b)?;
+    let (what, mods) = match &mut e {
+        Effect::Modify { what, mods, .. } => (what.clone(), mods),
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => match &mut **then {
+            Effect::Modify { what, mods, .. } => (what.clone(), mods),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    if !idx.is_empty() {
+        let to_source = matches!(what, Sel::This);
+        let granted =
+            super::grant_grammar::compile_quotes(&idx, &quotes, CardType::Creature, to_source, b);
+        let Some(granted) = granted else {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            return None;
+        };
+        mods.extend(granted.into_iter().map(Modification::AddAbility));
+    }
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "characteristic riders: [subject] becomes [...], it has [...], and it gains [...]", priority: 1090, parse: becomes_it_has_it_gains } }
+
+/// "[object]'s base toughness becomes equal to 1 plus the number of creature cards in
+/// your graveyard" (Wall of Tombstones), "... base power becomes equal to ...": a base
+/// power or toughness set by a resolving effect (layer 7b, CR 613.4b), the value fixed as
+/// the effect begins (CR 608.2h), lasting indefinitely.
+fn base_stat_becomes(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (obj, stat, value) = [("'s base power becomes equal to ", true), ("'s base toughness becomes equal to ", false)]
+        .iter()
+        .find_map(|(p, power)| l.split_once(p).map(|(o, v)| (o, *power, v)))?;
+    let saved = (b.targets.len(), b.it.clone());
+    let result = (|| {
+        let (what, rest) = crate::oracle::effects::object_ref(obj, b)?;
+        if !rest.trim().is_empty() || matches!(what, Sel::None | Sel::All(_)) {
+            return None;
+        }
+        let (v, rest) = crate::oracle::statics::parse_value_phrase(value, b)?;
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        let m = if stat {
+            Modification::SetPT(Some(v), None)
+        } else {
+            Modification::SetPT(None, Some(v))
+        };
+        Some(Effect::Modify {
+            what,
+            mods: vec![m],
+            duration: Duration::Permanent,
+        })
+    })();
+    if result.is_none() {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+    }
+    result
+}
+
+inventory::submit! { EffectPattern { name: "characteristic riders: [object]'s base toughness becomes equal to [value]", priority: 1090, parse: base_stat_becomes } }
+
+/// "~'s base power is equal to the number of cards in your hand." granted in quotes (Ms.
+/// Marvel, Kamala Khan): a granted ability that sets power isn't characteristic-defining
+/// (CR 604.3a), so it's an ordinary static ability setting the base power (layer 7b).
+fn base_stat_is_equal(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (power, value) = if let Some(v) = l.strip_prefix("~'s base power is equal to ") {
+        (true, v)
+    } else {
+        (false, l.strip_prefix("~'s base toughness is equal to ")?)
+    };
+    let mut b = Builder::new(ctx);
+    b.it = Sel::This;
+    let (v, rest) = crate::oracle::statics::parse_value_phrase(value, &mut b)?;
+    if !rest.trim().is_empty() || !b.targets.is_empty() {
+        return None;
+    }
+    let m = if power {
+        Modification::SetPT(Some(v), None)
+    } else {
+        Modification::SetPT(None, Some(v))
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods: vec![m],
+        })),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "characteristic riders: ~'s base power is equal to [value]", priority: 1090, parse: base_stat_is_equal } }
+
+/// One mode written as a characteristic bundle: "3/1 Human Warrior with trample and
+/// haste", "2/2 white Fox with vigilance": its power and toughness, the words before
+/// "with" (colors and types) and the abilities after it.
+fn bundle_parts(mode: &str) -> Option<(&str, &str, &str)> {
+    let mode = mode.trim().trim_start_matches('•').trim().trim_end_matches('.');
+    let (pt, rest) = mode.split_once(' ')?;
+    let (p, t) = pt.split_once('/')?;
+    if p.parse::<i32>().is_err() || t.parse::<i32>().is_err() {
+        return None;
+    }
+    let (words, abilities) = rest.split_once(" with ")?;
+    Some((pt, words, abilities))
+}
+
+/// "choose one at random. Create a red and white creature token with those
+/// characteristics. / • 3/1 Human Warrior with trample and haste. / ..." (Outlaws'
+/// Merriment, Genku), "Choose one. Until end of turn, target creature you control has that
+/// base power and toughness, becomes that creature type, and gains that ability. / • 1/3
+/// Turtle with hexproof. / ..." (Wild Shape): modes listed as characteristic bundles
+/// (CR 700.2). Each mode is the instruction with its bundle's characteristics, and the
+/// ability is parsed as the modal ability it amounts to.
+fn bundle_modes(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let mut lines = block.lines();
+    let header = lines.next()?;
+    let modes: Vec<&str> = lines.collect();
+    if modes.len() < 2 || !modes.iter().all(|m| m.trim_start().starts_with('•')) {
+        return None;
+    }
+    let lower = header.to_lowercase();
+    let c = lower.find("choose ")?;
+    let dot = c + lower[c..].find(". ")?;
+    let (choose, instr) = (&header[..dot], header[dot + 2..].trim());
+    let instr_l = instr.to_lowercase();
+    let instr_l = end(&instr_l);
+    let mut new_modes = Vec::new();
+    for m in &modes {
+        let (pt, words, abilities) = bundle_parts(m)?;
+        let mode = if let Some(colors) = instr_l
+            .strip_prefix("create a ")
+            .and_then(|r| r.strip_suffix("creature token with those characteristics"))
+        {
+            // The header's colors (original case) and the mode's words.
+            let colors = &instr["create a ".len().."create a ".len() + colors.len()];
+            format!("Create a {pt} {colors}{words} creature token with {abilities}.")
+        } else {
+            let (lead, subj) = match instr_l.strip_prefix("until end of turn, ") {
+                Some(r) => ("Until end of turn, ", r),
+                None => ("", instr_l),
+            };
+            let subj = subj.strip_suffix(
+                " has that base power and toughness, becomes that creature type, and gains that ability",
+            )?;
+            let subj = &instr[instr.len() - instr_l.len() - (instr.len() - instr.trim_end_matches('.').len())..];
+            let subj = &subj[lead.len()..lead.len() + instr_l.len() - lead.len() - " has that base power and toughness, becomes that creature type, and gains that ability".len()];
+            // The creature types only: a mode's words are its creature types.
+            if words.split(' ').any(|w| crate::types::Color::from_word(w).is_some()) {
+                return None;
+            }
+            format!("{lead}{subj} has base power and toughness {pt}, becomes a {words}, and gains {abilities}.")
+        };
+        new_modes.push(format!("• {mode}"));
+    }
+    let rebuilt = format!("{choose} —\n{}", new_modes.join("\n"));
+    if rebuilt.to_lowercase().contains("those characteristics") {
+        return None;
+    }
+    let v = crate::oracle::parse_ability(&rebuilt, ctx)?;
+    Some(
+        v.into_iter()
+            .map(|a| AbilityDef::with_link(a.kind.clone(), block, a.link))
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "characteristic riders: modes listed as characteristic bundles", priority: 60, parse: bundle_modes } }
+
+/// "If you do, it gains equip {3} and \"Equipped creature gets +3/+3\" and loses all other
+/// abilities." (The Irencrag): the object has only the abilities it gains (layer 6: it
+/// loses its abilities, then gets those, in the order the effect lists, CR 613.1f).
+fn gains_and_loses_all_other(l: &str, b: &mut Builder) -> Option<Effect> {
+    let head = end(l).strip_suffix(" and loses all other abilities")?;
+    if !head.contains(" gains ") {
+        return None;
+    }
+    let mut e = crate::oracle::effects::parse_clause(head, b)?;
+    let Effect::Modify { mods, .. } = &mut e else {
+        return None;
+    };
+    if mods.iter().any(|m| {
+        !matches!(
+            m,
+            Modification::AddKeyword(_) | Modification::AddAbility(_)
+        )
+    }) {
+        return None;
+    }
+    mods.insert(0, Modification::RemoveAllAbilities);
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "characteristic riders: [subject] gains [abilities] and loses all other abilities", priority: 1090, parse: gains_and_loses_all_other } }

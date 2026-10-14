@@ -1692,7 +1692,7 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
     // (CR 201.2), in the card's own capitalization.
     if let Some((x, name)) = r.rsplit_once(" named ") {
         let name = name.trim();
-        if !name.is_empty() && !name.contains(['"', '~', ',']) && name.split(' ').count() <= 4 {
+        if !name.is_empty() && !name.contains(['"', '~']) && name.split(' ').count() <= 6 {
             let raw = crate::oracle::raw_text();
             let original = (raw.len() == raw.to_lowercase().len())
                 .then(|| {
@@ -1700,6 +1700,16 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
                     raw.get(i..i + name.len()).map(str::to_string)
                 })
                 .flatten()?;
+            // A name with a comma ("Mileva, the Stalwart", "Everflame, Heroes' Legacy"):
+            // its words are capitalized but for "the" and "of", so it's one name rather than
+            // a list.
+            let title = |w: &str| {
+                w.starts_with(|c: char| c.is_uppercase()) || matches!(w, "the" | "of")
+            };
+            if name.contains(',') && !original.split([' ', ',']).filter(|w| !w.is_empty()).all(title)
+            {
+                return None;
+            }
             let mut out = type_predicate(x, subj)?;
             out.push(Out::Mod(Modification::SetName(original.into())));
             return Some(out);

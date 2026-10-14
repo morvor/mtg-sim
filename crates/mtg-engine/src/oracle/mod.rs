@@ -164,6 +164,12 @@ fn with_text(a: Ability, text: &str) -> Ability {
 
 /// Normalizes oracle text for parsing.
 pub fn normalize(text: &str, ctx: &CompileContext) -> String {
+    normalize_impl(text, ctx, false)
+}
+
+/// [`normalize`]; `alt`: also a planeswalker's first name that's its own subtype
+/// ("Garruk" on Garruk Relentless), for blocks that don't parse otherwise.
+fn normalize_impl(text: &str, ctx: &CompileContext, alt: bool) -> String {
     let mut s = strip_reminder(text);
     s = s
         .replace('\u{2212}', "-")
@@ -217,7 +223,7 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
     // Legendary cards are also called by the first word(s) of their name ("Whenever Edgar
     // attacks" on Edgar Markov, "Zur" for Zur the Enchanter, "Jedit Ojanen" for Jedit
     // Ojanen of Efrava): the longest such prefix first.
-    if let Some(first) = short_first_name(ctx) {
+    if let Some(first) = short_first_name(ctx, alt) {
         let words: Vec<&str> = ctx.card_name.split(' ').collect();
         for k in (2..words.len()).rev() {
             let prefix = words[..k].join(" ");
@@ -266,11 +272,13 @@ pub fn normalize(text: &str, ctx: &CompileContext) -> String {
     s
 }
 
-/// [`normalize`], with a legendary character's "he", "him" and "her" (CR 201.5) and a
-/// plural name's verbs and "they" (see `self_refs`) in their neuter singular forms: the
-/// text a block that doesn't parse as written is parsed from instead.
+/// [`normalize`], with a planeswalker's first name that's its subtype read as its name
+/// where it isn't used as the subtype, a legendary character's "he", "him" and "her"
+/// (CR 201.5) and a plural name's verbs and "they" (see `self_refs`) in their neuter
+/// singular forms: the text a block that doesn't parse as written is parsed from
+/// instead.
 pub fn normalize_neuter(text: &str, ctx: &CompileContext) -> String {
-    let mut s = normalize(text, ctx);
+    let mut s = normalize_impl(text, ctx, true);
     if ctx.type_line.supertypes.contains(Supertype::Legendary) {
         s = self_refs::neuter_pronouns(&s);
     }
@@ -287,7 +295,7 @@ fn is_title(w: &str) -> bool {
 
 /// The first word of a legendary card's name when it can stand for the card: not a
 /// subtype ("Ajani", "Sliver"), a title ("Captain", "General") or an article.
-fn short_first_name<'a>(ctx: &CompileContext<'a>) -> Option<&'a str> {
+fn short_first_name<'a>(ctx: &CompileContext<'a>, alt: bool) -> Option<&'a str> {
     if !ctx.type_line.supertypes.contains(Supertype::Legendary) || ctx.card_name.contains(',') {
         return None;
     }
@@ -301,7 +309,8 @@ fn short_first_name<'a>(ctx: &CompileContext<'a>) -> Option<&'a str> {
         // A planeswalker's own subtype is its character's name ("Garruk Relentless",
         // "Sarkhan the Mad"); other subtypes aren't ("Sliver Queen").
         && (crate::types::subtype_kind(first).is_none()
-            || (crate::types::subtype_kind(first) == Some(crate::types::SubtypeKind::Planeswalker)
+            || (alt
+                && crate::types::subtype_kind(first) == Some(crate::types::SubtypeKind::Planeswalker)
                 && ctx.type_line.subtypes.iter().any(|s| s.as_str() == first)))
         && !matches!(
             first,

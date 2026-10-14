@@ -98,16 +98,11 @@ pub fn replace_self_name(s: &str, name: &str, subtype: bool) -> String {
             && ((before.is_some_and(|c| c == ' ')
                 && SUBTYPE_DETERMINERS.contains(&prev_word.as_str()))
                 || (rest.starts_with(' ') && SUBTYPE_NOUNS.contains(&next_word)));
-        // "Icingdeath, Frost Tongue", "a card named Nissa's Chosen": another name that
-        // starts with this one.
-        let other_name = (rest
-            .strip_prefix(", ")
-            .is_some_and(|r| r.starts_with(|c: char| c.is_uppercase()))
-            && !rest.starts_with(", ~"))
-            || rest
-                .strip_prefix("'s ")
-                .is_some_and(|r| r.starts_with(|c: char| c.is_uppercase()))
-            || s[..start].ends_with("named ");
+        // "create Icingdeath, Frost Tongue": a token's name that starts with this one.
+        let other_name = s[..start].ends_with("create ")
+            && rest
+                .strip_prefix(", ")
+                .is_some_and(|r| r.starts_with(|c: char| c.is_uppercase()));
         out.push_str(&s[i..start]);
         if before.is_some_and(is_word) || after.is_some_and(is_word) || as_subtype || other_name {
             out.push_str(name);

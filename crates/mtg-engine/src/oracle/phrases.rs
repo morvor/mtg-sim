@@ -78,12 +78,37 @@ pub fn parse_number(s: &str) -> Option<(Value, &str)> {
         other => {
             if let Ok(n) = other.parse::<i32>() {
                 n
+            } else if let Some(n) = hyphenated_number(other) {
+                n
             } else {
                 return None;
             }
         }
     };
     Some((Value::Const(n), rest))
+}
+
+/// "twenty-five", "forty-two" (CR 107.1).
+fn hyphenated_number(w: &str) -> Option<i32> {
+    let (t, o) = w.split_once('-')?;
+    let tens = match t {
+        "twenty" => 20,
+        "thirty" => 30,
+        "forty" => 40,
+        "fifty" => 50,
+        "sixty" => 60,
+        "seventy" => 70,
+        "eighty" => 80,
+        "ninety" => 90,
+        _ => return None,
+    };
+    let ones = [
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    ]
+    .iter()
+    .position(|x| *x == o)? as i32
+        + 1;
+    Some(tens + ones)
 }
 
 /// Splits off the first word.

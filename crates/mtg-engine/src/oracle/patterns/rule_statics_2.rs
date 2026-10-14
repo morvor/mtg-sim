@@ -65,6 +65,16 @@ fn rule_statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability
                 crate::rule_statics::caused_actions::CANT_CAUSE_CONTROLLER_TO_SEARCH,
             )]);
         }
+        "untap all permanents you control during each opponent's untap step" => {
+            return Some(vec![custom(
+                crate::rule_statics::opponents_steps::UNTAP_DURING_OPPONENTS_UNTAP_STEPS,
+            )]);
+        }
+        "you draw a card during each opponent's draw step" => {
+            return Some(vec![custom(
+                crate::rule_statics::opponents_steps::DRAW_DURING_OPPONENTS_DRAW_STEPS,
+            )]);
+        }
         "creatures your opponents control can be the targets of spells and abilities as though they didn't have hexproof. ward abilities of those creatures don't trigger" => {
             return Some(vec![custom(
                 crate::kw::hexproof::OPPONENT_CREATURES_TARGETABLE_BY_ANY,
@@ -106,3 +116,34 @@ fn targetable_until_eot(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "rule statics 2: until end of turn, [players and creatures] can be the targets ... as though they didn't have hexproof", priority: 95, parse: targetable_until_eot } }
+
+/// "~ has each activated ability of the exiled cards used to craft it. You may activate
+/// each of those abilities only once each turn." (The Enigma Jewel // Locus of
+/// Enlightenment): activation instructions for the abilities a static ability gives
+/// (CR 113.10a, 602.5c; see `gained_terms`).
+fn static_with_gained_terms(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if ctx.is_spell() || block.contains('\n') || block.contains(':') {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let i = lower.find(". you may ")?;
+    let (first, rider) = (&block[..i + 1], &lower[i + 2..]);
+    let v = crate::oracle::statics::parse_static(first, ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let AbilityKind::Static(st) = &a.kind else {
+        return None;
+    };
+    let mut st = st.clone();
+    let StaticEffect::Continuous { mods, .. } = &mut st.effect else {
+        return None;
+    };
+    let terms = super::gained_terms::last_terms(mods)?;
+    if !super::gained_terms::add_rider(rider, terms) {
+        return None;
+    }
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), block)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "rule statics 2: [static giving abilities]. you may activate each of those abilities only once each turn", priority: 50, parse: static_with_gained_terms } }
