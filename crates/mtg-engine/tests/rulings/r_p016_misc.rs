@@ -374,3 +374,58 @@ fn sylvok_replica_targeting_itself_does_nothing() {
     assert!(t.on_battlefield(ring));
     assert!(t.in_graveyard(P0, "Sylvok Replica"));
 }
+
+#[test]
+fn gogo_copy_of_a_linked_ability_is_linked_too() {
+    cr!("607.2a", "707.10", "702.75a");
+    ruling!(
+        "Gogo, Master of Mimicry",
+        "If an ability is linked to a second ability, copies of that first ability are also linked to that second ability. If the second ability refers to \"the exiled card,\" it refers to all cards exiled by the first ability and the copy."
+    );
+    supported("Gogo, Master of Mimicry");
+    supported("Clive's Hideaway");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let gogo = t.battlefield(P0, "Gogo, Master of Mimicry");
+    for l in [
+        "Thalia, Guardian of Thraben",
+        "Isamaru, Hound of Konda",
+        "Ragavan, Nimble Pilferer",
+    ] {
+        t.battlefield(P0, l);
+    }
+    // Eight cards on top: each hideaway looks at four and exiles one.
+    let cards = crate::r_s01_common::stack_library(
+        &mut t,
+        P0,
+        &[
+            "Grizzly Bears",
+            "Island",
+            "Island",
+            "Island",
+            "Hill Giant",
+            "Island",
+            "Island",
+            "Island",
+        ],
+    );
+    let hideaway = crate::r_s05_common::enter(&mut t, P0, "Clive's Hideaway");
+    let trig = *t.g.stack.last().expect("hideaway trigger");
+    lots(&mut t, P0);
+    t.answer(P0, DecisionKind::X, Answer::Number(1));
+    t.activate(P0, gogo, 0, &[o(trig)]).unwrap();
+    t.resolve_all();
+    let exiled: Vec<ObjectId> = cards
+        .iter()
+        .map(|c| t.g.current(*c))
+        .filter(|c| t.zone(*c) == mtg_engine::object::Zone::Exile)
+        .collect();
+    assert_eq!(exiled.len(), 2);
+    lots(&mut t, P0);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    crate::r_s06_common::activate_containing(&mut t, P0, hideaway, "{2}").unwrap();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+}
