@@ -565,14 +565,17 @@ impl<'a> Picker<'a> {
         if x.is(CardType::Conspiracy) {
             sideboard.push(x.def.clone());
         }
+        let mv = if x.is_land() { 0 } else { x.mana_value };
+        // Enough lands for its activated abilities too (Abomination, Terrifying Titan's
+        // "Power-up — {5}{R/G}{R/G}: ...", embalm, a land's "{4}{G}, {T}: ...").
+        let target = mv.max(crate::coverage::activation_mana_value(&x.def).min(10));
         let n_lands = if x.is_land() {
-            16
-        } else if x.mana_value >= 5 {
+            16 + 2 * target.saturating_sub(4) as usize
+        } else if target >= 5 {
             24
         } else {
             22
         };
-        let mv = if x.is_land() { 0 } else { x.mana_value };
         let copies = if x.is(CardType::Conspiracy) {
             0
         } else {
@@ -622,7 +625,7 @@ impl<'a> Picker<'a> {
                 }
             }
             for d in 0..10 {
-                if lands < (mv as usize + 1).max(5) && lands < n_lands {
+                if lands < (target as usize + 1).max(5) && lands < n_lands {
                     top.push(land(lands));
                     lands += 1;
                 } else if d % 3 == 2 && copies_left > 0 {

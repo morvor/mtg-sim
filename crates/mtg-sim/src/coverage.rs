@@ -198,6 +198,27 @@ pub fn tracked_abilities(def: &CardDef) -> Vec<Tracked> {
     out
 }
 
+/// The greatest mana value of the mana costs of a card's activated abilities, on every
+/// face, including those its keywords stand for (embalm, unearth, ...); X counts as 0.
+pub fn activation_mana_value(def: &CardDef) -> u32 {
+    let of = |a: &AbilityDef| match &a.kind {
+        AbilityKind::Activated(act) if !a.is_mana_ability() => {
+            act.cost.mana.as_ref().map_or(0, |m| m.mana_value())
+        }
+        _ => 0,
+    };
+    let mut best = 0;
+    for f in &def.faces {
+        for a in &f.chars.abilities {
+            best = best.max(of(a));
+        }
+        for (_, a) in mtg_engine::keyword_impls::derived_by_keyword(&f.chars) {
+            best = best.max(of(&a));
+        }
+    }
+    best
+}
+
 /// The card a game is built around, for [`FocusAgent`].
 pub struct Focus {
     pub name: SmolStr,
