@@ -1215,7 +1215,12 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     if b.in_trigger {
         if let Some((n, x)) = parse_number(r) {
             if let Some(k) = n.as_const().filter(|k| *k > 0) {
-                for p in ["life you lost", "life you gained"] {
+                for p in [
+                    "life you lost",
+                    "life you gained",
+                    "life they lost",
+                    "life they gained",
+                ] {
                     if let Some(rest) = x.trim_start().strip_prefix(p) {
                         if word_end(rest) {
                             let v = if k == 1 {

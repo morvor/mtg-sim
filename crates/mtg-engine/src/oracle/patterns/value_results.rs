@@ -893,6 +893,23 @@ fn players_who(r: &str, _b: &Builder) -> Option<(Value, String)> {
 fn life_in_groups(r: &str, b: &Builder) -> Option<(Value, String)> {
     let (n, x) = parse_number(r)?;
     let k = n.as_const().filter(|k| *k > 0)?;
+    // "for each 1 damage dealt to you this turn".
+    if let Some(y) = x.trim_start().strip_prefix("damage dealt to you") {
+        let rest = this_turn(y)?;
+        let total = events(
+            TriggerCond::PlayerDealtDamage {
+                who: PlayerRel::You,
+                combat_only: false,
+            },
+            Tally::Amount,
+        );
+        let v = if k == 1 {
+            total
+        } else {
+            Value::Div(Box::new(total), k, false)
+        };
+        return Some((v, rest.to_string()));
+    }
     let x = x.trim_start().strip_prefix("life ")?;
     let (who, x) = player_perfect(x, b)?;
     let (cond, x) = if let Some(x) = x.strip_prefix("lost") {

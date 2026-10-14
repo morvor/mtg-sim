@@ -398,8 +398,21 @@ inventory::submit! { super::EffectPattern { name: "referents: exile N cards from
 /// counts (`value_results::count_ext`).
 pub(crate) fn count_ext(
     r: &str,
-    _b: &mut crate::oracle::effects::Builder,
+    b: &mut crate::oracle::effects::Builder,
 ) -> Option<(Value, String)> {
+    // "nontoken creatures you controlled that died this turn": those that died under your
+    // control this turn (CR 700.4).
+    for (p, q) in [(
+        " you controlled that died this turn",
+        " that died under your control this turn",
+    )] {
+        if let Some(i) = r.find(p) {
+            if !r[..i].contains(',') {
+                let rewritten = format!("the number of {}{q}{}", &r[..i], &r[i + p.len()..]);
+                return super::value_grammar::parse_value(&rewritten, b);
+            }
+        }
+    }
     let i = r.find(" removed this way")?;
     let head = &r[..i];
     let rest = &r[i + " removed this way".len()..];
@@ -486,3 +499,69 @@ fn delayed_that_many(l: &str, b: &mut crate::oracle::effects::Builder) -> Option
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: whenever ... this turn, ... that many (its event's amount)", priority: 1500, parse: delayed_that_many } }
+
+/// "For each 1 life you lost, sacrifice a permanent other than ~ unless you discard a
+/// card." (Oath of Lim-Dûl), "for each nontoken creature you controlled that died this
+/// turn, create a 2/2 black Zombie creature token": an amount before the instruction,
+/// which is performed that many times (or on that many, see
+/// `iteration_grammar::times_over`). Only instructions that don't refer to what's
+/// counted (those are `iteration_grammar`'s "for each [objects], [instruction about it]").
+fn for_each_amount_leading(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    let r = l.strip_prefix("for each ")?;
+    let (x, y) = r.split_once(", ")?;
+    if x.contains('"') || y.contains(" for each ") {
+        return None;
+    }
+    let refers_back = [
+        "it", "its", "they", "them", "their", "that", "those", "he", "she", "his", "her",
+    ]
+    .iter()
+    .any(|w| has_word(y, w));
+    if refers_back {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let restore = |b: &mut crate::oracle::effects::Builder| {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+    };
+    // "for each nontoken creature you controlled that died this turn": the number of
+    // nontoken creatures ... (the counted noun in the plural).
+    let plural = plural_head(x);
+    let parsed = super::value_grammar::parse_value(&format!("the number of {x}"), b)
+        .filter(|(_, rest)| rest.trim().is_empty())
+        .or_else(|| {
+            restore(b);
+            let p = plural.as_ref()?;
+            super::value_grammar::parse_value(&format!("the number of {p}"), b)
+        });
+    let Some((times, rest)) = parsed else {
+        restore(b);
+        return None;
+    };
+    if !rest.trim().is_empty() || b.targets.len() != saved.0 {
+        restore(b);
+        return None;
+    }
+    let Some(e) = crate::oracle::effects::parse_sentence(y, b) else {
+        restore(b);
+        return None;
+    };
+    Some(super::iteration_grammar::times_over(e, times))
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: for each [amount], [instruction]", priority: 990, parse: for_each_amount_leading } }
+
+/// The phrase with its first counted noun in the plural ("nontoken creature you
+/// controlled" → "nontoken creatures you controlled").
+fn plural_head(x: &str) -> Option<String> {
+    const NOUNS: [&str; 10] = [
+        "creature", "card", "spell", "permanent", "land", "artifact", "enchantment", "token",
+        "opponent", "player",
+    ];
+    let mut words: Vec<String> = x.split(' ').map(str::to_string).collect();
+    let i = words.iter().position(|w| NOUNS.contains(&w.as_str()))?;
+    words[i].push('s');
+    Some(words.join(" "))
+}

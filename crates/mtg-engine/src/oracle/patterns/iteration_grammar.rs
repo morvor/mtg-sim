@@ -633,7 +633,7 @@ fn for_each_spent(l: &str, b: &mut Builder) -> Option<Effect> {
 /// ("for each {B}{B} spent, each opponent discards a card": each opponent discards that
 /// many cards at once, CR 701.9; creating that many tokens is one event, CR 111.1); anything
 /// else is repeated (drawing is one card at a time anyway, CR 121.2).
-fn times_over(e: Effect, times: Value) -> Effect {
+pub(crate) fn times_over(e: Effect, times: Value) -> Effect {
     let scale = |n: &mut Value| {
         *n = match std::mem::replace(n, Value::c(0)) {
             Value::Const(1) => times.clone(),

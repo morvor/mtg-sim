@@ -36,6 +36,10 @@ fn toluz_exiles_the_discarded_cards_from_your_graveyard() {
 #[test]
 fn conspiracy_theorist_exiles_one_of_the_discarded_cards_and_lets_you_cast_it() {
     cr!("603.2c");
+    ruling!(
+        "Conspiracy Theorist",
+        "The card exiled by the second ability is exiled face up. Casting it follows the normal rules for casting that card."
+    );
     compiles("Conspiracy Theorist");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Conspiracy Theorist");
@@ -60,6 +64,10 @@ fn conspiracy_theorist_exiles_one_of_the_discarded_cards_and_lets_you_cast_it() 
 #[test]
 fn descendants_fury_sacrifices_one_of_the_creatures_that_dealt_damage() {
     cr!("603.2c", "701.21a");
+    ruling!(
+        "Descendants' Fury",
+        "You'll reveal cards until you find one that shares at least one creature type with the creature you sacrificed."
+    );
     compiles("Descendants' Fury");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Descendants' Fury");

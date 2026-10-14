@@ -335,3 +335,57 @@ fn conformer_shuriken_compares_with_the_tapped_creature() {
     // 6 - 2 = 4 counters.
     assert_eq!(t.counters(bear, "+1/+1"), 4);
 }
+
+#[test]
+fn oath_of_lim_dul_sacrifices_a_permanent_for_each_life_lost() {
+    cr!("119.3", "608.2c");
+    compiles("Oath of Lim-Dûl");
+    let mut t = TestGame::new(2);
+    let oath = t.battlefield(P0, "Oath of Lim-Dûl");
+    let forest = t.battlefield(P0, "Forest");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    // No cards in hand to discard instead: two permanents for two life.
+    t.g.lose_life(P0, 2);
+    t.resolve_all();
+    assert!(t.on_battlefield(oath), "other than ~");
+    let left = [forest, bear, elf]
+        .iter()
+        .filter(|id| t.on_battlefield(**id))
+        .count();
+    assert_eq!(left, 1);
+}
+
+#[test]
+fn discordant_spirit_counts_the_damage_dealt_to_you_this_turn() {
+    cr!("603.4", "120.3");
+    compiles("Discordant Spirit");
+    let mut t = TestGame::new(2);
+    let spirit = t.battlefield(P0, "Discordant Spirit");
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.advance_to(P1, Step::PrecombatMain);
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    t.advance_to(P1, Step::End);
+    t.resolve_all();
+    assert_eq!(t.counters(spirit, "+1/+1"), 3);
+}
+
+#[test]
+fn tobias_creates_a_zombie_for_each_nontoken_creature_that_died_under_your_control() {
+    cr!("700.4", "603.10a");
+    compiles("Tobias, Doomed Conqueror");
+    let mut t = TestGame::new(2);
+    let tobias = t.battlefield(P0, "Tobias, Doomed Conqueror");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Llanowar Elves");
+    t.g.destroy(bear, None);
+    t.g.destroy(theirs, None);
+    t.resolve_all();
+    t.g.destroy(tobias, None);
+    t.resolve_all();
+    // The Bears and Tobias itself; not the opponent's creature.
+    assert_eq!(tokens(&t, P0).len(), 2);
+}
