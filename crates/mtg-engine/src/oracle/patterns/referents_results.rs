@@ -1222,3 +1222,39 @@ fn lost_life_this_way_exchange(s: &str, prev: &mut Effect, b: &mut crate::oracle
 }
 
 inventory::submit! { super::FollowupPattern { name: "referents: if you lost life this way (in an exchange), that many", priority: 1500, apply: lost_life_this_way_exchange } }
+
+/// "At the beginning of your upkeep, if there are four or more cards exiled with ~, choose
+/// one of them at random." (River Song's Diary): one of the objects the condition counts.
+fn one_of_the_counted_at_random(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if in_standard() {
+        return None;
+    }
+    const IF: &str = ", if there are ";
+    const CHOOSE: &str = ", choose one of them at random.";
+    let i = block.find(IF)?;
+    let j = block.find(CHOOSE)?;
+    if j < i {
+        return None;
+    }
+    let cond = &block[i + IF.len()..j];
+    let rest = &block[j + CHOOSE.len()..];
+    let (_, objs) = cond.split_once(" or more ")?;
+    // "cards exiled with ~" → "a card exiled with ~".
+    let (noun, qual) = objs.split_once(' ').unwrap_or((objs, ""));
+    let one = noun.strip_suffix('s')?;
+    if !matches!(one, "card" | "creature" | "permanent" | "land" | "artifact") {
+        return None;
+    }
+    let qual = if qual.is_empty() {
+        String::new()
+    } else {
+        format!(" {qual}")
+    };
+    let rewritten = format!(
+        "{}{IF}{cond}, choose a {one}{qual} at random.{rest}",
+        &block[..i]
+    );
+    reread(block, &rewritten, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "referents: choose one of them at random (the condition's objects)", priority: 50, parse: one_of_the_counted_at_random } }

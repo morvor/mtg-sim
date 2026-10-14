@@ -680,3 +680,26 @@ fn mister_negative_draws_the_life_it_lost_in_the_exchange() {
         assert_eq!(t.hand_size(P0), hand + drawn);
     }
 }
+
+#[test]
+fn river_songs_diary_casts_one_of_its_exiled_cards_at_random() {
+    cr!("607.2a", "603.4");
+    compiles("River Song's Diary");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "River Song's Diary");
+    t.lands(P0, "Mountain", 4);
+    t.advance_to(P0, Step::PrecombatMain);
+    for _ in 0..4 {
+        let bolt = t.hand(P0, "Lightning Bolt");
+        t.cast(P0, bolt).target(Entity::Player(P1)).go();
+        t.resolve_all();
+    }
+    assert_eq!(t.life(P1), 8);
+    assert_eq!(t.g.exile.len(), 4);
+    t.advance_to(P1, Step::End);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 5, "one of them cast for free");
+}
