@@ -111,6 +111,22 @@ fn gravel_slinger_pings_an_attacking_creature() {
     t.resolve_all();
     assert!(!t.on_battlefield(attacker), "1 damage kills the 1/1");
     assert_eq!(t.obj_now(idle).damage, 0);
+    // A blocking creature can be targeted too.
+    let mut t = TestGame::new(2);
+    let attacker = t.battlefield(P0, "Grizzly Bears");
+    let s = t.battlefield(P1, "Gravel Slinger");
+    let blocker = t.battlefield(P1, "Llanowar Elves");
+    let idle = t.battlefield(P1, "Hill Giant");
+    attack_with(&mut t, &[attacker]);
+    block(&mut t, P1, &[(blocker, attacker)]);
+    go_to(&mut t, Step::DeclareBlockers);
+    assert!(t.g.is_blocking(blocker));
+    act(&mut t, P1, s, "damage", &[Entity::Object(blocker)]).unwrap();
+    let c = target_choices(&t, P1).pop().unwrap();
+    assert!(c.contains(&Entity::Object(blocker)) && c.contains(&Entity::Object(attacker)));
+    assert!(!c.contains(&Entity::Object(idle)), "neither attacking nor blocking");
+    t.resolve_all();
+    assert!(!t.on_battlefield(blocker));
 }
 
 #[test]
@@ -137,6 +153,7 @@ fn haunted_dead_returns_from_the_graveyard_tapped() {
         ],
     );
     act(&mut t, P0, hd, "return", &[]).unwrap();
+    assert_eq!(untapped(&t, P0, "Swamp"), 0, "{{1}}{{B}} was paid");
     assert_eq!(t.hand_size(P0), 1, "two cards discarded");
     assert!(t.in_graveyard(P0, "Grizzly Bears") && t.in_graveyard(P0, "Hill Giant"));
     t.resolve_all();
@@ -289,7 +306,14 @@ fn wild_roads_makes_a_pilot_as_a_sorcery() {
     assert_eq!(t.pt(p), (1, 1));
     assert!(t.obj_now(p).is_token());
     assert!(t.obj_now(p).chars.colors.is_colorless(), "colorless");
-    // Crew 3 with a power-1 Pilot: it crews as though its power were 3.
+    // Crew 3 with a power-1 Pilot: it crews as though its power were 3 (an ordinary 1/1
+    // can't).
+    let mut u = TestGame::new(2);
+    let elves = u.battlefield(P0, "Llanowar Elves");
+    let v = u.battlefield(P0, "Skysovereign, Consul Flagship");
+    u.answer_choose(P0, &[Entity::Object(elves)]);
+    assert!(act(&mut u, P0, v, "crew", &[]).is_err());
+    assert!(!u.obj_now(elves).tapped);
     let v = t.battlefield(P0, "Skysovereign, Consul Flagship");
     t.answer_choose(P0, &[Entity::Object(p)]);
     act(&mut t, P0, v, "crew", &[]).unwrap();
@@ -455,7 +479,7 @@ fn self_pump_by_discarding_a_card() {
 
 #[test]
 fn azami_taps_an_untapped_wizard_to_draw() {
-    cr!("602.2", "118.3", "302.6");
+    cr!("602.2", "118.3");
     // "Tap an untapped Wizard you control: Draw a card."
     supported("Azami, Lady of Scrolls");
     let mut t = TestGame::new(2);
@@ -751,8 +775,16 @@ fn puppeteer_taps_or_untaps_target_creature() {
     cr!("602.2", "701.26a", "701.26b");
     // "{U}, {T}: You may tap or untap target creature."
     supported("Puppeteer");
-    // (tapped before, "you may" accepted)
-    for (tapped, may) in [(false, true), (true, true), (true, false)] {
+    // (tapped before, chosen option (0 tap, 1 untap), "you may" accepted, tapped after)
+    for (tapped, choice, may, after) in [
+        (false, 0, true, true),
+        (true, 1, true, false),
+        (true, 1, false, true),
+        (false, 0, false, false),
+        // Choosing to untap an untapped creature does nothing (no toggling).
+        (false, 1, true, false),
+        (true, 0, true, true),
+    ] {
         let mut t = TestGame::new(2);
         let p = t.battlefield(P0, "Puppeteer");
         let bears = t.battlefield(P1, "Grizzly Bears");
@@ -763,16 +795,13 @@ fn puppeteer_taps_or_untaps_target_creature() {
         }
         t.lands(P0, "Island", 1);
         act(&mut t, P0, p, "tap or untap", &[Entity::Object(bears)]).unwrap();
-        // Choose the action that changes it.
-        t.answer(P0, DecisionKind::Option, Answer::Index(usize::from(tapped)));
+        assert!(t.obj_now(p).tapped);
+        t.answer(P0, DecisionKind::Option, Answer::Index(choice));
         t.answer_yes(P0, may);
         t.resolve_all();
-        assert_eq!(
-            t.obj_now(bears).tapped,
-            tapped != may,
-            "tapped before: {tapped}, may: {may}"
-        );
-        assert_eq!(t.obj_now(other).tapped, tapped);
+        let case = format!("tapped {tapped}, choice {choice}, may {may}");
+        assert_eq!(t.obj_now(bears).tapped, after, "{case}");
+        assert_eq!(t.obj_now(other).tapped, tapped, "{case}");
     }
 }
 

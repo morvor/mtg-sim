@@ -3,7 +3,7 @@
 
 use super::structure_activated_2::{next_turn, target_choices};
 use super::structure_seed_common::*;
-use mtg_engine::decision::Answer;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::events::Event;
 use mtg_engine::game::{GameConfig, Variant};
 use mtg_engine::keywords::KeywordKind;
@@ -182,7 +182,8 @@ fn will_of_the_planeswalkers_votes_planeswalk_or_chaos() {
     // more votes, planeswalk. If chaos gets more votes or the vote is tied, chaos ensues."
     supported("Path of the Enigma");
     // (P0's vote, P1's vote) as option indices (0 planeswalk, 1 chaos) -> planeswalked?
-    for (v0, v1, walks) in [(0, 0, true), (1, 1, false), (0, 1, false)] {
+    // Both tie orders: a result that only counted one player's vote would fail one of them.
+    for (v0, v1, walks) in [(0, 0, true), (1, 1, false), (0, 1, false), (1, 0, false)] {
         let mut t = planechase();
         assert_eq!(face_up_planes(&t), vec!["Goldmeadow"]);
         t.lands(P0, "Island", 5);
@@ -191,6 +192,17 @@ fn will_of_the_planeswalkers_votes_planeswalk_or_chaos() {
         t.answer(P0, DecisionKind::Option, Answer::Index(v0));
         t.answer(P1, DecisionKind::Option, Answer::Index(v1));
         t.resolve();
+        // Each player votes once, starting with the caster, between the two words.
+        let votes: Vec<_> = t
+            .asked()
+            .into_iter()
+            .filter_map(|(p, d)| match d {
+                Decision::ChooseOption { options, .. } => Some((p, options)),
+                _ => None,
+            })
+            .collect();
+        let words = vec!["planeswalk".to_string(), "chaos".to_string()];
+        assert_eq!(votes, vec![(P0, words.clone()), (P1, words)]);
         assert_eq!(t.hand_size(P1), 4, "the target draws four");
         assert_eq!(t.hand_size(P0), 0);
         let walked = custom_events(&t, planechase::PLANESWALKED);
@@ -321,8 +333,8 @@ fn savage_smash_pumps_then_fights() {
         .targets(&[Entity::Object(bears), Entity::Object(giant)])
         .go();
     let c = target_choices(&t, P0);
-    assert!(!c[0].contains(&Entity::Object(giant)));
-    assert!(!c[1].contains(&Entity::Object(bears)));
+    assert!(c[0].contains(&Entity::Object(bears)) && !c[0].contains(&Entity::Object(giant)));
+    assert!(c[1].contains(&Entity::Object(giant)) && !c[1].contains(&Entity::Object(bears)));
     t.resolve_all();
     assert!(!t.on_battlefield(giant), "4 damage to a 3/3");
     assert_eq!(t.pt(bears), (4, 4));
@@ -357,7 +369,7 @@ fn minor_misstep_counters_only_a_cheap_spell() {
 
 #[test]
 fn justice_strike_makes_a_creature_damage_itself() {
-    cr!("608.2", "120.3e", "704.5g");
+    cr!("608.2", "120.3e", "704.5g", "702.15b", "702.2b");
     // "Target creature deals damage to itself equal to its power."
     supported("Justice Strike");
     let mut t = TestGame::new(2);
@@ -370,6 +382,16 @@ fn justice_strike_makes_a_creature_damage_itself() {
     assert!(!t.on_battlefield(giant));
     assert_eq!(t.life(P1), 20);
     assert_eq!(t.obj_now(wall).damage, 0);
+    // The creature is the source of the damage: its lifelink and deathtouch apply.
+    let mut t = TestGame::new(2);
+    let hawk = t.battlefield(P1, "Vampire Nighthawk");
+    t.lands(P0, "Plateau", 2);
+    let s = t.hand(P0, "Justice Strike");
+    t.cast(P0, s).target(hawk).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(hawk), "2 deathtouch damage to a 2/3");
+    assert_eq!(t.life(P1), 22, "its controller gains life from its lifelink");
+    assert_eq!(t.life(P0), 20);
     // A 0-power creature deals no damage.
     let mut t = TestGame::new(2);
     let wall = t.battlefield(P1, "Wall of Stone");

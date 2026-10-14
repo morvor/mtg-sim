@@ -1,7 +1,7 @@
 //! Structure-coverage tests (round 4): mana-ability structures shared by many cards that
 //! no other test exercised (see `docs/STRUCTURE_COVERAGE.md`).
 
-use super::structure_activated_2::{act, untapped};
+use super::structure_activated_2::{act, next_turn, untapped};
 use super::structure_seed_common::*;
 use mtg_engine::decision::Answer;
 use mtg_engine::mana::ManaType;
@@ -24,29 +24,29 @@ fn gathering_place_adds_two_colors_only_with_a_basic_or_this_turn() {
     // a basic land."
     supported("Gathering Place");
     let mut t = TestGame::new(2);
-    let g = t.battlefield(P0, "Gathering Place");
-    // It entered on an earlier turn.
-    t.g.objects[g.0 as usize].entered_turn = 0;
+    let g = t.enter(P0, "Gathering Place");
     t.battlefield(P0, "Taiga"); // not basic
     t.battlefield(P1, "Forest"); // not yours
+    // It entered this turn: no basic land needed. Index 0 is green.
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    act(&mut t, P0, g, "add {g} or {w}", &[]).unwrap();
+    assert_eq!(t.stack_len(), 0, "a mana ability doesn't use the stack");
+    assert_eq!(pool(&t, P0, ManaType::G), 1);
+    assert_eq!(pool_size(&t, P0), 1);
+    assert!(t.obj_now(g).tapped);
+    // The next turn it didn't enter this turn, and P0 controls no basic land.
+    next_turn(&mut t);
+    t.g.untap(g);
     assert!(
         act(&mut t, P0, g, "add {g} or {w}", &[]).is_err(),
         "neither condition holds"
     );
+    t.clear_answers();
     t.battlefield(P0, "Plains");
     // Index 1 is white.
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
     act(&mut t, P0, g, "add {g} or {w}", &[]).unwrap();
-    assert_eq!(t.stack_len(), 0);
     assert_eq!(pool(&t, P0, ManaType::W), 1);
-    assert_eq!(pool_size(&t, P0), 1);
-    assert!(t.obj_now(g).tapped);
-    // Entered this turn, no basic land.
-    let mut t = TestGame::new(2);
-    let g = t.enter(P0, "Gathering Place");
-    t.answer(P0, DecisionKind::Option, Answer::Index(0));
-    act(&mut t, P0, g, "add {g} or {w}", &[]).unwrap();
-    assert_eq!(pool(&t, P0, ManaType::G), 1);
     assert_eq!(pool_size(&t, P0), 1);
 }
 
@@ -107,6 +107,7 @@ fn devotee_filters_into_three_colors_once_each_turn() {
     act(&mut t, P0, d, "add", &[]).unwrap();
     assert_eq!(pool(&t, P0, ManaType::B), 1);
     assert_eq!(pool_size(&t, P0), 1);
+    assert_eq!(untapped(&t, P0, "Wastes"), 1, "{{1}} was paid");
     assert!(!t.obj_now(d).tapped);
     assert!(act(&mut t, P0, d, "add", &[]).is_err(), "only once each turn");
     t.g.player_mut(P0).mana_pool.mana.clear();
