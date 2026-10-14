@@ -943,6 +943,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               counts the objects of both kinds: the number of cards in your hand and foretold \
               cards you own in exile (CR 107.3a).",
     },
+    Equivalence {
+        pattern: r"\bthe base power and toughness of ([^.,]+?) become (\d+/\d+)",
+        replacement: "$1 has base power and toughness $2",
+        why: "\"The base power and toughness of each creature ... become 0/2\" and \"each \
+              creature ... has base power and toughness 0/2\" set the same characteristics \
+              (CR 613.4b).",
+    },
 ];
 
 /// The sentence-level rewrites `sentence_rewrites` applies to both sides (word order and

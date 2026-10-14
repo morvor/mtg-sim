@@ -12,6 +12,9 @@ impl Renderer<'_> {
 
     /// A number as a noun phrase ("3", "X", "the number of creatures you control").
     pub(crate) fn value(&mut self, v: &Value) -> String {
+        if let Some(s) = self.craft_value(v) {
+            return s;
+        }
         match v {
             Value::Const(n) => n.to_string(),
             Value::X => "X".into(),

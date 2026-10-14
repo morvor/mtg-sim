@@ -306,9 +306,25 @@ impl Renderer<'_> {
         if matches!(f, Filter::Any) {
             return "card".into();
         }
+        let n = self.card_noun_plain(f);
+        // "a land or double-faced card": the shared qualities said once, or for each
+        // alternative (see `nouns::factor_or`).
+        let g = super::nouns::factor_or(f);
+        if format!("{g:?}") == format!("{f:?}") {
+            return n;
+        }
+        let m = self.card_noun_plain(&g);
+        if m == n {
+            n
+        } else {
+            format!("{{alt:{n}|{m}}}")
+        }
+    }
+
+    fn card_noun_plain(&mut self, f: &Filter) -> String {
         let n = self.noun(&f.clone().in_zone(ZoneKind::Hand), Num::One);
         // The zone is implied.
-        n.trim_end_matches(" in a hand").to_string()
+        n.replacen(" in a hand", "", 1)
     }
 
     /// "[subject] [vp]": "you" is dropped for imperative verbs.
@@ -4192,7 +4208,13 @@ impl Renderer<'_> {
         // A permanent put onto the battlefield is under the control of the player who put
         // it there (CR 110.2a), "put" or "return": the instruction is yours.
         let d = if to.zone == ZoneKind::Battlefield {
-            d.replacen(" under your control", " {opt:under your control}", 1)
+            // Cards say it before or after "tapped and attacking".
+            d.replacen(
+                " tapped and attacking under your control",
+                " {alt:tapped and attacking {opt:under your control}|under your control tapped and attacking}",
+                1,
+            )
+            .replacen(" under your control", " {opt:under your control}", 1)
         } else {
             d
         };
@@ -4272,6 +4294,18 @@ impl Renderer<'_> {
             // the player putting it there; cards still say "under your control" when the
             // object isn't theirs, and "under its owner's control" when it goes back.
             match &to.controller {
+                // "onto the battlefield under your control tapped and attacking": the
+                // control said before the status.
+                Some(PlayerRef::You) if yours && to.tapped && to.attacking && !to.transformed => {
+                    let st = " tapped and attacking";
+                    if let Some(head) = s.strip_suffix(st) {
+                        s = format!(
+                            "{head} {{alt:tapped and attacking {{opt:under your control}}|under your control tapped and attacking}}"
+                        );
+                    } else {
+                        s.push_str(" {opt:under your control}");
+                    }
+                }
                 // The player putting it there controls it (CR 110.2a): cards may say so.
                 Some(PlayerRef::You) if yours => s.push_str(" {opt:under your control}"),
                 // Its owner is you: a card from your graveyard enters under your control

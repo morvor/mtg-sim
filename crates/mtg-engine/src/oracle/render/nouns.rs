@@ -385,6 +385,21 @@ impl Renderer<'_> {
                 let flat = flatten_or(f);
                 self.collect(&flat, np)
             }
+            // "a land or double-faced card".
+            Filter::Or(v)
+                if v.iter().any(is_double_faced)
+                    && v.iter().all(|x| is_double_faced(x) || matches!(x, Filter::Type(_))) =>
+            {
+                for x in v {
+                    np.alts.push(match x {
+                        Filter::Type(t) => t.word().to_lowercase(),
+                        _ => "double-faced".to_string(),
+                    });
+                }
+                if np.kind.is_none() {
+                    np.kind = Some("card");
+                }
+            }
             // "an artifact card with mana cost {0} or {1}".
             Filter::Or(v) if v.len() > 1 && v.iter().all(|x| mana_cost_is(x).is_some()) => {
                 let costs: Vec<String> = v.iter().filter_map(mana_cost_is).collect();
@@ -1811,6 +1826,11 @@ fn is_outlaw(v: &[Filter]) -> bool {
     v.len() == 5 && names == ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]
 }
 
+/// A double-faced card (CR 712.1).
+fn is_double_faced(f: &Filter) -> bool {
+    matches!(f, Filter::Custom(n) if n == crate::kw::dig_filters::DOUBLE_FACED)
+}
+
 /// "with mana cost {0}" (`kw/spell_cost_grammar.rs`): the mana cost.
 fn mana_cost_is(f: &Filter) -> Option<String> {
     match f {
@@ -1825,7 +1845,7 @@ fn mana_cost_is(f: &Filter) -> Option<String> {
 /// them: "Auras you control or Equipment you control" is "Auras and Equipment you
 /// control"; "an artifact card with mana cost {0} or an artifact card with mana cost {1}"
 /// is "an artifact card with mana cost {0} or {1}". The same objects either way.
-fn factor_or(f: &Filter) -> Filter {
+pub(crate) fn factor_or(f: &Filter) -> Filter {
     let factor = |alts: &[Filter]| -> Option<(Filter, Vec<Filter>)> {
         if alts.len() < 2 {
             return None;
@@ -1860,7 +1880,7 @@ fn factor_or(f: &Filter) -> Filter {
         // Each alternative keeps one quality of its own, and it's one a list of
         // alternatives says before the shared ones (a type, or the mana cost).
         let simple = |x: &Filter| {
-            Renderer::is_type_like(x) || mana_cost_is(x).is_some()
+            Renderer::is_type_like(x) || mana_cost_is(x).is_some() || is_double_faced(x)
         };
         if !rest.iter().all(simple) {
             return None;
@@ -1902,6 +1922,8 @@ fn distribute_or(f: &Filter) -> Filter {
     let complex = |x: &Filter| {
         matches!(x, Filter::Or(alts) if !alts.iter().all(Renderer::is_type_like)
             && !alts.iter().all(|a| mana_cost_is(a).is_some())
+            && !(alts.iter().any(is_double_faced)
+                && alts.iter().all(|a| is_double_faced(a) || matches!(a, Filter::Type(_))))
             && !alts.iter().all(|a| matches!(a, Filter::Color(_)))
             && !alts.iter().all(|a| matches!(a, Filter::Named(_)))
             && !alts.iter().all(|a| matches!(a, Filter::Attacking | Filter::Blocking | Filter::Tapped | Filter::Untapped | Filter::Blocked | Filter::Unblocked)))

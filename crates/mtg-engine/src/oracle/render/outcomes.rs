@@ -447,7 +447,7 @@ impl Renderer<'_> {
             Value::Const(k) => super::nouns::Det::Count(number_word(*k)),
             other => super::nouns::Det::Count(self.value(other)),
         };
-        let noun = self.noun_det(&Filter::and(rest), det);
+        let noun = self.noun_det(&Filter::and(rest.clone()), det);
         let zone = here.iter().find_map(|x| match x {
             Filter::InZone(z) => Some(*z),
             _ => None,
@@ -470,6 +470,12 @@ impl Renderer<'_> {
             let from = match (zone, owner) {
                 (Some(ZoneKind::Graveyard), Some(r)) => {
                     format!(" from {} graveyard", self.rel_possessive(r, Num::One))
+                }
+                // "an exiled card used to craft ~ at random": the quality says where.
+                (Some(ZoneKind::Exile), None)
+                    if rest.iter().any(|x| matches!(x, Filter::Custom(n) if n == crate::kw::craft::USED_TO_CRAFT)) =>
+                {
+                    String::new()
                 }
                 (Some(ZoneKind::Exile), None) => " from exile".into(),
                 (None, None) => String::new(),

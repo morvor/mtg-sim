@@ -332,4 +332,22 @@ impl Renderer<'_> {
         };
         Some(format!("the {} {kind} of {whose} graveyard", which.0))
     }
+
+    /// "the total power of the exiled cards used to craft it", "the mana value of the
+    /// exiled card used to craft it" (CR 702.167a).
+    pub(crate) fn craft_value(&mut self, v: &Value) -> Option<String> {
+        let crafted = |s: &Sel| {
+            matches!(s, Sel::All(Filter::And(p))
+                if p.iter().any(|x| matches!(x, Filter::Custom(n) if n == crate::kw::craft::USED_TO_CRAFT)))
+        };
+        match v {
+            Value::Aggregate(AggOp::Sum, Stat::Power, s) if crafted(s) => {
+                Some("the total power of the exiled cards used to craft ~it".into())
+            }
+            Value::ManaValueOf(s) if crafted(s) => {
+                Some("the mana value of the exiled card used to craft ~it".into())
+            }
+            _ => None,
+        }
+    }
 }

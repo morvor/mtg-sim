@@ -148,6 +148,48 @@ impl Renderer<'_> {
                 let x = self.effect(then);
                 Some(format!("{{alt:if {neg}, {x}|{x} unless {pos}}}"))
             }
+            // "If the top card of target player's graveyard is a creature card, put that
+            // card on top of that player's library."
+            Effect::Seq(v) if v.len() == 2 => {
+                let [Effect::Store {
+                    var,
+                    sel: Sel::All(Filter::And(f)),
+                }, Effect::If {
+                    cond: Condition::Compare(Value::Count(Filter::And(g)), Cmp::Ge, Value::Const(1)),
+                    then,
+                    otherwise,
+                }] = v.as_slice()
+                else {
+                    return None;
+                };
+                let top = |x: &Filter| matches!(x, Filter::Custom(n) if n == crate::kw::hand_graveyard_actions::TOP_OF_GRAVEYARD);
+                if !f.iter().any(top) || !matches!(otherwise.as_ref(), Effect::Noop) {
+                    return None;
+                }
+                let Effect::Move { what: Sel::Var(w), to } = then.as_ref() else {
+                    return None;
+                };
+                let key = |x: &Filter| format!("{x:?}");
+                // The condition's quality: what the stored card's filter doesn't say.
+                let extra: Vec<Filter> = g
+                    .iter()
+                    .filter(|x| !f.iter().any(|y| key(y) == key(x)))
+                    .cloned()
+                    .collect();
+                if w != var || !f.iter().all(|y| g.iter().any(|x| key(x) == key(y))) || extra.is_empty() {
+                    return None;
+                }
+                let owner = f.iter().find_map(|x| match x {
+                    Filter::OwnedBy(r) => Some(*r),
+                    _ => None,
+                })?;
+                let p = self.rel_possessive(owner, Num::One);
+                let mut q = extra;
+                q.push(Filter::Card);
+                let n = self.noun_det(&Filter::and(q), Det::A);
+                let d = self.destination_phrase(to, false, false);
+                Some(format!("if the top card of {p} graveyard is {n}, put that card {d}"))
+            }
             // "You may draw an additional card if ~ is enchanted": the choice and the
             // condition, either way round.
             Effect::May { who, effect } => {

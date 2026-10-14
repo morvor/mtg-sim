@@ -518,6 +518,8 @@ impl Renderer<'_> {
                         // gerund.
                         let t = if let Some(x) = t.strip_suffix(" enters") {
                             format!("{x} entering {{opt:the battlefield}}")
+                        } else if let Some(x) = t.strip_suffix(" is dealt damage") {
+                            format!("{x} being dealt damage")
                         } else if let Some(x) = t.strip_suffix(" dies") {
                             format!("{x} dying")
                         } else if let Some(x) = t.strip_suffix(" attacks") {
