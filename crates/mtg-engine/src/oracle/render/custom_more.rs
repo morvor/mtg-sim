@@ -115,6 +115,9 @@ impl Renderer<'_> {
         if name == crate::kw::reveal_first_draw::YOUR_TURNS {
             return Some("reveal the first card you draw on each of your turns".into());
         }
+        if name == crate::kw::reveal_first_draw::MAY_EACH_TURN {
+            return Some("you may reveal the first card you draw each turn as you draw it".into());
+        }
         // "You may cast this card from your graveyard by discarding two cards in addition
         // to paying its other costs." The cost is the one the ability's rules read
         // (`kw/cast_self_from_graveyard.rs`).

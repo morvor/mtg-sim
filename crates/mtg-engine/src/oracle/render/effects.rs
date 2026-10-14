@@ -1779,65 +1779,20 @@ impl Renderer<'_> {
                 duration,
                 uses,
             } => {
-                // Crafty Cutpurse.
-                if let (
-                    ReplacementEvent::CreateTokens(PlayerFilter::Opponent),
-                    ReplacementAction::EnterUnderControl(PlayerRef::You),
-                    Duration::EndOfTurn,
-                    None,
-                ) = (&def.event, &def.action, duration, uses)
-                {
-                    return "each token that would be created under an opponent's control this turn is created under your control instead".into();
+                let s = self.add_replacement(def, duration, uses);
+                // A replacement effect that applies only once is always said to ("the
+                // next time ... would ...", CR 614.1); a wording that doesn't say it
+                // misrepresents it. One about a particular object entering ("that
+                // creature enters with an additional +1/+1 counter") can apply only once
+                // anyway: an object that enters again is a new object (CR 400.7).
+                let one_object = matches!(
+                    &def.event,
+                    ReplacementEvent::EntersBattlefield(Filter::In(_))
+                );
+                if uses.is_some() && !one_object && !s.contains("next") {
+                    return self.gap("one-use replacement effect");
                 }
-                let s = self.replacement(def, *uses);
-                let d = self.duration(duration);
-                // "All damage that would be dealt to target creature this turn is dealt to
-                // you instead."
-                if (d == "this turn" || d == "until end of turn")
-                    && (s.starts_with("all ") || s.starts_with("the next "))
-                    && s.contains(" that would be dealt to ")
-                    && s.contains(" is dealt to ")
-                {
-                    return s.replacen(" is dealt to ", " this turn is dealt to ", 1);
-                }
-                // "If it would die this turn, exile it instead."
-                if d == "until end of turn" && s.starts_with("if ") && s.contains(" would die,") {
-                    return s.replacen(" would die,", " would die this turn,", 1);
-                }
-                // "If any source would deal 1 or more damage to a permanent or player this
-                // turn, it deals 2 damage to that permanent or player instead."
-                // "If a red source you control would deal damage to a permanent or player
-                // this turn, it deals that much damage plus 2 ... instead."
-                if d == "until end of turn"
-                    && uses.is_none()
-                    && matches!(def.event, ReplacementEvent::Damage { .. })
-                    && s.starts_with("if ")
-                    && s.contains(" would deal damage")
-                    && s.contains(", it deals ")
-                {
-                    if let Some((ev, then)) = s.split_once(", it deals ") {
-                        return format!("{ev} this turn, it deals {then}");
-                    }
-                }
-                if d == "until end of turn" && s.starts_with("if ") && s.contains(" or more damage to ") {
-                    if let Some((ev, then)) = s.split_once(", ") {
-                        return format!("{ev} this turn, {then}");
-                    }
-                }
-                // "The next time you would draw a card this turn, ... instead": one use.
-                if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
-                    if let Some(rest) = s.strip_prefix("if ") {
-                        if let Some((ev, then)) = rest.split_once(", ") {
-                            let one_alt = ev.starts_with("{alt:")
-                                && ev.ends_with('}')
-                                && ev.matches('{').count() == 1;
-                            if !ev.contains('{') || one_alt {
-                                return format!("the next time {ev} this turn, {then}");
-                            }
-                        }
-                    }
-                }
-                join_words(&[s, d])
+                s
             }
             Effect::GainControl {
                 what,
@@ -3197,6 +3152,75 @@ impl Renderer<'_> {
             Value::X if ok => Some("X".into()),
             _ => None,
         }
+    }
+
+    /// "[Replacement effect] this turn" created by a resolving spell or ability; see the
+    /// `Effect::AddReplacement` arm of `effect_inner`.
+    fn add_replacement(
+        &mut self,
+        def: &ReplacementDef,
+        duration: &Duration,
+        uses: &Option<u32>,
+    ) -> String {
+        // Crafty Cutpurse.
+        if let (
+            ReplacementEvent::CreateTokens(PlayerFilter::Opponent),
+            ReplacementAction::EnterUnderControl(PlayerRef::You),
+            Duration::EndOfTurn,
+            None,
+        ) = (&def.event, &def.action, duration, uses)
+        {
+            return "each token that would be created under an opponent's control this turn is created under your control instead".into();
+        }
+        let s = self.replacement(def, *uses);
+        let d = self.duration(duration);
+        // "All damage that would be dealt to target creature this turn is dealt to
+        // you instead."
+        if (d == "this turn" || d == "until end of turn")
+            && (s.starts_with("all ") || s.starts_with("the next "))
+            && s.contains(" that would be dealt to ")
+            && s.contains(" is dealt to ")
+        {
+            return s.replacen(" is dealt to ", " this turn is dealt to ", 1);
+        }
+        // "If it would die this turn, exile it instead."
+        if d == "until end of turn" && s.starts_with("if ") && s.contains(" would die,") {
+            return s.replacen(" would die,", " would die this turn,", 1);
+        }
+        // "If any source would deal 1 or more damage to a permanent or player this
+        // turn, it deals 2 damage to that permanent or player instead."
+        // "If a red source you control would deal damage to a permanent or player
+        // this turn, it deals that much damage plus 2 ... instead."
+        if d == "until end of turn"
+            && uses.is_none()
+            && matches!(def.event, ReplacementEvent::Damage { .. })
+            && s.starts_with("if ")
+            && s.contains(" would deal damage")
+            && s.contains(", it deals ")
+        {
+            if let Some((ev, then)) = s.split_once(", it deals ") {
+                return format!("{ev} this turn, it deals {then}");
+            }
+        }
+        if d == "until end of turn" && s.starts_with("if ") && s.contains(" or more damage to ") {
+            if let Some((ev, then)) = s.split_once(", ") {
+                return format!("{ev} this turn, {then}");
+            }
+        }
+        // "The next time you would draw a card this turn, ... instead": one use.
+        if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
+            if let Some(rest) = s.strip_prefix("if ") {
+                if let Some((ev, then)) = rest.split_once(", ") {
+                    let one_alt = ev.starts_with("{alt:")
+                        && ev.ends_with('}')
+                        && ev.matches('{').count() == 1;
+                    if !ev.contains('{') || one_alt {
+                        return format!("the next time {ev} this turn, {then}");
+                    }
+                }
+            }
+        }
+        join_words(&[s, d])
     }
 
     /// "The next time a source of your choice would deal damage to you this turn, prevent

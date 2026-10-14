@@ -60,7 +60,8 @@ docs/roundtrip-passing.txt; `roundtrip --check` must pass.
 Re-run on the branch (Oct 14): 25,861 of 28,994 passed at the start; 25,983 of 29,179
 pass after (merged with origin, whose passing list had 25,861); 26,009 of 29,230 after merging
 the later landings. 92 of the 93 cards in the
-taken clusters pass.
+taken clusters pass. After review (Inquisitor Eisenhorn's optional reveal, the one-use
+limit always rendered): 26,010 of 29,230.
 
 ## Parser bugs found
 
@@ -76,6 +77,13 @@ on the old code, and a row in the bug table (`FINDINGS`):
   ... this way" triggers were compiled, so the card was never revealed. Now a static
   ability (`kw/reveal_first_draw.rs`) reveals it as it's drawn (once, however many apply;
   Keranos only on your turns).
+- Inquisitor Eisenhorn (found in review): "You may reveal the first card you draw each turn
+  as you draw it" was modeled as an optional effect of the "whenever you reveal ... this
+  way" trigger: the card was never revealed, the trigger went on the stack whether or not
+  the player would have revealed it, and the choice was put off until it resolved (when
+  the card could already have left the hand). Now the player chooses as the card is drawn
+  (`kw/reveal_first_draw.rs`, its rulings), and the triggered ability triggers only if it
+  was revealed (`Condition::Custom` reading `TurnHistory::first_draws_revealed`).
 
 Behavior doubts left by the roundtrip-clusters-4 review, checked in play (both behave as
 the text says; tests pass on the old code):
@@ -111,11 +119,19 @@ that damage, rounded down"; "who can't" after a sacrifice (CR 701.21a); "each op
 who has three or more poison counters"; "if you chose a creature other than ~ as your
 Ring-bearer"; "If a land card is revealed this way"; "Reveal the first card ...".
 
-Noticed, not changed: the general damage-replacement rendering ignores a one-use
-`uses: Some(1)` ("the next time") when no chosen source is involved; Circle of Despair now
-goes through the chosen-source form, which says it.
+Review: the renderer now always says a one-use limit (`uses: Some(1)`) of a replacement
+effect a resolving ability creates ("the next time ..."); a wording that doesn't is a gap.
+Only a replacement about one particular object entering ("that creature enters with an
+additional +1/+1 counter") is exempt: it can apply only once anyway (CR 400.7). No passing
+card mismatched for it, and every passing card whose text says "the next time" has the
+limit in its AST (or is regeneration, whose shield is one use by definition).
 
 ## Remaining
+
+- Inquisitor Eisenhorn: a card drawn while a spell is being cast or an ability activated
+  (a mana ability that draws, paying a cost) is revealed only once that's done (CR
+  121.8), after its draw was already checked for triggers, so it doesn't trigger the
+  "this way" ability then.
 
 - Chlorophant: the granted "you may put another +1/+1 counter on ~" repeats its first
   ability; rendered "a +1/+1 counter" (same action; "another" refers to the other

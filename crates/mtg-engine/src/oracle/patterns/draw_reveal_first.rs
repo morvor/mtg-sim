@@ -4,8 +4,8 @@
 //! triggers when you draw your first card of the turn (CR 121.1; "on each of your turns":
 //! only during your turns) if it's that kind of card (the card is revealed as it's drawn,
 //! CR 701.20a). "You may reveal the first card you draw each turn as you draw it": the
-//! card is revealed only if you choose to, so the triggered ability's effect happens only
-//! then.
+//! card is revealed only if you choose to as you draw it, and the triggered abilities
+//! trigger only then.
 
 use super::AbilityPattern;
 use crate::ability::*;
@@ -33,19 +33,19 @@ fn reveal_first_draw(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
     let rest = rest.strip_prefix("whenever you reveal ")?;
     let mut out = Vec::new();
     // The reveal itself: a static ability (`kw/reveal_first_draw.rs`). "You may reveal"
-    // is asked as the card is drawn; that choice isn't modeled, the triggered abilities'
-    // effects are optional instead.
-    if !may {
-        let name = if your_turns {
-            crate::kw::reveal_first_draw::YOUR_TURNS
-        } else {
-            crate::kw::reveal_first_draw::EACH_TURN
-        };
-        out.push(AbilityDef::new(
-            AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(name.into()))),
-            block,
-        ));
-    }
+    // is chosen as the card is drawn, and the triggered abilities trigger only if it was
+    // revealed.
+    let name = if may {
+        crate::kw::reveal_first_draw::MAY_EACH_TURN
+    } else if your_turns {
+        crate::kw::reveal_first_draw::YOUR_TURNS
+    } else {
+        crate::kw::reveal_first_draw::EACH_TURN
+    };
+    out.push(AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(name.into()))),
+        block,
+    ));
     for part in rest.split(". whenever you reveal ") {
         let (desc, effect) = part.split_once(" this way, ")?;
         let desc = desc
@@ -66,19 +66,18 @@ fn reveal_first_draw(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
                 PlayerFilter::Active,
             ));
         }
-        let mut body = crate::oracle::effects::parse_trigger_body(
+        if may {
+            // Revealed only if you chose to (as it was drawn).
+            cond.push(Condition::Custom(
+                crate::kw::reveal_first_draw::REVEALED_THIS_WAY.into(),
+            ));
+        }
+        let body = crate::oracle::effects::parse_trigger_body(
             effect,
             ctx,
             Sel::TriggerObject,
             PlayerRef::You,
         )?;
-        if may {
-            // Revealed only if you choose to (as it's drawn).
-            body.effect = Effect::May {
-                who: PlayerRef::You,
-                effect: Box::new(body.effect),
-            };
-        }
         let trigger = TriggerCond::Where {
             trigger: Box::new(TriggerCond::Draws {
                 who: PlayerRel::You,

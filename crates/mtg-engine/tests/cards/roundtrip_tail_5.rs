@@ -189,3 +189,63 @@ fn plaguecrafter_each_player_who_cant_sacrifice_discards() {
     assert_eq!(t.hand_size(P1), 1, "{}", t.dump_log());
     assert_eq!(t.hand_size(P2), 0, "{}", t.dump_log());
 }
+
+#[test]
+fn inquisitor_eisenhorn_chooses_to_reveal_as_the_card_is_drawn() {
+    cr!("701.20a", "121.1", "603.2");
+    ruling!(
+        "Inquisitor Eisenhorn",
+        "You look at the card as you draw it before choosing whether to reveal it."
+    );
+    ruling!(
+        "Inquisitor Eisenhorn",
+        "If you reveal a card this way, it remains revealed until Inquisitor Eisenhorn's triggered ability finishes resolving."
+    );
+    // "You may reveal the first card you draw each turn as you draw it. Whenever you
+    // reveal an instant or sorcery card this way, create Cherubael ...": not revealing it
+    // means there's nothing to trigger (the choice isn't put off until the triggered
+    // ability resolves).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Inquisitor Eisenhorn");
+    t.library_top(P0, "Shock");
+    t.answer_yes(P0, false);
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert!(!was_revealed(&t, "Shock"), "{}", t.dump_log());
+    assert_eq!(t.stack_len(), 0, "{}", t.dump_log());
+
+    // Revealed as it's drawn; it stays revealed while the triggered ability waits.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Inquisitor Eisenhorn");
+    let shock = t.library_top(P0, "Shock");
+    t.answer_yes(P0, true);
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert!(was_revealed(&t, "Shock"), "{}", t.dump_log());
+    assert_eq!(t.stack_len(), 1);
+    let in_hand = t.g.current(shock);
+    assert!(mtg_engine::reveal::is_revealed(&t.g, in_hand));
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Cherubael").len(), 1);
+}
+
+#[test]
+fn inquisitor_eisenhorn_token_even_if_the_revealed_card_left_your_hand() {
+    cr!("701.20a", "603.2");
+    ruling!(
+        "Inquisitor Eisenhorn",
+        "If the card leaves your hand before Inquisitor Eisenhorn's triggered ability resolves, you'll still create a Cherubael token."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Inquisitor Eisenhorn");
+    let shock = t.library_top(P0, "Shock");
+    t.answer_yes(P0, true);
+    t.g.draw_cards(P0, 1);
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+    let in_hand = t.g.current(shock);
+    t.g.discard(P0, in_hand, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Cherubael").len(), 1, "{}", t.dump_log());
+}
