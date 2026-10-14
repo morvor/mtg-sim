@@ -113,7 +113,7 @@ fn cosmos_charger_only_works_on_the_battlefield() {
 
 #[test]
 fn delayed_blast_fireball_deals_5_when_cast_from_exile_for_any_reason() {
-    cr!("601.2", "702.143a");
+    cr!("601.2");
     ruling!(
         "Delayed Blast Fireball",
         "Delayed Blast Fireball deals 5 damage if it was cast from exile for any reason; it doesn't have to be from its foretell ability."
@@ -149,7 +149,7 @@ fn delayed_blast_fireball_deals_5_when_cast_from_exile_for_any_reason() {
 
 #[test]
 fn a_copy_of_the_foretold_soldier_becomes_foretold_but_has_no_foretell_cost() {
-    cr!("702.143a", "702.143e", "707.2");
+    cr!("702.143a", "702.143d", "707.2");
     ruling!(
         "The Foretold Soldier",
         "If a card is a copy of The Foretold Soldier on the battlefield, it can be exiled by the triggered ability and will become foretold. However, it may only be cast this way if it has a foretell cost in exile."

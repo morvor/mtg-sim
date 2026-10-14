@@ -222,7 +222,6 @@ fn a_nontoken_food_pays_campsite_cuisines_sacrifice_but_not_two_costs() {
     t.battlefield(P0, "Campsite Cuisine");
     let ramen = t.battlefield(P0, "Instant Ramen");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.answer(P0, DecisionKind::Number, Answer::Number(1));
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(ramen)]);
     t.answer_targets(P0, &[obj(bears)]);
@@ -241,10 +240,58 @@ fn a_nontoken_food_pays_campsite_cuisines_sacrifice_but_not_two_costs() {
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
     assert_eq!(t.stack_len(), 1);
     t.activate(P0, food, 0, &[]).unwrap();
-    t.answer(P0, DecisionKind::Number, Answer::Number(1));
     t.answer_yes(P0, true);
     t.resolve_all();
     assert_eq!(t.life(P0), 23);
+    assert_eq!(t.pt(bears), (2, 2));
+}
+
+/// The maximum number of targets offered by the last target choice of `p`.
+fn last_target_max(t: &TestGame, p: PlayerId) -> Option<u32> {
+    t.asked().iter().rev().find_map(|(q, d)| match d {
+        Decision::ChooseTargets { max, .. } if *q == p => Some(*max),
+        _ => None,
+    })
+}
+
+#[test]
+fn campsite_cuisines_x_is_the_number_of_foods_sacrificed() {
+    cr!("107.3f", "603.12");
+    supported("Campsite Cuisine");
+    // Three Foods, three attackers: sacrificing two makes X = 2 for the reflexive
+    // trigger's "up to X target attacking creatures".
+    for chosen in [1usize, 2] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Campsite Cuisine");
+        create_tokens(&mut t, P0, "Food", 3);
+        let all = with_subtype(&t, P0, "Food");
+        let bears: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+        t.answer_yes(P0, true);
+        let pick: Vec<Entity> = all[..chosen].iter().map(|f| obj(*f)).collect();
+        t.answer_choose(P0, &pick);
+        let targets: Vec<Entity> = bears[..chosen].iter().map(|b| obj(*b)).collect();
+        t.answer_targets(P0, &targets);
+        let atk: Vec<(ObjectId, Entity)> = bears.iter().map(|b| (*b, Entity::Player(P1))).collect();
+        attack_with(&mut t, &atk);
+        t.resolve_all();
+        assert_eq!(foods(&t, P0), 3 - chosen, "{chosen}");
+        assert_eq!(last_target_max(&t, P0), Some(chosen as u32), "{chosen}");
+        for (i, b) in bears.iter().enumerate() {
+            let want = if i < chosen { (5, 5) } else { (2, 2) };
+            assert_eq!(t.pt(*b), want, "{chosen}: bear {i}");
+        }
+        assert!(t.obj_now(bears[0]).has_keyword(mtg_engine::keywords::KeywordKind::Trample));
+        assert!(!t.obj_now(bears[2]).has_keyword(mtg_engine::keywords::KeywordKind::Trample));
+    }
+    // Declining sacrifices nothing and pumps nothing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Campsite Cuisine");
+    create_tokens(&mut t, P0, "Food", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_yes(P0, false);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(foods(&t, P0), 2);
     assert_eq!(t.pt(bears), (2, 2));
 }
 
@@ -279,6 +326,15 @@ fn bilbo_adds_that_many_treasures_and_each_bilbo_applies_once() {
         assert_eq!(treasures(&t, P0), 3 * bilbos);
         assert_eq!(treasures(&t, P1), 0);
     }
+    // With a token doubler, whichever order the replacements apply in (CR 616.1), two
+    // Foods and two Treasures.
+    supported("Parallel Lives");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bilbo, Fellow Conspirator");
+    t.battlefield(P0, "Parallel Lives");
+    create_tokens(&mut t, P0, "Food", 1);
+    assert_eq!(foods(&t, P0), 2);
+    assert_eq!(treasures(&t, P0), 2);
 }
 
 #[test]
