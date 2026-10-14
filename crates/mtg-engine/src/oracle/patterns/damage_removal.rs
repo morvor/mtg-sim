@@ -389,6 +389,15 @@ fn recipient_item(
     if let Some(r) = word(s, "itself") {
         return Some((src.clone(), r.to_string()));
     }
+    // "that player or planeswalker" (Searing Blaze): the earlier "target player or
+    // planeswalker".
+    if let Some(r) = word(s, "that player or planeswalker") {
+        let slot = b.targets.iter().rposition(|t| {
+            matches!(t.what, TargetKind::ObjectOrPlayer(..))
+                && t.text.ends_with("player or planeswalker")
+        })?;
+        return Some((Sel::Target(slot as u8), r.to_string()));
+    }
     if let Some((sel, r)) = player_recipient(s, b) {
         return Some((sel, r.to_string()));
     }
@@ -515,12 +524,18 @@ fn starts_recipient(s: &str) -> bool {
 fn recipients(s: &str, src: &Sel, b: &mut Builder) -> Option<(Sel, String)> {
     let s = s.trim_start();
     if let Some(r) = s.strip_prefix("each of ") {
-        // "each of up to two other targets": other than the earlier targets.
-        let other_targets = r.contains(" other targets");
-        let probe = r.replacen(" other targets", " targets", 1);
+        // "each of up to two other targets", "each of two other target creatures": other
+        // than the earlier targets (the count comes first).
+        let other_at = r
+            .find(" other target")
+            .filter(|&i| !r[..i].contains("target"));
+        let probe = match other_at {
+            Some(i) => format!("{}{}", &r[..i], &r[i + " other".len()..]),
+            None => r.to_string(),
+        };
         let (mut spec, _, rest) = counted_targets(&probe)?;
-        if other_targets {
-            if !matches!(spec.what, TargetKind::AnyTarget) || b.targets.is_empty() {
+        if other_at.is_some() {
+            if b.targets.is_empty() {
                 return None;
             }
             spec.distinct_from = (0..b.targets.len() as u8).collect();

@@ -1395,6 +1395,26 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
             rest.to_string(),
         ));
     }
+    // "creatures that died this way" (Reign of Terror, Hellfire): the permanents the
+    // instruction put into a graveyard from the battlefield (CR 700.4), judged as they last
+    // existed there; one destroyed but moved elsewhere by a replacement didn't die.
+    if let Some(noun) = head
+        .strip_suffix(" that died")
+        .or_else(|| head.strip_suffix(" died"))
+    {
+        let (f, _, tail) = parse_object_phrase(noun)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        let died = Sel::Matching(
+            Box::new(Sel::Var(vars::IT)),
+            Filter::InZone(ZoneKind::Graveyard),
+        );
+        return Some((
+            Sel::Matching(Box::new(Sel::Before(Box::new(died))), f),
+            rest.to_string(),
+        ));
+    }
     // The cards an earlier sentence revealed (not read apart from the ability's text, as
     // in a cost: the hand/graveyard grammar reads those).
     if head.ends_with(" revealed") && b.sentences == 0 {

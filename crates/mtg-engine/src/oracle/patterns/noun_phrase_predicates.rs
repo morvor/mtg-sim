@@ -230,6 +230,26 @@ pub fn other_than_trigger_subject(f: Filter, b: &crate::oracle::effects::Builder
     )
 }
 
+/// "all lands its controller controls" (Tectonic Instability: "Whenever a land enters,
+/// tap all lands its controller controls"): objects controlled by the controller of the
+/// one object "it" names.
+pub fn its_controller_controls(
+    f: Filter,
+    rest: &str,
+    b: &crate::oracle::effects::Builder,
+) -> Option<(Filter, String)> {
+    let r = word(rest.trim_start(), "its controller controls")?;
+    let it = super::pronoun_groups::singular_it(b);
+    if !super::filters_relational::names_one_object(&it) || matches!(it, Sel::This) {
+        return None;
+    }
+    let who = PlayerRef::ControllerOf(Box::new(it));
+    Some((
+        Filter::and(vec![f, Filter::ControlledByPlayer(Box::new(who))]),
+        r.to_string(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

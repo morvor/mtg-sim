@@ -367,6 +367,70 @@ fn two_phrases_same_head(s: &str) -> Option<(Filter, bool, &str)> {
     Some((Filter::Or(vec![f1, f2]), plural1 || plural2, rest))
 }
 
+/// After "X or": an alternative with adjectives of its own ("noncreature spell", "nonblack
+/// creature", "tapped creature"), as a complete noun phrase ending in its head noun (what
+/// follows, "you control", describes both alternatives). Returns its filter, plural, the
+/// rest, and its head noun.
+fn adjective_alternative(r: &str) -> Option<(Filter, bool, &str, &str)> {
+    let first = split_word(r).0;
+    if first.ends_with(',')
+        || head_noun(first).is_some()
+        || adjective(first).is_none()
+        || matches!(first, "token" | "tokens" | "commander" | "commanders")
+    {
+        return None;
+    }
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    let consumed = r[..r.len() - rest.len()].trim_end();
+    let noun = consumed.rsplit(' ').next()?;
+    if consumed.contains(" or ") || consumed.contains(',') || head_noun(noun).is_none() {
+        return None;
+    }
+    Some((f, plural, rest, noun))
+}
+
+/// Makes the phrase so far ("Hero", "nontoken land") one alternative and `alt` the other.
+/// The adjectives before the first alternative are its own; a narrowing head noun ending
+/// the second ("spell", "card", "permanent") narrows the first's pending heads too
+/// ("Hero or noncreature spell": a Hero spell or a noncreature spell).
+fn own_alternative(
+    parts: &mut Vec<Filter>,
+    heads: &mut Vec<Filter>,
+    group_start: usize,
+    alt: Filter,
+    noun: &str,
+) {
+    let narrowing = match noun {
+        "spell" | "spells" | "card" | "cards" | "permanent" | "permanents" => head_noun(noun),
+        _ => None,
+    };
+    let pending: Vec<Filter> = heads.drain(group_start.min(heads.len())..).collect();
+    let pending = match pending.len() {
+        0 => None,
+        1 => pending.into_iter().next(),
+        _ => Some(Filter::Or(pending)),
+    }
+    .map(|p| match &narrowing {
+        Some(n) => Filter::and(vec![p, n.clone()]),
+        None => p,
+    });
+    let mut first: Vec<Filter> = parts
+        .iter()
+        .filter(|p| !matches!(p, Filter::Other))
+        .cloned()
+        .collect();
+    parts.retain(|p| matches!(p, Filter::Other));
+    let mut done: Vec<Filter> = std::mem::take(heads);
+    done.extend(pending);
+    first.push(if done.len() == 1 {
+        done.pop().unwrap()
+    } else {
+        Filter::Or(done)
+    });
+    heads.push(Filter::and(first));
+    heads.push(alt);
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     if let Some(r) = two_phrases_same_head(s) {
         return Some(r);
@@ -466,6 +530,14 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         // Continue after "or", "and/or", "and", or comma lists.
         let t = s.trim_start();
         if let Some(r) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
+            if let Some((alt, pl, rest, noun)) = adjective_alternative(r) {
+                // "Hero or noncreature spell", "land or nonblack creature": the
+                // alternative has adjectives of its own.
+                own_alternative(&mut parts, &mut heads, group_start, alt, noun);
+                plural |= pl;
+                s = rest;
+                break;
+            }
             s = r;
             continue;
         }
@@ -599,6 +671,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // allow "creature card or artifact card", "artifact creature and/or Vehicle"
             let t = s.trim_start();
             if let Some(r) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
+                if let Some((alt, pl, rest, noun)) = adjective_alternative(r) {
+                    // "artifact card or noncreature permanent card".
+                    own_alternative(&mut parts, &mut heads, group_start, alt, noun);
+                    plural |= pl;
+                    s = rest;
+                    break;
+                }
                 // "basic land card or Gate card": adjectives before a complete "... card"
                 // phrase describe only that phrase, not the alternative after "or" (but
                 // "nontoken artifact creature or Vehicle" is one description).

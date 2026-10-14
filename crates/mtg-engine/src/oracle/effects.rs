@@ -958,7 +958,14 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             Some((f, r)) => (f, r),
             None => (f, rest.to_string()),
         };
-        let (f, rest) = bind_target_player(f, &rest, b);
+        let (f, rest) = match super::patterns::noun_phrase_predicates::its_controller_controls(
+            f.clone(),
+            &rest,
+            b,
+        ) {
+            Some(x) => x,
+            None => bind_target_player(f, &rest, b),
+        };
         return Some((Sel::All(f), rest));
     }
     // Bare plural noun phrases ("creatures you control") mean all such objects.
@@ -1029,6 +1036,10 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     if let Some(r) = s
         .strip_prefix("its controller")
         .or_else(|| s.strip_prefix("their controller"))
+        // A named character's personal pronoun ("If that permanent was a Liliana
+        // planeswalker, her controller loses 3 life").
+        .or_else(|| s.strip_prefix("her controller"))
+        .or_else(|| s.strip_prefix("his controller"))
     {
         if is_no_referent(&b.it) {
             return None;
