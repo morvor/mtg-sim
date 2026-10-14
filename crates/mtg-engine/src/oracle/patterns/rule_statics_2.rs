@@ -147,3 +147,87 @@ fn static_with_gained_terms(block: &str, ctx: &CompileContext) -> Option<Vec<Abi
 }
 
 inventory::submit! { super::AbilityPattern { name: "rule statics 2: [static giving abilities]. you may activate each of those abilities only once each turn", priority: 50, parse: static_with_gained_terms } }
+
+/// "If ~ is in a graveyard, effects from spells named Flame Burst count it as a card named
+/// Flame Burst." (Pardic Firecat, Diligent Farmhand): see `counts_as_named`. It functions
+/// in graveyards (CR 113.6b).
+fn counts_as_named_static(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("if ~ is in a graveyard, effects from spells named ")?;
+    let (a, b) = r.split_once(" count it as a card named ")?;
+    if a != b {
+        return None;
+    }
+    let (name, rest) = super::value_grammar::literal_card_name(a)?;
+    if !rest.is_empty() || ctx.card_name.is_empty() {
+        return None;
+    }
+    let mut st = StaticAbility::new(StaticEffect::Custom(
+        format!("{}{name}", crate::counts_as_named::PREFIX).into(),
+    ));
+    st.zone = FunctionZone::Graveyard;
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+inventory::submit! { StaticPattern { name: "rule statics 2: effects from spells named [name] count it as a card named [name]", priority: 95, parse: counts_as_named_static } }
+
+/// "Creatures with flying can't attack or block, and their activated abilities with {T}
+/// in their costs can't be activated." (Katabatic Winds): see `tap_abilities_prohibited`.
+fn tap_abilities_cant_be_activated(
+    l: &str,
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    if ctx.is_spell() {
+        return None;
+    }
+    let l = end(l);
+    let (head, tail) = l.split_once(", and their activated abilities with {t} in their costs can't be activated")?;
+    if !tail.is_empty() {
+        return None;
+    }
+    let (subj, pred) = head.split_once(" can't ")?;
+    let (f, plural, rest) = crate::oracle::phrases::parse_object_phrase(subj)?;
+    if !plural || !end(rest).is_empty() {
+        return None;
+    }
+    let restriction = match pred {
+        "attack or block" => Restriction::CantAttackOrBlock(f.clone()),
+        "attack" => Restriction::CantAttack(f.clone()),
+        "block" => Restriction::CantBlock(f.clone()),
+        _ => return None,
+    };
+    Some(vec![
+        stat(StaticEffect::Restriction(restriction), text),
+        stat(crate::kw::tap_abilities_prohibited::effect(&f)?, text),
+    ])
+}
+
+inventory::submit! { StaticPattern { name: "rule statics 2: their activated abilities with {T} in their costs can't be activated", priority: 95, parse: tap_abilities_cant_be_activated } }
+
+/// "You may cast ~ from exile [as long as (condition)]": granted to an exiled card (Monk
+/// Class; Lukka, Coppercoat Outcast), a permission that functions while the card is in
+/// exile (CR 113.6b, 604.6).
+fn cast_self_from_exile(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("you may cast ~ from exile")?;
+    let condition = if r.is_empty() {
+        None
+    } else {
+        Some(crate::oracle::statics::parse_condition(r.strip_prefix(" as long as ")?, ctx)?)
+    };
+    let mut s = StaticAbility::new(StaticEffect::PlayPermission(PlayPermission {
+        who: PlayerRel::You,
+        zone: ZoneKind::Exile,
+        top_only: false,
+        what: Filter::Source,
+        lands: false,
+        spells: true,
+        cost: None,
+        flash: false,
+        terms: Default::default(),
+    }));
+    s.zone = FunctionZone::Exile;
+    s.condition = condition;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "rule statics 2: you may cast ~ from exile [as long as ...]", priority: 95, parse: cast_self_from_exile } }

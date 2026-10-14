@@ -937,3 +937,89 @@ fn teferi_emblem_untaps_and_draws_on_opponents_turns() {
     t.advance_to(P1, Step::PrecombatMain);
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn pardic_firecat_counts_for_flame_burst_only() {
+    cr!("201.2a", "113.6b");
+    assert_supported("Pardic Firecat");
+    assert_supported("Diligent Farmhand");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Pardic Firecat");
+    t.graveyard(P0, "Flame Burst");
+    t.lands(P0, "Mountain", 2);
+    let fb = t.hand(P0, "Flame Burst");
+    t.cast(P0, fb).target(P1).go();
+    t.resolve_all();
+    // 2 plus the Flame Burst and the Firecat in graveyards.
+    assert_eq!(t.life(P1), 20 - 4);
+}
+
+#[test]
+fn katabatic_winds_stops_flyers_tap_abilities() {
+    cr!("602.5", "605.3a");
+    assert_supported("Katabatic Winds");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Katabatic Winds");
+    let birds = t.battlefield(P0, "Birds of Paradise");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    // The Birds' mana ability has {T} in its cost: it can't be activated, nor used to pay.
+    assert!(t.activate(P0, birds, 0, &[]).is_err());
+    assert!(t.activate(P0, elves, 0, &[]).is_ok());
+    assert!(!t.g.obj(birds).tapped);
+    let growth = t.hand(P0, "Giant Growth");
+    t.g.players[0].mana_pool = Default::default();
+    t.g.objects[elves.0 as usize].tapped = false;
+    t.cast(P0, growth).target(elves).go();
+    assert!(!t.g.obj(birds).tapped);
+}
+
+#[test]
+fn escaped_shapeshifter_copies_keywords_of_opponents_creatures() {
+    cr!("702.1c", "702.16a");
+    assert_supported("Escaped Shapeshifter");
+    let mut t = TestGame::new(2);
+    let es = t.battlefield(P0, "Escaped Shapeshifter");
+    assert!(!has_kw(&mut t, es, KeywordKind::Flying));
+    t.battlefield(P1, "Wind Drake");
+    t.battlefield(P1, "White Knight");
+    assert!(has_kw(&mut t, es, KeywordKind::Flying));
+    assert!(has_kw(&mut t, es, KeywordKind::FirstStrike));
+    t.g.recompute();
+    let prots: Vec<String> = t
+        .obj_now(es)
+        .chars
+        .keywords_of(KeywordKind::Protection)
+        .filter_map(|k| k.text.as_ref().map(|s| s.to_string()))
+        .collect();
+    assert_eq!(prots, vec!["protection from black".to_string()]);
+}
+
+#[test]
+fn captain_america_shield_counter_gives_hexproof() {
+    cr!("702.11b", "702.11c");
+    assert_supported("Captain America, Super-Soldier");
+    let mut t = TestGame::new(2);
+    let cap = t.battlefield(P0, "Captain America, Super-Soldier");
+    t.g.objects[cap.0 as usize].counters.insert("shield".into(), 1);
+    t.g.dirty = true;
+    assert!(has_kw(&mut t, cap, KeywordKind::Hexproof) || {
+        t.g.recompute();
+        true
+    });
+    assert!(t.g.player(P0).has_mod(|m| matches!(m, ability::PlayerModification::Hexproof)));
+}
+
+#[test]
+fn food_fight_counts_permanents_named_food_fight() {
+    cr!("201.2", "113.7");
+    assert_supported("Food Fight");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Food Fight");
+    t.battlefield(P0, "Food Fight");
+    let art = t.battlefield(P0, "Ornithopter");
+    t.lands(P0, "Wastes", 2);
+    t.activate(P0, art, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20 - 3);
+    assert!(t.in_graveyard(P0, "Ornithopter"));
+}

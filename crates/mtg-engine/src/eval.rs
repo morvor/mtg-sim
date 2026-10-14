@@ -652,12 +652,16 @@ impl Game {
                 cmp.eval(mv as i64, self.eval_value(v, ctx))
             }
             Filter::Loyalty(cmp, v) => cmp.eval(o.loyalty() as i64, self.eval_value(v, ctx)),
-            Filter::Named(n) => c.has_name(n),
-            Filter::SameNameAs(sel) => self
-                .eval_sel(sel, ctx)
-                .iter()
-                .filter_map(|e| e.object())
-                .any(|x| c.shares_name_with(&self.obj(x).chars)),
+            Filter::Named(n) => {
+                c.has_name(n) || crate::counts_as_named::counts_as_named(self, id, n, ctx)
+            }
+            Filter::SameNameAs(sel) => {
+                self.eval_sel(sel, ctx)
+                    .iter()
+                    .filter_map(|e| e.object())
+                    .any(|x| c.shares_name_with(&self.obj(x).chars))
+                    || crate::counts_as_named::counts_as_named_like(self, id, sel, ctx)
+            }
             Filter::DifferentNameFrom(sel) => {
                 let others = self.eval_sel_objects(sel, ctx);
                 crate::names::has_different_name(c, others.iter().map(|x| &self.obj(*x).chars))

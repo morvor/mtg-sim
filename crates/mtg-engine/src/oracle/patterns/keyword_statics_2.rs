@@ -81,7 +81,9 @@ fn same_is_true_for_exiled(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
         Some(r) => {
             let (cond, main) = r.split_once(", ")?;
             let (subject, kw) = main.split_once(" has ")?;
-            let holder = cond.strip_suffix(&format!(" has {kw}"))?;
+            let holder = cond
+                .strip_suffix(&format!(" has {kw}"))
+                .unwrap_or(cond);
             (subject, kw, holder)
         }
         None => {
@@ -92,15 +94,67 @@ fn same_is_true_for_exiled(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
         }
     };
     let affected = super::k702_001_010::static_subject(subject)?;
+    // "protection from any color": each color's protection, separately.
+    let (list, any_color) = match list
+        .strip_suffix(", and protection from any color")
+        .or_else(|| list.strip_suffix(" and protection from any color"))
+    {
+        Some(r) => (r, true),
+        None => (list, false),
+    };
     let kinds = kind_list(kw, list)?;
-    let from = exiled_holders(holder)?;
-    Some(vec![AbilityDef::new(
+    let from = exiled_holders(holder).or_else(|| opponents_creatures_with(holder, kw))?;
+    let mut out = vec![AbilityDef::new(
         AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
-            affected,
-            mods: vec![Modification::AddKeywordsOf { kinds, from }],
+            affected: affected.clone(),
+            mods: vec![Modification::AddKeywordsOf {
+                kinds,
+                from: from.clone(),
+            }],
         })),
         block,
-    )])
+    )];
+    if any_color {
+        for c in Color::ALL {
+            let mut k = Keyword::new(KeywordKind::Protection);
+            k.filter = Some(Filter::Color(c));
+            k.text = Some(format!("protection from {}", c.word()).into());
+            let mut st = StaticAbility::new(StaticEffect::Continuous {
+                affected: affected.clone(),
+                mods: vec![Modification::AddKeyword(k)],
+            });
+            st.condition = Some(Condition::Exists(Filter::and(vec![
+                from.clone(),
+                crate::kw::protection_from_color_filter::filter(c),
+            ])));
+            out.push(AbilityDef::new(AbilityKind::Static(st), block));
+        }
+    }
+    Some(out)
+}
+
+/// "an opponent controls a creature with flying not named ~" (Escaped Shapeshifter): the
+/// creatures whose keywords count, without the keyword itself.
+fn opponents_creatures_with(holder: &str, kw: &str) -> Option<Filter> {
+    let r = holder.strip_prefix("an opponent controls a ")?;
+    let r = r.replace(&format!(" with {kw}"), "");
+    let (r, not_named) = match r.strip_suffix(" not named ~") {
+        Some(x) => (x.to_string(), true),
+        None => (r, false),
+    };
+    let (f, plural, tail) = parse_object_phrase(&r)?;
+    if plural || !end(tail).is_empty() {
+        return None;
+    }
+    let mut parts = vec![
+        f,
+        Filter::ControlledBy(PlayerRel::Opponent),
+        Filter::InZone(ZoneKind::Battlefield),
+    ];
+    if not_named {
+        parts.push(Filter::not(Filter::SameNameAs(Box::new(Sel::This))));
+    }
+    Some(Filter::and(parts))
 }
 
 inventory::submit! { AbilityPattern { name: "keyword statics: [subject] has [kw] as long as [an exiled card] has [kw]. the same is true for ...", priority: 49, parse: same_is_true_for_exiled } }
