@@ -879,7 +879,7 @@ fn icatian_infantry_gains_banding_until_end_of_turn() {
 
 #[test]
 fn birthing_boughs_makes_a_changeling_shapeshifter() {
-    cr!("602.2", "111.1", "702.73a");
+    cr!("602.2", "111.1", "702.73a", "700.8a");
     // "{4}, {T}: Create a 2/2 colorless Shapeshifter creature token with changeling."
     supported("Birthing Boughs");
     let mut t = TestGame::new(2);
@@ -898,6 +898,10 @@ fn birthing_boughs_makes_a_changeling_shapeshifter() {
     // A Goblin lord pumps it: it's a Goblin.
     t.battlefield(P0, "Goblin King");
     assert_eq!(t.pt(s[0]), (3, 3));
+    // Regression: a token with the changeling keyword (and no printed characteristic-
+    // defining ability) is a Rogue, Warrior or Wizard for the party (CR 700.8).
+    let arch = t.battlefield(P0, "Archpriest of Iona");
+    assert_eq!(t.pt(arch).0, 2, "the Cleric and the changeling token");
 }
 
 #[test]
