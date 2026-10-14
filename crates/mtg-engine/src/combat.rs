@@ -2233,8 +2233,13 @@ fn assign_attacker_damage(
         .iter()
         .map(|b| crate::kw::trample::lethal_damage(g, id, *b, pending))
         .collect();
-    // CR 702.22j: another player may divide its damage freely among its blockers.
+    // CR 702.22j: another player may divide its damage freely among its blockers. With
+    // trample, that player also makes the trample choices (Defensive Formation ruling): any
+    // damage beyond lethal to all blockers may go to the attacked player or permanent.
     if let Some(p) = crate::kw::combat_damage_assigner(g, id) {
+        if trample {
+            return assign_trample_damage(g, id, p, power, &blockers, lethal, target, spill);
+        }
         return divide_freely(g, id, p, power, &blockers, lethal);
     }
     if !trample {
@@ -2290,7 +2295,19 @@ fn assign_trample_damage(
         target: target.is_some(),
         spill: target.is_some() && spill.is_some(),
     };
-    let default = shape.default_assignment(power);
+    let mut default = shape.default_assignment(power);
+    if controller != g.obj(id).controller && nb > 0 {
+        // The defending player assigning it (CR 702.22j) keeps it all on the blockers
+        // unless they choose otherwise.
+        let blockers_only = TrampleShape {
+            lethal: lethal[..nb].to_vec(),
+            blockers: nb,
+            target: false,
+            spill: false,
+        };
+        default = blockers_only.default_assignment(power);
+        default.resize(recipients.len(), 0);
+    }
     let ans = g.ask(
         controller,
         Decision::AssignCombatDamage {

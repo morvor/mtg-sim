@@ -575,7 +575,7 @@ fn rule_applies(g: &Game, name: &str) -> bool {
 /// Planeswalker symbol, the planeswalking ability triggers; a blank does nothing (unless
 /// an effect makes blank rolls chaos rolls).
 pub fn roll_planar_die(g: &mut Game, p: PlayerId) -> PlanarFace {
-    let rolled = face_for(g.random_range(1, 6));
+    let rolled = face_for(crate::dice::roll_planar_natural(g, p));
     // "Each blank roll of the planar die is a {CHAOS} roll" (Chaotic Aether).
     let face = if rolled == PlanarFace::Blank && rule_applies(g, BLANK_ROLLS_ARE_CHAOS) {
         PlanarFace::Chaos

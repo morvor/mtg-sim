@@ -56,8 +56,8 @@ impl Renderer<'_> {
     /// life" (CR 119).
     pub(crate) fn compare_terms(&mut self, c: &Condition) -> Option<String> {
         match c {
-            Condition::Compare(Value::Count(Filter::And(v)), Cmp::Ge, Value::Const(n))
-                if matches!(v.as_slice(), [Filter::In(s), Filter::Custom(q)]
+            Condition::Compare(Value::CountSel(sel), Cmp::Ge, Value::Const(n))
+                if matches!(sel.as_ref(), Sel::Matching(s, Filter::Custom(q))
                     if matches!(s.as_ref(), Sel::TriggerObjects)
                         && q == crate::kw::activated_ability_kind::ATTACKING_YOU_OR_YOUR_PLANESWALKER) =>
             {

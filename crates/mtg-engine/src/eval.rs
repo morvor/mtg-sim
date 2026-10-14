@@ -352,6 +352,9 @@ impl Game {
             PlayerFilter::AttackedThisTurn => {
                 self.turn.active == p && !self.history.attackers.is_empty()
             }
+            PlayerFilter::CastSpellThisTurn => {
+                self.history.spells_cast.iter().any(|(q, _)| *q == p)
+            }
             PlayerFilter::AttackRelation {
                 attacking,
                 other,
@@ -592,13 +595,7 @@ impl Game {
             Filter::Not(x) => !self.matches_view(view, id, x, ctx),
             Filter::Type(t) => c.card_types.contains(*t),
             Filter::Supertype(s) => c.supertypes.contains(*s),
-            Filter::Subtype(s) => {
-                c.has_subtype(s)
-                    || (is_creature_type(s)
-                        && (c.card_types.contains(CardType::Creature)
-                            || c.card_types.contains(CardType::Kindred))
-                        && crate::kw::changeling::every_creature_type_by_keyword(c))
-            }
+            Filter::Subtype(s) => c.has_subtype(s),
             Filter::Color(col) => c.colors.contains(*col),
             Filter::ExactColors(cs) => c.colors == *cs,
             Filter::Colorless => c.colors.is_colorless(),
