@@ -35,6 +35,10 @@ pub enum Case {
     Poss,
 }
 
+/// [`Renderer::trigger_player`] for an event an opponent performs ("Whenever an opponent
+/// attacks"): "that opponent" as well as "that player".
+pub(crate) const OPPONENT_EVENT: &str = "that opponent";
+
 pub(crate) fn decline(s: String, case: Case) -> String {
     match case {
         // Alternative wordings each take the possessive.
@@ -413,6 +417,9 @@ impl Renderer<'_> {
     pub(crate) fn target_mention(&mut self, i: u8, case: Case) -> String {
         let idx = i as usize;
         if idx >= self.targets.len() {
+            if let Some(n) = self.targeted_noun {
+                return decline(n.to_string(), case);
+            }
             return self.gap(format!("target slot {i} out of range"));
         }
         if !self.introduced[idx] {
@@ -943,6 +950,15 @@ impl Renderer<'_> {
                 let s = self.sel(sel, Case::Poss);
                 format!("{s} owner")
             }
+            // "Whenever an opponent attacks with creatures, ... that opponent loses 3
+            // life".
+            PlayerRef::TriggerPlayer if self.trigger_player == Some(OPPONENT_EVENT) => {
+                return match case {
+                    Case::Subj => "{alt:that player|that opponent|they}".into(),
+                    Case::Obj => "{alt:that player|that opponent|them}".into(),
+                    Case::Poss => "{alt:that player's|that opponent's|their}".into(),
+                };
+            }
             PlayerRef::TriggerPlayer if self.trigger_player.is_some() => {
                 self.trigger_player.unwrap_or("that player").into()
             }
@@ -987,6 +1003,30 @@ impl Renderer<'_> {
                 format!("each {n}")
             }
             PlayerRef::Owner => "~'s owner".into(),
+            PlayerRef::Seat { of, side, opponent } => {
+                let who = if *opponent { "opponent" } else { "player" };
+                let s = match (of.as_ref(), side) {
+                    (PlayerRef::Iterated, SeatSide::Chosen) => {
+                        "the next player in {alt:the chosen|that} direction".to_string()
+                    }
+                    (_, SeatSide::Chosen) => {
+                        format!("the {who} next to you in the chosen direction")
+                    }
+                    (of, side) => {
+                        let side = if *side == SeatSide::Left {
+                            "left"
+                        } else {
+                            "right"
+                        };
+                        let o = self.player(of, Case::Poss);
+                        format!("the {who} to {o} {side}")
+                    }
+                };
+                return match case {
+                    Case::Poss => format!("{s}'s"),
+                    _ => s,
+                };
+            }
             // "Choose an opponent. ... the chosen player's hand".
             PlayerRef::ChosenOpponent if matches!(case, Case::Poss) => {
                 return "the chosen {alt:opponent's|player's}".into();
@@ -1031,6 +1071,14 @@ impl Renderer<'_> {
             PlayerFilter::Defending => "defending player".into(),
             PlayerFilter::Active => "the active player".into(),
             PlayerFilter::Ref(r) => self.player(r, Case::Obj),
+            // "player who controls more lands than they do and is their opponent".
+            PlayerFilter::And(v)
+                if matches!(v.as_slice(), [PlayerFilter::OpponentOf(_), _])
+                    && self.player_quality_terms(pf).is_some() =>
+            {
+                let q = self.player_quality_terms(pf).unwrap_or_default();
+                format!("{} {q}", base("player"))
+            }
             PlayerFilter::And(v) => {
                 let mut head = base("player");
                 let mut quals = Vec::new();
@@ -1086,6 +1134,9 @@ impl Renderer<'_> {
 
     /// A quality of a player ("with 10 or less life", "who controls an Island").
     fn player_quality(&mut self, pf: &PlayerFilter) -> String {
+        if let Some(s) = self.player_quality_terms(pf) {
+            return s;
+        }
         match pf {
             PlayerFilter::Any => String::new(),
             PlayerFilter::Is(_) => "that is that player".into(),
@@ -1132,6 +1183,10 @@ impl Renderer<'_> {
             PlayerFilter::AttackedThisTurn => "who attacked this turn".into(),
             PlayerFilter::Poisoned => "who is poisoned".into(),
             PlayerFilter::MaxSpeed => "with max speed".into(),
+            PlayerFilter::VotedLikeYou(true) => "who voted for a choice you voted for".into(),
+            PlayerFilter::VotedLikeYou(false) => {
+                "who voted for a choice you didn't vote for".into()
+            }
             PlayerFilter::LessThanHalfStartingLife => {
                 "with less than half their starting life total".into()
             }

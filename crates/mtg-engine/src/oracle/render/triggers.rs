@@ -138,8 +138,25 @@ impl Renderer<'_> {
                 _ => false,
             }
         }
-        if targeted(&t.trigger) {
+        // "Whenever you become the target of a spell or ability an opponent controls,
+        // counter that spell or ability unless its controller pays {1}": the event's
+        // player is the spell's controller.
+        fn player_targeted(t: &TriggerCond) -> bool {
+            match t {
+                TriggerCond::Custom(n) => crate::kw::activated_ability_kind::is_player_targeted(n),
+                TriggerCond::AnyOf(v) => v.iter().any(player_targeted),
+                TriggerCond::Where { trigger, .. } | TriggerCond::Batched { trigger, .. } => {
+                    player_targeted(trigger)
+                }
+                _ => false,
+            }
+        }
+        if player_targeted(&t.trigger) {
+            self.trigger_player = Some("{alt:that spell's controller|that player}");
+        } else if targeted(&t.trigger) {
             self.trigger_player = Some("that spell's controller");
+        } else if matches!(t.trigger, TriggerCond::PlayerAttacks(PlayerRel::Opponent)) {
+            self.trigger_player = Some(super::players::OPPONENT_EVENT);
         }
         let trig = self.trigger_text(&t.trigger);
         self.trigger_names_opponent =
@@ -282,6 +299,9 @@ impl Renderer<'_> {
     /// Event with a determiner for its object ("a creature" / "one or more creatures").
     fn trigger_event(&mut self, t: &TriggerCond, det: Det) -> Ev {
         let obj = |r: &mut Self, f: &Filter| -> String { r.noun_det(f, det.clone()) };
+        if let Some((s, vp)) = self.qualified_trigger_event(t, &det) {
+            return Ev::new(s, vp);
+        }
         match t {
             // "When ~ enters untapped".
             TriggerCond::EntersBattlefield(Filter::And(v))
@@ -1371,6 +1391,10 @@ impl Renderer<'_> {
                 let s = self.spell_noun(filter, det.clone());
                 Ev::new(w, format!("copy {s}"))
             }
+            TriggerCond::PlayerAction {
+                name,
+                who: PlayerRel::Any,
+            } if name == crate::kwa::vote::FINISHED_VOTING => Ev::new("players", "finish voting"),
             TriggerCond::PlayerAction { name, who } => {
                 let w = self.rel_subject(*who);
                 Ev::new(w, name.to_string())

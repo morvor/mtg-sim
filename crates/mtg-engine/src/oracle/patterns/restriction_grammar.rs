@@ -538,7 +538,15 @@ fn cost_and_cant_be_countered(l: &str, text: &str, ctx: &CompileContext) -> Opti
         PlayerRel::Opponent => PlayerRel::Opponent,
         _ => return None,
     };
-    let what = Filter::and(vec![f.clone(), Filter::Spell, Filter::ControlledBy(rel)]);
+    // "Spells ... you cast": cast by that player, not copies or spells whose control changed.
+    // (Look at the subject only: the predicate always ends "less to cast".)
+    let subject = head.split(" cost").next().unwrap_or(head);
+    let who = if subject.contains(" cast") {
+        Filter::CastBy(rel)
+    } else {
+        Filter::ControlledBy(rel)
+    };
+    let what = Filter::and(vec![f.clone(), Filter::Spell, who]);
     let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBeCountered(
         what,
     )));
@@ -646,6 +654,7 @@ fn spells_subject(s: &str) -> Option<Filter> {
         Some(r) => (r, true),
         None => (s, false),
     };
+    let cast = s.ends_with(" cast");
     let (head, rel) = if let Some(h) = s
         .strip_suffix(" you cast")
         .or_else(|| s.strip_suffix(" you control"))
@@ -669,7 +678,13 @@ fn spells_subject(s: &str) -> Option<Filter> {
         f
     };
     if let Some(rel) = rel {
-        f = Filter::and(vec![f, Filter::ControlledBy(rel)]);
+        // "Spells you cast": cast by that player (not copies, CR 707.10).
+        let who = if cast {
+            Filter::CastBy(rel)
+        } else {
+            Filter::ControlledBy(rel)
+        };
+        f = Filter::and(vec![f, who]);
     }
     if other {
         f = Filter::and(vec![f, Filter::Other]);
@@ -1460,6 +1475,28 @@ fn none_on_battlefield(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "restriction grammar: no [permanents] are on the battlefield", priority: 100, parse: none_on_battlefield } }
+
+/// "ten or more lands are on the battlefield" (Limited Resources): a count of the
+/// permanents of every player.
+fn n_or_more_on_battlefield(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let r = c.strip_suffix(" are on the battlefield")?;
+    if !(r.contains(" or more ") || r.contains(" or fewer ")) {
+        return None;
+    }
+    let (cmp, n, noun) = super::counters_resources_counters::amount_cmp(r)?;
+    let (f, plural) = whole_object_phrase(noun.trim())?;
+    if !plural {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![f, Filter::Permanent])),
+        cmp,
+        n,
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "restriction grammar: N or more [permanents] are on the battlefield", priority: 100, parse: n_or_more_on_battlefield } }
 
 /// "that doesn't have first strike, double strike, vigilance, or haste", "that don't
 /// have flying": none of the listed keyword abilities (CR 702).

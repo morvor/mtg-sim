@@ -12,11 +12,15 @@ impl Renderer<'_> {
 
     /// A number as a noun phrase ("3", "X", "the number of creatures you control").
     pub(crate) fn value(&mut self, v: &Value) -> String {
+        if let Some(s) = self.craft_value(v) {
+            return s;
+        }
         if let Some(s) = self.value_extra(v) {
             return s;
         }
         match v {
             Value::Const(n) => n.to_string(),
+            Value::PlayerTally { var, .. } => crate::tallies::words(*var).into(),
             Value::X if self.extra.x_words.is_some() => self.extra.x_words.unwrap_or("X").into(),
             Value::X => "X".into(),
             // "for each card discarded this way": the objects the instruction before
@@ -374,6 +378,7 @@ impl Renderer<'_> {
                     .iter()
                     .map(|x| match x {
                         Value::Count(f) => Some(f.zone().unwrap_or(ZoneKind::Battlefield)),
+                        Value::HandSize(_) => Some(ZoneKind::Hand),
                         _ => None,
                     })
                     .collect();
@@ -633,6 +638,9 @@ impl Renderer<'_> {
 
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
         self.new_clause();
+        if let Some(s) = self.compare_terms(c) {
+            return s;
+        }
         if let Some(v) = self.vote_condition(c) {
             return v;
         }
@@ -924,6 +932,11 @@ impl Renderer<'_> {
     }
 
     fn negated_condition(&mut self, c: &Condition) -> String {
+        if let Condition::Custom(n) = c {
+            if let Some(s) = self.custom_condition_terms(n, true) {
+                return s;
+            }
+        }
         match c {
             Condition::Exists(f) => self.exists(f, true),
             Condition::YourTurn => "it's not your turn".into(),
@@ -1062,6 +1075,12 @@ impl Renderer<'_> {
 
     /// "is tapped", "is a creature", "has flying".
     pub(crate) fn is_predicate(&mut self, f: &Filter, negated: bool) -> String {
+        if let Filter::Custom(n) = f {
+            if let Some(p) = super::custom_filters::custom_predicate(n) {
+                let is = if negated { "isn't" } else { "is" };
+                return format!("{is} {p}");
+            }
+        }
         let mut atoms: Vec<&Filter> = match f {
             Filter::And(v) => v.iter().collect(),
             other => vec![other],
@@ -1296,6 +1315,8 @@ impl Renderer<'_> {
             PlayerFilter::Monarch => "is the monarch".into(),
             PlayerFilter::Poisoned => "is poisoned".into(),
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
+            PlayerFilter::VotedLikeYou(true) => "voted for a choice you voted for".into(),
+            PlayerFilter::VotedLikeYou(false) => "voted for a choice you didn't vote for".into(),
             PlayerFilter::LessThanHalfStartingLife => {
                 let p = if you { "your" } else { "their" };
                 format!("{have} less than half {p} starting life total")
@@ -1675,6 +1696,13 @@ impl Renderer<'_> {
                 )
             }
             Duration::WhileYouControlSource => format!("for as long as you control {}", self.me()),
+            // "until ~ is cast from exile": once it's cast, it's no longer in exile.
+            Duration::WhileCondition(Condition::Not(c))
+                if matches!(c.as_ref(), Condition::Custom(n)
+                    if n == crate::oracle::patterns::grant_conditions::SOURCE_CAST_FROM_EXILE) =>
+            {
+                format!("until {} is cast from exile", self.me())
+            }
             Duration::WhileCondition(c) => {
                 let c = self.condition(c);
                 format!("for as long as {c}")

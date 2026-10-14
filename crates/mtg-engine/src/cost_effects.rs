@@ -52,6 +52,24 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
                         .all(|o| g.is_live(*o) && g.obj(*o).attached_to.is_some()),
             )
         }
+        // "Tap Fishing Pole": an untapped permanent (CR 701.26a).
+        Effect::Tap {
+            what: what @ (Sel::This | Sel::All(_)),
+        } => {
+            let objs = match what {
+                Sel::This => ctx.source.into_iter().collect(),
+                Sel::All(f) => g.objects_matching(f, ctx),
+                _ => Vec::new(),
+            };
+            Some(
+                !objs.is_empty()
+                    && objs.iter().all(|o| {
+                        g.is_live(*o)
+                            && g.obj(*o).zone == crate::object::Zone::Battlefield
+                            && !g.obj(*o).tapped
+                    }),
+            )
+        }
         Effect::Unattach {
             what: Sel::Choose { filter, count, .. },
         } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),

@@ -331,7 +331,11 @@ pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
         }
         _ => {}
     }
-    if super::without_quotes(eff).contains("~ from your graveyard") {
+    // (Not "target card named ~ from your graveyard": a name, CR 201.2.)
+    if super::without_quotes(eff)
+        .replace("named ~ from your graveyard", "")
+        .contains("~ from your graveyard")
+    {
         return FunctionZone::Graveyard;
     }
     FunctionZone::Battlefield
