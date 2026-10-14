@@ -196,11 +196,18 @@ impl Game {
             // Recorded before detection so "for the first time each turn" can see which
             // events of this turn precede this one.
             self.turn_events.push(ev.clone());
+            self.excess_ahead = events[i + 1..]
+                .iter()
+                .take_while(|e| !matches!(e, Event::BatchBoundary))
+                .filter(|e| matches!(e, Event::ExcessDamage { .. }))
+                .cloned()
+                .collect();
             if let Some(f) = self.observer.as_ref().map(|o| o.on_event.clone()) {
                 f(self, ev);
             }
             once_delayed.extend(self.detect_triggers(ev, &recent, &born_later));
         }
+        self.excess_ahead.clear();
         self.check_batch_triggers(&events[batch_start..], &born_later);
         self.fire_once_delayed(once_delayed);
         // Static abilities' conditions can depend on what happened this turn ("as long as
