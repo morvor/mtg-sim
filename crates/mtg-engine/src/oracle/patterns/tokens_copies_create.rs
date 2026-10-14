@@ -308,6 +308,33 @@ fn original_name(n: &str, ctx: &CompileContext) -> Option<String> {
     None
 }
 
+/// "red, green, and white", "white and black" at the start of `s`, and the rest (which
+/// must be the end of the description or another tail part).
+fn token_color_list(s: &str) -> Option<(ColorSet, &str)> {
+    let mut colors = ColorSet::NONE;
+    let mut rest = s;
+    loop {
+        let n = rest
+            .find(|c: char| !c.is_ascii_alphabetic())
+            .unwrap_or(rest.len());
+        colors.insert(Color::from_word(&rest[..n])?);
+        rest = &rest[n..];
+        let next = [", and ", " and ", ", "]
+            .iter()
+            .find_map(|sep| rest.strip_prefix(sep))
+            .filter(|r| {
+                let m = r.find(|c: char| !c.is_ascii_alphabetic()).unwrap_or(r.len());
+                Color::from_word(&r[..m]).is_some()
+            });
+        match next {
+            Some(r) => rest = r,
+            None => break,
+        }
+    }
+    let t = rest.trim_start();
+    (t.is_empty() || t.starts_with("with ") || t.starts_with("named ")).then_some((colors, rest))
+}
+
 /// Parses "1/1 white Soldier creature token with flying named Wasp that's tapped and
 /// attacking" (lowercase, quotes included).
 pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
@@ -436,6 +463,16 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             .find_map(|p| rest.strip_prefix(p))
         {
             colors = ColorSet::ALL;
+            rest = r.trim().to_string();
+        } else if let Some((c, r)) = ["that's ", "that are "]
+            .iter()
+            .find_map(|p| rest.strip_prefix(p))
+            .and_then(token_color_list)
+            .filter(|_| colors == ColorSet::NONE)
+        {
+            // "an 8/8 Beast creature token that's red, green, and white" (Godsire): the
+            // token's colors (CR 111.4).
+            colors = c;
             rest = r.trim().to_string();
         } else if let Some(r) = [
             "that's tapped and attacking",
