@@ -1572,8 +1572,7 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // Only when the earlier instructions left the chosen card where it is: a target card
     // the previous instruction moved is a new object (CR 400.7) that "it" now means.
     let e = if matches!(moved(prev), Moved::Unchanged) {
-        let Some(e) = super::choice_grammar_objects::permission_for_chosen(e, Some(prev), b)
-        else {
+        let Some(e) = super::choice_grammar_objects::permission_for_chosen(e, Some(prev), b) else {
             return false;
         };
         e
@@ -1599,8 +1598,79 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         },
         None => e,
     };
+    let e = if rest.contains("those cards") {
+        keep_earlier_moved(prev, e)
+    } else {
+        e
+    };
     *prev = Effect::seq(vec![std::mem::take(prev), e]);
     true
+}
+
+/// The cards an earlier instruction moved, kept for "those cards" (see
+/// [`keep_earlier_moved`]).
+pub(crate) const EARLIER_MOVED: Var = vars::USER + 9460;
+
+/// "Exile it. If you do, exile the top card of your library. ... you may play one of
+/// those cards." (Flameskull): "those cards" are the cards both instructions moved, while
+/// "it" ([`vars::IT`]) is left meaning only the top card. When the previous sentence
+/// (`prev`) moves a single card to a zone only "if you do", the cards "it" meant before it
+/// (those the instruction it depends on moved) that are in that zone are kept, and the
+/// permission `e` covers them too.
+fn keep_earlier_moved(prev: &mut Effect, e: Effect) -> Effect {
+    let Effect::If {
+        cond: Condition::PrevHappened,
+        then,
+        otherwise,
+    } = &*prev
+    else {
+        return e;
+    };
+    if !matches!(**otherwise, Effect::Noop) {
+        return e;
+    }
+    let single = match &**then {
+        Effect::Exile { what, .. } => {
+            matches!(what, Sel::TopOfLibrary(_, Value::Const(1)))
+        }
+        _ => false,
+    };
+    let Moved::Cards(zone) = moved(then) else {
+        return e;
+    };
+    if !single {
+        return e;
+    }
+    fn widen(e: &mut Effect, zone: ZoneKind) -> bool {
+        match e {
+            Effect::GrantPlayPermission { what, .. } if matches!(&*what, Sel::Var(v) if *v == vars::IT) =>
+            {
+                let earlier = Sel::All(Filter::and(vec![
+                    Filter::In(Box::new(Sel::Var(EARLIER_MOVED))),
+                    Filter::InZone(zone),
+                ]));
+                *what = Sel::Union(vec![earlier, Sel::Var(vars::IT)]);
+                true
+            }
+            Effect::WithPlayTerms { effect, .. } => widen(effect, zone),
+            _ => false,
+        }
+    }
+    let mut widened = e.clone();
+    if !widen(&mut widened, zone) {
+        return e;
+    }
+    if let Effect::If { then, .. } = prev {
+        let old = std::mem::replace(then.as_mut(), Effect::Noop);
+        **then = Effect::Seq(vec![
+            Effect::Store {
+                var: EARLIER_MOVED,
+                sel: Sel::Var(vars::IT),
+            },
+            old,
+        ]);
+    }
+    widened
 }
 
 /// A permission as an instruction of its own: for cards with qualities in a zone for a
@@ -1883,10 +1953,15 @@ fn statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     // "[permission]. [rider]."
     if let Some((first, second)) = l.split_once(". ") {
         let mut p = parse(first)?;
+        // "If you cast a creature spell this way, it gains haste until end of turn.",
+        // "When you cast an Equipment spell this way, ..." (see `played_this_way`).
+        let mut extra = None;
         if !static_rider(second, &mut p) {
-            return None;
+            extra = super::played_this_way::static_rider(second, &mut p.terms, text, ctx)?;
         }
-        return to_statics(&p, text, ctx);
+        let mut v = to_statics(&p, text, ctx)?;
+        v.extend(extra);
+        return Some(v);
     }
     // "If you control a creature with power 4 or greater, you may cast ~ as though it had
     // flash.": a condition on casting it.

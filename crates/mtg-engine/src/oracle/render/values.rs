@@ -20,6 +20,7 @@ impl Renderer<'_> {
         }
         match v {
             Value::Const(n) => n.to_string(),
+            Value::PlayerTally { var, .. } => crate::tallies::words(*var).into(),
             Value::X if self.extra.x_words.is_some() => self.extra.x_words.unwrap_or("X").into(),
             Value::X => "X".into(),
             // "for each card discarded this way": the objects the instruction before
@@ -348,6 +349,12 @@ impl Renderer<'_> {
             }
             // "the total number of instant and sorcery cards you own in exile and in your
             // graveyard": cards of one kind counted in two zones.
+            Value::Sum(v) if super::history_values::graveyard_arrivals(v) => {
+                match self.graveyard_arrivals_sum(v) {
+                    Some(s) => s,
+                    None => self.gap("a sum of cards put into a graveyard"),
+                }
+            }
             Value::Sum(v) if two_zone_count(v).is_some() => {
                 let (f, zones) = two_zone_count(v).unwrap_or((Filter::Any, vec![]));
                 let n = self.noun(&f, Num::Many);
@@ -459,6 +466,7 @@ impl Renderer<'_> {
             }
             Value::Custom(name) => self.custom_value(name),
             Value::EventsThisTurn(c, t) => self.events_this_turn(c, *t),
+            Value::EventsDuring(w, c, t) => self.gap(format!("EventsDuring({w:?}, {c:?}, {t:?})")),
         }
     }
 
@@ -652,7 +660,7 @@ impl Renderer<'_> {
                     == "[SelMatches(This, InZone(Exile)), SelMatches(This, HasKeyword(Suspend)), \
                         Compare(CountersOn(This, Some(\"time\")), Gt, Const(0))]" =>
             {
-                "~ is suspended".into()
+                format!("{} is suspended", self.me())
             }
             // "if you have more cards in hand than each opponent": no opponent has at
             // least as many.
@@ -781,6 +789,12 @@ impl Renderer<'_> {
             Condition::Or(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
                 merge_subject(&parts, "or")
+            }
+            // "if the Ring has tempted you four or more times this game" (CR 701.54).
+            Condition::Compare(Value::Custom(n), Cmp::Ge, Value::Const(k))
+                if n == crate::kwa::ring::TIMES_TEMPTED =>
+            {
+                format!("the Ring has tempted you {} or more times this game", number_word(*k))
             }
             Condition::Compare(a, cmp, b) => self.compare_condition(a, *cmp, b),
             Condition::Exists(f) => self.exists(f, false),
@@ -969,8 +983,8 @@ impl Renderer<'_> {
             // "If it's not their turn" (the active player's turn, CR 102.1).
             Condition::PlayerMatches(p, PlayerFilter::Active) if !matches!(p, PlayerRef::You) => {
                 let poss = self.player(p, Case::Poss);
-                let poss = if poss.starts_with("{alt:") {
-                    "their".to_string()
+                let poss = if poss.starts_with("{alt:") || poss == "their" {
+                    "{alt:their|that player's}".to_string()
                 } else {
                     poss
                 };
@@ -1266,6 +1280,20 @@ impl Renderer<'_> {
                 }
             }
         }
+        // "you have at least 7 life more than your starting life total".
+        if let PlayerFilter::Life(Cmp::Ge, v) = pf {
+            if let Value::Sum(xs) = v.as_ref() {
+                if let [Value::StartingLife, Value::Const(n)] = xs.as_slice() {
+                    let n = number_word(*n);
+                    let life = format!("at least {n} life more than your starting life total");
+                    return if negated {
+                        format!("doesn't have {life}")
+                    } else {
+                        format!("{have} {life}")
+                    };
+                }
+            }
+        }
         match pf {
             PlayerFilter::Life(c, v) => {
                 let v = self.value(v);
@@ -1313,6 +1341,8 @@ impl Renderer<'_> {
             PlayerFilter::Monarch => "is the monarch".into(),
             PlayerFilter::Poisoned => "is poisoned".into(),
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
+            PlayerFilter::VotedLikeYou(true) => "voted for a choice you voted for".into(),
+            PlayerFilter::VotedLikeYou(false) => "voted for a choice you didn't vote for".into(),
             PlayerFilter::LessThanHalfStartingLife => {
                 let p = if you { "your" } else { "their" };
                 format!("{have} less than half {p} starting life total")

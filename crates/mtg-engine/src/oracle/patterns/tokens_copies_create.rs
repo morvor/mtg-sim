@@ -148,8 +148,14 @@ pub(crate) fn token_quote_abilities(
     let mut orig = orig.trim().trim_end_matches(',').to_string();
     // A nested quote was checked as part of the quote it's in.
     let nested = NESTED_QUOTES.with(|n| n.borrow().iter().any(|q| q.trim() == orig));
+    // "... a card named Rekindling Phoenix ...": a name, not a reference to the card.
+    let mut names_creator = false;
     if !nested && super::statics::quote_names_card(&orig, ctx) {
-        return None;
+        match crate::granted_by::token_quote_naming(&orig, ctx) {
+            Some(crate::granted_by::TokenQuote::Named(text)) => orig = text,
+            Some(crate::granted_by::TokenQuote::Creator) => names_creator = true,
+            None => return None,
+        }
     }
     // The token's own name means the token (CR 201.5).
     if let Some(name) = TOKEN_NAME.with(|t| t.borrow().clone()) {
@@ -189,6 +195,9 @@ pub(crate) fn token_quote_abilities(
     {
         return None;
     }
+    if names_creator {
+        return v.iter().map(crate::granted_by::refer_cda_to_creator).collect();
+    }
     Some(v)
 }
 
@@ -225,10 +234,9 @@ pub(crate) fn ability_list(
     if !keywords.is_empty() {
         for m in keyword_mods(&keywords.join(", "))? {
             if let Modification::AddKeyword(k) = m {
-                out.push(AbilityDef::new(
-                    AbilityKind::Keyword(k.clone()),
-                    k.kind.name(),
-                ));
+                // A keyword the creating effect gives the token comes with its
+                // characteristic-defining ability (changeling, CR 604.3a, 702.73a).
+                out.extend(crate::oracle::keywords::compile_keyword(k.clone(), k.kind.name()));
             }
         }
     }
@@ -298,6 +306,33 @@ fn original_name(n: &str, ctx: &CompileContext) -> Option<String> {
         }
     }
     None
+}
+
+/// "red, green, and white", "white and black" at the start of `s`, and the rest (which
+/// must be the end of the description or another tail part).
+fn token_color_list(s: &str) -> Option<(ColorSet, &str)> {
+    let mut colors = ColorSet::NONE;
+    let mut rest = s;
+    loop {
+        let n = rest
+            .find(|c: char| !c.is_ascii_alphabetic())
+            .unwrap_or(rest.len());
+        colors.insert(Color::from_word(&rest[..n])?);
+        rest = &rest[n..];
+        let next = [", and ", " and ", ", "]
+            .iter()
+            .find_map(|sep| rest.strip_prefix(sep))
+            .filter(|r| {
+                let m = r.find(|c: char| !c.is_ascii_alphabetic()).unwrap_or(r.len());
+                Color::from_word(&r[..m]).is_some()
+            });
+        match next {
+            Some(r) => rest = r,
+            None => break,
+        }
+    }
+    let t = rest.trim_start();
+    (t.is_empty() || t.starts_with("with ") || t.starts_with("named ")).then_some((colors, rest))
 }
 
 /// Parses "1/1 white Soldier creature token with flying named Wasp that's tapped and
@@ -428,6 +463,16 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             .find_map(|p| rest.strip_prefix(p))
         {
             colors = ColorSet::ALL;
+            rest = r.trim().to_string();
+        } else if let Some((c, r)) = ["that's ", "that are "]
+            .iter()
+            .find_map(|p| rest.strip_prefix(p))
+            .and_then(token_color_list)
+            .filter(|_| colors == ColorSet::NONE)
+        {
+            // "an 8/8 Beast creature token that's red, green, and white" (Godsire): the
+            // token's colors (CR 111.4).
+            colors = c;
             rest = r.trim().to_string();
         } else if let Some(r) = [
             "that's tapped and attacking",

@@ -16,7 +16,7 @@ use mtg_engine::types::{CardType, Color, ColorSet};
 use mtg_engine::*;
 
 /// The sources of the damage dealt to `target` this turn.
-fn damage_sources(t: &TestGame, target: Entity) -> Vec<(ObjectId, u32)> {
+pub fn damage_sources(t: &TestGame, target: Entity) -> Vec<(ObjectId, u32)> {
     t.g.turn_events
         .iter()
         .filter_map(|e| match e {

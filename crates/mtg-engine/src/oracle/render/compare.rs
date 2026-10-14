@@ -28,6 +28,29 @@ pub struct Equivalence {
 /// The allowed equivalences, applied in order.
 pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
+        pattern: r"\b(creatures?|permanents?) that (?:isn't|aren't|is not|are not) (enchanted|equipped)\b",
+        replacement: "un$2 $1",
+        why: "\"A creature that isn't enchanted\" is an unenchanted creature (CR 303.4).",
+    },
+    Equivalence {
+        pattern: r"\b(artifact|creature|enchantment|land|planeswalker|instant|sorcery|battle) card or (non-?[a-z]+ [a-z]+) card\b",
+        replacement: "$1 or $2 card",
+        why: "\"Artifact or non-Aura enchantment card\": the noun after the last alternative \
+              names both alternatives (\"artifact card or non-Aura enchantment card\").",
+    },
+    Equivalence {
+        pattern: r"\b(artifact|creature|enchantment|land|planeswalker|instant|sorcery|battle) spell or (non-?[a-z]+ [a-z]+) spell\b",
+        replacement: "$1 or $2 spell",
+        why: "\"Artifact or non-Aura enchantment spell\": the noun after the last alternative \
+              names both alternatives (\"artifact spell or non-Aura enchantment spell\").",
+    },
+    Equivalence {
+        pattern: r"\b(target|each|all) ([a-z ]*?)(creatures?) that(?:'s| is| are) attacking or blocking\b",
+        replacement: "$1 attacking or blocking $2$3",
+        why: "\"Target creature that's attacking or blocking\" is an attacking or blocking \
+              creature (CR 506.4).",
+    },
+    Equivalence {
         pattern: r"\bcan block an additional ([a-z ]*?creatures?) each combat this turn\b",
         replacement: "can block an additional $1 this turn",
         why: "\"Can block an additional creature this turn\" applies in each combat that \
@@ -274,8 +297,8 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               opponent\" does.",
     },
     Equivalence {
-        pattern: r"\bcreature that's one or more colors\b",
-        replacement: "colored creature",
+        pattern: r"\b(creature|permanent) that's one or more colors\b",
+        replacement: "colored $1",
         why: "A colored object is one that's one or more colors (CR 105.2).",
     },
     Equivalence {
@@ -655,6 +678,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (CR 400.7: that object is the card in exile); \"Discard a card. If the \
               discarded card was a land card, ...\" and \"Reveal a card at random from \
               your hand. ... where X is the revealed card's mana value\" likewise.",
+    },
+    Equivalence {
+        pattern: r"\bthe (mana value|power|toughness) of (thatit|it)\b",
+        replacement: "$2 $1",
+        why: "Possessive: \"the mana value of the discarded card\" is that card's mana \
+              value.",
     },
     Equivalence {
         pattern: r"\bif (it|thatit|that-object|~it|~) had\b",
@@ -1828,7 +1857,9 @@ fn where_x_rewrites() -> &'static [(Regex, &'static str)] {
             (r"\b(draws?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\b(mills?) cards equal to ([^.]+?)(\.|$)", "$1 x cards, where x is $2$3"),
             (r"\bputs? an? (\S+) counter on ([^.,]+?) for each ([^.]+?)(\.|$)", "put x $1 counters on $2, where x is the number of $3$4"),
-            (r"\benters? with an? (\S+) counter on (?:~it|it) for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
+            // The same kind of counter both times (a regex can't compare the two kinds).
+            (r"\benters? with an? (\+1/\+1) counter on (?:~it|it) plus an additional \+1/\+1 counter on (?:~it|it) for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is 1 plus the number of $2$3"),
+            (r"\benters? with an? (?:additional )?(\S+) counter on (?:~it|it|them) for each ([^.]+?)(\.|$)", "enters with x $1 counters on it, where x is the number of $2$3"),
             (r"\benters? with (two|three|four|\d+) (\S+) counters on it for each ([^.]+?)(\.|$)", "enters with x $2 counters on it, where x is $1 times the number of $3$4"),
             (r"\b(enters?|puts?) (with )?a number of (\S+) counters on ([^.]+?) equal to ([^.]+?)(\.|$)", "$1 ${2}x $3 counters on $4, where x is $5$6"),
             (r"\b(draws?) a card for each ([^.]+?)(\.|$)", "$1 x cards, where x is the number of $2$3"),

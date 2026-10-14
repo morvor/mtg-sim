@@ -120,7 +120,8 @@ impl Game {
                         out.modal = b.modal;
                     }
                 }
-                out.effect = Effect::seq(effects);
+                // Each spell ability's instructions stay apart from the others'.
+                out.effect = crate::trigger_timing::join_instructions(effects);
                 out
             }
         }
@@ -1332,7 +1333,9 @@ impl Game {
                 }
                 _ => false,
             };
-            let now = self.current(src);
+            // The object the Aura card became when it was put there — not a later one,
+            // if it has left the graveyard since (CR 400.7).
+            let now = self.obj(src).next.unwrap_or(src);
             if about_enchanted
                 && now != src
                 && self.obj(src).chars.has_subtype("Aura")
@@ -1401,6 +1404,14 @@ impl Game {
                 (Some(m), Some(modal)) => modal.modes[m].effect.clone(),
                 _ => body.effect.clone(),
             };
+            self.exec(&effect, ctx);
+        }
+        // A modal spell's other spell abilities (the paragraph after the modes: "Then
+        // return a creature card ..." of Blood on the Snow, Thermal Flux's delayed draw)
+        // are performed once, after the chosen modes (CR 608.2c). `spell_body` combines
+        // them into the effect of the modal body, whose own effect is nothing.
+        if body.modal.is_some() && !matches!(body.effect, Effect::Noop) && !chosen.is_empty() {
+            let effect = body.effect.clone();
             self.exec(&effect, ctx);
         }
     }

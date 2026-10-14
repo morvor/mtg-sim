@@ -542,6 +542,7 @@ impl Game {
                 continue;
             }
             let c = crate::permissions::CastPermission {
+                way: 0,
                 kind: crate::permissions::PermissionKind::Static(i),
                 source: Some(*src),
                 free: true,
@@ -1210,6 +1211,7 @@ impl Game {
         if let Some(n) = new {
             // CR 400.7i: grants to lands played this way apply to the new permanent.
             crate::zones::land_played(self, p, card, n);
+            crate::permissions::land_played_with(self, permission, n);
             self.emit(Event::LandPlayed { player: p, land: n });
         }
         self.flush_events();
@@ -2193,6 +2195,7 @@ impl Game {
             pay_ctx.x = x;
             pay_ctx.x_defined = true;
         }
+        pay_ctx.ability_uid = a.uid;
         let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
         let chars = o.chars.clone();
         self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
@@ -2471,7 +2474,7 @@ impl Game {
                 is_ability: true,
                 card_types: src_chars.card_types,
                 source: Some(src),
-                any_color: self.any_color_mana(p, src, true),
+                any_color: self.ability_any_color_mana(p, src, act),
                 cost_of: Some(crate::rule_statics::payment::CostOf::ManaAbility),
                 x_spend: crate::payment_rules::x_spend(
                     &crate::payment_rules::ability_rules(act),
@@ -2573,7 +2576,7 @@ impl Game {
             is_ability: true,
             card_types: src_chars.card_types,
             source: Some(src),
-            any_color: self.any_color_mana(p, src, true),
+            any_color: self.ability_any_color_mana(p, src, act),
             class_level: crate::classes::gains_a_level(act),
             has_x: cost_has_x,
             cost_of: Some(crate::rule_statics::payment::CostOf::Ability),
@@ -2724,6 +2727,24 @@ impl Game {
         out
     }
 
+    /// [`Self::any_color_mana`] for activating `act` of `src`, with the mana its own
+    /// activation instructions let be spent so ("You may spend mana as though it were
+    /// mana of any color to activate those abilities", CR 113.10a, 609.4b).
+    pub fn ability_any_color_mana(
+        &self,
+        p: PlayerId,
+        src: ObjectId,
+        act: &ActivatedAbility,
+    ) -> Vec<ManaType> {
+        let mut v = self.any_color_mana(p, src, true);
+        match &act.spend_as_any_color {
+            Some(t) if t.is_empty() => v.extend(ManaType::ALL),
+            Some(t) => v.extend(t.iter().copied()),
+            None => {}
+        }
+        v
+    }
+
     // ------------------------------------------------------------------
     // Costs (CR 118)
     // ------------------------------------------------------------------
@@ -2800,6 +2821,18 @@ impl Game {
                     .map(|s| {
                         let mut v = self.any_color_mana(p, s, true);
                         v.extend(self.any_color_mana(p, s, false));
+                        // The activation instructions of the ability being checked.
+                        if ctx.ability_uid != 0 {
+                            if let Some(AbilityKind::Activated(act)) = self
+                                .try_obj(s)
+                                .and_then(|o| {
+                                    o.chars.abilities.iter().find(|a| a.uid == ctx.ability_uid)
+                                })
+                                .map(|a| &a.kind)
+                            {
+                                v.extend(self.ability_any_color_mana(p, s, act));
+                            }
+                        }
                         v
                     })
                     .unwrap_or_default(),
@@ -3361,11 +3394,13 @@ impl Game {
                     n,
                     ctx,
                 );
-                for o in pick {
-                    paid.objects.push(o);
-                    paid.sacrificed.push(o);
-                    self.sacrifice(o, p);
-                }
+                // The permanents one cost sacrifices leave the battlefield together, so
+                // their leaves-the-battlefield abilities see each other (CR 603.10a):
+                // "Sacrifice three white creatures" with Teysa, Orzhov Scion among them.
+                paid.objects.extend(pick.iter().copied());
+                paid.sacrificed.extend(pick.iter().copied());
+                let what: Vec<(ObjectId, PlayerId)> = pick.iter().map(|o| (*o, p)).collect();
+                self.sacrifice_simultaneously(&what);
             }
             CostPart::DiscardSelf => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
@@ -3778,6 +3813,8 @@ pub(crate) fn as_spell_filter(f: &Filter) -> Filter {
         Filter::Spell | Filter::SpellOnStack | Filter::InZone(ZoneKind::Stack) => Filter::Any,
         // "Spells you cast from exile": a card about to be cast from exile is still there.
         Filter::CastFrom(z) => Filter::Or(vec![f.clone(), Filter::InZone(*z)]),
+        // "Spells you cast": a card about to be cast by that player.
+        Filter::CastBy(rel) => Filter::ControlledBy(*rel),
         Filter::And(v) => Filter::And(v.iter().map(as_spell_filter).collect()),
         Filter::Or(v) => Filter::Or(v.iter().map(as_spell_filter).collect()),
         Filter::Not(x) => match **x {

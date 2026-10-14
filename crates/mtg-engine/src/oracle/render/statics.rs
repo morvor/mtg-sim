@@ -1101,6 +1101,12 @@ impl Renderer<'_> {
     /// creatures had haste" (CR 602.5d, 606.3, 302.6).
     pub(crate) fn activation_permission(&mut self, who: &str, ap: &ActivationPermission) -> String {
         let what = self.ability_scope(&ap.scope);
+        // Only activated abilities are activated (CR 602.1): "activate abilities of
+        // creatures you control".
+        let what = match what.strip_prefix("activated abilities ") {
+            Some(rest) => format!("{{opt:activated}} abilities {rest}"),
+            None => what,
+        };
         let mut parts = Vec::new();
         if ap.instant_timing {
             parts.push("any time you could cast an instant".to_string());
@@ -1274,14 +1280,20 @@ impl Renderer<'_> {
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
             CostChange::ReduceColored(c, v) => {
                 let sym = mana_symbol(crate::mana::ManaType::from_color(*c));
-                let s = match v {
-                    Value::Const(n) if *n > 0 => sym.repeat(*n as usize),
-                    other => {
-                        let v = self.value(other);
-                        format!("{sym} for each {v}")
-                    }
+                let (s, tail) = match v {
+                    Value::Const(n) if *n > 0 => (sym.repeat(*n as usize), String::new()),
+                    // "~ costs {G} less to cast for each green creature you control".
+                    other => match self.per_each(other) {
+                        Some((k, each)) if k > 0 => {
+                            (sym.repeat(k as usize), format!(" for each {each}"))
+                        }
+                        _ => {
+                            let v = self.value(other);
+                            (sym.to_string(), format!(" for each {v}"))
+                        }
+                    },
                 };
-                format!("{target}{who} {costs} {s} less {act}")
+                format!("{target}{who} {costs} {s} less {act}{tail}")
             }
             CostChange::ReduceMana { mana, colored_only } => {
                 // "As an additional cost to cast green permanent spells, you may pay 2 life.
@@ -1505,10 +1517,15 @@ impl Renderer<'_> {
                 let sym = mana_symbol(crate::mana::ManaType::from_color(*c));
                 match v {
                     Value::Const(n) if *n > 0 => ("less", sym.repeat(*n as usize), String::new()),
-                    other => {
-                        let v = self.value(other);
-                        ("less", sym.to_string(), format!(" for each {v}"))
-                    }
+                    other => match self.per_each(other) {
+                        Some((k, each)) if k > 0 => {
+                            ("less", sym.repeat(k as usize), format!(" for each {each}"))
+                        }
+                        _ => {
+                            let v = self.value(other);
+                            ("less", sym.to_string(), format!(" for each {v}"))
+                        }
+                    },
                 }
             }
             other => {
@@ -1657,10 +1674,36 @@ impl Renderer<'_> {
                 ("{1}".into(), format!(" for {}", join_list(&parts, "and")))
             }
             other => {
+                // "{2} less to cast for each creature card in your graveyard": an amount
+                // for each of something counted.
+                if let Some((k, each)) = self.per_each(other) {
+                    return (format!("{{{k}}}"), format!(" for each {each}"));
+                }
                 let s = self.value(other);
                 ("{X}".into(), format!(", where X is {s}"))
             }
         }
+    }
+
+    /// A number written as an amount "for each" thing counted: (the amount per thing,
+    /// the thing). `2 × the number of creature cards in your graveyard` is {2} for each
+    /// creature card in your graveyard; the amount of life gained is one for each 1 life.
+    pub(crate) fn per_each(&mut self, v: &Value) -> Option<(i32, String)> {
+        let (k, inner) = match v {
+            Value::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
+                (Value::Const(k), x) | (x, Value::Const(k)) if *k > 0 => (*k, x),
+                _ => return None,
+            },
+            other => (1, other),
+        };
+        if let Value::Count(f) = inner {
+            return Some((k, self.for_each_noun(f)));
+        }
+        let s = self.value(inner);
+        if let Some(r) = s.strip_prefix("the number of ") {
+            return Some((k, r.to_string()));
+        }
+        None
     }
 
     /// The text of a restriction (a rule-modifying effect, CR 613.11).
@@ -1668,6 +1711,14 @@ impl Renderer<'_> {
         let subj = |me: &mut Self, f: &Filter| me.restricted_subject(f);
         match r {
             Restriction::CantAttack(f) => format!("{} can't attack", subj(self, f)),
+            Restriction::AttackOnlyNearestOpponent { side } => {
+                let d = match side {
+                    SeatSide::Left => "to the left",
+                    SeatSide::Right => "to the right",
+                    SeatSide::Chosen => "in the {alt:chosen|last chosen} direction",
+                };
+                format!("each player may attack only the nearest opponent {d} and planeswalkers controlled by that opponent")
+            }
             Restriction::CantBlock(f) => format!("{} can't block", subj(self, f)),
             Restriction::CantAttackOrBlock(f) => {
                 format!("{} can't attack or block", subj(self, f))
@@ -2420,6 +2471,7 @@ impl Renderer<'_> {
                     | A::Multiply(_)
                     | A::Add(_)
                     | A::PlusTokens { .. }
+                    | A::TokensInstead { .. }
                     | A::Subtract(_)
                     | A::Redirect(_)
                     | A::RedirectNext(..)
@@ -2470,7 +2522,16 @@ impl Renderer<'_> {
                     (Some(f), None) => format!("leave {}", self.zone_src(*f)),
                     (None, None) => "change zones".into(),
                 };
-                let then = self.replacement_then(action, "it");
+                let then = match action {
+                    // "reveal ~ and shuffle it into its owner's library instead": the
+                    // object itself is revealed, named again in the instruction.
+                    A::RevealAndMoveInstead(d) if matches!(filter, Filter::Source) => {
+                        let me = self.me();
+                        let t = self.replacement_then(&A::MoveInstead(d.clone()), "it");
+                        format!("reveal {me} and {t}")
+                    }
+                    _ => self.replacement_then(action, "it"),
+                };
                 format!("if {subj} would {where_}, {then}")
             }
             (E::Destroy(f), action) => {
@@ -2614,7 +2675,8 @@ impl Renderer<'_> {
                         let v = self.value(v);
                         format!("{they} gain that much life plus {v} instead")
                     }
-                    A::Prevent => "they gain no life instead".into(),
+                    A::Prevent if w == "you" => "you gain no life instead".into(),
+                    A::Prevent => "{alt:they|that player} gain no life instead".into(),
                     other => self.replacement_then(other, ""),
                 };
                 format!("if {w} would gain life, {then}")
@@ -2777,6 +2839,23 @@ impl Renderer<'_> {
             (E::CreateTokensMatching { who, tokens }, action) => {
                 let w = self.player_filter_subject(who);
                 let t = self.noun(tokens, Num::Many);
+                if let (
+                    PlayerFilter::You,
+                    Filter::Subtype(sub),
+                    A::PlusTokens {
+                        spec,
+                        count: Value::EventAmount,
+                    },
+                ) = (who, tokens, action)
+                {
+                    // "If you would create a Food token, instead create a Food token and a
+                    // Treasure token." (Bilbo, Fellow Conspirator).
+                    let (d, tail) = self.token_desc(spec);
+                    return format!(
+                        "if you would create a {sub} token, instead create a {sub} token and {} token{tail}",
+                        with_article(&d)
+                    );
+                }
                 let then = match action {
                     A::Multiply(2) => {
                         "twice that many of those tokens are created instead".to_string()
@@ -3175,6 +3254,10 @@ impl Renderer<'_> {
                 };
                 format!("those tokens plus {tokens} are created instead")
             }
+            A::TokensInstead { spec } => {
+                let (d, tail) = self.token_desc(spec);
+                format!("that many {d} tokens{tail} are created instead")
+            }
             A::Redirect(sel) => {
                 let t = self.sel(sel, Case::Obj);
                 format!("that damage is dealt to {t} instead")
@@ -3324,6 +3407,7 @@ impl Renderer<'_> {
                 format!("all {kind} that would be dealt{to_s} is dealt to {t} instead")
             }
             other => {
+                let src_named = src.clone();
                 let s = src.unwrap_or_else(|| "a source".into());
                 // "it deals double that damage to that player or permanent instead".
                 let both = to_players.is_some() && to_objects.is_some();
@@ -3363,6 +3447,13 @@ impl Renderer<'_> {
                     }
                     other => self.replacement_then(other, "it"),
                 };
+                // Damage is always dealt by a source (CR 120.1): "if damage would be dealt
+                // to ~" when what replaces it doesn't name the source.
+                if src_named.is_none() && !then.starts_with("it ") {
+                    return format!(
+                        "if {{alt:{kind} would be dealt{to_s}|a source would deal {kind}{to_s}}}, {then}"
+                    );
+                }
                 format!("if {s} would deal {kind}{to_s}, {then}")
             }
         }
@@ -3448,7 +3539,13 @@ impl Renderer<'_> {
         match d {
             D::ExtraDie { who } => {
                 let w = self.rel_subject(*who);
-                format!("if {w} would roll one or more dice, instead {w} roll that many dice plus one and ignore the lowest roll")
+                // "instead roll that many dice": you, told to.
+                let w2 = if w == "you" {
+                    "{opt:you}".to_string()
+                } else {
+                    w.clone()
+                };
+                format!("if {w} would roll one or more dice, instead {w2} roll that many dice plus one and ignore the lowest roll")
             }
             D::ExtraCoin { who } => {
                 let w = self.rel_subject(*who);

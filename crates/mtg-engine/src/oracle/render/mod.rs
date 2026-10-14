@@ -12,6 +12,8 @@
 
 mod ability_cost_terms;
 mod activation_triggers;
+mod block_pairs;
+mod chosen_from_targets;
 pub mod compare;
 mod condition_terms;
 mod copy_exceptions;
@@ -27,8 +29,11 @@ mod each_player;
 mod effect_terms;
 mod effects;
 mod extremes;
+mod flashback_reduction;
 mod history_values;
+mod joined_lines;
 mod keywords;
+mod library_top;
 mod nouns;
 mod once_each_turn;
 mod outcomes;
@@ -193,10 +198,10 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
             continue;
         }
         // "Equip {10}. This ability costs {X} less to activate, where X is ...".
-        if let Some(line) = abilities
-            .get(i + 1)
-            .and_then(|next| r.keyword_with_own_cost(a, next))
-        {
+        if let Some(line) = abilities.get(i + 1).and_then(|next| {
+            r.keyword_with_own_cost(a, next)
+                .or_else(|| r.flashback_with_reduction(a, next))
+        }) {
             out.lines.push(line);
             skip = 1;
             continue;
@@ -580,7 +585,7 @@ pub(crate) fn is_solved(c: &Condition) -> bool {
     matches!(c, Condition::Custom(n) if n == "case: is solved")
 }
 
-fn is_changeling_cda(a: &Ability) -> bool {
+pub(crate) fn is_changeling_cda(a: &Ability) -> bool {
     matches!(&a.kind, AbilityKind::Static(s) if s.is_cda && matches!(&s.effect,
         StaticEffect::Continuous { mods, .. } if mods.len() == 1 && matches!(mods[0], Modification::AllCreatureTypes)))
 }
@@ -624,6 +629,9 @@ pub(crate) fn merge_shared_as_though(lines: &mut Vec<String>) {
 }
 
 fn join_as_though(a: &str, b: &str) -> Option<String> {
+    if let Some(j) = joined_lines::join_lines(a, b) {
+        return Some(j);
+    }
     // "~ can't block or be blocked by non-Spirit creatures."
     if let (Some((sa, oa)), Some((sb, ob))) = (
         a.trim_end_matches('.').split_once(" can't block "),
@@ -804,6 +812,8 @@ pub struct Renderer<'a> {
     /// Rendering a trigger event that triggers once for a whole batch of events
     /// (`BatchPer::Batch`): "one or more players", "one or more Humans".
     pub(crate) batch_once: bool,
+    /// Rendering a trigger that triggers once per source of a batch of damage events.
+    pub(crate) batch_per_source: bool,
     /// The instruction before is one the player must follow if able ("Sacrifice a
     /// creature. If you can't, ...").
     pub(crate) prev_mandatory: bool,
@@ -820,6 +830,12 @@ pub struct Renderer<'a> {
     pub(crate) trigger_player: Option<&'static str>,
     /// A hand was just revealed: a card chosen from it is "from it".
     pub(crate) revealed_hand: bool,
+    /// Variables holding a choice of up to one object made by you ("you may choose a
+    /// nonland card from it"): "if you do" is whether one was chosen.
+    pub(crate) chosen_up_to_one: Vec<Var>,
+    /// Variables holding one object chosen by an earlier instruction ("Choose a creature
+    /// you control. Each other creature you control ...").
+    pub(crate) chosen_one: Vec<Var>,
     /// What X stands for when the cost defined it ("for each storage counter removed this
     /// way").
     pub(crate) x_for_each: Option<String>,
@@ -844,6 +860,10 @@ pub struct Renderer<'a> {
     /// objects it acted on, and what it did to them ("destroyed", "discarded"): "the
     /// number of creatures destroyed this way" (see `tail_parts.rs`).
     pub(crate) this_way: Vec<(Var, &'static str, Option<CardType>)>,
+    /// What earlier instructions did, as known where a number was remembered
+    /// (`Effect::StoreValue`): "where X is the number of creatures tapped this way" is
+    /// worded after the sentence, where those instructions are out of scope.
+    pub(crate) stored_this_way: Vec<(Var, &'static str, Option<CardType>)>,
     /// The target contexts outside the current one ([`Renderer::with_targets`]): a
     /// number remembered as an ability resolves can be about its targets, and be said in
     /// a delayed ability created then.
@@ -878,6 +898,12 @@ pub struct Renderer<'a> {
     /// Rendering a triggered ability that triggers on an attack: the active player is the
     /// attacking player.
     pub(crate) attack_trigger: bool,
+    /// Rendering a triggered ability that triggers when a creature blocks or becomes
+    /// blocked by a creature: the triggering object is the other creature.
+    pub(crate) block_pair_trigger: bool,
+    /// The target player who is the subject of the instruction being rendered: named
+    /// again in it, "they" (see `effects.rs`, life gained or lost).
+    pub(crate) they_target: Option<u8>,
 }
 
 impl<'a> Renderer<'a> {
@@ -916,6 +942,8 @@ impl<'a> Renderer<'a> {
             vote_noun: None,
             for_each_subject: None,
             attack_trigger: false,
+            block_pair_trigger: false,
+            they_target: None,
             granted_keyword: false,
             self_before_target: false,
             last_actor_other: false,
@@ -945,12 +973,15 @@ impl<'a> Renderer<'a> {
             outer_vars: Vec::new(),
             it_done: None,
             batch_once: false,
+            batch_per_source: false,
             prev_mandatory: false,
             milled: false,
             in_emblem: None,
             removed_kind: None,
             trigger_player: None,
             revealed_hand: false,
+            chosen_up_to_one: Vec::new(),
+            chosen_one: Vec::new(),
             x_for_each: None,
             trigger_names_opponent: false,
             keyword_ability: None,
@@ -958,6 +989,7 @@ impl<'a> Renderer<'a> {
             play_terms: None,
             after_exile: false,
             this_way: Vec::new(),
+            stored_this_way: Vec::new(),
             each_target: None,
             target_vars: Vec::new(),
             target_stack: Vec::new(),
@@ -1076,8 +1108,11 @@ impl<'a> Renderer<'a> {
         self.plural_vars.clear();
         self.target_vars.clear();
         self.stored_values.clear();
+        self.stored_this_way.clear();
         self.trigger_player = None;
         self.revealed_hand = false;
+        self.chosen_up_to_one.clear();
+        self.chosen_one.clear();
         self.x_for_each = None;
         self.sacrificed = None;
         self.vote_words.clear();
@@ -1174,7 +1209,10 @@ impl<'a> Renderer<'a> {
         match defs.as_slice() {
             [] => s,
             [v] => {
+                let saved = self.this_way.clone();
+                self.this_way.extend(self.stored_this_way.clone());
                 let w = self.outer_value(v);
+                self.this_way = saved;
                 if w == "X" || s.contains(&format!(", where X is {w}")) {
                     return s;
                 }
@@ -1303,6 +1341,22 @@ impl<'a> Renderer<'a> {
                         format!("{no_s}. If {c}, choose {yes_s} instead")
                     }
                 }
+                // "Choose one. If this spell was kicked, choose any number instead": none
+                // to all of them when the condition holds.
+                (None, None)
+                    if matches!((&m.min, &m.max), (Value::If(c1, y1, n1), Value::If(c2, y2, n2))
+                        if format!("{c1:?}") == format!("{c2:?}")
+                            && y1.as_const() == Some(0)
+                            && n1.as_const() == Some(1)
+                            && n2.as_const() == Some(1)
+                            && y2.as_const().is_some_and(|k| k as usize >= m.modes.len())) =>
+                {
+                    let Value::If(c, _, _) = &m.min else {
+                        return self.gap("modal min");
+                    };
+                    let c = format!("{} {{opt:as you cast ~}}", self.condition(c));
+                    format!("one. If {c}, choose any number instead")
+                }
                 // "choose up to X, where X is the number of Lesson cards in your graveyard".
                 _ if !matches!(m.max, Value::X) && m.min.as_const() == Some(0) => {
                     let v = self.value(&m.max);
@@ -1338,7 +1392,11 @@ impl<'a> Renderer<'a> {
         }
         for mode in &m.modes {
             let cost = mode.cost.as_ref().map(|c| self.cost(c));
-            let text = self.with_targets(&mode.targets, |r| r.effect_sentences(&mode.effect));
+            let text = self.with_targets(&mode.targets, |r| {
+                let s = r.effect_sentences(&mode.effect);
+                // "where X is ...": a number the mode's instructions remembered.
+                r.define_stored_x(s)
+            });
             let pp = mode.pawprints();
             let mut prefix = String::new();
             if pp > 0 {

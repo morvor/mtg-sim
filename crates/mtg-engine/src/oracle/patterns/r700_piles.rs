@@ -17,11 +17,22 @@ use crate::oracle::phrases::*;
 use crate::piles::{PileAction, CHOSEN, OTHER};
 
 fn separate(what: Sel, separator: PlayerRef) -> Effect {
-    Effect::Piles(Box::new(PileAction::Separate { what, separator }))
+    Effect::Piles(Box::new(PileAction::Separate {
+        what,
+        separator,
+        count: 0,
+        face_down: false,
+        own: false,
+    }))
 }
 
 fn choose(chooser: PlayerRef) -> Effect {
-    Effect::Piles(Box::new(PileAction::Choose { chooser }))
+    Effect::Piles(Box::new(PileAction::Choose {
+        chooser,
+        picked_by: None,
+        of: None,
+        at_random: false,
+    }))
 }
 
 fn to_zone(var: crate::ability::Var, zone: ZoneKind) -> Effect {
@@ -73,6 +84,10 @@ fn separate_into_piles(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let objs = r.strip_suffix(" into two piles")?;
     let what = match objs {
+        // "Exile up to five target creature cards from graveyards. An opponent separates
+        // those cards ...": the cards the previous instruction exiled (the new objects,
+        // CR 400.7).
+        "those cards" | "them" if matches!(b.it, Sel::Target(_)) => Sel::Var(vars::IT),
         "those cards" | "them" => b.it.clone(),
         _ => {
             let (sel, tail) = object_ref(objs, b)?;

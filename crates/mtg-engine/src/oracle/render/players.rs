@@ -115,7 +115,9 @@ impl Renderer<'_> {
                 let words: Vec<String> = (a..=m).map(number_word).collect();
                 Some(join_list(&words, "or"))
             }
-            (Some(1), Some(m)) if m > 1 && m < 100 => Some(format!("one or {}", number_word(m))),
+            // "One or more target creatures" (no upper bound, as "any number" is written).
+            (Some(1), Some(m)) if m >= 99 => Some("one or more".into()),
+            (Some(1), Some(m)) if m > 1 && m < 99 => Some(format!("one or {}", number_word(m))),
             (Some(0), Some(_)) | (Some(0), None) if matches!(t.max, Value::Const(_)) => {
                 Some("any number of".into())
             }
@@ -272,6 +274,24 @@ impl Renderer<'_> {
                 if s == before && !s.contains("graveyard") {
                     s.push_str(" a single player owns");
                 }
+            }
+            // "two target creatures controlled by the same opponent".
+            Some(TargetGroup::SameController)
+                if s.contains(" {alt:an opponent controls|your opponents control}")
+                    || s.ends_with(" your opponents control")
+                    || s.ends_with(" an opponent controls") =>
+            {
+                for c in [
+                    " {alt:an opponent controls|your opponents control}",
+                    " your opponents control",
+                    " an opponent controls",
+                ] {
+                    if let Some(head) = s.strip_suffix(c) {
+                        s = head.to_string();
+                        break;
+                    }
+                }
+                s.push_str(" {alt:controlled by the same opponent|a single opponent controls}")
             }
             Some(TargetGroup::SameController) => {
                 s.push_str(" {alt:a single player controls|controlled by the same player}")
@@ -436,6 +456,10 @@ impl Renderer<'_> {
             return match case {
                 // "Target player shuffles their graveyard into their library."
                 Case::Poss => "{alt:that player's|their}".into(),
+                // "Target opponent loses life equal to the number of creatures they
+                // control": the subject, named again in the amount.
+                Case::Subj if self.they_target == Some(i) => "{alt:that player|they}".into(),
+                Case::Obj if self.they_target == Some(i) => "{alt:that player|them}".into(),
                 _ => "that player".into(),
             };
         }
@@ -445,6 +469,16 @@ impl Renderer<'_> {
                 Case::Obj => "them".into(),
                 Case::Poss => "their".into(),
             };
+        }
+        // "~ deals 3 damage to any target. ... to that permanent or player": a target
+        // that may be a player or an object.
+        if matches!(case, Case::Obj)
+            && self
+                .targets
+                .get(idx)
+                .is_some_and(|t| matches!(t.what, TargetKind::AnyTarget))
+        {
+            return "{alt:it|that permanent or player}".into();
         }
         match case {
             Case::Poss => "its".into(),
@@ -581,6 +615,10 @@ impl Renderer<'_> {
             // Another object while "it" is the object itself (named again since the
             // trigger condition): cards say "that creature" (`that-object`, which matches
             // only that wording, see `compare::token_eq`).
+            // "the other creature" of a block.
+            Sel::TriggerObject if self.block_pair_trigger => {
+                self.block_pair_other(case).unwrap_or_default()
+            }
             Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell
                 if self.self_salient && !self.other_salient && !self.trigger_is_self =>
             {
@@ -740,6 +778,17 @@ impl Renderer<'_> {
             Sel::AtRandom { filter, count, .. } => {
                 let det = self.det_for(count);
                 let s = self.noun_det(filter, det);
+                // "a card at random from your graveyard".
+                if let Some((head, zone)) = s.split_once(" in your ") {
+                    if !head.contains('{') && !zone.contains(' ') {
+                        return decline(
+                            format!(
+                                "{{alt:{s} chosen at random|{head} at random from your {zone}}}"
+                            ),
+                            case,
+                        );
+                    }
+                }
                 decline(format!("{s} chosen at random"), case)
             }
             Sel::Linked => decline("each card exiled with ~it".into(), case),
@@ -751,6 +800,10 @@ impl Renderer<'_> {
                     None => self.gap(format!("Sel::ThisTurn({c:?})")),
                 };
                 decline(s, case)
+            }
+            Sel::EventsDuring(w, c) => {
+                let g = self.gap(format!("Sel::EventsDuring({w:?}, {c:?})"));
+                decline(g, case)
             }
             // "the creatures destroyed this way": the objects an earlier instruction acted
             // on.
@@ -778,6 +831,23 @@ impl Renderer<'_> {
             Sel::CreatorLinked => decline("the exiled card".into(), case),
             Sel::ExiledWithCardsNamed(n) => {
                 decline(format!("a card you exiled with cards named {n}"), case)
+            }
+            // "the exiled card" in another ability than the one that exiled it: the
+            // parser's alternatives for what this ability exiled (none here) and what
+            // the object's linked ability exiled (CR 607.2a).
+            Sel::Union(v)
+                if v.iter().any(is_linked_exiled)
+                    && v.iter().all(|p| {
+                        is_linked_exiled(p)
+                            || matches!(p, Sel::Var(_))
+                            || matches!(p, Sel::Matching(x, Filter::InZone(ZoneKind::Exile)) if matches!(x.as_ref(), Sel::Var(_)))
+                    }) =>
+            {
+                let linked = v.iter().find(|p| is_linked_exiled(p)).cloned().unwrap_or(Sel::None);
+                self.sel(&linked, case)
+            }
+            Sel::Union(v) if self.block_pair_both(v, case).is_some() => {
+                self.block_pair_both(v, case).unwrap_or_default()
             }
             Sel::Union(v) => {
                 let mut parts: Vec<String> = v.iter().map(|x| self.sel(x, Case::Obj)).collect();
@@ -819,8 +889,7 @@ impl Renderer<'_> {
             Sel::TopOfLibrary(p, n) => {
                 let p = self.player(p, Case::Poss);
                 let s = match n {
-                    Value::Const(1) => format!("the top card of {p} library"),
-                    Value::Const(k) => format!("the top {} cards of {p} library", number_word(*k)),
+                    Value::Const(_) | Value::EventAmount | Value::Prev => self.top_cards(n, &p),
                     other => {
                         let v = self.value(other);
                         format!("the top {v} cards of {p} library")
@@ -999,6 +1068,30 @@ impl Renderer<'_> {
                 format!("each {n}")
             }
             PlayerRef::Owner => "~'s owner".into(),
+            PlayerRef::Seat { of, side, opponent } => {
+                let who = if *opponent { "opponent" } else { "player" };
+                let s = match (of.as_ref(), side) {
+                    (PlayerRef::Iterated, SeatSide::Chosen) => {
+                        "the next player in {alt:the chosen|that} direction".to_string()
+                    }
+                    (_, SeatSide::Chosen) => {
+                        format!("the {who} next to you in the chosen direction")
+                    }
+                    (of, side) => {
+                        let side = if *side == SeatSide::Left {
+                            "left"
+                        } else {
+                            "right"
+                        };
+                        let o = self.player(of, Case::Poss);
+                        format!("the {who} to {o} {side}")
+                    }
+                };
+                return match case {
+                    Case::Poss => format!("{s}'s"),
+                    _ => s,
+                };
+            }
             // "Choose an opponent. ... the chosen player's hand".
             PlayerRef::ChosenOpponent if matches!(case, Case::Poss) => {
                 return "the chosen {alt:opponent's|player's}".into();
@@ -1155,6 +1248,10 @@ impl Renderer<'_> {
             PlayerFilter::AttackedThisTurn => "who attacked this turn".into(),
             PlayerFilter::Poisoned => "who is poisoned".into(),
             PlayerFilter::MaxSpeed => "with max speed".into(),
+            PlayerFilter::VotedLikeYou(true) => "who voted for a choice you voted for".into(),
+            PlayerFilter::VotedLikeYou(false) => {
+                "who voted for a choice you didn't vote for".into()
+            }
             PlayerFilter::LessThanHalfStartingLife => {
                 "with less than half their starting life total".into()
             }
@@ -1169,6 +1266,16 @@ impl Renderer<'_> {
             PlayerFilter::Or(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.player_quality(x)).collect();
                 join_list(&parts, "or")
+            }
+            // "Each opponent discards a card. ... each opponent who can't": who owns none
+            // of the cards discarded this way. Discarding is mandatory, so a player who
+            // discarded nothing couldn't (CR 701.9a).
+            PlayerFilter::Not(x)
+                if matches!(x.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(),
+                    PlayerRef::OwnerOf(s) if matches!(s.as_ref(), Sel::All(Filter::In(v))
+                        if matches!(v.as_ref(), Sel::Var(crate::discard_rules::DISCARDED))))) =>
+            {
+                "who {alt:can't|didn't discard a card this way}".into()
             }
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);
@@ -1286,4 +1393,11 @@ fn unbounded_choice(filter: &Filter, count: &Value) -> bool {
         }
         _ => false,
     }
+}
+
+/// The cards exiled with this object that are still in exile (CR 607.2a).
+fn is_linked_exiled(s: &Sel) -> bool {
+    matches!(s, Sel::All(Filter::And(v)) if v.len() == 2
+        && matches!(&v[0], Filter::In(x) if matches!(x.as_ref(), Sel::Linked))
+        && matches!(v[1], Filter::InZone(ZoneKind::Exile)))
 }

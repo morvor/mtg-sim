@@ -554,7 +554,11 @@ impl Renderer<'_> {
                 np.post.push(format!("{w} {v}"));
             }
             Filter::AttachedToAnyOf(s) => {
-                let w = self.sel(s, Case::Obj);
+                // "attached to a creature": attached to any one of them.
+                let w = match s.as_ref() {
+                    Sel::All(f) => self.noun_det(f, Det::A),
+                    _ => self.sel(s, Case::Obj),
+                };
                 np.post.push(format!("attached to {w}"));
             }
             // "with toughness greater than its power": a value of the object itself
@@ -759,6 +763,8 @@ impl Renderer<'_> {
             Filter::In(s) if matches!(s.as_ref(), Sel::Linked) => {
                 np.zone_said = true;
                 np.post.push("exiled with ~it".into());
+                // The object itself was named: a later "it" may be it.
+                self.self_salient = true;
             }
             // "for each creature card exiled this way": the cards the instruction before
             // exiled.
@@ -778,7 +784,11 @@ impl Renderer<'_> {
                 np.kind.get_or_insert("card");
             }
             // "for each permanent destroyed this way".
-            Filter::In(s) if self.this_way_of(s).is_some() => {
+            Filter::In(s)
+                if self.this_way_of(s).is_some()
+                    && !(self.milled
+                        && matches!(s.as_ref(), Sel::Var(v) if *v == crate::ability::vars::IT)) =>
+            {
                 let (verb, card, ty) = self.this_way_of(s).unwrap_or(("", false, None));
                 np.post.push(format!("{verb} this way"));
                 if let (Some(t), true) = (ty, np.types.is_empty()) {
@@ -854,6 +864,13 @@ impl Renderer<'_> {
             Filter::StackTargets(tf) => {
                 let s = self.targets_filter(tf);
                 np.rel.push(s);
+            }
+            Filter::CastBy(r) => {
+                np.controller_matches = Some(match r {
+                    PlayerRel::You => "you cast".into(),
+                    PlayerRel::Opponent => "your opponents cast".into(),
+                    other => format!("{} casts", self.rel_subject(*other)),
+                });
             }
             // Worded in `np_text`, where the owner is known.
             Filter::CastFrom(z) => {
@@ -942,6 +959,12 @@ impl Renderer<'_> {
                     s.as_ref(),
                     Sel::Target(_) | Sel::TriggerObject | Sel::AttachedTo
                 ) =>
+            {
+                np.other = true
+            }
+            // "Choose a creature you control. Each other creature you control ...".
+            Filter::In(s)
+                if matches!(s.as_ref(), Sel::Var(v) if self.chosen_one.contains(v)) =>
             {
                 np.other = true
             }
@@ -1365,6 +1388,10 @@ impl Renderer<'_> {
                 s.push(' ');
                 s.push_str(&self.zone_phrase(z, owner, num));
             }
+            // "a creature you control but don't own".
+            (_, Some(PlayerRel::NotYou)) if s.ends_with(" you control") => {
+                s.push_str(" {alt:but don't own|you don't own}");
+            }
             (_, Some(o)) => {
                 s.push(' ');
                 s.push_str(&self.owns_phrase(o));
@@ -1549,7 +1576,9 @@ impl Renderer<'_> {
             if !matches!(
                 sel.as_ref(),
                 Sel::Var(crate::kw::reveal_from_hand::REVEALED)
-            ) && self.this_way_of(sel).is_none()
+            ) && (self.this_way_of(sel).is_none()
+                || self.milled
+                    && matches!(sel.as_ref(), Sel::Var(v) if *v == crate::ability::vars::IT))
             {
                 return self.sel(sel, Case::Obj);
             }
@@ -1599,7 +1628,8 @@ impl Renderer<'_> {
             if let Some((shared, kws)) = keyword_alternatives(v) {
                 let n = self.noun_det(&shared, det.clone());
                 let k: Vec<String> = kws.iter().map(|k| self.keyword_kind_word(*k)).collect();
-                return format!("{n} with {}", join_list(&k, "or"));
+                // "with flying, deathtouch, and/or lifelink": any of them.
+                return format!("{n} with {}", join_list(&k, "{alt:or|and/or}"));
             }
             if !v.iter().all(Self::is_type_like) && !v.iter().all(|x| matches!(x, Filter::Color(_)))
             {

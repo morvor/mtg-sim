@@ -13,10 +13,17 @@
 //!   how they enter are made only then, in APNAP order (CR 616.1);
 //! * the permanents they sacrifice are sacrificed together (CR 701.21a);
 //! * the cards they discard are discarded once all of them have chosen;
+//! * "[effect] unless they pay [life / sacrifice ... / discard ...]": each decides whether
+//!   to pay and chooses what to pay with, then the payments are made with the others'
+//!   actions (CR 101.4, 118.12; Killing Wave, Torment of Hailfire);
 //! * damage dealt to each of them is dealt at once, so a source with lifelink causes one
 //!   life gain event (CR 120.3f, 608.2f);
 //! * a search: each searches, then the cards found are moved together;
-//! * life gained or lost: each amount is determined before anyone's life total changes.
+//! * life gained or lost: each amount is determined before anyone's life total changes;
+//! * control changes: every player's objects are determined (and chosen, by whoever
+//!   chooses them, each chooser knowing the earlier choices) before any control changes,
+//!   then control of all of them changes at the same time ("each player gains control of
+//!   all creatures their opponents control" swaps them; Aminatou, Scrambleverse rulings).
 //!
 //! An instruction that isn't one of those is performed for each player in turn, in APNAP
 //! order (CR 608.2f); "you may ..." questions and conditions are still settled for every
@@ -184,6 +191,8 @@ fn adds_to_collected(e: &Effect) -> bool {
     }
     match e {
         Effect::Custom(_) => true,
+        // Each player's own piles (`piles.rs`).
+        Effect::Piles(a) => a.collects(),
         Effect::Store { var, sel } => mentions(sel, *var),
         Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => adds_to_collected(effect),
         Effect::If {
@@ -499,12 +508,17 @@ impl Frames {
         // Atraxa): what "it" came to mean for each player (the objects their instructions
         // acted on) is, after them, all of those objects, not only the last player's
         // (CR 608.2c: later text refers to what the earlier instructions did).
-        if matches!(self.frames.first().map(|f| f.item), Some(Item::Player(_)))
-            && self.local_vars.contains(&vars::IT)
-        {
+        // The same for the tokens each player created ("Each player creates a Treasure
+        // token. Tap those tokens.").
+        for var in [vars::IT, vars::CREATED] {
+            if !matches!(self.frames.first().map(|f| f.item), Some(Item::Player(_)))
+                || !self.local_vars.contains(&var)
+            {
+                continue;
+            }
             let mut all: Vec<Entity> = Vec::new();
             for f in &self.frames {
-                let Some(mine) = f.vars.get(&vars::IT) else {
+                let Some(mine) = f.vars.get(&var) else {
                     continue;
                 };
                 for e in mine.iter().flatten() {
@@ -513,7 +527,7 @@ impl Frames {
                     }
                 }
             }
-            ctx.vars.insert(vars::IT, all);
+            ctx.vars.insert(var, all);
         }
         ctx.controller = self.controller;
         ctx.resolving_controller = self.resolving;
@@ -554,6 +568,11 @@ enum Plan {
         reveal: bool,
         shuffle: bool,
     },
+    /// A control change, made together with the other players' (`None`: nothing).
+    Control(Option<crate::control_change::Grant>),
+    /// Life the player chose to pay for "[effect] unless they pay N life", paid together
+    /// with the other players' actions (CR 101.4, 118.12).
+    PayLife { player: PlayerId, cost: Cost },
     /// Performed for this player in turn (CR 608.2f).
     Exec(Effect),
 }
@@ -574,6 +593,14 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
     match e {
         Effect::Noop => true,
         Effect::May { effect, .. } => plannable(g, effect, ctx, p),
+        Effect::AsPlayer { who, effect } => match g.eval_player(who, ctx) {
+            Some(q) => {
+                let mut c = ctx.clone();
+                c.controller = q;
+                plannable(g, effect, &c, p)
+            }
+            None => true,
+        },
         Effect::If {
             then, otherwise, ..
         } => plannable(g, then, ctx, p) && plannable(g, otherwise, ctx, p),
@@ -591,6 +618,29 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
             p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
         }
         Effect::DealDamage { source, to, .. } => chosen_by(g, &[source, to], ctx, p),
+        // Whoever makes the choices: no control changes until all are made.
+        Effect::GainControl { .. } => true,
+        // "For each creature, its controller sacrifices it unless they pay X life" (Killing
+        // Wave): each player decides whether to pay, then they all pay and sacrifice
+        // together (CR 101.4, 118.12).
+        Effect::PayOptional {
+            who,
+            cost,
+            then,
+            otherwise,
+        } => {
+            let payers = g.eval_players(who, ctx);
+            // "Each opponent loses 3 life unless that player sacrifices a nonland
+            // permanent or discards a card" (Torment of Hailfire): each player chooses
+            // what to sacrifice or discard, then it's done together (CR 101.4).
+            let own_objects = choice_cost(cost).is_some() && p.is_some_and(|p| payers == vec![p]);
+            (life_amount(cost).is_some() || own_objects)
+                && matches!(**then, Effect::Noop)
+                && payers.len() == 1
+                // "... loses 3 life unless ...": the amount is fixed as it's planned.
+                && (plannable(g, otherwise, ctx, p)
+                    || matches!(**otherwise, Effect::LoseLife { .. } | Effect::GainLife { .. }))
+        }
         Effect::Search { who, whose, .. } => {
             p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
                 && g.eval_player(whose, ctx).is_some()
@@ -599,8 +649,96 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
     }
 }
 
+/// The life `cost` consists of, if it's only a payment of life.
+fn life_amount(cost: &Cost) -> Option<Value> {
+    match (&cost.mana, cost.parts.as_slice()) {
+        (None, [CostPart::PayLife(v)]) => Some(v.clone()),
+        _ => None,
+    }
+}
+
+/// A cost that is only sacrificing or discarding chosen objects: its one part.
+fn choice_cost(cost: &Cost) -> Option<&CostPart> {
+    match (&cost.mana, cost.parts.as_slice()) {
+        (None, [part @ (CostPart::Sacrifice { .. } | CostPart::Discard { random: false, .. })]) => {
+            Some(part)
+        }
+        _ => None,
+    }
+}
+
+/// What `q` may sacrifice or discard to pay `part` (see [`choice_cost`]), as paying it
+/// would offer (`Game::pay_cost`): the candidates and how many to choose, if enough of
+/// them can be chosen.
+fn choice_cost_candidates(
+    g: &Game,
+    q: PlayerId,
+    part: &CostPart,
+    ctx: &Ctx,
+) -> Option<(Vec<ObjectId>, u32)> {
+    let (filter, n, cands): (&Filter, u32, Vec<ObjectId>) = match part {
+        CostPart::Sacrifice { filter, count } => (
+            filter,
+            g.eval_value(count, ctx).max(0) as u32,
+            g.objects_matching(filter, ctx)
+                .into_iter()
+                .filter(|o| g.obj(*o).controller == q && g.may_sacrifice_for_cost(*o, ctx))
+                .collect(),
+        ),
+        CostPart::Discard { filter, count, .. } => (
+            filter,
+            g.eval_value(count, ctx).max(0) as u32,
+            g.player(q)
+                .hand
+                .iter()
+                .copied()
+                .filter(|c| crate::draw_rules::usable_for_cost(g, *c, filter, ctx))
+                .collect(),
+        ),
+        _ => return None,
+    };
+    crate::target_groups::can_choose_together(g, filter, &cands, n as usize, ctx)
+        .then_some((cands, n))
+}
+
+/// `q`'s choice among `cands` of what to sacrifice or discard to pay `part`, made now and
+/// performed with the other players' actions.
+fn plan_choice_cost(
+    g: &mut Game,
+    q: PlayerId,
+    part: &CostPart,
+    (cands, n): (Vec<ObjectId>, u32),
+    ctx: &Ctx,
+) -> Plan {
+    let (filter, prompt) = match part {
+        CostPart::Sacrifice { filter, .. } => (filter, "Choose permanents to sacrifice (cost)"),
+        CostPart::Discard { filter, .. } => (filter, "Choose cards to discard (cost)"),
+        _ => return Plan::Nothing,
+    };
+    let pick =
+        crate::target_groups::choose_together(g, q, ctx.source, prompt, filter, cands, n, n, ctx);
+    // CR 101.4a: cards chosen in a hand stay face down until discarded.
+    g.record_apnap_choice(q, pick.clone());
+    match part {
+        CostPart::Sacrifice { .. } => Plan::Sacrifice {
+            what: pick.into_iter().map(|o| (o, q)).collect(),
+            chosen: false,
+        },
+        _ => Plan::Discard {
+            player: q,
+            cards: pick,
+        },
+    }
+}
+
 /// Makes `p`'s choices for `e` (CR 101.4) and returns what they'll do.
-fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
+fn plan(
+    g: &mut Game,
+    e: &Effect,
+    ctx: &mut Ctx,
+    p: Option<PlayerId>,
+    earlier: &[Option<Plan>],
+) -> Plan {
     match e {
         Effect::Noop => Plan::Nothing,
         Effect::May { who, effect } => {
@@ -612,10 +750,24 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
                 && g.ask_yes_no(asker, ctx.source, &format!("You may: {text}"), true);
             ctx.prev_happened = yes;
             if yes {
-                plan(g, effect, ctx, p)
+                plan(g, effect, ctx, p, earlier)
             } else {
                 Plan::Nothing
             }
+        }
+        // "Its controller sacrifices it": planned as that player (see `Game::exec`).
+        Effect::AsPlayer { who, effect } if plannable(g, e, ctx, p) => {
+            let Some(q) = g.eval_player(who, ctx) else {
+                return Plan::Nothing;
+            };
+            let saved = ctx.controller;
+            let saved_resolving = ctx.resolving_controller;
+            ctx.resolving_controller.get_or_insert(saved);
+            ctx.controller = q;
+            let plan = plan(g, effect, ctx, p, earlier);
+            ctx.controller = saved;
+            ctx.resolving_controller = saved_resolving;
+            plan
         }
         Effect::If {
             cond,
@@ -623,17 +775,18 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
             otherwise,
         } => {
             if g.eval_cond(cond, ctx) {
-                plan(g, then, ctx, p)
+                plan(g, then, ctx, p, earlier)
             } else {
                 // An instruction whose condition didn't hold wasn't done (as in
                 // `Game::exec`).
                 if matches!(**otherwise, Effect::Noop) {
                     ctx.prev_happened = false;
                 }
-                plan(g, otherwise, ctx, p)
+                plan(g, otherwise, ctx, p, earlier)
             }
         }
         Effect::Move { what, to } if plannable(g, e, ctx, p) => {
+            let what = &crate::attach::only_enterable(g, what, to, ctx);
             let objs: Vec<ObjectId> = g
                 .resolve_objects(what, ctx)
                 .into_iter()
@@ -807,6 +960,84 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
                 shuffle: *shuffle,
             }
         }
+        Effect::GainControl {
+            what,
+            who,
+            duration,
+        } if plannable(g, e, ctx, p) => {
+            let grant = crate::control_change::plan_gain_control(g, what, who, duration, ctx);
+            if has_choice(what) {
+                let mut by = Vec::new();
+                choosers(g, what, ctx, &mut by);
+                if let (Some(c), Some(gr)) = (by.first(), &grant) {
+                    g.record_apnap_choice(*c, gr.objs.clone());
+                }
+            }
+            Plan::Control(grant)
+        }
+        Effect::PayOptional {
+            who,
+            cost,
+            otherwise,
+            ..
+        } if plannable(g, e, ctx, p) => {
+            if let (Some(q), Some(part)) = (g.eval_player(who, ctx), choice_cost(cost)) {
+                let cands = (!crate::multiplayer::cant_pay(g, q)
+                    && crate::entry_costs::can_pay(g, q, cost, ctx))
+                .then(|| choice_cost_candidates(g, q, part, ctx))
+                .flatten();
+                let can = cands.is_some();
+                let pays = can
+                    && g.ask_yes_no(
+                        q,
+                        ctx.source,
+                        &format!("Pay {}?", crate::resolve::describe_cost(cost)),
+                        false,
+                    );
+                ctx.prev_happened = pays;
+                return match cands.filter(|_| pays) {
+                    Some(cands) => plan_choice_cost(g, q, part, cands, ctx),
+                    None => {
+                        // CR 732.6: declining the [B] of "[A] unless [B]".
+                        if can {
+                            crate::shortcuts::declined_unless(g);
+                        }
+                        plan(g, otherwise, ctx, p, earlier)
+                    }
+                };
+            }
+            let (Some(q), Some(n)) = (g.eval_player(who, ctx), life_amount(cost)) else {
+                return Plan::Nothing;
+            };
+            let n = g.eval_value(&n, ctx).max(0);
+            // The life this player already chose to pay in this instruction counts against
+            // what they can pay (CR 119.4).
+            let committed: i64 = earlier
+                .iter()
+                .flatten()
+                .map(|pl| match pl {
+                    Plan::PayLife { player, cost } if *player == q => {
+                        life_amount(cost).map_or(0, |v| g.eval_value(&v, ctx))
+                    }
+                    _ => 0,
+                })
+                .sum();
+            let total = Cost::free().with(CostPart::PayLife(Value::Const((n + committed) as i32)));
+            let can =
+                !crate::multiplayer::cant_pay(g, q) && g.can_pay_cost(q, &total, ctx.source, ctx);
+            let cost = Cost::free().with(CostPart::PayLife(Value::Const(n as i32)));
+            let pays = can && g.ask_yes_no(q, ctx.source, &format!("Pay {n} life?"), false);
+            ctx.prev_happened = pays;
+            if pays {
+                Plan::PayLife { player: q, cost }
+            } else {
+                // CR 732.6: declining the [B] of "[A] unless [B]".
+                if can {
+                    crate::shortcuts::declined_unless(g);
+                }
+                plan(g, otherwise, ctx, p, earlier)
+            }
+        }
         // "Each player loses a third of their life": every amount is determined before
         // anyone's life changes (CR 608.2f) — in Two-Headed Giant the teammates look at
         // the shared total (CR 810.9).
@@ -853,7 +1084,7 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         let plan = match &ins.action {
             Some(a) => {
                 let before = frames.enter(i, ctx);
-                let plan = plan(g, a, ctx, p);
+                let plan = plan(g, a, ctx, p, &plans[..i]);
                 frames.leave(i, ctx, before, false);
                 plan
             }
@@ -863,10 +1094,27 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
     }
     let outcomes = perform_plans(g, &mut plans, frames, ctx);
     g.end_apnap_choices(round);
+    let mut process_done = false;
     for (i, outcome) in outcomes.into_iter().enumerate() {
         if frames.frames[i].actor.is_none() {
             continue;
         }
+        // A process of several steps ("reveals cards until ..., puts that card onto the
+        // battlefield, then shuffles") can't be performed simultaneously: it's performed
+        // for each player or object individually (CR 608.2f), one after another, so the
+        // events of an earlier one happened before a later one began: a permanent put
+        // onto the battlefield by a later one doesn't see an earlier one enter.
+        let individual = match &plans[i] {
+            Some(Plan::Exec(e)) => is_process(e),
+            None => ins.action.as_ref().is_some_and(is_process),
+            Some(_) => false,
+        };
+        if individual && process_done {
+            let hold = std::mem::replace(&mut g.batch_hold, 0);
+            g.sequential_step();
+            g.batch_hold = hold;
+        }
+        process_done |= individual;
         match plans[i].take() {
             None => {
                 // The whole instruction, for this player, in turn (CR 608.2f).
@@ -887,6 +1135,34 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         for e in &ins.post {
             frames.run(g, i, e, ctx);
         }
+    }
+}
+
+/// Whether `e` is a process of several steps performed by one player (see
+/// [`perform_instruction`]): at least two of its instructions are actions that happen in
+/// the game. One action with bookkeeping around it ("may have ~ deal 5 damage to them",
+/// recording who did; "search for a basic land card and put it onto the battlefield",
+/// recording who searched; "exile a card from their hand and may play that card") is
+/// still one action, performed for all of them as one event.
+fn is_process(e: &Effect) -> bool {
+    match e {
+        Effect::AsPlayer { effect, .. } | Effect::May { effect, .. } => is_process(effect),
+        Effect::Seq(v) => {
+            !crate::trigger_timing::creates_tokens_together(v)
+                && v.iter().map(process_steps).sum::<usize>() > 1
+        }
+        _ => false,
+    }
+}
+
+/// How many actions that happen in the game `e` consists of, for [`is_process`]:
+/// bookkeeping and play permissions granted aren't events.
+fn process_steps(e: &Effect) -> usize {
+    match e {
+        Effect::Seq(v) => v.iter().map(process_steps).sum(),
+        Effect::GrantPlayPermission { .. } => 0,
+        e if is_bookkeeping(e) => 0,
+        _ => 1,
     }
 }
 
@@ -911,6 +1187,17 @@ fn perform_plans(
     ctx: &mut Ctx,
 ) -> Vec<Outcome> {
     let mut out: Vec<Outcome> = (0..plans.len()).map(|_| Outcome::default()).collect();
+    // Life the players chose to pay (CR 118.12), paid with the other actions.
+    for (i, plan) in plans.iter().enumerate() {
+        if let Some(Plan::PayLife { player, cost }) = plan {
+            let before = frames.enter(i, ctx);
+            g.last_paid = None;
+            if g.pay_cost(*player, cost, ctx.source, ctx) {
+                crate::cost_effects::note_paid(g, cost, ctx);
+            }
+            frames.leave(i, ctx, before, true);
+        }
+    }
     // Sacrifices (CR 701.21a): at the same time.
     let mut sac: Vec<(ObjectId, PlayerId)> = Vec::new();
     for plan in plans.iter().flatten() {
@@ -1006,6 +1293,19 @@ fn perform_plans(
             }
         }
     }
+    // Control changes: at the same time.
+    let mut changed_control = false;
+    for (i, plan) in plans.iter().enumerate() {
+        if let Some(Plan::Control(Some(grant))) = plan {
+            let before = frames.enter(i, ctx);
+            crate::control_change::apply(g, grant, ctx);
+            frames.leave(i, ctx, before, true);
+            changed_control = true;
+        }
+    }
+    if changed_control {
+        g.recompute();
+    }
     // Damage: dealt at once (CR 120.3f, 702.15e).
     let evs: Vec<(ObjectId, Entity, u32)> = plans
         .iter()
@@ -1031,6 +1331,8 @@ fn perform_plans(
 fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
     match plan {
         Plan::Nothing | Plan::Exec(_) => {}
+        Plan::Control(grant) => crate::control_change::record(grant.as_ref(), ctx),
+        Plan::PayLife { .. } => ctx.prev_happened = true,
         Plan::Move { battlefield, .. } => {
             let res: Vec<ObjectId> = outcome.moved.into_iter().flatten().collect();
             // CR 712.21c, 730.3c: a melded or merged permanent became several cards.

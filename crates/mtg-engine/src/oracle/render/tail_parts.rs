@@ -312,6 +312,10 @@ impl Renderer<'_> {
             return None;
         };
         let (_, verb, t) = self.this_way.iter().rev().find(|(x, _, _)| x == v)?;
+        // A remembered choice: only its card type is noted (see `note_this_way`).
+        if verb.is_empty() {
+            return None;
+        }
         let card = matches!(*verb, "discarded" | "milled" | "exiled" | "drawn");
         Some((verb, card, *t))
     }
@@ -342,7 +346,16 @@ fn note_this_way(e: &Effect, out: &mut Vec<(Var, &'static str, Option<CardType>)
     };
     // The one card type the objects acted on all have ("destroy all creatures": the
     // creatures destroyed this way).
+    let known = out.clone();
     let ty = |s: &Sel| -> Option<CardType> {
+        // "Tap any number of untapped creatures you control": the chosen objects' type.
+        if let Sel::Var(v) = s {
+            return known
+                .iter()
+                .rev()
+                .find(|(x, _, _)| x == v)
+                .and_then(|e| e.2);
+        }
         let Sel::All(f) = s else { return None };
         let parts: Vec<&Filter> = match f {
             Filter::And(v) => v.iter().collect(),
@@ -381,6 +394,8 @@ fn note_this_way(e: &Effect, out: &mut Vec<(Var, &'static str, Option<CardType>)
             set(out, vars::IT, Some(("returned", ty(what))))
         }
         Effect::Tap { what } => set(out, vars::TAPPED, Some(("tapped", ty(what)))),
+        // "If a permanent dealt damage this way would die this turn, ...".
+        Effect::DealDamage { .. } => set(out, vars::DAMAGED, Some(("dealt damage", None))),
         Effect::Discard { .. } | Effect::DiscardHand { .. } => set(
             out,
             crate::discard_rules::DISCARDED,
@@ -400,9 +415,32 @@ fn note_this_way(e: &Effect, out: &mut Vec<(Var, &'static str, Option<CardType>)
                 .map(|(_, v, t)| (*v, *t));
             set(out, *var, verb);
         }
+        // The objects a player chooses, remembered: only their card type is noted (an
+        // empty verb), for "tap any number of creatures ... for each creature tapped this
+        // way".
+        Effect::Store {
+            var,
+            sel: Sel::Choose { filter, .. },
+        } => {
+            let t = ty(&Sel::All(filter.clone()));
+            set(out, *var, t.map(|t| ("", Some(t))));
+        }
         Effect::Store { var, .. } => set(out, *var, None),
+        // "Mill three cards. For each creature card milled this way, ...": the milled
+        // cards are "it" (see `Effect::Mill` in resolve.rs).
+        Effect::Mill { .. } => set(out, vars::IT, Some(("milled", None))),
+        Effect::Seq(v) => {
+            for e in v {
+                note_this_way(e, out);
+            }
+        }
+        // "Sacrifice it. If you do, exile the top four cards of your library": what the
+        // conditional instruction did, if it was done.
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(otherwise.as_ref(), Effect::Noop) => note_this_way(then, out),
         // Another instruction acting on objects leaves something else in "it".
-        Effect::Move { .. } | Effect::Mill { .. } => set(out, vars::IT, None),
+        Effect::Move { .. } => set(out, vars::IT, None),
         _ => {}
     }
 }

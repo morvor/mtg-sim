@@ -211,6 +211,11 @@ pub struct ActivatedAbility {
     /// functions while the ability is on the stack (CR 113.6g, 707.10).
     #[serde(default)]
     pub cant_be_copied: bool,
+    /// Mana types that may be spent as though they were mana of any color to activate
+    /// this ability (empty: any), an activation instruction an effect gave it with the
+    /// ability (CR 113.10a, 609.4b; see [`GainedTerms`]).
+    #[serde(default)]
+    pub spend_as_any_color: Option<Vec<crate::mana::ManaType>>,
 }
 
 /// A change an activated ability makes to its own total cost, applying while its condition
@@ -238,6 +243,7 @@ impl ActivatedAbility {
             max_total: None,
             own_cost_changes: Vec::new(),
             cant_be_copied: false,
+            spend_as_any_color: None,
         }
     }
 }
@@ -1042,6 +1048,10 @@ pub enum Sel {
     /// sacrificed this turn", "creatures you controlled that dealt combat damage to a
     /// player this turn" (see `kw/value_results.rs`).
     ThisTurn(Box<TriggerCond>),
+    /// The objects the events matching the trigger condition during another stretch of the
+    /// game were about ("~ and at least two other creatures attacked this combat"), like
+    /// [`Sel::ThisTurn`] (see `history_query.rs`).
+    EventsDuring(HistoryWindow, Box<TriggerCond>),
 }
 
 /// Where an [`Effect::InTurnOrder`] instruction starts.
@@ -1051,6 +1061,20 @@ pub enum TurnOrderStart {
     You,
     /// "starting with the next opponent in turn order".
     NextOpponent,
+}
+
+/// A direction around the table (CR 101.4: the next player in turn order is usually the
+/// one seated to the left; CR 103.1: turn order proceeds clockwise). See `seats.rs`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SeatSide {
+    /// To the left: the direction of turn order.
+    #[default]
+    Left,
+    /// To the right.
+    Right,
+    /// The direction last chosen for the source ("choose left or right", stored as its
+    /// chosen word); undefined if none was chosen.
+    Chosen,
 }
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
@@ -1100,6 +1124,14 @@ pub enum PlayerRef {
     /// target player loses 6 life. When ~ leaves the battlefield, that player gains 6
     /// life." (Laquatus's Champion).
     LinkedNoted,
+    /// "the player to your left/right", "the next player in the chosen direction"
+    /// (`opponent: false`: whoever sits there, teammate or not), "the opponent to your
+    /// left" (`opponent: true`: the nearest opponent in that direction). See `seats.rs`.
+    Seat {
+        of: Box<PlayerRef>,
+        side: SeatSide,
+        opponent: bool,
+    },
 }
 
 /// Player predicates, used in targets and filters.
@@ -1141,6 +1173,11 @@ pub enum PlayerFilter {
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
+    /// In the vote the ability triggered on ("whenever players finish voting", CR
+    /// 701.38): a player who voted for a choice you voted for (`true`), or who voted only
+    /// for choices you didn't vote for (`false`; Grudge Keeper's rulings). See
+    /// `kwa::vote::voted_like`.
+    VotedLikeYou(bool),
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,
@@ -1461,6 +1498,9 @@ pub enum Filter {
     StackTargets(Box<TargetsFilter>),
     /// A spell that was cast from the given zone ("a spell from exile", "from your graveyard").
     CastFrom(ZoneKind),
+    /// A spell cast by the given player ("spells you cast"): not a copy, and not one cast by
+    /// another player that changed control (Cunning Nightbonder's rulings).
+    CastBy(PlayerRel),
     /// A spell for which the named optional additional cost was paid ("a kicked spell":
     /// `"kicked"`, see `kw/kicker.rs`).
     CastWithCost(SmolStr),
@@ -1575,6 +1615,12 @@ pub enum Value {
     Prev,
     /// Numeric variable.
     Var(Var),
+    /// A player's own running total kept with [`Effect::AddToPlayerTally`] ("the amount of
+    /// life they paid this way", "for each card they revealed this way"); 0 if none.
+    PlayerTally {
+        var: Var,
+        who: Box<PlayerRef>,
+    },
     /// Devotion to colors (CR 700.5).
     Devotion(ColorSet),
     /// Number of basic land types among lands you control (domain).
@@ -1676,8 +1722,31 @@ pub enum Value {
     /// controller) would trigger on, whether or not anything triggered (CR 603.1b),
     /// tallied (see `kw/value_results.rs`).
     EventsThisTurn(Box<TriggerCond>, Tally),
+    /// Like [`Value::EventsThisTurn`], over the events of another stretch of the game: "if
+    /// an opponent lost life last turn", "if it attacked during your last turn", "if you
+    /// haven't been dealt combat damage since your last turn" (see `history_query.rs`).
+    EventsDuring(HistoryWindow, Box<TriggerCond>, Tally),
     /// Custom computed values implemented in code.
     Custom(SmolStr),
+}
+
+/// A stretch of the game whose events a history condition looks at (besides "this turn",
+/// [`Value::EventsThisTurn`]).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum HistoryWindow {
+    /// "this combat": since the latest combat phase of this turn began (CR 506.1).
+    ThisCombat,
+    /// "last turn": the turn before this one.
+    LastTurn,
+    /// "during [player's] last turn": the latest turn the player took before this one
+    /// (CR 500.1).
+    PlayersLastTurn(PlayerRef),
+    /// "since [player's] last turn": everything after the latest turn the player took
+    /// before this one, including this turn so far.
+    SinceLastTurn(PlayerRef),
+    /// "since [player's] last upkeep": from the latest upkeep of the player's before this
+    /// one, including this turn so far.
+    SinceLastUpkeep(PlayerRef),
 }
 
 /// How [`Value::EventsThisTurn`] tallies the events it finds.
@@ -2039,6 +2108,12 @@ pub enum Modification {
     AddAbilitiesOf {
         from: Box<Sel>,
         which: AbilitySelection,
+        /// Activation instructions the effect gives the gained abilities ("You may spend
+        /// mana as though it were mana of any color to activate those abilities", "You
+        /// may activate each of those abilities only once each turn"): they become part
+        /// of each gained ability (CR 113.10a, 602.5c).
+        #[serde(default)]
+        terms: GainedTerms,
     },
     RemoveKeyword(KeywordKind),
     /// Loses one particular keyword ability: the instances of that kind with the same
@@ -2436,6 +2511,10 @@ pub enum ReplacementAction {
     /// event also creates `count` of these tokens under the same player's control
     /// (`Value::EventAmount` is how many tokens the event creates, "that many").
     PlusTokens { spec: TokenSpec, count: Value },
+    /// "that many [token] are created instead" (CR 614.1a, Divine Visitation): the tokens
+    /// the event creates have these characteristics instead of their own; everything else
+    /// the creating effect specifies (tapped, attacking) still applies.
+    TokensInstead { spec: TokenSpec },
     /// Subtract N from the amount.
     Subtract(Value),
     /// Redirect damage to the selection.
@@ -2564,6 +2643,13 @@ pub enum Restriction {
     MustBlockAttacker {
         blocker: Filter,
         attacker: Filter,
+    },
+    /// "Each player may attack only the nearest opponent in the [chosen] direction and
+    /// planeswalkers controlled by that opponent" (CR 508.1c): no other player, none of
+    /// their planeswalkers, and no battle. Only declared attackers are restricted (CR
+    /// 508.4c). See `seats.rs`.
+    AttackOnlyNearestOpponent {
+        side: SeatSide,
     },
     /// "[attackers] can't attack [defender] (or planeswalkers they control) unless their
     /// controller pays [cost] for each ..." (CR 508.1d, 508.1h).
@@ -2888,6 +2974,36 @@ impl AbilitySelection {
         only: None,
         except: None,
     };
+}
+
+/// Activation instructions an effect that gives activated abilities includes for them
+/// (CR 113.10a): see [`Modification::AddAbilitiesOf`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GainedTerms {
+    /// "You may activate each of those abilities only once each turn" (CR 602.5b): each
+    /// gained ability, as acquired from that object (CR 602.5c).
+    #[serde(default)]
+    pub max_per_turn: Option<u32>,
+    /// "You may spend [blue] mana as though it were mana of any color to activate those
+    /// abilities" (CR 609.4b): the mana types that may be spent so (empty: any).
+    #[serde(default)]
+    pub spend_as_any_color: Option<Vec<crate::mana::ManaType>>,
+}
+
+impl GainedTerms {
+    pub fn is_empty(&self) -> bool {
+        self.max_per_turn.is_none() && self.spend_as_any_color.is_none()
+    }
+
+    /// `act` with these terms.
+    pub fn apply(&self, act: &mut ActivatedAbility) {
+        if let Some(n) = self.max_per_turn {
+            act.max_per_turn = Some(act.max_per_turn.map_or(n, |m| m.min(n)));
+        }
+        if let Some(t) = &self.spend_as_any_color {
+            act.spend_as_any_color = Some(t.clone());
+        }
+    }
 }
 
 /// A kind of activated ability.
@@ -3260,6 +3376,16 @@ pub struct PlayTerms {
     /// that object (CR 400.7).
     #[serde(default)]
     pub exile_instead: bool,
+    /// "If you cast a creature spell this way, it gains haste until end of turn.": done as
+    /// a spell is cast with the permission (not a triggered ability), with `Var(IT)` the
+    /// spell; by CR 400.7a, what it does to a permanent spell applies to the permanent it
+    /// becomes.
+    #[serde(default)]
+    pub on_cast: Option<Box<Effect>>,
+    /// The effect that gave the permission (0: none recorded), which "cast this way"
+    /// refers to (see `permissions::PermissionUse`).
+    #[serde(default)]
+    pub way: u32,
 }
 
 impl PlayTerms {
@@ -3301,6 +3427,12 @@ impl PlayTerms {
         self.lands_enter_tapped |= other.lands_enter_tapped;
         self.spend_as_any_color |= other.spend_as_any_color;
         self.spend_any_type |= other.spend_any_type;
+        if let Some(e) = &other.on_cast {
+            self.on_cast = Some(match self.on_cast.take() {
+                Some(mine) => Box::new(Effect::seq(vec![*mine, (**e).clone()])),
+                None => e.clone(),
+            });
+        }
     }
 }
 
@@ -3466,9 +3598,14 @@ pub enum TriggerCond {
         filter: Filter,
         by: PlayerRel,
     },
+    /// Counters are removed from [filter]: once for each removal action, or with `each`
+    /// ("Whenever a +1/+1 counter is removed from ~", Protean Hydra), once for each
+    /// counter removed.
     CountersRemoved {
         filter: Filter,
         kind: Option<CounterKind>,
+        #[serde(default)]
+        each: bool,
     },
     /// "When the Nth [kind] counter is put on [filter]": one or more counters are put on it
     /// such that it had fewer than N before and N or more after (CR 122.7).
@@ -3722,6 +3859,18 @@ pub enum Effect {
         first: TurnOrderStart,
         who: PlayerFilter,
         effect: Box<Effect>,
+        /// "and proceeding in the chosen direction": around the table that way (the
+        /// default, to the left, is turn order).
+        #[serde(default)]
+        direction: SeatSide,
+    },
+    /// Adds `value` to each of `who`'s own running totals under `var` ("each player may
+    /// pay any amount of life ... for each 1 life they paid this way"), read back with
+    /// [`Value::PlayerTally`]; kept for the rest of the resolution.
+    AddToPlayerTally {
+        var: Var,
+        who: PlayerRef,
+        value: Value,
     },
     /// "[player] does the same": the player performs the effect in place of its
     /// controller, so "you" in it is that player (none if `who` names no player).
