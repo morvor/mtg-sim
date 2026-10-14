@@ -34,8 +34,9 @@ cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
   the file. Files with fewer than 60 mutants run in full.
 - `--timeout 300` bounds a mutant's test run (the unmutated suite takes ~105 s), so a
   mutant that makes the engine loop counts as `timeout`, which is a detection.
-- The re-run after adding tests (`RERUN=1`) selects the survivors by their exact
-  cargo-mutants names (`-F '^<name>$'`), so it must run on the same revision of the file.
+- The re-run after adding tests (`RERUN=1`) finds each survivor again in the file's
+  current mutant list (same function and mutation, same column, nearest line, since
+  merges move lines) and tests exactly those (`-F '^<name>$'`).
 
 Kill rate = (caught + timeout) / (caught + missed + timeout); unviable mutants (that do
 not compile) are excluded.
