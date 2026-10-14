@@ -354,8 +354,10 @@ impl Game {
             }
             Effect::SacrificeObjects { what } => {
                 // "Sacrifice ~": the ability's controller sacrifices its source, which they
-                // can't do if another player controls it now (CR 701.21a).
-                let own_source = matches!(what, Sel::This);
+                // can't do if another player controls it now (CR 701.21a). The same for
+                // "sacrifice Spare Dagger" in an ability it grants (`granted_by`).
+                let own_source =
+                    matches!(what, Sel::This) || crate::granted_by::is_bound_granter(what);
                 let objs = self.resolve_objects(what, ctx);
                 let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 // Sacrificed at the same time (CR 101.4).
@@ -934,6 +936,13 @@ impl Game {
                 ctx.prev_value = created.len() as i64;
                 // "Create a ... token. When you do, ...": whether one was created.
                 ctx.prev_happened = !created.is_empty();
+                // "Create a Monster Role token attached to target creature you control.
+                // When you do, that creature fights ..." (Curse of the Werefox): "it" /
+                // "that creature" is what the tokens were created attached to.
+                let hosts: Vec<Entity> = attach.into_iter().flatten().collect();
+                if !hosts.is_empty() {
+                    ctx.set_var(vars::IT, hosts);
+                }
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),
@@ -1979,6 +1988,7 @@ impl Game {
             } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let objs = self.resolve_objects(what, ctx);
+                let before = self.play_grants.len();
                 crate::casting::grant_play_permission(
                     self,
                     p,
@@ -1987,6 +1997,8 @@ impl Game {
                     *free,
                     ctx.source,
                 );
+                // "When you play a card this way" (see `permissions::PermissionUse`).
+                crate::permissions::note_way(self, before, ctx);
             }
             Effect::WithPlayTerms { terms, effect } => {
                 // The permissions the effect gives come with the terms.
@@ -2403,8 +2415,8 @@ impl Game {
                 }
                 // "gains all activated abilities of target creature until end of turn":
                 // the abilities it has as the effect is created (CR 608.2h).
-                Modification::AddAbilitiesOf { from, which } => {
-                    crate::ability_grants::snapshot(self, from, which, ctx)
+                Modification::AddAbilitiesOf { from, which, terms } => {
+                    crate::ability_grants::snapshot(self, from, which, terms, ctx)
                 }
                 other => vec![other.clone()],
             })

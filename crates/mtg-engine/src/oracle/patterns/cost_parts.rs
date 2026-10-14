@@ -419,9 +419,14 @@ fn pay(p: &str) -> Option<CostPart> {
     (r.trim() == "{e}").then_some(CostPart::PayEnergy(n))
 }
 
-/// "Tap five untapped attacking creatures you control named ~".
+/// "Tap five untapped attacking creatures you control named ~"; "Tap ~" (not the {T}
+/// symbol: summoning sickness doesn't matter, CR 302.6; in an ability a card grants, the
+/// granting card, see `granted_by`).
 fn tap(p: &str) -> Option<CostPart> {
     let r = strip(p, "tap")?;
+    if end(r) == "~" {
+        return Some(CostPart::Effect(Box::new(Effect::Tap { what: Sel::This })));
+    }
     let (n, r) = parse_number(r)?;
     let r = strip(r, "untapped")?;
     let (f, plural) = object(r)?;

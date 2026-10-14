@@ -37,6 +37,9 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::kw::blocked_this_turn::BLOCKED_BY_REFERENT => {
             rel("{alt:that were blocked by {alt:it|that creature} this turn|that was blocked by {alt:it|that creature} this turn}")
         }
+        crate::kw::blocked_this_turn::BLOCKED_BY_TARGET_THIS_COMBAT => {
+            rel("that were blocked by that creature this combat")
+        }
         crate::kw::blocked_this_turn::BLOCKED_OR_BLOCKED_BY_REFERENT => {
             rel("that blocked or were blocked by {alt:it|that creature} this turn")
         }

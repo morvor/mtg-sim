@@ -1883,10 +1883,15 @@ fn statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     // "[permission]. [rider]."
     if let Some((first, second)) = l.split_once(". ") {
         let mut p = parse(first)?;
+        // "If you cast a creature spell this way, it gains haste until end of turn.",
+        // "When you cast an Equipment spell this way, ..." (see `played_this_way`).
+        let mut extra = None;
         if !static_rider(second, &mut p) {
-            return None;
+            extra = super::played_this_way::static_rider(second, &mut p.terms, text, ctx)?;
         }
-        return to_statics(&p, text, ctx);
+        let mut v = to_statics(&p, text, ctx)?;
+        v.extend(extra);
+        return Some(v);
     }
     // "If you control a creature with power 4 or greater, you may cast ~ as though it had
     // flash.": a condition on casting it.

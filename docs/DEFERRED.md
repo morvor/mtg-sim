@@ -58,6 +58,10 @@ Decided 2026-10-01.
 - **Scope:** the 1,916 cards with no paper printing (MTG Arena/Alchemy and other
   digital-only cards) and their mechanics: perpetual, seek, conjure, spellbooks, draft from
   a spellbook, intensity, specialize, boons and similar.
+- **Paper cards with these mechanics** (round-2 card plan, Oct 14): Pearl Collector
+  (perpetual) and Tenacious Pup (a boon) are paper cards whose abilities use these
+  digital-only mechanics; they stay unsupported with the mechanics
+  (`docs/agents/round2/deferred.tsv`).
 - **Status:** `card-coverage` counts paper cards only. The plan for them is
   `docs/agents/items/cards-digital-alchemy.md` (939 unsupported texts), which is not
   scheduled. Rulings that apply only to digital-only cards are DEFERRED in
