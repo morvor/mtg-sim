@@ -426,3 +426,111 @@ fn chooses_at_random_in_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "an opponent chooses a card at random in your graveyard", priority: 100, parse: chooses_at_random_in_graveyard } }
 
 inventory::submit! { EffectPattern { name: "you may have that player shuffle that library", priority: 100, parse: may_have_shuffle } }
+
+// ---------------------------------------------------------------------------
+// Other players' graveyards and cards
+// ---------------------------------------------------------------------------
+
+/// "exile up to one card of each card type from defending player's graveyard" (Grime
+/// Gorger): any number of that graveyard's cards, each standing for a different card type
+/// it has (`TargetGroup::OnePerCardType`).
+fn exile_one_of_each_type(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("exile up to one card of each card type from ")?;
+    let whose = r.strip_suffix(" graveyard")?;
+    let who = match whose {
+        "your" => PlayerRef::You,
+        "defending player's" => PlayerRef::DefendingPlayer,
+        _ => return None,
+    };
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::Exile {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                Filter::Card,
+                Filter::InZone(ZoneKind::Graveyard),
+                Filter::OwnedByPlayer(Box::new(who)),
+                Filter::Together(TargetGroup::OnePerCardType),
+            ]),
+            count: Value::c(crate::types::CardType::ALL.len() as i32),
+            up_to: true,
+            store: None,
+        },
+        face_down: false,
+        link: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "exile up to one card of each card type from a graveyard", priority: 100, parse: exile_one_of_each_type } }
+
+/// "Target opponent exiles a creature they control and their graveyard." (Strategic
+/// Betrayal): that player chooses the creature; their whole graveyard is exiled.
+fn exiles_creature_and_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (subject, r) = end(l).split_once(" exiles a ")?;
+    let desc = r.strip_suffix(" they control and their graveyard")?;
+    let saved = b.targets.len();
+    let parsed = (|| {
+        let (who, extra) = player_ref(subject, b)?;
+        if !extra.trim().is_empty() || !matches!(who, PlayerRef::Target(_)) {
+            return None;
+        }
+        let (f, _, rest) = crate::oracle::phrases::parse_object_phrase(desc)?;
+        if !rest.trim().is_empty() || f.zone().is_some() {
+            return None;
+        }
+        let rel = match &who {
+            PlayerRef::Target(n) => PlayerRel::Target(*n),
+            _ => return None,
+        };
+        Some(Effect::seq(vec![
+            Effect::Exile {
+                what: Sel::Choose {
+                    chooser: who.clone(),
+                    filter: Filter::and(vec![
+                        f,
+                        Filter::InZone(ZoneKind::Battlefield),
+                        Filter::ControlledBy(rel),
+                    ]),
+                    count: Value::c(1),
+                    up_to: false,
+                    store: None,
+                },
+                face_down: false,
+                link: false,
+            },
+            Effect::Exile {
+                what: Sel::All(Filter::and(vec![
+                    Filter::InZone(ZoneKind::Graveyard),
+                    Filter::OwnedByPlayer(Box::new(who)),
+                ])),
+                face_down: false,
+                link: false,
+            },
+        ]))
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(saved);
+    }
+    parsed
+}
+
+inventory::submit! { EffectPattern { name: "[player] exiles a [permanent] they control and their graveyard", priority: 100, parse: exiles_creature_and_graveyard } }
+
+/// "that player reveals the chosen card" (Vendilion Clique): the card chosen from their
+/// hand is revealed.
+fn reveals_the_chosen_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l
+        .strip_prefix("that player reveals ")
+        .or_else(|| l.strip_prefix("reveal "))?;
+    if r != "the chosen card" {
+        return None;
+    }
+    let (what, rest) = object_ref(r, b)?;
+    if !rest.trim().is_empty() || !matches!(what, Sel::Var(_)) {
+        return None;
+    }
+    crate::kw::zones_dig_effects::reveal_effect(&what)
+}
+
+inventory::submit! { EffectPattern { name: "that player reveals the chosen card", priority: 100, parse: reveals_the_chosen_card } }

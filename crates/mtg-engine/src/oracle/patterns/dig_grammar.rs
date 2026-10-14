@@ -1748,6 +1748,8 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
     } else {
         counted_of_them(r, may)?
     };
+    let mut c = c;
+    c.filter = with_prev_it(c.filter, b)?;
     // "choose from among them a card with flying, ..." isn't this.
     let (reveal, to, tail) = match verb {
         "reveal" => {
@@ -1924,10 +1926,29 @@ fn parse_put_found(l: &str, b: &Builder) -> Option<Vec<Effect>> {
     } else {
         destination(r)?
     };
+    // "Put that card onto the battlefield attached to that creature" (CR 301.5c,
+    // 303.4f): the creature the trigger is about.
+    let (mut to, tail) = (to, tail);
+    if let Some(t) = tail.strip_prefix(" attached to that creature") {
+        if to.zone != ZoneKind::Battlefield {
+            return None;
+        }
+        let creature = b
+            .named
+            .iter()
+            .find_map(|(n, s)| (n == "that creature").then(|| s.clone()))?;
+        to.attached_to = Some(creature);
+        return finish_put_found(from, to, t, b);
+    }
     // "Put it into your hand." alone is an ordinary instruction.
     if tail.is_empty() && matches!(from, Sel::Var(vars::IT)) && to.zone != ZoneKind::Library {
         return None;
     }
+    finish_put_found(from, to, tail, b)
+}
+
+/// The selection of the cards found or chosen ([`parse_put_found`]) and the rest.
+fn finish_put_found(from: Sel, to: Destination, tail: &str, b: &Builder) -> Option<Vec<Effect>> {
     let mut out = vec![Effect::DigStep(Box::new(DigStep::Take {
         from,
         chooser: PlayerRef::You,
@@ -2253,6 +2274,34 @@ pub(super) fn keep_that_creature(b: &mut Builder) {
         b.named
             .push(("that creature".to_string(), Sel::TriggerObject));
     }
+    // "You may put a card that shares a creature type with it from among them into your
+    // hand" (Tajuru Paragon): a qualifier's "it" is still what it was before the dig.
+    b.named.retain(|(n, _)| n != PREV_IT_MARK);
+    if super::filters_relational::names_one_object(&b.it) {
+        b.named.push((PREV_IT_MARK.to_string(), b.it.clone()));
+    }
+}
+
+/// What "it" (or "that creature") meant before the text dug cards (see
+/// [`keep_that_creature`]).
+const PREV_IT_MARK: &str = "\u{1}dig-prev-it";
+
+/// A selection's description with "it" / "that creature" in a qualifier ("a card that
+/// shares a creature type with it") made the object "it" was before the dig.
+pub(super) fn with_prev_it(f: Filter, b: &Builder) -> Option<Filter> {
+    if !super::filters_relational::mentions_referent(&f) {
+        return Some(f);
+    }
+    // Without one, the qualifier is left for the sentence's "it" (it may still mean
+    // something there).
+    let Some(prev) = b
+        .named
+        .iter()
+        .find_map(|(n, s)| (n == PREV_IT_MARK).then(|| s.clone()))
+    else {
+        return Some(f);
+    };
+    super::filters_relational::substitute(&f, &prev)
 }
 
 /// After cards dug are put onto the battlefield, "that creature" may be one of them
@@ -2287,6 +2336,12 @@ fn source_amount(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     // "Reveal the cards in your library." (Guided Passage).
     if r == "the cards in your library" {
         return Some((Value::LibrarySize(PlayerRef::You), "your library".into()));
+    }
+    // "exile cards equal to its power from the top of its owner's library".
+    if let Some(x) = r.strip_prefix("cards equal to ") {
+        let (n, tail) = super::value_grammar::parse_value(x, b)?;
+        let lib = tail.trim_start().strip_prefix("from the top of ")?;
+        return Some((n, lib.to_string()));
     }
     // "Exile cards from the top of your library equal to the excess damage dealt to that
     // creature this way."
@@ -2340,6 +2395,7 @@ fn source_amount(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// Whose library: "your library", "defending player's library", "that library" / "that
 /// player's library" (the player the text is about).
 fn library_owner(s: &str, b: &Builder) -> Option<PlayerRef> {
+    use super::oracle_hardening_referents::is_no_player_referent;
     Some(match s {
         "your library" => PlayerRef::You,
         "defending player's library" => PlayerRef::DefendingPlayer,
@@ -2347,6 +2403,17 @@ fn library_owner(s: &str, b: &Builder) -> Option<PlayerRef> {
             if matches!(b.it_player, PlayerRef::TriggerPlayer | PlayerRef::Target(_)) =>
         {
             b.it_player.clone()
+        }
+        // "exile the top card of that player's library" (the attacking opponent).
+        "that player's library"
+            if !matches!(b.it_player, PlayerRef::You | PlayerRef::Iterated)
+                && !is_no_player_referent(&b.it_player) =>
+        {
+            b.it_player.clone()
+        }
+        // "from the top of its owner's library" (the creature that died).
+        "its owner's library" if super::filters_relational::names_one_object(&b.it) => {
+            PlayerRef::OwnerOf(Box::new(b.it.clone()))
         }
         _ => return None,
     })

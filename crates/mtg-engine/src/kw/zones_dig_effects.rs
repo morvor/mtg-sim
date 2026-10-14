@@ -42,6 +42,15 @@ pub fn parse_beneath(name: &str) -> Option<Beneath> {
     serde_json::from_str(name.strip_prefix(BENEATH_PREFIX)?).ok()
 }
 
+const REVEAL_PREFIX: &str = "zones: reveal:";
+
+/// "That player reveals the chosen card": the selected cards are revealed by their
+/// owners (CR 701.20a).
+pub fn reveal_effect(what: &Sel) -> Option<Effect> {
+    let json = serde_json::to_string(what).ok()?;
+    Some(Effect::Custom(format!("{REVEAL_PREFIX}{json}").into()))
+}
+
 pub struct ZonesDigEffects;
 
 impl KeywordRules for ZonesDigEffects {
@@ -69,6 +78,16 @@ impl KeywordRules for ZonesDigEffects {
                 // Cards don't change zones (CR 400.7).
                 g.players[p.idx()].graveyard = order;
                 g.log(|_| format!("{p} reorders their graveyard"));
+                true
+            }
+            _ if name.starts_with(REVEAL_PREFIX) => {
+                let Ok(what) = serde_json::from_str::<Sel>(&name[REVEAL_PREFIX.len()..]) else {
+                    return false;
+                };
+                for o in g.resolve_objects(&what, ctx) {
+                    let owner = g.obj(o).owner;
+                    crate::reveal::reveal_in(g, owner, &[o], Some(ctx));
+                }
                 true
             }
             _ => {
