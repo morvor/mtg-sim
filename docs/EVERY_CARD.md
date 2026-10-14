@@ -113,11 +113,20 @@ What it found:
   past the 60 s watchdog. With two or more Conquerors on each side the loop can't be
   ended by any answer: only one of a player's triggers can tap the entering token, so
   the others each make a token for the other side, which triggers *their* Conquerors in
-  turn. Tokens pile up (hundreds) and every action gets slower. That is the rules
-  working as written: the loop contains an optional action, so it isn't a draw
-  (CR 104.4b), and the game state never repeats (more tokens each time), so no loop
-  detection applies. Not an engine bug; listed here so the two SLOW reports aren't
-  chased again.
+  turn. Tokens pile up (hundreds) and every action gets slower. Each trigger resolves
+  correctly; what's open is how the game ends. CR 104.4b makes a loop of mandatory
+  actions "with no way to stop" a draw but says loops containing an optional action
+  aren't, and here the optional action (tapping) can't stop it (compare CR 732.6, "[A]
+  unless [B]" loops continuing as though [A] were mandatory). The engine recognizes a
+  loop only when the game state repeats (`game_end::check_mandatory_loop`), and here it
+  never does (more tokens each time). Listed here so the two SLOW reports aren't chased
+  again.
+- **Found in review: tapping a permanent that had left the battlefield.** The old
+  object keeps its zone as last known information, and `Game::tap`/`untap` checked only
+  that zone, so "they may tap that permanent" on a creature already gone "tapped" it and
+  the Conqueror made no token (its ruling: a permanent no longer on the battlefield
+  can't be tapped, so you get a token). They now require the object to still be on the
+  battlefield (`rulings/charismatic_conqueror.rs`).
 
 ### Not used, by likely reason
 

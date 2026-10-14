@@ -305,15 +305,15 @@ impl Focus {
     }
 }
 
+/// How many times a yes-or-no question is answered at random in a step before the
+/// focus agent suspects a loop.
+const LOOP_AFTER: u32 = 6;
+
 /// Plays like [`RandomAgent`], but when it can use the focus card (cast it, play it,
 /// activate its abilities, take a special action with it) it usually does, preferring
 /// what it hasn't done yet in the game, and records what it was offered in `usage`. It
 /// also makes some choices [`RandomAgent`] leaves to the engine (optional costs, casting
 /// methods, numbers, scry and surveil, orders) at random.
-/// How many times a yes-or-no question is answered at random in a step before the
-/// focus agent suspects a loop.
-const LOOP_AFTER: u32 = 6;
-
 pub struct FocusAgent {
     pub inner: RandomAgent,
     pub focus: Arc<Focus>,

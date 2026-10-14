@@ -4,6 +4,8 @@
 //! feeding each other's tokens without end when the opponents always declined to tap.
 
 use mtg_engine::testing::*;
+use mtg_engine::events::MoveCause;
+use mtg_engine::object::Zone;
 use mtg_engine::*;
 
 fn vampires(t: &TestGame, p: PlayerId) -> usize {
@@ -52,6 +54,46 @@ fn a_permanent_already_tapped_gives_a_token() {
 }
 
 #[test]
+fn a_permanent_gone_from_the_battlefield_gives_a_token() {
+    cr!("608.2c", "400.7");
+    ruling!(
+        "Charismatic Conqueror",
+        "if it's no longer on the battlefield as the ability resolves, they can't choose to tap it"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Charismatic Conqueror");
+    t.answer_yes(P1, true);
+    let bears = t.enter(P1, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.g.move_object(bears, Zone::Graveyard(P1), MoveCause::Effect, None)
+        .unwrap();
+    t.resolve_all();
+    assert_eq!(vampires(&t, P0), 1, "{}", t.dump_log());
+    // The card left behind wasn't tapped either.
+    assert!(!t.obj_now(bears).tapped);
+}
+
+#[test]
+fn only_one_of_two_triggers_can_tap_the_permanent() {
+    // Why two Conquerors on each side loop without end: tapping the entering permanent
+    // for the first trigger leaves it tapped for the second, which makes a token.
+    cr!("608.2c");
+    ruling!(
+        "Charismatic Conqueror",
+        "If the permanent is tapped as the ability resolves, the opponent can't choose to tap it"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Charismatic Conqueror");
+    t.battlefield(P0, "Charismatic Conqueror");
+    t.answer_yes(P1, true);
+    let bears = t.enter(P1, "Grizzly Bears");
+    t.resolve_all();
+    assert!(t.obj_now(bears).tapped);
+    assert_eq!(vampires(&t, P0), 1);
+}
+
+#[test]
 fn two_players_conquerors_trigger_on_each_others_tokens() {
     cr!("603.2");
     let mut t = TestGame::new(2);
@@ -68,3 +110,4 @@ fn two_players_conquerors_trigger_on_each_others_tokens() {
     let v = t.named_on_battlefield("Vampire Token")[0];
     assert!(t.obj_now(v).tapped);
 }
+
