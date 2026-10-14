@@ -132,6 +132,7 @@ const VERBS: &[(&str, &str, &str)] = &[
     ("investigated", "investigate", "investigates"),
     ("put", "put", "puts"),
     ("tapped", "tap", "taps"),
+    ("came", "come", "comes"),
 ];
 
 /// Passive forms: "was put into", "were put into", "was dealt", "was blocked".
@@ -506,6 +507,17 @@ fn object_clause(c: &str) -> Option<Clause> {
         }
         let Some(present) = present else { continue };
         let present = present.trim_end().to_string();
+        // "was dealt 4 or more damage": the total dealt to it.
+        let (present, amount) = match present
+            .strip_prefix("is dealt ")
+            .and_then(parse_number)
+        {
+            Some((Value::Const(k), r)) if r.starts_with("or more ") && r.ends_with("damage") => {
+                let kind = r["or more ".len()..].trim();
+                (format!("is dealt {kind}"), Some(k))
+            }
+            _ => (present, None),
+        };
         let np_s = if np == "~" {
             np.clone()
         } else if plural {
@@ -535,6 +547,13 @@ fn object_clause(c: &str) -> Option<Clause> {
         };
         let mut cl = Clause::new(format!("{subj} {present}"), cmp, n, negated);
         cl.pred = rest;
+        if let Some(k) = amount {
+            if cmp != Cmp::Ge || n != 1 {
+                return None;
+            }
+            cl.n = k;
+            cl.amount = true;
+        }
         return Some(cl);
     }
     None
@@ -568,6 +587,25 @@ fn control_qualifier(np: String, present: String) -> (String, String) {
 /// The trigger condition for a present-tense clause, if the trigger grammar reads it as
 /// one about events: batches are counted event by event.
 fn trigger_of(text: &str) -> Option<TriggerCond> {
+    // "[objects] [verb] or come(s) under your control": either.
+    if let Some(head) = text.strip_suffix(" or comes under your control") {
+        let (subj, _) = head.rsplit_once(' ')?;
+        let a = trigger_of(head)?;
+        let b = trigger_of(&format!("{subj} comes under your control"))?;
+        return Some(TriggerCond::AnyOf(vec![a, b]));
+    }
+    // "[objects] come(s) under your control": they enter the battlefield under your
+    // control, or you gain control of them (Erg Raiders's ruling).
+    if let Some(subj) = text.strip_suffix(" comes under your control") {
+        let TriggerCond::EntersBattlefield(f) = trigger_of(&format!("{subj} enters"))? else {
+            return None;
+        };
+        let f = Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]);
+        return Some(TriggerCond::AnyOf(vec![
+            TriggerCond::EntersBattlefield(f.clone()),
+            TriggerCond::ControlChanged(f),
+        ]));
+    }
     let parse = |t: &str| crate::oracle::triggers::parse_trigger_condition(&format!("whenever {t}"));
     // A card put into a hand from the battlefield is returned there.
     let (cond, _, _) = parse(text).or_else(|| {
@@ -794,6 +832,16 @@ pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Opt
     if c.contains('~') || split_window(c).is_none() {
         return None;
     }
+    // "4 or more damage was dealt to it this turn": "it was dealt 4 or more damage".
+    let swapped;
+    let c = match c.split_once(" damage was dealt to ") {
+        Some((amount, r)) if parse_number(amount).is_some() => {
+            let (who, window) = r.split_once(' ').unwrap_or((r, ""));
+            swapped = format!("{who} was dealt {amount} damage {window}");
+            swapped.as_str()
+        }
+        _ => c,
+    };
     let before = b.targets.len();
     let saved = b.it.clone();
     let r = crate::oracle::effects::object_ref(c, b);
@@ -1014,6 +1062,13 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
         .find(|(_, x)| x.starts_with(' '))?;
     let rest = rest.trim();
     let w = whose(word, b.as_deref_mut())?;
+    if matches!(rest, "was cast this turn" | "were cast this turn") {
+        return Some(status(
+            &w,
+            Condition::SelMatches(Sel::This, Filter::Custom(ch::CAST_THIS_TURN.into())),
+            Filter::Custom(ch::CAST_THIS_TURN.into()),
+        ));
+    }
     for (p, neg) in [
         ("was cast", false),
         ("were cast", false),
@@ -1168,6 +1223,22 @@ fn mana_spent(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
     Some(cond)
 }
 
+/// "Some of [group] [condition]": each condition about the group made about some object of
+/// it.
+fn some_of(c: Condition, group: &Sel) -> Option<Condition> {
+    Some(match c {
+        Condition::SelMatches(s, f) if format!("{s:?}") == format!("{group:?}") => {
+            Condition::SelNonEmpty(Sel::Matching(Box::new(s), f))
+        }
+        Condition::Or(v) => Condition::Or(
+            v.into_iter()
+                .map(|x| some_of(x, group))
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        _ => return None,
+    })
+}
+
 /// Cast-status and mana-spent conditions without referents ("~ wasn't cast from your
 /// hand", "at least three mana was spent to cast ~").
 fn cast_condition_free(c: &str) -> Option<Condition> {
@@ -1181,6 +1252,14 @@ inventory::submit! { super::ConditionPattern { name: "history: how ~ was cast an
 /// kicked", "if no mana was spent to cast it" in a cast trigger).
 pub fn cast_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     let c = end(c);
+    // "if one or more of them entered from a graveyard or was cast from a graveyard" (the
+    // objects of a "one or more" trigger): some of them.
+    if let Some(r) = c.strip_prefix("one or more of them ") {
+        if !matches!(b.it, Sel::TriggerObjects) {
+            return None;
+        }
+        return some_of(cast_status(&format!("it {r}"), Some(b))?, &Sel::TriggerObjects);
+    }
     cast_status(c, Some(b)).or_else(|| mana_spent(c, Some(b)))
 }
 

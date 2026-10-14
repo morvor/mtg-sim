@@ -27,6 +27,8 @@ use crate::types::*;
 pub const WAS_CAST: &str = "cast history:was cast";
 /// `Filter::Custom` prefix: the object was cast from this zone (`cast from:Hand`).
 pub const CAST_FROM: &str = "cast history:cast from:";
+/// `Filter::Custom`: the object was cast this turn.
+pub const CAST_THIS_TURN: &str = "cast history:cast this turn";
 /// `Filter::Custom`: the object was kicked (CR 702.33).
 pub const KICKED: &str = "cast history:kicked";
 /// `Value::Custom`: how many times the ability being resolved has been activated this
@@ -183,6 +185,9 @@ impl KeywordRules for CastHistory {
         let cast = object_cast(g, id).filter(|c| c.was_cast);
         if name == WAS_CAST {
             return Some(cast.is_some());
+        }
+        if name == CAST_THIS_TURN {
+            return Some(cast.is_some_and(|c| c.turn == g.turn.number));
         }
         if name == KICKED {
             return Some(cast.is_some_and(|c| c.times_kicked > 0 || c.paid.iter().any(|p| p == "kicker")));
