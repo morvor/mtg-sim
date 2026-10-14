@@ -124,6 +124,7 @@ fn a_player_with_several_simultaneous_objects_chooses_their_order() {
             P0,
             None,
             Effect::CopySpellRetargeted {
+            among: None,
                 what: in_zone(ZoneKind::Stack, vec![spell]),
                 target: None,
             },

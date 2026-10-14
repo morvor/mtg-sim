@@ -2826,11 +2826,33 @@ impl Renderer<'_> {
                 };
                 format!("the next {f} you cast{d} {vp}")
             }
-            Effect::CopySpellRetargeted { what, target } => {
+            Effect::CopySpellRetargeted {
+                what,
+                target,
+                among,
+            } => {
                 let w = self.sel(what, Case::Obj);
-                match target {
-                    None => format!("copy {w} for each other object or player it could target"),
-                    Some(t) => {
+                match (target, among) {
+                    // "copy that spell for each other creature you control that the spell
+                    // could target. Each copy targets a different one of those creatures."
+                    (None, Some(f)) => {
+                        let w = if matches!(what, Sel::TriggerSpell) {
+                            "that spell".to_string()
+                        } else {
+                            w
+                        };
+                        let n = self.noun(f, Num::One);
+                        // "those creatures": the kind, without "you control".
+                        let ns = self.noun(f, Num::Many);
+                        let ns = ns.strip_suffix(" you control").unwrap_or(&ns).to_string();
+                        format!(
+                            "copy {w} for each other {n} {{alt:that the spell|that spell}} could target. Each copy targets a different one of those {ns}"
+                        )
+                    }
+                    (None, None) => {
+                        format!("copy {w} for each other object or player it could target")
+                    }
+                    (Some(t), _) => {
                         let t = self.sel(t, Case::Obj);
                         format!("copy {w}. The copy targets {t}")
                     }
