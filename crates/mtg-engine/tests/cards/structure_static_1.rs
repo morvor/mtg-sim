@@ -55,6 +55,22 @@ fn nahiris_wrath_discards_x_and_deals_their_total_mana_value() {
     // damage equal to the total mana value of the discarded cards to each of up to X
     // target creatures and/or planeswalkers."
     supported("Nahiri's Wrath");
+    // "Up to X": with X = 1, a second target isn't allowed (the invalid choice falls back
+    // to a legal one), so at most one creature is dealt damage.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let a = t.battlefield(P1, "Hill Giant");
+    let b = t.battlefield(P1, "Hill Giant");
+    let wrath = t.hand(P0, "Nahiri's Wrath");
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.cast(P0, wrath)
+        .x(1)
+        .targets(&[Entity::Object(a), Entity::Object(b)])
+        .go();
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), Zone::Graveyard(P0));
+    assert!([a, b].iter().filter(|c| t.obj_now(**c).damage > 0).count() <= 1);
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 3);
     let bolt = t.hand(P0, "Lightning Bolt");

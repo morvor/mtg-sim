@@ -685,7 +685,7 @@ fn remnant_elemental_landfall_gives_plus_2_power() {
 
 #[test]
 fn teeming_dragonstorm_returns_to_hand_when_your_dragon_enters() {
-    cr!("603.6a", "400.7");
+    cr!("603.6a", "603.2");
     // "When a Dragon you control enters, return this enchantment to its owner's hand."
     supported("Teeming Dragonstorm");
     let mut t = TestGame::new(2);
@@ -834,7 +834,7 @@ fn wooden_sphere_may_pay_1_to_gain_1_when_any_player_casts_a_green_spell() {
 
 #[test]
 fn aurora_eidolon_returns_from_graveyard_when_you_cast_a_multicolored_spell() {
-    cr!("603.2", "603.6", "105.4");
+    cr!("603.2", "113.6m", "105.2b");
     // "Whenever you cast a multicolored spell, you may return this card from your
     // graveyard to your hand."
     supported("Aurora Eidolon");
@@ -853,6 +853,18 @@ fn aurora_eidolon_returns_from_graveyard_when_you_cast_a_multicolored_spell() {
     t.resolve_all();
     assert_eq!(t.zone(e), Zone::Hand(P0));
     assert_eq!(t.life(P1), 14);
+    // The ability moves the card out of the graveyard, so it works only from there
+    // (CR 113.6m): on the battlefield, a multicolored spell doesn't return it.
+    let mut t = TestGame::new(2);
+    let e = t.battlefield(P0, "Aurora Eidolon");
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Plains", 1);
+    t.answer_yes(P0, true);
+    let helix = t.hand(P0, "Lightning Helix");
+    t.cast(P0, helix).target(P1).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(e));
+    assert_eq!(t.hand_size(P0), 0);
 }
 
 // ---------------------------------------------------------------------------
