@@ -685,6 +685,9 @@ impl Renderer<'_> {
         if let Some(v) = self.vote_condition(c) {
             return v;
         }
+        if let Some(s) = self.condition_more(c) {
+            return s;
+        }
         match c {
             Condition::Always => self.gap("Condition::Always"),
             Condition::Never => self.gap("Condition::Never"),

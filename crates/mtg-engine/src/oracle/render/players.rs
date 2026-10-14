@@ -1317,6 +1317,16 @@ impl Renderer<'_> {
             {
                 "who {alt:can't|didn't discard a card this way}".into()
             }
+            // "Each opponent sacrifices a creature of their choice. Each opponent who
+            // can't ...": who controlled none of the permanents sacrificed this way.
+            // Sacrificing is mandatory, so a player who sacrificed nothing couldn't (CR
+            // 701.21a).
+            PlayerFilter::Not(x)
+                if matches!(x.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(),
+                    PlayerRef::ControllerOf(s) if matches!(s.as_ref(), Sel::Var(vars::SACRIFICED)))) =>
+            {
+                "who {alt:can't|didn't sacrifice a permanent this way}".into()
+            }
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);
                 format!("not {q}")

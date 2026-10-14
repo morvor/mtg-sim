@@ -31,6 +31,9 @@ pub(crate) struct ExtraState {
     /// ("the amount of damage it dealt to that player", "the number of cards looked at
     /// while scrying this way").
     pub event_amount: Option<&'static str>,
+    /// In a "whenever the Ring tempts you" trigger, whose event object is the creature
+    /// chosen as your Ring-bearer (CR 701.54a).
+    pub ring_tempts: bool,
 }
 
 /// The past tense of a past participle ("drawn" -> "drew").

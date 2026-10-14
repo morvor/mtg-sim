@@ -74,7 +74,12 @@ impl Renderer<'_> {
             &mut self.extra.event_amount,
             super::more_terms::event_amount_words(&t.trigger),
         );
+        let saved_ring = std::mem::replace(
+            &mut self.extra.ring_tempts,
+            matches!(&t.trigger, TriggerCond::PlayerAction { name, .. } if name == "the ring tempts you"),
+        );
         let s = self.triggered_plain_inner(t);
+        self.extra.ring_tempts = saved_ring;
         self.extra.event_amount = saved_dealt;
         self.attack_trigger = saved;
         self.block_pair_trigger = saved_pair;

@@ -105,6 +105,53 @@ impl Renderer<'_> {
                     "{{alt:the owner of {t}|{poss} owner}} puts it into their library second from the top or on the bottom"
                 ))
             }
+            // "Each opponent who has three or more poison counters loses 3 life."
+            Effect::ForEachPlayer { who, effect } => {
+                let Effect::AsPlayer {
+                    who: PlayerRef::Iterated,
+                    effect: inner,
+                } = effect.as_ref()
+                else {
+                    return None;
+                };
+                let Effect::If {
+                    cond: Condition::Compare(Value::PlayerCounters(PlayerRef::You, k), c, n),
+                    then,
+                    otherwise,
+                } = inner.as_ref()
+                else {
+                    return None;
+                };
+                if !matches!(otherwise.as_ref(), Effect::Noop) {
+                    return None;
+                }
+                let n = match n {
+                    Value::Const(k) => number_word(*k),
+                    other => self.value(other),
+                };
+                let count = match c {
+                    Cmp::Ge => format!("{n} or more"),
+                    Cmp::Le => format!("{n} or fewer"),
+                    Cmp::Eq => n,
+                    _ => return None,
+                };
+                let w = self.player(who, Case::Subj);
+                let saved = std::mem::replace(&mut self.in_as_player, true);
+                let t = self.effect(then);
+                self.in_as_player = saved;
+                let t = t.strip_prefix("you ").unwrap_or(&t);
+                if t.contains(['.', '{']) {
+                    return None;
+                }
+                let t = format!(" {} ", super::effects::third_person(t))
+                    .replace(" your ", " their ")
+                    .replace(" you ", " they ");
+                Some(format!(
+                    "{w} who has {count} {} counters {}",
+                    k.as_str(),
+                    t.trim()
+                ))
+            }
             _ => None,
         }
     }
@@ -117,6 +164,9 @@ impl Renderer<'_> {
         }
         if let Some(r) = self.another_one(v) {
             return Some(r);
+        }
+        if let Some(s) = self.may_reveal_top(v) {
+            return Some((s, 3));
         }
         // "Move any number of +1/+1 counters from target creature onto another target
         // creature": a number chosen, then that many moved.
@@ -252,5 +302,64 @@ impl Renderer<'_> {
                 .collect(),
         );
         Some(self.noun_det(&rest, super::nouns::Det::A))
+    }
+
+    /// A condition worded as a whole, before the general wording.
+    pub(crate) fn condition_more(&mut self, c: &Condition) -> Option<String> {
+        // "if you chose a creature other than ~ as your Ring-bearer": the creature chosen
+        // as the Ring tempted you is the event's object (CR 701.54a).
+        if self.extra.ring_tempts {
+            if let Condition::And(v) = c {
+                if let [Condition::SelNonEmpty(Sel::TriggerObject), Condition::Not(n)] =
+                    v.as_slice()
+                {
+                    if matches!(
+                        n.as_ref(),
+                        Condition::SelMatches(Sel::TriggerObject, Filter::Source)
+                    ) {
+                        let m = self.me();
+                        return Some(format!(
+                            "you chose a creature other than {m} as your Ring-bearer"
+                        ));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// "You may reveal the top card of your library. If a land card is revealed this way,
+    /// put it onto the battlefield tapped.": "it" is the card only if it was revealed.
+    fn may_reveal_top(&mut self, v: &[Effect]) -> Option<String> {
+        let [Effect::Store {
+            var: vars::IT,
+            sel: Sel::None,
+        }, may @ Effect::May {
+            who: PlayerRef::You,
+            effect,
+        }, Effect::If {
+            cond: Condition::SelMatches(Sel::Var(vars::IT), f),
+            then,
+            otherwise,
+        }, ..] = v
+        else {
+            return None;
+        };
+        let Effect::Dig {
+            n: Value::Const(1),
+            reveal: true,
+            take: Value::Const(0),
+            ..
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        if !matches!(otherwise.as_ref(), Effect::Noop) {
+            return None;
+        }
+        let m = self.effect(may);
+        let n = self.noun_det(f, super::nouns::Det::A);
+        let t = self.effect(then);
+        Some(format!("{m}. If {n} is revealed this way, {t}"))
     }
 }
