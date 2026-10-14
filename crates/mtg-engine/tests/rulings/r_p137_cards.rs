@@ -553,7 +553,7 @@ fn single_combat_players_choose_in_turn_order_then_sacrifice_the_rest() {
 
 #[test]
 fn limited_resources_a_player_with_fewer_than_five_lands_keeps_them_all() {
-    cr!("101.4", "701.21a");
+    cr!("701.21a");
     ruling!(
         "Limited Resources",
         "If a player has less than 5 lands, they get to pick and keep all of their lands."
@@ -583,7 +583,7 @@ fn limited_resources_a_player_with_fewer_than_five_lands_keeps_them_all() {
 
 #[test]
 fn ogre_marauder_second_trigger_doesnt_undo_the_first() {
-    cr!("603.2", "611.2a", "506.1");
+    cr!("603.2", "611.2a", "500.8");
     ruling!(
         "Ogre Marauder",
         "Attacking with Ogre Marauder a second time would cause a second trigger. If no creature was previously sacrificed, the Marauder already can’t be blocked. Sacrificing a creature for the second trigger will not nullify the first."

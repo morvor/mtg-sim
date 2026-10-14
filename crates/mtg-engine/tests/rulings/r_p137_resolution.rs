@@ -564,7 +564,7 @@ fn nazgul_battle_mace_triggers_when_the_sacrificed_card_is_exiled_instead() {
 
 #[test]
 fn in_thrall_to_the_pit_cast_in_the_end_step_cant_sacrifice_later() {
-    cr!("603.7c", "513.1a");
+    cr!("603.7c", "603.7b");
     ruling!(
         "In Thrall to the Pit",
         "If an effect allows In Thrall to the Pit to be cast during the end step and it is kicked, you will gain control of the target creature until this turn ends. The delayed triggered ability will trigger at the beginning of the next turn's end step, but you won't be able to sacrifice that creature because you no longer control it."
