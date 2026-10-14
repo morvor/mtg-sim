@@ -422,3 +422,48 @@ fn call_for_aids_creatures_cant_be_sacrificed() {
         assert!(!c.contains(&obj(bears)), "{c:?}");
     }
 }
+
+#[test]
+fn rootwater_matriarch_control_lasts_while_the_creature_is_enchanted() {
+    cr!("611.2b");
+    ruling!(
+        "Rootwater Matriarch",
+        "The control effect applies so long as at least one Aura is attached to the creature, and will continue to apply even if Rootwater Matriarch has left the battlefield."
+    );
+    ruling!(
+        "Rootwater Matriarch",
+        "Unlike many similar creatures, Rootwater Matriarch untaps as normal during your untap step."
+    );
+    supported("Rootwater Matriarch");
+    let mut t = TestGame::new(2);
+    let matriarch = t.battlefield(P0, "Rootwater Matriarch");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let strength = attach_new(&mut t, P1, "Holy Strength", bears);
+    let strength2 = attach_new(&mut t, P1, "Holy Strength", bears);
+    t.activate(P0, matriarch, 0, &[obj(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(controller(&mut t, bears), P0);
+    // Matriarch untaps as usual and leaves the battlefield: P0 keeps control.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    assert!(!tapped(&t, matriarch));
+    assert_eq!(controller(&mut t, bears), P0);
+    destroy(&mut t, matriarch);
+    assert_eq!(controller(&mut t, bears), P0);
+    // One Aura left: still P0's. None: the effect ends.
+    destroy(&mut t, strength);
+    assert_eq!(controller(&mut t, bears), P0);
+    destroy(&mut t, strength2);
+    assert_eq!(controller(&mut t, bears), P1);
+    // A new Aura doesn't bring the effect back.
+    attach_new(&mut t, P1, "Holy Strength", bears);
+    assert_eq!(controller(&mut t, bears), P1);
+
+    // An unenchanted creature: nothing happens.
+    let mut t = TestGame::new(2);
+    let matriarch = t.battlefield(P0, "Rootwater Matriarch");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.activate(P0, matriarch, 0, &[obj(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(controller(&mut t, bears), P1);
+}

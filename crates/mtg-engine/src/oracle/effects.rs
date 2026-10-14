@@ -1129,6 +1129,15 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
             return (d, r);
         }
     }
+    // "for as long as that creature is enchanted" (CR 611.2b): a condition about the
+    // objects the effect applies to.
+    if let Some(r) = t.strip_suffix(" for as long as that creature is enchanted") {
+        let affected = Sel::Var(vars::AFFECTED);
+        return (
+            Duration::WhileCondition(Condition::SelMatches(affected, Filter::Enchanted)),
+            r,
+        );
+    }
     // "for as long as it has a flood counter on it" (CR 611.2b).
     if let Some((d, r)) = super::patterns::counter_grammar::counter_duration(t) {
         return (d, r);

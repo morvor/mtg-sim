@@ -839,8 +839,10 @@ impl Game {
             } => {
                 // "If they do, ...": whether a player gained control of something.
                 ctx.prev_happened = false;
-                // CR 611.2b (Master Thief).
-                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                // CR 611.2b (Master Thief). A condition about the affected objects ("for
+                // as long as that creature is enchanted") is checked for them below.
+                let about_affected = matches!(duration, Duration::WhileCondition(_));
+                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
                 }
                 let objs: Vec<ObjectId> = self
@@ -853,6 +855,16 @@ impl Game {
                 };
                 if objs.is_empty() {
                     return;
+                }
+                if let Duration::WhileCondition(c) = duration {
+                    let mut c2 = ctx.clone();
+                    c2.set_var(
+                        vars::AFFECTED,
+                        objs.iter().map(|o| Entity::Object(*o)).collect(),
+                    );
+                    if !self.eval_cond(c, &c2) {
+                        return;
+                    }
                 }
                 // "Draw a card for each one they gained control of this way".
                 let changed: Vec<ObjectId> = objs
