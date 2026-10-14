@@ -389,3 +389,51 @@ fn tobias_creates_a_zombie_for_each_nontoken_creature_that_died_under_your_contr
     // The Bears and Tobias itself; not the opponent's creature.
     assert_eq!(tokens(&t, P0).len(), 2);
 }
+
+#[test]
+fn angrath_deals_damage_equal_to_the_total_power_of_the_creatures() {
+    cr!("608.2h");
+    ruling!(
+        "Angrath, Minotaur Pirate",
+        "uses the power of those creatures as they last existed on the battlefield to determine their total power"
+    );
+    ruling!(
+        "Angrath, Minotaur Pirate",
+        "its power still contributes to the amount of damage dealt"
+    );
+    compiles("Angrath, Minotaur Pirate");
+    let mut t = TestGame::new(2);
+    let angrath = t.battlefield(P0, "Angrath, Minotaur Pirate");
+    t.g.add_counters(Entity::Object(angrath), "loyalty", 6, None);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    let gargoyle = t.battlefield(P1, "Darksteel Gargoyle");
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 1, None);
+    let mine = t.battlefield(P0, "Hill Giant");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.activate(P0, angrath, 2, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert!(!t.on_battlefield(wurm) && !t.on_battlefield(bear));
+    assert!(t.on_battlefield(gargoyle), "indestructible");
+    assert!(t.on_battlefield(mine));
+    // 6 (Craw Wurm) + 3 (Grizzly Bears with its counter) + 3 (Darksteel Gargoyle).
+    assert_eq!(t.life(P1), 8);
+}
+
+#[test]
+fn unquenchable_fury_deals_damage_equal_to_the_defending_players_hand() {
+    cr!("506.2", "107.3c");
+    compiles("Unquenchable Fury");
+    let mut t = TestGame::new(2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let fury = t.battlefield(P0, "Unquenchable Fury");
+    t.g.attach(fury, Entity::Object(bear));
+    for _ in 0..4 {
+        t.hand(P1, "Island");
+    }
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.attack(&[(bear, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    // 4 from the trigger, 2 combat damage.
+    assert_eq!(t.life(P1), 14);
+}

@@ -565,3 +565,79 @@ fn plural_head(x: &str) -> Option<String> {
     words[i].push('s');
     Some(words.join(" "))
 }
+
+/// The objects a mass instruction acted on, recorded as it begins ("their total power").
+pub const ACTED_ON: Var = vars::USER + 12_002;
+
+/// "Destroy all creatures target opponent controls. ~ deals damage to that player equal
+/// to their total power.": the objects the instruction acted on, those destroyed as they
+/// last existed on the battlefield and any that weren't with their current power (CR
+/// 608.2h; Angrath, Minotaur Pirate ruling).
+fn their_total_after_mass(s: &str, prev: &mut Effect, b: &mut crate::oracle::effects::Builder) -> bool {
+    let lower = s.to_lowercase();
+    let (phrase, stat) = match [
+        ("their total power", Stat::Power),
+        ("their total toughness", Stat::Toughness),
+    ]
+    .into_iter()
+    .find(|(p, _)| lower.contains(p))
+    {
+        Some(x) => x,
+        None => return false,
+    };
+    if has_word(&lower, "x") || lower.matches(phrase).count() != 1 {
+        return false;
+    }
+    fn last_mass(e: &mut Effect) -> Option<&mut Effect> {
+        match e {
+            Effect::Seq(v) => v.last_mut().and_then(last_mass),
+            Effect::Destroy {
+                what: Sel::All(_), ..
+            }
+            | Effect::Exile {
+                what: Sel::All(_), ..
+            } => Some(e),
+            _ => None,
+        }
+    }
+    if last_mass(prev).is_none() {
+        return false;
+    }
+    let rewritten = lower.replace(phrase, "x");
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let parsed = super::value_grammar::with_x_defined(true, || {
+        crate::oracle::effects::parse_sentence(&rewritten, b)
+    });
+    let amount = Value::Aggregate(AggOp::Sum, stat, Box::new(Sel::Var(ACTED_ON)));
+    let Some(e) = parsed.and_then(|e| super::r107_numbers::substitute_x(&e, &amount)) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return false;
+    };
+    if super::r107_numbers::uses_x(&e) {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return false;
+    }
+    let Some(mass) = last_mass(prev) else {
+        return false;
+    };
+    let what = match mass {
+        Effect::Destroy { what, .. } | Effect::Exile { what, .. } => what,
+        _ => return false,
+    };
+    let group = std::mem::replace(what, Sel::Var(ACTED_ON));
+    let acted = std::mem::take(mass);
+    *mass = Effect::seq(vec![
+        Effect::Store {
+            var: ACTED_ON,
+            sel: group,
+        },
+        acted,
+    ]);
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "referents: their total power (of the objects a mass instruction acted on)", priority: 1500, apply: their_total_after_mass } }

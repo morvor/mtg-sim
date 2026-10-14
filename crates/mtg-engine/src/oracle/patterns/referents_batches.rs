@@ -151,3 +151,55 @@ fn exile_pronoun_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: exile them from a graveyard", priority: 1500, parse: exile_pronoun_from_graveyard } }
+
+/// "where X is ... their ...": "their" is the one player the sentence names ("it
+/// deals X damage to defending player, where X is the number of cards in their hand.").
+fn where_x_their(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if super::referents_results::in_standard() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let w = lower.find(", where x is ")?;
+    let j = w + lower[w..].find(" their ")?;
+    // The sentence the "where" clause belongs to.
+    let start = lower[..w].rfind(['.', '"', ':']).map_or(0, |i| i + 1);
+    let main = &lower[start..w];
+    const PLAYERS: [&str; 3] = ["defending player", "that player", "that opponent"];
+    let named: Vec<&str> = PLAYERS.iter().copied().filter(|p| main.contains(p)).collect();
+    let [p] = named.as_slice() else {
+        return None;
+    };
+    let clause = &lower[w..];
+    let clause = &clause[..clause.find(['.', '"']).unwrap_or(clause.len())];
+    if clause.matches(" their ").count() != 1
+        || super::referents_results::has_word(clause, "they")
+        || super::referents_results::has_word(main, "they")
+    {
+        return None;
+    }
+    if super::referents_results::standard_ok(block, ctx) {
+        return None;
+    }
+    let rewritten = format!("{} {p}'s {}", &block[..j], &block[j + " their ".len()..]);
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    let ok = v.iter().all(|a| {
+        !(super::oracle_hardening_referents::has_no_referent(a)
+            || crate::repeat_process::has_stray_repeat(a)
+            || super::filters_relational::unresolved(a))
+    });
+    if !ok {
+        return None;
+    }
+    let text = crate::oracle::strip_ability_word(block.trim());
+    Some(
+        v.into_iter()
+            .map(|a| {
+                let mut d = (*a).clone();
+                d.text = text.to_string();
+                std::sync::Arc::new(d)
+            })
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "referents: where X is ... their (the one player named)", priority: 50, parse: where_x_their } }
