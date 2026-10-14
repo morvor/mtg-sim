@@ -74,9 +74,14 @@ pub fn is_cast_grant(s: &StaticAbility) -> bool {
         && !mentions(affected, &Filter::SpellOnStack)
         && !mentions_source(affected)
         && !mods.is_empty()
-        && mods
-            .iter()
-            .all(|m| matches!(m, Modification::AddKeyword(_) | Modification::AddAbility(_)))
+        && mods.iter().all(|m| {
+            matches!(
+                m,
+                Modification::AddKeyword(_)
+                    | Modification::AddKeywordOwnCost(..)
+                    | Modification::AddAbility(_)
+            )
+        })
 }
 
 /// Whether the filter has `part` among its conjuncts.
@@ -294,8 +299,17 @@ pub fn cast_grant_keywords(g: &Game, p: PlayerId, card: ObjectId) -> Vec<crate::
                 continue;
             }
             for m in mods {
-                if let Modification::AddKeyword(k) = m {
-                    out.push(k.clone());
+                match m {
+                    Modification::AddKeyword(k) => out.push(k.clone()),
+                    // "The emerge cost is equal to its mana cost."
+                    Modification::AddKeywordOwnCost(k, reduce) => {
+                        out.push(crate::layers::own_cost_keyword(
+                            k,
+                            *reduce,
+                            &g.characteristics_to_cast(card),
+                        ))
+                    }
+                    _ => {}
                 }
             }
         }

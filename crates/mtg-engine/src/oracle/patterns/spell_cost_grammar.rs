@@ -87,6 +87,7 @@ fn from_zones(z: &str) -> Option<Filter> {
     Some(match z {
         "anywhere other than your hand" => Filter::not(zone(ZoneKind::Hand)),
         "exile" => zone(ZoneKind::Exile),
+        "your hand" => Filter::and(vec![zone(ZoneKind::Hand), Filter::OwnedBy(PlayerRel::You)]),
         // A card in your graveyard is yours (CR 404.1).
         "your graveyard" => Filter::and(vec![
             zone(ZoneKind::Graveyard),

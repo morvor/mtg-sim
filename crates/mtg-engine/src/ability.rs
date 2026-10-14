@@ -2126,6 +2126,11 @@ pub enum Modification {
     /// is ..."): X is reevaluated each time characteristics are computed (CR 702.1b). It
     /// becomes the keyword's N, and the value of {X} in its cost.
     AddKeywordX(Keyword, Value),
+    /// Adds a keyword whose cost is the object's mana cost reduced by {N} generic mana
+    /// ("Each creature spell you cast has emerge. The emerge cost is equal to its mana
+    /// cost.", "... has foretell. Its foretell cost is equal to its mana cost reduced by
+    /// {2}."; CR 702.119a, 702.143a, 702.94a): computed for each object it applies to.
+    AddKeywordOwnCost(Keyword, u32),
     /// Adds each keyword of these kinds, with all its variants and variables, that an
     /// object matching the filter has ("... has flying. The same is true for first strike,
     /// landwalk, protection, ...", CR 702.1c).
@@ -2219,6 +2224,7 @@ impl Modification {
             | AddThisAbility
             | AddKeyword(_)
             | AddKeywordX(..)
+            | AddKeywordOwnCost(..)
             | AddKeywordsOf { .. }
             | AddAbilitiesOf { .. }
             | RemoveKeyword(_)
