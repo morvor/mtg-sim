@@ -622,6 +622,14 @@ impl Renderer<'_> {
                 let p = if w == "you" { "your" } else { "their" };
                 format!("{w} may look at the top card of {p} library any time")
             }
+            // "Players play with the top card of their libraries revealed": each player
+            // with their own.
+            StaticEffect::RevealTopCard(PlayerRel::Any) => {
+                "players play with the top card of their libraries revealed".into()
+            }
+            StaticEffect::RevealTopCard(PlayerRel::Opponent) => {
+                "your opponents play with the top card of their libraries revealed".into()
+            }
             StaticEffect::RevealTopCard(r) => {
                 let p = self.rel_possessive(*r, Num::One);
                 format!("play with the top card of {p} library revealed")
@@ -1115,7 +1123,15 @@ impl Renderer<'_> {
         };
         let mut parts = Vec::new();
         if ap.instant_timing {
-            parts.push("any time you could cast an instant".to_string());
+            // Loyalty abilities are otherwise activated only on your turn (CR 606.3); an
+            // instant can be cast on any player's turn (CR 117.1a).
+            if matches!(ap.scope.class, AbilityClass::Loyalty) {
+                parts.push(
+                    "{opt:on any player's turn} any time you could cast an instant".to_string(),
+                );
+            } else {
+                parts.push("any time you could cast an instant".to_string());
+            }
         }
         if let Some(n) = ap.loyalty_per_turn {
             let t = match n {
@@ -2074,6 +2090,10 @@ impl Renderer<'_> {
             Restriction::CantCast { who, what } => {
                 let w = self.player_filter_subject(who);
                 let s = self.spell_noun_plural(what);
+                // "Spells with the chosen name can't be cast": by no player.
+                if matches!(who, PlayerFilter::Any) {
+                    return format!("{{alt:{w} can't cast {s}|{s} can't be cast}}");
+                }
                 format!("{w} can't cast {s}")
             }
             Restriction::CantActivate {
@@ -2531,12 +2551,24 @@ impl Renderer<'_> {
                         format!("~ escapes with {c} on {it}{}", w.unwrap_or_default())
                     }
                     A::AsEnters(e) => self.as_enters(&subj, e),
-                    A::EnterAsCopy { filter, optional } => {
+                    A::EnterAsCopy {
+                        filter,
+                        optional,
+                        tapped,
+                    } => {
                         // A copy of a permanent (CR 707.5): "any creature on the
                         // battlefield", "any creature on the battlefield with mana value 3
-                        // or less", "a creature you control".
+                        // or less", "a creature you control"; or of a card in another zone
+                        // ("any land card in a graveyard", CR 707.2).
                         let noun = self.noun(filter, Num::One);
-                        let mut alts = vec![format!("any {noun} on the battlefield")];
+                        let elsewhere = filter
+                            .zone()
+                            .is_some_and(|z| z != crate::ability::ZoneKind::Battlefield);
+                        let mut alts = vec![if elsewhere {
+                            format!("any {noun}")
+                        } else {
+                            format!("any {noun} on the battlefield")
+                        }];
                         if let Some((head, rest)) = noun.split_once(" with ") {
                             alts.push(format!("any {head} on the battlefield with {rest}"));
                         }
@@ -2555,10 +2587,11 @@ impl Renderer<'_> {
                         } else {
                             format!("{{alt:{}}}", alts.join("|"))
                         };
+                        let t = if *tapped { " tapped" } else { "" };
                         if *optional {
-                            format!("you may have {subj} enter as a copy of {n}")
+                            format!("you may have {subj} enter{t} as a copy of {n}")
                         } else {
-                            format!("{subj} enters as a copy of {n}")
+                            format!("{subj} enters{t} as a copy of {n}")
                         }
                     }
                     A::EnterUnderControl(p) => {
@@ -2999,7 +3032,14 @@ impl Renderer<'_> {
                 format!("skip {p} {s}")
             }
             (E::ProduceMana(f), action) => {
-                let n = self.noun_det(f, Det::A);
+                // "If you tap a permanent for mana": only its controller can (CR 602.2).
+                let n = match self.yours_tapped(f) {
+                    Some(y) => {
+                        let a = self.noun_det(f, Det::A);
+                        format!("{{alt:{a} is tapped|you tap {y}}}")
+                    }
+                    None => format!("{} is tapped", self.noun_det(f, Det::A)),
+                };
                 let then = match action {
                     A::Multiply(2) => "it produces twice as much of that mana instead".to_string(),
                     A::Multiply(3) => {
@@ -3014,7 +3054,7 @@ impl Renderer<'_> {
                     }
                     other => self.replacement_then(other, "it"),
                 };
-                format!("if {n} is tapped for mana, {then}")
+                format!("if {n} for mana, {then}")
             }
             (E::UntapDuringUntapStep(f), A::Prevent) => {
                 let s = self.affected_subject(f);
@@ -3545,9 +3585,32 @@ impl Renderer<'_> {
                         };
                         format!("it deals that much damage plus {v}{to_that} instead")
                     }
+                    // "it deals half that damage, rounded down, to that permanent or player
+                    // instead": that much minus the other half.
+                    A::Subtract(Value::Diff(a, b))
+                        if matches!(a.as_ref(), Value::EventAmount)
+                            && matches!(b.as_ref(), Value::Div(n, 2, _) if matches!(n.as_ref(), Value::EventAmount)) =>
+                    {
+                        let Value::Div(_, _, up) = b.as_ref() else {
+                            return self.gap("half that damage");
+                        };
+                        // That much minus (that much minus half of it) is half of it.
+                        let r = if *up { "up" } else { "down" };
+                        let to_that = if anything {
+                            " {opt:to that permanent or player}"
+                        } else {
+                            to_that
+                        };
+                        format!("it deals half that damage, rounded {r},{to_that} instead")
+                    }
                     A::Subtract(v) => {
                         let v = self.value(v);
-                        format!("it deals that much damage minus {v} instead")
+                        let to_that = if anything {
+                            " {opt:to that permanent or player}"
+                        } else {
+                            to_that
+                        };
+                        format!("it deals that much damage minus {v}{to_that} instead")
                     }
                     A::Redirect(sel) => {
                         let t = self.sel(sel, Case::Obj);

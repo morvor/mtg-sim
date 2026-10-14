@@ -1422,7 +1422,14 @@ impl Game {
                 }
                 vec![ReplEvent::Move(m)]
             }
-            (ReplacementAction::EnterAsCopy { filter, optional }, ReplEvent::Move(mut m)) => {
+            (
+                ReplacementAction::EnterAsCopy {
+                    filter,
+                    optional,
+                    tapped,
+                },
+                ReplEvent::Move(mut m),
+            ) => {
                 // "enter as a copy of [this creature]" refers to the effect's source.
                 let c = ctx.clone();
                 let cands: Vec<ObjectId> = self
@@ -1454,6 +1461,10 @@ impl Game {
                         m.etb.copy_extras.clear();
                     }
                     m.etb.copy_of = Some(*o);
+                    // "Enter tapped as a copy of": only as a copy (Vesuva's rulings).
+                    if tapped {
+                        m.etb.tapped = true;
+                    }
                 }
                 vec![ReplEvent::Move(m)]
             }

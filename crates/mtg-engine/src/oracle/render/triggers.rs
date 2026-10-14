@@ -70,7 +70,17 @@ impl Renderer<'_> {
         let saved = std::mem::replace(&mut self.attack_trigger, attack);
         let pair = super::block_pairs::is_block_pair(&t.trigger);
         let saved_pair = std::mem::replace(&mut self.block_pair_trigger, pair);
+        let saved_dealt = std::mem::replace(
+            &mut self.extra.event_amount,
+            super::more_terms::event_amount_words(&t.trigger),
+        );
+        let saved_ring = std::mem::replace(
+            &mut self.extra.ring_tempts,
+            matches!(&t.trigger, TriggerCond::PlayerAction { name, .. } if name == "the ring tempts you"),
+        );
         let s = self.triggered_plain_inner(t);
+        self.extra.ring_tempts = saved_ring;
+        self.extra.event_amount = saved_dealt;
         self.attack_trigger = saved;
         self.block_pair_trigger = saved_pair;
         s
@@ -750,6 +760,15 @@ impl Renderer<'_> {
             TriggerCond::BecomesUntapped(f) => Ev::new(obj(self, f), "becomes untapped"),
             TriggerCond::TappedForManaOfType { filter, mana } => {
                 let m = mana_symbol(*mana);
+                // "Whenever you tap a permanent for {C}": only its controller can (CR
+                // 602.2, as for `TappedForMana`).
+                if let Some(n) = self.yours_tapped(filter) {
+                    let a = obj(self, filter);
+                    return Ev::new(
+                        "",
+                        format!("{{alt:{a} is tapped for {m}|you tap {n} for {m}}}"),
+                    );
+                }
                 Ev::new(obj(self, filter), format!("is tapped for {m}"))
             }
             TriggerCond::BecomesTarget { filter, by } => {
@@ -1017,6 +1036,20 @@ impl Renderer<'_> {
                     }
                     Ev::new("", s)
                 }
+            }
+            // "Reveal the first card you draw each turn. Whenever you reveal a creature
+            // card this way, ...": the first card you draw (each turn, or on each of your
+            // turns), revealed by the static ability next to it
+            // (`kw/reveal_first_draw.rs`), if it's that kind of card.
+            TriggerCond::Where { trigger, cond }
+                if matches!(trigger.as_ref(), TriggerCond::Draws { who: PlayerRel::You })
+                    && super::more_terms::first_draw_revealed(cond).is_some() =>
+            {
+                let f = super::more_terms::first_draw_revealed(cond)
+                    .cloned()
+                    .unwrap_or(Filter::Any);
+                let n = self.noun_det(&f, Det::A);
+                Ev::new("you", format!("reveal {n} this way"))
             }
             // "Whenever you draw your second card each turn".
             TriggerCond::Where { trigger, cond }

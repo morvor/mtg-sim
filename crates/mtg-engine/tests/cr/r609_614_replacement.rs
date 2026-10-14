@@ -215,6 +215,7 @@ fn entering_with_counters_as_enters_and_enters_as_copy() {
             ReplacementAction::EnterAsCopy {
                 filter: Filter::creature(),
                 optional: true,
+                tapped: false,
             },
         )],
     );
