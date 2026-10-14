@@ -59,13 +59,24 @@ Tests in `crates/mtg-engine/tests/cards/roundtrip_tail_4.rs`; each fails on the 
 - Discerning Taste: "Put one of them into your hand and the rest into your graveyard. You
   gain life equal to the greatest power among creature cards put into your graveyard this
   way" measured the card put into the hand. A dig now records every card it put somewhere
-  (`dig_steps::DUG_PLACED`).
+  (`dig_steps::DUG_PLACED`), forgotten as soon as a later instruction of the same
+  resolution acts on other objects (`Ctx::set_var`; review: without that, "destroy all
+  artifacts ... for each card put into a graveyard this way" after a dig counted the dig's
+  cards too, test with a compiled custom card).
 - King Narfi's Betrayal: "exile a creature or planeswalker card from each graveyard" exiled
   one card in all. Now one chosen from each player's graveyard (`Cards::per_owner` in
-  `hand_graveyard_grammar.rs`); chapter II can cast them (test).
+  `hand_graveyard_grammar.rs`); chapter II can cast them (test); a graveyard with no such
+  card gives none (3-player test). Summon: Esper Valigarmanda ("Exile an instant or
+  sorcery card from each graveyard") had the same bug and is fixed by the same change.
 - Verdant Command: "Counter target loyalty ability of a planeswalker" could target the
   loyalty ability of a permanent that isn't a planeswalker (CR 606.2). Now `AbilityFrom` a
   planeswalker (`phrases.rs`).
+
+Review: the comparison's shared-subject rewrite ("each opponent sacrifices ... and
+[verb]s") read the plural noun in "among creatures and planeswalkers they control" as a
+verb; a plural object noun after "and" no longer starts a clause (`compare.rs`, unit
+test), so Flare of Malice, Soul Shatter and Break Under Pressure pass (Soul Shatter
+checked in a 3-player game: each opponent sacrifices their own greatest).
 
 Checked in play because the rendering changed (all behave as the text says): Song of Blood
 (delayed trigger count), Typhoon in a 3-player game (each opponent's own Islands), Rite of
@@ -87,9 +98,8 @@ AST and plays as the text says (wording only):
   instruction still names ~.
 - Kaho, Jeleva, Shell of the Last Kappa: "a spell from among cards exiled with ~" as "a
   spell exiled with ~" (the cast choice is rendered through the up-to-one cast path).
-- Flare of Malice, Soul Shatter, Break Under Pressure: "among creatures and planeswalkers
-  they control" — the comparison's shared-subject rewrite reads "planeswalkers" as a verb
-  on the Oracle side; the filter is per opponent (checked in the AST).
+  The choice is among the linked exiled cards only (`In(Linked)`, CR 607.2a), so cards
+  exiled by something else can't be cast.
 - Lightstall Inquisitor: sentence order of the two permission terms and the repeated
   subject of "may play".
 - Wolverine, Crumbling Sanctuary: "instead that damage is dealt, but ... is healed";
@@ -99,4 +109,5 @@ AST and plays as the text says (wording only):
 - Renewed Solidarity: "for each token ... create a token that's a copy of it" with a
   chosen-type filter ("that type" alternative breaks the for-each form).
 - Plague of Vermin: `loop totals` payment and "repeat this process until no one pays life"
-  wording.
+  wording. Plays as the text says (tests in `tests/cards/loop_totals.rs`: 2 players,
+  the process ending only after a full pass with no payment, and Two-Headed Giant).

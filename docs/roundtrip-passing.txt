@@ -2694,6 +2694,7 @@ Break Down the Door
 Break Open
 Break Through the Line
 Break Ties
+Break Under Pressure
 Break of Day
 Break the Ice
 Breaker of Armies
@@ -7836,6 +7837,7 @@ Flare of Cultivation
 Flare of Denial
 Flare of Duplication
 Flare of Faith
+Flare of Malice
 Flaring Cinder
 Flaring Pain
 Flash Conscription
@@ -20635,6 +20637,7 @@ Soul Scourge
 Soul Sear
 Soul Search
 Soul Seizer // Ghastly Haunting
+Soul Shatter
 Soul Shepherd
 Soul Snuffers
 Soul Spike

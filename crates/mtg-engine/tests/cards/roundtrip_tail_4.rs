@@ -3,7 +3,7 @@
 
 use mtg_engine::ability::*;
 use mtg_engine::object::Zone;
-use mtg_engine::types::CardType;
+use mtg_engine::types::{CardType, TypeLine};
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -246,7 +246,7 @@ fn natural_balance_trims_and_fills_each_players_lands() {
 
 #[test]
 fn treasure_keeper_puts_the_card_not_cast_on_the_bottom_too() {
-    cr!("608.2c", "401.4");
+    cr!("608.2c");
     // "You may cast that card without paying its mana cost. Put all revealed cards not
     // cast this way on the bottom of your library in a random order."
     let mut t = TestGame::new(2);
@@ -267,4 +267,92 @@ fn treasure_keeper_puts_the_card_not_cast_on_the_bottom_too() {
     let mut bottom = lib[..2].to_vec();
     bottom.sort();
     assert_eq!(bottom, ["Forest", "Grizzly Bears"], "{lib:?}\n{}", t.dump_log());
+}
+
+#[test]
+fn king_narfis_betrayal_exiles_from_the_graveyards_that_have_such_a_card() {
+    cr!("714.2b", "608.2c");
+    // "Exile a creature or planeswalker card from each graveyard": a graveyard with no
+    // such card gives none, the others still give one each.
+    let mut t = TestGame::new(3);
+    for p in [P0, P1, P2] {
+        for _ in 0..4 {
+            t.library_top(p, "Forest");
+        }
+    }
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let giant = t.graveyard(P2, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bears), Entity::Object(giant)]);
+    t.enter(P0, "King Narfi's Betrayal");
+    t.settle();
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"), "{}", t.dump_log());
+    assert!(t.in_exile("Hill Giant"), "{}", t.dump_log());
+    assert_eq!(t.graveyard_size(P1), 4, "{}", t.dump_log());
+}
+
+#[test]
+fn soul_shatter_each_opponent_sacrifices_among_their_own_permanents() {
+    cr!("608.2c", "701.21a");
+    // "Each opponent sacrifices a creature or planeswalker with the greatest mana value
+    // among creatures and planeswalkers they control."
+    let mut t = TestGame::new(3);
+    t.battlefield(P1, "Craw Wurm");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P2, "Hill Giant");
+    t.battlefield(P2, "Llanowar Elves");
+    t.lands(P0, "Swamp", 3);
+    let spell = t.hand(P0, "Soul Shatter");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Craw Wurm"), "{}", t.dump_log());
+    assert!(t.in_graveyard(P2, "Hill Giant"), "{}", t.dump_log());
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.named_on_battlefield("Llanowar Elves").len(), 1);
+}
+
+#[test]
+fn cards_a_dig_put_into_the_graveyard_are_not_counted_after_another_instruction() {
+    cr!("608.2c");
+    // A dig's "the rest" is what "put into a graveyard this way" counts right after it
+    // (Discerning Taste), not after another instruction: here only the destroyed
+    // artifact.
+    use mtg_engine::object::Characteristics;
+    use mtg_engine::oracle::{self, CompileContext};
+    let text = "Look at the top two cards of your library. Put one of them into your hand and \
+                the rest into your graveyard. Then destroy all artifacts. You gain 3 life for \
+                each card put into a graveyard this way.";
+    let tl = TypeLine::parse("Sorcery");
+    let ctx = CompileContext {
+        card_name: "Test Dig Then Destroy",
+        full_name: "Test Dig Then Destroy",
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let compiled = oracle::compile(text, &ctx);
+    assert!(compiled.unsupported.is_empty(), "{:?}", compiled.unsupported);
+    let def = mtg_engine::card::CardDef::custom(Characteristics {
+        name: "Test Dig Then Destroy".into(),
+        mana_cost: mtg_engine::mana::ManaCost::parse("{0}"),
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        ..Default::default()
+    });
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Sol Ring");
+    // Looked at: the Wurm (taken) and the Giant (the rest).
+    t.library_top(P0, "Hill Giant");
+    let wurm = t.library_top(P0, "Craw Wurm");
+    t.answer_choose(P0, &[Entity::Object(wurm)]);
+    let spell = t.custom(P0, def, Zone::Hand(P0));
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Hill Giant"), "{}", t.dump_log());
+    assert!(t.in_graveyard(P1, "Sol Ring"), "{}", t.dump_log());
+    assert_eq!(t.life(P0), 23, "{}", t.dump_log());
 }
