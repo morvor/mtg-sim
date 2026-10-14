@@ -2813,6 +2813,11 @@ impl Renderer<'_> {
                     s = format!("{s} (undo)");
                     s = self.gap(format!("keyword action undo: {s}"));
                 }
+                // "Populate. The token enters tapped and attacking."
+                if spec.action == KeywordAction::Populate && spec.tapped {
+                    let how = if spec.attacking { "tapped and attacking" } else { "tapped" };
+                    s = format!("{s}. the token enters {how}");
+                }
                 s
             }
             Effect::ChangeText {
