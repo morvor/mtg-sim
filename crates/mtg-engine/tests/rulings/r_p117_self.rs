@@ -929,3 +929,29 @@ fn exuberant_wolfbear_is_unaffected() {
     );
     assert_eq!(wolfbear(1), ((5 + 3, 5 + 3), (5, 5)));
 }
+
+#[test]
+fn meglonoth_blocking_two_creatures_triggers_twice() {
+    cr!("509.1a", "603.2c");
+    ruling!(
+        "Meglonoth",
+        "If Meglonoth somehow blocks more than one creature, its ability will trigger once for each creature it blocks."
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::BeginningOfCombat);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Llanowar Elves");
+    let meg = t.battlefield(P0, "Meglonoth");
+    t.battlefield(P0, "High Ground");
+    attack_with(&mut t, &[(a, Entity::Player(P0)), (b, Entity::Player(P0))]);
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(meg, a), (meg, b)]),
+    );
+    t.advance_to(P1, Step::DeclareBlockers);
+    t.settle();
+    assert_eq!(stack(&t), 2);
+    t.resolve_all();
+    assert_eq!(lost(&t, P1), 12);
+}
