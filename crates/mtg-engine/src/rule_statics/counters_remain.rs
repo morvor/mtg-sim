@@ -28,16 +28,22 @@ fn has_ability(g: &Game, id: ObjectId) -> bool {
     })
 }
 
+/// Whether the counters on the object `old` remain on the object it becomes as it moves
+/// to `to` (also asked after the move, of the old object's last known information, by
+/// observers accounting for counters).
+pub fn remain(g: &Game, old: ObjectId, to: Zone) -> bool {
+    !matches!(to, Zone::Hand(_) | Zone::Library(_) | Zone::Nowhere)
+        && !g.obj(old).counters.is_empty()
+        && has_ability(g, old)
+}
+
 /// Called as the object `old` moves to `to`, becoming `new` (CR 400.7): its counters
 /// remain on the new object if it has the ability and isn't going to a hand or library.
 pub fn follow(g: &mut Game, old: ObjectId, new: ObjectId, to: Zone) {
-    if matches!(to, Zone::Hand(_) | Zone::Library(_) | Zone::Nowhere) {
+    if !remain(g, old, to) {
         return;
     }
     let o = g.obj(old);
-    if o.counters.is_empty() || !has_ability(g, old) {
-        return;
-    }
     let counters = o.counters.clone();
     let stamps = o.counter_timestamps.clone();
     let n = &mut g.objects[new.0 as usize];

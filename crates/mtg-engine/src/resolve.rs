@@ -107,6 +107,13 @@ impl Game {
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
+                    // "You may draw cards equal to its power. If you do, discard two cards":
+                    // a player may choose to draw even with too few cards in their library
+                    // (CR 121.3), and "if you do" follows that choice, however many cards
+                    // were drawn (Champion of Wits rulings).
+                    if matches!(**effect, Effect::Draw { .. }) {
+                        ctx.prev_happened = true;
+                    }
                 }
             }
             Effect::PayOptional {
@@ -1241,13 +1248,16 @@ impl Game {
                 crate::keyword_impls::phase_out(self, objs);
             }
             Effect::TurnFaceUp { what } => {
+                // "Turn ~ face up. If you can't, ..." (CR 609.3).
+                let mut turned = false;
                 for o in self.resolve_objects(what, ctx) {
-                    if self.obj(o).zone == Zone::Exile {
-                        crate::facedown::turn_exiled_face_up(self, o);
+                    turned |= if self.obj(o).zone == Zone::Exile {
+                        crate::facedown::turn_exiled_face_up(self, o)
                     } else {
-                        crate::facedown::turn_face_up(self, o, false);
-                    }
+                        crate::facedown::turn_face_up(self, o, false)
+                    };
                 }
+                ctx.prev_happened = turned;
             }
             Effect::TurnFaceDown { what } => {
                 let mut turned = Vec::new();
@@ -1382,9 +1392,18 @@ impl Game {
                 let mut drawn = Vec::new();
                 // CR 121.2c: the active player draws first, then the others in turn order.
                 let players = crate::draw_rules::draw_order(self, self.eval_players(who, ctx));
+                let n = players.len() as u32;
+                let total = |g: &Game| g.history.cards_drawn.values().sum::<u32>();
+                let before = total(self);
                 for p in players {
                     drawn.extend(self.draw_cards(p, k));
                 }
+                // "Draw four cards. When you do, ...": done only if at least that many cards
+                // were drawn (a draw from an empty library or a draw replaced by something
+                // else isn't one, CR 614.6, 603.12), counting cards drawn by replacement
+                // effects ("draw two cards instead"). See The Royal Scions rulings. ("You
+                // may draw ... If you do" is about the choice: see `Effect::May`.)
+                ctx.prev_happened = k > 0 && total(self).saturating_sub(before) >= k * n;
                 ctx.prev_value = drawn.len() as i64;
                 ctx.set_var(
                     vars::REVEALED,
@@ -1514,6 +1533,8 @@ impl Game {
                 restriction,
             } => {
                 crate::mana_abilities::resolve_add_mana(self, who, mana, restriction, ctx);
+                // "Add {R}. When you do, ..." (Rubble Rouser): adding mana is done.
+                ctx.prev_happened = true;
             }
             Effect::AddManaWithSpentTrigger {
                 add,
@@ -1561,7 +1582,11 @@ impl Game {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let players = self.eval_players(who, ctx);
                 let look = crate::scry_rules::Look::Scry;
-                crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                let looked = crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                ctx.set_var(
+                    crate::scry_rules::LOOKED_ON_TOP,
+                    looked.on_top.into_iter().map(Entity::Object).collect(),
+                );
                 // CR 701.22b, 701.22d: scrying N > 0 always happens ("When you do, ...").
                 ctx.prev_happened = k > 0 && !players.is_empty();
             }
@@ -1569,7 +1594,20 @@ impl Game {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let players = self.eval_players(who, ctx);
                 let look = crate::scry_rules::Look::Surveil;
-                crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                let looked = crate::scry_rules::perform(self, &players, k, look, ctx.source);
+                // "If you put a ... card into your graveyard this way" (CR 701.25a).
+                ctx.set_var(
+                    crate::scry_rules::SURVEILED_TO_GRAVEYARD,
+                    looked
+                        .to_graveyard
+                        .into_iter()
+                        .map(Entity::Object)
+                        .collect(),
+                );
+                ctx.set_var(
+                    crate::scry_rules::LOOKED_ON_TOP,
+                    looked.on_top.into_iter().map(Entity::Object).collect(),
+                );
                 // CR 701.25c-d: surveilling N > 0 always happens, even with fewer cards in
                 // the library ("When you do, ...").
                 ctx.prev_happened = k > 0 && !players.is_empty();
