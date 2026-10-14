@@ -406,3 +406,42 @@ fn target_artifact_that_opponent_controls_parapet_thrasher() {
     assert!(!t.on_battlefield(theirs));
     assert!(t.on_battlefield(other));
 }
+
+#[test]
+fn lesser_mana_value_than_the_triggering_spell_rashmi() {
+    compiles("Rashmi, Eternities Crafter");
+    for (top, cast) in [("Grizzly Bears", true), ("Craw Wurm", false)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Rashmi, Eternities Crafter");
+        t.library_top(P0, top);
+        t.lands(P0, "Forest", 3);
+        let giant = t.hand(P0, "Hill Giant"); // mana value 4
+        t.lands(P0, "Mountain", 1);
+        t.answer_yes(P0, true);
+        t.cast(P0, giant).go();
+        t.resolve_all();
+        if cast {
+            assert_eq!(t.named_on_battlefield(top).len(), 1, "{top}");
+        } else {
+            assert!(t.in_hand(P0, top), "{top}");
+        }
+    }
+}
+
+#[test]
+fn if_the_token_is_an_aura_yenna() {
+    compiles("Yenna, Redtooth Regent");
+    let mut t = TestGame::new(2);
+    let yenna = t.battlefield(P0, "Yenna, Redtooth Regent");
+    t.lands(P0, "Forest", 2);
+    let anthem = t.battlefield(P0, "Glorious Anthem");
+    t.activate(P0, yenna, 0, &[Entity::Object(anthem)]).unwrap();
+    t.resolve();
+    // A copy of a non-Aura enchantment: Yenna stays tapped.
+    assert_eq!(t.named_on_battlefield("Glorious Anthem").len(), 2);
+    assert!(t.obj_now(yenna).tapped);
+    // Now each Glorious Anthem has the same name as another permanent: no legal target.
+    t.g.objects[yenna.0 as usize].tapped = false;
+    t.lands(P0, "Forest", 2);
+    assert!(t.activate(P0, yenna, 0, &[Entity::Object(anthem)]).is_err());
+}

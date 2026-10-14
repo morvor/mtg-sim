@@ -117,6 +117,40 @@ pub fn referent_rewording(c: &str) -> Option<String> {
     None
 }
 
+/// "Whenever you cast your first spell each turn, reveal the top card of your library.
+/// You may cast it without paying its mana cost if it's a spell with lesser mana value."
+/// (Rashmi, Eternities Crafter): lesser than the spell that triggered the ability (the
+/// card is checked as the spell it would be, as `conditional_followups` reads it). Read
+/// before the referent grammar, whose implicit comparison would be with "it" itself.
+pub fn lesser_than_triggering_spell(c: &str, b: &Builder) -> Option<Condition> {
+    let c = end(c.trim());
+    // "Whenever you cast your first spell each turn, reveal the top card of your library.
+    // You may cast it without paying its mana cost if it's a spell with lesser mana
+    // value." (Rashmi): lesser than the spell that triggered the ability (the card is
+    // checked as the spell it would be, as `conditional_followups` reads it).
+    for (p, cmp) in [
+        ("it's a card with lesser mana value", Cmp::Lt),
+        ("it's a spell with lesser mana value", Cmp::Lt),
+        ("it's a card with greater mana value", Cmp::Gt),
+        ("it's a spell with greater mana value", Cmp::Gt),
+    ] {
+        if c == p
+            && crate::oracle::raw_text()
+                .to_lowercase()
+                .starts_with("whenever you cast ")
+            && !matches!(b.it, Sel::This | Sel::TriggerSpell)
+            && !is_no_referent(&b.it)
+        {
+            return Some(Condition::Compare(
+                Value::ManaValueOf(Box::new(b.it.clone())),
+                cmp,
+                Value::ManaValueOf(Box::new(Sel::TriggerSpell)),
+            ));
+        }
+    }
+    None
+}
+
 /// [`parse_with`] when it adds no targets (conditions of the referent grammar,
 /// `conditions_referents::parse_condition_with`, never add targets).
 pub fn parse_without_targets(c: &str, b: &mut Builder) -> Option<Condition> {
@@ -235,6 +269,13 @@ fn parse_inner(c: &str, b: &mut Builder) -> Option<Condition> {
             let f = super::filters_relational::resolve_referent(f, b)?;
             return Some(Condition::Exists(f.you_control()));
         }
+    }
+    // "If the token is an Aura, ..." (the token an earlier instruction created).
+    if let Some(r) = c.strip_prefix("the token is ") {
+        return Some(Condition::SelMatches(
+            Sel::Var(vars::CREATED),
+            state_filter(r)?,
+        ));
     }
     if let Some(cond) = different_values_this_way(c, b) {
         return Some(cond);

@@ -53,7 +53,8 @@ pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
         );
         (!d.contains(&needle)).then_some(r)
     };
-    let r = understood(referent_condition(c, b))
+    let r = super::conditions_compare::lesser_than_triggering_spell(c, b)
+        .or_else(|| understood(referent_condition(c, b)))
         .or_else(|| understood(joined(c, b)))
         .or_else(|| understood(referent_free(c, b)))
         .or_else(|| understood(super::conditions_compare::parse_without_targets(c, b)))
