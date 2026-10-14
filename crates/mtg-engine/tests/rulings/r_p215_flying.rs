@@ -244,7 +244,6 @@ fn starry_eyed_skyrider_leaving_lets_tokens_be_blocked() {
     t.resolve_all();
     assert!(flies(&mut t, token));
     assert!(!legal_blocks(&mut t, P1, &[(bears, token)]));
-    let _ = sky;
     destroy(&mut t, sky);
     assert!(!flies(&mut t, token));
     assert!(legal_blocks(&mut t, P1, &[(bears, token)]));
