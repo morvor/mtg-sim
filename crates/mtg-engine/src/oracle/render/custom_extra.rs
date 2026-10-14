@@ -636,3 +636,53 @@ fn paid_any_number_of_times(e: &Effect) -> Option<&Cost> {
     let stops = matches!(otherwise.as_ref(), Effect::StoreValue { var, value: Value::Const(1) } if var == stop);
     (counts && stops).then_some(cost)
 }
+
+impl Renderer<'_> {
+    /// A static permission to play only one of the cards it's for (`PlayTerms::limit` of
+    /// one): "you may play a card exiled with ~", "you may cast a creature spell from your
+    /// graveyard", "without paying its mana cost".
+    pub(crate) fn one_play_permission(&mut self, pp: &PlayPermission) -> Option<String> {
+        let t = &pp.terms;
+        if t.limit != Some(1) || t.what.is_some() || t.until_another || t.later_turn {
+            return None;
+        }
+        let mut q = pp.clone();
+        q.terms.limit = None;
+        let s = self.play_permission(&q);
+        let s = s.replace(
+            " without paying their mana costs",
+            " without paying its mana cost",
+        );
+        let (head, rest) = ["may play ", "may cast "]
+            .iter()
+            .find_map(|v| s.find(v).map(|i| (i + v.len(), ())))
+            .map(|(i, _)| (s[..i].to_string(), s[i..].to_string()))?;
+        // "{alt:spells exiled with ~|spells from among cards exiled with ~}".
+        if let Some(r) = rest.strip_prefix("{alt:spells exiled with ") {
+            let r = r.replacen("|spells from among", "|a spell from among", 1);
+            return Some(format!("{head}{{alt:a spell exiled with {r}"));
+        }
+        let end = [" from ", " exiled with ", " without ", " {", " until ", " this turn"]
+            .iter()
+            .filter_map(|m| rest.find(m))
+            .min()
+            .unwrap_or(rest.len());
+        let (noun, tail) = rest.split_at(end);
+        let one = with_article(&singular(noun));
+        // "a creature spell exiled with ~" is one "from among cards exiled with ~".
+        if let Some(w) = tail.strip_prefix(" exiled with ") {
+            if one.ends_with(" spell") {
+                let (who, after) = w.split_once(' ').unwrap_or((w, ""));
+                let after = if after.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {after}")
+                };
+                return Some(format!(
+                    "{head}{{alt:{one} exiled with {who}|{one} from among cards exiled with {who}}}{after}"
+                ));
+            }
+        }
+        Some(format!("{head}{one}{tail}"))
+    }
+}

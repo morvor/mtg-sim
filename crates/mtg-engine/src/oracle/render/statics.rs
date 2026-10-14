@@ -889,7 +889,10 @@ impl Renderer<'_> {
         }
     }
 
-    fn play_permission(&mut self, pp: &PlayPermission) -> String {
+    pub(crate) fn play_permission(&mut self, pp: &PlayPermission) -> String {
+        if let Some(s) = self.one_play_permission(pp) {
+            return s;
+        }
         let who = self.rel_subject(pp.who);
         let p = if who == "you" { "your" } else { "their" };
         // A spell isn't a land, and it's the card that's cast (CR 305.9): "nonland" and
