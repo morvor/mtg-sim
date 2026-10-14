@@ -775,7 +775,7 @@ pub fn history_condition(c: &str) -> Option<Condition> {
     clause_or_joined(&body, &w)
 }
 
-inventory::submit! { super::ConditionPattern { name: "history: [subject] [past verb] [objects] this turn", priority: 50, parse: history_condition } }
+inventory::submit! { super::ConditionPattern { name: "history: [subject] [past verb] [objects] this turn", priority: 900, parse: history_condition } }
 
 /// A history clause about a referent: "it attacked or blocked this turn", "that creature
 /// entered this turn", "equipped creature didn't deal combat damage to a creature this
@@ -784,7 +784,11 @@ inventory::submit! { super::ConditionPattern { name: "history: [subject] [past v
 /// 400.7).
 pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Option<Condition> {
     let c = end(c);
-    if let Some(cond) = cast_condition(c, b) {
+    if let Some(cond) = cast_condition(c, b)
+        .or_else(|| phase_condition(c))
+        .or_else(|| resolved_ordinal(c))
+        .or_else(|| nth_spell(c, b))
+    {
         return Some(cond);
     }
     if c.contains('~') || split_window(c).is_none() {
@@ -909,10 +913,7 @@ fn whose(word: &str, b: Option<&mut Builder>) -> Option<Whose> {
     {
         return Some(Whose::TriggerSpell);
     }
-    if word == "that spell" {
-        return None;
-    }
-    if word == "that creature" {
+    if word == "that creature" || word == "that spell" {
         let before = b.targets.len();
         let (sel, rest) = crate::oracle::effects::object_ref(word, b)?;
         if b.targets.len() != before || !rest.trim().is_empty() {
@@ -1071,7 +1072,22 @@ fn payment_whose(r: &str, b: &mut Option<&mut Builder>) -> Option<(&'static str,
     match whose(word, b.as_deref_mut())? {
         Whose::Own => Some(("self", Whose::Own)),
         Whose::TriggerSpell => Some(("that spell", Whose::TriggerSpell)),
+        // A target spell ("Counter target spell if no mana was spent to cast it").
+        Whose::Obj(Sel::Target(i)) => Some((
+            ["target 0", "target 1", "target 2"].get(i as usize)?,
+            Whose::Obj(Sel::Target(i)),
+        )),
         Whose::Obj(_) => None,
+    }
+}
+
+/// An amount of the mana spent on a spell or ability (the existing values for the total
+/// spent on the source's own spell and on the triggering spell).
+fn spent_value(key: &str, what: &str) -> Value {
+    match (key, what) {
+        ("self", "total") => Value::ManaSpent,
+        ("that spell", "total") => Value::Custom(crate::kw::opus::MANA_SPENT_ON_THAT_SPELL.into()),
+        _ => Value::Custom(ch::spent(key, what).into()),
     }
 }
 
@@ -1097,15 +1113,14 @@ fn mana_spent(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
             let sel = match w {
                 Whose::Own => Sel::This,
                 Whose::TriggerSpell => Sel::TriggerSpell,
-                Whose::Obj(_) => return None,
+                Whose::Obj(sel) => sel,
             };
             let other = match y {
                 "its mana value" | "that spell's mana value" => Value::ManaValueOf(Box::new(sel)),
                 "~'s power" => Value::PowerOf(Box::new(Sel::This)),
                 _ => return None,
             };
-            let spent = Value::Custom(ch::spent(key, "total").into());
-            return Some(Condition::Compare(spent, cmp, other));
+            return Some(Condition::Compare(spent_value(key, "total"), cmp, other));
         }
         return None;
     }
@@ -1129,7 +1144,7 @@ fn mana_spent(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
     if neg {
         return None;
     }
-    let v = |what: &str| Value::Custom(ch::spent(key, what).into());
+    let v = |what: &str| spent_value(key, what);
     let cmp = |what: &str, cmp: Cmp, n: i32| Condition::Compare(v(what), cmp, Value::Const(n));
     let cond = match amount {
         "no mana" => cmp("total", Cmp::Eq, 0),
@@ -1160,13 +1175,174 @@ fn cast_condition_free(c: &str) -> Option<Condition> {
     cast_status(c, None).or_else(|| mana_spent(c, None))
 }
 
-inventory::submit! { super::ConditionPattern { name: "history: how ~ was cast and paid for", priority: 60, parse: cast_condition_free } }
+inventory::submit! { super::ConditionPattern { name: "history: how ~ was cast and paid for", priority: 900, parse: cast_condition_free } }
 
 /// Cast-status and mana-spent conditions about a referent ("if it was cast", "if he was
 /// kicked", "if no mana was spent to cast it" in a cast trigger).
 pub fn cast_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     let c = end(c);
     cast_status(c, Some(b)).or_else(|| mana_spent(c, Some(b)))
+}
+
+// ---------------------------------------------------------------------------
+// Ordinals and totals: "the first combat phase", "the second creature spell you cast
+// this turn", "the second time this ability has resolved", "total power 6 or greater"
+// ---------------------------------------------------------------------------
+
+/// "first", "second", ... as a number.
+fn ordinal(w: &str) -> Option<i32> {
+    Some(match w {
+        "first" => 1,
+        "second" => 2,
+        "third" => 3,
+        "fourth" => 4,
+        "fifth" => 5,
+        _ => return None,
+    })
+}
+
+/// "it's the first combat phase of the turn" (CR 506.1: a turn may have several), "of
+/// your turn".
+fn phase_condition(c: &str) -> Option<Condition> {
+    let first = || Condition::Custom(crate::kw::activated_ability_kind::FIRST_COMBAT_PHASE.into());
+    match c {
+        "it's the first combat phase of the turn" => Some(first()),
+        "it's the first combat phase of your turn" => {
+            Some(Condition::And(vec![Condition::YourTurn, first()]))
+        }
+        _ => None,
+    }
+}
+
+/// "this ability has been activated four or more times this turn" (in the ability's own
+/// effect; the activation being resolved counts).
+fn activated_times(c: &str) -> Option<Condition> {
+    let r = c.strip_prefix("this ability has been activated ")?;
+    let (n, r) = parse_number(r)?;
+    let cmp = match r.trim() {
+        "or more times this turn" => Cmp::Ge,
+        "times this turn" => Cmp::Eq,
+        _ => return None,
+    };
+    Some(Condition::Compare(
+        Value::Custom(ch::TIMES_ACTIVATED.into()),
+        cmp,
+        n,
+    ))
+}
+
+/// "this is the first or second time this ability has resolved this turn" (the count
+/// includes this resolution); "it's the second time" after such a condition earlier in the
+/// ability ("..., if this is the first time this ability has resolved this turn. If it's
+/// the second time, ...").
+fn resolved_ordinal(c: &str) -> Option<Condition> {
+    let times = |n: i32, cmp: Cmp| Condition::Compare(Value::TimesResolvedThisTurn, cmp, Value::c(n));
+    if let Some(r) = c.strip_prefix("this is the ") {
+        let r = r.strip_suffix(" time this ability has resolved this turn")?;
+        let (a, b) = r.split_once(" or ")?;
+        let (a, b) = (ordinal(a)?, ordinal(b)?);
+        if a != 1 || b != 2 {
+            return None;
+        }
+        return Some(times(2, Cmp::Le));
+    }
+    let r = c.strip_prefix("it's the ")?.strip_suffix(" time")?;
+    let n = ordinal(r)?;
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("time this ability has resolved this turn") {
+        return None;
+    }
+    Some(times(n, Cmp::Eq))
+}
+
+/// "you attacked with creatures with total power 6 or greater this combat" (pack tactics):
+/// the creatures you attacked with, each with its power now (or as it last existed).
+fn attacked_total_power(c: &str) -> Option<Condition> {
+    let (body, w) = split_window(c)?;
+    let r = body.strip_prefix("you attacked with ")?;
+    let (np, n) = r.split_once(" with total power ")?;
+    let (n, rest) = parse_number(n)?;
+    if rest.trim() != "or greater" {
+        return None;
+    }
+    let (f, true, tail) = parse_object_phrase(np)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let cond = TriggerCond::Attacks(Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]));
+    let sel = match w {
+        None => Sel::ThisTurn(Box::new(cond)),
+        Some(w) => Sel::EventsDuring(w, Box::new(cond)),
+    };
+    Some(Condition::Compare(
+        Value::Aggregate(AggOp::Sum, Stat::Power, Box::new(sel)),
+        Cmp::Ge,
+        n,
+    ))
+}
+
+/// Ordinals and totals without referents.
+fn ordinal_condition(c: &str) -> Option<Condition> {
+    let c = end(c);
+    phase_condition(c)
+        .or_else(|| activated_times(c))
+        .or_else(|| attacked_total_power(c))
+        .or_else(|| {
+            if c.starts_with("this is the ") {
+                resolved_ordinal(c)
+            } else {
+                None
+            }
+        })
+}
+
+inventory::submit! { super::ConditionPattern { name: "history: ordinals and totals this turn", priority: 900, parse: ordinal_condition } }
+
+/// "it's the second creature spell you cast this turn", "it was the second spell you cast
+/// this turn": the spell (the triggering spell, or the source's own) is the Nth matching
+/// spell its controller cast this turn, counting the ones cast up to it.
+fn nth_spell(c: &str, b: &mut Builder) -> Option<Condition> {
+    let r = c
+        .strip_prefix("it's the ")
+        .or_else(|| c.strip_prefix("it was the "))?;
+    let (w, r) = split_word(r);
+    let n = ordinal(w)?;
+    let np = r
+        .strip_suffix(" you cast this turn")
+        .or_else(|| r.strip_suffix(" you've cast this turn"))?;
+    let (f, false, tail) = parse_object_phrase(np)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let (key, subject) = match whose("it", Some(b))? {
+        Whose::Own => ("self", None),
+        Whose::TriggerSpell => ("that spell", Some(Sel::TriggerSpell)),
+        Whose::Obj(_) => return None,
+    };
+    let plain_spell = matches!(f, Filter::Spell);
+    let count = Condition::Compare(
+        Value::EventsThisTurn(
+            Box::new(TriggerCond::CastSpell {
+                who: PlayerRel::You,
+                filter: Filter::and(vec![
+                    f.clone(),
+                    Filter::Custom(format!("{}{key}", ch::CAST_BY_THEN).into()),
+                ]),
+            }),
+            Tally::Events,
+        ),
+        Cmp::Eq,
+        Value::c(n),
+    );
+    Some(match subject {
+        Some(sel) if !plain_spell => Condition::And(vec![Condition::SelMatches(sel, f), count]),
+        _ if !plain_spell => return None,
+        _ => count,
+    })
 }
 
 #[cfg(test)]

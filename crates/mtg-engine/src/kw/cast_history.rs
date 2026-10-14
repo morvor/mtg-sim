@@ -29,6 +29,14 @@ pub const WAS_CAST: &str = "cast history:was cast";
 pub const CAST_FROM: &str = "cast history:cast from:";
 /// `Filter::Custom`: the object was kicked (CR 702.33).
 pub const KICKED: &str = "cast history:kicked";
+/// `Value::Custom`: how many times the ability being resolved has been activated this
+/// turn, this activation included ("if this ability has been activated four or more times
+/// this turn").
+pub const TIMES_ACTIVATED: &str = "cast history:times this ability was activated this turn";
+/// `Filter::Custom` prefix: a spell cast this turn no later than the spell `whose` names
+/// (`self` or `that spell`): "if it's the second creature spell you cast this turn" counts
+/// the creature spells cast up to it.
+pub const CAST_BY_THEN: &str = "cast history:cast no later than:";
 /// `Value::Custom` prefix: an amount of the mana spent on a spell or ability:
 /// `cast history:spent:<whose>:<what>`, `whose` being `self`, `that spell` or `this
 /// ability`, `what` being `total`, `colored`, `colors` (how many colors), `type:<C>` (one
@@ -79,6 +87,14 @@ fn payment<'a>(g: &'a Game, whose: &str, ctx: &'a Ctx) -> Option<&'a CastInfo> {
         "that spell" => {
             let spell = ctx.event.as_ref().and_then(|e| e.spell)?;
             object_cast(g, spell).filter(|c| c.was_cast)
+        }
+        w if w.starts_with("target ") => {
+            let slot: usize = w["target ".len()..].parse().ok()?;
+            let id = ctx.targets.get(slot)?.iter().find_map(|e| match e {
+                Entity::Object(o) => Some(*o),
+                _ => None,
+            })?;
+            object_cast(g, id).filter(|c| c.was_cast)
         }
         "this ability" => {
             let a = ctx.stack_obj?;
@@ -133,12 +149,37 @@ impl KeywordRules for CastHistory {
     }
 
     fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name == TIMES_ACTIVATED {
+            let n = ctx.source.and_then(|s| {
+                g.obj(s)
+                    .activations_this_turn
+                    .get(&ctx.ability_uid)
+                    .copied()
+            });
+            return Some(n.unwrap_or(0) as i64);
+        }
         let r = name.strip_prefix(SPENT)?;
         let (whose, what) = r.split_once(':')?;
         Some(payment(g, whose, ctx).map_or(0, |c| amount(g, c, what).unwrap_or(0)))
     }
 
-    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if let Some(whose) = name.strip_prefix(CAST_BY_THEN) {
+            let order = &g.history.spells_cast;
+            let pos = |o: ObjectId| order.iter().position(|(_, s)| *s == o);
+            // The source's own spell: the source, or the spell it was (CR 400.7).
+            let then = match whose {
+                "self" => ctx
+                    .source
+                    .and_then(|s| pos(s).or_else(|| g.obj(s).prev.and_then(pos))),
+                "that spell" => ctx.event.as_ref().and_then(|e| e.spell).and_then(pos),
+                _ => None,
+            };
+            return Some(match (then, pos(id)) {
+                (Some(then), Some(i)) => i <= then,
+                _ => false,
+            });
+        }
         let cast = object_cast(g, id).filter(|c| c.was_cast);
         if name == WAS_CAST {
             return Some(cast.is_some());
