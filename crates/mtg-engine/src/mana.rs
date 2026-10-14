@@ -403,6 +403,24 @@ pub enum ManaRestriction {
     /// "This mana can't be spent to cast spells from your hand.": it can pay for anything
     /// except casting a spell matching the filter.
     NotCastSpell(SpendFilter),
+    /// "Spend this mana only to pay cumulative upkeep costs", "... to activate equip
+    /// abilities", "... to foretell cards", "... to unlock doors": the cost being paid is
+    /// for that purpose ([`SpendContext::purpose`]).
+    Purpose(SpendPurpose),
+    /// "... or pay a cost that contains {C}": the mana cost being paid has a {C} symbol.
+    CostWithColorless,
+}
+
+/// What a cost is paid for, beyond casting a spell or activating an ability, for spending
+/// restrictions (CR 106.6).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub enum SpendPurpose {
+    /// The cost of a keyword ability: activating an equip or power-up ability, the
+    /// cumulative upkeep cost paid as that triggered ability resolves, the foretell
+    /// special action (CR 702.143a).
+    Keyword(crate::keywords::KeywordKind),
+    /// Unlocking a door of a Room (CR 709.5e).
+    UnlockDoor,
 }
 
 /// A filter inside a [`ManaRestriction`], compared structurally.
@@ -472,6 +490,13 @@ pub struct SpendContext {
     /// activated before the costs are paid (CR 601.2g-h, 602.2b; Heart Warden's "{T}: Add
     /// {G}" helps pay its "{2}, Sacrifice this creature").
     pub reserve_may_tap: bool,
+    /// What the cost is paid for beyond casting or activating ([`SpendPurpose`]).
+    pub purpose: Option<SpendPurpose>,
+    /// The mana cost being paid contains {C} ("pay a cost that contains {C}").
+    pub cost_has_colorless: bool,
+    /// "Spend only mana produced by basic lands to cast ~": only mana whose source matches
+    /// the filter may pay (see `payment_rules`).
+    pub only_from: Option<SpendFilter>,
 }
 
 /// The part of a cost's generic mana that X represents, which only mana of `colors` may pay
@@ -520,6 +545,8 @@ impl ManaRestriction {
             // Filters need the game: see `allows_in`.
             ManaRestriction::CastSpell(_) | ManaRestriction::ActivateAbilityOf(_) => false,
             ManaRestriction::NotCastSpell(_) => !ctx.is_spell,
+            ManaRestriction::Purpose(p) => ctx.purpose == Some(*p),
+            ManaRestriction::CostWithColorless => ctx.cost_has_colorless,
         }
     }
 
@@ -637,6 +664,14 @@ impl Mana {
         payer: crate::types::PlayerId,
         ctx: &SpendContext,
     ) -> bool {
+        // "Spend only mana produced by creatures to cast ~": the source as it last existed.
+        if let Some(f) = &ctx.only_from {
+            if !self.source.is_some_and(|s| {
+                g.try_obj(s).is_some() && g.matches(s, &f.0, &crate::eval::Ctx::new(Some(s), payer))
+            }) {
+                return false;
+            }
+        }
         self.restriction
             .as_ref()
             .is_none_or(|r| r.allows_in(g, payer, self.source, ctx))

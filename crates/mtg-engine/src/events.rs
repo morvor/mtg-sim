@@ -37,6 +37,9 @@ pub enum MoveCause {
     /// into the dungeon keyword action (CR 309.2a, 701.49): the only way a dungeon card
     /// can be brought into the game (CR 309.2d).
     Venture,
+    /// Exiled by the rules because a player left the game (CR 800.4a, 800.4c) — which
+    /// exiles phased-out permanents too (CR 702.26n).
+    PlayerLeft,
     Other,
 }
 

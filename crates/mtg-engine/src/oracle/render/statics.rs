@@ -1117,6 +1117,11 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn cost_modifier(&mut self, cm: &CostModifier) -> String {
+        if let (CostTarget::Abilities(Filter::Source), CostChange::SpendAnyType) =
+            (&cm.applies_to, &cm.change)
+        {
+            return "mana of any type can be spent to activate ~'s abilities".into();
+        }
         // "The first creature spell you cast each turn costs {2} less to cast."
         let first = match &cm.applies_to {
             CostTarget::Spells(f) => Self::first_each_turn(f),
@@ -1212,6 +1217,21 @@ impl Renderer<'_> {
             CostChange::SpendAnyType => {
                 let t = target.clone();
                 format!("you can spend mana of any type to cast {t}")
+            }
+            // "Spend only mana produced by basic lands to cast ~" (the permanents on the
+            // battlefield that produced it).
+            CostChange::Rule(CostRule::OnlyManaFrom(f)) => {
+                let f = match &*f.0 {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::InZone(ZoneKind::Battlefield)))
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let n = self.noun(&f, Num::Many);
+                format!("spend only mana produced by {n} to cast ~")
             }
             CostChange::Rule(r) => cost_rule_text(r),
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
@@ -3405,6 +3425,25 @@ impl Renderer<'_> {
                         };
                         format!("{once}you may {pay}{verb} the result of {die} {rolled} by {n}")
                     }
+                    // "After you roll a die, you may pay 1 life. If you do, increase or
+                    // decrease the result by 1. Do this only once each turn."
+                    (None, crate::dice::ModifierKind::AddOrSubtract(n)) => {
+                        let roll = match m.whose {
+                            PlayerRel::You => "you roll",
+                            _ => "any player rolls",
+                        };
+                        let once = if m.once_per_turn {
+                            ". Do this only once each turn"
+                        } else {
+                            ""
+                        };
+                        if free {
+                            format!("after {roll} {die}, you may increase or decrease the result by {n}{once}")
+                        } else {
+                            let pay = self.cost_as_payment(&m.cost);
+                            format!("after {roll} {die}, you may {pay}. If you do, increase or decrease the result by {n}{once}")
+                        }
+                    }
                 }
             }
         }
@@ -3441,6 +3480,10 @@ pub(crate) fn cost_rule_text(r: &CostRule) -> String {
             s
         }
         CostRule::NoMana => "you can't spend mana to cast ~".into(),
+        CostRule::OnlyManaFrom(_) => "spend only mana produced by permanents to cast ~".into(),
+        CostRule::OnlyChosenColor => {
+            "spend only mana of the chosen color to activate this ability".into()
+        }
     }
 }
 

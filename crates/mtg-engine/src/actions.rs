@@ -315,6 +315,10 @@ impl Game {
                 }
             }
         }
+        // CR 702.26b: a phased-out permanent can't be affected by anything.
+        if crate::kw::phasing::move_forbidden(self, mv) {
+            return true;
+        }
         // CR 400.4b, 407.3, 407.4: the command zone and the ante zone; CR 309.2c, 315.3:
         // dungeon and conspiracy cards.
         crate::zones::move_forbidden(self, mv) || crate::variants::stays_in_command_zone(self, mv)
