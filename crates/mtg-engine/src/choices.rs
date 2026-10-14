@@ -211,6 +211,52 @@ pub fn filter_mentions_choice(f: &crate::ability::Filter) -> bool {
     }
 }
 
+/// Whether a filter refers to a choice that is undefined for its source (no such choice
+/// was made, CR 607.5a).
+pub fn filter_refers_to_undefined_choice(
+    f: &crate::ability::Filter,
+    ch: Option<&crate::object::Choices>,
+) -> bool {
+    use crate::ability::Filter;
+    match f {
+        Filter::ChosenColor => ch.and_then(|c| c.color).is_none(),
+        Filter::ChosenType => ch.is_none_or(|c| {
+            c.creature_type.is_none() && c.basic_land_type.is_none() && c.card_type.is_none()
+        }),
+        Filter::ChosenName => ch
+            .and_then(|c| c.card_name.as_ref())
+            .is_none_or(|n| n.is_empty()),
+        Filter::ChosenCardType => ch.and_then(|c| c.card_type).is_none(),
+        Filter::ManaValue(_, v) | Filter::Power(_, v) | Filter::Toughness(_, v)
+            if matches!(**v, crate::ability::Value::Chosen) =>
+        {
+            ch.and_then(|c| c.number).is_none()
+        }
+        Filter::And(v) | Filter::Or(v) => {
+            v.iter().any(|x| filter_refers_to_undefined_choice(x, ch))
+        }
+        Filter::Not(x) => filter_refers_to_undefined_choice(x, ch),
+        _ => false,
+    }
+}
+
+/// Whether a condition ("you control no permanents of the chosen color") refers to a
+/// choice that is undefined for its source (CR 607.5a).
+pub fn condition_refers_to_undefined_choice(
+    c: &crate::ability::Condition,
+    ch: Option<&crate::object::Choices>,
+) -> bool {
+    use crate::ability::Condition;
+    match c {
+        Condition::Exists(f) => filter_refers_to_undefined_choice(f, ch),
+        Condition::Not(x) => condition_refers_to_undefined_choice(x, ch),
+        Condition::And(v) | Condition::Or(v) => v
+            .iter()
+            .any(|x| condition_refers_to_undefined_choice(x, ch)),
+        _ => false,
+    }
+}
+
 /// Replaces references to chosen values with the values chosen for a particular object,
 /// for abilities granted to other objects (CR 607.2d). An undefined choice matches
 /// nothing (CR 607.5a).

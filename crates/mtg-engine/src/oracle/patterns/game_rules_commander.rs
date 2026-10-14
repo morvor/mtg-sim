@@ -245,7 +245,9 @@ inventory::submit! { super::StaticPattern { name: "game rules: that target one o
 
 /// "Your commander costs {1} less to cast for each time it's been cast from the command
 /// zone this game." (Myth Unbound): a cost reduction for commanders you own (CR 601.2f),
-/// counting each commander's own casts (CR 903.8).
+/// counting each commander's own casts (CR 903.8). It applies whoever casts it: "If another
+/// player is somehow able to cast your commander, Myth Unbound's first ability applies to
+/// that player's spell" (ruling).
 fn commander_costs_less(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let r = end(l).strip_prefix("your commander costs {")?;
     let (n, r) = r.split_once('}')?;
@@ -258,7 +260,7 @@ fn commander_costs_less(l: &str, text: &str, _ctx: &CompileContext) -> Option<Ve
             Filter::Commander,
             Filter::OwnedBy(PlayerRel::You),
         ])),
-        who: PlayerRel::You,
+        who: PlayerRel::Any,
         change: CostChange::ReduceGeneric(Value::Mul(
             Box::new(Value::c(n)),
             Box::new(Value::Custom(crate::kw::game_rules::TIMES_IT_WAS_CAST.into())),

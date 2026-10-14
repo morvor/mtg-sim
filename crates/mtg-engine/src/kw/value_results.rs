@@ -21,7 +21,12 @@ pub const DESTROYED: crate::ability::Var = crate::ability::vars::USER + 7520;
 pub fn events_this_turn(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -> i64 {
     let mut n = 0i64;
     let mut players = BTreeSet::new();
-    for ev in g.turn_events.iter().chain(g.events.iter()) {
+    // Excess damage dealt along with the damage being looked at (CR 120.10).
+    let ahead = match cond {
+        TriggerCond::DealtExcessDamage { .. } => g.excess_ahead.as_slice(),
+        _ => &[],
+    };
+    for ev in g.turn_events.iter().chain(g.events.iter()).chain(ahead) {
         for info in g.trigger_matches_ctx(cond, ctx, ev) {
             match tally {
                 Tally::Events => n += 1,

@@ -193,7 +193,13 @@ fn trailing_if(l: &str, b: &mut Builder) -> Option<Effect> {
     // Where "it" is the ability's source ("Whenever ~ attacks, you win the game if there
     // are twenty or more counters on it"), so is the condition's "it".
     let about_source;
-    let c = if matches!(b.it, Sel::This) && !pronoun_free(c) && exiled_card.is_none() {
+    // Not when the instruction names a target, which "it" may be ("you may exile target
+    // creature if it attacked or blocked this turn").
+    let c = if matches!(b.it, Sel::This)
+        && !pronoun_free(c)
+        && exiled_card.is_none()
+        && !x.contains("target ")
+    {
         about_source = c
             .split(' ')
             .map(|w| if w == "it" { "~" } else { w })

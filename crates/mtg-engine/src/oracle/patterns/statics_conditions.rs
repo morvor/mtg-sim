@@ -1027,6 +1027,13 @@ pub(crate) fn parse_static_condition(
         if let Some(cond) = object_state(r, &sel, contracted) {
             return Some((cond, Some(sel)));
         }
+        // What it did earlier: "if it attacked during your last turn".
+        if let Some(cond) = (!contracted)
+            .then(|| super::history_conditions::object_history(r, &sel))
+            .flatten()
+        {
+            return Some((cond, Some(sel)));
+        }
     }
     if let Some((cond, sel)) = stat_condition_sel(c, it) {
         return Some((cond, Some(sel)));
