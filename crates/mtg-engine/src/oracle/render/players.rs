@@ -939,7 +939,7 @@ impl Renderer<'_> {
                         let v = self.value(other);
                         // "a number of cards from the top of your library equal to the
                         // number of ...": the same cards, the number said after them.
-                        if v.contains(' ') {
+                        if !matches!(other, Value::X | Value::Var(_)) {
                             format!("a number of cards from the top of {p} library equal to {v}")
                         } else {
                             format!("the top {v} cards of {p} library")

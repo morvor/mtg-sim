@@ -146,13 +146,11 @@ impl Renderer<'_> {
             let (name, owner) = history_atoms(f)?;
             preds.push(history_predicate(name, owner)?.0);
         }
-        let s = self.sel(sel?, Case::Obj);
-        let s = if s == "them" || s.contains("them") {
-            "them".to_string()
-        } else {
+        // "one or more of them": the objects the trigger event was about.
+        if !matches!(sel?, Sel::TriggerObjects) {
             return None;
-        };
-        Some(format!("one or more of {s} {}", join_list(&preds, "or")))
+        }
+        Some(format!("one or more of them {}", join_list(&preds, "or")))
     }
 
     /// "it entered from your library or was cast from your library": the object itself,

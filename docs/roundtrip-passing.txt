@@ -5330,6 +5330,7 @@ Dega Disciple
 Dega Sanctuary
 Degavolver
 Dehydration
+Deicide
 Deity of Scars
 Delay
 Delete
@@ -7597,6 +7598,7 @@ Fell Gravship
 Fell Horseman // Deathly Ride
 Fell Specter
 Fell Stinger
+Fell the Mighty
 Fell the Pheasant
 Fell the Profane // Fell Mire
 Felling Blow
@@ -9818,6 +9820,7 @@ Guardian of Ghirapur
 Guardian of New Benalia
 Guardian of Pilgrims
 Guardian of Solitude
+Guardian of Tazeem
 Guardian of Vitu-Ghazi
 Guardian of the Ages
 Guardian of the Forgotten
@@ -10453,6 +10456,7 @@ Hideous Laughter
 Hideous Taskmaster
 Hideous Visage
 Hidetsugu and Kairi
+Hidetsugu's Second Rite
 Hieroglyphic Illumination
 Hieromancer's Cage
 Hierophant Bio-Titan
@@ -10873,6 +10877,7 @@ Hystrodon
 Hythonia the Cruel
 I Am Iron Man
 Ian Chesterton
+Ian the Reckless
 Ib Halfheart, Goblin Tactician
 Icatian Crier
 Icatian Infantry
@@ -11385,6 +11390,7 @@ Invasion of Mercadia // Kyren Flamewright
 Invasion of Moag // Bloomwielder Dryads
 Invasion of Muraganda // Primordial Plasm
 Invasion of New Capenna // Holy Frazzle-Cannon
+Invasion of Pyrulea // Gargantuan Slabhorn
 Invasion of Segovia // Caetus, Sea Tyrant of Segovia
 Invasion of Shandalar // Leyline Surge
 Invasion of Theros // Ephara, Ever-Sheltering
@@ -13752,6 +13758,7 @@ Mascot Interception
 Mask of Avacyn
 Mask of Griselbrand
 Mask of Immolation
+Mask of Intolerance
 Mask of Law and Grace
 Mask of Memory
 Mask of Riddles
@@ -17086,7 +17093,9 @@ Pulsar Squadron Ace
 Pulsating Illusion
 Pulse Tracker
 Pulse of Murasa
+Pulse of the Dross
 Pulse of the Fields
+Pulse of the Forge
 Pulse of the Grid
 Pulse of the Tangle
 Pulsemage Advocate
@@ -19652,6 +19661,7 @@ Sentinel Sarah Lyons
 Sentinel Sliver
 Sentinel Spider
 Sentinel Totem
+Sentinel of Lost Lore
 Sentinel of the Eternal Watch
 Sentinel of the Nameless City
 Sentinel of the Pearl Trident
@@ -22802,6 +22812,7 @@ Tethered Griffin
 Tethered Skirge
 Tethermage's Advantage
 Tethmos High Priest
+Tetzin, Gnome Champion // The Golden-Gear Colossus
 Teval's Judgment
 Teval, Arbiter of Virtue
 Teval, the Balanced Scale
@@ -23437,6 +23448,7 @@ Timberpack Wolf
 Timberwatch Elf
 Time Beetle
 Time Lord Regeneration
+Time Reaper
 Time Reversal
 Time Sieve
 Time Spiral
@@ -25622,6 +25634,7 @@ Whispering Snitch
 Whispering Specter
 Whispering Wizard
 Whispers of Emrakul
+Whisperwood Elemental
 White Auracite
 White Dragon
 White Glove Gourmand

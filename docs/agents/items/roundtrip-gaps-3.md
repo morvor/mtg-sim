@@ -37,10 +37,8 @@ docs/ROUNDTRIP.md and docs/roundtrip-passing.txt; `roundtrip --check` must pass.
 
 ## Result
 
-26,145 of 29,374 fully supported cards passed at the start (ae5c399); 26,312 of 29,374
-pass on the branch before merging the later landings, 26,342 of 29,462 after (origin's
-passing list had 26,145 + the cards those landings made pass). 141 of the 152 cards in the
-taken clusters pass.
+26,145 of 29,374 fully supported cards passed at the start (ae5c399); 26,355 of 29,555 pass after merging the later landings (origin's passing list at that merge has 26,145 cards).
+141 of the 152 cards in the taken clusters pass.
 
 Renderer (new files `events_happened.rs`, `cast_history_terms.rs`, `opt_in.rs`,
 `next_time.rs`, `remembered_groups.rs`; small hooks elsewhere): comparisons of this

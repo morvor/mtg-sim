@@ -250,8 +250,9 @@ impl Renderer<'_> {
                 Value::Const(n) if *n > 0 => format!("pay {}", "{E}".repeat(*n as usize)),
                 other => {
                     let s = self.value(other);
-                    // "pay an amount of {E} equal to that creature's power".
-                    if s.contains(' ') {
+                    // "pay an amount of {E} equal to that creature's power" (a number
+                    // that isn't just X).
+                    if !matches!(other, Value::X | Value::Var(_)) {
                         format!("pay {{alt:{s} {{E}}|an amount of {{E}} equal to {s}}}")
                     } else {
                         format!("pay {s} {{E}}")
@@ -263,8 +264,9 @@ impl Renderer<'_> {
                 Value::Const(n) if *n > 0 => format!("pay {}", "{E}".repeat(*n as usize)),
                 other => {
                     let s = self.value(other);
-                    // "pay an amount of {E} equal to that creature's power".
-                    if s.contains(' ') {
+                    // "pay an amount of {E} equal to that creature's power" (a number
+                    // that isn't just X).
+                    if !matches!(other, Value::X | Value::Var(_)) {
                         format!("pay {{alt:{s} {{E}}|an amount of {{E}} equal to {s}}}")
                     } else {
                         format!("pay {s} {{E}}")
