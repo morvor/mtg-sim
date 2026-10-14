@@ -30,10 +30,7 @@ fn next_turn(t: &mut TestGame) {
 
 /// Runs a combat on P0's turn: `attackers` attack P1, who blocks with `blocks`.
 fn fight(t: &mut TestGame, attackers: &[ObjectId], blocks: &[(ObjectId, ObjectId)]) {
-    let a: Vec<(ObjectId, Entity)> = attackers
-        .iter()
-        .map(|a| (*a, Entity::Player(P1)))
-        .collect();
+    let a: Vec<(ObjectId, Entity)> = attackers.iter().map(|a| (*a, Entity::Player(P1))).collect();
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&a, blocks);
 }
@@ -158,7 +155,10 @@ fn keldon_champion_deals_3_to_a_player_or_planeswalker() {
     t.answer_targets(P0, &[obj(jace)]);
     etb(&mut t, P0, "Keldon Champion");
     assert_eq!(t.life(P1), 20);
-    assert!(!t.on_battlefield(jace), "3 loyalty removed from a 3-loyalty Jace");
+    assert!(
+        !t.on_battlefield(jace),
+        "3 loyalty removed from a 3-loyalty Jace"
+    );
 }
 
 #[test]
@@ -202,17 +202,15 @@ fn glistening_sphere_proliferates() {
     let mine = with_counters(&mut t, P0, "Grizzly Bears", "+1/+1", 1);
     let theirs = with_counters(&mut t, P1, "Grizzly Bears", "-1/-1", 1);
     let skip = with_counters(&mut t, P1, "Hill Giant", "+1/+1", 1);
-    t.g.players[P1.idx()]
-        .counters
-        .insert(types::counters::POISON.into(), 2);
-    t.answer_choose(
-        P0,
-        &[obj(mine), obj(theirs), Entity::Player(P1)],
-    );
+    t.g.add_counters(Entity::Player(P1), types::counters::POISON, 2, None);
+    t.answer_choose(P0, &[obj(mine), obj(theirs), Entity::Player(P1)]);
     let sphere = etb(&mut t, P0, "Glistening Sphere");
     assert!(t.obj_now(sphere).tapped);
     assert_eq!(t.counters(mine, "+1/+1"), 2);
-    assert!(!t.on_battlefield(theirs), "a 2/2 with two -1/-1 counters dies");
+    assert!(
+        !t.on_battlefield(theirs),
+        "a 2/2 with two -1/-1 counters dies"
+    );
     assert_eq!(t.counters(skip, "+1/+1"), 1, "not chosen");
     assert_eq!(t.g.player(P1).counter(types::counters::POISON), 3);
 }
@@ -250,7 +248,7 @@ fn stingscourger_bounces_a_creature_an_opponent_controls() {
 
 #[test]
 fn bespoke_bo_bounces_up_to_one_other_nonland_permanent() {
-    cr!("603.6a", "115.1", "601.2c");
+    cr!("603.6a", "115.1", "603.3d", "601.2c");
     // "When this Equipment enters, return up to one other target nonland permanent to its
     // owner's hand."
     supported("Bespoke Bō");
@@ -342,7 +340,7 @@ fn topplegeist_taps_a_creature_an_opponent_controls() {
 
 #[test]
 fn weftblade_enhancer_counters_up_to_two_creatures() {
-    cr!("603.6a", "601.2c", "122.6");
+    cr!("603.6a", "603.3d", "601.2c", "122.6");
     // "When this creature enters, put a +1/+1 counter on each of up to two target
     // creatures."
     supported("Weftblade Enhancer");
@@ -402,6 +400,15 @@ fn arashin_sunshield_exiles_up_to_two_cards_from_a_graveyard() {
     assert_eq!(t.zone(mine), Zone::Graveyard(P0));
     let offered = &target_choices(&t, P0)[0];
     assert!(offered.contains(&obj(mine)) && offered.contains(&obj(c)));
+    // "From a single graveyard": choosing cards from two graveyards keeps only those from
+    // the first one's graveyard.
+    let mut t = TestGame::new(2);
+    let a = t.graveyard(P1, "Grizzly Bears");
+    let mine = t.graveyard(P0, "Hill Giant");
+    t.answer_targets(P0, &[obj(a), obj(mine)]);
+    etb(&mut t, P0, "Arashin Sunshield");
+    assert_eq!(t.zone(a), Zone::Exile);
+    assert_eq!(t.zone(mine), Zone::Graveyard(P0));
 }
 
 // ---------------------------------------------------------------------------
@@ -513,7 +520,9 @@ fn deathbringer_thoctar_may_grow_when_another_creature_dies() {
     t.g.deal_damage_batch(vec![(bears, obj(th), 3), (th, obj(bears), 2)], false);
     t.resolve_all();
     assert!(!t.on_battlefield(th) && !t.on_battlefield(bears));
-    assert!(t.dump_log().contains("Resolving Deathbringer Thoctar ability"));
+    assert!(t
+        .dump_log()
+        .contains("Resolving Deathbringer Thoctar ability"));
     assert!(t.in_graveyard(P0, "Deathbringer Thoctar"));
 }
 
@@ -608,7 +617,11 @@ fn kemuri_onna_may_return_to_hand_on_a_spirit_or_arcane_spell() {
         }
         b.go();
         t.resolve_all();
-        let want = if returned { Zone::Hand(P0) } else { Zone::Battlefield };
+        let want = if returned {
+            Zone::Hand(P0)
+        } else {
+            Zone::Battlefield
+        };
         assert_eq!(t.zone(k), want, "{spell} cast by {caster:?}, yes: {yes}");
     }
 }
@@ -664,6 +677,21 @@ fn malachite_talisman_may_pay_3_to_untap_on_a_green_spell() {
     t.cast(P1, growth).target(theirs).go();
     t.resolve_all();
     assert!(t.obj_now(bears).tapped);
+    // Unable to pay {3}: answering yes does nothing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Malachite Talisman");
+    let wastes = t.lands(P0, "Wastes", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.tap(bears);
+    t.lands(P1, "Forest", 1);
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[obj(bears)]);
+    t.answer_yes(P0, true);
+    let growth = t.hand(P1, "Giant Growth");
+    t.cast(P1, growth).target(theirs).go();
+    t.resolve_all();
+    assert!(t.obj_now(bears).tapped, "couldn't pay");
+    assert!(wastes.iter().all(|w| !t.obj_now(*w).tapped), "nothing paid");
 }
 
 #[test]
@@ -722,6 +750,15 @@ fn brass_gnat_may_pay_1_to_untap_at_upkeep() {
         assert_eq!(t.obj_now(g).tapped, !pay, "pay: {pay}");
         assert_eq!(t.obj_now(w).tapped, pay);
     }
+    // Without mana to pay {1}, it stays tapped.
+    let mut t = TestGame::new(2);
+    let g = t.battlefield(P0, "Brass Gnat");
+    t.g.tap(g);
+    t.answer_yes(P0, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.obj_now(g).tapped, "couldn't pay");
 }
 
 #[test]
@@ -845,6 +882,19 @@ fn ethereal_investigator_makes_a_spirit_on_your_second_draw_each_turn() {
     t.resolve_all();
     assert_eq!(spirits(&t).len(), 1, "only the second card");
     assert_eq!(count_subtype(&t, P1, "Spirit"), 0);
+    // The count starts over each turn: P0's draw step is their first draw this turn, and
+    // drawing two at once draws them one at a time, so the second one triggers it.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.resolve_all();
+    assert_eq!(
+        spirits(&t).len(),
+        1,
+        "the draw step's card is the first this turn"
+    );
+    t.g.draw_cards(P0, 2);
+    t.resolve_all();
+    assert_eq!(spirits(&t).len(), 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -977,7 +1027,10 @@ fn inferno_elemental_deals_3_to_each_creature_it_blocks_or_is_blocked_by() {
     t.answer(P0, DecisionKind::Damage, Answer::Default);
     fight(&mut t, &[e], &[(a, e), (b, e)]);
     assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
-    assert!(t.on_battlefield(e), "the blockers died before dealing combat damage");
+    assert!(
+        t.on_battlefield(e),
+        "the blockers died before dealing combat damage"
+    );
     assert_eq!(t.obj_now(e).damage, 0);
     assert_eq!(t.obj_now(idle).damage, 0);
     // A blocker that survives the 3 damage is still dealt combat damage (and deals its
@@ -1100,7 +1153,11 @@ fn the_indomitable_draws_when_your_creature_deals_combat_damage_to_a_player() {
     let wall = t.battlefield(P1, "Wall of Wood");
     fight(&mut t, &[a, b, c], &[(wall, c)]);
     assert_eq!(t.life(P1), 16);
-    assert_eq!(t.hand_size(P0), 2, "one card per creature that dealt damage to P1");
+    assert_eq!(
+        t.hand_size(P0),
+        2,
+        "one card per creature that dealt damage to P1"
+    );
     assert_eq!(t.hand_size(P1), 0);
     // An opponent's creature hitting P0 doesn't trigger it.
     let gob = t.battlefield(P1, "Raging Goblin");
@@ -1112,7 +1169,7 @@ fn the_indomitable_draws_when_your_creature_deals_combat_damage_to_a_player() {
 
 #[test]
 fn ingenious_infiltrator_draws_when_a_ninja_you_control_deals_combat_damage() {
-    cr!("510.2", "603.2", "603.10a");
+    cr!("510.2", "603.2", "603.10");
     ruling!(
         "Ingenious Infiltrator",
         "If Ingenious Infiltrator is dealt lethal combat damage at the same time a Ninja you control deals combat damage to a player, its ability triggers."
@@ -1191,10 +1248,13 @@ fn stormwing_dragon_counters_other_dragons_when_turned_face_up() {
     assert_eq!(t.counters(mine, "+1/+1"), 0);
     t.lands(P0, "Mountain", 7);
     t.g.turn.priority = Some(P0);
-    t.g
-        .take_action(P0, Action::Special(SpecialAction::TurnFaceUp { obj: d }));
+    t.g.take_action(P0, Action::Special(SpecialAction::TurnFaceUp { obj: d }));
     t.resolve_all();
     assert!(!t.obj_now(d).face_down);
+    // Its copiable values revert: a 3/3 flier with first strike, plus megamorph's counter.
+    assert_eq!(t.pt(d), (4, 4));
+    assert!(t.obj_now(d).has_keyword(KeywordKind::Flying));
+    assert!(t.obj_now(d).has_keyword(KeywordKind::FirstStrike));
     assert_eq!(t.counters(mine, "+1/+1"), 1);
     assert_eq!(t.counters(theirs, "+1/+1"), 0);
     assert_eq!(t.counters(bears, "+1/+1"), 0);

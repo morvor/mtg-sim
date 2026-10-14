@@ -132,13 +132,22 @@ fn veldt_doesnt_untap_while_it_has_a_depletion_counter() {
     supported("Veldt");
     let mut t = TestGame::new(2);
     let v = t.battlefield(P0, "Veldt");
+    // Tapping it for mana to cast a spell puts the depletion counter on it.
+    let elves = t.hand(P0, "Llanowar Elves");
+    t.cast(P0, elves).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(elves));
+    assert!(t.obj_now(v).tapped);
+    assert_eq!(t.counters(v, "depletion"), 1);
+    // A tapped Veldt without a depletion counter untaps normally.
     let plain = t.battlefield(P0, "Veldt");
-    t.g.add_counters(obj(v), "depletion", 1, None);
-    t.g.tap(v);
     t.g.tap(plain);
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::Upkeep);
-    assert!(t.obj_now(v).tapped, "had a depletion counter during the untap step");
+    assert!(
+        t.obj_now(v).tapped,
+        "had a depletion counter during the untap step"
+    );
     assert!(!t.obj_now(plain).tapped);
     t.resolve_all();
     assert_eq!(t.counters(v, "depletion"), 0, "removed in the upkeep");
@@ -265,6 +274,7 @@ fn sleepers_robe_gives_the_enchanted_creature_fear() {
     let green = t.battlefield(P1, "Grizzly Bears");
     let black = t.battlefield(P1, "Walking Corpse");
     let artifact = t.battlefield(P1, "Ornithopter");
+    // {U}{B}: an Island plus the Swamp `enchant` adds.
     t.lands(P0, "Island", 1);
     enchant(&mut t, "Sleeper's Robe", "Swamp", 1, bears);
     assert!(t.obj_now(bears).has_keyword(KeywordKind::Fear));
@@ -317,7 +327,6 @@ fn muzzle_prevents_all_damage_dealt_by_the_enchanted_creature() {
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let other = t.battlefield(P1, "Grizzly Bears");
-    let giant = t.battlefield(P0, "Hill Giant");
     enchant(&mut t, "Muzzle", "Plains", 2, bears);
     t.set_step(P1, Step::BeginningOfCombat);
     t.attack(
@@ -329,7 +338,6 @@ fn muzzle_prevents_all_damage_dealt_by_the_enchanted_creature() {
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let blocker = t.battlefield(P0, "Hill Giant");
-    let _ = giant;
     enchant(&mut t, "Muzzle", "Plains", 2, bears);
     t.set_step(P1, Step::BeginningOfCombat);
     t.attack(&[(bears, Entity::Player(P0))], &[(blocker, bears)]);
