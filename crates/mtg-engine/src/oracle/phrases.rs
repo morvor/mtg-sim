@@ -2009,8 +2009,11 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
 /// "its controller", "its owner", "defending player". Returns (ref, target spec if any, rest).
 pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
-    let pairs: [(&str, PlayerRef); 14] = [
+    let pairs: [(&str, PlayerRef); 16] = [
         ("you ", PlayerRef::You),
+        // CR 506.2: the active player is the attacking player.
+        ("the attacking player ", PlayerRef::ActivePlayer),
+        ("attacking player ", PlayerRef::ActivePlayer),
         // Internal form of "that player" in an ability linked to one that targeted a
         // player (CR 607.1, see `patterns::r607_linked_targets`).
         ("the noted player ", PlayerRef::LinkedNoted),
