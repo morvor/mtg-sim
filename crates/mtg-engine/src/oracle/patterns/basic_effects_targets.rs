@@ -336,6 +336,15 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
             }
         }
     }
+    // "each of two other target creatures" (Betrayal at the Vault): exactly that many
+    // targets (CR 601.2c), each dealt the amount.
+    if let Some(r) = s.strip_prefix("each of ") {
+        if parse_number(r).is_some() && !r.starts_with("up to ") {
+            if let Some((sel, rest)) = one_target(r, b) {
+                return Some((sel, rest, false));
+            }
+        }
+    }
     if let Some(r) = s.strip_prefix("you") {
         if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
             return Some((Sel::Players(PlayerRef::You), r.to_string(), false));
@@ -774,33 +783,29 @@ inventory::submit! { EffectPattern { name: "basic effects: each [object] deals d
 fn targets_each_deal_their_power(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (subject, recipient) = l.split_once(" each deal damage equal to their power to ")?;
-    // "Target creature you control and up to one other target legendary creature you
-    // control each deal ...": several target phrases (Friendly Rivalry).
-    let mut phrases = vec![];
-    match parse_target(subject) {
-        Some((spec, tail)) if end(tail).is_empty() => phrases.push((spec, subject)),
-        _ => {
-            let (a, c) = subject.split_once(" and ")?;
-            for p in [a, c] {
-                let (spec, tail) = parse_target(p)?;
-                if !end(tail).is_empty() {
-                    return None;
-                }
-                phrases.push((spec, p));
-            }
+    // "Any number of target enchanted creatures you control and up to one other target
+    // creature you control" (Graceful Takedown): two groups of targets, all of which deal
+    // damage.
+    let mut specs = Vec::new();
+    for part in subject.split(" and ") {
+        let (spec, tail) = parse_target(part)?;
+        if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+            return None;
         }
+        specs.push((spec, part));
     }
-    if phrases
-        .iter()
-        .any(|(spec, _)| !matches!(spec.what, TargetKind::Object(_)))
-    {
+    if specs.len() > 2 {
         return None;
     }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let slots: Vec<u8> = phrases
+    let slots: Vec<Sel> = specs
         .into_iter()
-        .map(|(spec, text)| b.add_target(spec, text))
+        .map(|(spec, part)| Sel::Target(b.add_target(spec, part)))
         .collect();
+    let subjects = match <[Sel; 1]>::try_from(slots) {
+        Ok([one]) => one,
+        Err(v) => Sel::Union(v),
+    };
     let restore = |b: &mut Builder| {
         b.targets.truncate(saved.0);
         b.it = saved.1.clone();
@@ -815,13 +820,8 @@ fn targets_each_deal_their_power(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     const EACH: Var = vars::USER + 3331;
-    let sel = if slots.len() == 1 {
-        Sel::Target(slots[0])
-    } else {
-        Sel::Union(slots.into_iter().map(Sel::Target).collect())
-    };
     Some(Effect::ForEach {
-        sel,
+        sel: subjects,
         var: EACH,
         effect: Box::new(Effect::DealDamage {
             source: Sel::Var(EACH),

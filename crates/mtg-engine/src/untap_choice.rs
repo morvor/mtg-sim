@@ -146,6 +146,7 @@ impl Game {
                 })
             })
             .map(|(id, _)| id)
+            .chain(crate::rule_statics::opponents_steps::extra_untaps(self))
             .collect();
         for id in extra {
             if !to_untap.contains(&id) {

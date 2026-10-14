@@ -144,7 +144,9 @@ impl Renderer<'_> {
             .collect();
         let plain = self.noun_det(&Filter::and(rest), det.clone());
         let bare = self.noun_det(&Filter::and(bare), det.clone());
-        let n = self.noun(g, Num::Many);
+        // "among creatures and planeswalkers they control": the objects of every kind
+        // listed are compared together.
+        let n = self.noun(g, Num::Many).replace("{alt:and|or}", "and");
         let words: &[&str] = match (greatest, x) {
             (true, "mana value") => &["greatest", "highest"],
             (false, "mana value") => &["least", "lowest"],
@@ -184,7 +186,7 @@ impl Renderer<'_> {
             return self.gap("Value::Extreme");
         };
         let s = match sel {
-            Sel::All(f) => self.noun(f, Num::Many),
+            Sel::All(f) => self.noun(f, Num::Many).replace("{alt:and|or}", "and"),
             other => self.sel(other, Case::Obj),
         };
         let word = match (greatest, stat) {

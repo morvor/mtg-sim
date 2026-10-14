@@ -233,6 +233,7 @@ fn copy_entry_effects_apply_before_others() {
                 ReplacementAction::EnterAsCopy {
                     filter: Filter::Source,
                     optional: false,
+                    tapped: false,
                 },
             )],
         ),

@@ -237,7 +237,7 @@ impl KeywordRules for ChoiceGrammar {
             let o = g.obj(id);
             let types = chosen_types(ctx, var);
             return Some(
-                o.chars.all_creature_types
+                super::changeling::every_creature_type(&o.chars)
                     || types.iter().any(|t| o.chars.subtypes.iter().any(|s| s == t)),
             );
         }

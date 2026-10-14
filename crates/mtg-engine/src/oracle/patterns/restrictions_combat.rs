@@ -31,7 +31,13 @@ fn names_source_faithfully(subject: &str, what: &Sel) -> bool {
 fn subject_filter(what: &Sel) -> Option<Filter> {
     let target_players_class = |f: &Filter| match f {
         Filter::And(v) => v.iter().all(|x| {
-            is_class_filter(x) || matches!(x, Filter::ControlledBy(PlayerRel::Target(_)))
+            is_class_filter(x)
+                || matches!(x, Filter::ControlledBy(PlayerRel::Target(_)))
+                // "creatures the active player controls": bound to the player as the
+                // effect begins (`fix_restriction`).
+                || matches!(x, Filter::ControlledByPlayer(p) if matches!(**p, PlayerRef::ActivePlayer))
+                // "the chosen type": the type chosen as the effect begins.
+                || matches!(x, Filter::ChosenType)
         }),
         _ => false,
     };

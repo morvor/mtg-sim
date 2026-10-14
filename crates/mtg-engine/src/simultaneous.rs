@@ -510,7 +510,15 @@ impl Frames {
         // (CR 608.2c: later text refers to what the earlier instructions did).
         // The same for the tokens each player created ("Each player creates a Treasure
         // token. Tap those tokens.").
-        for var in [vars::IT, vars::CREATED] {
+        // Likewise the cards each player discarded and the permanents each sacrificed
+        // ("Each player may discard a card. If a creature card was discarded this way,
+        // ...").
+        for var in [
+            vars::IT,
+            vars::CREATED,
+            crate::discard_rules::DISCARDED,
+            vars::SACRIFICED,
+        ] {
             if !matches!(self.frames.first().map(|f| f.item), Some(Item::Player(_)))
                 || !self.local_vars.contains(&var)
             {

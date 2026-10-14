@@ -98,7 +98,7 @@ fn step_words(s: &str) -> Option<Vec<TriggerStep>> {
         "upkeep" | "upkeep step" => vec![Upkeep],
         "draw step" => vec![Draw],
         "cleanup step" => vec![Cleanup],
-        "combat" => vec![BeginningOfCombat],
+        "combat" | "combat phase" => vec![BeginningOfCombat],
         "declare attackers step" => vec![DeclareAttackers],
         // CR 505.1: "your next main phase" is whichever main phase of yours comes next.
         "main phase" => vec![PrecombatMain, PostcombatMain],

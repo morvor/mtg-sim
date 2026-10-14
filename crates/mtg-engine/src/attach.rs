@@ -291,6 +291,16 @@ fn might_enter_as_aura(g: &Game, mv: &MoveEv) -> bool {
             .etb
             .copy_of
             .is_some_and(|s| g.obj(s).copiable.has_subtype("Aura"))
+        // "It's an Aura enchantment with enchant creature you control ..." (Bronzehide
+        // Lion): what an effect says it is as it enters.
+        || mv.etb.with_mods.as_ref().is_some_and(|(_, _, mods)| {
+            mods.iter().any(|m| match m {
+                Modification::SetTypes { subtypes, .. } | Modification::AddSubtypes(subtypes) => {
+                    subtypes.iter().any(|s| s == "Aura")
+                }
+                _ => false,
+            })
+        })
 }
 
 /// What the Aura `id` (as it would exist on the battlefield) could enter attached to:

@@ -51,6 +51,7 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
                 .filter(|o| !taken.contains(o))
                 .collect();
             let placed = place(g, cards, to, ctx);
+            note_placed(ctx, &placed);
             // "for each card put into your graveyard this way".
             ctx.nums.insert(vars::DUG, placed.len() as i64);
         }
@@ -84,6 +85,20 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
 pub fn set_dug(ctx: &mut Ctx, cards: Vec<Entity>) {
     ctx.set_var(vars::DUG, cards);
     ctx.set_var(vars::DUG_TAKEN, vec![]);
+    ctx.set_var(DUG_PLACED, vec![]);
+}
+
+/// The objects the most recent dig's selections and "the rest" became where they were put
+/// (CR 400.7): "creature cards put into your graveyard this way" after "Put one of them
+/// into your hand and the rest into your graveyard" are among them (not "it", the card
+/// put into the hand).
+pub const DUG_PLACED: Var = vars::USER + 9205;
+
+/// Records cards a step of the current dig put somewhere ([`DUG_PLACED`]).
+pub fn note_placed(ctx: &mut Ctx, placed: &[ObjectId]) {
+    let mut all = ctx.vars.get(&DUG_PLACED).cloned().unwrap_or_default();
+    all.extend(entities(placed));
+    ctx.set_var(DUG_PLACED, all);
 }
 
 fn entities(v: &[ObjectId]) -> Vec<Entity> {
@@ -298,6 +313,7 @@ fn take(
     }
     let n = chosen.len();
     let placed = place(g, chosen, to, ctx);
+    note_placed(ctx, &placed);
     // "Look at the top three cards of your library. Exile one face down ...": the player
     // who looked at it may go on looking at it (CR 406.3).
     if !reveal {

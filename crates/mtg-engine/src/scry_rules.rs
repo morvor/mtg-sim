@@ -50,11 +50,32 @@ fn surveil_extra(g: &Game, p: PlayerId) -> u32 {
         .sum()
 }
 
+/// Where the cards went: put into a graveyard (the new objects) or left on top of a
+/// library ("If you put a noncreature, nonland card into your graveyard this way", "for
+/// each card you put on top of your library", CR 701.25a).
+#[derive(Debug, Default)]
+pub struct Looked {
+    pub to_graveyard: Vec<ObjectId>,
+    pub on_top: Vec<ObjectId>,
+}
+
+/// The cards the latest surveil put into a graveyard ([`Looked::to_graveyard`]).
+pub const SURVEILED_TO_GRAVEYARD: Var = vars::USER + 9655;
+/// The cards the latest scry or surveil left on top of a library.
+pub const LOOKED_ON_TOP: Var = vars::USER + 9656;
+
 /// `players` scry or surveil `n` at the same time (CR 701.22c).
-pub fn perform(g: &mut Game, players: &[PlayerId], n: u32, kind: Look, source: Option<ObjectId>) {
+pub fn perform(
+    g: &mut Game,
+    players: &[PlayerId],
+    n: u32,
+    kind: Look,
+    source: Option<ObjectId>,
+) -> Looked {
+    let mut looked_result = Looked::default();
     // CR 701.22b, 701.25c: scrying or surveilling 0 is no event.
     if n == 0 {
-        return;
+        return looked_result;
     }
     // APNAP order (CR 101.4), each player once.
     let players: Vec<PlayerId> = g
@@ -129,6 +150,7 @@ pub fn perform(g: &mut Game, players: &[PlayerId], n: u32, kind: Look, source: O
     let mut to_graveyard: Vec<MoveEv> = Vec::new();
     for (p, (top, rest)) in players.iter().zip(&splits) {
         crate::library::put_on_top(g, *p, top);
+        looked_result.on_top.extend(top.iter().copied());
         match kind {
             Look::Scry => crate::library::put_on_bottom(g, *p, rest),
             Look::Surveil => to_graveyard.extend(rest.iter().map(|c| MoveEv {
@@ -143,7 +165,7 @@ pub fn perform(g: &mut Game, players: &[PlayerId], n: u32, kind: Look, source: O
         }
     }
     if !to_graveyard.is_empty() {
-        g.move_objects(to_graveyard);
+        looked_result.to_graveyard = g.move_objects(to_graveyard).into_iter().flatten().collect();
     }
     // CR 701.22d, 701.25d: the abilities trigger after the process is complete.
     let name = match kind {
@@ -160,6 +182,7 @@ pub fn perform(g: &mut Game, players: &[PlayerId], n: u32, kind: Look, source: O
             amount: cards.len() as i32,
         });
     }
+    looked_result
 }
 
 fn split_ok(all: &[ObjectId], a: &[ObjectId], b: &[ObjectId]) -> bool {

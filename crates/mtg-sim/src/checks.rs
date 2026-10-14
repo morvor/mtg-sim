@@ -71,16 +71,27 @@ impl Ledger {
             );
         }
         for ev in &g.events {
-            self.apply_signed(ev, -1);
+            self.apply_signed(g, ev, -1);
         }
     }
 
-    fn apply(&mut self, ev: &Event) {
-        self.apply_signed(ev, 1)
+    fn apply(&mut self, g: &Game, ev: &Event) {
+        self.apply_signed(g, ev, 1)
     }
 
-    fn apply_signed(&mut self, ev: &Event, sign: i64) {
+    fn apply_signed(&mut self, g: &Game, ev: &Event, sign: i64) {
         match ev {
+            // Counters that remain on an object as it moves (Skullbriar, the Walking
+            // Grave) are on the new object without being put on it: the old object's
+            // last known counters carry over.
+            Event::ZoneChange { old, new, to, .. }
+                if mtg_engine::rule_statics::counters_remain::remain(g, *old, *to) =>
+            {
+                let entry = self.counters.entry(Entity::Object(*new)).or_default();
+                for (k, n) in &g.obj(*old).counters {
+                    *entry.entry(k.clone()).or_default() += sign * *n as i64;
+                }
+            }
             Event::LifeGained { player, amount } => {
                 if let Some(l) = self.life.get_mut(player.idx()) {
                     *l += sign * *amount as i64;
@@ -127,7 +138,7 @@ impl Ledger {
             ..Default::default()
         };
         for ev in &g.events {
-            expected.apply(ev);
+            expected.apply(g, ev);
         }
         for p in &g.players {
             let want = expected.life.get(p.id.idx()).copied().unwrap_or(0);
@@ -207,7 +218,7 @@ pub fn observe(g: &Game, ev: &Event, ledger: &mut Ledger) {
         ledger.baseline(g);
     }
     ledger.turn = g.turn.number;
-    ledger.apply(ev);
+    ledger.apply(g, ev);
     if g.config.variant == Variant::GrandMelee {
         return;
     }
@@ -506,6 +517,7 @@ mod tests {
     use super::*;
     use mtg_engine::agents::RandomAgent;
     use mtg_engine::decision::Action;
+    use mtg_engine::events::MoveCause;
     use mtg_engine::mana::{Mana, ManaType};
     use mtg_engine::testing::TestGame;
     use mtg_engine::turn::Step;
@@ -699,6 +711,40 @@ mod tests {
         t.g.lose_life(P1, 1);
         assert_eq!(ledger.lock().unwrap().check(&t.g), None);
         t.g.roll_back(t.g.clone());
+        assert_eq!(ledger.lock().unwrap().check(&t.g), None);
+    }
+
+    #[test]
+    fn counters_that_remain_on_a_moving_object_are_accounted_for() {
+        // "Counters remain on ~ as it moves to any zone other than a player's hand or
+        // library": the new object has them without their being put on it.
+        let mut t = TestGame::new(2);
+        let sk = t.battlefield(P0, "Skullbriar, the Walking Grave");
+        let mut ledger = Ledger::default();
+        ledger.baseline(&t.g);
+        let ledger = Arc::new(Mutex::new(ledger));
+        t.g.observer = Some(observer(ledger.clone(), None));
+        t.g.add_counters(Entity::Object(sk), "+1/+1", 2, None);
+        t.g.flush_events();
+        let gy =
+            t.g.move_object(sk, Zone::Graveyard(P0), MoveCause::Effect, Some(P0))
+                .unwrap();
+        // Checked before the events are processed, and after.
+        let back =
+            t.g.move_object(gy, Zone::Battlefield, MoveCause::Effect, Some(P0))
+                .unwrap();
+        assert_eq!(t.g.obj(back).counters.get("+1/+1"), Some(&2));
+        assert_eq!(ledger.lock().unwrap().check(&t.g), None);
+        t.g.flush_events();
+        assert_eq!(ledger.lock().unwrap().check(&t.g), None);
+        // A card without the ability loses them, as the events say.
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.g.add_counters(Entity::Object(bears), "+1/+1", 1, None);
+        let gy =
+            t.g.move_object(bears, Zone::Graveyard(P0), MoveCause::Effect, Some(P0))
+                .unwrap();
+        t.g.move_object(gy, Zone::Battlefield, MoveCause::Effect, Some(P0));
+        t.g.flush_events();
         assert_eq!(ledger.lock().unwrap().check(&t.g), None);
     }
 }
