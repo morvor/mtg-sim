@@ -116,7 +116,12 @@ impl Renderer<'_> {
                 Some("any number of".into())
             }
             (Some(n), None) => {
-                let v = self.value(&t.max);
+                // "up to that many target lands": the amount just paid.
+                let v = if matches!(t.max, Value::X) && self.extra.x_paid {
+                    "that many".to_string()
+                } else {
+                    self.value(&t.max)
+                };
                 if n == 0 {
                     Some(format!("up to {v}"))
                 } else {

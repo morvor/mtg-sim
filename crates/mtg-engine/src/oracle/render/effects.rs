@@ -3009,6 +3009,11 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            if let Some((s, used)) = self.seq_extra(&v[i..]) {
+                parts.push(s);
+                i += used;
+                continue;
+            }
             // "Roll a d20. Create X Treasure tokens, where X is the result.": the number
             // X stands for is said where X is first used (CR 107.3).
             if let Effect::SetX { value } = &v[i] {
@@ -4636,6 +4641,11 @@ impl Renderer<'_> {
         let top = match n {
             Value::Const(1) => format!("the top card of {p} library"),
             Value::Const(k) => format!("the top {} cards of {p} library", number_word(*k)),
+            // "that many cards from the top of your library": the amount paid by "pay any
+            // amount of ...".
+            Value::X if self.extra.x_paid => format!(
+                "{{alt:the top X cards of {p} library|that many cards from the top of {p} library}}"
+            ),
             // "the top X cards of your library, where X is ...".
             other => {
                 let (v, w) = self.amount(other);
@@ -4863,6 +4873,10 @@ impl Renderer<'_> {
         let (c, w) = match count {
             Value::Const(1) => (with_article(&noun_one), None::<String>),
             Value::Const(n) => (format!("{} {noun_many}", number_word(*n)), None),
+            Value::X if self.extra.x_paid => {
+                let w = self.extra.x_words.unwrap_or("that many");
+                (format!("{w} {noun_many}"), None)
+            }
             Value::X => (format!("X {noun_many}"), None),
             // "create that many 1/1 black Insect creature tokens".
             Value::EventAmount | Value::Prev => (format!("that many {noun_many}"), None),

@@ -21,6 +21,8 @@ pub(crate) struct ExtraState {
     pub x_paid: bool,
     /// The card pays any amount of life as it enters: its chosen number is that life.
     pub life_paid: bool,
+    /// How X reads after "pay any amount" when it was redefined ("twice that many").
+    pub x_words: Option<&'static str>,
 }
 
 /// The past tense of a past participle ("drawn" -> "drew").
@@ -269,13 +271,7 @@ impl Renderer<'_> {
             } if !matches!(zone, ZoneKind::Battlefield | ZoneKind::Stack) => {
                 let f = filter.clone().in_zone(*zone).and_owner_you();
                 let n = self.noun(&f, Num::Many);
-                let one = self.noun(filter, Num::One);
-                let noun = if one == "card" {
-                    one
-                } else {
-                    format!("{{alt:card|{one}}}")
-                };
-                (format!("exile any number of {n}"), noun, "exiled")
+                (format!("exile any number of {n}"), "card".into(), "exiled")
             }
             CostPart::Sacrifice {
                 filter,
@@ -321,7 +317,7 @@ impl Renderer<'_> {
             .paid_costs
             .retain(|(n, _, _)| n.as_str() != name.as_str());
         self.extra.paid_costs.push((name.to_string(), noun, done));
-        Some(format!("{{opt:you may}} {phrase}"))
+        Some(phrase)
     }
 
     /// "~ costs 3 life more to cast for each target" (an additional cost paid once per
@@ -330,6 +326,13 @@ impl Renderer<'_> {
         let [CostPart::Repeated { cost, times }] = c.parts.as_slice() else {
             return None;
         };
+        // "As an additional cost to cast this spell, you may sacrifice any number of
+        // creatures": paying it zero times is choosing not to pay it.
+        if c.mana.is_none() {
+            if let Some(s) = self.repeated_any_number(cost, times) {
+                return Some(format!("as an additional cost to cast ~, {{opt:you may}} {s}"));
+            }
+        }
         if c.mana.is_some()
             || !matches!(times, Value::Custom(n) if n == crate::kw::spell_cost_grammar::OWN_TARGETS)
         {
@@ -469,8 +472,14 @@ impl Renderer<'_> {
         let Sel::Matching(inner, Filter::OwnedBy(PlayerRel::Iterated)) = s else {
             return None;
         };
-        let (verb, card, _) = self.this_way_of(inner)?;
-        Some((verb, card))
+        if let Some((verb, card, _)) = self.this_way_of(inner) {
+            return Some((verb, card));
+        }
+        // The cards the discard instructions of the effect discarded.
+        match inner.as_ref() {
+            Sel::Var(v) if *v == crate::discard_rules::DISCARDED => Some(("discarded", true)),
+            _ => None,
+        }
     }
 
     /// What the iterated player did at least `k` times: "drew a card this way", "had two
@@ -538,4 +547,92 @@ impl Renderer<'_> {
         let s = self.events_this_turn(c, Tally::Events);
         s.strip_prefix("the number of ").map(str::to_string)
     }
+}
+
+impl Renderer<'_> {
+    /// Instructions of a sequence put into words together here, and how many: "you may
+    /// pay {1}{G} any number of times. When you pay this cost one or more times, ..."
+    /// (the payments counted in a number, then a reflexive trigger, CR 603.12).
+    pub(crate) fn seq_extra(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        // "create twice that many tokens": X doubled after "pay any amount".
+        if let [Effect::SetX { value }, rest @ ..] = v {
+            let doubled = match value {
+                Value::Sum(p) => matches!(p.as_slice(), [Value::X, Value::X]),
+                Value::Mul(a, b) => {
+                    matches!((a.as_ref(), b.as_ref()), (Value::Const(2), Value::X) | (Value::X, Value::Const(2)))
+                }
+                _ => false,
+            };
+            if doubled && self.extra.x_paid && !rest.is_empty() && self.extra.x_words.is_none() {
+                self.extra.x_words = Some("twice that many");
+                let s = self.seq(rest);
+                self.extra.x_words = None;
+                return Some((s, v.len()));
+            }
+        }
+        let [Effect::May { who: PlayerRef::You, effect }, Effect::If { cond, then, otherwise }, ..] = v
+        else {
+            return None;
+        };
+        let cost = paid_any_number_of_times(effect)?;
+        if !matches!(cond, Condition::Compare(Value::X, Cmp::Ge, Value::Const(1)))
+            || !matches!(otherwise.as_ref(), Effect::Noop)
+        {
+            return None;
+        }
+        let Effect::Reflexive { body } = then.as_ref() else {
+            return None;
+        };
+        let c = self.cost(cost);
+        let saved = std::mem::replace(&mut self.extra.x_paid, true);
+        let b = self.in_event_scope(|r| r.body(body));
+        self.extra.x_paid = saved;
+        Some((
+            format!(
+                "you may pay {c} any number of times. When you pay this cost one or more times, {}",
+                effects::lower_first(&b)
+            ),
+            2,
+        ))
+    }
+}
+
+/// The cost of "you may pay [cost] any number of times" with the times counted as X:
+/// a payment repeated until the player declines, counted, then X set to the count.
+fn paid_any_number_of_times(e: &Effect) -> Option<&Cost> {
+    let Effect::Seq(v) = e else {
+        return None;
+    };
+    let [Effect::StoreValue { var: count, value: Value::Const(0) }, Effect::StoreValue { var: stop, value: Value::Const(0) }, Effect::Repeat { effect, .. }, Effect::SetX { value: Value::Var(x) }] =
+        v.as_slice()
+    else {
+        return None;
+    };
+    if x != count {
+        return None;
+    }
+    let Effect::If {
+        cond: Condition::Compare(Value::Var(s), Cmp::Eq, Value::Const(0)),
+        then,
+        otherwise,
+    } = effect.as_ref()
+    else {
+        return None;
+    };
+    if s != stop || !matches!(otherwise.as_ref(), Effect::Noop) {
+        return None;
+    }
+    let Effect::PayOptional {
+        who: PlayerRef::You,
+        cost,
+        then,
+        otherwise,
+    } = then.as_ref()
+    else {
+        return None;
+    };
+    let counts = matches!(then.as_ref(), Effect::StoreValue { var, value: Value::Sum(p) }
+        if var == count && matches!(p.as_slice(), [Value::Var(a), Value::Const(1)] if a == count));
+    let stops = matches!(otherwise.as_ref(), Effect::StoreValue { var, value: Value::Const(1) } if var == stop);
+    (counts && stops).then_some(cost)
 }
