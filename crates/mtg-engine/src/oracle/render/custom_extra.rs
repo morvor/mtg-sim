@@ -554,6 +554,12 @@ impl Renderer<'_> {
     /// pay {1}{G} any number of times. When you pay this cost one or more times, ..."
     /// (the payments counted in a number, then a reflexive trigger, CR 603.12).
     pub(crate) fn seq_extra(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        if let Some(s) = self.revealed_this_way(v) {
+            return Some((s, 4));
+        }
+        if let Some(r) = self.countered_source(v) {
+            return Some(r);
+        }
         // "create twice that many tokens": X doubled after "pay any amount".
         if let [Effect::SetX { value }, rest @ ..] = v {
             let doubled = match value {
@@ -739,4 +745,122 @@ impl Renderer<'_> {
         }
         None
     }
+}
+
+impl Renderer<'_> {
+    /// "You may reveal that card. If an instant or sorcery card is revealed this way,
+    /// [effect]." (Delver of Secrets): the looked-at card optionally revealed, remembered
+    /// if it was, then a check of what was revealed.
+    fn revealed_this_way(&mut self, v: &[Effect]) -> Option<String> {
+        let [Effect::May { who: PlayerRef::You, effect }, Effect::If { cond: Condition::PrevHappened, then: kept, otherwise: none }, Effect::Store { sel: Sel::All(_), .. }, Effect::If { cond, then, otherwise }, ..] =
+            v
+        else {
+            return None;
+        };
+        let Effect::DigStep(step) = effect.as_ref() else {
+            return None;
+        };
+        let DigStep::Take {
+            count: Some(Value::Const(1)),
+            reveal: true,
+            up_to: false,
+            random: false,
+            to,
+            ..
+        } = step.as_ref()
+        else {
+            return None;
+        };
+        if to.zone != ZoneKind::Library || !matches!(otherwise.as_ref(), Effect::Noop) {
+            return None;
+        }
+        let (Effect::Store { var, sel: Sel::Var(_) }, Effect::Store { var: v2, sel: Sel::None }) =
+            (kept.as_ref(), none.as_ref())
+        else {
+            return None;
+        };
+        if var != v2 {
+            return None;
+        }
+        // "the revealed card exists and matches F".
+        let Condition::And(cs) = cond else {
+            return None;
+        };
+        let [Condition::SelNonEmpty(Sel::Var(a)), Condition::Not(n)] = cs.as_slice() else {
+            return None;
+        };
+        let Condition::SelMatches(Sel::Var(b), Filter::Not(f)) = n.as_ref() else {
+            return None;
+        };
+        if a != var || b != var {
+            return None;
+        }
+        let what = self.noun_det(f, super::nouns::Det::A);
+        let e = self.effect(then);
+        Some(format!(
+            "you may reveal {{alt:that card|it}}. If {what} is revealed this way, {e}"
+        ))
+    }
+}
+
+impl Renderer<'_> {
+    /// "Counter target activated ability. If a permanent's ability is countered this way,
+    /// destroy that permanent." / "That permanent's activated abilities can't be
+    /// activated this turn.": the source of the targeted ability remembered before it's
+    /// countered, then "that permanent".
+    fn countered_source(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [Effect::Store { var, sel: Sel::All(f) }, counter @ Effect::CounterSpell { what: Sel::Target(0) }, rest @ ..] =
+            v
+        else {
+            return None;
+        };
+        let parts: Vec<&Filter> = match f {
+            Filter::And(p) => p.iter().collect(),
+            other => vec![other],
+        };
+        let is_source = |x: &Filter| {
+            matches!(x, Filter::Custom(n)
+                if n.as_str() == "basic_effects:source of the ability in target slot 0")
+        };
+        if !parts.iter().any(|x| is_source(x))
+            || !parts.iter().all(|x| is_source(x) || matches!(x, Filter::Permanent))
+        {
+            return None;
+        }
+        let destroys = matches!(rest.first(), Some(Effect::If { cond: Condition::PrevHappened, .. }));
+        let that = if destroys {
+            "{alt:that permanent|that artifact}"
+        } else {
+            "that permanent"
+        };
+        self.target_vars.push((*var, that.into(), false));
+        let c = self.effect(counter);
+        match rest.first() {
+            Some(Effect::If {
+                cond: Condition::PrevHappened,
+                then,
+                otherwise,
+            }) if matches!(otherwise.as_ref(), Effect::Noop) => {
+                let e = self.effect(then);
+                Some((
+                    format!(
+                        "{{alt:{c}. If a permanent's ability is countered this way, {e}|{c} and {e} if it's on the battlefield|if it's on the battlefield, {c} and {e}}}"
+                    ),
+                    3,
+                ))
+            }
+            Some(next) => {
+                let e = self.effect(next);
+                Some((format!("{c}. {e}"), 3))
+            }
+            None => None,
+        }
+    }
+}
+
+/// Whether an instruction refers to what variable `var` holds without naming it: "look
+/// at" names "it" ([`vars::IT`]).
+pub(crate) fn names_it(e: &Effect, var: Var) -> bool {
+    matches!(e, Effect::Custom(n) if n.as_str() == crate::zones::MAY_LOOK_AT_EXILED)
+        && var == vars::IT
 }

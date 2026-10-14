@@ -3396,11 +3396,18 @@ impl Renderer<'_> {
             ) = (v.get(i), v.get(i + 1))
             {
                 let named = format!("{all:?}");
+                let var_n = *var;
                 let var = format!("{:?}", Sel::Var(*var));
-                if !next.is_some_and(|n| {
-                    let n = format!("{n:?}");
-                    n.contains(&named) || n.contains(&var)
-                }) {
+                let names = |n: &Effect| {
+                    custom_extra::names_it(n, var_n) || {
+                        let n = format!("{n:?}");
+                        n.contains(&named) || n.contains(&var)
+                    }
+                };
+                // (A group remembered with others, named by a later instruction.)
+                let later = v[i + 1..].iter().take_while(|e| matches!(e, Effect::Store { .. }));
+                let named_later = v[i + 1..].iter().skip(later.count()).take(1).any(names);
+                if !next.is_some_and(names) && !named_later {
                     parts.push(self.gap("a remembered group no instruction names"));
                 }
             }
