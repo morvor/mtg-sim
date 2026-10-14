@@ -106,7 +106,7 @@ fn crashing_tide_loses_flash_after_being_cast() {
 
 #[test]
 fn monk_class_second_spell_reduction() {
-    cr!("601.2f", "716.2a");
+    cr!("601.2f");
     ruling!(
         "Monk Class",
         "If Monk Class is the first spell you cast, the next spell is the second spell and costs {1} less. If Monk Class is the second (or later) spell you cast, its bonus won't apply until the next turn."
@@ -229,7 +229,7 @@ fn divide_by_zero_copy_returned_to_hand_ceases_to_exist() {
 
 #[test]
 fn string_of_disappearances_copies() {
-    cr!("707.10", "707.12", "603.2");
+    cr!("707.10", "603.2");
     ruling!(
         "String of Disappearances",
         "The copies String of Disappearances creates are created on the stack, so they’re not cast. Abilities that trigger when a player casts a spell won’t trigger."
@@ -270,7 +270,7 @@ fn string_of_disappearances_copies() {
 
 #[test]
 fn great_synthesis_chapter_one() {
-    cr!("714.2c", "402.2", "608.2h");
+    cr!("714.2b", "402.2", "608.2h");
     ruling!(
         "Jin-Gitaxias // The Great Synthesis",
         "For chapter I of The Great Synthesis, the number of cards you draw is determined as the ability resolves. If you no longer control The Great Synthesis at that time, your maximum hand size remains unchanged."
@@ -300,7 +300,7 @@ fn great_synthesis_chapter_one() {
 
 #[test]
 fn jin_gitaxias_transform_ability_resolves_with_fewer_cards() {
-    cr!("602.5b", "608.2");
+    cr!("602.2", "608.2");
     ruling!(
         "Jin-Gitaxias // The Great Synthesis",
         "Once you’ve activated Jin-Gitaxias’s last ability, it doesn’t matter what happens to the number of cards in your hand. The ability will resolve even if you have six or fewer cards in your hand by that time."
@@ -340,7 +340,7 @@ fn synthesis_chapter_three(t: &mut TestGame, card: ObjectId, answers: &dyn Fn(&m
 
 #[test]
 fn great_synthesis_free_casts_pay_additional_costs() {
-    cr!("118.9", "118.9a", "714.2c");
+    cr!("118.9", "118.9a", "714.2b");
     ruling!(
         "Jin-Gitaxias // The Great Synthesis",
         "If you cast a spell “without paying its mana cost,” you can’t pay any alternative costs. You can, however, pay additional costs. If the spell has any mandatory additional costs, those must be paid to cast it."

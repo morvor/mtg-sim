@@ -507,7 +507,7 @@ fn mystic_confluence_targets() {
 
 #[test]
 fn wail_of_the_forgotten_targets() {
-    cr!("608.2b", "700.2", "702.177a");
+    cr!("608.2b", "700.2");
     ruling!(
         "Wail of the Forgotten",
         "If all targets for the chosen modes become illegal before Wail of the Forgotten resolves, the spell will be countered and none of its effects will happen. If at least one target is still legal, the spell will resolve but will have no effect on any illegal targets."
@@ -647,7 +647,7 @@ fn two_target_bounce_one_target_illegal() {
 
 #[test]
 fn karns_temporal_sundering_targets() {
-    cr!("608.2b", "205.4d");
+    cr!("608.2b");
     ruling!(
         "Karn's Temporal Sundering",
         "If the target player or target nonland permanent is an illegal target as Karn’s Temporal Sundering resolves, the other target is affected as normal and Karn’s Temporal Sundering is exiled. If both targets are illegal, Karn’s Temporal Sundering doesn’t resolve and isn’t exiled."
@@ -670,7 +670,7 @@ fn karns_temporal_sundering_targets() {
 
 #[test]
 fn karns_temporal_sundering_both_targets_illegal() {
-    cr!("608.2b", "205.4d");
+    cr!("608.2b");
     ruling!(
         "Karn's Temporal Sundering",
         "If both targets are illegal, Karn’s Temporal Sundering doesn’t resolve and isn’t exiled."
@@ -715,7 +715,7 @@ fn run_away_together_same_controller() {
 
 #[test]
 fn run_away_together_one_target_illegal_uses_lki() {
-    cr!("608.2b", "608.2h", "113.7a");
+    cr!("608.2b", "608.2h");
     ruling!(
         "Run Away Together",
         "If one of the two target creatures becomes an illegal target, Run Away Together can still determine its controller only to check whether the other creature is a legal target. If the illegal target has left the battlefield, use its last known information. If the other creature is still a legal target, it's returned to its owner's hand."

@@ -17,7 +17,7 @@ use mtg_engine::*;
 
 #[test]
 fn sword_coast_serpent_noncreature_spell_after_blocks() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "Sword Coast Serpent // Capsizing Wave",
         "Casting a noncreature spell after Sword Coast Serpent has become blocked will not cause it to become unblocked."
@@ -100,7 +100,7 @@ fn exit_specialist_stays_blocked() {
 
 #[test]
 fn aether_membrane_returns_at_end_of_combat_without_membrane() {
-    cr!("603.7a", "506.4", "511.1");
+    cr!("603.7a", "400.7", "511.1");
     ruling!(
         "Aether Membrane",
         "The blocked creature is returned to its owner’s hand at end of combat only if the blocked creature is still on the battlefield. It doesn’t matter whether Aether Membrane is on the battlefield."
@@ -258,7 +258,7 @@ fn vronos_animated_equipment_becomes_unattached() {
 
 #[test]
 fn vronos_animated_artifact_can_attack() {
-    cr!("302.6", "113.6");
+    cr!("302.6");
     ruling!(
         "Vronos, Masked Inquisitor",
         "The resulting artifact creature will be able to attack on your turn if it's been under your control continuously since the turn began. It doesn't matter how long it's been a creature, just how long it's been on the battlefield."

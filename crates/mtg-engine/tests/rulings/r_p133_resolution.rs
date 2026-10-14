@@ -52,7 +52,7 @@ fn bounce_all_only_affects_the_battlefield() {
 
 #[test]
 fn displacement_wave_x_in_permanent_costs_is_zero() {
-    cr!("107.3f", "202.3b");
+    cr!("202.3e");
     ruling!(
         "Displacement Wave",
         "If a permanent has an {X} in its mana cost, that X is 0."
@@ -73,7 +73,7 @@ fn displacement_wave_x_in_permanent_costs_is_zero() {
 
 #[test]
 fn run_ashore_owner_chooses_top_or_bottom() {
-    cr!("401.4");
+    cr!("608.2d");
     ruling!(
         "Run Ashore",
         "For the first mode, the owner of the card chooses whether it goes on the top or bottom of that library."
@@ -304,7 +304,7 @@ fn undo_returns_to_each_owner() {
 
 #[test]
 fn call_to_heel_controller_draws() {
-    cr!("608.2h", "108.4");
+    cr!("608.2h", "110.2");
     ruling!(
         "Call to Heel",
         "The player who draws a card is the player who controls the creature when Call to Heel resolves. This may not be the player whose hand the creature is put into."
@@ -525,7 +525,7 @@ fn stern_proctor_must_return_your_own_artifact() {
 
 #[test]
 fn mu_yanling_effect_lasts_until_your_next_turn_would_have_begun() {
-    cr!("800.4a", "611.2b");
+    cr!("800.4m");
     ruling!(
         "Mu Yanling, Celestial Wind",
         "In a multiplayer game, if you leave the game after Mu Yanling’s first ability resolves but before your next turn begins, its effect lasts until your next turn would have begun. It neither expires immediately nor lasts indefinitely."

@@ -271,7 +271,7 @@ fn scalding_viper_x_spells_use_the_chosen_x() {
 
 #[test]
 fn ugins_binding_graveyard_trigger() {
-    cr!("603.2", "603.12");
+    cr!("603.2", "603.12", "113.6m");
     ruling!(
         "Ugin's Binding",
         "The last ability triggers only if Ugin's Binding is in your graveyard as you cast the colorless spell. That ability will resolve before the colorless spell does. If the colorless spell is countered or otherwise leaves the stack in response to Ugin's Binding's triggered ability, the ability will still resolve as normal."
