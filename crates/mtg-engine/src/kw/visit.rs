@@ -28,6 +28,52 @@ pub const CLAIMED: &str = "claimed the prize";
 /// `TriggerCond::Custom`: "whenever you claim the prize of an Attraction".
 pub const YOU_CLAIM: &str = "visit:you claim the prize of an attraction";
 
+/// `Event::Custom`: `player` visited the Attraction `obj` (CR 701.52a).
+pub const VISITED: &str = "visited an attraction";
+/// `TriggerCond::Custom`: "whenever you visit an Attraction".
+pub const YOU_VISIT: &str = "visit:you visit an attraction";
+/// `TriggerCond::Custom`: "whenever you roll to visit your Attractions" (the result is
+/// the event's amount).
+pub const YOU_ROLL_TO_VISIT: &str = "visit:you roll to visit";
+/// `Value::Custom`: "the number of Attractions you've visited this turn".
+pub const VISITED_THIS_TURN: &str = "visit:attractions you've visited this turn";
+/// `Condition::Custom`: "you've visited an Attraction this turn".
+pub const VISITED_ANY_THIS_TURN: &str = "visit:you've visited an attraction this turn";
+
+/// CR 701.52a: after `p` rolled `result` to visit their Attractions, each Attraction they
+/// control with that number lit up has been visited.
+pub fn note_visits(g: &mut Game, p: PlayerId, result: i64) {
+    g.recompute();
+    let visited: Vec<ObjectId> = g
+        .permanents()
+        .filter(|o| {
+            o.controller == p
+                && o.chars.has_subtype("Attraction")
+                && crate::variants::lit_up(o, result)
+        })
+        .map(|o| o.id)
+        .collect();
+    for a in visited {
+        g.emit(Event::Custom {
+            name: VISITED.into(),
+            player: Some(p),
+            obj: Some(a),
+            amount: result as i32,
+        });
+    }
+}
+
+/// The Attractions `p` visited this turn (each visit counts).
+fn visits_this_turn(g: &Game, p: PlayerId) -> usize {
+    g.turn_events
+        .iter()
+        .filter(|e| {
+            matches!(e, Event::Custom { name, player: Some(q), .. }
+                if name == VISITED && *q == p)
+        })
+        .count()
+}
+
 pub struct Visit;
 
 impl KeywordRules for Visit {
@@ -71,6 +117,14 @@ impl KeywordRules for Visit {
         true
     }
 
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        (name == VISITED_THIS_TURN).then(|| visits_this_turn(g, ctx.controller) as i64)
+    }
+
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        (name == VISITED_ANY_THIS_TURN).then(|| visits_this_turn(g, ctx.controller) > 0)
+    }
+
     fn custom_trigger(
         &self,
         _g: &Game,
@@ -81,6 +135,27 @@ impl KeywordRules for Visit {
     ) -> Option<Vec<EventInfo>> {
         match name {
             PRIZE => Some(vec![]),
+            YOU_VISIT | YOU_ROLL_TO_VISIT => {
+                let want = if name == YOU_VISIT {
+                    VISITED
+                } else {
+                    crate::variants::ROLLED_TO_VISIT
+                };
+                Some(match ev {
+                    Event::Custom {
+                        name: n,
+                        player: Some(p),
+                        obj,
+                        amount,
+                    } if n == want && *p == ctl => vec![EventInfo {
+                        object: *obj,
+                        player: Some(*p),
+                        amount: *amount,
+                        ..Default::default()
+                    }],
+                    _ => vec![],
+                })
+            }
             YOU_CLAIM => Some(match ev {
                 Event::Custom {
                     name: n,

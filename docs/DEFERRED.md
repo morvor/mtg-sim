@@ -34,8 +34,8 @@ Decided 2026-10-01.
 - **Already implemented:** the rules for stickers on permanents (CR 123) are in
   `stickers.rs`. Cards that put stickers on permanents are supported only as far as they
   work without modeling sheets; anything that needs sheets is deferred with them.
-- **Status:** sheets are to be excluded from `card-coverage` and `unsupported` and
-  reported separately; the `cards-dice-un` item does this. Rulings that apply only to
+- **Status:** sheets are excluded from `card-coverage` (which reports their count
+  separately) and from `unsupported` (unless asked for with `--card`). Rulings that apply only to
   sticker sheets are DEFERRED in `scripts/rulings_batches.py`.
 
 ### Digital-only cards

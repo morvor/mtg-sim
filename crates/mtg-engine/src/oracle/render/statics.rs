@@ -3405,6 +3405,25 @@ impl Renderer<'_> {
                         };
                         format!("{once}you may {pay}{verb} the result of {die} {rolled} by {n}")
                     }
+                    // "After you roll a die, you may pay 1 life. If you do, increase or
+                    // decrease the result by 1. Do this only once each turn."
+                    (None, crate::dice::ModifierKind::AddOrSubtract(n)) => {
+                        let roll = match m.whose {
+                            PlayerRel::You => "you roll",
+                            _ => "any player rolls",
+                        };
+                        let once = if m.once_per_turn {
+                            ". Do this only once each turn"
+                        } else {
+                            ""
+                        };
+                        if free {
+                            format!("after {roll} {die}, you may increase or decrease the result by {n}{once}")
+                        } else {
+                            let pay = self.cost_as_payment(&m.cost);
+                            format!("after {roll} {die}, you may {pay}. If you do, increase or decrease the result by {n}{once}")
+                        }
+                    }
                 }
             }
         }
