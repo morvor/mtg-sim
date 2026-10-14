@@ -156,7 +156,7 @@ fn parish_blade_trainee_puts_the_same_counters_rather_than_moving_them() {
 
 #[test]
 fn drop_of_honey_and_porphyry_nodes_destroy_the_chosen_tied_creature() {
-    cr!("608.2c", "117.2");
+    cr!("608.2c", "117.2e");
     ruling!(
         "Drop of Honey",
         "No player can take actions between the time you choose which creature to destroy and the time it's destroyed."
@@ -188,7 +188,7 @@ fn drop_of_honey_and_porphyry_nodes_destroy_the_chosen_tied_creature() {
 
 #[test]
 fn baird_compares_with_base_power() {
-    cr!("613.4b", "613.4c", "208.2");
+    cr!("613.4b", "613.4c");
     ruling!(
         "Baird, Argivian Recruiter",
         "If another effect sets a creature’s power and toughness to specific numbers or values, those become its base power and toughness. If an effect modifies a creature’s power and/or toughness without setting them, that is not included when determining its base power and toughness."

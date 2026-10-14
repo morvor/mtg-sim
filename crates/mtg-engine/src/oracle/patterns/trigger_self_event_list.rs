@@ -20,33 +20,31 @@ fn self_event_list(r: &str) -> Option<Parsed> {
     let mut conds = Vec::new();
     let mut it: Option<Sel> = None;
     let mut player: Option<PlayerRef> = None;
-    let mut same_it = true;
-    let mut same_player = true;
+    let dbg = |x: &dyn std::fmt::Debug| format!("{x:?}");
     for p in parts {
         let (c, i, pl) =
             crate::oracle::triggers::parse_trigger_condition(&format!("whenever ~ {p}"))?;
-        let dbg = |x: &dyn std::fmt::Debug| format!("{x:?}");
-        match &it {
-            Some(prev) if dbg(prev) != dbg(&i) => same_it = false,
-            Some(_) => {}
-            None => it = Some(i),
-        }
-        match &player {
-            Some(prev) if dbg(prev) != dbg(&pl) => same_player = false,
-            Some(_) => {}
-            None => player = Some(pl),
-        }
+        // When the listed events give "it" or "that player" different meanings (Giggling
+        // Skitterspike: the player who targeted it, or you), the effect may not use that
+        // word: it has no antecedent, so an effect mentioning it doesn't compile.
+        it = match it {
+            Some(prev) if dbg(&prev) != dbg(&i) => Some(super::oracle_hardening_referents::no_referent()),
+            Some(prev) => Some(prev),
+            None => Some(i),
+        };
+        player = match player {
+            Some(prev) if dbg(&prev) != dbg(&pl) => {
+                Some(super::oracle_hardening_referents::no_player_referent())
+            }
+            Some(prev) => Some(prev),
+            None => Some(pl),
+        };
         match c {
             TriggerCond::AnyOf(v) => conds.extend(v),
             c => conds.push(c),
         }
     }
-    let it = if same_it { it? } else { Sel::None };
-    let player = if same_player {
-        player?
-    } else {
-        PlayerRef::Iterated
-    };
+    let (it, player) = (it?, player?);
     Some((TriggerCond::AnyOf(conds), it, player))
 }
 

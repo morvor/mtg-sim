@@ -182,3 +182,55 @@ fn giggling_skitterspike_uses_its_last_known_power() {
     t.resolve_all();
     assert_eq!(lost(&t, P1), 1 + 4);
 }
+
+#[test]
+fn self_event_list_with_differing_players_has_no_that_player() {
+    cr!("603.2c");
+    // "~ attacks" (you) and "~ becomes the target of a spell" (the spell's controller)
+    // give "that player" different meanings: such an effect isn't compiled.
+    use mtg_engine::oracle::{self, CompileContext};
+    use mtg_engine::types::TypeLine;
+    let tl = TypeLine::parse("Creature — Test");
+    let ctx = CompileContext {
+        card_name: "Test Spike",
+        full_name: "Test Spike",
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: Some("1"),
+        toughness: Some("1"),
+    };
+    let c = oracle::compile(
+        "Whenever Test Spike attacks, blocks, or becomes the target of a spell, that player loses 2 life.",
+        &ctx,
+    );
+    assert!(!c.unsupported.is_empty());
+    let c = oracle::compile(
+        "Whenever Test Spike attacks, blocks, or becomes the target of a spell, each opponent loses 2 life.",
+        &ctx,
+    );
+    assert!(c.unsupported.is_empty(), "{:?}", c.unsupported);
+}
+
+#[test]
+fn strength_testing_hammer_draws_if_greatest_or_tied_for_greatest_power() {
+    cr!("608.2c", "706.1");
+    supported("Strength-Testing Hammer");
+    // Grizzly Bears (2/2) with the Hammer attacks; P1 has Craw Wurm (6/4).
+    for (roll, draws) in [(3, false), (4, true), (5, true)] {
+        let mut t = TestGame::new(2);
+        stack_library(&mut t, P0, &["Forest"]);
+        let hammer = t.battlefield(P0, "Strength-Testing Hammer");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.battlefield(P1, "Craw Wurm");
+        assert!(t.g.attach_as_creature(hammer, Entity::Object(bears)));
+        t.g.recompute();
+        t.g.dice.loaded.push_back(roll);
+        let hand = t.hand_size(P0);
+        attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+        t.resolve_all();
+        assert_eq!(t.pt(bears).0, 2 + roll as i32, "roll {roll}");
+        assert_eq!(t.hand_size(P0), hand + usize::from(draws), "roll {roll}");
+    }
+}
