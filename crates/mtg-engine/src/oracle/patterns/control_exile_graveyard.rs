@@ -69,32 +69,36 @@ fn names_cards_or_tokens(f: &Filter) -> bool {
 }
 
 /// What happens instead: "exile it", "exile that card", "reveal ~ and shuffle it into its
-/// owner's library".
-fn instead(s: &str, is_self: bool) -> Option<Destination> {
+/// owner's library" (the card is revealed as it's moved, CR 701.20a).
+fn instead(s: &str, is_self: bool) -> Option<ReplacementAction> {
     match s {
-        "exile it instead" | "exile that card instead" | "instead exile it" => {
-            Some(Destination::zone(ZoneKind::Exile))
-        }
+        "exile it instead" | "exile that card instead" | "instead exile it" => Some(
+            ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+        ),
         "reveal ~ and shuffle it into its owner's library instead"
         | "shuffle it into its owner's library instead"
             if is_self =>
         {
             let mut d = Destination::zone(ZoneKind::Library);
             d.position = LibraryPosition::Shuffled;
-            Some(d)
+            Some(if s.starts_with("reveal ") {
+                ReplacementAction::RevealAndMoveInstead(d)
+            } else {
+                ReplacementAction::MoveInstead(d)
+            })
         }
         _ => None,
     }
 }
 
-fn def(filter: Filter, to: Destination) -> ReplacementDef {
+fn def(filter: Filter, action: ReplacementAction) -> ReplacementDef {
     ReplacementDef {
         event: ReplacementEvent::ZoneChange {
             filter,
             from: None,
             to: Some(ZoneKind::Graveyard),
         },
-        action: ReplacementAction::MoveInstead(to),
+        action,
         self_replacement: false,
         optional: false,
     }

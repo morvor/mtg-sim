@@ -159,6 +159,39 @@ impl Renderer<'_> {
                     "the {{opt:amount of}} damage dealt to {to} {{opt:so far}} this turn by {s}"
                 )
             }
+            // "the number of cards that were put into target player's graveyard from their
+            // library this turn" (cards go to their owner's graveyard, CR 404.2).
+            (
+                TriggerCond::ZoneChange {
+                    filter,
+                    from: Some(from),
+                    to: Some(ZoneKind::Graveyard),
+                },
+                Tally::Events,
+            ) => match self.put_into_graveyard_from(filter, &[*from]) {
+                Some(s) => s,
+                None => self.gap(format!("EventsThisTurn({c:?})")),
+            },
+            // "the number of your opponents who were dealt combat damage by ~ or a Dragon
+            // this turn".
+            (
+                TriggerCond::DealsDamage {
+                    source,
+                    to: DamageRecipient::Player(who),
+                    combat_only,
+                },
+                Tally::Players,
+            ) if !matches!(source, Filter::Any) => {
+                let combat = if *combat_only { "combat " } else { "" };
+                let by = self.noun_det(source, super::nouns::Det::A);
+                let n = match who {
+                    PlayerRel::Opponent => "{alt:opponents|your opponents}",
+                    _ => "players",
+                };
+                format!(
+                    "the number of {n} {{alt:who|that}} {{alt:was|were}} dealt {combat}damage by {by} this turn"
+                )
+            }
             (cond, Tally::Players) => {
                 let (who, verb) = match cond {
                     TriggerCond::LosesLife { who } => (*who, "lost life"),
@@ -188,5 +221,102 @@ impl Renderer<'_> {
             }
             _ => self.gap(format!("EventsThisTurn({c:?})")),
         }
+    }
+}
+
+/// Whether `v` sums the cards of one kind put into a graveyard from several zones this turn
+/// (see [`Renderer::graveyard_arrivals_sum`]).
+pub(crate) fn graveyard_arrivals(v: &[Value]) -> bool {
+    let parts: Option<Vec<(String, ZoneKind)>> = v
+        .iter()
+        .map(|x| match x {
+            Value::EventsThisTurn(c, Tally::Events) => match c.as_ref() {
+                TriggerCond::ZoneChange {
+                    filter: f @ Filter::And(_),
+                    from: Some(z),
+                    to: Some(ZoneKind::Graveyard),
+                } => Some((format!("{f:?}"), *z)),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    parts.is_some_and(|p| p.len() >= 2 && p.iter().all(|(f, _)| *f == p[0].0))
+}
+
+impl Renderer<'_> {
+    /// "the number of cards that were put into your graveyard from your hand or library
+    /// this turn": the cards of `filter` (owned by one player) put into that player's
+    /// graveyard from any of `from`.
+    fn put_into_graveyard_from(&mut self, filter: &Filter, from: &[ZoneKind]) -> Option<String> {
+        let Filter::And(v) = filter else {
+            return None;
+        };
+        let owner = v.iter().find_map(|x| match x {
+            Filter::OwnedBy(r) => Some(*r),
+            _ => None,
+        })?;
+        let rest: Vec<Filter> = v
+            .iter()
+            .filter(|x| !matches!(x, Filter::OwnedBy(_)))
+            .cloned()
+            .collect();
+        let n = self.many(&Filter::and(rest), "cards");
+        let p = self.rel_possessive(owner, Num::One);
+        let pp = if p == "your" { "your" } else { "their" };
+        let zones: Vec<&str> = from
+            .iter()
+            .map(|z| match z {
+                ZoneKind::Hand => Some("hand"),
+                ZoneKind::Library => Some("library"),
+                ZoneKind::Battlefield => Some("battlefield"),
+                ZoneKind::Exile => Some("exile"),
+                ZoneKind::Stack => Some("stack"),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let z = join_list(
+            &zones.iter().map(|z| z.to_string()).collect::<Vec<_>>(),
+            "or",
+        );
+        let from = match zones.as_slice() {
+            ["battlefield"] => "the battlefield".to_string(),
+            _ => format!("{pp} {z}"),
+        };
+        Some(format!(
+            "the number of {n} {{alt:that were|}} put into {p} graveyard from {from} this turn"
+        ))
+    }
+
+    /// The sum of the cards put into one graveyard from several zones this turn, as one
+    /// number: "from your hand or library".
+    pub(crate) fn graveyard_arrivals_sum(&mut self, v: &[Value]) -> Option<String> {
+        let mut filter = None;
+        let mut zones = Vec::new();
+        for x in v {
+            let Value::EventsThisTurn(c, Tally::Events) = x else {
+                return None;
+            };
+            let TriggerCond::ZoneChange {
+                filter: f,
+                from: Some(z),
+                to: Some(ZoneKind::Graveyard),
+            } = c.as_ref()
+            else {
+                return None;
+            };
+            if filter
+                .as_ref()
+                .is_some_and(|g: &Filter| format!("{g:?}") != format!("{f:?}"))
+            {
+                return None;
+            }
+            filter = Some(f.clone());
+            zones.push(*z);
+        }
+        if zones.len() < 2 {
+            return None;
+        }
+        self.put_into_graveyard_from(&filter?, &zones)
     }
 }

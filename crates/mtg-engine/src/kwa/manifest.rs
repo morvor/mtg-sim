@@ -42,6 +42,18 @@ pub fn put_face_down(
     kind: &str,
     source: Option<ObjectId>,
 ) -> Option<ObjectId> {
+    put_face_down_entering(g, card, p, kind, source, false)
+}
+
+/// [`put_face_down`], entering tapped if `tapped`.
+pub fn put_face_down_entering(
+    g: &mut Game,
+    card: ObjectId,
+    p: PlayerId,
+    kind: &str,
+    source: Option<ObjectId>,
+    tapped: bool,
+) -> Option<ObjectId> {
     if !g.is_live(card) || g.obj(card).zone == Zone::Battlefield {
         return None;
     }
@@ -56,6 +68,7 @@ pub fn put_face_down(
             // Enters with the plain face-down characteristics (CR 708.3); its kind is
             // recorded right after.
             face_down: Some(KeywordKind::Morph),
+            tapped,
             ..Default::default()
         },
         source,
@@ -156,6 +169,7 @@ impl KeywordActionRules for Manifest {
             _ => MANIFESTED,
         };
         let n = number(g, a.n, ctx);
+        let tapped = a.spec.is_some_and(|s| s.tapped);
         let mut out = Vec::new();
         for p in g.eval_players(a.who, ctx) {
             match (a.action, a.what) {
@@ -186,7 +200,7 @@ impl KeywordActionRules for Manifest {
                     for c in cards {
                         // One at a time (CR 701.40e, 701.58e).
                         g.end_event_batch();
-                        out.extend(put_face_down(g, c, p, kind, ctx.source));
+                        out.extend(put_face_down_entering(g, c, p, kind, ctx.source, tapped));
                     }
                 }
             }
