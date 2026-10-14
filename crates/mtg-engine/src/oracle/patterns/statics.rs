@@ -146,11 +146,16 @@ pub(crate) fn granted_abilities_to(
     // Blazing Torch: Blazing Torch deals 2 damage to any target.\""): only when every
     // self-reference in it is the card's name (see `granted_by`).
     let mut names_granter = false;
+    let mut cost_names_granter = false;
     if !to_source && quote_names_card(orig, ctx) {
-        if !quote_only_names_card(orig, ctx) {
+        if quote_only_names_card(orig, ctx) {
+            names_granter = true;
+        } else if quote_names_card_only_in_cost(orig, ctx) {
+            // "{T}, Unattach Surestrike Trident: This creature deals damage ...".
+            cost_names_granter = true;
+        } else {
             return None;
         }
-        names_granter = true;
     }
     let mut tl = TypeLine::default();
     tl.card_types.insert(hint);
@@ -178,6 +183,12 @@ pub(crate) fn granted_abilities_to(
     if names_granter {
         return v.iter().map(crate::granted_by::refer_to_granter).collect();
     }
+    if cost_names_granter {
+        return v
+            .iter()
+            .map(crate::granted_by::refer_cost_to_granter)
+            .collect();
+    }
     Some(v.into_iter().map(not_a_cda).collect())
 }
 
@@ -201,6 +212,40 @@ fn quote_only_names_card(normalized: &str, ctx: &CompileContext) -> bool {
     quoted_segments(&raw).into_iter().any(|q| {
         bare(&crate::oracle::normalize(q, ctx)) == bare(normalized)
             && !crate::oracle::normalize(q, &anonymous).contains('~')
+    })
+}
+
+/// Whether a quoted activated ability (normalized) names the card only in its cost, and
+/// otherwise refers only to "this creature": "{T}, Unattach Surestrike Trident: This
+/// creature deals damage equal to its power to ...".
+fn quote_names_card_only_in_cost(normalized: &str, ctx: &CompileContext) -> bool {
+    let raw = crate::oracle::raw_text();
+    let tl = TypeLine::default();
+    let anonymous = CompileContext {
+        card_name: "\u{1}",
+        full_name: "\u{1}",
+        type_line: &tl,
+        layout: crate::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let bare = |s: &str| s.trim().trim_end_matches(',').to_string();
+    quoted_segments(&raw).into_iter().any(|q| {
+        let with_name = crate::oracle::normalize(q, ctx);
+        if bare(&with_name) != bare(normalized) {
+            return false;
+        }
+        let anon = crate::oracle::normalize(q, &anonymous);
+        match (with_name.split_once(": "), anon.split_once(": ")) {
+            // The cost must not also say "this creature" (which would be the creature,
+            // not the Equipment).
+            (Some((cost, effect)), Some((anon_cost, anon_effect))) => {
+                cost != anon_cost && !anon_cost.contains('~') && effect == anon_effect
+            }
+            _ => false,
+        }
     })
 }
 
@@ -460,7 +505,10 @@ pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     }
     if let Some(r) = s.strip_prefix("commanders") {
         if r.is_empty() || r.starts_with(' ') {
-            let probe = format!("permanents{r}");
+            // Commanders in another zone ("commanders from the command zone") are cards.
+            let t = r.trim_start();
+            let elsewhere = t.starts_with("from ") || t.starts_with("in ");
+            let probe = format!("{}{r}", if elsewhere { "cards" } else { "permanents" });
             let (f, _, rest) = object_phrase(&probe)?;
             let rest = &r[r.len() - rest.len()..];
             return Some((Filter::and(vec![Filter::Commander, f]), true, rest));

@@ -42,6 +42,16 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
             ctx.source
                 .is_some_and(|s| g.is_live(s) && g.obj(s).attached_to.is_some()),
         ),
+        // "Unattach Heartseeker" in an ability Heartseeker grants (`granted_by`).
+        Effect::Unattach { what: Sel::All(f) } => {
+            let objs = g.objects_matching(f, ctx);
+            Some(
+                !objs.is_empty()
+                    && objs
+                        .iter()
+                        .all(|o| g.is_live(*o) && g.obj(*o).attached_to.is_some()),
+            )
+        }
         Effect::Unattach {
             what: Sel::Choose { filter, count, .. },
         } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),

@@ -936,6 +936,14 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               ability's controller (\"you\", CR 106.4), so \"when you spend this mana\" is \
               when that mana is spent (CR 106.6).",
     },
+    Equivalence {
+        pattern: r"\bthe base power and toughness of ([^.,]+?) become (\d+/\d+)",
+        replacement: "$1 has base power and toughness $2",
+        why: "\"The base power and toughness of each creature ... become 0/2\" and \"each \
+              creature ... has base power and toughness 0/2\" set the same characteristics \
+              in layer 7b (CR 613.4b); either way, an effect of a resolving ability with no \
+              duration stated lasts until the end of the game (CR 611.2a).",
+    },
 ];
 
 /// The sentence-level rewrites `sentence_rewrites` applies to both sides (word order and

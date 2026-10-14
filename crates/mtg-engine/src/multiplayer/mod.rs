@@ -186,7 +186,7 @@ pub fn remove_player_objects(g: &mut Game, p: PlayerId) {
         .filter(|id| g.obj(*id).controller == p)
         .collect();
     for id in controlled {
-        g.exile_object(id, None);
+        exile_by_rule(g, id);
     }
     // CR 725.4, 726.4: the monarch or the player with the initiative leaving passes the
     // designation to the active player (or the next player in turn order).
@@ -199,6 +199,20 @@ pub fn remove_player_objects(g: &mut Game, p: PlayerId) {
     // planeswalks.
     crate::planechase::player_left(g, p, planar);
     g.dirty = true;
+}
+
+/// Exiles an object because a player left the game (CR 800.4a, 800.4c). This applies to
+/// phased-out permanents too (CR 702.26n).
+fn exile_by_rule(g: &mut Game, id: ObjectId) {
+    g.move_object_ev(crate::replacement::MoveEv {
+        obj: id,
+        to: Zone::Exile,
+        pos: crate::ability::LibraryPosition::Top,
+        cause: crate::events::MoveCause::PlayerLeft,
+        by: None,
+        etb: Default::default(),
+        source: None,
+    });
 }
 
 /// CR 800.4c: if an effect giving a player still in the game control of an object ends,
@@ -220,7 +234,7 @@ pub fn exile_orphaned_objects(g: &mut Game) -> bool {
         .filter(|id| !g.player(g.obj(*id).controller).in_game())
         .collect();
     for id in &orphans {
-        g.exile_object(*id, None);
+        exile_by_rule(g, *id);
     }
     !orphans.is_empty()
 }

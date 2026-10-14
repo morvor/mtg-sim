@@ -839,8 +839,10 @@ impl Game {
             } => {
                 // "If they do, ...": whether a player gained control of something.
                 ctx.prev_happened = false;
-                // CR 611.2b (Master Thief).
-                if self.effect_expired(duration, ctx.source, ctx.controller) {
+                // CR 611.2b (Master Thief). A condition about the affected objects ("for
+                // as long as that creature is enchanted") is checked for them below.
+                let about_affected = matches!(duration, Duration::WhileCondition(_));
+                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
                 }
                 let objs: Vec<ObjectId> = self
@@ -853,6 +855,16 @@ impl Game {
                 };
                 if objs.is_empty() {
                     return;
+                }
+                if let Duration::WhileCondition(c) = duration {
+                    let mut c2 = ctx.clone();
+                    c2.set_var(
+                        vars::AFFECTED,
+                        objs.iter().map(|o| Entity::Object(*o)).collect(),
+                    );
+                    if !self.eval_cond(c, &c2) {
+                        return;
+                    }
                 }
                 // "Draw a card for each one they gained control of this way".
                 let changed: Vec<ObjectId> = objs
@@ -1261,6 +1273,7 @@ impl Game {
                 // "Attach ~ to a creature you control. If you do, ...": whether anything
                 // became attached.
                 let mut any = false;
+                let to = &crate::attach::recipient_for_all(self, to, &objs, ctx);
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
                     for o in objs {
                         any |= self.attach(o, t);
@@ -1348,7 +1361,11 @@ impl Game {
                     });
                 }
             }
-            Effect::CopySpellRetargeted { what, target } => {
+            Effect::CopySpellRetargeted {
+                what,
+                target,
+                among,
+            } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
                     match &targets {
@@ -1361,7 +1378,12 @@ impl Game {
                             );
                         }
                         None => {
-                            crate::copy_rules::copy_for_each_target(self, o, ctx.controller);
+                            crate::copy_rules::copy_for_each_target(
+                                self,
+                                o,
+                                ctx.controller,
+                                among.as_ref().map(|f| (f, &*ctx)),
+                            );
                         }
                     }
                 }
@@ -2659,6 +2681,12 @@ impl Game {
                 *f = Filter::Objects(self.named_objects(f, ctx));
             }
         }
+        // "Spells with the same mana value as that spell": amounts naming the resolving
+        // ability's objects are determined as the effect begins (CR 608.2h), as they
+        // can't be evaluated later.
+        if let Restriction::CantCast { what, .. } = &mut r {
+            self.lock_filter_amounts(what, ctx);
+        }
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
         if let Some(pf) = restriction_player_filter(&mut r) {
@@ -2724,6 +2752,41 @@ impl Game {
                 Filter::Or(v.iter().map(|x| self.bind_target_players(x, ctx)).collect())
             }
             other => other.clone(),
+        }
+    }
+
+    /// Replaces the amounts of a filter's comparisons that refer to the resolving spell's
+    /// or ability's objects ("the same mana value as that spell", "X") with their values
+    /// now (CR 608.2h).
+    fn lock_filter_amounts(&self, f: &mut Filter, ctx: &Ctx) {
+        fn refers_to_ctx(v: &Value) -> bool {
+            match v {
+                Value::X | Value::Var(_) | Value::EventAmount | Value::Chosen => true,
+                Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s) => matches!(
+                    **s,
+                    Sel::Target(_)
+                        | Sel::Var(_)
+                        | Sel::TriggerObject
+                        | Sel::TriggerLki
+                        | Sel::TriggerOtherObject
+                        | Sel::TriggerSpell
+                ),
+                _ => false,
+            }
+        }
+        match f {
+            Filter::And(v) | Filter::Or(v) => {
+                for x in v {
+                    self.lock_filter_amounts(x, ctx);
+                }
+            }
+            Filter::Not(x) => self.lock_filter_amounts(x, ctx),
+            Filter::ManaValue(_, v) | Filter::Power(_, v) | Filter::Toughness(_, v)
+                if refers_to_ctx(v) =>
+            {
+                **v = Value::c(self.eval_value(v, ctx) as i32);
+            }
+            _ => {}
         }
     }
 
@@ -2941,6 +3004,26 @@ impl Game {
                 self.choose_mana_combination(p, ctx, opts, k)
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
+            ManaProduction::DistinctColors(colors, each) => {
+                // Each color chosen is different from those chosen before it.
+                let mut left = vec![
+                    ManaType::W,
+                    ManaType::U,
+                    ManaType::B,
+                    ManaType::R,
+                    ManaType::G,
+                ];
+                let mut out = Vec::new();
+                for _ in 0..*colors {
+                    if left.is_empty() {
+                        break;
+                    }
+                    let c = self.choose_mana_color(p, ctx, &left);
+                    left.retain(|t| *t != c);
+                    out.extend(std::iter::repeat_n(c, *each as usize));
+                }
+                out
+            }
             ManaProduction::OneOfOrChosenColor(opts) => {
                 let mut u = opts.clone();
                 if let Some(c) = self
@@ -3040,6 +3123,23 @@ impl Game {
                     cs = cs.union(self.obj(o).chars.colors);
                 }
                 cs.iter().map(ManaType::from_color).collect()
+            }
+            ManaProduction::DevotionToChosenColor => {
+                let c = self.choose_mana_color(
+                    p,
+                    ctx,
+                    &[
+                        ManaType::W,
+                        ManaType::U,
+                        ManaType::B,
+                        ManaType::R,
+                        ManaType::G,
+                    ],
+                );
+                let k = c.color().map_or(0, |col| {
+                    self.eval_value(&Value::Devotion(ColorSet::single(col)), ctx)
+                });
+                vec![c; k.max(0) as usize]
             }
             ManaProduction::CommanderIdentity => {
                 // CR 903.4f: undefined without a commander; no mana.

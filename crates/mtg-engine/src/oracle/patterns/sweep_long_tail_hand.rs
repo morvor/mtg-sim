@@ -15,7 +15,7 @@ use crate::oracle::effects::{player_ref, Builder};
 use crate::oracle::phrases::*;
 
 /// The permanents the cards put onto the battlefield became.
-const PUT: Var = vars::USER + 1400;
+pub(crate) const PUT: Var = vars::USER + 1400;
 
 inventory::submit! {
     EffectPattern { name: "sweep: put cards from your hand onto the battlefield", priority: 95, parse: put_from_hand }

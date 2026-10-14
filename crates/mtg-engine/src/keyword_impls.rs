@@ -134,6 +134,22 @@ pub fn ability_from_keyword(a: &AbilityDef) -> Option<KeywordKind> {
     })
 }
 
+/// The keyword ability whose resolution asks for the cost being paid ("pay cumulative
+/// upkeep costs", CR 702.24a), as a spending purpose (CR 106.6).
+pub fn resolving_keyword_purpose(
+    g: &Game,
+    ctx: &crate::eval::Ctx,
+) -> Option<crate::mana::SpendPurpose> {
+    let so = g.try_obj(ctx.stack_obj?)?;
+    match so.stack.as_deref().map(|si| &si.kind) {
+        Some(
+            crate::object::StackKind::Activated { ability, .. }
+            | crate::object::StackKind::Triggered { ability, .. },
+        ) => ability_from_keyword(ability).map(crate::mana::SpendPurpose::Keyword),
+        _ => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Casting hooks
 // ---------------------------------------------------------------------------
