@@ -1317,6 +1317,11 @@ impl Renderer<'_> {
                 )
             }
             CostChange::AdditionalCost(c) => {
+                if matches!(cm.applies_to, CostTarget::ThisSpell) {
+                    if let Some(s) = self.additional_cost_extra(c) {
+                        return s;
+                    }
+                }
                 let c = self.cost_as_payment(c);
                 if matches!(cm.applies_to, CostTarget::ThisSpell) {
                     format!("as an additional cost to cast ~, {c}")
@@ -1560,6 +1565,9 @@ impl Renderer<'_> {
 
     /// "{1}" / "{1} for each artifact you control" / "{X}, where X is ...".
     fn cost_amount(&mut self, v: &Value) -> (String, String) {
+        if let Some(r) = self.cost_amount_extra(v) {
+            return r;
+        }
         match v {
             Value::Const(n) => (format!("{{{n}}}"), String::new()),
             Value::X => ("{X}".into(), String::new()),

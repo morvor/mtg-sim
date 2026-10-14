@@ -1823,6 +1823,11 @@ impl Renderer<'_> {
                 duration,
                 repeatable,
             } => {
+                if matches!(duration, Duration::WhileSourceOnBattlefield) && !*repeatable {
+                    if let Some(s) = self.special_action_extra(def) {
+                        return s;
+                    }
+                }
                 let d = self.duration(duration);
                 let c = self.cost(&def.cost);
                 let what = match &def.action {
@@ -5317,8 +5322,15 @@ impl Renderer<'_> {
                     let regains = mods[pos..].iter().any(|x| {
                         matches!(x, Modification::AddAbility(_) | Modification::AddKeyword(_))
                     });
+                    let land = if custom_extra::loses_land_types_and_abilities(mods) {
+                        "land types and "
+                    } else {
+                        ""
+                    };
                     parts.push(if regains {
-                        "loses all {opt:other} abilities".into()
+                        format!("loses all {land}{{opt:other}} abilities")
+                    } else if !land.is_empty() {
+                        format!("loses all {land}abilities")
                     } else {
                         "loses all abilities".into()
                     })
@@ -5330,6 +5342,10 @@ impl Renderer<'_> {
                     becomes.pt = Some((p.clone(), t.clone()));
                 }
                 Modification::SwitchPT => parts.push("has its power and toughness switched".into()),
+                // "loses all land types and abilities" (with `RemoveAllAbilities`).
+                Modification::Custom { name, .. }
+                    if name.as_str() == crate::kw::grant_filters::LOSE_ALL_LAND_TYPES
+                        && custom_extra::loses_land_types_and_abilities(mods) => {}
                 Modification::Custom { name, .. } => {
                     let t = self.custom_modification(name);
                     parts.push(t);
@@ -5538,7 +5554,9 @@ impl Renderer<'_> {
             let at = parts
                 .iter()
                 .take_while(|p| {
-                    p.starts_with("isn't") || (loses_first && p.as_str() == "loses all abilities")
+                    p.starts_with("isn't")
+                        || (loses_first && p.as_str() == "loses all abilities")
+                        || p.as_str() == custom_extra::LOSES_THIS_ABILITY
                 })
                 .count();
             parts.insert(at, b);

@@ -731,8 +731,11 @@ impl Renderer<'_> {
             Sel::LinkedNoted => decline("the last chosen card".into(), case),
             Sel::Before(inner) => self.sel(inner, case),
             Sel::ThisTurn(c) => {
-                let g = self.gap(format!("Sel::ThisTurn({c:?})"));
-                decline(g, case)
+                let s = match self.this_turn_objects(c) {
+                    Some(s) => s,
+                    None => self.gap(format!("Sel::ThisTurn({c:?})")),
+                };
+                decline(s, case)
             }
             // "the creatures destroyed this way": the objects an earlier instruction acted
             // on.

@@ -251,7 +251,10 @@ impl Renderer<'_> {
                 };
                 format!("the total number of {c} among {among}")
             }
-            _ => self.gap("Value::OverPlayers"),
+            _ => match self.over_players_extra(op, pf, v) {
+                Some(s) => s,
+                None => self.gap("Value::OverPlayers"),
+            },
         }
     }
 
