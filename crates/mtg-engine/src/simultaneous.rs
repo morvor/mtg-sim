@@ -554,6 +554,9 @@ enum Plan {
         reveal: bool,
         shuffle: bool,
     },
+    /// Life the player chose to pay for "[effect] unless they pay N life", paid together
+    /// with the other players' actions (CR 101.4, 118.12).
+    PayLife { player: PlayerId, cost: Cost },
     /// Performed for this player in turn (CR 608.2f).
     Exec(Effect),
 }
@@ -574,6 +577,14 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
     match e {
         Effect::Noop => true,
         Effect::May { effect, .. } => plannable(g, effect, ctx, p),
+        Effect::AsPlayer { who, effect } => match g.eval_player(who, ctx) {
+            Some(q) => {
+                let mut c = ctx.clone();
+                c.controller = q;
+                plannable(g, effect, &c, p)
+            }
+            None => true,
+        },
         Effect::If {
             then, otherwise, ..
         } => plannable(g, then, ctx, p) && plannable(g, otherwise, ctx, p),
@@ -591,6 +602,20 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
             p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
         }
         Effect::DealDamage { source, to, .. } => chosen_by(g, &[source, to], ctx, p),
+        // "For each creature, its controller sacrifices it unless they pay X life" (Killing
+        // Wave): each player decides whether to pay, then they all pay and sacrifice
+        // together (CR 101.4, 118.12).
+        Effect::PayOptional {
+            who,
+            cost,
+            then,
+            otherwise,
+        } => {
+            life_amount(cost).is_some()
+                && matches!(**then, Effect::Noop)
+                && g.eval_players(who, ctx).len() == 1
+                && plannable(g, otherwise, ctx, p)
+        }
         Effect::Search { who, whose, .. } => {
             p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
                 && g.eval_player(whose, ctx).is_some()
@@ -599,8 +624,22 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
     }
 }
 
+/// The life `cost` consists of, if it's only a payment of life.
+fn life_amount(cost: &Cost) -> Option<Value> {
+    match (&cost.mana, cost.parts.as_slice()) {
+        (None, [CostPart::PayLife(v)]) => Some(v.clone()),
+        _ => None,
+    }
+}
+
 /// Makes `p`'s choices for `e` (CR 101.4) and returns what they'll do.
-fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
+fn plan(
+    g: &mut Game,
+    e: &Effect,
+    ctx: &mut Ctx,
+    p: Option<PlayerId>,
+    earlier: &[Option<Plan>],
+) -> Plan {
     match e {
         Effect::Noop => Plan::Nothing,
         Effect::May { who, effect } => {
@@ -612,10 +651,24 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
                 && g.ask_yes_no(asker, ctx.source, &format!("You may: {text}"), true);
             ctx.prev_happened = yes;
             if yes {
-                plan(g, effect, ctx, p)
+                plan(g, effect, ctx, p, earlier)
             } else {
                 Plan::Nothing
             }
+        }
+        // "Its controller sacrifices it": planned as that player (see `Game::exec`).
+        Effect::AsPlayer { who, effect } if plannable(g, e, ctx, p) => {
+            let Some(q) = g.eval_player(who, ctx) else {
+                return Plan::Nothing;
+            };
+            let saved = ctx.controller;
+            let saved_resolving = ctx.resolving_controller;
+            ctx.resolving_controller.get_or_insert(saved);
+            ctx.controller = q;
+            let plan = plan(g, effect, ctx, p, earlier);
+            ctx.controller = saved;
+            ctx.resolving_controller = saved_resolving;
+            plan
         }
         Effect::If {
             cond,
@@ -623,14 +676,14 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
             otherwise,
         } => {
             if g.eval_cond(cond, ctx) {
-                plan(g, then, ctx, p)
+                plan(g, then, ctx, p, earlier)
             } else {
                 // An instruction whose condition didn't hold wasn't done (as in
                 // `Game::exec`).
                 if matches!(**otherwise, Effect::Noop) {
                     ctx.prev_happened = false;
                 }
-                plan(g, otherwise, ctx, p)
+                plan(g, otherwise, ctx, p, earlier)
             }
         }
         Effect::Move { what, to } if plannable(g, e, ctx, p) => {
@@ -807,6 +860,44 @@ fn plan(g: &mut Game, e: &Effect, ctx: &mut Ctx, p: Option<PlayerId>) -> Plan {
                 shuffle: *shuffle,
             }
         }
+        Effect::PayOptional {
+            who,
+            cost,
+            otherwise,
+            ..
+        } if plannable(g, e, ctx, p) => {
+            let (Some(q), Some(n)) = (g.eval_player(who, ctx), life_amount(cost)) else {
+                return Plan::Nothing;
+            };
+            let n = g.eval_value(&n, ctx).max(0);
+            // The life this player already chose to pay in this instruction counts against
+            // what they can pay (CR 119.4).
+            let committed: i64 = earlier
+                .iter()
+                .flatten()
+                .map(|pl| match pl {
+                    Plan::PayLife { player, cost } if *player == q => {
+                        life_amount(cost).map_or(0, |v| g.eval_value(&v, ctx))
+                    }
+                    _ => 0,
+                })
+                .sum();
+            let total = Cost::free().with(CostPart::PayLife(Value::Const((n + committed) as i32)));
+            let can =
+                !crate::multiplayer::cant_pay(g, q) && g.can_pay_cost(q, &total, ctx.source, ctx);
+            let cost = Cost::free().with(CostPart::PayLife(Value::Const(n as i32)));
+            let pays = can && g.ask_yes_no(q, ctx.source, &format!("Pay {n} life?"), false);
+            ctx.prev_happened = pays;
+            if pays {
+                Plan::PayLife { player: q, cost }
+            } else {
+                // CR 732.6: declining the [B] of "[A] unless [B]".
+                if can {
+                    crate::shortcuts::declined_unless(g);
+                }
+                plan(g, otherwise, ctx, p, earlier)
+            }
+        }
         // "Each player loses a third of their life": every amount is determined before
         // anyone's life changes (CR 608.2f) — in Two-Headed Giant the teammates look at
         // the shared total (CR 810.9).
@@ -853,7 +944,7 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         let plan = match &ins.action {
             Some(a) => {
                 let before = frames.enter(i, ctx);
-                let plan = plan(g, a, ctx, p);
+                let plan = plan(g, a, ctx, p, &plans[..i]);
                 frames.leave(i, ctx, before, false);
                 plan
             }
@@ -911,6 +1002,17 @@ fn perform_plans(
     ctx: &mut Ctx,
 ) -> Vec<Outcome> {
     let mut out: Vec<Outcome> = (0..plans.len()).map(|_| Outcome::default()).collect();
+    // Life the players chose to pay (CR 118.12), paid with the other actions.
+    for (i, plan) in plans.iter().enumerate() {
+        if let Some(Plan::PayLife { player, cost }) = plan {
+            let before = frames.enter(i, ctx);
+            g.last_paid = None;
+            if g.pay_cost(*player, cost, ctx.source, ctx) {
+                crate::cost_effects::note_paid(g, cost, ctx);
+            }
+            frames.leave(i, ctx, before, true);
+        }
+    }
     // Sacrifices (CR 701.21a): at the same time.
     let mut sac: Vec<(ObjectId, PlayerId)> = Vec::new();
     for plan in plans.iter().flatten() {
@@ -1031,6 +1133,7 @@ fn perform_plans(
 fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
     match plan {
         Plan::Nothing | Plan::Exec(_) => {}
+        Plan::PayLife { .. } => ctx.prev_happened = true,
         Plan::Move { battlefield, .. } => {
             let res: Vec<ObjectId> = outcome.moved.into_iter().flatten().collect();
             // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
