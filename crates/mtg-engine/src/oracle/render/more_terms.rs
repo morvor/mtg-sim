@@ -58,6 +58,9 @@ impl Renderer<'_> {
         if let Some(s) = self.shuffle_hands_then_draw(v) {
             return Some((s, 3));
         }
+        if let Some(r) = self.another_one(v) {
+            return Some(r);
+        }
         // "Move any number of +1/+1 counters from target creature onto another target
         // creature": a number chosen, then that many moved.
         if let [c, Effect::MoveCounters {
@@ -121,5 +124,76 @@ impl Renderer<'_> {
             "each player shuffles the cards from their hand into their library, then draws that many cards"
                 .to_string()
         })
+    }
+
+    /// "Put a +1/+1 counter on ~. Then if ..., put another +1/+1 counter on ~", "Draw a
+    /// card. Draw another card if ...": the same instruction again, under a condition.
+    fn another_one(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [first, Effect::If {
+            then, otherwise, ..
+        }, ..] = v
+        else {
+            return None;
+        };
+        if !matches!(otherwise.as_ref(), Effect::Noop) {
+            return None;
+        }
+        let again = match (first, then.as_ref()) {
+            (
+                Effect::AddCounters {
+                    what: a,
+                    kind: k,
+                    n: Value::Const(1),
+                },
+                Effect::AddCounters {
+                    what: b,
+                    kind: l,
+                    n: Value::Const(1),
+                },
+            ) if k == l && format!("{a:?}") == format!("{b:?}") => {
+                Some(format!("put a {} on", counter_name(k)))
+            }
+            (
+                Effect::Draw {
+                    who: a,
+                    n: Value::Const(1),
+                },
+                Effect::Draw {
+                    who: b,
+                    n: Value::Const(1),
+                },
+            ) if format!("{a:?}") == format!("{b:?}") => Some("draw a card".to_string()),
+            _ => None,
+        }?;
+        let one = self.effect(first);
+        let two = self.effect(&v[1]);
+        let another = again.replacen(" a ", " {alt:another|a} ", 1);
+        if !two.contains(&again) {
+            return None;
+        }
+        let two = two.replacen(&again, &another, 1);
+        Some((format!("{one}. {two}"), 2))
+    }
+
+    /// A permanent you control tapped for mana, as "you tap [noun]" (only a permanent's
+    /// controller can activate its mana abilities, CR 602.2): the noun without "you
+    /// control".
+    pub(crate) fn yours_tapped(&mut self, filter: &Filter) -> Option<String> {
+        let Filter::And(v) = filter else {
+            return None;
+        };
+        if !v
+            .iter()
+            .any(|x| matches!(x, Filter::ControlledBy(PlayerRel::You)))
+        {
+            return None;
+        }
+        let rest = Filter::and(
+            v.iter()
+                .filter(|x| !matches!(x, Filter::ControlledBy(PlayerRel::You)))
+                .cloned()
+                .collect(),
+        );
+        Some(self.noun_det(&rest, super::nouns::Det::A))
     }
 }

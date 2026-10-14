@@ -6105,6 +6105,28 @@ impl Renderer<'_> {
         parts.retain(|p| p != GRANTS);
         // An "isn't" part moves before the rest: cards list it first.
         parts.sort_by_key(|p| !p.starts_with("isn't"));
+        // "loses hexproof, indestructible, and shroud": one verb for the abilities lost.
+        let lost = |p: &String| {
+            p.strip_prefix("loses ")
+                .filter(|r| !r.contains(['"', '{']) && !r.starts_with("all "))
+                .map(str::to_string)
+        };
+        let mut merged: Vec<String> = Vec::new();
+        let mut i = 0;
+        while i < parts.len() {
+            let mut run = Vec::new();
+            while let Some(k) = parts.get(i + run.len()).and_then(lost) {
+                run.push(k);
+            }
+            if run.len() >= 2 {
+                merged.push(format!("loses {}", join_list(&run, "and")));
+                i += run.len();
+            } else {
+                merged.push(parts[i].clone());
+                i += 1;
+            }
+        }
+        let parts = merged;
         let s = join_list(&parts, "and");
         (s, where_clauses.concat())
     }

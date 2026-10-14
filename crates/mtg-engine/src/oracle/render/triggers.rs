@@ -748,6 +748,15 @@ impl Renderer<'_> {
             TriggerCond::BecomesUntapped(f) => Ev::new(obj(self, f), "becomes untapped"),
             TriggerCond::TappedForManaOfType { filter, mana } => {
                 let m = mana_symbol(*mana);
+                // "Whenever you tap a permanent for {C}": only its controller can (CR
+                // 602.2, as for `TappedForMana`).
+                if let Some(n) = self.yours_tapped(filter) {
+                    let a = obj(self, filter);
+                    return Ev::new(
+                        "",
+                        format!("{{alt:{a} is tapped for {m}|you tap {n} for {m}}}"),
+                    );
+                }
                 Ev::new(obj(self, filter), format!("is tapped for {m}"))
             }
             TriggerCond::BecomesTarget { filter, by } => {
