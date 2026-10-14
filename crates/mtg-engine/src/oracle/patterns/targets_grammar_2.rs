@@ -208,3 +208,28 @@ pub fn cast_target_forbidden(chars: &crate::object::Characteristics) -> Option<F
         _ => Some(Filter::Or(fs)),
     }
 }
+
+/// "Then that creature gets +1/+1 until end of turn and fights target creature you don't
+/// control." (Ent's Fury): the subject of the first instruction also fights (CR 701.14).
+fn gets_and_fights(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (a, c) = end(l).split_once(" and fights ")?;
+    if !a.contains(" gets ") && !a.contains(" get ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let e1 = parse_clause(a, b)?;
+    // The first instruction's subject is what "it" now refers to.
+    if !matches!(b.it, Sel::Target(_)) {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    }
+    let Some(e2) = parse_clause(&format!("it fights {c}"), b) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    Some(Effect::Seq(vec![e1, e2]))
+}
+
+inventory::submit! { EffectPattern { name: "[subject] gets ... and fights [object]", priority: 100, parse: gets_and_fights } }

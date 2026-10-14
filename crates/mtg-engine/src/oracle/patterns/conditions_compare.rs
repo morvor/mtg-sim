@@ -223,6 +223,18 @@ fn parse_inner(c: &str, b: &mut Builder) -> Option<Condition> {
         if let Some(cond) = you_control(r) {
             return Some(cond);
         }
+        // "you control a white permanent other than that creature or ~": an object
+        // described relative to what the text named.
+        if let Some(x) = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")) {
+            let (f, false, rest) = parse_object_phrase(x)? else {
+                return None;
+            };
+            if !rest.trim().is_empty() || !super::filters_relational::mentions_referent(&f) {
+                return None;
+            }
+            let f = super::filters_relational::resolve_referent(f, b)?;
+            return Some(Condition::Exists(f.you_control()));
+        }
     }
     if let Some(cond) = player_comparison(c, b) {
         return Some(cond);
