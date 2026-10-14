@@ -1,0 +1,10 @@
+[package]
+name = "mtg-tools"
+version.workspace = true
+edition.workspace = true
+description = "Coverage and reporting tools (CR coverage, rulings coverage, card support)"
+
+[dependencies]
+mtg-data = { path = "../mtg-data" }
+regex.workspace = true
+mtg-engine = { path = "../mtg-engine" }

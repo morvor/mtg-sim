@@ -1,0 +1,1411 @@
+//! Registry of keyword rule implementations (CR 702).
+//!
+//! Each keyword (or small family of related keywords) lives in its own file in this
+//! directory and implements [`KeywordRules`]. Register it in [`registry`] with one line.
+//! Every hook has a no-op default, so an implementation only overrides what it needs.
+//!
+//! Hooks come in two flavors:
+//! * **per-instance** hooks receive the [`Keyword`] instance (e.g. `derived`,
+//!   `cast_options`, `optional_costs`) and are only called for objects that have the
+//!   keyword;
+//! * **global** hooks (combat checks, special actions, damage) are called on every
+//!   registered implementation, which inspects the game itself.
+
+use crate::ability::*;
+use crate::casting::{CastOption, Illegal};
+use crate::decision::{Action, SpecialAction};
+use crate::eval::Ctx;
+use crate::events::Event;
+use crate::game::Game;
+use crate::keywords::{Keyword, KeywordKind};
+use crate::object::*;
+use crate::types::*;
+use smol_str::SmolStr;
+use std::sync::OnceLock;
+
+/// Rules behavior for one keyword ability. All methods have no-op defaults.
+#[allow(unused_variables)]
+pub trait KeywordRules: Sync + Send {
+    /// The keyword(s) this implementation handles.
+    fn kinds(&self) -> &'static [KeywordKind];
+
+    /// Abilities the keyword stands for (triggered/activated/static). Called once per
+    /// distinct keyword instance and cached.
+    fn derived(&self, kw: &Keyword) -> Option<Vec<Ability>> {
+        None
+    }
+    /// Whether a variable X the granting effect defines ("has ward {X}, where X is ...")
+    /// is determined as the keyword's ability resolves (kept in [`Keyword::x`]) rather than
+    /// whenever characteristics are computed (CR 702.21b).
+    fn x_determined_on_resolution(&self) -> bool {
+        false
+    }
+    /// Additional ways to cast `card` because it has `kw`.
+    fn cast_options(&self, g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -> Vec<CastOption> {
+        vec![]
+    }
+    /// Ways to cast `card` because it has `kw` that don't involve an alternative cost
+    /// (CR 118.9), so that an effect instructing a player to cast the card (CR 608.2g),
+    /// even "without paying its mana cost", allows them too, e.g. casting a prototype card
+    /// as a prototyped spell (CR 718.3). Without an alternative cost of their own.
+    fn cast_options_with_any_cost(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+        kw: &Keyword,
+    ) -> Vec<CastOption> {
+        vec![]
+    }
+    /// Whether a rule this keyword defines prohibits `p` from casting `card` as a spell
+    /// with the characteristics `chars` (CR 601.3), e.g. "this half of this split card
+    /// can't be cast from any zone other than a graveyard" (aftermath, CR 702.127a).
+    /// `card` may be the spell already on the stack as its proposal is checked
+    /// (CR 601.2e). Called for every registered implementation.
+    fn cast_prohibited(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
+        false
+    }
+    /// Cards `searcher` found searching `owner`'s library, before the searching effect
+    /// puts them anywhere: returns true if this implementation's rule dealt with them
+    /// instead (e.g. "they exile each card they find"), so the effect doesn't move them.
+    fn search_found(
+        &self,
+        g: &mut Game,
+        searcher: PlayerId,
+        owner: PlayerId,
+        found: &[ObjectId],
+    ) -> bool {
+        false
+    }
+    /// Whether a rule this implementation defines prohibits `p` from playing the land
+    /// card `card` (CR 305.2). Called for every registered implementation.
+    fn land_play_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
+        false
+    }
+    /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a
+    /// foretold card face down in exile (CR 702.143a) or a plotted card (CR 702.170d).
+    /// Called for every registered implementation.
+    fn global_cast_options(&self, g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+        vec![]
+    }
+    /// Land cards outside `p`'s hand that a keyword's rule lets them play, e.g. a card
+    /// with mayhem they discarded this turn (CR 702.187c). Called for every registered
+    /// implementation; the usual rules for playing lands still apply (CR 305.2).
+    fn playable_lands(&self, g: &Game, p: PlayerId) -> Vec<ObjectId> {
+        vec![]
+    }
+    /// Optional additional costs announced while casting (name, cost, repeatable).
+    fn optional_costs(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+    ) -> Vec<(SmolStr, Cost, bool)> {
+        vec![]
+    }
+    /// Optional additional costs announced while casting `spell` that depend on all of its
+    /// keywords together rather than on one instance of a keyword, e.g. several instances
+    /// of replicate, each paid separately (CR 702.56b). Called for every registered
+    /// implementation, after the per-instance [`KeywordRules::optional_costs`].
+    fn spell_optional_costs(&self, g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
+        vec![]
+    }
+    /// Choices that casting `spell` with `method` calls for as it's proposed (CR 601.2b),
+    /// e.g. the permanent to sacrifice for emerge (CR 702.119c), adding any costs they
+    /// entail to `extra` (paid with the rest of the total cost, CR 601.2h). Called once
+    /// per keyword kind the spell has, after its optional additional costs are announced.
+    fn announce(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        spell: ObjectId,
+        kw: &Keyword,
+        method: &CastMethod,
+        extra: &mut Cost,
+    ) -> Result<(), Illegal> {
+        Ok(())
+    }
+    /// Choices announced as `spell` is proposed (CR 601.2b) that are recorded by name in
+    /// its `CastInfo::paid` (`paid`), such as promising a gift to an opponent
+    /// (CR 702.174a, 702.174k). Called once per keyword kind the spell has, after its
+    /// optional additional costs are announced.
+    fn announce_choices(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        spell: ObjectId,
+        kw: &Keyword,
+        paid: &mut Vec<SmolStr>,
+    ) {
+    }
+    /// Adjust the targets/effect of a spell being cast.
+    fn adjust_spell_body(&self, g: &Game, spell: ObjectId, kw: &Keyword, body: Body) -> Body {
+        body
+    }
+    /// A text-changing effect (CR 612) this keyword makes on the spell `spell` that has
+    /// it, cast paying the costs named `paid` (`CastInfo::paid`), applied to its
+    /// characteristics `chars` in layer 3 (CR 613.1c), e.g. overload's "target" → "each"
+    /// (CR 702.96c). Also applied to the characteristics a card would have as a spell cast
+    /// a given way (CR 601.3e). `g.obj(spell).chars` isn't meaningful meanwhile.
+    fn spell_text_change(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+        paid: &[SmolStr],
+        chars: &mut Characteristics,
+    ) {
+    }
+    /// Reduce/modify the total cost of a spell being cast.
+    fn cost_reduction(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+        kw: &Keyword,
+        cost: &mut Cost,
+        x: u32,
+    ) {
+    }
+    /// Changes to the total cost of `card` cast by `p` applied after every other cost
+    /// increase and reduction (CR 601.2f), e.g. a minimum total cost. Called for every
+    /// registered implementation.
+    fn global_spell_cost(&self, g: &Game, p: PlayerId, card: ObjectId, cost: &mut Cost) {}
+    /// Where a resolved instant/sorcery goes, if the keyword changes it.
+    fn resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
+    /// Where a resolving permanent spell is put instead of onto the battlefield, if the
+    /// keyword changes it: e.g. a creature spell with rebound cast from its owner's hand
+    /// is exiled (CR 702.88a; Jeskai Baller). [`KeywordRules::after_spell_resolved`] is
+    /// then called as for an instant or sorcery.
+    fn permanent_resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
+    /// Whether [`KeywordRules::resolved_destination`] is a replacement effect of the
+    /// spell being put into its owner's graveyard ("instead of putting it into your
+    /// graveyard as it resolves, ...", CR 614.1a): if other replacement effects would
+    /// apply to that event, its controller chooses which to apply (CR 616.1). Not so for
+    /// an effect that applies wherever the card would go ("exile it instead of putting it
+    /// anywhere else", which still applies after any other), nor for a spell whose own
+    /// instruction puts it somewhere ("Exile this spell.").
+    fn resolved_destination_replaces(&self) -> bool {
+        true
+    }
+    /// After an instant or sorcery spell with this keyword resolved and was put where it
+    /// goes (`new` is the card there, e.g. in exile after
+    /// [`KeywordRules::resolved_destination`] sent it there), e.g. rebound's delayed
+    /// triggered ability (CR 702.88a). Called once per keyword kind the spell had as it
+    /// last existed on the stack.
+    fn after_spell_resolved(&self, g: &mut Game, spell: ObjectId, kw: &Keyword, new: ObjectId) {}
+    /// Where a resolved instant/sorcery goes because of something other than its keywords
+    /// (an effect that applies to that spell: "exile that spell instead of putting it into
+    /// your graveyard as it resolves"). Called for every registered implementation, after
+    /// the keywords' [`KeywordRules::resolved_destination`].
+    fn global_resolved_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
+    /// After any instant or sorcery spell resolved and was put where it goes (`new`).
+    /// Called for every registered implementation.
+    fn global_after_spell_resolved(&self, g: &mut Game, spell: ObjectId, new: ObjectId) {}
+    /// Where a countered spell goes, if the keyword changes it.
+    fn countered_destination(
+        &self,
+        g: &Game,
+        spell: ObjectId,
+        kw: &Keyword,
+    ) -> Option<(Zone, LibraryPosition)> {
+        None
+    }
+    /// After a permanent spell with this keyword resolves (`new` is the permanent).
+    fn after_permanent_resolves(&self, g: &mut Game, spell: ObjectId, new: ObjectId, kw: &Keyword) {
+    }
+
+    // --- global hooks ---
+    fn special_actions(&self, g: &Game, p: PlayerId) -> Vec<Action> {
+        vec![]
+    }
+    /// Return Some(result) if this implementation handles the special action.
+    fn perform_special_action(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        sa: &SpecialAction,
+    ) -> Option<Result<(), Illegal>> {
+        None
+    }
+    fn block_allowed(&self, g: &Game, blocker: ObjectId, attacker: ObjectId) -> bool {
+        true
+    }
+    /// Whether `p` may activate the activated ability `a` of `src` as far as this
+    /// implementation is concerned (e.g. "Players can't cycle cards", CR 702.29f).
+    fn activation_allowed(&self, g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {
+        true
+    }
+    /// Changes a keyword's rules make to the total cost of activating the ability `a` of
+    /// `src` (CR 601.2f, 602.2b), after cost-modifying effects: e.g. a power-up ability's
+    /// cost is reduced by its permanent's mana cost the turn it entered (CR 702.193a).
+    fn activation_cost(&self, g: &Game, p: PlayerId, src: ObjectId, a: &Ability, cost: &mut Cost) {}
+    fn attack_declaration_ok(&self, g: &Game, decl: &[(ObjectId, Entity)]) -> bool {
+        true
+    }
+    fn block_declaration_ok(
+        &self,
+        g: &Game,
+        options: &[(ObjectId, Vec<ObjectId>)],
+        decl: &[(ObjectId, ObjectId)],
+    ) -> bool {
+        true
+    }
+    fn pay_attack_costs(&self, g: &mut Game, ap: PlayerId, declared: &[(ObjectId, Entity)]) {}
+    fn pay_block_costs(&self, g: &mut Game, blocks: &[(ObjectId, ObjectId)]) {}
+    fn before_combat_damage(&self, g: &mut Game, assignments: &mut Vec<(ObjectId, Entity, u32)>) {}
+    fn combat_damage_amount(&self, g: &Game, creature: ObjectId) -> Option<u32> {
+        None
+    }
+    fn assigns_as_though_unblocked(&self, g: &mut Game, creature: ObjectId) -> bool {
+        false
+    }
+    /// The player who assigns this attacking or blocking creature's combat damage instead
+    /// of its controller, dividing it freely among the creatures it's blocked by or
+    /// blocking (banding, CR 702.22j–k).
+    fn combat_damage_assigner(&self, g: &Game, creature: ObjectId) -> Option<PlayerId> {
+        None
+    }
+    /// Attack requirements this implementation's rules impose on the attacking players'
+    /// creatures (CR 508.1d). Called for every registered implementation.
+    fn attack_requirements(&self, g: &Game) -> Vec<crate::combat::AttackRequirement> {
+        vec![]
+    }
+    /// A way the attacking creature `attacker` may assign its `power` combat damage other
+    /// than the usual one (an exception to CR 510.1b–c), e.g. "divided as you choose among
+    /// defending player and/or any number of creatures they control": the assignment, if
+    /// this implementation's rule applies and its controller chose to use it. Not called
+    /// for a blocked creature whose blockers are all gone (it assigns no damage).
+    fn assign_combat_damage(
+        &self,
+        g: &mut Game,
+        attacker: ObjectId,
+        power: u32,
+    ) -> Option<Vec<(ObjectId, Entity, u32)>> {
+        None
+    }
+    /// Other attacking creatures that become blocked by the same blocking creature when
+    /// `attacker` becomes blocked by it (or become blocked when an effect blocks it), e.g.
+    /// the rest of its band (CR 702.22h–i).
+    fn also_blocked(&self, g: &Game, attacker: ObjectId) -> Vec<ObjectId> {
+        vec![]
+    }
+    fn after_damage(
+        &self,
+        g: &mut Game,
+        source: ObjectId,
+        target: Entity,
+        amount: u32,
+        combat: bool,
+    ) {
+    }
+    /// Prevention effects (CR 615) that keyword abilities generate for a proposed damage
+    /// event, each preventing all of that damage (e.g. protection, CR 702.16e).
+    fn damage_prevention(&self, g: &Game, source: ObjectId, target: Entity) -> Vec<KeywordShield> {
+        vec![]
+    }
+    fn day_night_changed(&self, g: &mut Game) {}
+    /// The number damage marked on `creature` is checked against to determine whether
+    /// it's lethal damage (CR 704.5g, 702.19b, 120.4a), if not its toughness: e.g.
+    /// "lethal damage ... is determined by their power rather than their toughness".
+    fn lethal_damage_basis(&self, g: &Game, creature: ObjectId) -> Option<i32> {
+        None
+    }
+    /// Whether `creature`, which has lethal damage marked on it, isn't destroyed by the
+    /// state-based action for lethal damage (an exception to CR 704.5g).
+    fn survives_lethal_damage(&self, g: &Game, creature: ObjectId) -> bool {
+        false
+    }
+    /// Whether damage `source` deals to the player `p` is dealt as though the source had
+    /// infect (CR 120.3b, 702.90b): it results in poison counters, not life loss.
+    fn damage_as_though_infect(&self, g: &Game, source: ObjectId, p: PlayerId) -> bool {
+        false
+    }
+    /// The colors `source` has as a source of damage, if a rule makes them differ from
+    /// its colors (e.g. "black and/or red ... spells are colorless sources of damage").
+    /// Used where effects look at the damage's source: prevention and replacement effects
+    /// and protection (CR 702.16e), not triggered abilities.
+    fn damage_source_colors(&self, g: &Game, source: ObjectId) -> Option<ColorSet> {
+        None
+    }
+    /// Whether a rule this implementation defines forbids `e` as a target of the target
+    /// slot `spec` of the spell or ability `source` (CR 115.4), e.g. "can't be the target
+    /// of spells that can target only Walls". Called for every registered implementation.
+    fn target_forbidden(
+        &self,
+        g: &Game,
+        spec: &TargetSpec,
+        e: Entity,
+        source: Option<ObjectId>,
+    ) -> bool {
+        false
+    }
+    /// Whether the step or phase `step` of `active`'s turn that's about to begin is
+    /// skipped (CR 614.1b, 614.10) because of a rule this implementation defines (for a
+    /// skipped combat phase, each of its steps).
+    fn skips_step(&self, g: &Game, step: crate::turn::Step, active: PlayerId) -> bool {
+        false
+    }
+    /// Whether damage marked on the permanent `id` isn't removed in the cleanup step (an
+    /// exception to CR 514.2).
+    fn keeps_damage_in_cleanup(&self, g: &Game, id: ObjectId) -> bool {
+        false
+    }
+    /// A player drew `card` (the `nth` card they drew this turn), as it's drawn: e.g.
+    /// "you may reveal this card as you draw it" (CR 121.9, 702.94a).
+    fn after_draw(&self, g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {}
+    fn is_mutating(&self, g: &Game, spell: ObjectId) -> bool {
+        false
+    }
+    fn resolve_mutate(&self, g: &mut Game, spell: ObjectId) -> bool {
+        false
+    }
+    fn unbestow(&self, g: &mut Game, spell: ObjectId) -> bool {
+        false
+    }
+    /// Just before a resolving permanent spell is put onto the battlefield (CR 608.3):
+    /// e.g. the effect making a bestowed Aura spell an Aura is carried over to the
+    /// permanent, so it enters as an Aura (CR 702.103b, 614.12).
+    fn before_permanent_enters(&self, g: &mut Game, spell: ObjectId) {}
+    /// How the permanent a resolving permanent spell becomes enters the battlefield
+    /// (CR 608.3), if a keyword of the spell changes it: e.g. a spell whose sneak cost was
+    /// paid enters tapped and attacking (CR 702.190b). Called for every registered
+    /// implementation, after [`KeywordRules::before_permanent_enters`].
+    fn permanent_spell_etb(
+        &self,
+        g: &mut Game,
+        spell: ObjectId,
+        etb: &mut crate::replacement::EtbInfo,
+    ) {
+    }
+    /// Called for each event as triggered abilities are detected (CR 603.2): for
+    /// triggered abilities a keyword's rules define that have no source (e.g. the
+    /// inherent ability of a player with speed, CR 702.179d), and for records a keyword's
+    /// rules keep about the game.
+    fn on_event(&self, g: &mut Game, ev: &Event) {}
+    /// Whether an Aura that's unattached or attached to an illegal object or player stays
+    /// on the battlefield instead of being put into its owner's graveyard (an exception to
+    /// CR 704.5m, e.g. a bestowed Aura, CR 702.103f): the keyword's own
+    /// [`KeywordRules::state_based_actions`] deal with it.
+    fn keeps_unattached_aura(&self, g: &Game, aura: ObjectId) -> bool {
+        false
+    }
+    /// What a static ability of this keyword does "any time" the game is in some state,
+    /// such as a player getting the city's blessing from ascend (CR 702.131b). Checked each
+    /// time state-based actions are checked, before them.
+    fn static_state_checks(&self, g: &mut Game) {}
+    /// State-based actions a keyword defines (e.g. space sculptor's sector designations,
+    /// CR 704.5u). Returns true if any action was performed.
+    fn state_based_actions(&self, g: &mut Game) -> bool {
+        false
+    }
+    /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        None
+    }
+    /// Performs a named [`Effect::Custom`] this implementation defines; returns true if it
+    /// was one.
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        false
+    }
+    /// Whether the player (`ctx.controller`) could perform a named [`Effect::Custom`] this
+    /// implementation defines when it's a cost or an optional action (CR 118.3), e.g.
+    /// exiling a craft ability's materials: `None` if it isn't one of its effects.
+    fn custom_effect_possible(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        None
+    }
+    /// Matches a named [`TriggerCond::Custom`] this implementation defines against an
+    /// event, for the triggered ability of `src` controlled by `ctl`.
+    fn custom_trigger(
+        &self,
+        g: &Game,
+        name: &str,
+        src: ObjectId,
+        ctl: PlayerId,
+        ev: &Event,
+    ) -> Option<Vec<EventInfo>> {
+        None
+    }
+    /// Whether a named [`TriggerCond::Custom`] this implementation defines "looks back in
+    /// time" for the event (CR 603.10), e.g. one that triggers on a player sacrificing a
+    /// permanent (CR 603.10a): whether it triggers is determined from the abilities that
+    /// existed immediately before the event. `None` if it isn't one of its triggers.
+    fn custom_trigger_looks_back(&self, name: &str, ev: &Event) -> Option<bool> {
+        None
+    }
+    /// A named value (`Value::Custom(name)`) computed by this implementation, e.g. the
+    /// number of spells cast before a storm spell (CR 702.40a).
+    fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
+        None
+    }
+    /// Applies a named [`Modification::Custom`] this implementation defines to the
+    /// characteristics `chars` of `target` (in the modification's layer); returns true if
+    /// it was one.
+    fn custom_modification(
+        &self,
+        g: &Game,
+        name: &str,
+        chars: &mut Characteristics,
+        ctx: &Ctx,
+        target: ObjectId,
+    ) -> bool {
+        false
+    }
+    /// A named object filter (`Filter::Custom(name)`) evaluated by this implementation,
+    /// e.g. "creature that convoked it" (CR 702.51c).
+    fn custom_filter(
+        &self,
+        g: &Game,
+        name: &str,
+        id: ObjectId,
+        ctx: &crate::eval::Ctx,
+    ) -> Option<bool> {
+        None
+    }
+    /// Once the total cost of `spell` is locked in (CR 601.2f), ways this keyword lets its
+    /// controller pay part of it other than with mana, performed as the total cost is paid
+    /// (CR 601.2h): e.g. tapping creatures for convoke (CR 702.51a–b), or sacrificing the
+    /// permanent offered for offering, which reduces the mana to pay by its mana cost
+    /// (CR 702.48a–c). Takes what was paid out of `cost`.
+    fn pay_mana_otherwise(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        spell: ObjectId,
+        kw: &Keyword,
+        cost: &mut Cost,
+    ) -> Result<(), Illegal> {
+        Ok(())
+    }
+    /// For the check whether `card` could be cast with `method`: takes out of `cost` what
+    /// this keyword could pay other than with mana (see
+    /// [`KeywordRules::pay_mana_otherwise`]).
+    fn payable_otherwise(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+        kw: &Keyword,
+        method: &CastMethod,
+        cost: &mut Cost,
+    ) {
+    }
+}
+
+/// See [`KeywordRules::static_state_checks`].
+pub fn static_state_checks(g: &mut Game) {
+    for r in registry() {
+        r.static_state_checks(g);
+    }
+}
+
+/// Keyword-defined state-based actions (see [`KeywordRules::state_based_actions`]).
+pub fn state_based_actions(g: &mut Game) -> bool {
+    let mut performed = false;
+    for r in registry() {
+        performed |= r.state_based_actions(g);
+    }
+    performed
+}
+
+// Every file in this directory is a module (generated by build.rs).
+include!(concat!(env!("OUT_DIR"), "/kw_mods.rs"));
+
+/// A prevention effect generated by a keyword ability of a permanent or player (see
+/// [`KeywordRules::damage_prevention`]).
+#[derive(Clone, Debug)]
+pub struct KeywordShield {
+    /// The permanent or player whose ability generates the effect.
+    pub holder: Entity,
+    /// Distinguishes the holder's abilities: each applies only once to an event (CR 614.5).
+    pub id: u64,
+    /// The player who controls the effect.
+    pub controller: PlayerId,
+    pub text: String,
+}
+
+/// Registration of a keyword implementation. In a file in `src/kw/`:
+///
+/// ```ignore
+/// pub struct Prowess;
+/// impl KeywordRules for Prowess { fn kinds(&self) -> &'static [KeywordKind] { &[KeywordKind::Prowess] } ... }
+/// inventory::submit! { KeywordRegistration(&Prowess) }
+/// ```
+pub struct KeywordRegistration(pub &'static dyn KeywordRules);
+inventory::collect!(KeywordRegistration);
+
+/// All registered keyword implementations.
+pub fn registry() -> &'static [&'static dyn KeywordRules] {
+    static R: OnceLock<Vec<&'static dyn KeywordRules>> = OnceLock::new();
+    R.get_or_init(|| {
+        inventory::iter::<KeywordRegistration>
+            .into_iter()
+            .map(|r| r.0)
+            .collect()
+    })
+}
+
+fn impls_for(kind: KeywordKind) -> impl Iterator<Item = &'static &'static dyn KeywordRules> {
+    registry().iter().filter(move |r| r.kinds().contains(&kind))
+}
+
+// ---------------------------------------------------------------------------
+// Dispatchers used by keyword_impls.rs
+// ---------------------------------------------------------------------------
+
+pub fn x_determined_on_resolution(kind: KeywordKind) -> bool {
+    impls_for(kind).any(|r| r.x_determined_on_resolution())
+}
+
+pub fn derived(kw: &Keyword) -> Vec<Ability> {
+    for r in impls_for(kw.kind) {
+        if let Some(v) = r.derived(kw) {
+            return v;
+        }
+    }
+    vec![]
+}
+
+pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+    let mut out: Vec<CastOption> = registry()
+        .iter()
+        .flat_map(|r| r.global_cast_options(g, p, card))
+        .collect();
+    let mut kws: Vec<Keyword> = g
+        .characteristics_to_cast(card)
+        .keywords()
+        .cloned()
+        .collect();
+    // Keywords static abilities make it gain as it's cast ("Assassin spells you cast have
+    // freerunning {B}{B}", CR 610.5).
+    for k in crate::next_spell::cast_grant_keywords(g, p, card) {
+        if !kws.iter().any(|x| format!("{x:?}") == format!("{k:?}")) {
+            kws.push(k);
+        }
+    }
+    for kw in &kws {
+        for r in impls_for(kw.kind) {
+            out.extend(r.cast_options(g, p, card, kw));
+        }
+    }
+    out
+}
+
+/// See [`KeywordRules::playable_lands`].
+pub fn playable_lands(g: &Game, p: PlayerId) -> Vec<ObjectId> {
+    registry()
+        .iter()
+        .flat_map(|r| r.playable_lands(g, p))
+        .collect()
+}
+
+/// See [`KeywordRules::cast_options_with_any_cost`].
+pub fn cast_options_with_any_cost(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+    let mut out = Vec::new();
+    for kw in &distinct_kinds(&g.obj(card).chars) {
+        for r in impls_for(kw.kind) {
+            out.extend(r.cast_options_with_any_cost(g, p, card, kw));
+        }
+    }
+    out
+}
+
+/// See [`KeywordRules::cast_prohibited`].
+pub fn cast_prohibited(g: &Game, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.cast_prohibited(g, p, card, chars))
+}
+
+pub fn optional_costs(g: &Game, spell: ObjectId) -> Vec<(SmolStr, Cost, bool)> {
+    let mut out = Vec::new();
+    let kws: Vec<Keyword> = g.obj(spell).chars.keywords().cloned().collect();
+    for kw in &kws {
+        for r in impls_for(kw.kind) {
+            out.extend(r.optional_costs(g, spell, kw));
+        }
+    }
+    for r in registry() {
+        out.extend(r.spell_optional_costs(g, spell));
+    }
+    out
+}
+
+/// See [`KeywordRules::announce`].
+pub fn announce(
+    g: &mut Game,
+    p: PlayerId,
+    spell: ObjectId,
+    method: &CastMethod,
+    extra: &mut Cost,
+) -> Result<(), Illegal> {
+    for kw in &distinct_kinds(&g.obj(spell).chars) {
+        for r in impls_for(kw.kind) {
+            r.announce(g, p, spell, kw, method, extra)?;
+        }
+    }
+    Ok(())
+}
+
+/// See [`KeywordRules::announce_choices`].
+pub fn announce_choices(g: &mut Game, p: PlayerId, spell: ObjectId, paid: &mut Vec<SmolStr>) {
+    for kw in &distinct_kinds(&g.obj(spell).chars) {
+        for r in impls_for(kw.kind) {
+            r.announce_choices(g, p, spell, kw, paid);
+        }
+    }
+}
+
+pub fn adjust_spell_body(g: &Game, spell: ObjectId, mut body: Body) -> Body {
+    let kws: Vec<Keyword> = g.obj(spell).chars.keywords().cloned().collect();
+    for kw in &kws {
+        for r in impls_for(kw.kind) {
+            body = r.adjust_spell_body(g, spell, kw, body);
+        }
+    }
+    body
+}
+
+/// Layer 3: the text-changing effects keywords make on the spells that have them (see
+/// [`KeywordRules::spell_text_change`]).
+pub fn spell_text_changes(g: &mut Game, live: &[ObjectId]) {
+    let spells: Vec<ObjectId> = g
+        .stack
+        .iter()
+        .copied()
+        .filter(|id| live.contains(id) && g.obj(*id).is_spell())
+        .collect();
+    for id in spells {
+        let paid = g
+            .obj(id)
+            .stack
+            .as_deref()
+            .map(|si| si.cast.paid.clone())
+            .unwrap_or_default();
+        let mut c = std::mem::take(&mut g.objects[id.0 as usize].chars);
+        apply_spell_text_changes(g, id, &paid, &mut c);
+        g.objects[id.0 as usize].chars = c;
+    }
+}
+
+/// The text-changing effects the keywords of `chars` make on a spell cast paying the costs
+/// named `paid` (see [`KeywordRules::spell_text_change`]).
+pub fn apply_spell_text_changes(
+    g: &Game,
+    spell: ObjectId,
+    paid: &[SmolStr],
+    chars: &mut Characteristics,
+) {
+    for kw in &distinct_kinds(chars) {
+        for r in impls_for(kw.kind) {
+            r.spell_text_change(g, spell, kw, paid, chars);
+        }
+    }
+}
+
+/// The keywords of `chars` that reduce or otherwise change the cost `cost` of casting
+/// `card` (see [`KeywordRules::cost_reduction`]).
+pub fn cost_changing_keywords(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+    cost: &Cost,
+    x: u32,
+) -> Vec<Keyword> {
+    let mut out = Vec::new();
+    for kw in chars.keywords() {
+        for r in impls_for(kw.kind) {
+            let mut c = cost.clone();
+            r.cost_reduction(g, p, card, kw, &mut c, x);
+            if format!("{c:?}") != format!("{cost:?}")
+                && !out
+                    .iter()
+                    .any(|k: &Keyword| format!("{k:?}") == format!("{kw:?}"))
+            {
+                out.push(kw.clone());
+            }
+        }
+    }
+    out
+}
+
+pub fn cost_reductions(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+    cost: &mut Cost,
+    x: u32,
+) {
+    let kws: Vec<Keyword> = chars.keywords().cloned().collect();
+    for kw in &kws {
+        for r in impls_for(kw.kind) {
+            r.cost_reduction(g, p, card, kw, cost, x);
+        }
+    }
+}
+
+/// See [`KeywordRules::global_spell_cost`].
+pub fn global_spell_cost(g: &Game, p: PlayerId, card: ObjectId, cost: &mut Cost) {
+    for r in registry() {
+        r.global_spell_cost(g, p, card, cost);
+    }
+}
+
+pub fn resolved_destination(g: &Game, spell: ObjectId) -> Option<(Zone, LibraryPosition)> {
+    resolved_destination_by(g, spell).map(|(d, _)| d)
+}
+
+/// Like [`resolved_destination`], with a description of the replacement effect that
+/// sends the spell there, if it is one (see [`KeywordRules::resolved_destination_replaces`];
+/// effects applying to the spell, [`KeywordRules::global_resolved_destination`], are).
+pub fn resolved_destination_by(
+    g: &Game,
+    spell: ObjectId,
+) -> Option<((Zone, LibraryPosition), Option<String>)> {
+    let kws: Vec<Keyword> = g.obj(spell).chars.keywords().cloned().collect();
+    for kw in &kws {
+        for r in impls_for(kw.kind) {
+            if let Some(d) = r.resolved_destination(g, spell, kw) {
+                let label = r
+                    .resolved_destination_replaces()
+                    .then(|| format!("{}: put it into {:?} instead", kw.kind.name(), d.0));
+                return Some((d, label));
+            }
+        }
+    }
+    registry()
+        .iter()
+        .find_map(|r| r.global_resolved_destination(g, spell))
+        .map(|d| (d, Some(format!("Put it into {:?} instead", d.0))))
+}
+
+/// Every destination keywords give the spell as it resolves (see
+/// [`resolved_destination_by`]), one per keyword (e.g. both rebound and buyback, among
+/// which the spell's controller chooses, CR 616.1); or else the one an effect applying to
+/// the spell gives it.
+pub fn resolved_destinations(
+    g: &Game,
+    spell: ObjectId,
+) -> Vec<((Zone, LibraryPosition), Option<String>)> {
+    let mut out = Vec::new();
+    for kw in &distinct_kinds(&g.obj(spell).chars) {
+        for r in impls_for(kw.kind) {
+            if let Some(d) = r.resolved_destination(g, spell, kw) {
+                let label = r
+                    .resolved_destination_replaces()
+                    .then(|| format!("{}: put it into {:?} instead", kw.kind.name(), d.0));
+                out.push((d, label));
+            }
+        }
+    }
+    if out.is_empty() {
+        out.extend(resolved_destination_by(g, spell));
+    }
+    out
+}
+
+/// See [`KeywordRules::permanent_resolved_destination`].
+pub fn permanent_resolved_destination(
+    g: &Game,
+    spell: ObjectId,
+) -> Option<(Zone, LibraryPosition)> {
+    distinct_kinds(&g.obj(spell).chars).iter().find_map(|kw| {
+        impls_for(kw.kind).find_map(|r| r.permanent_resolved_destination(g, spell, kw))
+    })
+}
+
+pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
+    for r in registry() {
+        r.global_after_spell_resolved(g, spell, new);
+    }
+    for kw in &distinct_kinds(&g.obj(spell).chars) {
+        for r in impls_for(kw.kind) {
+            r.after_spell_resolved(g, spell, kw, new);
+        }
+    }
+}
+
+pub fn countered_destination(g: &Game, spell: ObjectId) -> Option<(Zone, LibraryPosition)> {
+    let kws: Vec<Keyword> = g.obj(spell).chars.keywords().cloned().collect();
+    for kw in &kws {
+        for r in impls_for(kw.kind) {
+            if let Some(d) = r.countered_destination(g, spell, kw) {
+                return Some(d);
+            }
+        }
+    }
+    None
+}
+
+pub fn after_permanent_resolves(g: &mut Game, spell: ObjectId, new: ObjectId) {
+    let kws: Vec<Keyword> = g.obj(new).chars.keywords().cloned().collect();
+    for kw in &kws {
+        for r in impls_for(kw.kind) {
+            r.after_permanent_resolves(g, spell, new, kw);
+        }
+    }
+}
+
+pub fn special_actions(g: &Game, p: PlayerId) -> Vec<Action> {
+    registry()
+        .iter()
+        .flat_map(|r| r.special_actions(g, p))
+        .collect()
+}
+
+pub fn perform_special_action(g: &mut Game, p: PlayerId, sa: SpecialAction) -> Result<(), Illegal> {
+    for r in registry() {
+        if let Some(res) = r.perform_special_action(g, p, &sa) {
+            return res;
+        }
+    }
+    Err(Illegal(format!("unsupported special action {sa:?}")))
+}
+
+pub fn block_allowed(g: &Game, blocker: ObjectId, attacker: ObjectId) -> bool {
+    registry()
+        .iter()
+        .all(|r| r.block_allowed(g, blocker, attacker))
+}
+
+/// See [`KeywordRules::activation_cost`].
+pub fn activation_cost(g: &Game, p: PlayerId, src: ObjectId, a: &Ability, cost: &mut Cost) {
+    for r in registry() {
+        r.activation_cost(g, p, src, a, cost);
+    }
+}
+
+pub fn activation_allowed(g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {
+    registry()
+        .iter()
+        .all(|r| r.activation_allowed(g, p, src, a))
+}
+
+pub fn attack_declaration_ok(g: &Game, decl: &[(ObjectId, Entity)]) -> bool {
+    registry().iter().all(|r| r.attack_declaration_ok(g, decl))
+}
+
+pub fn block_declaration_ok(
+    g: &Game,
+    options: &[(ObjectId, Vec<ObjectId>)],
+    decl: &[(ObjectId, ObjectId)],
+) -> bool {
+    registry()
+        .iter()
+        .all(|r| r.block_declaration_ok(g, options, decl))
+}
+
+pub fn pay_attack_costs(g: &mut Game, ap: PlayerId, declared: &[(ObjectId, Entity)]) {
+    for r in registry() {
+        r.pay_attack_costs(g, ap, declared);
+    }
+}
+
+pub fn pay_block_costs(g: &mut Game, blocks: &[(ObjectId, ObjectId)]) {
+    for r in registry() {
+        r.pay_block_costs(g, blocks);
+    }
+}
+
+pub fn before_combat_damage(g: &mut Game, assignments: &mut Vec<(ObjectId, Entity, u32)>) {
+    for r in registry() {
+        r.before_combat_damage(g, assignments);
+    }
+}
+
+pub fn combat_damage_amount(g: &Game, id: ObjectId) -> Option<u32> {
+    registry()
+        .iter()
+        .find_map(|r| r.combat_damage_amount(g, id))
+}
+
+pub fn also_blocked(g: &Game, attacker: ObjectId) -> Vec<ObjectId> {
+    let mut out: Vec<ObjectId> = Vec::new();
+    for r in registry() {
+        for x in r.also_blocked(g, attacker) {
+            if x != attacker && !out.contains(&x) {
+                out.push(x);
+            }
+        }
+    }
+    out
+}
+
+/// See [`KeywordRules::attack_requirements`].
+pub fn attack_requirements(g: &Game) -> Vec<crate::combat::AttackRequirement> {
+    registry()
+        .iter()
+        .flat_map(|r| r.attack_requirements(g))
+        .collect()
+}
+
+/// See [`KeywordRules::assign_combat_damage`].
+pub fn assign_combat_damage(
+    g: &mut Game,
+    attacker: ObjectId,
+    power: u32,
+) -> Option<Vec<(ObjectId, Entity, u32)>> {
+    registry()
+        .iter()
+        .find_map(|r| r.assign_combat_damage(g, attacker, power))
+}
+
+pub fn combat_damage_assigner(g: &Game, id: ObjectId) -> Option<PlayerId> {
+    registry()
+        .iter()
+        .find_map(|r| r.combat_damage_assigner(g, id))
+}
+
+pub fn assigns_as_though_unblocked(g: &mut Game, id: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.assigns_as_though_unblocked(g, id))
+}
+
+pub fn after_damage(g: &mut Game, source: ObjectId, target: Entity, amount: u32, combat: bool) {
+    for r in registry() {
+        r.after_damage(g, source, target, amount, combat);
+    }
+}
+
+pub fn damage_prevention(g: &Game, source: ObjectId, target: Entity) -> Vec<KeywordShield> {
+    registry()
+        .iter()
+        .flat_map(|r| r.damage_prevention(g, source, target))
+        .collect()
+}
+
+/// The number damage marked on `creature` is checked against for lethal damage: its
+/// toughness unless a rule changes it (see [`KeywordRules::lethal_damage_basis`]).
+pub fn lethal_damage_basis(g: &Game, creature: ObjectId) -> i32 {
+    registry()
+        .iter()
+        .find_map(|r| r.lethal_damage_basis(g, creature))
+        .unwrap_or_else(|| g.obj(creature).toughness())
+}
+
+/// See [`KeywordRules::damage_as_though_infect`].
+pub fn damage_as_though_infect(g: &Game, source: ObjectId, p: PlayerId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.damage_as_though_infect(g, source, p))
+}
+
+/// Whether `source`, as a source of damage, matches `f` (see
+/// [`KeywordRules::damage_source_colors`]).
+pub fn damage_source_matches(g: &Game, source: ObjectId, f: &Filter, ctx: &Ctx) -> bool {
+    match registry()
+        .iter()
+        .find_map(|r| r.damage_source_colors(g, source))
+    {
+        None => g.matches(source, f, ctx),
+        Some(colors) => {
+            let mut chars = g.obj(source).chars.clone();
+            chars.colors = colors;
+            crate::casting::matches_with_chars(g, source, &chars, f, ctx)
+        }
+    }
+}
+
+/// See [`KeywordRules::search_found`].
+pub fn search_found(g: &mut Game, searcher: PlayerId, owner: PlayerId, found: &[ObjectId]) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.search_found(g, searcher, owner, found))
+}
+
+/// See [`KeywordRules::land_play_prohibited`].
+pub fn land_play_prohibited(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.land_play_prohibited(g, p, card))
+}
+
+/// See [`KeywordRules::target_forbidden`].
+pub fn target_forbidden(g: &Game, spec: &TargetSpec, e: Entity, source: Option<ObjectId>) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.target_forbidden(g, spec, e, source))
+}
+
+/// See [`KeywordRules::skips_step`].
+pub fn skips_step(g: &Game, step: crate::turn::Step, active: PlayerId) -> bool {
+    registry().iter().any(|r| r.skips_step(g, step, active))
+}
+
+/// See [`KeywordRules::keeps_damage_in_cleanup`].
+pub fn keeps_damage_in_cleanup(g: &Game, id: ObjectId) -> bool {
+    registry().iter().any(|r| r.keeps_damage_in_cleanup(g, id))
+}
+
+/// See [`KeywordRules::survives_lethal_damage`].
+pub fn survives_lethal_damage(g: &Game, creature: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.survives_lethal_damage(g, creature))
+}
+
+pub fn day_night_changed(g: &mut Game) {
+    for r in registry() {
+        r.day_night_changed(g);
+    }
+}
+
+pub fn after_draw(g: &mut Game, p: PlayerId, card: ObjectId, nth: u32) {
+    for r in registry() {
+        if !g.is_live(card) {
+            return;
+        }
+        r.after_draw(g, p, card, nth);
+    }
+}
+
+pub fn is_mutating(g: &Game, spell: ObjectId) -> bool {
+    registry().iter().any(|r| r.is_mutating(g, spell))
+}
+
+pub fn resolve_mutate(g: &mut Game, spell: ObjectId) {
+    for r in registry() {
+        if r.resolve_mutate(g, spell) {
+            return;
+        }
+    }
+}
+
+pub fn unbestow(g: &mut Game, spell: ObjectId) {
+    for r in registry() {
+        if r.unbestow(g, spell) {
+            return;
+        }
+    }
+}
+
+/// See [`KeywordRules::before_permanent_enters`].
+pub fn before_permanent_enters(g: &mut Game, spell: ObjectId) {
+    for r in registry() {
+        r.before_permanent_enters(g, spell);
+    }
+}
+
+/// See [`KeywordRules::permanent_spell_etb`].
+pub fn permanent_spell_etb(g: &mut Game, spell: ObjectId, etb: &mut crate::replacement::EtbInfo) {
+    for r in registry() {
+        r.permanent_spell_etb(g, spell, etb);
+    }
+}
+
+/// See [`KeywordRules::on_event`].
+pub fn on_event(g: &mut Game, ev: &Event) {
+    for r in registry() {
+        r.on_event(g, ev);
+    }
+}
+
+/// Whether a keyword keeps an unattached or illegally attached Aura from being put into
+/// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
+pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
+    registry().iter().any(|r| r.keeps_unattached_aura(g, aura))
+}
+
+pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_condition(g, name, ctx))
+}
+
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+    registry().iter().any(|r| r.custom_effect(g, name, ctx))
+}
+
+/// See [`KeywordRules::custom_effect_possible`].
+pub fn custom_effect_possible(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_effect_possible(g, name, ctx))
+}
+
+pub fn custom_trigger(
+    g: &Game,
+    name: &str,
+    src: ObjectId,
+    ctl: PlayerId,
+    ev: &Event,
+) -> Option<Vec<EventInfo>> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_trigger(g, name, src, ctl, ev))
+}
+
+/// Whether a keyword-defined custom trigger looks back in time for the event (see
+/// [`KeywordRules::custom_trigger_looks_back`]).
+pub fn custom_trigger_looks_back(name: &str, ev: &Event) -> bool {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_trigger_looks_back(name, ev))
+        .unwrap_or(false)
+}
+
+/// A keyword ability's cost that `p` pays, after the effects that modify that keyword's
+/// costs ("Buyback costs cost {2} less", "All morph costs cost {2} more", CR 601.2f):
+/// generic mana only, never below zero.
+pub fn modified_keyword_cost(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Cost) -> Cost {
+    let mut cost = cost.clone();
+    for (s, ctl, cm) in &g.statics.cost_modifiers {
+        if !matches!(cm.applies_to, CostTarget::Keyword(k) if k == kind) {
+            continue;
+        }
+        let ctx = Ctx::new(Some(*s), *ctl);
+        if !g.player_rel_matches(cm.who, p, &ctx) {
+            continue;
+        }
+        match &cm.change {
+            CostChange::ReduceGeneric(v) => {
+                let n = g.eval_value(v, &ctx).max(0) as u32;
+                if let Some(m) = cost.mana.as_mut() {
+                    m.reduce_generic(n);
+                }
+            }
+            CostChange::IncreaseGeneric(v) => {
+                let n = g.eval_value(v, &ctx).max(0) as u32;
+                cost.mana
+                    .get_or_insert_with(crate::mana::ManaCost::default)
+                    .add(&crate::mana::ManaCost::generic(n));
+            }
+            _ => {}
+        }
+    }
+    cost
+}
+
+pub fn custom_value(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
+    registry().iter().find_map(|r| r.custom_value(g, name, ctx))
+}
+
+/// See [`KeywordRules::custom_modification`].
+pub fn custom_modification(
+    g: &Game,
+    name: &str,
+    chars: &mut Characteristics,
+    ctx: &Ctx,
+    target: ObjectId,
+) {
+    for r in registry() {
+        if r.custom_modification(g, name, chars, ctx, target) {
+            return;
+        }
+    }
+}
+
+pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &crate::eval::Ctx) -> Option<bool> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_filter(g, name, id, ctx))
+}
+
+/// Keyword instances of `chars` with distinct kinds: several instances of a payment
+/// keyword are redundant (e.g. CR 702.51d).
+fn distinct_kinds(chars: &Characteristics) -> Vec<Keyword> {
+    let mut out: Vec<Keyword> = Vec::new();
+    for kw in chars.keywords() {
+        if !out.iter().any(|k| k.kind == kw.kind) {
+            out.push(kw.clone());
+        }
+    }
+    out
+}
+
+/// CR 601.2h: lets keywords of the spell pay part of its total cost other than with mana.
+pub fn pay_mana_otherwise(
+    g: &mut Game,
+    p: PlayerId,
+    spell: ObjectId,
+    cost: &mut Cost,
+) -> Result<(), Illegal> {
+    let kws = distinct_kinds(&g.obj(spell).chars);
+    for kw in &kws {
+        for r in impls_for(kw.kind) {
+            let before = crate::structure::enabled().then(|| format!("{cost:?}"));
+            r.pay_mana_otherwise(g, p, spell, kw, cost)?;
+            if before.is_some_and(|b| b != format!("{cost:?}")) {
+                let c = &g.obj(spell).chars;
+                let want = format!("{kw:?}");
+                if let Some(a) = c
+                    .abilities
+                    .iter()
+                    .find(|a| a.keyword().is_some_and(|k| format!("{k:?}") == want))
+                {
+                    crate::structure::record(a, &c.name, "keyword");
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A card seen as the spell its caster would put on the stack.
+struct AsSpell<'c> {
+    id: ObjectId,
+    chars: &'c Characteristics,
+    caster: PlayerId,
+}
+
+impl crate::eval::View for AsSpell<'_> {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        if id == self.id {
+            self.chars
+        } else {
+            &g.obj(id).chars
+        }
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.id {
+            self.caster
+        } else {
+            g.obj(id).controller
+        }
+    }
+    fn controller_override(&self, id: ObjectId) -> Option<PlayerId> {
+        (id == self.id).then_some(self.caster)
+    }
+}
+
+/// The characteristics `card` would have as a spell `p` casts, including the keywords
+/// that static abilities give such spells ("Artifact spells you cast have convoke"), for
+/// checking whether it could be cast (CR 601.3e). As it's cast, the spell on the stack
+/// gets them from the layer system.
+pub fn with_granted_spell_keywords(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+) -> Characteristics {
+    let mut out = chars.clone();
+    let sources: Vec<ObjectId> = g
+        .permanents()
+        .map(|o| o.id)
+        .chain(g.command.iter().copied())
+        .collect();
+    for src in sources {
+        let o = g.obj(src);
+        for a in &o.chars.abilities {
+            let AbilityKind::Static(s) = &a.kind else {
+                continue;
+            };
+            let StaticEffect::Continuous { affected, mods } = &s.effect else {
+                continue;
+            };
+            if !g.ability_functions(o, s.zone, s.is_cda) {
+                continue;
+            }
+            let ctx = crate::eval::Ctx::new(Some(src), o.controller);
+            if s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx)) {
+                continue;
+            }
+            let granted: Vec<&Keyword> = mods
+                .iter()
+                .filter_map(|m| match m {
+                    Modification::AddKeyword(k) => Some(k),
+                    _ => None,
+                })
+                .collect();
+            // Judged as the spell it would be: with these characteristics, controlled by
+            // its caster.
+            let view = AsSpell {
+                id: card,
+                chars,
+                caster: p,
+            };
+            if granted.is_empty()
+                || !g.matches_view(
+                    &view,
+                    card,
+                    &crate::casting::as_spell_filter(affected),
+                    &ctx,
+                )
+            {
+                continue;
+            }
+            for k in granted {
+                out.abilities.push(AbilityDef::new(
+                    AbilityKind::Keyword(k.clone()),
+                    k.kind.name(),
+                ));
+            }
+        }
+    }
+    // "The next [quality] spell you cast this turn has [keyword]" (CR 611.2f).
+    let view = AsSpell {
+        id: card,
+        chars,
+        caster: p,
+    };
+    for e in &g.next_spell_effects {
+        let expired = matches!(e.expires, Duration::EndOfTurn | Duration::ThisTurn)
+            && e.created_turn != g.turn.number;
+        let ctx = crate::eval::Ctx::new(e.source, e.player);
+        if e.player != p
+            || expired
+            || !g.matches_view(
+                &view,
+                card,
+                &crate::casting::as_spell_filter(&e.filter),
+                &ctx,
+            )
+        {
+            continue;
+        }
+        for m in &e.mods {
+            if let Modification::AddKeyword(k) = m {
+                out.abilities.push(AbilityDef::new(
+                    AbilityKind::Keyword(k.clone()),
+                    k.kind.name(),
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// What of `cost` the keywords of `chars` could pay other than with mana.
+pub fn payable_otherwise(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+    method: &CastMethod,
+    cost: &mut Cost,
+) {
+    for kw in &distinct_kinds(chars) {
+        for r in impls_for(kw.kind) {
+            r.payable_otherwise(g, p, card, kw, method, cost);
+        }
+    }
+}
