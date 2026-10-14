@@ -1247,6 +1247,26 @@ impl Renderer<'_> {
             PlayerFilter::Active => "whose turn it is".into(),
             PlayerFilter::AttackedThisTurn => "who attacked this turn".into(),
             PlayerFilter::Poisoned => "who is poisoned".into(),
+            PlayerFilter::HasInitiative => "who has the initiative".into(),
+            PlayerFilter::AttackRelation {
+                attacking,
+                other,
+                past,
+                planeswalkers,
+            } => {
+                let o = self.player_filter_object(other);
+                let pw = if *planeswalkers {
+                    " and/or a planeswalker they control"
+                } else {
+                    ""
+                };
+                match (attacking, past) {
+                    (true, false) => format!("who is attacking {o}{pw}"),
+                    (true, true) => format!("who attacked {o}{pw}"),
+                    (false, false) => format!("being attacked by {o}"),
+                    (false, true) => format!("who was attacked by {o}"),
+                }
+            }
             PlayerFilter::MaxSpeed => "with max speed".into(),
             PlayerFilter::VotedLikeYou(true) => "who voted for a choice you voted for".into(),
             PlayerFilter::VotedLikeYou(false) => {

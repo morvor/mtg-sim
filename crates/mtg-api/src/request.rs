@@ -722,6 +722,8 @@ pub fn prepare(
                         R::AttacksPlayer(c, p) => *c == a && t == Entity::Player(*p),
                         // Required only if one of the others attacks.
                         R::AttacksIfAnyAttacks(..) => false,
+                        // At least one of the player's creatures, not this one in particular.
+                        R::AttacksWithAny { .. } => false,
                     })
                 };
                 let mut views = Vec::new();

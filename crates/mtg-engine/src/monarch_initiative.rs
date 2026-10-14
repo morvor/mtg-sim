@@ -78,6 +78,14 @@ pub fn sourceless_trigger(
     });
 }
 
+/// Whether `src` is the placeholder standing in for the source of a triggered ability
+/// that has no source (see [`sourceless_trigger`]): such an ability isn't "from" any
+/// source (CR 725.2, 726.2).
+pub fn is_sourceless(g: &Game, src: ObjectId) -> bool {
+    let o = g.obj(src);
+    o.zone == Zone::Nowhere && o.kind == ObjKind::Emblem
+}
+
 /// Whether the triggered ability with this source is one of the designations' inherent
 /// abilities named `name`.
 pub fn is_inherent(g: &Game, src: ObjectId, name: &str) -> bool {

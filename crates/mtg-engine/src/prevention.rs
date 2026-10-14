@@ -47,6 +47,14 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
         Filter::And(v) => Filter::And(v.iter().map(|x| lock_filter(g, x, ctx)).collect()),
         Filter::Or(v) => Filter::Or(v.iter().map(|x| lock_filter(g, x, ctx)).collect()),
         Filter::Not(x) => Filter::Not(Box::new(lock_filter(g, x, ctx))),
+        // "each creature blocking it" (Feint): the creatures blocking that object as the
+        // effect is created (the object is known only then).
+        Filter::BlockingAnyOf(sel) if !matches!(**sel, Sel::This) => Filter::Objects(
+            g.permanents()
+                .map(|o| o.id)
+                .filter(|&o| g.matches(o, f, ctx))
+                .collect(),
+        ),
         // "creatures target opponent controls": that player, whoever controls what later.
         Filter::ControlledBy(PlayerRel::Target(k)) => {
             let ps = ctx
@@ -224,6 +232,14 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
                 k.clone(),
                 Value::Const(g.eval_value(n, ctx) as i32),
             )
+        }
+        // "{X}, {T}: If a source you control would deal noncombat damage ... this turn, it
+        // deals that much damage plus X instead": the ability's X is locked in (CR 107.3,
+        // 608.2h); it has no value once the ability has left the stack.
+        ReplacementAction::Add(n)
+            if serde_json::to_string(n).is_ok_and(|j| j.contains("\"X\"")) =>
+        {
+            ReplacementAction::Add(Value::Const(g.eval_value(n, ctx) as i32))
         }
         other => other.clone(),
     };

@@ -142,6 +142,11 @@ fn singular(w: &str) -> String {
     w.to_string()
 }
 
+/// A noun whose plural is spelled like its singular ("Equipment", "Spacecraft").
+fn invariant_plural(w: &str) -> bool {
+    matches!(w, "equipment" | "spacecraft")
+}
+
 fn capitalize(w: &str) -> String {
     let mut c = w.chars();
     match c.next() {
@@ -222,6 +227,8 @@ pub fn head_noun(w: &str) -> Option<Filter> {
         // Tokens and copies aren't cards (CR 108.2, 108.2b).
         "card" => return Some(Filter::Card),
         "token" => return Some(Filter::Token),
+        // CR 903.3: "all commanders".
+        "commander" => return Some(Filter::Commander),
         // CR 700.12.
         "outlaw" => return Some(crate::game_terms::outlaw_filter()),
         _ => {}
@@ -360,6 +367,77 @@ fn two_phrases_same_head(s: &str) -> Option<(Filter, bool, &str)> {
     Some((Filter::Or(vec![f1, f2]), plural1 || plural2, rest))
 }
 
+/// After "X or": an alternative with adjectives of its own ("noncreature spell", "nonblack
+/// creature", "tapped creature"), as a complete noun phrase ending in its head noun (what
+/// follows, "you control", describes both alternatives). Returns its filter, plural, the
+/// rest, and its head noun.
+fn adjective_alternative(r: &str) -> Option<(Filter, bool, &str, &str)> {
+    let first = split_word(r).0;
+    if first.ends_with(',')
+        || head_noun(first).is_some()
+        || adjective(first).is_none()
+        || matches!(first, "token" | "tokens" | "commander" | "commanders")
+    {
+        return None;
+    }
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    let consumed = r[..r.len() - rest.len()].trim_end();
+    let noun = consumed.rsplit(' ').next()?;
+    if consumed.contains(" or ") || consumed.contains(',') || head_noun(noun).is_none() {
+        return None;
+    }
+    Some((f, plural, rest, noun))
+}
+
+/// Makes the phrase so far ("Hero", "nontoken land") one alternative and `alt` the other.
+/// The adjectives before the first alternative are its own; a narrowing head noun ending
+/// the second ("spell", "card", "permanent") narrows the first's pending heads too
+/// ("Hero or noncreature spell": a Hero spell or a noncreature spell).
+fn own_alternative(
+    parts: &mut Vec<Filter>,
+    heads: &mut Vec<Filter>,
+    group_start: usize,
+    alt: Filter,
+    noun: &str,
+) {
+    let narrowing = match noun {
+        "spell" | "spells" | "card" | "cards" | "permanent" | "permanents" => head_noun(noun),
+        _ => None,
+    };
+    let pending: Vec<Filter> = heads.drain(group_start.min(heads.len())..).collect();
+    // Only card types and subtypes are narrowed ("spell or nonland permanent" is a spell
+    // or a nonland permanent).
+    let narrowing = narrowing.filter(|_| {
+        pending
+            .iter()
+            .all(|h| matches!(h, Filter::Type(_) | Filter::Subtype(_)))
+    });
+    let pending = match pending.len() {
+        0 => None,
+        1 => pending.into_iter().next(),
+        _ => Some(Filter::Or(pending)),
+    }
+    .map(|p| match &narrowing {
+        Some(n) => Filter::and(vec![p, n.clone()]),
+        None => p,
+    });
+    let mut first: Vec<Filter> = parts
+        .iter()
+        .filter(|p| !matches!(p, Filter::Other))
+        .cloned()
+        .collect();
+    parts.retain(|p| matches!(p, Filter::Other));
+    let mut done: Vec<Filter> = std::mem::take(heads);
+    done.extend(pending);
+    first.push(if done.len() == 1 {
+        done.pop().unwrap()
+    } else {
+        Filter::Or(done)
+    });
+    heads.push(Filter::and(first));
+    heads.push(alt);
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     if let Some(r) = two_phrases_same_head(s) {
         return Some(r);
@@ -459,6 +537,17 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         // Continue after "or", "and/or", "and", or comma lists.
         let t = s.trim_start();
         if let Some(r) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
+            // (Not the last item of a comma list, which `object_alternatives` reads.)
+            if let Some((alt, pl, rest, noun)) =
+                adjective_alternative(r).filter(|_| !w.ends_with(','))
+            {
+                // "Hero or noncreature spell", "land or nonblack creature": the
+                // alternative has adjectives of its own.
+                own_alternative(&mut parts, &mut heads, group_start, alt, noun);
+                plural |= pl;
+                s = rest;
+                break;
+            }
             s = r;
             continue;
         }
@@ -471,17 +560,23 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 let next = head_noun(split_word(r).0.trim_end_matches(','));
                 let types = matches!(heads.last(), Some(Filter::Type(_)))
                     && matches!(next, Some(Filter::Type(_)));
-                if (plural && next.is_some()) || types {
+                // "each Scout, Pirate, and Rogue you control": a list of subtypes names
+                // objects with any of them.
+                let subtypes = matches!(heads.last(), Some(Filter::Subtype(_)))
+                    && matches!(next, Some(Filter::Subtype(_)));
+                if (plural && next.is_some()) || types || subtypes {
                     s = r;
                 }
             }
             continue;
         }
-        // "artifacts and enchantments": plural nouns joined by "and" name a union.
+        // "artifacts and enchantments": plural nouns joined by "and" name a union (also
+        // a noun whose plural is the same word: "creatures and Spacecraft", "Auras and
+        // Equipment").
         if plural {
             if let Some(r) = t.strip_prefix("and ") {
                 let nw = split_word(r).0.trim_end_matches(',');
-                if nw.ends_with('s') && head_noun(nw).is_some() {
+                if (nw.ends_with('s') || invariant_plural(nw)) && head_noun(nw).is_some() {
                     s = r;
                     continue;
                 }
@@ -583,9 +678,16 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 s = crest;
                 ends_in_card = true;
             }
-            // allow "creature card or artifact card"
+            // allow "creature card or artifact card", "artifact creature and/or Vehicle"
             let t = s.trim_start();
-            if let Some(r) = t.strip_prefix("or ") {
+            if let Some(r) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
+                if let Some((alt, pl, rest, noun)) = adjective_alternative(r) {
+                    // "artifact card or noncreature permanent card".
+                    own_alternative(&mut parts, &mut heads, group_start, alt, noun);
+                    plural |= pl;
+                    s = rest;
+                    break;
+                }
                 // "basic land card or Gate card": adjectives before a complete "... card"
                 // phrase describe only that phrase, not the alternative after "or" (but
                 // "nontoken artifact creature or Vehicle" is one description).
@@ -687,6 +789,18 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 Filter::and(vec![
                     Filter::ControlledBy(PlayerRel::NotYou),
                     Filter::not(Filter::OwnedBy(PlayerRel::You)),
+                ]),
+                r,
+            )
+        } else if let Some(r) = t
+            .strip_prefix("you own or control")
+            .or_else(|| t.strip_prefix("you control or own"))
+        {
+            // "target permanent you own or control" (Telim'Tor's Edict).
+            (
+                Filter::Or(vec![
+                    Filter::OwnedBy(PlayerRel::You),
+                    Filter::ControlledBy(PlayerRel::You),
                 ]),
                 r,
             )
@@ -894,9 +1008,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         } else if let Some(r) = t
             .strip_prefix("that's attacking")
             .or_else(|| t.strip_prefix("that is attacking"))
+            .filter(|r| !continues_predicate(r))
         {
             (Filter::Attacking, r)
-        } else if let Some(r) = t.strip_prefix("that's blocking") {
+        } else if let Some(r) = t
+            .strip_prefix("that's blocking")
+            .filter(|r| !continues_predicate(r))
+        {
             (Filter::Blocking, r)
         } else if let Some((f, r)) = t.strip_prefix("that's ").and_then(color_list_suffix) {
             // "target creature or planeswalker that's black or red" (Devout Decree).
@@ -1003,6 +1121,28 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     // "each other creature that shares a color with it": other than "it".
     let f = super::patterns::filters_relational::other_than_referent(Filter::and(parts));
     Some((f, plural, s))
+}
+
+/// Whether the text after "that's attacking" / "that's blocking" goes on with the
+/// predicate ("that's attacking or blocking", "that's attacking you", "that's blocking
+/// equipped creature"): read by `patterns::noun_phrase_predicates` and the blocking
+/// grammar instead.
+fn continues_predicate(r: &str) -> bool {
+    let w = r.trim_start().split([' ', ',', '.']).next().unwrap_or("");
+    r.starts_with(' ')
+        && matches!(
+            w,
+            "or" | "and/or"
+                | "you"
+                | "a"
+                | "an"
+                | "one"
+                | "your"
+                | "target"
+                | "enchanted"
+                | "equipped"
+                | "it"
+        )
 }
 
 /// "target player controls" / "target opponent controls" after an object phrase. The
@@ -1262,6 +1402,23 @@ fn parse_with_suffix(t: &str) -> Option<(Filter, &str)> {
                     ))
             {
                 return Some((Filter::HasCounter(Some(kind.into())), tail));
+            }
+        }
+    }
+    // "with islandwalk": one landwalk ability (CR 702.14), not every landwalk.
+    {
+        let n = rest
+            .find(|c: char| !c.is_ascii_alphabetic())
+            .unwrap_or(rest.len());
+        let w = &rest[..n];
+        if let Some(stem) = w.strip_suffix("walk").filter(|s| !s.is_empty()) {
+            let is_land_type = crate::types::subtype_lists()
+                .land
+                .iter()
+                .any(|t| t.eq_ignore_ascii_case(stem));
+            if is_land_type && !rest[n..].starts_with(" or") && !rest[n..].starts_with(',') {
+                let f = Filter::Custom(format!("{}{w}", crate::kw::landwalk::HAS_LANDWALK).into());
+                return Some((if negate { Filter::not(f) } else { f }, &rest[n..]));
             }
         }
     }
@@ -1852,8 +2009,11 @@ pub fn parse_any_target(s: &str) -> Option<(TargetSpec, &str)> {
 /// "its controller", "its owner", "defending player". Returns (ref, target spec if any, rest).
 pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
-    let pairs: [(&str, PlayerRef); 14] = [
+    let pairs: [(&str, PlayerRef); 16] = [
         ("you ", PlayerRef::You),
+        // CR 506.2: the active player is the attacking player.
+        ("the attacking player ", PlayerRef::ActivePlayer),
+        ("attacking player ", PlayerRef::ActivePlayer),
         // Internal form of "that player" in an ability linked to one that targeted a
         // player (CR 607.1, see `patterns::r607_linked_targets`).
         ("the noted player ", PlayerRef::LinkedNoted),
