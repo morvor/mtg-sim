@@ -39,7 +39,11 @@ fn blood_reckoning_triggers_once_per_declared_attacker() {
         ],
     );
     t.resolve_all();
-    assert_eq!(t.life(P0), 17, "one trigger per creature, the planeswalker's included");
+    assert_eq!(
+        t.life(P0),
+        17,
+        "one trigger per creature, the planeswalker's included"
+    );
     // A creature put onto the battlefield attacking P1 doesn't trigger it.
     let new = enter_attacking(&mut t, P0, "Grizzly Bears", Entity::Player(P1));
     assert!(attacking(&t, new));
@@ -68,11 +72,20 @@ fn circle_of_flame_checks_flying_as_attackers_are_declared() {
     );
     t.resolve_all();
     assert!(
-        !t.obj_now(angel).has_keyword(mtg_engine::keywords::KeywordKind::Flying),
+        !t.obj_now(angel)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Flying),
         "Gravity Well removed its flying"
     );
-    assert_eq!(damage_on(&t, angel), 0, "no trigger for the creature that attacked flying");
-    assert_eq!(damage_on(&t, bears), 1, "the creature without flying was dealt 1");
+    assert_eq!(
+        damage_on(&t, angel),
+        0,
+        "no trigger for the creature that attacked flying"
+    );
+    assert_eq!(
+        damage_on(&t, bears),
+        1,
+        "the creature without flying was dealt 1"
+    );
     // A creature without flying put onto the battlefield attacking doesn't trigger it.
     let new = enter_attacking(&mut t, P0, "Hill Giant", Entity::Player(P1));
     t.resolve_all();
@@ -104,9 +117,14 @@ fn flying_granted_after_gravity_well_resolves_works() {
         &[(cricket, Entity::Player(P1)), (angel, Entity::Player(P1))],
     );
     t.resolve_all();
-    let flying =
-        |t: &TestGame, id| t.obj_now(id).has_keyword(mtg_engine::keywords::KeywordKind::Flying);
-    assert!(flying(&t, cricket), "the Cricket's own attack trigger resolved last");
+    let flying = |t: &TestGame, id| {
+        t.obj_now(id)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Flying)
+    };
+    assert!(
+        flying(&t, cricket),
+        "the Cricket's own attack trigger resolved last"
+    );
     assert!(!flying(&t, angel));
     cast_card(&mut t, P0, "Jump", &[obj(angel)]).unwrap();
     t.resolve_all();
@@ -128,7 +146,11 @@ fn argent_dais_counts_any_players_attack() {
     let b = t.battlefield(P0, "Hill Giant");
     attack_with(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
     t.resolve_all();
-    assert_eq!(t.counters(dais, "oil"), before + 1, "an opponent's attack with two");
+    assert_eq!(
+        t.counters(dais, "oil"),
+        before + 1,
+        "an opponent's attack with two"
+    );
     // One attacker: no trigger.
     let mut t = TestGame::new(2);
     let dais = t.battlefield(P1, "Argent Dais");
@@ -156,10 +178,14 @@ fn lightmine_field_counts_attackers_as_it_resolves() {
     // declared attackers (the removed one included) is dealt 3, the Giant none.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Lightmine Field");
-    let a: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Siege Mastodon")).collect();
+    let a: Vec<ObjectId> = (0..3)
+        .map(|_| t.battlefield(P0, "Siege Mastodon"))
+        .collect();
     attack_with(
         &mut t,
-        &a.iter().map(|x| (*x, Entity::Player(P1))).collect::<Vec<_>>(),
+        &a.iter()
+            .map(|x| (*x, Entity::Player(P1)))
+            .collect::<Vec<_>>(),
     );
     remove_from_combat(&mut t.g, a[0]);
     let giant = enter_attacking(&mut t, P0, "Hill Giant", Entity::Player(P1));
@@ -172,10 +198,14 @@ fn lightmine_field_counts_attackers_as_it_resolves() {
     // With nothing changed, two attackers are dealt 2 each.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Lightmine Field");
-    let a: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Siege Mastodon")).collect();
+    let a: Vec<ObjectId> = (0..2)
+        .map(|_| t.battlefield(P0, "Siege Mastodon"))
+        .collect();
     attack_with(
         &mut t,
-        &a.iter().map(|x| (*x, Entity::Player(P1))).collect::<Vec<_>>(),
+        &a.iter()
+            .map(|x| (*x, Entity::Player(P1)))
+            .collect::<Vec<_>>(),
     );
     t.resolve_all();
     assert_eq!(damage_on(&t, a[0]), 2);
@@ -270,7 +300,11 @@ fn emberwilde_captain_resolves_after_the_monarch_changes() {
     mtg_engine::designations::become_monarch(&mut t.g, P0);
     t.resolve_all();
     assert_eq!(t.g.monarch, Some(P0));
-    assert_eq!(t.life(P0), 20 - hand, "the attacking player was still dealt damage");
+    assert_eq!(
+        t.life(P0),
+        20 - hand,
+        "the attacking player was still dealt damage"
+    );
 }
 
 #[test]
@@ -292,7 +326,9 @@ fn kazuul_always_offers_the_attacking_player_the_payment() {
         t.resolve_all();
         let asked_p0 = t.asked()[from..]
             .iter()
-            .filter(|(p, d)| *p == P0 && !matches!(d, mtg_engine::decision::Decision::Priority { .. }))
+            .filter(|(p, d)| {
+                *p == P0 && !matches!(d, mtg_engine::decision::Decision::Priority { .. })
+            })
             .count();
         assert!(asked_p0 >= 1, "the attacking player was asked");
         let ogres = crate::r_s01_common::with_subtype(&t, P1, "Ogre").len();
@@ -329,5 +365,255 @@ fn kazuul_trigger_resolves_before_the_attackers_own_trigger() {
     t.resolve_all();
     t.g.recompute();
     assert!(!t.g.can_block_at_all(bears), "the Heelcutter's target");
-    assert!(t.g.can_block_at_all(ogre), "the Ogre wasn't a possible target");
+    assert!(
+        t.g.can_block_at_all(ogre),
+        "the Ogre wasn't a possible target"
+    );
+}
+
+#[test]
+fn mangara_uses_last_known_attack_target_of_creatures_that_left() {
+    cr!("603.4", "608.2h", "506.4");
+    ruling!(
+        "Mangara, the Diplomat",
+        "If some of the attacking creatures leave the battlefield while Mangara's triggered ability is on the stack, use the player or planeswalker they were attacking before they left"
+    );
+    supported("Mangara, the Diplomat");
+    supported("Tomik, Wielder of Law");
+    // P0 attacks P1 (Mangara, or Tomik with the same condition) with two creatures; with
+    // the trigger on the stack one of them dies (P1 still draws) or is removed from combat
+    // (P1 doesn't draw).
+    for card in ["Mangara, the Diplomat", "Tomik, Wielder of Law"] {
+        for dies in [true, false] {
+            let mut t = TestGame::new(2);
+            t.battlefield(P1, card);
+            let a = t.battlefield(P0, "Grizzly Bears");
+            let b = t.battlefield(P0, "Hill Giant");
+            attack_with(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+            assert_eq!(t.stack_len(), 1);
+            if dies {
+                crate::r_s02_common::destroy(&mut t, a);
+            } else {
+                remove_from_combat(&mut t.g, a);
+            }
+            let hand = t.hand_size(P1);
+            t.resolve_all();
+            assert_eq!(t.hand_size(P1), hand + dies as usize, "{card} dies: {dies}");
+        }
+    }
+    // A planeswalker attacked counts too, even after the attacker died.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Mangara, the Diplomat");
+    let pw = t.battlefield(P1, "Jace Beleren");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    attack_with(&mut t, &[(a, obj(pw)), (b, Entity::Player(P1))]);
+    crate::r_s02_common::destroy(&mut t, a);
+    let hand = t.hand_size(P1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), hand + 1);
+    // Two attackers, only one at P1 (the other at P2): no trigger resolution draw.
+    let mut t = TestGame::new(3);
+    t.battlefield(P1, "Mangara, the Diplomat");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    attack_with(&mut t, &[(a, Entity::Player(P2)), (b, Entity::Player(P1))]);
+    let hand = t.hand_size(P1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), hand);
+}
+
+#[test]
+fn lost_in_the_woods_each_trigger_is_tied_to_its_attacker() {
+    cr!("508.3a", "603.2", "506.4");
+    ruling!(
+        "Lost in the Woods",
+        "Because Lost in the Woods will trigger once for each creature that attacks you or a planeswalker you control"
+    );
+    supported("Lost in the Woods");
+    // Two attackers, two triggers; P1's library has a Forest on top and an Island below.
+    // The trigger resolving first reveals the Forest and removes its own attacker.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Lost in the Woods");
+    crate::r_s01_common::stack_library(&mut t, P1, &["Forest", "Island"]);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    attack_with(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    assert_eq!(t.stack_len(), 2);
+    let top = crate::r_s04_common::top_of_stack(&t);
+    let its = t
+        .obj_now(top)
+        .stack
+        .as_ref()
+        .unwrap()
+        .event
+        .as_ref()
+        .unwrap()
+        .object
+        .unwrap();
+    let other = if its == a { b } else { a };
+    t.resolve();
+    assert!(
+        !attacking(&t, its),
+        "the trigger's own creature left combat"
+    );
+    assert!(attacking(&t, other));
+    t.resolve_all();
+    assert!(
+        attacking(&t, other),
+        "the Island was revealed for the other one"
+    );
+}
+
+/// P0 controls O-Kagachi. During P1's turn `p1_turn` runs in P1's declare attackers step
+/// (P1 has a Grizzly Bears to attack with); then, in P0's next turn, O-Kagachi attacks P1
+/// unblocked, targeting P1's Hill Giant if it triggers. Returns whether the Giant was
+/// exiled.
+fn okagachi_after(players: usize, p1_turn: fn(&mut TestGame, ObjectId)) -> bool {
+    let mut t = TestGame::new(players);
+    let ok = t.battlefield(P0, "O-Kagachi, Vengeful Kami");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P1, mtg_engine::turn::Step::BeginningOfCombat);
+    p1_turn(&mut t, bears);
+    t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.answer_targets(P0, &[obj(giant)]);
+    t.attack(&[(ok, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.life(P1) <= 14, "O-Kagachi dealt combat damage to P1");
+    !t.on_battlefield(giant)
+}
+
+#[test]
+fn okagachi_player_attacked_you_only_if_a_declared_attacker_attacks_you() {
+    cr!("508.6", "508.4", "508.7", "603.4");
+    ruling!(
+        "O-Kagachi, Vengeful Kami",
+        "A player attacked you if that player declared a creature as an attacking creature and that creature is attacking you."
+    );
+    supported("O-Kagachi, Vengeful Kami");
+    // Declared attacking P0: triggers.
+    assert!(okagachi_after(2, |t, bears| {
+        attack_with(t, &[(bears, Entity::Player(P0))]);
+    }));
+    // Attacked only P0's planeswalker: no.
+    assert!(!okagachi_after(2, |t, bears| {
+        let pw = t.battlefield(P0, "Jace Beleren");
+        attack_with(t, &[(bears, obj(pw))]);
+    }));
+    // Attacked P2; a creature put onto the battlefield attacking P0: no.
+    assert!(!okagachi_after(3, |t, bears| {
+        attack_with(t, &[(bears, Entity::Player(P2))]);
+        let new = enter_attacking(t, P1, "Savannah Lions", Entity::Player(P0));
+        assert!(attacking(t, new));
+    }));
+    // Attacked P2, and P0 reselected P0 as the player the Bears attack: no.
+    assert!(!okagachi_after(3, |t, bears| {
+        attack_with(t, &[(bears, Entity::Player(P2))]);
+        crate::r_s01_common::give_mana_for(t, P0, "Portal Mage");
+        let mage = t.hand(P0, "Portal Mage");
+        t.answer_targets(P0, &[obj(bears)]);
+        t.answer_choose(P0, &[Entity::Player(P0)]);
+        t.cast(P0, mage).go();
+        t.resolve();
+        t.resolve();
+        assert_eq!(
+            t.g.combat.as_ref().unwrap().attack_target(bears),
+            Some(Entity::Player(P0))
+        );
+    }));
+}
+
+#[test]
+fn okagachi_blocker_dies_before_the_target_is_chosen() {
+    cr!("510.2", "704.5g", "603.3d", "702.19b");
+    ruling!(
+        "O-Kagachi, Vengeful Kami",
+        "that blocking creature is destroyed before a target is selected for O-Kagachi's last ability. It can't be exiled."
+    );
+    // P1 attacked P0 last turn; now O-Kagachi (6/6 flying, trample) is blocked by P1's
+    // Wind Drake: 2 to the Drake, 4 to P1. The Drake is already dead when the target is
+    // chosen.
+    let mut t = TestGame::new(2);
+    let ok = t.battlefield(P0, "O-Kagachi, Vengeful Kami");
+    let bears = t.battlefield(P1, "Wind Drake");
+    let lions = t.battlefield(P1, "Savannah Lions");
+    t.advance_to(P1, mtg_engine::turn::Step::BeginningOfCombat);
+    attack_with(&mut t, &[(lions, Entity::Player(P0))]);
+    t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    let from = t.asked().len();
+    t.attack(&[(ok, Entity::Player(P1))], &[(bears, ok)]);
+    assert_eq!(t.life(P1), 16);
+    assert!(!t.on_battlefield(bears));
+    let candidates = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert!(!candidates.is_empty(), "the trigger asked for a target");
+    assert!(candidates.iter().all(|c| !c.contains(&obj(bears))));
+}
+
+#[test]
+fn reselected_defending_player_makes_targets_of_defending_players_permanents_illegal() {
+    cr!("508.7", "608.2b");
+    ruling!(
+        "Portal Mage",
+        "If an ability targets something controlled by the “defending player” of an attacking creature and the defending player for that creature changes before that ability resolves, the ability won’t resolve"
+    );
+    ruling!(
+        "Windshaper Planetar",
+        "If an ability targets something controlled by the “defending player” of an attacking creature and the defending player for that creature changes before that ability resolves, the ability won't resolve"
+    );
+    supported("Master of Diversion");
+    // Master of Diversion ("whenever this creature attacks, tap target creature defending
+    // player controls") attacks P1, aimed at P1's Bears; P1 reselects it to attack P2.
+    for planetar in [false, true] {
+        let mut t = TestGame::new(3);
+        let master = t.battlefield(P0, "Master of Diversion");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.answer_targets(P0, &[obj(bears)]);
+        attack_with(&mut t, &[(master, Entity::Player(P1))]);
+        let name = if planetar {
+            "Windshaper Planetar"
+        } else {
+            "Portal Mage"
+        };
+        crate::r_s01_common::give_mana_for(&mut t, P1, name);
+        let card = t.hand(P1, name);
+        if !planetar {
+            t.answer_targets(P1, &[obj(master)]);
+        }
+        t.answer_choose(P1, &[Entity::Player(P2)]);
+        t.cast(P1, card).go();
+        t.resolve();
+        t.resolve();
+        assert_eq!(
+            t.g.combat.as_ref().unwrap().attack_target(master),
+            Some(Entity::Player(P2)),
+            "{name}"
+        );
+        t.resolve_all();
+        assert!(!crate::r_s08_common::is_tapped(&t, bears), "{name}");
+    }
+}
+
+#[test]
+fn sarkhan_planeswalker_creatures_need_to_have_been_controlled_since_the_turn_began() {
+    cr!("302.6", "508.1a");
+    ruling!(
+        "Sarkhan the Masterless",
+        "A planeswalker that becomes a creature due to Sarkhan’s first loyalty ability can’t attack unless you’ve controlled it continuously since your turn began."
+    );
+    supported("Sarkhan the Masterless");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let sarkhan = t.battlefield(P0, "Sarkhan the Masterless");
+    let jace = t.battlefield_sick(P0, "Jace Beleren");
+    t.activate(P0, sarkhan, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(crate::r_s04_common::is_creature(&t, jace));
+    assert!(crate::r_s04_common::is_creature(&t, sarkhan));
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    assert!(crate::r_s02_common::can_attack(&mut t, sarkhan));
+    assert!(
+        !crate::r_s02_common::can_attack(&mut t, jace),
+        "came under P0's control this turn"
+    );
 }
