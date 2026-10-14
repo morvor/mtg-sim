@@ -54,6 +54,7 @@ Each surviving mutant is classified as
 | File | Mutants (all) | Sampled | Caught | Missed | Timeout | Unviable | Kill rate | After new tests |
 |---|---|---|---|---|---|---|---|---|
 | sba.rs | 154 | 16 (1/10) | 14 | 2 | 0 | 0 | 87.5% | 87.5% (both survivors equivalent) |
+| trigger_timing.rs | 17 | 17 (all) | 14 | 2 | 0 | 1 | 87.5% | TBD |
 
 ### sba.rs
 
@@ -69,3 +70,20 @@ Run 2026-10-14, 16 of 154 mutants (round-robin 0/10), 23 minutes.
 - `sba.rs:369:26: replace > with >= in Game::check_sbas` (704.5z roles, `ids.len() > 1`):
   **(a) equivalent**. With exactly one Role the mutant sorts the one-element list, pops it
   and puts nothing into the graveyard, the same result as skipping it.
+
+### trigger_timing.rs
+
+Run 2026-10-14, all 17 mutants, 27 minutes.
+
+- `trigger_timing.rs:55:9: replace <impl Clone for TriggerTiming>::clone -> Self with
+  Default::default()`: **(b) missing test**. A copy of the game must keep the count of
+  actions in progress (a snapshot taken inside an atomic effect, such as a cast attempted
+  while an effect resolves, is restored by `roll_back` when the cast is illegal), while the
+  "triggers are being detected" flag is the original's own. No test reaches a rollback inside
+  an atomic action followed by a trigger check in the same action, so the contract is pinned
+  by the unit test `trigger_timing::tests::a_copy_keeps_the_actions_in_progress_but_not_the_check_in_progress`.
+- `trigger_timing.rs:95:13: replace > with >= in creates_tokens_together`: **(a)
+  equivalent**. It makes a one-instruction `Seq` of a token creation count as one atomic
+  action instead of a sequence of one action. Either way the events before it are checked at
+  the boundary before the `Seq`, the creation runs as one action, and its events are checked
+  at the next boundary.
