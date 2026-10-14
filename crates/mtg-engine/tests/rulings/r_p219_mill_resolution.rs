@@ -408,7 +408,7 @@ fn old_rutstein_dryad_arbor_is_both_a_land_and_a_creature() {
 
 #[test]
 fn soaring_thought_thief_mills_every_opponent() {
-    cr!("701.17a", "102.2");
+    cr!("701.17a");
     ruling!(
         "Soaring Thought-Thief",
         "Soaring Thought-Thief’s fourth ability causes each opponent to mill two cards, not just those being attacked by Rogues you control."

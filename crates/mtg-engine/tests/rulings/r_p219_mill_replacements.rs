@@ -108,9 +108,10 @@ fn putting_cards_into_a_graveyard_without_milling_isnt_affected() {
         assert!(t.in_graveyard(P1, "Hill Giant"), "{watcher}");
         // The Hill Giant and Consider itself.
         assert_eq!(t.graveyard_size(P1), 2, "{watcher}");
-        // A mill instruction is replaced.
+        // A mill instruction is replaced: two cards (Bruvac), five (The Water Crystal).
         mill(&mut t, P0, P1, 1);
-        assert!(t.graveyard_size(P1) > 3, "{watcher}");
+        let milled = if watcher == "The Water Crystal" { 5 } else { 2 };
+        assert_eq!(t.graveyard_size(P1), 2 + milled, "{watcher}");
     }
 }
 
@@ -163,7 +164,7 @@ fn angel_of_suffering_still_mills_if_the_damage_cant_be_prevented() {
 
 #[test]
 fn two_mindskinners_replace_the_damage_only_once() {
-    cr!("615.1a", "616.1", "616.2");
+    cr!("615.1a", "616.1");
     ruling!(
         "The Mindskinner",
         "If you somehow control more than one of The Mindskinner, the multiple replacement effects will have no effect. Damage dealt to an opponent by a source you control will be replaced only once with that opponent milling that many cards."

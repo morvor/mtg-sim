@@ -135,7 +135,7 @@ fn nemesis_of_mortals_cant_reduce_colored_mana() {
 
 #[test]
 fn sinuous_vermin_gaining_menace_after_blocks_doesnt_undo_the_block() {
-    cr!("509.1h", "702.111b", "506.4");
+    cr!("509.1h", "702.111b");
     ruling!(
         "Sinuous Vermin",
         "Once Sinuous Vermin has been legally blocked by one creature, activating the monstrosity ability to give it menace won’t change or undo that block."

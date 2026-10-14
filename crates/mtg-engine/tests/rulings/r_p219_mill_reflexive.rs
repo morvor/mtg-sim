@@ -254,7 +254,7 @@ fn locke_permission_is_unused_by_casting_with_another_permission() {
 
 #[test]
 fn singularity_rupture_targets_are_optional_but_all_illegal_means_nothing() {
-    cr!("608.2b", "115.1d", "800.4a");
+    cr!("608.2b", "115.1a", "800.4a");
     ruling!(
         "Singularity Rupture",
         "You don’t have to choose any targets for Singularity Rupture. However, if you do and those targets are all illegal as Singularity Rupture tries to resolve, it won’t resolve and none of its effects will happen. No creatures will be destroyed, and no one will mill any cards."

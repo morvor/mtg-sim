@@ -344,13 +344,21 @@ fn the_returned_card_can_be_one_just_milled_or_one_already_there() {
             let mut t = TestGame::new(2);
             WANTED.with(|w| w.set(case.wanted));
             respond(&mut t, P0, pick_wanted);
-            if already_there {
-                t.graveyard(case.owner, case.wanted);
+            let wanted = if already_there {
+                t.graveyard(case.owner, case.wanted)
             } else {
-                t.library_top(case.owner, case.wanted);
-            }
+                t.library_top(case.owner, case.wanted)
+            };
             (case.run)(&mut t);
             t.resolve_all();
+            // It moved (milled, then returned): one that stayed on top of the library
+            // without being milled doesn't count.
+            assert_ne!(
+                t.g.current(wanted),
+                wanted,
+                "{} (already there: {already_there})",
+                case.card
+            );
             assert!(
                 arrived(&t, &case),
                 "{} (already there: {already_there})\n{}",
