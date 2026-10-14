@@ -1847,7 +1847,13 @@ pub fn apply_mod(
                 c.colors = c.colors.union(ColorSet::single(col));
             }
         }
-        Modification::AddAbility(a) => c.abilities.push(acquired_ability(a, ctx.source, _target)),
+        Modification::AddAbility(a) => {
+            // An ability a card gave itself before it changed zones ("you may exile ~. If
+            // you do, it gains \"... if ~ is exiled ...\"", Cosima) is its own, from the
+            // object it is now.
+            let from = ctx.source.map(|s| if g.current(s) == _target { _target } else { s });
+            c.abilities.push(acquired_ability(a, from, _target))
+        }
         // Replaced by the ability itself as the effect is created (`Game::fix_mods`).
         Modification::AddThisAbility => {}
         Modification::AddKeyword(k) => {
@@ -1953,11 +1959,20 @@ pub fn apply_mod(
 /// Derived abilities are cached so their identity is stable across recomputation.
 pub fn acquired_ability(a: &Ability, from: Option<ObjectId>, target: ObjectId) -> Ability {
     use std::sync::{Mutex, OnceLock};
-    let Some(src) = from.filter(|s| *s != target) else {
-        return a.clone();
-    };
     static CACHE: OnceLock<Mutex<HashMap<(u64, u32), Ability>>> = OnceLock::new();
     let m = CACHE.get_or_init(Default::default);
+    let Some(src) = from.filter(|s| *s != target) else {
+        // An ability an object grants itself that names its granter ("Until end of turn,
+        // Ms. Marvel gains \"Ms. Marvel's base power is ...\""): the granter is that object.
+        if let Some(s) = from.filter(|_| crate::granted_by::refers_to_granter(a)) {
+            let mut g = m.lock().unwrap();
+            return g
+                .entry((a.uid, s.0 | 0x8000_0000))
+                .or_insert_with(|| crate::granted_by::bind_granter(a, s))
+                .clone();
+        }
+        return a.clone();
+    };
     let mut g = m.lock().unwrap();
     g.entry((a.uid, src.0))
         .or_insert_with(|| {

@@ -488,6 +488,11 @@ pub struct TurnHistory {
     /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
     #[serde(default)]
     pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
+    /// Cards revealed as they were drawn by "You may reveal the first card you draw each
+    /// turn as you draw it" (Inquisitor Eisenhorn): "Whenever you reveal ... this way"
+    /// triggers only for them. Recorded by `kw/reveal_first_draw.rs`.
+    #[serde(default)]
+    pub first_draws_revealed: Vec<ObjectId>,
     /// Named actions players performed this turn, from [`Event::Custom`] events with a
     /// player ("surveil", "scry"): "as long as you've surveilled this turn". Recorded by
     /// `kw/grant_conditions.rs`.

@@ -1169,6 +1169,8 @@ pub enum PlayerFilter {
     /// A player who attacked with creatures this turn ("target player who attacked this
     /// turn"): only the active player declares attackers (CR 508.1).
     AttackedThisTurn,
+    /// A player who cast a spell this turn ("each opponent who cast a spell this turn").
+    CastSpellThisTurn,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
     /// CR 508.6: a player who is attacking (controls a creature attacking) a player
@@ -2525,8 +2527,13 @@ pub enum ReplacementAction {
     /// enters. Conditional ETB replacements ("enters tapped unless ...") are expressed as
     /// `AsEnters(If { .. })`.
     AsEnters(Box<Effect>),
-    /// Enters as a copy of (chosen) object (CR 707.9).
-    EnterAsCopy { filter: Filter, optional: bool },
+    /// Enters as a copy of (chosen) object (CR 707.9). `tapped`: "enter tapped as a copy
+    /// of": it enters tapped only if it copies something (Vesuva's rulings).
+    EnterAsCopy {
+        filter: Filter,
+        optional: bool,
+        tapped: bool,
+    },
     /// Enters under another player's control.
     EnterUnderControl(PlayerRef),
     /// Put into a different zone instead ("exile it instead").

@@ -397,8 +397,12 @@ impl Game {
                     .collect();
                 let res = self.move_to_destination(objs, to, ctx);
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
-                let res = crate::merge::found_all(self, res);
+                let mut res = crate::merge::found_all(self, res);
                 if to.zone == ZoneKind::Battlefield {
+                    // A card put somewhere else instead (Containment Priest, CR 614.6)
+                    // didn't enter: "it" and "if you do" refer only to what's on the
+                    // battlefield.
+                    res.retain(|o| self.obj(*o).zone == Zone::Battlefield);
                     self.link_to_creator(ctx, &res);
                 }
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();

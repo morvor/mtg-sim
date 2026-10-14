@@ -2009,7 +2009,10 @@ fn dealt_damage(r: &str) -> Option<Parsed> {
                         combat_only: true,
                     },
                 ]),
-                BatchPer::Batch,
+                // Once for you and once for each planeswalker dealt damage at the same
+                // time (Vengeful Pharaoh rulings): damage to you has no object, so all of
+                // it is one group.
+                BatchPer::Object,
                 PlayerRef::ActivePlayer,
             ),
             _ => None,
@@ -2681,13 +2684,19 @@ fn those_attacking_you(c: &str) -> Option<Condition> {
     if !tail.trim().is_empty() || !x.ends_with(" or more") {
         return None;
     }
-    let those = Filter::and(vec![
-        Filter::In(Box::new(Sel::TriggerObjects)),
+    // Each judged as it is now or, if it left the battlefield, as it last existed
+    // (Mangara, the Diplomat ruling).
+    let those = Sel::Matching(
+        Box::new(Sel::TriggerObjects),
         Filter::Custom(
             crate::kw::activated_ability_kind::ATTACKING_YOU_OR_YOUR_PLANESWALKER.into(),
         ),
-    ]);
-    Some(Condition::Compare(Value::Count(those), Cmp::Ge, n))
+    );
+    Some(Condition::Compare(
+        Value::CountSel(Box::new(those)),
+        Cmp::Ge,
+        n,
+    ))
 }
 
 inventory::submit! { ConditionPattern { name: "N or more of those creatures are attacking you and/or planeswalkers you control", priority: 100, parse: those_attacking_you } }

@@ -508,20 +508,35 @@ inventory::submit! { EffectPattern { name: "choice grammar: you [verb] (imperati
 /// player"), as the spell or ability is put on the stack (CR 601.2c).
 fn target_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let (k, theirs) = match (l.find(" of their choice"), l.find(" of your choice")) {
-        (Some(k), _) => (k, true),
-        (None, Some(k)) => (k, false),
+    // "destroy target nonland permanent of that player's choice that one of your
+    // opponents controls" (Bladegriff Prototype): "that player" chooses.
+    let (k, theirs, phrase) = match (
+        l.find(" of their choice"),
+        l.find(" of your choice"),
+        l.find(" of that player's choice"),
+    ) {
+        (Some(k), _, _) => (k, true, " of their choice"),
+        (None, Some(k), _) => (k, false, " of your choice"),
+        (None, None, Some(k)) => (k, true, " of that player's choice"),
         _ => return None,
     };
+    let that_players = phrase == " of that player's choice";
     // Right after a target phrase.
     let before = &l[..k];
     let t = before.rfind("target ")?;
     if before[t..].contains(", ") || before[t..].contains(" and ") {
         return None;
     }
-    let phrase = if theirs { " of their choice" } else { " of your choice" };
-    let text = format!("{before}{}", &l[k + phrase.len()..]);
-    if text.contains(" of their choice") || text.contains(" of your choice") {
+    let after = &l[k + phrase.len()..];
+    let after = match after.strip_prefix(" that one of your opponents controls") {
+        Some(r) if that_players => format!(" an opponent controls{r}"),
+        _ => after.to_string(),
+    };
+    let text = format!("{before}{after}");
+    if text.contains(" of their choice")
+        || text.contains(" of your choice")
+        || text.contains(" of that player's choice")
+    {
         return None;
     }
     // Who "their" is: a player subject ("that creature's controller may have ...").
@@ -529,7 +544,8 @@ fn target_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
     let chooser = if theirs {
         let subject = ["may have ", "may tap ", "may "]
             .iter()
-            .find_map(|m| l.find(&format!(" {m}")).map(|i| &l[..i]));
+            .find_map(|m| l.find(&format!(" {m}")).map(|i| &l[..i]))
+            .filter(|_| !that_players);
         let who = match subject {
             Some(s) => {
                 let (who, rest) = crate::oracle::effects::player_ref(s, b)?;

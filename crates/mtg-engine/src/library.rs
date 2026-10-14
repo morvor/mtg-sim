@@ -125,7 +125,9 @@ pub fn search(
     n: u32,
     ctx: &Ctx,
 ) -> Vec<ObjectId> {
-    if g.player_restricted(searcher, |r| matches!(r, Restriction::CantSearch(_))) {
+    if g.player_restricted(searcher, |r| matches!(r, Restriction::CantSearch(_)))
+        || crate::rule_statics::caused_actions::search_forbidden(g, searcher, owner, ctx)
+    {
         return vec![];
     }
     // CR 701.23f: an effect may replace searching the library with searching its top
