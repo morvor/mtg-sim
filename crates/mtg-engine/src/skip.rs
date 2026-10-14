@@ -18,12 +18,13 @@ pub fn static_skip(g: &mut Game, kind: StepKind, active: PlayerId) -> bool {
         }
         _ => false,
     };
-    let mut cands: Vec<(Option<ObjectId>, PlayerId, ReplacementDef)> = g
+    // (source, controller, effect, uid of the static ability it comes from)
+    let mut cands: Vec<(Option<ObjectId>, PlayerId, ReplacementDef, Option<u64>)> = g
         .statics
         .replacements
         .iter()
         .filter(|(s, c, _, _, d)| applies(d, Some(*s), *c))
-        .map(|(s, c, _, _, d)| (Some(*s), *c, d.clone()))
+        .map(|(s, c, _, a, d)| (Some(*s), *c, d.clone(), Some(a.uid)))
         .collect();
     // One-shot effects ("you skip your draw step this turn"): several of them still skip
     // the step only once.
@@ -31,11 +32,14 @@ pub fn static_skip(g: &mut Game, kind: StepKind, active: PlayerId) -> bool {
         g.replacements
             .iter()
             .filter(|r| r.uses != Some(0) && applies(&r.def, r.source, r.controller))
-            .map(|r| (r.source, r.controller, r.def.clone())),
+            .map(|r| (r.source, r.controller, r.def.clone(), None)),
     );
-    for (src, ctl, d) in cands {
+    for (src, ctl, d, uid) in cands {
         if d.optional && !g.ask_yes_no(active, src, &format!("Skip your {kind:?} step?"), false) {
             continue;
+        }
+        if let (Some(src), Some(uid)) = (src, uid) {
+            crate::structure::record_replacement(g, src, uid);
         }
         match &d.action {
             ReplacementAction::Instead(e) | ReplacementAction::Also(e) => {
