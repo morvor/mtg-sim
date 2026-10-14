@@ -1958,6 +1958,7 @@ pub fn group_phrase(t: &str) -> Option<(&str, TargetGroup)> {
             "that share a permanent type",
             TargetGroup::SharePermanentType,
         ),
+        ("that share a land type", TargetGroup::ShareLandType),
         (
             "with different controllers",
             TargetGroup::DifferentControllers,

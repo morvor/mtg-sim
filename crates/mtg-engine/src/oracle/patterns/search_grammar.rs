@@ -992,6 +992,16 @@ fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
             break;
         }
     }
+    // "with different powers", "that share a land type": a relationship the cards found
+    // together must have (`target_groups`), for each part.
+    if let Some((0, j, grp)) = find_group_phrase(&rest) {
+        if j == rest.len() {
+            for item in items.iter_mut() {
+                item.3 = Filter::and(vec![item.3.clone(), Filter::Together(grp.clone())]);
+            }
+            rest = String::new();
+        }
+    }
     // "a land card of each basic land type" (CR 205.3i): one part per type.
     if let Some(r) = rest.strip_prefix(" of each basic land type") {
         if items.len() != 1 || !matches!(items[0].0, Value::Const(1)) {

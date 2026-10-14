@@ -767,6 +767,9 @@ pub enum TargetGroup {
     /// There's a permanent type (artifact, battle, creature, enchantment, land,
     /// planeswalker) all of them have.
     SharePermanentType,
+    /// There's a land type all of them have ("two basic land cards that share a land
+    /// type", CR 205.3i).
+    ShareLandType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
     /// No two of them are controlled by the same player ("with different controllers",

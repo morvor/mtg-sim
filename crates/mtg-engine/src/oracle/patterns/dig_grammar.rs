@@ -1036,6 +1036,47 @@ pub fn dug_objects(s: &str, b: &Builder) -> Option<(Filter, String)> {
     None
 }
 
+/// Notes that the text has cards to choose among and distribute like dug cards (cards a
+/// search found and left where they are): "the rest" is `rest`.
+pub(super) fn mark_dug(b: &mut Builder, rest: Sel) {
+    b.named.retain(|(n, _)| n != DIG_MARK && n != UNTIL_MARK && n != CHOSEN_MARK);
+    b.named.push((DIG_MARK.to_string(), rest));
+}
+
+/// "An opponent chooses two of those cards": `chooser` chooses `count` of the cards (all
+/// of them if there are no more), which stay where they are ("the chosen cards").
+pub(super) fn choose_in_place(chooser: PlayerRef, count: Value, b: &mut Builder) -> Effect {
+    let mut to = Destination::library_top();
+    to.position = LibraryPosition::FromTop(0);
+    if !b.named.iter().any(|(n, _)| n == CHOSEN_MARK) {
+        b.named
+            .push((CHOSEN_MARK.to_string(), Sel::Var(vars::DUG_CHOSEN)));
+    }
+    // "Put the chosen card into your hand and the other into your graveyard."
+    let among = rest_sel(b);
+    let others = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(among.clone())),
+        Filter::not(Filter::In(Box::new(Sel::Var(vars::DUG_CHOSEN)))),
+    ]));
+    for n in ["the chosen card", "the chosen cards"] {
+        b.named.push((n.to_string(), Sel::Var(vars::DUG_CHOSEN)));
+    }
+    for n in ["the other", "the others", "the rest"] {
+        b.named.push((n.to_string(), others.clone()));
+    }
+    Effect::DigStep(Box::new(DigStep::Take {
+        from: among,
+        chooser,
+        filter: Filter::Any,
+        each_of: vec![],
+        count: Some(count),
+        up_to: false,
+        random: false,
+        reveal: false,
+        to,
+    }))
+}
+
 /// Whether an earlier sentence dug cards (a step on them is read by this grammar).
 pub fn dug(b: &Builder) -> bool {
     b.named.iter().any(|(n, _)| n == DIG_MARK)
@@ -1582,6 +1623,17 @@ fn rest_tail(s: &str, rest: &Sel, mut builder: Option<&mut Builder>) -> Option<V
                 if let Some(e) = rest_step(r2.trim_start(), &rest_of(all, rest)) {
                     return Some(vec![e]);
                 }
+                // "and the rest onto the battlefield tapped, then shuffle".
+                if let Some(x) = r2.trim_start().strip_suffix(", then shuffle") {
+                    if let Some(e) = rest_step(x, &rest_of(all, rest)) {
+                        return Some(vec![
+                            e,
+                            Effect::Shuffle {
+                                who: PlayerRef::You,
+                            },
+                        ]);
+                    }
+                }
             }
             // "and up to one Elf card from among them into your hand": another selection.
             if let Some(b) = builder.as_deref_mut() {
@@ -1818,6 +1870,9 @@ fn parse_put_found(l: &str, b: &Builder) -> Option<Vec<Effect>> {
         ("put", r)
     } else if let Some(r) = l.strip_prefix("exile ") {
         ("exile", r)
+    } else if let Some(r) = l.strip_prefix("shuffle ") {
+        // "Shuffle the chosen cards into your library and put the rest into your hand."
+        ("shuffle", r)
     } else {
         return None;
     };
@@ -1862,6 +1917,10 @@ fn parse_put_found(l: &str, b: &Builder) -> Option<Vec<Effect>> {
     };
     let (to, tail) = if verb == "exile" {
         (Destination::zone(ZoneKind::Exile), r)
+    } else if verb == "shuffle" {
+        let mut to = Destination::library_top();
+        to.position = LibraryPosition::Shuffled;
+        (to, r.strip_prefix(" into your library")?)
     } else {
         destination(r)?
     };
