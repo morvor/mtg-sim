@@ -74,7 +74,13 @@ impl Renderer<'_> {
             return s;
         };
         if t.chosen_by_opponent {
-            s.push_str(" of an opponent's choice");
+            // "target creature of an opponent's choice they control": the chosen player
+            // is the opponent who chooses it (CR 601.2c).
+            if let Some((head, tail)) = s.split_once(" the chosen player controls") {
+                s = format!("{head}{tail} of an opponent's choice they control");
+            } else {
+                s.push_str(" of an opponent's choice");
+            }
         }
         // "target creature of their choice": another player chooses it (CR 601.2c).
         if let Some(p) = &t.chosen_by {

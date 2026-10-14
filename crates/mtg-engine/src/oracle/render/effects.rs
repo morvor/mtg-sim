@@ -399,8 +399,11 @@ impl Renderer<'_> {
 
     fn effect_inner(&mut self, e: &Effect) -> String {
         self.new_clause();
-        // Instructions worded as a whole (`effect_terms.rs`).
+        // Instructions worded as a whole (`effect_terms.rs`, `more_terms.rs`).
         if let Some(s) = self.effect_terms(e) {
+            return s;
+        }
+        if let Some(s) = self.effect_more(e) {
             return s;
         }
         // "For each {B}{B} spent to cast it, each opponent discards a card": one action on
@@ -725,6 +728,14 @@ impl Renderer<'_> {
                     return self.gap("shuffle your zone");
                 };
                 format!("shuffle your {} into your library", zone_word(*z))
+            }
+            // "You lose half your life": performed once, by you.
+            Effect::ForEachPlayer {
+                who: PlayerRef::You,
+                effect,
+            } if you_alone::iterated_as_you(effect).is_some() => {
+                let e = you_alone::iterated_as_you(effect).unwrap_or_default();
+                self.effect(&e)
             }
             Effect::ForEachPlayer { who, effect } => {
                 let inner = self.effect(effect);
@@ -1483,8 +1494,14 @@ impl Renderer<'_> {
                 )
             }
             Effect::Fight { a, b } => {
+                let two_targets =
+                    matches!((a, b), (Sel::Target(x), Sel::Target(y)) if x != y);
                 let a = self.sel(a, Case::Subj);
                 let b = self.sel(b, Case::Obj);
+                // Two targets both named before: "those creatures fight each other".
+                if two_targets && !a.contains("target") && !b.contains("target") {
+                    return "{alt:those creatures|they} fight each other".into();
+                }
                 format!("{a} fights {b}")
             }
             Effect::AddCounters { what, kind, n } => {
@@ -2364,7 +2381,13 @@ impl Renderer<'_> {
                 format!("{subj} shuffles {w} into their library")
             }
             Effect::ShuffleIntoLibrary { what, library } => {
-                let w = self.sel(what, Case::Obj);
+                let mut w = self.sel(what, Case::Obj);
+                // "Shuffle the cards from your hand into your library" (all of them).
+                if matches!(what, Sel::All(Filter::And(f)) if matches!(f.as_slice(), [Filter::InZone(ZoneKind::Hand), Filter::OwnedBy(_)]))
+                    && w.ends_with(" hand")
+                {
+                    w = format!("{{alt:the cards from {w}|{w}}}");
+                }
                 let p = self.possessive_for(library);
                 let vp = format!("shuffle {w} into {p} library");
                 self.with_subject(library, &vp, false)

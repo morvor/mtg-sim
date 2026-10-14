@@ -582,6 +582,9 @@ impl Renderer<'_> {
     /// pay {1}{G} any number of times. When you pay this cost one or more times, ..."
     /// (the payments counted in a number, then a reflexive trigger, CR 603.12).
     pub(crate) fn seq_extra(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        if let Some(r) = self.seq_more(v) {
+            return Some(r);
+        }
         if let Some(s) = self.revealed_this_way(v) {
             return Some((s, 4));
         }

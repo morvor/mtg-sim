@@ -490,8 +490,9 @@ impl Renderer<'_> {
         if matches!(v, Value::EventAmount) {
             return ("{alt:that much|that many}".into(), None);
         }
+        // "You gain that much life": the amount of the previous instruction.
         if matches!(v, Value::Prev) {
-            return ("that many".into(), None);
+            return ("{alt:that much|that many}".into(), None);
         }
         if let Some(x) = self.stored_x(v) {
             return (x, None);
@@ -1120,6 +1121,7 @@ impl Renderer<'_> {
             matches!(
                 a,
                 Filter::Card
+                    | Filter::PermanentCard
                     | Filter::Type(_)
                     | Filter::Subtype(_)
                     | Filter::Supertype(_)

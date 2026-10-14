@@ -34,6 +34,7 @@ mod history_values;
 mod joined_lines;
 mod keywords;
 mod library_top;
+mod more_terms;
 mod nouns;
 mod once_each_turn;
 mod outcomes;
@@ -47,6 +48,7 @@ mod this_turn;
 mod trigger_causes;
 mod triggers;
 mod values;
+mod you_alone;
 
 use crate::ability::*;
 use crate::card::{CardDef, FaceDef};
