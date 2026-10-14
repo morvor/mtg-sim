@@ -707,8 +707,14 @@ pub fn parse_clause(l: &str, b: &mut Builder) -> Option<Effect> {
             if let Some(mut ea) = parse_simple(a, b) {
                 // "put a +1/+1 counter on ~, then it deals damage ..."
                 super::patterns::oracle_hardening_referents::note_counters_on_source(&mut ea, b);
-                // "create a 2/2 Wolf token, then put a +1/+1 counter on it": the token.
-                super::patterns::oracle_hardening_referents::note_created_in_first_half(&mut ea, b);
+                // "create a 2/2 Wolf token, then put a +1/+1 counter on it": the token
+                // (only when the second half says "it": "then copy that spell" still
+                // names the spell).
+                if c.split(|ch: char| !ch.is_alphanumeric()).any(|w| w == "it") {
+                    super::patterns::oracle_hardening_referents::note_created_in_first_half(
+                        &mut ea, b,
+                    );
+                }
                 // "untap all creatures and gain control of them": the group the first
                 // half affected.
                 let store = super::patterns::pronoun_groups::note(&mut ea, b);
