@@ -198,14 +198,31 @@ fn lignify_makes_a_changeling_only_a_treefolk() {
 }
 
 #[test]
-fn a_creature_given_changeling_by_an_effect_is_every_creature_type() {
-    cr!("702.73a");
+fn a_creature_given_changeling_by_an_effect_is_not_every_creature_type() {
+    // Changeling granted by an effect other than token creation, a copy effect or a
+    // text-changing effect isn't a characteristic-defining ability (CR 604.3a(2)): it's
+    // added in layer 6 (CR 613.1f), after creature types were set in layer 4 (CR 613.1d).
+    cr!("604.3a", "613.1d", "613.1f");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
-    assert!(!is_a(&t, bears, "Goblin"));
+    t.battlefield(P0, "Goblin King");
+    let arch = t.battlefield(P0, "Archpriest of Iona");
+    assert_eq!(t.pt(bears), (2, 2));
+    assert_eq!(t.pt(arch).0, 1, "only the Archpriest (a Cleric) is in the party");
     grant(&mut t, bears, Keyword::new(KeywordKind::Changeling));
-    assert!(is_a(&t, bears, "Goblin"));
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Changeling));
+    // Not a Goblin: no creature-type filter matches it and the Goblin lord doesn't pump it.
+    assert!(!is_a(&t, bears, "Goblin"));
+    assert!(!t.obj_now(bears).chars.has_subtype("Goblin"));
     assert!(is_a(&t, bears, "Bear"));
+    assert_eq!(t.pt(bears), (2, 2));
+    // Not a Rogue, Warrior or Wizard for the party (CR 700.8).
+    assert_eq!(t.pt(arch).0, 1);
+    // Unlike a printed changeling.
+    let colossus = t.battlefield(P0, "Chameleon Colossus");
+    assert!(is_a(&t, colossus, "Goblin"));
+    assert_eq!(t.pt(colossus), (5, 5), "pumped by the Goblin King");
+    assert_eq!(t.pt(arch).0, 2);
 }
 
 #[test]
@@ -264,4 +281,51 @@ fn a_changeling_spell_is_a_spell_of_every_creature_type_for_mana_restrictions() 
     let mut t = with_elf_mana();
     let bears = t.hand(P0, "Grizzly Bears");
     assert!(t.cast(P0, bears).try_go().is_err());
+}
+
+#[test]
+fn changeling_acquired_through_token_creation_or_a_copy_effect_is_every_creature_type() {
+    // CR 604.3a(2): changeling granted to a token by the effect creating it, or acquired
+    // through a copy effect, is a characteristic-defining ability (unlike one granted by
+    // any other effect), so the object is every creature type.
+    cr!("604.3a", "702.73a");
+    assert_supported("Irregular Cohort");
+    assert_supported("Clone");
+    assert_supported("Omni-Changeling");
+    assert_supported("Moritte of the Frost");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Goblin King");
+    // "When this creature enters, create a 2/2 colorless Shapeshifter creature token with
+    // changeling."
+    t.enter(P0, "Irregular Cohort");
+    t.resolve_all();
+    let token = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .find(|id| t.obj(*id).is_token())
+        .expect("the Shapeshifter token");
+    assert!(is_a(&t, token, "Goblin"));
+    assert_eq!(t.pt(token), (3, 3), "pumped by the Goblin King");
+    // A Clone copying a printed changeling copies its characteristic-defining ability.
+    let wc = t.battlefield(P1, "Woodland Changeling");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(wc)]);
+    let clone = t.enter(P0, "Clone");
+    assert_eq!(t.obj_now(clone).chars.name.as_str(), "Woodland Changeling");
+    assert!(is_a(&t, clone, "Goblin"));
+    assert_eq!(t.pt(clone), (3, 3), "pumped by the Goblin King");
+    // "... except it has changeling" (Omni-Changeling) and "... and has changeling"
+    // (Moritte of the Frost), copying a non-changeling creature.
+    for name in ["Omni-Changeling", "Moritte of the Frost"] {
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        assert!(!is_a(&t, bears, "Goblin"));
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[Entity::Object(bears)]);
+        let copy = t.enter(P0, name);
+        assert_eq!(t.obj_now(copy).chars.name.as_str(), "Grizzly Bears", "{name}");
+        assert!(is_a(&t, copy, "Goblin"), "{name}");
+        assert!(is_a(&t, copy, "Bear"), "{name}");
+    }
 }

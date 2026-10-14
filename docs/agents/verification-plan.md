@@ -30,7 +30,7 @@ reset, Oct 16 ~09:00 UTC):
 
 - No new work is issued. Items already running finish and land; each worker then stops and reports.
 - The A, B, D and F items have not started.
-- The judge audit (E) was already running and finishes.
+- The judge audit (E) was already running. It finished on Oct 14: 58 tests judged, 0 disagreements (reports/judge-audit-1.md).
 - The hourly check-in is disabled.
 
 ## Queues after the reset
@@ -53,6 +53,8 @@ Already landed from round 2: `cards2-followups`, `cards2-statics-characteristics
 Also landed: `roundtrip-tail-5`, `every-card-fuzz-2` and the three gap-residual items.
 
 ## The judge audit (E)
+
+**Result (Oct 14).** The judge agreed with all 225 questions from 58 tests. See reports/judge-audit-1.md: method, limits, and two calls for the interpretation register.
 
 **Sample.** 60 tests drawn at random with seed 20261014: 14 from tests/cr, 18 from
 tests/rulings, 10 from tests/keywords, 12 from tests/cards and 6 from tests/actions, at commit

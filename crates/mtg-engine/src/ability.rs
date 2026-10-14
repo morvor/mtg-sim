@@ -1176,6 +1176,8 @@ pub enum PlayerFilter {
     /// A player who attacked with creatures this turn ("target player who attacked this
     /// turn"): only the active player declares attackers (CR 508.1).
     AttackedThisTurn,
+    /// A player who cast a spell this turn ("each opponent who cast a spell this turn").
+    CastSpellThisTurn,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
     /// CR 508.6: a player who is attacking (controls a creature attacking) a player

@@ -11,6 +11,47 @@ use crate::object::*;
 use crate::replacement::ReplEvent;
 use crate::types::*;
 
+/// The damage a prevention effect's additional instruction refers to as "that damage" /
+/// "that many" ("prevent that damage and mill twice that many cards"): all the damage that
+/// would have been dealt, even if it can't be prevented (CR 615.12; Angel of Suffering's,
+/// Polukranos's and Sekki's rulings), as opposed to "the damage prevented this way"
+/// (`Value::EventAmount`, nothing if it can't be prevented: Stormwild Capridor's ruling).
+pub const THAT_DAMAGE: Var = crate::ability::vars::USER + 9870;
+
+/// `e` with its references to the event's amount ("that many") meaning the damage that
+/// would have been dealt ([`THAT_DAMAGE`]).
+pub fn that_damage_amounts(e: &Effect) -> Option<Effect> {
+    use serde_json::Value as J;
+    fn walk(v: J) -> J {
+        match v {
+            J::String(s) if s == "EventAmount" => serde_json::json!({ "Var": THAT_DAMAGE }),
+            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(walk).collect()),
+            other => other,
+        }
+    }
+    serde_json::from_value(walk(serde_json::to_value(e).ok()?)).ok()
+}
+
+/// The inverse of [`that_damage_amounts`], for rendering: "that many" again.
+pub fn that_damage_as_event_amount(e: &Effect) -> Effect {
+    use serde_json::Value as J;
+    fn walk(v: J) -> J {
+        match v {
+            J::Object(m) if m.len() == 1 && m.get("Var") == Some(&J::from(THAT_DAMAGE)) => {
+                J::String("EventAmount".into())
+            }
+            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(walk).collect()),
+            other => other,
+        }
+    }
+    serde_json::to_value(e)
+        .ok()
+        .and_then(|v| serde_json::from_value(walk(v)).ok())
+        .unwrap_or_else(|| e.clone())
+}
+
 /// Whether a prevention effect's additional instruction (CR 615.5) is about the object the
 /// damage would have been dealt to ("put a +1/+1 counter on that creature for each 1
 /// damage prevented this way"): applied to simultaneous damage to several objects, it

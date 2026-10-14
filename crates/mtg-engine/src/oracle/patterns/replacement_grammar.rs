@@ -1047,7 +1047,8 @@ pub(crate) fn damage_action(
         .strip_prefix("prevent that damage and ")
         .or_else(|| s.strip_prefix("prevent that damage, "))
     {
-        let e = instructions(r, ctx, it)?;
+        // "that many" is the damage that would have been dealt (CR 615.12).
+        let e = crate::prevention::that_damage_amounts(&instructions(r, ctx, it)?)?;
         return Some((ReplacementAction::PreventAndThen(None, Box::new(e)), false));
     }
     if let Some(r) = s.strip_prefix("prevent ") {
