@@ -336,3 +336,89 @@ fn attacking_player_chooses_blocks(
 }
 
 inventory::submit! { super::StaticPattern { name: "combat requirements: the attacking player chooses blocks", priority: 120, parse: attacking_player_chooses_blocks } }
+
+/// "This turn, creatures can't attack unless their controller pays {X} for each attacking
+/// creature they control." (War Tax), "This turn, creatures can't block unless their
+/// controller pays {X} for each blocking creature they control." (War Cadence): a tax on
+/// attacks or blocks declared after the effect begins (rulings), with X fixed as it
+/// begins (CR 608.2h).
+fn p_tax_this_turn(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("this turn, ")?;
+    let (subject, rest) = r.split_once(" can't ")?;
+    let (verb, rest) = rest.split_once(" unless their controller pays ")?;
+    let (f, plural) = super::statics::whole_object_phrase(subject)?;
+    if !plural || !crate::oracle::effects::is_class_filter(&f) {
+        return None;
+    }
+    let (pay, attack) = match verb {
+        "attack" => (
+            rest.strip_suffix(" for each attacking creature they control")?,
+            true,
+        ),
+        "block" => (
+            rest.strip_suffix(" for each blocking creature they control")?,
+            false,
+        ),
+        _ => return None,
+    };
+    let cost = if pay == "{x}" {
+        Cost::mana(crate::mana::ManaCost::parse("{X}")?)
+    } else {
+        super::counters_resources_pay::resolution_cost(pay)?
+    };
+    let restriction = if attack {
+        Restriction::AttackCost {
+            attackers: f,
+            defender: PlayerFilter::Any,
+            planeswalkers: true,
+            cost,
+        }
+    } else {
+        Restriction::BlockCost { blockers: f, cost }
+    };
+    Some(Effect::AddRestriction {
+        restriction,
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat requirements: this turn, creatures can't attack/block unless their controller pays", priority: 90, parse: p_tax_this_turn } }
+
+/// "they can't attack you or planeswalkers you control this turn" (Unstable Glyphbridge;
+/// "they" being a player): creatures that player controls can't (CR 508.1c); the player
+/// is fixed as the effect begins.
+fn p_player_cant_attack_you(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (subject, rest) = l.split_once(" can't attack you")?;
+    let (planeswalkers, rest) = match rest.strip_prefix(" or planeswalkers you control") {
+        Some(r) => (true, r),
+        None => (false, rest),
+    };
+    if rest != " this turn" {
+        return None;
+    }
+    let who = match subject {
+        "they" | "that player" => {
+            if super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+                return None;
+            }
+            b.it_player.clone()
+        }
+        _ => return None,
+    };
+    Some(Effect::AddRestriction {
+        restriction: Restriction::CantAttackPlayer {
+            attackers: Filter::and(vec![
+                Filter::creature(),
+                Filter::ControlledByPlayer(Box::new(who)),
+            ]),
+            defender: PlayerFilter::You,
+            planeswalkers,
+            battles: false,
+        },
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat requirements: that player can't attack you this turn", priority: 90, parse: p_player_cant_attack_you } }

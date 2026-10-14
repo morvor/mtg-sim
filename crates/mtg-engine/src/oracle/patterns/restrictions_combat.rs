@@ -29,17 +29,17 @@ fn names_source_faithfully(subject: &str, what: &Sel) -> bool {
 }
 
 fn subject_filter(what: &Sel) -> Option<Filter> {
-    let target_players_class = |f: &Filter| {
-        match f {
+    let target_players_class = |f: &Filter| match f {
         Filter::And(v) => v.iter().all(|x| {
             is_class_filter(x)
                 || matches!(x, Filter::ControlledBy(PlayerRel::Target(_)))
                 // "creatures the active player controls": bound to the player as the
                 // effect begins (`fix_restriction`).
                 || matches!(x, Filter::ControlledByPlayer(p) if matches!(**p, PlayerRef::ActivePlayer))
+                // "the chosen type": the type chosen as the effect begins.
+                || matches!(x, Filter::ChosenType)
         }),
         _ => false,
-    }
     };
     match what {
         Sel::All(f) if is_class_filter(f) || target_players_class(f) => Some(f.clone()),
@@ -221,10 +221,7 @@ fn blocks_target(rest: &str, f: &Filter, b: &mut Builder) -> Option<Effect> {
     let (r, dur) = if let Some(x) = r.strip_suffix(" this turn if able") {
         (x, Duration::EndOfTurn)
     } else {
-        (
-            r.strip_suffix(" this combat if able")?,
-            Duration::EndOfCombat,
-        )
+        (r.strip_suffix(" this combat if able")?, Duration::EndOfCombat)
     };
     if r != "target creature" {
         return None;

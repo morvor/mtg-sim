@@ -609,6 +609,14 @@ impl Game {
                     Entity::Player(p) => self.player_rel_matches(*rel, p, ctx),
                     Entity::Object(_) => false,
                 }),
+            Filter::AttackingObject(of) => self
+                .combat
+                .as_ref()
+                .and_then(|cb| cb.attack_target(id))
+                .is_some_and(|t| match t {
+                    Entity::Object(o) => self.matches(o, of, ctx),
+                    Entity::Player(_) => false,
+                }),
             Filter::BlockingSource => ctx.source.is_some_and(|s| {
                 self.combat.as_ref().is_some_and(|cb| {
                     cb.blockers_of(s).contains(&id) || self.left_combat_pair(s, id, s)

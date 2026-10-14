@@ -651,6 +651,10 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Obj);
                 np.post.push(format!("blocking {s}"));
             }
+            Filter::AttackingObject(of) => {
+                let n = self.noun(of, Num::One);
+                np.post.push(format!("attacking {n}"));
+            }
             Filter::ControlledSinceTurnBegan => np.rel.push(
                 "{alt:its controller has controlled continuously since the beginning of the turn|that player has controlled continuously since the beginning of the turn}".into(),
             ),

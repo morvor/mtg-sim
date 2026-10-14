@@ -1379,6 +1379,9 @@ pub enum Filter {
     /// "attacking you", "attacking your opponents": attacking that player, not a
     /// planeswalker they control or a battle they protect (CR 506.2, 508.1b).
     AttackingPlayer(PlayerRel),
+    /// "attacking a battle", "attacking a planeswalker": attacking a permanent that
+    /// matches the filter (CR 506.2, 508.1b).
+    AttackingObject(Box<Filter>),
     /// "creature blocking it", "creature blocked by it" relative to the source.
     BlockingSource,
     BlockedBySource,

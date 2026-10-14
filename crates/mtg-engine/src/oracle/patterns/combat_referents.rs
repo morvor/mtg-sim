@@ -181,3 +181,198 @@ fn mentions_source(e: &Effect) -> bool {
 }
 
 inventory::submit! { EffectPattern { name: "combat referents: blocking or blocked by target creature", priority: 80, parse: blocking_or_blocked_by_target } }
+
+/// "creatures attacking the last chosen player" (Beckoning Will-o'-Wisp, Triarch
+/// Stalker): attacking the player most recently chosen for the source (CR 607.2d).
+fn last_chosen_player_suffix<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let rest = r.strip_prefix("attacking the last chosen player")?;
+    Some((Filter::AttackingPlayer(PlayerRel::Chosen), rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "combat referents: attacking the last chosen player", priority: 100, parse: last_chosen_player_suffix } }
+
+/// "~ deals 3 damage to you and attacks this turn if able" (Kookus): the source is the
+/// subject of both instructions.
+fn source_and_attacks(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let head = l.strip_suffix(" and attacks this turn if able")?;
+    if !head.starts_with("~ ") || head.contains(" and ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let a = parse_clause(head, b);
+    let c = a
+        .as_ref()
+        .and_then(|_| parse_clause("~ attacks this turn if able", b));
+    match (a, c) {
+        (Some(a), Some(c)) => Some(Effect::seq(vec![a, c])),
+        _ => {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            b.it_player = saved.2;
+            None
+        }
+    }
+}
+
+inventory::submit! { EffectPattern { name: "combat referents: ~ [does something] and attacks this turn if able", priority: 90, parse: source_and_attacks } }
+
+/// "it can't be blocked by creatures with greater power this combat" (Tadeas): greater
+/// than the attacking creature's power as blockers are declared.
+fn cant_be_blocked_by_greater_power(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (subject, duration) = if let Some(s) =
+        l.strip_suffix(" can't be blocked by creatures with greater power this combat")
+    {
+        (s, Duration::EndOfCombat)
+    } else {
+        let s = l.strip_suffix(" can't be blocked by creatures with greater power this turn")?;
+        (s, Duration::EndOfTurn)
+    };
+    if !matches!(subject, "it" | "that creature") {
+        return None;
+    }
+    let (what, rest) = object_ref(subject, b)?;
+    if !rest.trim().is_empty()
+        || !matches!(what, Sel::TriggerObject | Sel::Target(_) | Sel::This)
+        || super::oracle_hardening_referents::is_no_referent(&what)
+    {
+        return None;
+    }
+    Some(Effect::AddRestriction {
+        restriction: Restriction::CantBeBlockedBy {
+            attacker: Filter::In(Box::new(what)),
+            blocker: Filter::and(vec![
+                Filter::creature(),
+                Filter::Power(
+                    Cmp::Gt,
+                    Box::new(Value::PowerOf(Box::new(Sel::Var(vars::AFFECTED)))),
+                ),
+            ]),
+        },
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat referents: can't be blocked by creatures with greater power this combat", priority: 90, parse: cant_be_blocked_by_greater_power } }
+
+/// "Equipped creature has first strike as long as it's blocking or blocked by a Goblin or
+/// Orc." (Sting): while a creature matching the noun blocks it or is blocked by it.
+fn as_long_as_blocking_or_blocked_by(
+    l: &str,
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l.trim());
+    let (body, noun) = l.split_once(" as long as it's blocking or blocked by ")?;
+    let it = if body.starts_with("equipped creature ") || body.starts_with("enchanted creature ") {
+        Sel::AttachedTo
+    } else if body.starts_with("~ ") {
+        Sel::This
+    } else {
+        return None;
+    };
+    let noun = noun
+        .strip_prefix("a ")
+        .or_else(|| noun.strip_prefix("an "))?;
+    let (f, plural) = super::statics::whole_object_phrase(noun)?;
+    if plural {
+        return None;
+    }
+    let cond = Condition::Exists(Filter::and(vec![
+        f,
+        Filter::BlockRelation {
+            rel: BlockRel::BlockingOrBlockedBy,
+            other: Box::new(it),
+            when: BlockWhen::Now,
+        },
+    ]));
+    let cut = text.to_lowercase().find(" as long as ")?;
+    let mut abilities = crate::oracle::statics::parse_static(&format!("{}.", &text[..cut]), ctx)?;
+    if abilities.is_empty() {
+        return None;
+    }
+    for a in abilities.iter_mut() {
+        let AbilityKind::Static(s) = &a.kind else {
+            return None;
+        };
+        let mut s = s.clone();
+        if s.condition.is_some() {
+            return None;
+        }
+        s.condition = Some(cond.clone());
+        *a = AbilityDef::new(AbilityKind::Static(s), text);
+    }
+    Some(abilities)
+}
+
+inventory::submit! { super::StaticPattern { name: "combat referents: as long as it's blocking or blocked by", priority: 110, parse: as_long_as_blocking_or_blocked_by } }
+
+/// "at least one other Wall creature is blocking that creature and no non-Wall creatures
+/// are blocking that creature" (Wall of Caltrops, after "whenever ~ blocks a creature":
+/// that creature is the blocked one): counts of the creatures blocking it.
+fn blocking_that_creature(c: &str) -> Option<Condition> {
+    fn part(c: &str) -> Option<Condition> {
+        let blocking = Filter::BlockRelation {
+            rel: BlockRel::Blocking,
+            other: Box::new(Sel::TriggerObject),
+            when: BlockWhen::Now,
+        };
+        let (cmp, n, noun) = if let Some(r) = c.strip_prefix("at least one other ") {
+            (
+                Cmp::Ge,
+                1,
+                format!("other {}", r.strip_suffix(" is blocking that creature")?),
+            )
+        } else if let Some(r) = c.strip_prefix("no ") {
+            (
+                Cmp::Eq,
+                0,
+                r.strip_suffix(" are blocking that creature")?.to_string(),
+            )
+        } else {
+            return None;
+        };
+        let (f, _) = super::statics::whole_object_phrase(&noun)?;
+        Some(Condition::Compare(
+            Value::Count(Filter::and(vec![f, blocking])),
+            cmp,
+            Value::c(n),
+        ))
+    }
+    let c = end(c.trim());
+    match c.split_once(" and ") {
+        Some((a, b)) => Some(Condition::And(vec![part(a)?, part(b)?])),
+        None => part(c),
+    }
+}
+
+inventory::submit! { super::ConditionPattern { name: "combat referents: creatures blocking that creature", priority: 100, parse: blocking_that_creature } }
+
+/// The internal form of "attacking that player" when "that player" is the trigger's
+/// player (see `attacking_that_player`).
+const ATTACKING_TRIGGER_PLAYER: &str = "attacking the-trigger-player";
+
+fn attacking_trigger_player_suffix<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let rest = r.strip_prefix(ATTACKING_TRIGGER_PLAYER)?;
+    Some((Filter::AttackingPlayer(PlayerRel::TriggerPlayer), rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "combat referents: attacking the trigger's player", priority: 100, parse: attacking_trigger_player_suffix } }
+
+/// "[creatures you control] attacking that player get +2/+0 until end of turn" in a
+/// trigger whose player is the attacked one (Namor: "whenever ~ attacks a player ...").
+fn attacking_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    if !l.contains(" attacking that player ") || !matches!(b.it_player, PlayerRef::TriggerPlayer) {
+        return None;
+    }
+    let text = l.replacen(
+        " attacking that player ",
+        &format!(" {ATTACKING_TRIGGER_PLAYER} "),
+        1,
+    );
+    parse_clause(&text, b)
+}
+
+inventory::submit! { EffectPattern { name: "combat referents: creatures attacking that player", priority: 90, parse: attacking_that_player } }

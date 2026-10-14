@@ -2602,6 +2602,9 @@ impl Game {
                 // "Creatures target player controls don't untap ...": the objects that
                 // player controls, whichever they are later.
                 *f = self.bind_target_players(f, ctx);
+                // "Creatures of the creature type of your choice attack this turn if
+                // able": the type chosen as the effect began (CR 608.2h).
+                self.lock_chosen_type(f, ctx);
             }
         }
         // "Target creature blocks this creature this combat if able": both creatures are
@@ -2645,6 +2648,16 @@ impl Game {
         // can't be evaluated later.
         if let Restriction::CantCast { what, .. } = &mut r {
             self.lock_filter_amounts(what, ctx);
+        }
+        // "This turn, creatures can't attack unless their controller pays {X} for each
+        // attacking creature they control": X is fixed as the effect begins (CR 608.2h).
+        if let Restriction::AttackCost { cost, .. }
+        | Restriction::BlockCost { cost, .. }
+        | Restriction::BlockCostAgainst { cost, .. } = &mut r
+        {
+            if let Some(m) = cost.mana.as_mut().filter(|m| m.has_x()) {
+                *m = m.with_x(ctx.x.max(0) as u32);
+            }
         }
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
@@ -2714,6 +2727,28 @@ impl Game {
         }
     }
 
+    /// Replaces "the chosen type" in a filter with the creature or basic land type chosen
+    /// for the effect's source as it begins.
+    fn lock_chosen_type(&self, f: &mut Filter, ctx: &Ctx) {
+        match f {
+            Filter::ChosenType => {
+                if let Some(t) = self
+                    .source_choices(ctx)
+                    .and_then(|ch| ch.creature_type.clone().or(ch.basic_land_type.clone()))
+                {
+                    *f = Filter::Subtype(t);
+                }
+            }
+            Filter::And(v) | Filter::Or(v) => {
+                for x in v.iter_mut() {
+                    self.lock_chosen_type(x, ctx);
+                }
+            }
+            Filter::Not(x) => self.lock_chosen_type(x, ctx),
+            _ => {}
+        }
+    }
+
     /// Replaces the amounts of a filter's comparisons that refer to the resolving spell's
     /// or ability's objects ("the same mana value as that spell", "X") with their values
     /// now (CR 608.2h).
@@ -2721,6 +2756,11 @@ impl Game {
         fn refers_to_ctx(v: &Value) -> bool {
             match v {
                 Value::X | Value::Var(_) | Value::EventAmount | Value::Chosen => true,
+                // The object the restriction is checked for (an attacker for "can't be
+                // blocked by creatures with greater power") is compared when checked.
+                Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s) if matches!(**s, Sel::Var(v) if v == vars::AFFECTED) => {
+                    false
+                }
                 Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s) => matches!(
                     **s,
                     Sel::Target(_)
@@ -3290,6 +3330,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
+        | Restriction::CantAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,
     }

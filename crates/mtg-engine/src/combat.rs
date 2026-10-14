@@ -454,9 +454,11 @@ impl Game {
         if self.protected_from(attacker, blocker) {
             return false;
         }
-        // Restrictions from effects.
+        // Restrictions from effects. ("can't be blocked by creatures with greater power":
+        // greater than the attacker's, `vars::AFFECTED`.)
         for (s, c, r, locked) in self.all_restrictions() {
-            let ctx = Ctx::new(s, c);
+            let mut ctx = Ctx::new(s, c);
+            ctx.set_var(vars::AFFECTED, vec![Entity::Object(attacker)]);
             match &r {
                 Restriction::CantBeBlocked(f)
                     if self.restriction_applies(attacker, f, &ctx, &locked) =>
