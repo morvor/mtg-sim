@@ -3753,6 +3753,18 @@ impl Renderer<'_> {
     ) -> String {
         let then_empty = matches!(then, Effect::Noop);
         let else_empty = matches!(otherwise, Effect::Noop);
+        // "That player shuffles that card into their library": only if a card was chosen
+        // (there's nothing to shuffle otherwise).
+        if else_empty {
+            if let Condition::SelNonEmpty(sel) = cond {
+                let shuffles_it = |e: &Effect| matches!(e, Effect::ShuffleIntoLibrary { what, .. } if same_sel(what, sel));
+                if shuffles_it(then)
+                    || matches!(then, Effect::AsPlayer { effect, .. } if shuffles_it(effect))
+                {
+                    return self.effect(then);
+                }
+            }
+        }
         // "Exile that card from your graveyard": only if it's still there (CR 400.7).
         if else_empty {
             if let Condition::SelMatches(sel, Filter::InZone(z)) = cond {
