@@ -206,7 +206,7 @@ fn stream_of_thought_chooses_the_cards_on_resolution_including_milled_ones() {
 
 #[test]
 fn arcane_heist_casts_the_card_during_its_resolution_or_never() {
-    cr!("608.2g", "601.2", "707.12");
+    cr!("608.2g", "601.2");
     ruling!(
         "Arcane Heist",
         "You choose whether to cast the target instant or sorcery card as Arcane Heist resolves. If you do, you do so as part of the resolution of Arcane Heist. You can’t wait to cast it later in the turn. Timing restrictions based on the card’s types are ignored."
@@ -308,7 +308,7 @@ fn rob(t: &mut TestGame) -> (ObjectId, ObjectId) {
 
 #[test]
 fn rob_the_archives_cards_follow_normal_timing_and_costs() {
-    cr!("601.2f", "305.2", "305.3", "307.1");
+    cr!("601.2f", "305.2", "305.3");
     ruling!(
         "Rob the Archives",
         "You must pay all costs and follow all normal timing rules for cards played this way. For example, you may play lands this way only during your main phase while no spells or abilities are on the stack and only if you haven't played a land yet this turn."

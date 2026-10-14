@@ -108,7 +108,7 @@ fn castaway_legendary_jace_coexists_with_nonlegendary_copies() {
 
 #[test]
 fn imperial_mask_tokens_are_enchantments_not_creatures() {
-    cr!("707.2", "810.2");
+    cr!("707.2");
     ruling!(
         "Imperial Mask",
         "This card creates tokens that enter as enchantments, not creatures."

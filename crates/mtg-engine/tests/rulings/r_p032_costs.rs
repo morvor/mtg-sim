@@ -185,7 +185,7 @@ fn naming_a_card_with_a_mana_ability_stops_only_its_other_abilities() {
 
 #[test]
 fn disruptor_flute_names_one_of_a_cards_names() {
-    cr!("201.4", "715.4", "601.2f");
+    cr!("201.4f", "601.2f");
     ruling!(
         "Disruptor Flute",
         "Some cards can have alternative names, such as split cards, adventurer cards, double-faced cards, and so on. You may choose one of the two names the card can have; Disruptor Flute's abilities won't affect anything with the other name. For example, if you choose Ondu Knotmaster, Throw a Line will still cost only {W}{B} to cast."
@@ -222,7 +222,7 @@ fn disruptor_flute_names_one_of_a_cards_names() {
 
 #[test]
 fn disruptor_flute_cant_name_a_token_only_name() {
-    cr!("201.3", "111.4");
+    cr!("201.4");
     ruling!(
         "Disruptor Flute",
         "You can choose the name of any card. You can't choose the name of a token unless it's also the name of a card."
@@ -250,7 +250,7 @@ fn disruptor_flute_cant_name_a_token_only_name() {
 
 #[test]
 fn god_pharaohs_statue_drains_the_opposing_team_twice_in_two_headed_giant() {
-    cr!("810.8a", "810.9");
+    cr!("810.9");
     ruling!(
         "God-Pharaoh's Statue",
         "In a Two-Headed Giant game, the last ability of God-Pharaoh's Statue causes the opposing team to lose 2 life."
@@ -519,7 +519,7 @@ fn cunning_nightbonder_doesnt_apply_to_itself_as_a_spell() {
 
 #[test]
 fn thryx_spells_cant_be_countered_but_counterspells_other_effects_happen() {
-    cr!("101.2", "608.2b", "701.6b");
+    cr!("101.2");
     ruling!(
         "Thryx, the Sudden Storm",
         "A spell or ability that counters spells can still target spells you control with mana value 5 or greater. When that spell or ability resolves, your spell won't be countered, but any additional effects of the countering spell or ability will still happen."
@@ -571,8 +571,10 @@ fn semblance_anvil_and_umori_use_card_types_only() {
     t.lands(P0, "Forest", 1);
     let wurm = t.hand(P0, "Grizzly Bears");
     assert!(can_cast(&mut t, P0, wurm, CastMethod::Normal));
-    let shock = t.hand(P0, "Lava Spike");
-    assert!(!can_cast(&mut t, P0, shock, CastMethod::Normal));
+    // Divination ({2}{U}, a sorcery) isn't reduced: Forest and Island aren't enough.
+    t.lands(P0, "Island", 1);
+    let div = t.hand(P0, "Divination");
+    assert!(!can_cast(&mut t, P0, div, CastMethod::Normal));
     // Umori offers card types only — no supertypes or subtypes.
     let mut t = main_phase(2);
     let from = t.asked().len();

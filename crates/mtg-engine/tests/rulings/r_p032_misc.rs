@@ -94,7 +94,7 @@ fn champion_of_wits_uses_power_on_resolution_or_last_known() {
 
 #[test]
 fn thornplate_intimidator_opponent_may_always_lose_3_life() {
-    cr!("608.2d", "701.21a");
+    cr!("608.2d");
     ruling!(
         "Thornplate Intimidator",
         "While resolving Thornplate Intimidator’s last ability, the target opponent chooses a card to be discarded without revealing it, chooses a nonland permanent to be sacrificed, or chooses to do neither. Then that player discards that card, sacrifices that permanent, or loses 3 life. That player can always choose to lose 3 life, even if they have cards to discard or nonland permanents to sacrifice."

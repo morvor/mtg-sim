@@ -33,7 +33,7 @@ fn banish(t: &mut TestGame) -> (ObjectId, Vec<ObjectId>) {
 
 #[test]
 fn banish_into_fable_copies_resolve_even_if_it_is_countered() {
-    cr!("603.3", "707.10", "608.2n");
+    cr!("603.3", "707.10");
     ruling!(
         "Banish into Fable",
         "The triggered ability that copies Banish into Fable resolves and creates copies of Banish into Fable even if Banish into Fable is countered. The ability and the copies resolve before Banish into Fable itself resolves."
@@ -98,7 +98,7 @@ fn banish_into_fable_checks_artifacts_and_enchantments_on_resolution() {
 
 #[test]
 fn bygone_marvels_is_copied_twice_even_if_countered() {
-    cr!("603.3", "707.10", "702.169a");
+    cr!("603.3", "707.10");
     ruling!(
         "Bygone Marvels",
         "The triggered ability will resolve before Bygone Marvels does. If Bygone Marvels is countered in response to its own triggered ability, you will still copy Bygone Marvels twice."
@@ -148,7 +148,7 @@ fn treats_with_chancellor(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn chancellor_of_tales_copies_an_adventure_without_targets() {
-    cr!("707.10", "715.3");
+    cr!("707.10", "715.3c", "715.3d");
     ruling!(
         "Chancellor of Tales",
         "Chancellor of Tales can copy any Adventure spell, not just one with targets."
@@ -163,7 +163,7 @@ fn chancellor_of_tales_copies_an_adventure_without_targets() {
 
 #[test]
 fn chancellor_of_tales_copy_resolves_even_if_the_adventure_is_countered() {
-    cr!("603.3", "707.10", "715.4");
+    cr!("603.3", "707.10");
     ruling!(
         "Chancellor of Tales",
         "Chancellor of Tales's ability and the copy it creates both resolve before the Adventure spell. They resolve even if the Adventure spell is countered before the copy is created."
@@ -187,7 +187,7 @@ fn chancellor_of_tales_copy_resolves_even_if_the_adventure_is_countered() {
 
 #[test]
 fn owlin_spiralmancer_doesnt_trigger_on_a_second_x_spell() {
-    cr!("603.2", "603.2h");
+    cr!("603.2");
     ruling!(
         "Owlin Spiralmancer",
         "If you cast your first spell with {X} in its mana cost during a turn before Owlin Spiralmancer is on the battlefield, casting another spell with {X} in its mana cost later in the turn won't cause its last ability to trigger."
