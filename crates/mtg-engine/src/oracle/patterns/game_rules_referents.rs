@@ -61,3 +61,54 @@ fn draw_another_if(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "game rules: draw another card if [condition]", priority: 100, parse: draw_another_if } }
+
+/// "Each opponent who doesn't control a legendary creature or planeswalker loses the
+/// game.", "each player who controls an Island draws a card": each such player performs
+/// the instruction (whether they control one is checked for each as the instruction is
+/// performed).
+fn each_who_controls(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (who, r) = if let Some(r) = l.strip_prefix("each opponent who ") {
+        (PlayerRef::EachOpponent, r)
+    } else {
+        (PlayerRef::EachPlayer, l.strip_prefix("each player who ")?)
+    };
+    let (negated, r) = if let Some(r) = r.strip_prefix("doesn't control ") {
+        (true, r)
+    } else {
+        (false, r.strip_prefix("controls ")?)
+    };
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let (f, false, rest) = crate::oracle::phrases::parse_object_phrase(r)? else {
+        return None;
+    };
+    let (verb, tail) = rest.trim_start().split_once(' ')?;
+    let base = verb
+        .strip_suffix("es")
+        .filter(|v| v.ends_with("ss") || v.ends_with("sh"))
+        .or_else(|| verb.strip_suffix('s'))?;
+    let effect = parse_simple(&format!("you {base} {tail}"), b)?;
+    let controls = Condition::Exists(Filter::and(vec![
+        f,
+        Filter::ControlledBy(PlayerRel::You),
+        Filter::InZone(ZoneKind::Battlefield),
+    ]));
+    let cond = if negated {
+        Condition::Not(Box::new(controls))
+    } else {
+        controls
+    };
+    Some(Effect::ForEachPlayer {
+        who,
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(Effect::If {
+                cond,
+                then: Box::new(effect),
+                otherwise: Box::new(Effect::Noop),
+            }),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "game rules: each opponent who (doesn't) control(s) [object] [does something]", priority: 100, parse: each_who_controls } }
