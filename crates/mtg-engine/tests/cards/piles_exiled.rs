@@ -144,8 +144,8 @@ const EIGHT: [&str; 8] = [
     "Grizzly Bears",
     "Hill Giant",
     "Lightning Bolt",
-    "Ornithopter",
     "Island",
+    "Ornithopter",
     "Forest",
     "Shock",
     "Plains",
@@ -153,7 +153,7 @@ const EIGHT: [&str; 8] = [
 
 #[test]
 fn abstract_performance_exiles_a_face_down_pile_and_a_face_up_pile() {
-    cr!("700.3", "406.3", "406.3a");
+    cr!("700.3", "406.3", "406.3a", "406.3b");
     ruling!(
         "Abstract Performance",
         "You can't look at the cards in the face-down pile until"
@@ -200,21 +200,21 @@ fn abstract_performance_exiles_a_face_down_pile_and_a_face_up_pile() {
     assert_eq!(
         lines(&seen),
         vec![
-            "Pile 1: face-down pile of 4 card(s) | Pile 2: Island, Forest, Shock, Plains / you look: false / face down: true"
+            "Pile 1: face-down pile of 4 card(s) | Pile 2: Ornithopter, Forest, Shock, Plains / you look: false / face down: true"
                 .to_string()
         ]
     );
-    // Lightning Bolt isn't castable without a target here; the Bears, Hill Giant and
-    // Ornithopter are the spells you may cast (any nonland card of the pile).
-    assert_eq!(lines(&mine), vec!["4 cards; you true / they false / stack 1".to_string()]);
+    // The spells you may cast: the face-down pile's nonland cards (judged as the spells
+    // they'd become, CR 406.3b), not the Island.
+    assert_eq!(lines(&mine), vec!["3 cards; you true / they false / stack 1".to_string()]);
     // The Bears were cast as Abstract Performance resolved; the rest went to your hand.
     assert_eq!(t.stack_len(), 1);
     t.resolve();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
-    for n in ["Hill Giant", "Lightning Bolt", "Ornithopter"] {
+    for n in ["Hill Giant", "Lightning Bolt", "Island"] {
         assert!(t.in_hand(P0, n), "{n}");
     }
-    for n in ["Island", "Forest", "Shock", "Plains", "Abstract Performance"] {
+    for n in ["Ornithopter", "Forest", "Shock", "Plains", "Abstract Performance"] {
         assert!(t.in_graveyard(P0, n), "{n}");
     }
     assert_eq!(count_exiled(&t.g), 0);
@@ -239,12 +239,12 @@ fn abstract_performance_an_opponent_of_your_choice_chooses_the_pile() {
     assert_eq!(asked_pile(&t, P1), 0);
     assert_eq!(asked_pile(&t, P2), 1);
     // The face-down cards are face up in the graveyard.
-    for n in ["Grizzly Bears", "Hill Giant", "Lightning Bolt", "Ornithopter"] {
+    for n in ["Grizzly Bears", "Hill Giant", "Lightning Bolt", "Island"] {
         assert!(t.in_graveyard(P0, n), "{n}");
     }
     assert!(t.g.player(P0).graveyard.iter().all(|o| !t.g.obj(*o).face_down));
     // You may cast a spell (you didn't); the rest went to your hand.
-    for n in ["Island", "Forest", "Shock", "Plains"] {
+    for n in ["Ornithopter", "Forest", "Shock", "Plains"] {
         assert!(t.in_hand(P0, n), "{n}");
     }
 }
