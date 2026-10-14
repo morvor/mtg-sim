@@ -620,9 +620,11 @@ impl Game {
                 })
             }),
             Filter::BlockingAnyOf(sel) => self.combat.as_ref().is_some_and(|cb| {
+                // Once the object has left the battlefield, the creatures that were
+                // blocking it ("{B}, Sacrifice ~: Destroy target creature blocking it").
                 self.eval_sel_objects(sel, ctx)
                     .into_iter()
-                    .any(|a| cb.blockers_of(a).contains(&id))
+                    .any(|a| cb.blockers_of(a).contains(&id) || self.left_combat_pair(a, id, a))
             }),
             Filter::TargetOf(sel) => self.eval_sel_objects(sel, ctx).into_iter().any(|s| {
                 self.obj(s).stack.as_ref().is_some_and(|si| {

@@ -837,11 +837,16 @@ fn subject_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
     let (duration, core) = split_duration(&l);
     // "you may have it become ..."
     let core = core.strip_prefix("have ").unwrap_or(core);
-    // The subject ends where the first predicate begins.
+    // The subject ends where the first predicate begins (not a relative clause's verb:
+    // "target attacking Vampire that isn't a Demon becomes a Demon").
     let i = VERBS
         .iter()
         .chain(OTHER_VERBS)
-        .filter_map(|v| core.find(&format!(" {v}")))
+        .filter_map(|v| {
+            core.match_indices(&format!(" {v}"))
+                .map(|(i, _)| i)
+                .find(|&i| !core[..i].ends_with(" that"))
+        })
         .min()?;
     let (subj_text, rest) = (&core[..i], &core[i + 1..]);
     // "up to two target creatures each have ..."
