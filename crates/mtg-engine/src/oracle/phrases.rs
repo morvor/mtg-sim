@@ -234,6 +234,10 @@ pub fn head_noun(w: &str) -> Option<Filter> {
 
 /// Adjectives preceding the head noun.
 pub fn adjective(w: &str) -> Option<Filter> {
+    // CR 903.3: "commander creatures you own" (and, alone, the head noun "commander").
+    if matches!(w, "commander" | "commanders") {
+        return Some(Filter::Commander);
+    }
     if let Some(c) = Color::from_word(w) {
         return Some(Filter::Color(c));
     }
@@ -609,6 +613,13 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         parts.pop();
         heads.push(Filter::Token);
         plural = last_adjective == "tokens";
+    }
+    // "target commander", "commanders you control" (CR 903.3): "commander" was the head
+    // noun; "commander creatures" uses it as an adjective.
+    if heads.is_empty() && !disjunctive && matches!(last_adjective, "commander" | "commanders") {
+        parts.pop();
+        heads.push(Filter::Commander);
+        plural = last_adjective == "commanders";
     }
     if heads.is_empty() {
         return None;
