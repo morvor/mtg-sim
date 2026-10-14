@@ -51,6 +51,7 @@ pub fn copy_spell(
         si.cast.was_cast = false;
         si.cast.mana_spent.clear();
         si.cast.mana_spent_snow = 0;
+        si.cast.mana_sources.clear();
     }
     let id = ObjectId(g.objects.len() as u32);
     copy.id = id;
