@@ -471,3 +471,43 @@ fn had_counters_put_on_it(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: each creature that had counters put on it this way", priority: 1500, parse: had_counters_put_on_it } }
+
+/// The permanents chosen by [`choose_those_that_got_counters`].
+pub const CHOSEN_GOT_COUNTERS: Var = vars::USER + 12_007;
+
+/// "Proliferate, then choose any number of permanents you control that had a counter put
+/// on them this way. Those permanents phase out." (Ripples of Potential): a choice among
+/// the objects the counter instruction just put counters on, which "those permanents"
+/// then refers to.
+fn choose_those_that_got_counters(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("choose any number of ")?;
+    let noun = r
+        .strip_suffix(" you control that had a counter put on them this way")
+        .or_else(|| r.strip_suffix(" you control that had counters put on them this way"))?;
+    let (f, true, tail) = crate::oracle::phrases::parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let filter = Filter::and(vec![
+        f,
+        Filter::In(Box::new(Sel::Var(vars::IT))),
+        Filter::InZone(ZoneKind::Battlefield),
+        Filter::ControlledBy(PlayerRel::You),
+    ]);
+    b.it = Sel::Var(CHOSEN_GOT_COUNTERS);
+    Some(Effect::Store {
+        var: CHOSEN_GOT_COUNTERS,
+        sel: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: filter.clone(),
+            count: Value::Count(filter),
+            up_to: true,
+            store: None,
+        },
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: choose any number of permanents that had a counter put on them this way", priority: 1500, parse: choose_those_that_got_counters } }

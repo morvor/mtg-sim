@@ -449,3 +449,31 @@ fn havoc_eater_counts_the_total_power_of_the_creatures_it_goaded() {
     assert!(t.g.obj(giant).goaded_by.contains(&P0));
     assert_eq!(t.counters(eater, "+1/+1"), 3);
 }
+
+#[test]
+fn ripples_of_potential_phases_out_permanents_it_proliferated() {
+    cr!("701.34a", "702.26a");
+    compiles("Ripples of Potential");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    let plain = t.battlefield(P0, "Llanowar Elves");
+    t.g.add_counters(Entity::Object(a), "+1/+1", 1, None);
+    t.g.add_counters(Entity::Object(b), "+1/+1", 1, None);
+    let spell = t.hand(P0, "Ripples of Potential");
+    t.advance_to(P0, Step::PrecombatMain);
+    // Proliferate both; then phase out only the Bears.
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        mtg_engine::decision::Answer::Entities(vec![Entity::Object(a), Entity::Object(b)]),
+    );
+    t.answer_choose(P0, &[Entity::Object(a)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.counters(a, "+1/+1"), 2);
+    assert_eq!(t.counters(b, "+1/+1"), 2);
+    assert!(t.g.obj(a).phased_out);
+    assert!(!t.g.obj(b).phased_out && !t.g.obj(plain).phased_out);
+}

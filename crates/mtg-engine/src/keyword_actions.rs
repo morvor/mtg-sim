@@ -46,9 +46,21 @@ pub fn perform(
         }
         // CR 701.34a: proliferate.
         KeywordAction::Proliferate => {
+            let before = g.events.len();
             for p in players {
                 crate::keyword_actions_impl::proliferate(g, p, ctx);
             }
+            // "Proliferate, then choose any number of permanents you control that had a
+            // counter put on them this way." (CR 608.2c): what it put counters on.
+            let mut got: Vec<Entity> = Vec::new();
+            for ev in &g.events[before.min(g.events.len())..] {
+                if let crate::events::Event::CountersAdded { target, n, .. } = ev {
+                    if *n > 0 && matches!(target, Entity::Object(_)) && !got.contains(target) {
+                        got.push(*target);
+                    }
+                }
+            }
+            ctx.set_var(crate::ability::vars::IT, got);
         }
         // CR 701.4a: behold a [quality].
         KeywordAction::Behold => {
