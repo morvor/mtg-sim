@@ -64,7 +64,8 @@ pub fn window_events<'a>(g: &'a Game, w: &HistoryWindow, ctx: &Ctx) -> Vec<&'a E
                         }
                     )
                 })
-                .map_or(all.len(), |i| i + 1);
+                // Without a combat phase begun this turn: the whole turn so far.
+                .map_or(0, |i| i + 1);
             all[start..].to_vec()
         }
         HistoryWindow::LastTurn => g
