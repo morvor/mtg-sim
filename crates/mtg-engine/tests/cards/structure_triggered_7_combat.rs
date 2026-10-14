@@ -4,6 +4,7 @@
 use super::structure_activated_2::{act, target_choices};
 use super::structure_seed_common::*;
 use super::structure_triggered_5::{next_turn, obj};
+use super::structure_triggered_7::tokens;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -17,14 +18,6 @@ fn fight(t: &mut TestGame, attackers: &[ObjectId], blocks: &[(ObjectId, ObjectId
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&a, blocks);
     t.resolve_all();
-}
-
-/// The tokens with subtype `sub` controlled by `p`.
-fn tokens(t: &TestGame, p: PlayerId, sub: &str) -> Vec<ObjectId> {
-    subtype_ids(t, p, sub)
-        .into_iter()
-        .filter(|id| t.obj_now(*id).is_token())
-        .collect()
 }
 
 // ---------------------------------------------------------------------------

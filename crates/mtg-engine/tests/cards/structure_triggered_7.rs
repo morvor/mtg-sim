@@ -4,30 +4,18 @@
 //! affected and not others, amounts, durations ending, conditions true and false, and the
 //! targets the engine offers. Combat triggers are in `structure_triggered_7_combat.rs`.
 
-#![allow(dead_code)]
-
 use super::structure_activated_2::{act, target_choices};
+use super::structure_activated_6::entity_choices;
 use super::structure_seed_common::*;
 use super::structure_triggered_5::{etb, next_turn, obj};
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::Answer;
 use mtg_engine::events::MoveCause;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
-use mtg_engine::types::{counters, Color};
+use mtg_engine::types::{counters, CardType, Color};
 use mtg_engine::*;
-
-/// The candidates offered by each "choose entities" decision asked of `p` so far.
-pub fn entity_choices(t: &TestGame, p: PlayerId) -> Vec<Vec<Entity>> {
-    t.asked()
-        .into_iter()
-        .filter_map(|(q, d)| match d {
-            Decision::ChooseEntities { candidates, .. } if q == p => Some(candidates),
-            _ => None,
-        })
-        .collect()
-}
 
 /// Destroys `id` (it dies) and resolves the triggers.
 pub fn kill(t: &mut TestGame, id: ObjectId) {
@@ -57,7 +45,7 @@ pub fn bolt(t: &mut TestGame, p: PlayerId, target: Entity) {
 }
 
 /// The tokens with subtype `sub` controlled by `p`.
-fn tokens(t: &TestGame, p: PlayerId, sub: &str) -> Vec<ObjectId> {
+pub fn tokens(t: &TestGame, p: PlayerId, sub: &str) -> Vec<ObjectId> {
     subtype_ids(t, p, sub)
         .into_iter()
         .filter(|id| t.obj_now(*id).is_token())
@@ -323,6 +311,12 @@ fn quirion_sentinel_adds_one_mana_of_any_color() {
     assert_eq!(t.g.player(P0).mana_pool.count(ManaType::W), 1);
     assert_eq!(t.g.player(P0).mana_pool.mana.len(), 1);
     assert!(t.g.player(P1).mana_pool.mana.is_empty());
+    // Any color: index 4 is green.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Option, Answer::Index(4));
+    etb(&mut t, P0, "Quirion Sentinel");
+    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::G), 1);
+    assert_eq!(t.g.player(P0).mana_pool.mana.len(), 1);
 }
 
 #[test]
@@ -572,7 +566,10 @@ fn patron_of_the_arts_creates_a_treasure_when_it_enters_or_dies() {
     supported("Patron of the Arts");
     let mut t = TestGame::new(2);
     let p = etb(&mut t, P0, "Patron of the Arts");
-    assert_eq!(tokens(&t, P0, "Treasure").len(), 1);
+    let tr = tokens(&t, P0, "Treasure");
+    assert_eq!(tr.len(), 1);
+    let c = &t.obj_now(tr[0]).chars;
+    assert!(c.card_types.contains(CardType::Artifact) && c.colors.is_colorless());
     kill(&mut t, p);
     assert_eq!(tokens(&t, P0, "Treasure").len(), 2);
     assert_eq!(tokens(&t, P1, "Treasure").len(), 0);
@@ -921,6 +918,9 @@ fn paradox_shaper_becomes_prepared_at_your_upkeep_if_it_isnt() {
     t.resolve_all();
     assert!(t.obj_now(s).prepared.is_none(), "not the opponent's upkeep");
     t.advance_to(P0, Step::Upkeep);
+    // Upkeep triggers wait to be put on the stack when a player would receive priority.
+    let queued = |t: &TestGame| t.stack_len() + t.g.pending_triggers.len();
+    assert_eq!(queued(&t), 1, "it triggered at your upkeep");
     t.resolve_all();
     let copy = t.obj_now(s).prepared.expect("prepared");
     assert_eq!(t.obj(copy).zone, Zone::Exile);
@@ -928,9 +928,8 @@ fn paradox_shaper_becomes_prepared_at_your_upkeep_if_it_isnt() {
     // Already prepared: the ability doesn't trigger (no second copy).
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::Upkeep);
-    let stack = t.stack_len();
+    assert_eq!(queued(&t), 0, "nothing triggered");
     t.resolve_all();
-    assert_eq!(stack, 0, "nothing triggered");
     assert_eq!(t.obj_now(s).prepared, Some(copy));
     let copies = t.g.exile.iter().filter(|c| t.obj(**c).chars.name == "Omit Variables").count();
     assert_eq!(copies, 1);
@@ -938,7 +937,7 @@ fn paradox_shaper_becomes_prepared_at_your_upkeep_if_it_isnt() {
 
 #[test]
 fn wall_of_hope_gains_life_equal_to_the_damage_dealt_to_it() {
-    cr!("603.2", "120.3e", "119.3", "603.10a");
+    cr!("603.2", "120.3e", "119.3");
     // "Whenever this creature is dealt damage, you gain that much life."
     supported("Wall of Hope");
     let mut t = TestGame::new(2);
@@ -950,7 +949,7 @@ fn wall_of_hope_gains_life_equal_to_the_damage_dealt_to_it() {
     assert_eq!((t.life(P0), t.life(P1)), (22, 20));
     bolt(&mut t, P0, obj(bears));
     assert_eq!(t.life(P0), 22, "another creature");
-    // Lethal damage still counts (it looks back at the Wall).
+    // Lethal damage still counts (it triggered before the Wall died).
     bolt(&mut t, P0, obj(w));
     assert!(!t.on_battlefield(w));
     assert_eq!(t.life(P0), 25);

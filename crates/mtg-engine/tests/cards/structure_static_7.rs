@@ -241,6 +241,7 @@ fn moderation_allows_you_one_spell_each_turn() {
     t.cast(P0, a).target(Entity::Player(P1)).go();
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
+    assert_eq!(t.hand_size(P0), 2, "it drew a card for the spell");
     assert!(t.cast(P0, b).target(Entity::Player(P1)).try_go().is_err());
     t.clear_answers();
     assert_eq!(t.zone(b), Zone::Hand(P0));
