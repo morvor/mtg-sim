@@ -407,8 +407,20 @@ fn may_fight_triggers_choose_the_target_first_and_whether_to_fight_on_resolution
         "Atzocan Archer",
         "You must choose another target creature (if able) as Atzocan Archer’s triggered ability is put on the stack. You choose as that ability resolves whether those creatures fight."
     );
-    for name in ["Somberwald Stag", "Affectionate Indrik", "Atzocan Archer"] {
-        supported(name);
+    ruling!(
+        "Foe-Razer Regent",
+        "You choose the target of the first triggered ability as it goes on the stack, but you choose whether or not to fight as that ability resolves."
+    );
+    // (Foe-Razer Regent's last ability isn't supported yet; its enters trigger is.)
+    for name in [
+        "Somberwald Stag",
+        "Affectionate Indrik",
+        "Atzocan Archer",
+        "Foe-Razer Regent",
+    ] {
+        if name != "Foe-Razer Regent" {
+            supported(name);
+        }
         for fight in [false, true] {
             let mut t = TestGame::new(2);
             let bears = t.battlefield(P1, "Grizzly Bears");
