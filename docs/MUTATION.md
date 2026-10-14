@@ -57,6 +57,7 @@ Each surviving mutant is classified as
 | trigger_timing.rs | 17 | 17 (all) | 14 | 2 | 0 | 1 | 87.5% | TBD |
 | permissions.rs | 169 | 17 (1/10) | 10 | 4 | 0 | 3 | 71.4% | TBD |
 | simultaneous.rs | 171 | 18 (1/10) | 6 | 12 | 0 | 0 | 33.3% | TBD |
+| turn.rs | 234 | 24 (1/10) | 21 | 2 | 0 | 1 | 91.3% | TBD |
 
 ### sba.rs
 
@@ -155,10 +156,13 @@ player's results from another's.
   part depends on what an earlier player's part already did, chosen by a third player.
 - `simultaneous.rs:664:46: replace match guard plannable(g, e, ctx, p) with false in plan`
   (sacrificing chosen objects, "sacrifices the rest", in turn instead of together):
-  **(b) not killed**. Simultaneous sacrifice of objects chosen earlier is observable with
-  a "whenever another creature dies" permanent sacrificed in the same event as another
-  player's creature (it sees that death only if they leave together); Balance-style
-  cards reach this path, a test is listed under remaining gaps.
+  **(b) not killed**. Simultaneous sacrifice is observable with a "whenever another
+  creature dies" permanent sacrificed in the same event as another player's creature (it
+  sees that death only if they leave together). The cards tried compile to their own
+  effects instead of this path (Cataclysm is `KeepAndSacrificeRest`, Balance is
+  unsupported); the behavior itself is now pinned for Cataclysm by
+  `tests/cr/r608_002f_each_player_sacrifices_together.rs` (Blood Artist sees the death of
+  the opponent's creature sacrificed with it).
 - `simultaneous.rs:628:38: replace == with != in plan` (link the moved permanents to the
   effect's source when they enter the battlefield, CR 607.1d): **(b) not killed**: no card
   puts a permanent onto the battlefield with an "each player" move whose abilities refer to
@@ -182,3 +186,19 @@ entered after P0's creature and could copy it (CR 614.12; Clone ruling "can't be
 of a creature entering at the same time"). `resolve.rs` now collects every searcher's moves
 and makes one simultaneous zone change. Regression test:
 `tests/cr/r701_023i_each_player_searches_then_cards_move.rs`.
+
+### turn.rs
+
+Run 2026-10-14, 24 of 234 mutants (round-robin 0/10), 31 minutes.
+
+- `turn.rs:545:48: replace += with *= in Game::take_action` (count an agent's illegal
+  attempts in a row): **(b) missing test**. The count never grew, so an agent that keeps
+  proposing illegal actions kept priority forever and the game stalled. Killed by
+  `tests/cr/r733_002_repeated_illegal_actions.rs` (the third illegal attempt in a row
+  passes priority).
+- `turn.rs:725:17: replace || with && in Game::current_phase_end`: **(b) missing test**. A
+  step of another phase no longer started a new phase unless it was a main phase, so
+  "after this main phase, there is an additional combat phase" cast in the postcombat main
+  phase put the combat after the ending phase. Killed by
+  `tests/cr/r500_008_combat_after_the_postcombat_main_phase.rs` (Relentless Assault in the
+  postcombat main phase).
