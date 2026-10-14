@@ -63,6 +63,8 @@ Each surviving mutant is classified as
 | stack.rs | 361 | 37 (1/10) | 33 | 3 | 0 | 1 | 91.7% | TBD |
 | replacement.rs | 361 | 37 (1/10) | 28 | 6 | 0 | 3 | 82.4% | TBD |
 | triggers.rs | 474 | 48 (1/10) | 32 | 16 | 0 | 0 | 66.7% | TBD |
+| resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | TBD |
+| actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | TBD |
 
 ### sba.rs
 
@@ -336,6 +338,62 @@ so on refer to); the field is only read by abilities whose wording refers to it.
   one. Killed by `tests/cr/r603_002_first_spell_each_turn_per_player.rs` (Esper Sentinel in
   a three-player game).
 - `triggers.rs:2051:50: replace && with || in Game::trigger_matches_ctx` ("is dealt excess
-  damage" stopped triggering on combat damage): **(b) missing test**. Killed by
-  `tests/cr/r120_010_excess_combat_damage_trigger.rs` (Aegar, the Freezing Flame draws when
-  Hill Giant deals excess combat damage).
+  damage" stopped triggering on combat damage): **(b) missing test**. The one card with an
+  excess-damage trigger that isn't "noncombat" only, Aegar, the Freezing Flame, isn't
+  supported yet, so the test uses a custom permanent. Killed by
+  `tests/cr/r120_010_excess_combat_damage_trigger.rs` (a 3/3 blocked by a 1/1 deals
+  excess combat damage).
+
+### resolve.rs
+
+Run 2026-10-14, 32 of 314 mutants (round-robin 0/10), 52 minutes.
+
+- `resolve.rs:658:31: replace += with *= in Game::exec_effect` ("that many" after putting
+  one object's counters on another stayed 0), `1317:37: delete ! in Game::exec_effect`
+  (turning a permanent face down reported "didn't happen"), `1610:43: replace && with ||
+  in Game::exec_effect` (scrying 0 reported "happened", CR 701.22b): **(b) missing
+  tests**. No card in the pool reads these results yet, but they're what "if you do" and
+  "that many" read (CR 608.2c). Killed by
+  `tests/actions/a701_022b_instruction_results.rs`.
+- `resolve.rs:2364:26: replace > with >= in Game::effect_on_entering_object` ("enters with
+  N counters" with N = 0 records an entry of 0 counters): **(a) equivalent**. Putting 0
+  counters on the entering permanent does nothing.
+- `resolve.rs:2847:9: replace Game::lock_replacement_objects -> Option<Vec<ObjectId>> with
+  None` and `3274:9: delete match arm ReplacementEvent::Where{event, ..} in
+  unlock_replacement_def`: **(b) not killed**. They concern a replacement effect created
+  by a resolving effect with an extra condition (`Where`) whose affected objects are
+  locked in as it's created (CR 611.2c); no card found produces that combination.
+- `resolve.rs:3230:35: replace < with <= in Game::choose_mana_color`: **(b) missing
+  test**. An answer one past the last offered mana type indexed out of bounds (a panic)
+  instead of getting the default. Killed by
+  `tests/cr/r106_004_mana_type_choice_answers.rs` (Selesnya Guildgate, answer `Index(2)`).
+- `resolve.rs:3407:20: replace match guard c != ctx.controller with true in
+  delayed_controller`: **(a) equivalent**. When the resolving spell's controller is the
+  same player, the mutant names that player as both the controller and the performer of
+  the delayed trigger, which is the same as naming no separate performer.
+
+### actions.rs
+
+Run 2026-10-14, 39 of 390 mutants (round-robin 0/10), 58 minutes. Three mutants
+(`87:16` in `move_objects`, `292:39` in `move_forbidden`, `339:13` in `can_move`) made the
+suite hang and count as detected (timeout).
+
+- `actions.rs:498:42: replace && with || in Game::perform_move_now` (remember a commander
+  put into a graveyard or exile for CR 704.6d): **(a) equivalent**. The state-based action
+  checks again that the object is a commander in a graveyard or exile before offering the
+  command zone, so the extra objects the mutant remembers are ignored.
+- `actions.rs:822:38: replace && with || in Game::perform_move_now` (record a permanent
+  that entered the battlefield): **(a) equivalent**. By this point an object moved to the
+  battlefield is on it (moves that can't happen were dropped before), and an object moved
+  elsewhere isn't, so both conditions agree.
+- `actions.rs:1477:35: replace += with *= in Game::perform_add_counters`
+  (`history.counters_put`): **(a) equivalent (dead state)**. Nothing reads that total.
+- `actions.rs:1561:20: delete ! in Game::gain_life` (when the player can't gain life, which
+  replaced events still happen): **(a) equivalent**. An "instead" self-replacement runs its
+  instruction while it's applied and returns no event, and a life-gain event that remains
+  is checked against "can't gain life" again when performed; CR 614.17c is pinned by
+  `tests/cr/r609_616_interaction.rs`, which passes with the mutant.
+- `actions.rs:1973:31: replace match guard spec.card.is_some() with true in
+  Game::token_entry` (a token copy of a double-faced permanent with no card of its own):
+  **(b) not killed**. Every path found that copies a double-faced permanent into a token
+  gives the token its card, so the guard's false branch isn't reached by the tests.
