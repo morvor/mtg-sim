@@ -198,14 +198,31 @@ fn lignify_makes_a_changeling_only_a_treefolk() {
 }
 
 #[test]
-fn a_creature_given_changeling_by_an_effect_is_every_creature_type() {
-    cr!("702.73a");
+fn a_creature_given_changeling_by_an_effect_is_not_every_creature_type() {
+    // Changeling granted by an effect other than token creation, a copy effect or a
+    // text-changing effect isn't a characteristic-defining ability (CR 604.3a(2)): it's
+    // added in layer 6 (CR 613.1f), after creature types were set in layer 4 (CR 613.1d).
+    cr!("604.3a", "613.1d", "613.1f");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
-    assert!(!is_a(&t, bears, "Goblin"));
+    t.battlefield(P0, "Goblin King");
+    let arch = t.battlefield(P0, "Archpriest of Iona");
+    assert_eq!(t.pt(bears), (2, 2));
+    assert_eq!(t.pt(arch).0, 1, "only the Archpriest (a Cleric) is in the party");
     grant(&mut t, bears, Keyword::new(KeywordKind::Changeling));
-    assert!(is_a(&t, bears, "Goblin"));
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Changeling));
+    // Not a Goblin: no creature-type filter matches it and the Goblin lord doesn't pump it.
+    assert!(!is_a(&t, bears, "Goblin"));
+    assert!(!t.obj_now(bears).chars.has_subtype("Goblin"));
     assert!(is_a(&t, bears, "Bear"));
+    assert_eq!(t.pt(bears), (2, 2));
+    // Not a Rogue, Warrior or Wizard for the party (CR 700.8).
+    assert_eq!(t.pt(arch).0, 1);
+    // Unlike a printed changeling.
+    let colossus = t.battlefield(P0, "Chameleon Colossus");
+    assert!(is_a(&t, colossus, "Goblin"));
+    assert_eq!(t.pt(colossus), (5, 5), "pumped by the Goblin King");
+    assert_eq!(t.pt(arch).0, 2);
 }
 
 #[test]

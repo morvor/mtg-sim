@@ -132,6 +132,11 @@ Each of these was checked against the current code and tests.
 
 ## 4. Open decision: changeling granted without the CDA
 
+**Decided: option B** (only the CDA confers types), implemented in item `changeling-cda-only`:
+`every_creature_type_by_keyword` is gone, and every reader listed below now goes through
+`kw::changeling::every_creature_type`, which reads only the layer-4 flag `all_creature_types`.
+The test is now `a_creature_given_changeling_by_an_effect_is_not_every_creature_type`.
+
 ### The behavior
 
 An object that has the changeling **keyword** without changeling's **characteristic-defining
