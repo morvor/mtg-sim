@@ -150,7 +150,22 @@ fn copula_predicates<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a st
     // and/or have an Adventure", "that are Oozes or are named ~").
     let t = rest.trim_start();
     if !boundary(rest)
-        || matches!(next, "by" | "this" | "from" | "than" | "as" | "with" | "or" | "and" | "and/or")
+        || matches!(next, "by"
+                | "this"
+                | "from"
+                | "than"
+                | "as"
+                | "with"
+                | "or"
+                | "and"
+                | "and/or"
+                // An object of the predicate ("that's blocking it", "that's blocking
+                // equipped creature"): the blocking grammar's.
+                | "it"
+                | "~"
+                | "target"
+                | "enchanted"
+                | "equipped")
         || rest.starts_with(',')
         || head_noun(next).is_some()
         || t.starts_with("or ")

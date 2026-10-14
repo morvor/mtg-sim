@@ -1041,6 +1041,7 @@ fn continues_predicate(r: &str) -> bool {
                 | "target"
                 | "enchanted"
                 | "equipped"
+                | "it"
         )
 }
 
