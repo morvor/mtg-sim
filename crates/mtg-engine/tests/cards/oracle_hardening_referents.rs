@@ -832,3 +832,47 @@ fn augment_and_host_cards_are_unsupported() {
     // Tokens and ordinary cards are unaffected.
     assert_supported(&["Grizzly Bears"]);
 }
+
+#[test]
+fn it_after_create_a_token_then_is_the_token() {
+    cr!("608.2c", "111.1");
+    // "Create a 0/0 ... Thopter ... token with flying, then put a +1/+1 counter on it for
+    // each card put into your graveyard this way.": "it" is the Thopter, not the revealed
+    // cards an earlier sentence referred to.
+    assert_supported(&["Intrude on the Mind"]);
+    let mut t = TestGame::new(2);
+    let library: Vec<ObjectId> = (0..6).map(|_| t.library_top(P0, "Island")).collect();
+    t.lands(P0, "Island", 5);
+    t.set_step(P0, Step::PrecombatMain);
+    // Pile 1 is two of the top five cards; the opponent chooses it, so three go to the
+    // graveyard.
+    t.answer_choose(P0, &[Entity::Object(library[5]), Entity::Object(library[4])]);
+    t.answer(P1, DecisionKind::Option, Answer::Index(0));
+    let spell = t.hand(P0, "Intrude on the Mind");
+    let hand_before = t.hand_size(P0);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand_before - 1 + 2);
+    let thopters = creatures_of(&t, P0, &[]);
+    assert_eq!(thopters.len(), 1);
+    assert_eq!(t.counters(thopters[0], "+1/+1"), 3);
+    assert_eq!(t.pt(thopters[0]), (3, 3));
+
+    // Without an earlier antecedent, the same: the counters go on the token.
+    let spell = custom_card(
+        "Sorcery",
+        "{G}",
+        "Create a 2/2 green Wolf creature token, then put a +1/+1 counter on it for each \
+         creature card in your graveyard.",
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 1);
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Hill Giant");
+    let s = t.custom(P0, spell, Zone::Hand(P0));
+    t.cast(P0, s).go();
+    t.resolve_all();
+    let wolves = creatures_of(&t, P0, &[]);
+    assert_eq!(wolves.len(), 1);
+    assert_eq!(t.pt(wolves[0]), (4, 4));
+}

@@ -5988,8 +5988,12 @@ impl Renderer<'_> {
                 s.push_str(" and ignore all but the highest roll")
             }
         }
+        if r.choose_one {
+            s.push_str(" and choose one result");
+        }
         for row in &r.table {
             let range = match row.hi {
+                Some(h) if row.lo == i64::MIN => format!("{h} or less"),
                 None => format!("{}+", row.lo),
                 Some(h) if h == row.lo => format!("{h}"),
                 Some(h) => format!("{}—{h}", row.lo),
@@ -6006,7 +6010,10 @@ impl Renderer<'_> {
 
     fn flip_coins(&mut self, c: &crate::dice::CoinFlip) -> String {
         let p = self.player(&c.who, Case::Subj);
-        let mut s = if c.until_lose {
+        let mut s = if let (true, Some(max)) = (c.until_lose, &c.max_flips) {
+            let n = self.value(max);
+            format!("flip a coin {n} times or until you lose a flip, whichever comes first")
+        } else if c.until_lose {
             "flip a coin until you lose a flip".to_string()
         } else {
             match &c.count {
