@@ -13,12 +13,21 @@ use crate::oracle::phrases::end;
 /// color ([`ManaProduction::AnyOneColor`] asks the player whose pool it goes to).
 fn that_player_adds_color_they_choose(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("that player adds ")?;
-    if r != "one mana of any color they choose" || matches!(b.it_player, PlayerRef::You) {
+    if matches!(b.it_player, PlayerRef::You) {
+        return None;
+    }
+    // "one mana of any color they choose", "two mana of any one color they choose".
+    let (n, rest) = crate::oracle::phrases::parse_number(r)?;
+    let n = n.as_const().filter(|n| *n > 0)?;
+    let rest = rest.trim();
+    if !(rest == "mana of any color they choose" && n == 1)
+        && rest != "mana of any one color they choose"
+    {
         return None;
     }
     Some(Effect::AddMana {
         who: b.it_player.clone(),
-        mana: ManaProduction::AnyOneColor(Value::c(1)),
+        mana: ManaProduction::AnyOneColor(Value::c(n)),
         restriction: None,
     })
 }

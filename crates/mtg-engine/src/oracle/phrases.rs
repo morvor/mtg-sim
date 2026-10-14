@@ -681,6 +681,15 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
                 ]),
                 r,
             )
+        } else if let Some(r) = t.strip_prefix("you neither own nor control") {
+            // "target permanent you neither own nor control" (Conjured Currency).
+            (
+                Filter::and(vec![
+                    Filter::ControlledBy(PlayerRel::NotYou),
+                    Filter::not(Filter::OwnedBy(PlayerRel::You)),
+                ]),
+                r,
+            )
         } else if let Some(r) = t.strip_prefix("you control") {
             (Filter::ControlledBy(PlayerRel::You), r)
         } else if let Some(r) = t.strip_prefix("not named ~") {

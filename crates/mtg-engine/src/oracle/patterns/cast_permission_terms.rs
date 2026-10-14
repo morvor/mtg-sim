@@ -100,7 +100,10 @@ fn spend_mana_this_way(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         }
         "if you cast a spell this way, you may spend mana as though it were mana of any type to cast it"
         | "if you cast a spell this way, mana of any type can be spent to cast it"
-        | "if you cast a spell this way, mana of any type can be spent to cast that spell" => {
+        | "if you cast a spell this way, mana of any type can be spent to cast that spell"
+        // Klaw, Master of Sound.
+        | "mana of any type can be spent to cast a spell this way"
+        | "mana of any type can be spent to cast spells this way" => {
             (false, true)
         }
         _ => return false,

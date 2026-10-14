@@ -36,6 +36,14 @@ pub const WINS: Var = vars::USER + 124;
 pub const LOSSES: Var = vars::USER + 125;
 pub const HEADS: Var = vars::USER + 126;
 pub const TAILS: Var = vars::USER + 127;
+/// "The other result" of "roll two d4 and choose one result": the result not chosen.
+pub const OTHER: Var = vars::USER + 8500;
+/// The number of even and odd results of the most recent roll ("for each even result").
+pub const EVENS: Var = vars::USER + 8501;
+pub const ODDS: Var = vars::USER + 8502;
+/// `RESULT_COUNT + n`: how many results of the most recent roll were `n` (1..=20, "if you
+/// rolled 6 exactly seven times").
+pub const RESULT_COUNT: Var = vars::USER + 8530;
 
 /// `Value::Custom`: "the result" — of the resolving ability's own roll, or else of the
 /// roll that triggered the ability ("whenever you roll one or more dice, ... equal to
@@ -52,6 +60,18 @@ pub const REROLL_STORED: &str = "die:reroll stored results";
 pub const STORED_SAME: &str = "die:stored results of the same value";
 /// `TriggerCond::Custom`: "whenever you roll a die's highest natural result".
 pub const NATURAL_MAX: &str = "die:highest natural result";
+
+/// `TriggerCond::Custom` prefix: "when you roll a natural 20" (`die:natural:20:you`).
+pub const NATURAL_N: &str = "die:natural";
+/// `TriggerCond::Custom` prefix: "whenever you roll your third die each turn"
+/// (`die:nth die:3:you`).
+pub const NTH_DIE: &str = "die:nth die";
+/// `Condition::Custom` prefix: "you've rolled three or more dice this turn"
+/// (`die:rolled dice this turn:3`).
+pub const DICE_THIS_TURN: &str = "die:rolled dice this turn";
+/// `Condition::Custom` prefix: "you've rolled a 20 this turn" (`die:rolled result this
+/// turn:20`).
+pub const RESULT_THIS_TURN: &str = "die:rolled result this turn";
 
 /// Per-game dice and coin bookkeeping.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -83,6 +103,10 @@ pub struct DieRoll {
     pub table: Vec<ResultRow>,
     /// "store those results on it" (CR 706.8a).
     pub store_on: Option<Sel>,
+    /// "roll two d4 and choose one result": the roller chooses which result is "that
+    /// result"; the other is "the other result".
+    #[serde(default)]
+    pub choose_one: bool,
 }
 
 impl DieRoll {
@@ -95,6 +119,7 @@ impl DieRoll {
             ignore: DiceIgnore::None,
             table: vec![],
             store_on: None,
+            choose_one: false,
         }
     }
 }
@@ -133,6 +158,10 @@ pub struct CoinFlip {
     pub call: bool,
     /// "flip a coin until you lose a flip".
     pub until_lose: bool,
+    /// With `until_lose`: "flip a coin X times or until you lose a flip, whichever comes
+    /// first".
+    #[serde(default)]
+    pub max_flips: Option<Value>,
     pub on_win: Effect,
     pub on_lose: Effect,
     pub on_heads: Effect,
@@ -146,6 +175,7 @@ impl CoinFlip {
             count: Value::c(1),
             call: true,
             until_lose: false,
+            max_flips: None,
             on_win: Effect::Noop,
             on_lose: Effect::Noop,
             on_heads: Effect::Noop,
@@ -194,6 +224,8 @@ pub struct DieModifier {
 pub enum ModifierKind {
     Reroll,
     Add(i64),
+    /// "increase or decrease the result by N": the modifier's controller chooses.
+    AddOrSubtract(i64),
 }
 
 /// One die as it's being rolled: its natural result and changes from modifiers.
@@ -267,6 +299,14 @@ pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
             // CR 706.5: doubles.
             let doubles = results.len() >= 2 && results.iter().all(|r| *r == results[0]);
             ctx.nums.insert(DOUBLES, doubles as i64);
+            ctx.nums
+                .insert(EVENS, results.iter().filter(|r| *r % 2 == 0).count() as i64);
+            ctx.nums
+                .insert(ODDS, results.iter().filter(|r| *r % 2 != 0).count() as i64);
+            for n in 1..=20i64 {
+                let k = results.iter().filter(|r| **r == n).count() as i64;
+                ctx.nums.insert(RESULT_COUNT + n as Var, k);
+            }
             if let Some(sel) = &spec.store_on {
                 for o in g.resolve_objects(sel, ctx) {
                     let v = g.dice.stored.entry(o).or_default();
@@ -282,6 +322,14 @@ pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
                 }
             }
             ctx.nums.insert(RESULT, total);
+            if spec.choose_one && results.len() >= 2 {
+                let opts = results.iter().map(|r| format!("Choose {r}")).collect();
+                let k = g
+                    .ask_option(p, ctx.source, "Choose one result", opts)
+                    .min(results.len() - 1);
+                ctx.nums.insert(RESULT, results[k]);
+                ctx.nums.insert(OTHER, total - results[k]);
+            }
             if ctx.nums.get(&AGAIN).copied() != Some(1) || guard >= 100 {
                 break;
             }
@@ -439,6 +487,15 @@ fn apply_modifiers(
                         d.adjust += x;
                         break;
                     }
+                    ModifierKind::AddOrSubtract(x) => {
+                        let opts = vec![
+                            format!("Increase the result by {x}"),
+                            format!("Decrease the result by {x}"),
+                        ];
+                        let k = g.ask_option(ctl, Some(src), "Change the result", opts);
+                        d.adjust += if k == 1 { -x } else { x };
+                        break;
+                    }
                 }
             }
         }
@@ -529,9 +586,13 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
         let (mut wins, mut losses, mut heads, mut tails) = (0i64, 0i64, 0i64, 0i64);
         let at_once = &mut at_once[pi];
         let mut i = 0u32;
+        let max = spec
+            .max_flips
+            .as_ref()
+            .map_or(1000, |v| g.eval_value(v, ctx).clamp(0, 1000) as u32);
         loop {
             if spec.until_lose {
-                if losses > 0 || i >= 1000 {
+                if losses > 0 || i >= max {
                     break;
                 }
             } else if i >= n {
@@ -606,6 +667,12 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
         ctx.nums.insert(LOSSES, losses);
         ctx.nums.insert(HEADS, heads);
         ctx.nums.insert(TAILS, tails);
+        // "Each player flips a coin. Each player whose coin comes up tails ...", "that
+        // player flips a coin. If they lose the flip, ...": the results are the flipper's.
+        let saved = ctx.iter_player;
+        if !matches!(spec.who, PlayerRef::You) {
+            ctx.iter_player = Some(p);
+        }
         if wins > 0 && losses == 0 {
             g.exec(&spec.on_win, ctx);
         }
@@ -618,6 +685,7 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
         if tails > 0 && heads == 0 {
             g.exec(&spec.on_tails, ctx);
         }
+        ctx.iter_player = saved;
     }
 }
 
@@ -702,6 +770,12 @@ fn reroll_stored(g: &mut Game, ctx: &mut Ctx) {
 /// `TriggerCond::Custom` triggers of this module: "whenever you roll a die's highest
 /// natural result" (a numerical result: never the planar die, CR 706.7).
 pub fn custom_trigger(g: &Game, name: &str, ctl: PlayerId, ev: &Event) -> Option<Vec<EventInfo>> {
+    if let Some(r) = name.strip_prefix(NATURAL_N) {
+        return Some(natural_n_trigger(g, r, ctl, ev));
+    }
+    if let Some(r) = name.strip_prefix(NTH_DIE) {
+        return Some(nth_die_trigger(g, r, ctl, ev));
+    }
     let rel = name.strip_prefix(NATURAL_MAX)?.strip_prefix(':');
     let Event::DieRolled {
         player,
@@ -727,3 +801,106 @@ pub fn custom_trigger(g: &Game, name: &str, ctl: PlayerId, ev: &Event) -> Option
         ..Default::default()
     }])
 }
+
+/// ":20:you" → (20, You).
+fn number_and_rel(r: &str) -> Option<(i64, PlayerRel)> {
+    let mut it = r.strip_prefix(':')?.split(':');
+    let n: i64 = it.next()?.parse().ok()?;
+    let rel = match it.next() {
+        Some("any") => PlayerRel::Any,
+        Some("opponent") => PlayerRel::Opponent,
+        _ => PlayerRel::You,
+    };
+    Some((n, rel))
+}
+
+/// The custom-name suffix for a player relation (see [`number_and_rel`]).
+pub fn rel_word(rel: PlayerRel) -> &'static str {
+    match rel {
+        PlayerRel::Any => "any",
+        PlayerRel::Opponent => "opponent",
+        _ => "you",
+    }
+}
+
+/// "When you roll a natural 20" (CR 706.2): the die's natural result, before modifiers.
+fn natural_n_trigger(g: &Game, r: &str, ctl: PlayerId, ev: &Event) -> Vec<EventInfo> {
+    let Some((n, rel)) = number_and_rel(r) else {
+        return vec![];
+    };
+    match ev {
+        Event::DieRolled {
+            player,
+            natural,
+            planar: false,
+            result,
+            ..
+        } if *natural as i64 == n && applies_to(g, rel, ctl, *player) => vec![EventInfo {
+            player: Some(*player),
+            amount: *result as i32,
+            ..Default::default()
+        }],
+        _ => vec![],
+    }
+}
+
+/// The dice `p` rolled this turn, through the event being handled (the last recorded).
+fn dice_rolled_this_turn(g: &Game, p: PlayerId) -> usize {
+    g.turn_events
+        .iter()
+        .filter(|e| matches!(e, Event::DieRolled { player, .. } if *player == p))
+        .count()
+}
+
+/// "Whenever you roll your third die each turn": the roll that is that player's Nth die
+/// roll this turn (the planar die is a die too, CR 706.7).
+fn nth_die_trigger(g: &Game, r: &str, ctl: PlayerId, ev: &Event) -> Vec<EventInfo> {
+    let Some((n, rel)) = number_and_rel(r) else {
+        return vec![];
+    };
+    match ev {
+        Event::DieRolled { player, result, .. }
+            if applies_to(g, rel, ctl, *player)
+                && dice_rolled_this_turn(g, *player) as i64 == n =>
+        {
+            vec![EventInfo {
+                player: Some(*player),
+                amount: *result as i32,
+                ..Default::default()
+            }]
+        }
+        _ => vec![],
+    }
+}
+
+/// Conditions about this turn's dice: "you've rolled three or more dice this turn",
+/// "you've rolled a 20 this turn" (a numerical result: not the planar die, CR 706.7).
+fn history_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+    let p = ctx.controller;
+    if let Some(n) = name.strip_prefix(DICE_THIS_TURN) {
+        let n: usize = n.strip_prefix(':')?.parse().ok()?;
+        return Some(dice_rolled_this_turn(g, p) >= n);
+    }
+    if let Some(n) = name.strip_prefix(RESULT_THIS_TURN) {
+        let n: u32 = n.strip_prefix(':')?.parse().ok()?;
+        return Some(g.turn_events.iter().any(|e| {
+            matches!(e, Event::DieRolled { player, result, planar: false, .. }
+                if *player == p && *result == n)
+        }));
+    }
+    None
+}
+
+/// The dice-history conditions, through the registry-wide hooks.
+struct DiceHistory;
+
+impl crate::kw::KeywordRules for DiceHistory {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        history_condition(g, name, ctx)
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&DiceHistory) }

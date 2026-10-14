@@ -128,6 +128,27 @@ pub fn note_counters_on_source(e: &mut Effect, b: &mut Builder) {
     }
 }
 
+/// "Create a 2/2 green Wolf creature token, then put a +1/+1 counter on it for each
+/// creature card among those cards.": once the first half of a clause created one token,
+/// "it" in the second half is that token (the nearest antecedent), whatever an earlier
+/// sentence made "it" refer to (cards revealed or exiled, a target).
+pub fn note_created_in_first_half(e: &mut Effect, b: &mut Builder) {
+    let mut creates = 0;
+    count_creates(e, &mut creates);
+    if creates != 1 {
+        return;
+    }
+    let single = match last_instruction_mut(e) {
+        Effect::CreateToken { count, .. }
+        | Effect::CreateTokenWithPT { count, .. }
+        | Effect::CreateTokenCopy { count, .. } => matches!(count, Value::Const(1)),
+        _ => false,
+    };
+    if single {
+        b.it = Sel::Var(vars::CREATED);
+    }
+}
+
 /// The cards the latest search found (see [`note_introduced`]).
 pub const INTRODUCED: Var = vars::USER + 1101;
 

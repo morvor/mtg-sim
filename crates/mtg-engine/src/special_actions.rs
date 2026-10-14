@@ -313,11 +313,25 @@ pub fn mana_offers(g: &Game, p: PlayerId) -> Vec<(u32, Ctx, u32, Effect)> {
 /// can be paid in more than one way is made immediately before paying (CR 118.13c).
 /// Nothing is paid if the whole cost can't be.
 pub fn pay(g: &mut Game, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
+    pay_for(g, p, cost, src, ctx, None)
+}
+
+/// [`pay`], for a special action whose cost mana may be restricted to ("Spend this mana
+/// only to foretell cards", "... to unlock doors", CR 106.6).
+pub fn pay_for(
+    g: &mut Game,
+    p: PlayerId,
+    cost: &Cost,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+    purpose: Option<crate::mana::SpendPurpose>,
+) -> bool {
     let snapshot = g.clone();
     let mut cost = cost.clone();
     crate::cost_rules::choose_payment_ways(g, p, src, &mut cost);
     let spend = SpendContext {
         source: src,
+        purpose,
         ..Default::default()
     };
     match g.pay_total_cost(p, &cost, src, &spend, ctx) {

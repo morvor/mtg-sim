@@ -1296,6 +1296,13 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             rest.to_string(),
         ));
     }
+    // "unlocked doors among Rooms you control" (Misty Salon, CR 709.5).
+    if let Some(rest) = r.strip_prefix("unlocked doors among rooms you control") {
+        return Some((
+            Value::Custom(crate::kw::mana_grammar::UNLOCKED_DOORS.into()),
+            rest.to_string(),
+        ));
+    }
     // Players.
     if let Some(rest) = r
         .strip_prefix("opponents you're attacking")

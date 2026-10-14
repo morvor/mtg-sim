@@ -2184,6 +2184,9 @@ pub enum ManaProduction {
     AnyOneColor(Value),
     /// N mana in any combination of colors.
     AnyCombination(Value),
+    /// Mana of `.0` different colors, `.1` of each ("two mana of different colors": (2, 1);
+    /// "two mana of any one color and two mana of any other color": (2, 2)).
+    DistinctColors(u32, u32),
     /// N mana in any combination of the listed types ("three mana in any combination of
     /// {R} and/or {G}"): each mana is one of them, chosen separately.
     CombinationOf(Vec<ManaType>, Value),
@@ -2972,6 +2975,14 @@ pub enum CostRule {
     /// pay its total cost, so only other ways of paying it can (CR 601.2h): convoke, delve,
     /// and life where an effect lets a mana symbol be paid with life (CR 118.3).
     NoMana,
+    /// "Spend only mana produced by basic lands to cast ~." (Imperiosaur): only mana from
+    /// a source matching the filter may pay the spell's total cost (CR 601.2h). The source
+    /// is checked as it last existed.
+    OnlyManaFrom(crate::mana::SpendFilter),
+    /// "Spend only mana of the chosen color to activate this ability." (Throne of Eldraine):
+    /// only mana of the color chosen for the source may pay the ability's (generic) mana
+    /// cost; none may without a choice (CR 607.5a).
+    OnlyChosenColor,
 }
 
 /// Static abilities (CR 604) and what they do.
