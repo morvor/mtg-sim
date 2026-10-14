@@ -659,3 +659,24 @@ fn isildurs_fateful_strike_exiles_cards_down_to_four() {
         2
     );
 }
+
+#[test]
+fn mister_negative_draws_the_life_it_lost_in_the_exchange() {
+    cr!("119.5", "608.2c");
+    compiles("Mister Negative");
+    for (mine, theirs, drawn) in [(20, 15, 5), (10, 15, 0)] {
+        let mut t = TestGame::new(2);
+        t.g.players[0].life = mine;
+        t.g.players[1].life = theirs;
+        for _ in 0..8 {
+            t.library_top(P0, "Island");
+        }
+        let hand = t.hand_size(P0);
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.enter(P0, "Mister Negative");
+        t.resolve_all();
+        assert_eq!((t.life(P0), t.life(P1)), (theirs, mine));
+        assert_eq!(t.hand_size(P0), hand + drawn);
+    }
+}

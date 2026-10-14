@@ -232,12 +232,12 @@ fn that_many_as_x(eff: &str) -> Option<String> {
     }
     let mut s = eff.to_string();
     for (p, r) in [
-        ("that amount of damage", "X damage"),
-        ("that amount of life", "X life"),
-        ("that much damage", "X damage"),
-        ("that much life", "X life"),
-        ("that many", "X"),
-        ("that much", "X"),
+        ("that amount of damage", "x damage"),
+        ("that amount of life", "x life"),
+        ("that much damage", "x damage"),
+        ("that much life", "x life"),
+        ("that many", "x"),
+        ("that much", "x"),
     ] {
         s = s.replace(p, r);
     }
@@ -1174,3 +1174,51 @@ fn controller_of_each_destroyed(s: &str, prev: &mut Effect, b: &mut crate::oracl
 }
 
 inventory::submit! { super::FollowupPattern { name: "referents: the controller of each of those [destroyed] gains life equal to its mana value", priority: 1500, apply: controller_of_each_destroyed } }
+
+/// "You may exchange life totals with target opponent. If you lost life this way, draw
+/// that many cards." (Mister Negative): the life you lost in the exchange (CR 119.5).
+fn lost_life_this_way_exchange(s: &str, prev: &mut Effect, b: &mut crate::oracle::effects::Builder) -> bool {
+    fn exchanges(e: &Effect) -> bool {
+        match e {
+            Effect::Seq(v) => v.last().is_some_and(exchanges),
+            Effect::May { effect, .. } => exchanges(effect),
+            Effect::ExchangeLifeTotals { .. } => true,
+            _ => false,
+        }
+    }
+    if !exchanges(prev) {
+        return false;
+    }
+    let lower = s.to_lowercase();
+    let l = crate::oracle::phrases::end(&lower);
+    let Some(rest) = l.strip_prefix("if you lost life this way, ") else {
+        return false;
+    };
+    if !(rest.contains("that many") || rest.contains("that much")) {
+        return false;
+    }
+    let Some(x) = that_many_as_x(rest) else {
+        return false;
+    };
+    let x = x.to_lowercase();
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let e = super::value_grammar::with_x_defined(true, || {
+        crate::oracle::effects::parse_clause(&x, b)
+    })
+    .and_then(|e| super::r107_numbers::substitute_x(&e, &Value::Prev));
+    let Some(e) = e else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return false;
+    };
+    let e = Effect::If {
+        cond: Condition::Compare(Value::Prev, Cmp::Gt, Value::c(0)),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "referents: if you lost life this way (in an exchange), that many", priority: 1500, apply: lost_life_this_way_exchange } }

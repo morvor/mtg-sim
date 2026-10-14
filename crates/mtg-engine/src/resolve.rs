@@ -1476,10 +1476,15 @@ impl Game {
             Effect::ExchangeLifeTotals { a, b } => {
                 let a = self.eval_player(a, ctx);
                 let b = self.eval_player(b, ctx);
+                let me = ctx.controller;
+                let before = self.player(me).life;
                 ctx.prev_happened = match (a, b) {
                     (Some(a), Some(b)) => crate::life_totals::exchange_life_totals(self, a, b),
                     _ => false,
                 };
+                // "If you lost life this way, draw that many cards." (CR 119.5: exchanging
+                // life totals is gaining or losing the difference).
+                ctx.prev_value = (before - self.player(me).life).max(0) as i64;
             }
             Effect::AddMana {
                 who,
