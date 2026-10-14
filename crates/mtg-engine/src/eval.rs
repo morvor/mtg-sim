@@ -864,7 +864,8 @@ impl Game {
             }
             Filter::AbilityFrom(inner) => match o.stack.as_deref().map(|si| &si.kind) {
                 Some(StackKind::Activated { source, .. } | StackKind::Triggered { source, .. }) => {
-                    self.matches_view(view, *source, inner, ctx)
+                    !crate::monarch_initiative::is_sourceless(self, *source)
+                        && self.matches_view(view, *source, inner, ctx)
                 }
                 _ => false,
             },
