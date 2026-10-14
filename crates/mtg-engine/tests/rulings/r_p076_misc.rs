@@ -381,13 +381,7 @@ fn three_blind_mice_copying_a_token_that_copies_something() {
 
 /// A Planechase game with `plane` as the starting plane (P0 is the planar controller).
 fn on_plane(plane: &str) -> TestGame {
-    if plane == "Esper" {
-        // Esper's chaos ability doesn't compile yet; only its first (static) ability is
-        // used here.
-        assert_eq!(mtg_engine::card::card(plane).unsupported_text().len(), 1);
-    } else {
-        supported(plane);
-    }
+    supported(plane);
     let mut t = crate::r_s19_common::planechase_game(2);
     crate::r_s19_common::start_planar_deck(&mut t, P0, &[plane]);
     t.set_step(P0, Step::PrecombatMain);

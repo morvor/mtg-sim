@@ -416,8 +416,24 @@ fn own_alternative(
         0 => None,
         1 => pending.into_iter().next(),
         _ => Some(Filter::Or(pending)),
+    };
+    // Nothing else before: "artifact or non-Aura enchantment card" is "(artifact or
+    // non-Aura enchantment) card", the narrowing noun shared.
+    if let (Some(n), Some(p), Filter::And(v)) = (&narrowing, &pending, &alt) {
+        let same = |f: &Filter| format!("{f:?}") == format!("{n:?}");
+        if heads.is_empty()
+            && parts.iter().all(|p| matches!(p, Filter::Other))
+            && v.iter().filter(|f| same(f)).count() == 1
+        {
+            let rest: Vec<Filter> = v.iter().filter(|f| !same(f)).cloned().collect();
+            heads.push(Filter::and(vec![
+                Filter::Or(vec![p.clone(), Filter::and(rest)]),
+                n.clone(),
+            ]));
+            return;
+        }
     }
-    .map(|p| match &narrowing {
+    let pending = pending.map(|p| match &narrowing {
         Some(n) => Filter::and(vec![p, n.clone()]),
         None => p,
     });
@@ -537,7 +553,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         // Continue after "or", "and/or", "and", or comma lists.
         let t = s.trim_start();
         if let Some(r) = t.strip_prefix("or ").or_else(|| t.strip_prefix("and/or ")) {
-            if let Some((alt, pl, rest, noun)) = adjective_alternative(r) {
+            // (Not the last item of a comma list, which `object_alternatives` reads.)
+            if let Some((alt, pl, rest, noun)) =
+                adjective_alternative(r).filter(|_| !w.ends_with(','))
+            {
                 // "Hero or noncreature spell", "land or nonblack creature": the
                 // alternative has adjectives of its own.
                 own_alternative(&mut parts, &mut heads, group_start, alt, noun);
