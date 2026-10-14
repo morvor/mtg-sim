@@ -54,7 +54,7 @@ fn mass_hysteria_gives_all_creatures_haste() {
 
 #[test]
 fn possessed_centaur_threshold_pumps_turns_black_and_grants_an_ability() {
-    cr!("207.2c", "611.3a", "105.3", "613.1e", "613.1f", "613.4c");
+    cr!("611.3a", "105.3", "613.1e", "613.1f", "613.4c");
     // "Threshold — As long as there are seven or more cards in your graveyard, this creature
     // gets +1/+1, is black, and has "{2}{B}, {T}: Destroy target green creature.""
     supported("Possessed Centaur");
@@ -354,7 +354,7 @@ fn call_for_unity_pumps_your_creatures_per_unity_counter() {
 
 #[test]
 fn frightcrawler_threshold_pumps_and_stops_it_blocking() {
-    cr!("207.2c", "611.3a", "509.1b");
+    cr!("611.3a", "509.1b");
     // "Threshold — As long as there are seven or more cards in your graveyard, this
     // creature gets +2/+2 and can't block."
     supported("Frightcrawler");

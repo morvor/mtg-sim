@@ -247,7 +247,7 @@ fn quick_draw_dagger_attaches_and_grants_first_strike() {
 
 #[test]
 fn rooftop_assassin_destroys_an_opponents_damaged_creature() {
-    cr!("603.6a", "115.1", "701.8a");
+    cr!("603.6a", "603.3d", "115.1", "701.8a");
     // "When this creature enters, destroy target creature an opponent controls that was
     // dealt damage this turn."
     supported("Rooftop Assassin");
@@ -264,7 +264,8 @@ fn rooftop_assassin_destroys_an_opponents_damaged_creature() {
     assert!(t.on_battlefield(fresh) && t.on_battlefield(mine));
     let offered = &target_choices(&t, P0)[0];
     assert_eq!(offered, &vec![obj(hurt)], "only a damaged opponent's creature");
-    // Damage dealt last turn doesn't count.
+    // Damage dealt last turn doesn't count: with no legal target, the ability is removed
+    // from the stack (CR 603.3d).
     let mut t = TestGame::new(2);
     let src = t.battlefield(P0, "Grizzly Bears");
     let hurt = t.battlefield(P1, "Hill Giant");
@@ -337,6 +338,17 @@ fn aviary_mechanic_may_return_another_permanent_you_control() {
     let m = etb(&mut t, P0, "Aviary Mechanic");
     assert_eq!(t.zone(forest), Zone::Hand(P0), "any permanent, a land included");
     assert!(t.on_battlefield(bears) && t.on_battlefield(theirs) && t.on_battlefield(m));
+    let offered: Vec<Entity> = t
+        .asked()
+        .into_iter()
+        .find_map(|(q, d)| match d {
+            Decision::ChooseEntities { candidates, .. } if q == P0 => Some(candidates),
+            _ => None,
+        })
+        .expect("asked which permanent to return");
+    assert!(offered.contains(&obj(forest)) && offered.contains(&obj(bears)));
+    assert!(!offered.contains(&obj(m)), "another permanent");
+    assert!(!offered.contains(&obj(theirs)), "one you control");
     // Declining.
     let mut t = TestGame::new(2);
     let forest = t.battlefield(P0, "Forest");
@@ -570,6 +582,15 @@ fn old_fat_spider_draws_when_an_opponent_targets_it() {
     assert_eq!(t.hand_size(P0), 1);
     assert_eq!(t.hand_size(P1), 0);
     assert_eq!(t.obj_now(s).damage, 3);
+    // An opponent's activated ability counts too.
+    let mut t = TestGame::new(2);
+    let s = t.battlefield(P0, "Old Fat Spider");
+    let pyro = t.battlefield(P1, "Prodigal Pyromancer");
+    t.set_step(P1, Step::PrecombatMain);
+    act(&mut t, P1, pyro, "1 damage", &[obj(s)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(s).damage, 1);
+    assert_eq!(t.hand_size(P0), 1);
     // Your own spell doesn't count.
     let mut t = TestGame::new(2);
     let s = t.battlefield(P0, "Old Fat Spider");
@@ -601,9 +622,11 @@ fn enchantresss_presence_draws_on_enchantment_spells() {
     let e = t.hand(P0, "Mass Hysteria");
     t.cast(P0, e).go();
     t.settle();
-    assert_eq!(t.hand_size(P0), 0, "drawn while the spell is still on the stack");
+    assert_eq!(t.hand_size(P0), 0, "the trigger hasn't resolved yet");
+    assert_eq!(t.stack_len(), 2, "the spell and the trigger above it");
     t.resolve();
     assert_eq!(t.hand_size(P0), 1);
+    assert_eq!(t.stack_len(), 1, "drawn while the spell is still on the stack");
     t.resolve_all();
     // A creature spell, or an opponent's enchantment, doesn't draw.
     let g = t.hand(P0, "Raging Goblin");
@@ -745,12 +768,14 @@ fn nut_collector_may_create_a_squirrel_each_upkeep() {
     assert_eq!(t.pt(sq[0]), (1, 1));
     assert!(t.obj_now(sq[0]).is_token());
     assert!(t.obj_now(sq[0]).chars.colors.contains(types::Color::Green));
-    // Declining, and not on another player's upkeep.
+    // Not on another player's upkeep (even if its controller would accept).
     t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert_eq!(count_subtype(&t, P1, "Squirrel"), 1);
     assert_eq!(count_subtype(&t, P0, "Squirrel"), 0);
+    // Declining.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Nut Collector");
     t.answer_yes(P1, false);

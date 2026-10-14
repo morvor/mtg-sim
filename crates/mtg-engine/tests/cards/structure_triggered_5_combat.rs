@@ -61,10 +61,10 @@ fn furtive_courier_loots_when_it_attacks() {
     assert_eq!(t.hand_size(P0), 1);
     assert_eq!(t.zone(bolt), Zone::Graveyard(P0));
     assert_eq!(t.life(P1), 17);
+    assert!(t.on_battlefield(other));
     // Another creature attacking alone doesn't trigger it.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Furtive Courier");
-    let _ = other;
     let bears = t.battlefield(P0, "Grizzly Bears");
     fight(&mut t, &[bears], &[]);
     assert_eq!(t.library_size(P0), 30);
@@ -225,9 +225,13 @@ fn dread_specter_destroys_nonblack_creatures_it_fights_at_end_of_combat() {
     let s = t.battlefield(P0, "Dread Specter");
     let wall = t.battlefield(P1, "Wall of Stone");
     fight(&mut t, &[s], &[(wall, s)]);
-    assert!(t.on_battlefield(wall), "still there during the end of combat step");
+    assert_eq!(t.g.turn.step, Step::EndOfCombat);
+    assert!(t.on_battlefield(wall), "survived combat damage");
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "the delayed trigger, at the beginning of end of combat");
     t.resolve_all();
     assert!(!t.on_battlefield(wall), "destroyed at end of combat");
+    assert_eq!(t.g.turn.step, Step::EndOfCombat, "not later in the turn");
     assert!(t.on_battlefield(s));
     // Blocks a nonblack creature.
     let mut t = TestGame::new(2);
