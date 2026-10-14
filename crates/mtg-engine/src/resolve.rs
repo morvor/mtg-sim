@@ -1675,8 +1675,13 @@ impl Game {
                         self.move_objects(moves)
                     };
                     for (p, owner, r) in movers {
-                        let mine: Vec<ObjectId> =
-                            res.get(r).unwrap_or_default().iter().flatten().copied().collect();
+                        let mine: Vec<ObjectId> = res
+                            .get(r)
+                            .unwrap_or_default()
+                            .iter()
+                            .flatten()
+                            .copied()
+                            .collect();
                         // "Search your library for a card, exile it face down".
                         crate::zones::looked_then_exiled(self, p, &mine);
                         if *shuffle {

@@ -58,6 +58,7 @@ Each surviving mutant is classified as
 | permissions.rs | 169 | 17 (1/10) | 10 | 4 | 0 | 3 | 71.4% | TBD |
 | simultaneous.rs | 171 | 18 (1/10) | 6 | 12 | 0 | 0 | 33.3% | TBD |
 | turn.rs | 234 | 24 (1/10) | 21 | 2 | 0 | 1 | 91.3% | TBD |
+| mana.rs | 228 | 23 (1/10) | 15 | 6 | 0 | 2 | 71.4% | TBD |
 
 ### sba.rs
 
@@ -202,3 +203,30 @@ Run 2026-10-14, 24 of 234 mutants (round-robin 0/10), 31 minutes.
   phase put the combat after the ending phase. Killed by
   `tests/cr/r500_008_combat_after_the_postcombat_main_phase.rs` (Relentless Assault in the
   postcombat main phase).
+
+### mana.rs
+
+Run 2026-10-14, 23 of 228 mutants (round-robin 0/10), 28 minutes.
+
+- `mana.rs:98:13: delete match arm ManaSymbol::Half(_) in ManaSymbol::mana_value` and
+  `mana.rs:147:13: delete match arm ["½"] in ManaSymbol::parse`: **(a) out of scope**.
+  Half-mana symbols ({½}, {HW}) appear only on Un-set cards that aren't legal in any
+  format, which `docs/DEFERRED.md` excludes; the Comprehensive Rules have no rules for
+  them.
+- `mana.rs:214:30: replace + with - in ManaCost::parse` (`rest = &rest[end + 1..]` becomes
+  `end - 1`): **(a) equivalent for in-scope cards**. The next search for `{` skips the
+  leftover last character of the symbol just read, so ASCII costs parse the same; only a
+  multi-byte symbol ({∞}, {½}, Un-set cards again) would slice inside a character.
+- `mana.rs:507:21: replace && with || in ManaRestriction::allows` ("Spend this mana only to
+  cast an instant or sorcery spell" allowed any spell): **(b) missing test**. Killed by
+  `tests/cr/r106_006_instant_or_sorcery_mana.rs` (Vodalian Arcanist's mana pays for
+  Titanic Growth, not for Grizzly Bears).
+- `mana.rs:586:9: replace <impl PartialEq for ManaRider>::eq -> bool with false`: **(a)
+  equivalent**. Nothing compares mana units that carry a rider (the pool removes spent
+  mana by index), so the equality of riders is never consulted.
+- `mana.rs:937:24: replace -= with += in PoolSolver<'_>::solve` (undo the life a Phyrexian
+  symbol tentatively paid when the rest of the cost can't be paid that way): **(b) missing
+  test**. With the mutant the abandoned life stayed counted, so a later, valid way of
+  paying exceeded the life total and the spell couldn't be cast. Killed by
+  `tests/cr/r107_004f_phyrexian_payment_backtracking.rs` ({B/G}{G/P}{G/P} from {G}{B}
+  with 3 life).
