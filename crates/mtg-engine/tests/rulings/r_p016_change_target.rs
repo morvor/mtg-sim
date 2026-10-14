@@ -244,7 +244,10 @@ fn only_the_spell_is_targeted_not_its_original_or_new_target() {
 
 /// P1 casts Shock; P0 casts Cancel at it; then `extra` (if any) is cast by P1 above the
 /// Cancel. Returns (Shock, Cancel, extra).
-fn cancel_on_stack(t: &mut TestGame, extra: Option<&str>) -> (ObjectId, ObjectId, Option<ObjectId>) {
+fn cancel_on_stack(
+    t: &mut TestGame,
+    extra: Option<&str>,
+) -> (ObjectId, ObjectId, Option<ObjectId>) {
     let shock = cast_at(t, P1, "Shock", &[Entity::Player(P0)]);
     let cancel = cast_at(t, P0, "Cancel", &[o(shock)]);
     let extra = extra.map(|n| cast_at(t, P1, n, &[Entity::Player(P0)]));
