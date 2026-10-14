@@ -1,12 +1,15 @@
 //! Rulings batch P117 — cards newly compiled for this batch: "Choose a color. Add one mana
 //! of that color for each [count]" mana abilities (Selvala, Eager Trailblazer; Astral
-//! Cornucopia; CR 605.1a, 106.1b) and "if it has the least power or is tied for least
-//! power among creatures on the battlefield" (Wretched Banquet; CR 608.2c).
+//! Cornucopia; CR 605.1a, 106.1b), "if it has the least power or is tied for least
+//! power among creatures on the battlefield" (Wretched Banquet; CR 608.2c), "if [a] or if
+//! [b]" (Reptilian Recruiter), and "whenever ~ attacks, blocks, or becomes the target of
+//! a spell" (Giggling Skitterspike; CR 603.2c).
 
 use crate::r_p117_common::*;
 use mtg_engine::decision::Answer;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 /// Taps `src` for mana, choosing green; returns the green mana in P0's pool.
@@ -103,4 +106,79 @@ fn wretched_banquet_checks_power_only_as_it_resolves() {
     cast_new(&mut t, P0, "Wretched Banquet", &[obj(bears)]);
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn reptilian_recruiter_checks_its_condition_as_it_resolves() {
+    cr!("608.2c", "115.1");
+    ruling!(
+        "Reptilian Recruiter",
+        "You can target any creature with Reptilian Recruiter’s triggered ability. Whether or not the ability does anything when it resolves will depend on whether that creature’s power is 2 or less or if you control another Lizard at the time the ability resolves."
+    );
+    supported("Reptilian Recruiter");
+    // (target, before it resolves: pump the target / a Lizard enters, P0 gains control)
+    let cases = [
+        ("Grizzly Bears", false, false, true),
+        ("Grizzly Bears", true, false, false),
+        ("Hill Giant", false, false, false),
+        ("Hill Giant", false, true, true),
+    ];
+    for (name, pump, lizard, gains) in cases {
+        let mut t = TestGame::new(2);
+        let target = t.battlefield(P1, name);
+        t.g.objects[target.0 as usize].tapped = true;
+        t.answer_targets(P0, &[obj(target)]);
+        t.enter(P0, "Reptilian Recruiter");
+        t.settle();
+        assert_eq!(stack(&t), 1);
+        if pump {
+            cast_new(&mut t, P1, "Giant Growth", &[obj(target)]);
+            t.resolve();
+        }
+        if lizard {
+            t.battlefield(P0, "Lizard Warrior");
+        }
+        t.resolve_all();
+        let c = t.obj_now(target);
+        assert_eq!(c.controller == P0, gains, "{name} {pump} {lizard}");
+        assert_eq!(!c.tapped, gains, "untapped only if it was gained");
+    }
+}
+
+#[test]
+fn giggling_skitterspike_uses_its_last_known_power() {
+    cr!("608.2h", "113.7a", "603.2c");
+    ruling!(
+        "Giggling Skitterspike",
+        "If Giggling Skitterspike is no longer on the battlefield when its second ability resolves, use its power as it last existed on the battlefield to determine how much damage it deals."
+    );
+    supported("Giggling Skitterspike");
+    let mut t = TestGame::new(2);
+    let spike = t.battlefield(P0, "Giggling Skitterspike");
+    attack_with(&mut t, &[(spike, Entity::Player(P1))]);
+    assert_eq!(stack(&t), 1);
+    grow_then_exile(&mut t, spike, 2);
+    t.resolve_all();
+    assert_eq!(lost(&t, P1), 3);
+    // It also triggers when it blocks, and when it becomes the target of a spell.
+    let mut t = TestGame::new(2);
+    let spike = t.battlefield(P0, "Giggling Skitterspike");
+    cast_new(&mut t, P0, "Giant Growth", &[obj(spike)]);
+    t.settle();
+    assert_eq!(stack(&t), 2);
+    t.resolve_all();
+    assert_eq!(lost(&t, P1), 1, "Giant Growth resolves after the trigger");
+    t.set_step(P1, Step::BeginningOfCombat);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    attack_with(&mut t, &[(bears, Entity::Player(P0))]);
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(spike, bears)]),
+    );
+    t.advance_to(P1, Step::DeclareBlockers);
+    t.settle();
+    assert_eq!(stack(&t), 1);
+    t.resolve_all();
+    assert_eq!(lost(&t, P1), 1 + 4);
 }

@@ -237,13 +237,15 @@ fn any_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     referent_condition(c, b).or_else(|| crate::oracle::statics::parse_condition(c, b.ctx))
 }
 
-/// "[a] and [b]", "[a] or [b]" where at least one part is about a referent. A part that
-/// starts with a verb shares the subject of the first ("that player is your opponent and
-/// has four or more cards in hand").
+/// "[a] and [b]", "[a] or [b]", "[a] or if [b]" where at least one part is about a
+/// referent. A part that starts with a verb shares the subject of the first ("that player
+/// is your opponent and has four or more cards in hand").
 fn joined(c: &str, b: &mut Builder) -> Option<Condition> {
     for (sep, all) in [(" and ", true), (" or ", false)] {
         for (i, _) in c.match_indices(sep) {
             let (x, y) = (&c[..i], &c[i + sep.len()..]);
+            // "its power is 2 or less or if you control another Lizard": "if" repeated.
+            let y = y.strip_prefix("if ").unwrap_or(y);
             let Some(cx) = referent_condition(x, b) else {
                 if let (Some(cx), Some(cy)) = (
                     crate::oracle::statics::parse_condition(x, b.ctx),
