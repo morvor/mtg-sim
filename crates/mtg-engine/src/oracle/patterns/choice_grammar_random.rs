@@ -135,6 +135,55 @@ fn choose_objects_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "choice grammar: choose objects at random", priority: 80, parse: choose_objects_at_random } }
 
+/// Whether an earlier sentence chose objects at random with [`choose_objects_at_random`]
+/// (its "that creature" is still known).
+fn chose_at_random(b: &Builder) -> bool {
+    b.named
+        .iter()
+        .any(|(_, sel)| matches!(sel, Sel::Var(v) if *v == RANDOM_OBJECTS))
+}
+
+/// "Choose a creature at random. You gain control of that creature ... Then destroy all
+/// other creatures." (The Nipton Lottery): after the random choice, "all other [objects]"
+/// are those other than the chosen ones, not other than the source.
+fn all_others_than_random(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if !l.contains(" all other ") || !chose_at_random(b) {
+        return false;
+    }
+    let Some(mut e) = parse_clause(l, b) else {
+        return false;
+    };
+    fn other_than_chosen(f: &mut Filter) -> bool {
+        match f {
+            Filter::Other => {
+                *f = Filter::not(Filter::In(Box::new(Sel::Var(RANDOM_OBJECTS))));
+                true
+            }
+            Filter::And(v) => v.iter_mut().fold(false, |any, x| other_than_chosen(x) | any),
+            _ => false,
+        }
+    }
+    let replaced = match &mut e {
+        Effect::Destroy {
+            what: Sel::All(f), ..
+        }
+        | Effect::Exile {
+            what: Sel::All(f), ..
+        } => other_than_chosen(f),
+        _ => false,
+    };
+    if !replaced {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "choice grammar: [verb] all other [objects] after a random choice", priority: 60, apply: all_others_than_random } }
+
 /// "... target [object] chosen at random", "... any target chosen at random", "... target
 /// opponent chosen at random": the target is chosen at random among the legal ones as the
 /// spell or ability is put on the stack. "... a creature an opponent controls chosen at

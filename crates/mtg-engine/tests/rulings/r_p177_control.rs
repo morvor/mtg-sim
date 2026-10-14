@@ -151,6 +151,8 @@ fn chamber_of_manipulation_neither_untaps_nor_gives_haste() {
     assert_eq!(controller(&mut t, pyro), P0);
     assert!(!can_activate(&mut t, P0, pyro), "can't use its {{T}} ability");
     t.set_step(P0, Step::BeginningOfCombat);
+    let giant = t.battlefield(P0, "Hill Giant");
+    assert!(can_attack(&mut t, giant));
     assert!(!can_attack(&mut t, pyro), "no haste");
     t.set_step(P0, Step::PostcombatMain);
     t.g.untap(island);
@@ -337,6 +339,8 @@ fn domineering_will_gives_no_haste() {
     t.resolve_all();
     assert_eq!(controller(&mut t, bears), P0);
     t.set_step(P0, Step::BeginningOfCombat);
+    let giant = t.battlefield(P0, "Hill Giant");
+    assert!(can_attack(&mut t, giant));
     assert!(!can_attack(&mut t, bears));
 }
 
