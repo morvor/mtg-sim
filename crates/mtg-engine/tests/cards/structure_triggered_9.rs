@@ -655,7 +655,7 @@ fn rushwood_elemental_may_put_a_counter_on_itself_each_upkeep() {
 
 #[test]
 fn the_night_of_the_doctor_chapter_i_destroys_all_creatures() {
-    cr!("714.2b", "714.3a", "701.8a");
+    cr!("714.2b", "714.3a", "714.4", "701.8a");
     // "I — Destroy all creatures."
     supported("The Night of the Doctor");
     let mut t = TestGame::new(2);

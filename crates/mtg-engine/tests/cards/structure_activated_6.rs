@@ -13,7 +13,7 @@ use mtg_engine::*;
 
 /// Declares `attackers` (controlled by the active player `ap`) attacking `defender` and
 /// advances to the declare attackers step.
-fn attack(t: &mut TestGame, ap: PlayerId, defender: PlayerId, attackers: &[ObjectId]) {
+pub fn attack(t: &mut TestGame, ap: PlayerId, defender: PlayerId, attackers: &[ObjectId]) {
     t.set_step(ap, Step::BeginningOfCombat);
     let decl: Vec<_> = attackers.iter().map(|a| (*a, Entity::Player(defender))).collect();
     declare(t, &decl);
