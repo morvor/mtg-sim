@@ -987,6 +987,10 @@ pub enum Sel {
     TriggerPlayer,
     /// The permanent or player this object is attached to ("enchanted creature").
     AttachedTo,
+    /// The permanents that were attached to the selected objects as those last existed
+    /// on the battlefield, each as it last existed then if it has since left (CR 608.2h):
+    /// "each Aura you controlled that was attached to it" after it died.
+    AttachedAsItLeft(Box<Sel>),
     /// The permanents or players the selected objects are attached to ("the permanent
     /// target Aura is attached to").
     HostOf(Box<Sel>),

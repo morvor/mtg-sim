@@ -538,6 +538,12 @@ pub struct LeftBattlefield {
     /// ("target creature blocking or blocked by it", CR 113.7a, 608.2h).
     #[serde(default)]
     pub blocks: Vec<(ObjectId, ObjectId)>,
+    /// The permanents attached to it as it left (CR 608.2h, 704.5m, 704.5n): "each Aura
+    /// you controlled that was attached to it". Each is judged as it last existed then if
+    /// it has left the battlefield too (an Aura put into a graveyard by a state-based
+    /// action is a new object, CR 400.7).
+    #[serde(default)]
+    pub attachments: Vec<ObjectId>,
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability

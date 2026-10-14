@@ -400,6 +400,12 @@ pub(crate) fn count_ext(
     r: &str,
     b: &mut crate::oracle::effects::Builder,
 ) -> Option<(Value, String)> {
+    // "Auras you controlled that were attached to it" after it left the battlefield: the
+    // permanents attached to it as it last existed there, each as it last existed (CR
+    // 608.2h; Hateful Eidolon rulings).
+    if let Some(v) = attached_as_it_left(r, b) {
+        return Some(v);
+    }
     // "nontoken creatures you controlled that died this turn": those that died under your
     // control this turn (CR 700.4).
     for (p, q) in [(
@@ -641,3 +647,42 @@ fn their_total_after_mass(s: &str, prev: &mut Effect, b: &mut crate::oracle::eff
 }
 
 inventory::submit! { super::FollowupPattern { name: "referents: their total power (of the objects a mass instruction acted on)", priority: 1500, apply: their_total_after_mass } }
+
+/// "Aura you controlled that was attached to it", "Auras that were attached to it",
+/// "Equipment that was attached to it": the permanents attached to "it" as it last
+/// existed on the battlefield (for an object that has left it).
+fn attached_as_it_left(
+    r: &str,
+    b: &mut crate::oracle::effects::Builder,
+) -> Option<(Value, String)> {
+    let (noun, x) = r.split_once(' ')?;
+    let sub = match noun {
+        "aura" | "auras" => "Aura",
+        "equipment" => "Equipment",
+        _ => return None,
+    };
+    let (yours, x) = match x.strip_prefix("you controlled ") {
+        Some(x) => (true, x),
+        None => (false, x),
+    };
+    let x = x
+        .strip_prefix("that was attached to ")
+        .or_else(|| x.strip_prefix("that were attached to "))?;
+    let (who, rest) = crate::oracle::effects::object_ref(x, b)?;
+    // Only an object that has left the battlefield (the trigger's object as it last
+    // existed): what's attached to a permanent still there is "attached to it".
+    if !matches!(who, Sel::TriggerLki) {
+        return None;
+    }
+    let mut f = vec![Filter::Subtype(sub.into())];
+    if yours {
+        f.push(Filter::ControlledBy(PlayerRel::You));
+    }
+    Some((
+        Value::CountSel(Box::new(Sel::Matching(
+            Box::new(Sel::AttachedAsItLeft(Box::new(who))),
+            Filter::and(f),
+        ))),
+        rest,
+    ))
+}
