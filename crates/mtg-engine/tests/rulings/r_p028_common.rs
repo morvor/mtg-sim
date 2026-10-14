@@ -347,3 +347,17 @@ pub const ECHO_MAGE_4: Copier = Copier {
         activate_containing(t, P0, mage, "Copy target").unwrap();
     },
 };
+
+/// Spree "+ {1} — Copy target instant spell, sorcery spell, activated ability, or
+/// triggered ability. You may choose new targets for the copy."
+pub const RETURN_THE_FAVOR: Copier = Copier {
+    name: "Return the Favor",
+    setup: nothing,
+    start: |t, s| {
+        t.lands(P0, "Mountain", 2);
+        t.lands(P0, "Wastes", 1);
+        let card = t.hand(P0, "Return the Favor");
+        t.cast(P0, card).modes(&[0]).target(s).go();
+        keep_copy_targets(t, P0);
+    },
+};
