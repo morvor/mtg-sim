@@ -362,6 +362,7 @@ fn starting_with_choose(l: &str, b: &mut Builder) -> Option<Effect> {
             first,
             who,
             effect: Box::new(choose),
+            direction: SeatSide::Left,
         },
     ]))
 }
@@ -746,6 +747,7 @@ fn join_forces(l: &str, b: &mut Builder) -> Option<Effect> {
                 who: PlayerRef::Iterated,
                 effect: Box::new(pay),
             }),
+            direction: SeatSide::Left,
         },
     ]))
 }

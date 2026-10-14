@@ -558,10 +558,19 @@ impl Renderer<'_> {
                 format!("for each {s}, {inner}")
             }
             // "Starting with you, each player chooses a creature."
-            Effect::InTurnOrder { first, who, effect } => {
-                let start = match first {
-                    TurnOrderStart::You => "you",
-                    TurnOrderStart::NextOpponent => "the next opponent in turn order",
+            Effect::InTurnOrder {
+                first,
+                who,
+                effect,
+                direction,
+            } => {
+                let start = match (first, direction) {
+                    (TurnOrderStart::You, SeatSide::Left) => "you",
+                    (TurnOrderStart::You, SeatSide::Chosen) => {
+                        "you and proceeding in the chosen direction"
+                    }
+                    (TurnOrderStart::You, SeatSide::Right) => "you and proceeding to the right",
+                    (TurnOrderStart::NextOpponent, _) => "the next opponent in turn order",
                 };
                 let w = self.player_filter_noun(who, Num::One);
                 // "Join forces — Starting with you, each player may pay any amount of mana."
@@ -1085,6 +1094,8 @@ impl Renderer<'_> {
                 format!("note {v}")
             }
             Effect::SetX { .. } => String::new(),
+            // Bookkeeping for "... they paid this way" (named by the value that reads it).
+            Effect::AddToPlayerTally { .. } => String::new(),
             Effect::Destroy { what, no_regen } => {
                 let w = self.sel(what, Case::Obj);
                 // "... for each permanent destroyed this way".

@@ -17,6 +17,7 @@ impl Renderer<'_> {
         }
         match v {
             Value::Const(n) => n.to_string(),
+            Value::PlayerTally { var, .. } => crate::tallies::words(*var).into(),
             Value::X if self.extra.x_words.is_some() => self.extra.x_words.unwrap_or("X").into(),
             Value::X => "X".into(),
             // "for each card discarded this way": the objects the instruction before
