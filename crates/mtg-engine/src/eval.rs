@@ -340,6 +340,9 @@ impl Game {
             PlayerFilter::AttackedThisTurn => {
                 self.turn.active == p && !self.history.attackers.is_empty()
             }
+            PlayerFilter::CastSpellThisTurn => {
+                self.history.spells_cast.iter().any(|(q, _)| *q == p)
+            }
             // CR 810.10d: poisoned if the team has a poison counter.
             PlayerFilter::Poisoned => {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
