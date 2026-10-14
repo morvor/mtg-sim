@@ -29,7 +29,8 @@ cargo run --release -p mtg-sim -- --every-card --from 6437 --count 1 --game 0 --
   discard for "whenever you discard", mill for graveyard abilities, energy, poison,
   lifegain, tokens, targeting spells for heroic, ...), and random cheap supported spells.
   The opening hand holds two copies and enough lands (a stacked start,
-  `GameConfig::top_of_library`), and the first draws bring the lands up to its mana value.
+  `GameConfig::top_of_library`), and the first draws bring the lands up to its mana
+  value (or the mana value of its most expensive activated ability, if greater).
   Cards that need more get the right game (`--kind`):
   - `commander`: a Commander game with the card as commander, or with a commander of its
     colors (a Background goes with a commander that can choose one);
@@ -45,7 +46,9 @@ cargo run --release -p mtg-sim -- --every-card --from 6437 --count 1 --game 0 --
   usually do, preferring what they haven't done yet; they build loyalty for a
   planeswalker's ultimate, don't use the card up from their hand (cycling, say) before
   casting it, pick optional costs, casting methods, numbers, scry and surveil splits,
-  orders and card names at random, and say "yes" less and less often within a step.
+  orders and card names at random, and answer a yes-or-no question asked over and over
+  in a step one way, then the other, for longer and longer stretches (a loop can go on
+  by "yes" or by "no").
 - **What's counted**, through the engine's events (`Game::observer`): spells cast and
   lands played, abilities activated (every activation, mana abilities included, is in the
   turn history), triggered abilities put on the stack, abilities that resolved, and
@@ -66,43 +69,89 @@ cargo run --release -p mtg-sim -- --every-card --from 6437 --count 1 --game 0 --
 
 ## Latest full sweep
 
-At commit 47b8f9d (the build whose pool had 23,116 cards), 3 threads on a shared 4-CPU
-machine, in six chunks of 4,000 cards:
+At commit fb94ed0 (pool of 29,534 cards), 2 threads on a 4-CPU machine shared with
+another build, in eight chunks of 4,000 cards (`--from N --count 4000`, the last one
+1,534):
 
 | | |
 |---|---:|
-| Cards | 23,116 |
-| Games | 46,232 (2 per card) |
-| Time | 64 min of chunk wall time (~12 games/s) |
-| Panics, hangs, rules violations, stopped (slow) games | **0** |
-| Cast or played (of 22,959 castable cards) | 22,893 (99.7%) |
-| Activated and triggered abilities used | 19,361 / 20,336 (95.2%) |
-| Cards fully exercised | 22,153 (95.8%) |
+| Cards | 29,534 |
+| Games | 59,068 (2 per card) |
+| Time | 196 min of chunk wall time (~5 games/s on 2 threads) |
+| Panics, hangs | **0** |
+| Rules violations | 2 games (the checker's own mistake, fixed; see below) |
+| Stopped (slow) games | 3 (two Charismatic Conqueror games, one Earth Kingdom Protectors game; see below) |
+| Cast or played (of 29,308 castable cards) | 29,211 (99.7%) |
+| Activated and triggered abilities used | 25,470 / 26,890 (94.7%) |
+| Cards fully exercised | 28,141 (95.3%) |
 
-Game kinds: 22,796 standard, 163 commander, 59 planechase, 40 archenemy, 27 vanguard,
-16 conspiracy, 14 attractions, 1 dungeon.
+Game kinds: 29,007 standard, 301 commander, 99 planechase, 62 archenemy, 29 vanguard,
+18 conspiracy, 17 attractions, 1 dungeon.
+
+What it found:
+
+- **Counters that remain on a moving object** (Skullbriar, the Walking Grave as a
+  commander; Me, the Immortal cast from its graveyard): "counters put on and removed add
+  up to 0". The engine was right (the counters aren't *put* on the new object, so no
+  event says so); the counter check now carries the old object's counters over when
+  `rule_statics::counters_remain::remain` says the engine did (unit test
+  `counters_that_remain_on_a_moving_object_are_accounted_for` in `checks.rs`). Both
+  games replay clean.
+- **Charismatic Conquerors on both sides** ("whenever an artifact or creature an
+  opponent controls enters untapped, they may tap that permanent; if they don't, you
+  create a 1/1 Vampire"): each token triggers the other player's Conquerors, and here
+  "no" continues the loop where the focus agent's old rule (say "yes" less often the
+  more it has this step) assumed "yes" did. The focus agent now answers a question asked
+  over and over in a step (same source name and prompt) at random six times, then one
+  way 24 times, then the other way 96 times, and so on, so whichever answer ends the
+  loop comes up (unit tests in `coverage.rs`). That fixed the Earth Kingdom Protectors
+  game (which had Conquerors as synergy cards). The engine's handling is tested in
+  `rulings/charismatic_conqueror.rs` (tap or token, the ruling that an already-tapped
+  permanent gives a token, the two players' Conquerors triggering on each other's
+  tokens).
+- **Remaining: Charismatic Conqueror's own games** (card 4080, both games) still run
+  past the 60 s watchdog. With two or more Conquerors on each side the loop can't be
+  ended by any answer: only one of a player's triggers can tap the entering token, so
+  the others each make a token for the other side, which triggers *their* Conquerors in
+  turn. Tokens pile up (hundreds) and every action gets slower. That is the rules
+  working as written: the loop contains an optional action, so it isn't a draw
+  (CR 104.4b), and the game state never repeats (more tokens each time), so no loop
+  detection applies. Not an engine bug; listed here so the two SLOW reports aren't
+  chased again.
 
 ### Not used, by likely reason
 
 | Count | Reason | Typical cause |
 |---:|---|---|
-| 659 | triggered ability never triggered | Its condition needs a board the random decks seldom build: another planeswalker type ("if you control an Ajani planeswalker"), a spell that targets the card, an opponent's discard spell, a nonbasic land to destroy, a face-down creature turned up, a chosen name. By trigger kind: enters 128, cast 104, dies 75, beginning of a step 73, "where" (first spell each opponent's turn, ...) 41, attacks 29, deals damage 28, batched 27, ... |
-| 238 | activated ability never activatable | Costs and targets the game didn't offer: planeswalker ultimates (−7 to −11), "Pay eight {E}", tapping five Goblins, sacrificing Foods, specific targets (a Kavu, a Wall, a red permanent), eight or more mana, graveyard abilities of cards that never reached the graveyard (embalm, encore, scavenge, unearth), cycling lands that are always played as lands |
-| 48 | ability on another face | A transforming card that never transformed (day/night, conditions) |
-| 42 | never legal to cast | No legal targets (Aerial Volley needs fliers, Coral Net a green or white creature), or too expensive |
-| 13 | no mana cost | Melded backs, cards cast only by suspend or other permission (Evermind) |
-| 16 | activated ability offered, never activated | Activations that failed as their costs or targets were chosen (copy target ability you control) |
-| 11 | offered, never cast | Counterspells with nothing to counter; casts whose payment then failed |
-| 14 | activated or triggered, never resolved | Countered, or every target gone (Aetherflux Reservoir's 50 life) |
+| 1,043 | triggered ability never triggered | Its condition needs a board the random decks seldom build. By trigger kind: enters 159 ("whenever a Gate you control enters", "if it was kicked", "if you control three or more artifacts"), cast 138 ("a spell that targets ~", multicolored, Adventure, kicked, mana value 6 or more), dies 108, beginning of a step 88 (Cases' solved abilities, "if you control an Ajani planeswalker", win-the-game upkeeps), "where" 71, attacks 54, batched 41, deals damage 34, ... |
+| 342 | activated ability never activatable | Planeswalker ultimates, "Pay eight {E}", tapping five Vampires, sacrificing Foods or a creature of three named colors, specific targets (a Kavu, a face-down creature), graveyard abilities of cards that never got there (embalm, encore, scavenge), cycling lands always played as lands, abilities on the other face of a card that never transformed or flipped |
+| 70 | never legal to cast | No legal targets (Aura Graft, Brace for Impact), or too expensive |
+| 18 | no mana cost | Melded backs, cards cast only by other permission |
+| 19 | activated ability offered, never activated | Activations that failed as their costs or targets were chosen |
+| 9 | offered, never cast | Counterspells with nothing to counter; casts whose payment then failed |
+| 11 | activated or triggered, never resolved | Countered, or every target gone |
 
 Run with `--report FILE` for the full list (card, reason, ability text).
 
-After merging the newer engine (pool of 23,613 cards), a one-game-per-card sweep
-(`--games-per-card 1`, 23,613 games, 33 min) found no panic, hang or slow game; its one
-rules report was the checker's own mistake (Ancient Adamantoise's damage legitimately
-isn't removed during cleanup; the check now asks the engine,
-`kw::keeps_damage_in_cleanup`). With one game per card: 99.5% cast or played, 93.7% of
-the abilities used, 94.7% of the cards fully exercised.
+Deck setup changes after this sweep (`every_card.rs`), from the commonest reasons
+above: decks get enough lands for the card's most expensive activated ability, not just
+its mana value (Abomination, Terrifying Titan's "Power-up — {5}{R/G}{R/G}", embalm and
+encore costs; `coverage::activation_mana_value`); the cards for what its text cares
+about ("whenever you cast a spell that targets ~" wants targeting spells) come before
+cards for the types and keywords it names, which could crowd them out; and "dies" and
+"is put into a graveyard from the battlefield" triggers get removal. Chunk 4,000–7,999
+re-run with these changes and the merged newer engine (pool of 29,744): abilities used
+94.8% → 95.0%, cards fully exercised 95.2% → 95.5%, and its only failures are the two
+Charismatic Conqueror games described above.
+
+### Earlier sweeps
+
+At commit 47b8f9d (pool of 23,116 cards, 46,232 games, 3 threads, 64 min): no panic,
+hang, rules violation or slow game; 99.7% cast or played, 95.2% of the abilities used,
+95.8% of the cards fully exercised. After merging the newer engine (pool of 23,613
+cards), a one-game-per-card sweep found no panic, hang or slow game; its one rules
+report was the checker's own mistake (Ancient Adamantoise's damage legitimately isn't
+removed during cleanup; the check now asks the engine, `kw::keeps_damage_in_cleanup`).
 
 ## Engine problems the sweeps found and fixed
 
@@ -137,4 +186,5 @@ supplementary deck's top card).
 Slow games found by earlier sweeps (two Enduring Scalelords answering "yes" to each
 other forever; Opal Acrolith's and the Lemures' "{0}:" abilities adding an effect each
 time) were the random players' doing: the focus agent now caps its uses of a card per
-turn and says "yes" less often the more it has this step.
+turn, and a yes-or-no question asked over and over in a step gets each answer in
+turn for longer and longer stretches (see the latest sweep).
