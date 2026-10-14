@@ -1026,6 +1026,26 @@ fn for_each_object(l: &str, b: &mut Builder) -> Option<Effect> {
         for n in &nouns {
             b.named.push((format!("that {n}"), Sel::Var(EACH)));
         }
+        // Targets that may be players or objects ("Choose any number of target
+        // creatures, planeswalkers, and/or players. For each of them, ... to that
+        // permanent or player"): each of them, whichever it is.
+        if let Sel::Target(i) = &sel {
+            if b
+                .targets
+                .get(*i as usize)
+                .is_some_and(|t| matches!(t.what, TargetKind::ObjectOrPlayer(..)))
+            {
+                for p in [
+                    "that permanent or player",
+                    "that player or permanent",
+                    "that player or planeswalker",
+                    "that creature or player",
+                    "that player or creature",
+                ] {
+                    b.named.push((p.to_string(), Sel::Var(EACH)));
+                }
+            }
+        }
         let body = parse_clause(&they_as_its_controller(y), b);
         b.named.truncate(saved.3);
         b.it = saved.1;

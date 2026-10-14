@@ -129,11 +129,30 @@ pub fn substitute<T: serde::Serialize + serde::de::DeserializeOwned>(x: &T, it: 
 /// means there (`b.it`). Returns None if "it" has no antecedent. "Other" in a phrase
 /// related to "it" means other than it ("each other creature that shares a color with
 /// it", "other creatures you control that share a creature type with it").
+/// What a qualifier's "it" means where the effect parser uses it: what "it" refers to,
+/// or, where that's the source by default, a creature the text sacrificed ("You may
+/// sacrifice another creature. If you do, reveal cards ... until you reveal a
+/// nonlegendary creature card with lesser mana value": compared with the creature
+/// sacrificed, which the text names last, `value_results::note_sacrificed`).
+pub fn qualifier_it(b: &Builder) -> Sel {
+    let it = super::pronoun_groups::singular_it(b);
+    if matches!(it, Sel::This)
+        || crate::oracle::patterns::oracle_hardening_referents::is_no_referent(&it)
+    {
+        if let Some((_, sel)) = b.named.iter().rev().find(|(n, s)| {
+            n == "that creature" && matches!(s, Sel::Var(v) if *v == vars::SACRIFICED)
+        }) {
+            return sel.clone();
+        }
+    }
+    it
+}
+
 pub fn resolve_referent(f: Filter, b: &Builder) -> Option<Filter> {
     if !mentions_referent(&f) {
         return Some(f);
     }
-    let it = super::pronoun_groups::singular_it(b);
+    let it = qualifier_it(b);
     if !names_one_object(&it) {
         return None;
     }
@@ -272,6 +291,24 @@ pub fn value_in(t: &str) -> Option<(Value, &str)> {
             return Some((Value::EventAmount, r));
         }
     }
+    // "the number of lands that player controls" in a qualifier of objects a player
+    // does something with ("Each opponent can't cast noncreature spells with mana value
+    // greater than the number of lands that player controls"): that object's controller.
+    if let Some(x) = t.strip_prefix("the number of ") {
+        if let Some((f, true, r)) = parse_object_phrase(x) {
+            if let Some(rest) = r.trim_start().strip_prefix("that player controls") {
+                if word_end(rest) && !mentions_referent(&f) {
+                    let theirs = Filter::and(vec![
+                        f,
+                        Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(
+                            Box::new(Sel::Var(vars::TESTED)),
+                        ))),
+                    ]);
+                    return Some((Value::Count(theirs), rest));
+                }
+            }
+        }
+    }
     if let Some((v, rest)) = with_builder(|b| super::r107_numbers::value_phrase(t, b)) {
         // A value naming an object ("the number of counters on it") ends at the object.
         let rest = tail_of(t, &rest)?;
@@ -301,11 +338,20 @@ fn exiled_with_source() -> Filter {
 /// of them), "creatures you control".
 pub fn object_in(t: &str) -> Option<(Sel, &str)> {
     let t = t.trim_start();
+    // "the enchanted creature's toughness": the enchanted creature.
+    if let Some(r) = t
+        .strip_prefix("the ")
+        .filter(|r| r.starts_with("enchanted ") || r.starts_with("equipped "))
+    {
+        return object_in(r);
+    }
     let word_end = |r: &str| r.is_empty() || r.starts_with([' ', ',', '.', '\'']);
     for (p, sel) in [
         ("the sacrificed creature", Sel::Var(vars::SACRIFICED)),
         ("the sacrificed permanent", Sel::Var(vars::SACRIFICED)),
         ("the sacrificed artifact", Sel::Var(vars::SACRIFICED)),
+        // "than the creature that died" (a dies trigger's object, as it last existed).
+        ("the creature that died", Sel::Var(REFERENT_THAT)),
         // Cards a linked ability of the source exiled (CR 607.2a).
         ("the exiled card", Sel::All(exiled_with_source())),
         ("a card exiled with ~", Sel::All(exiled_with_source())),
@@ -386,6 +432,11 @@ pub fn tested(stat: Stat) -> Value {
 
 /// An object whose stat compares with the value.
 pub fn stat_filter(stat: Stat, cmp: Cmp, v: Value) -> Filter {
+    // A value about the object itself (its controller's lands): compared with it bound.
+    let tested_needle = format!("{{\"Var\":{}}}", vars::TESTED);
+    if serde_json::to_string(&v).is_ok_and(|j| j.contains(&tested_needle)) {
+        return Filter::ValueCmp(Box::new(tested(stat)), cmp, Box::new(v));
+    }
     let v = Box::new(v);
     match stat {
         Stat::Power => Filter::Power(cmp, v),
@@ -399,6 +450,8 @@ fn cmp_phrase(t: &str) -> Option<(Cmp, &str)> {
     for (p, c) in [
         ("less than or equal to ", Cmp::Le),
         ("greater than or equal to ", Cmp::Ge),
+        ("equal to or less than ", Cmp::Le),
+        ("equal to or greater than ", Cmp::Ge),
         ("less than ", Cmp::Lt),
         ("greater than ", Cmp::Gt),
         ("equal to ", Cmp::Eq),
@@ -445,11 +498,19 @@ fn word_end(r: &str) -> bool {
 fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     // "... that shares a creature type with the sacrificed creature and has mana value
     // equal to 1 plus that creature's mana value" (Pyre of Heroes).
+    // "creatures that each have toughness greater than their power" (Catapult Fodder).
     let r = t
         .strip_prefix("with ")
-        .or_else(|| t.strip_prefix("and has "))?;
+        .or_else(|| t.strip_prefix("and has "))
+        .or_else(|| t.strip_prefix("that each have "))?;
     // "with lesser power [than ...]"
-    for (p, cmp) in [("lesser ", Cmp::Lt), ("greater ", Cmp::Gt)] {
+    for (p, cmp) in [
+        ("lesser ", Cmp::Lt),
+        ("greater ", Cmp::Gt),
+        // "with equal or lesser mana value" (the object the text named before).
+        ("equal or lesser ", Cmp::Le),
+        ("equal or greater ", Cmp::Ge),
+    ] {
         if let Some(x) = r.strip_prefix(p) {
             let (stat, rest) = stat_word(x)?;
             let (obj, rest) = match rest.trim_start().strip_prefix("than ") {
@@ -809,7 +870,7 @@ pub fn resolve_in_sentence(e: Effect, b: &Builder, before: (Sel, usize)) -> Opti
     if !same_it || b.targets.len() != n {
         return Some(e);
     }
-    let it = super::pronoun_groups::singular_it(b);
+    let it = qualifier_it(b);
     if !names_one_object(&it) {
         return Some(e);
     }

@@ -1710,6 +1710,11 @@ pub enum Value {
     /// "the number of differently named [objects]": the most objects matching the filter
     /// that have different names (CR 201.2b). Objects with no name don't count.
     DistinctNames(Filter),
+    /// "[N or more objects] with the same name (as one another)": the most matching
+    /// objects that all have one name in common (CR 201.2a; an object with all names of
+    /// nonlegendary creature cards has each of them, CR 612.7). Objects with no name don't
+    /// count.
+    LargestSameNameGroup(Filter),
     /// "the number of different mana values among [objects]": how many distinct mana
     /// values the matching objects have (CR 202.3; a land card's is 0, X is 0 off the
     /// stack, CR 202.3e).
