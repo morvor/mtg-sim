@@ -211,6 +211,12 @@ fn p_roll(l: &str, b: &mut Builder) -> Option<Effect> {
         } else if let Some(x) = r.strip_prefix("and store those results on ~") {
             spec.store_on = Some(Sel::This);
             x.to_string()
+        } else if let Some(x) = r.strip_prefix("for each player being attacked") {
+            // Only opponents can be attacked (CR 508.1b).
+            spec.count = Value::Custom(SmolStr::new(
+                crate::kw::value_counts::OPPONENTS_BEING_ATTACKED,
+            ));
+            x.to_string()
         } else if let Some(x) = r.strip_prefix("and choose one result") {
             spec.choose_one = true;
             x.to_string()
@@ -530,7 +536,7 @@ fn keep_targets(e: &Effect) -> (Vec<Effect>, Option<Effect>) {
     (stores, kept)
 }
 
-fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
+pub(crate) fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
     match e {
         Effect::FlipCoins(f) => Some(f),
         Effect::Seq(v) => v.iter_mut().rev().find_map(last_flip),
@@ -547,6 +553,11 @@ fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
         Effect::DelayedTrigger {
             body, once: true, ..
         } => last_flip(&mut body.effect),
+        // "Flip a coin for each opponent you have", "for each blocking creature, flip a
+        // coin" (`dice_coin_ext`): one flip for each.
+        Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
+            last_flip(effect)
+        }
         _ => None,
     }
 }

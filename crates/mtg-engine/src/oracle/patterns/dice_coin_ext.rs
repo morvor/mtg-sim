@@ -132,14 +132,132 @@ fn p_for_each_result(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "a705-706 for each flip or result", priority: 0, parse: p_for_each_result } }
 
-/// The coin flip the effect ends with.
-fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
+use super::r705_706_dice::last_flip;
+
+/// The object the current flip of "flip a coin for each [object]" is for.
+const FLIPPED_FOR: Var = vars::USER + 8540;
+
+/// "Flip a coin for each creature that isn't a Demon", "for each blocking creature, flip a
+/// coin", "flip a coin for each opponent you have": one flip for each, all as one
+/// instruction (what's done to the objects whose coins come up tails happens to them at
+/// once, `simultaneous`); "that creature" / "that player" is the one the flip is for.
+fn p_flip_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let x = l
+        .strip_prefix("flip a coin for each ")
+        .or_else(|| l.strip_prefix("for each ")?.strip_suffix(", flip a coin"))?;
+    let flip = CoinFlip::new();
+    if matches!(x, "opponent you have" | "opponent") {
+        b.it_player = PlayerRef::Iterated;
+        return Some(Effect::ForEachPlayer {
+            who: PlayerRef::EachOpponent,
+            effect: Box::new(Effect::FlipCoins(Box::new(flip))),
+        });
+    }
+    let f = match parse_object_phrase(x) {
+        Some((f, _, tail)) if tail.trim().is_empty() => f,
+        _ => {
+            let (f, rest) = super::value_grammar::objects(x, b)?;
+            if !rest.trim().is_empty() {
+                return None;
+            }
+            f
+        }
+    };
+    let mut flip = flip;
+    // Only heads or tails matters until a win/lose part says otherwise (CR 705.2).
+    flip.call = false;
+    b.it = Sel::Var(FLIPPED_FOR);
+    Some(Effect::ForEach {
+        sel: Sel::All(f),
+        var: FLIPPED_FOR,
+        effect: Box::new(Effect::FlipCoins(Box::new(flip))),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "a705 flip a coin for each", priority: 0, parse: p_flip_for_each } }
+
+/// Whether the effect's last flip is one of several flips made for each object or player.
+fn flips_in_loop(e: &Effect) -> bool {
     match e {
-        Effect::FlipCoins(f) => Some(f),
-        Effect::Seq(v) => v.last_mut().and_then(last_flip),
-        _ => None,
+        Effect::Seq(v) => v.last().is_some_and(flips_in_loop),
+        Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
+            matches!(**effect, Effect::FlipCoins(_))
+        }
+        _ => false,
     }
 }
+
+/// After one flip for each object or player: "For each flip you win, draw a card. For each
+/// flip you lose, ~ deals 3 damage to that player." — what happens after each flip.
+fn f_for_each_flip_in_loop(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !flips_in_loop(prev) {
+        return false;
+    }
+    let (win, rest) = if let Some(r) = l.strip_prefix("for each flip you win, ") {
+        (true, r)
+    } else if let Some(r) = l.strip_prefix("for each flip you lose, ") {
+        (false, r)
+    } else {
+        return false;
+    };
+    let Some(e) = parse_clause(rest, b) else {
+        return false;
+    };
+    let Some(f) = last_flip(prev) else {
+        return false;
+    };
+    let branch = if win { &mut f.on_win } else { &mut f.on_lose };
+    if !matches!(branch, Effect::Noop) {
+        return false;
+    }
+    *branch = e;
+    f.call = true;
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "a705 for each flip you win (one flip each)", priority: 5, apply: f_for_each_flip_in_loop } }
+
+/// "Destroy each creature whose coin comes up tails." after "flip a coin for each
+/// creature".
+fn f_whose_coin_objects(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !flips_in_loop(prev) {
+        return false;
+    }
+    let Some(i) = l.find(" whose coin comes up ") else {
+        return false;
+    };
+    let after = &l[i + " whose coin comes up ".len()..];
+    let (heads, after) = if let Some(r) = after.strip_prefix("tails") {
+        (false, r)
+    } else if let Some(r) = after.strip_prefix("heads") {
+        (true, r)
+    } else {
+        return false;
+    };
+    // "each creature" / "each permanent": the objects the flips were for.
+    let Some(j) = l[..i].rfind("each ") else {
+        return false;
+    };
+    let rewritten = format!("{}it{after}", &l[..j]);
+    let saved = std::mem::replace(&mut b.it, Sel::Var(FLIPPED_FOR));
+    let e = parse_clause(&rewritten, b);
+    b.it = saved;
+    let Some(e) = e else {
+        return false;
+    };
+    let Some(f) = last_flip(prev) else {
+        return false;
+    };
+    let branch = if heads { &mut f.on_heads } else { &mut f.on_tails };
+    if !matches!(branch, Effect::Noop) {
+        return false;
+    }
+    *branch = e;
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "a705 each object whose coin comes up", priority: 10, apply: f_whose_coin_objects } }
 
 /// "Each player flips a coin. Each player whose coin comes up tails sacrifices a creature
 /// of their choice.": what happens to each flipper whose coin came up tails (heads).
@@ -266,6 +384,35 @@ fn named_suffix<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
 }
 
 inventory::submit! { FilterSuffixPattern { name: "a705 named [printed name]", priority: 100, parse: named_suffix } }
+
+/// "creature that isn't a Demon, Devil, or Imp": none of the listed subtypes (the
+/// zone-move grammar reads a single type).
+fn not_subtype_list<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = s
+        .strip_prefix("that isn't a ")
+        .or_else(|| s.strip_prefix("that isn't an "))?;
+    let n = r.find(['.', ';']).unwrap_or(r.len());
+    let (list, rest) = (&r[..n], &r[n..]);
+    if !list.contains(" or ") {
+        return None;
+    }
+    let words: Vec<&str> = list
+        .split([','])
+        .flat_map(|w| w.split(" or "))
+        .map(|w| w.trim().trim_start_matches("or ").trim())
+        .filter(|w| !w.is_empty())
+        .collect();
+    if words.len() < 2 {
+        return None;
+    }
+    let subtypes = words
+        .iter()
+        .map(|w| subtype_word(w).map(Filter::Subtype))
+        .collect::<Option<Vec<_>>>()?;
+    Some((Filter::not(Filter::Or(subtypes)), rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "a705 that isn't a [subtype], [subtype], or [subtype]", priority: 960, parse: not_subtype_list } }
 
 /// "After you roll a die, you may pay 1 life. If you do, increase or decrease the result by
 /// 1. Do this only once each turn." (CR 706.2a)
