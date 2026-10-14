@@ -301,8 +301,6 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "token" => Filter::Token,
         "historic" => Filter::Historic,
         "face-down" => Filter::FaceDown,
-        // An object in exile ("exiled cards with hit counters on them", CR 406).
-        "exiled" => Filter::InZone(ZoneKind::Exile),
         // CR 406.3, 708: a face-up permanent or exiled card.
         "face-up" => Filter::not(Filter::FaceDown),
         // CR 712.1.

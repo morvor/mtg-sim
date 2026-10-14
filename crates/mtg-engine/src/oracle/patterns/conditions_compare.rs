@@ -474,10 +474,20 @@ fn player_owns(c: &str, b: &mut Builder) -> Option<Condition> {
         .split_once(" own ")
         .or_else(|| c.split_once(" owns "))?;
     let (cmp, n, rest) = amount_cmp(r)?;
-    let (f, _, tail) = parse_object_phrase(rest.trim())?;
+    // "exiled cards with hit counters on them": cards in exile.
+    let (exiled, rest) = match rest.trim().strip_prefix("exiled ") {
+        Some(x) => (true, x),
+        None => (false, rest.trim()),
+    };
+    let (f, _, tail) = parse_object_phrase(rest)?;
     if !tail.trim().is_empty() {
         return None;
     }
+    let f = if exiled {
+        Filter::and(vec![f, Filter::InZone(ZoneKind::Exile)])
+    } else {
+        f
+    };
     let p = match who {
         "they" => {
             if is_no_player_referent(&b.it_player) || matches!(b.it_player, PlayerRef::You) {
@@ -646,6 +656,16 @@ fn player_subject(who: &str, b: &mut Builder) -> Option<PlayerRef> {
     }
     let (p, rest) = crate::oracle::effects::player_ref(who, b)?;
     if !rest.trim().is_empty() || is_no_player_referent(&p) {
+        return None;
+    }
+    // One player: "each player has ..." isn't "some player has ...".
+    if matches!(
+        p,
+        PlayerRef::EachPlayer
+            | PlayerRef::EachOpponent
+            | PlayerRef::EachOtherPlayer
+            | PlayerRef::Each(_)
+    ) {
         return None;
     }
     Some(p)
