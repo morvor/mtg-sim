@@ -306,3 +306,85 @@ fn shared_subject_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: [target] [does x] and [does y] (one subject, a for-each amount)", priority: 1500, parse: shared_subject_for_each } }
+
+/// The object "choose ... at random" chose, for "the rest".
+pub const CHOSEN_AT_RANDOM: Var = vars::USER + 12_005;
+
+/// "Choose a creature at random, then destroy the rest." (Last One Standing): one of the
+/// objects chosen at random (CR 701.9b's randomness: each equally likely), then the
+/// instruction for all the others.
+fn choose_at_random_then_the_rest(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("choose ")?;
+    let (what, verb) = r.split_once(" at random, then ")?;
+    let what = what.strip_prefix("a ").or_else(|| what.strip_prefix("an "))?;
+    let verb = verb.strip_suffix(" the rest")?;
+    let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(what)?;
+    if plural || !tail.trim().is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+        return None;
+    }
+    let f = Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]);
+    let rest = Sel::All(Filter::and(vec![
+        f.clone(),
+        Filter::not(Filter::In(Box::new(Sel::Var(CHOSEN_AT_RANDOM)))),
+    ]));
+    let act = match verb {
+        "destroy" => Effect::Destroy {
+            what: rest,
+            no_regen: false,
+        },
+        "exile" => Effect::Exile {
+            what: rest,
+            face_down: false,
+            link: false,
+        },
+        _ => return None,
+    };
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: CHOSEN_AT_RANDOM,
+            sel: Sel::AtRandom {
+                filter: f,
+                count: Value::c(1),
+                store: None,
+            },
+        },
+        act,
+    ]))
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: choose [an object] at random, then [destroy] the rest", priority: 1500, parse: choose_at_random_then_the_rest } }
+
+/// "Put a stun counter on each of those creatures you don't control." (Lost in the Maze):
+/// those of the objects "those creatures" refers to that you (don't) control.
+fn those_you_control(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (phrase, mine) = [
+        ("each of those creatures you don't control", false),
+        ("each of those creatures you control", true),
+        ("those creatures you don't control", false),
+        ("those creatures you control", true),
+    ]
+    .into_iter()
+    .find(|(p, _)| l.contains(p))?;
+    let them = match super::pronoun_groups::plural_object_ref("those creatures", b) {
+        Some(Some((sel, _))) => sel,
+        _ => return None,
+    };
+    if matches!(them, Sel::None) || super::oracle_hardening_referents::is_no_referent(&them) {
+        return None;
+    }
+    let control = Filter::ControlledBy(PlayerRel::You);
+    let sel = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(them)),
+        if mine { control } else { Filter::not(control) },
+    ]));
+    let key = "the creatures of those named here".to_string();
+    let rewritten = l.replacen(phrase, &key, 1);
+    b.named.push((key.clone(), sel));
+    let e = crate::oracle::effects::parse_clause(&rewritten, b);
+    b.named.retain(|(p, _)| *p != key);
+    e
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: [each of] those creatures you (don't) control", priority: 1500, parse: those_you_control } }

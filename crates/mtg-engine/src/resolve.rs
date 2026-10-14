@@ -1223,7 +1223,9 @@ impl Game {
             }
             Effect::PhaseOut { what } => {
                 let objs = self.resolve_objects(what, ctx);
+                let before = self.phased_in_permanents();
                 crate::keyword_impls::phase_out(self, objs);
+                self.record_phased_out(before, ctx);
             }
             Effect::TurnFaceUp { what } => {
                 for o in self.resolve_objects(what, ctx) {
@@ -2123,7 +2125,9 @@ impl Game {
             }
             Effect::PhaseOutUntil { what, until } => {
                 let objs = self.resolve_objects(what, ctx);
+                let before = self.phased_in_permanents();
                 crate::until::exec_phase_out_until(self, objs, until, ctx);
+                self.record_phased_out(before, ctx);
             }
             Effect::SelfReplace {
                 replacement,
@@ -2367,6 +2371,26 @@ impl Game {
             .into_iter()
             .filter_map(|e| e.object())
             .collect()
+    }
+
+    /// The permanents that are phased in.
+    fn phased_in_permanents(&self) -> Vec<ObjectId> {
+        self.battlefield
+            .iter()
+            .copied()
+            .filter(|o| !self.obj(*o).phased_out)
+            .collect()
+    }
+
+    /// Records the permanents of `before` that are now phased out as "phased out this
+    /// way" ([`vars::PHASED_OUT`]).
+    fn record_phased_out(&mut self, before: Vec<ObjectId>, ctx: &mut Ctx) {
+        let now: Vec<Entity> = before
+            .into_iter()
+            .filter(|o| self.is_live(*o) && self.obj(*o).phased_out)
+            .map(Entity::Object)
+            .collect();
+        ctx.set_var(vars::PHASED_OUT, now);
     }
 
     /// Records the objects that were actually dealt damage by `src` since event index

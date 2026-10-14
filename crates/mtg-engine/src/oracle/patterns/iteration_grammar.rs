@@ -845,6 +845,11 @@ fn not_chosen_suffix<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
         "not chosen this way",
         "that weren't chosen this way",
         "that wasn't chosen this way",
+        // "destroy all creatures except creatures chosen this way" (Unstable Glyphbridge).
+        "except creatures chosen this way",
+        "except permanents chosen this way",
+        "except the chosen creatures",
+        "except the chosen permanents",
     ]
     .iter()
     .find_map(|p| s.strip_prefix(p))?;

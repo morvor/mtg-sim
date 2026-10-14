@@ -957,6 +957,9 @@ pub mod vars {
     /// measuring, while its values are evaluated ("with toughness greater than its power",
     /// "the greatest power among creatures you control"; see `relational.rs`).
     pub const TESTED: Var = 6;
+    /// Permanents the most recent phase-out instruction phased out, directly or
+    /// indirectly (CR 702.26g): "each creature that phased out this way".
+    pub const PHASED_OUT: Var = USER + 12_100;
 }
 
 /// Selects players and/or objects.

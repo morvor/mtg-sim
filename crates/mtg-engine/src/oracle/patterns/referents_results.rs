@@ -765,3 +765,81 @@ pub(crate) fn atom_ext(
     }
     None
 }
+
+/// "Target player loses 2 life plus 2 life for each Spirit sacrificed this way." (Devouring
+/// Greed): an amount plus an amount for each counted thing.
+fn n_plus_m_for_each(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let l = crate::oracle::phrases::end(l);
+    if has_word(l, "x") {
+        return None;
+    }
+    let (left, right) = l.split_once(" plus ")?;
+    let unit = [" life", " damage"].into_iter().find(|u| left.ends_with(u))?;
+    let (prefix, n) = left.strip_suffix(unit)?.rsplit_once(' ')?;
+    let (n, tail) = crate::oracle::phrases::parse_number(n)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let (m, r) = crate::oracle::phrases::parse_number(right)?;
+    let counted = r
+        .trim_start()
+        .strip_prefix(unit.trim_start())?
+        .strip_prefix(" for each ")?;
+    if counted.contains(',') {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let restore = |b: &mut crate::oracle::effects::Builder| {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+    };
+    let e = super::value_grammar::with_x_defined(true, || {
+        crate::oracle::effects::parse_clause(&format!("{prefix} x{unit}"), b)
+    });
+    let Some(e) = e else {
+        restore(b);
+        return None;
+    };
+    let after = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let plural = plural_head(counted);
+    let count = super::value_grammar::parse_value(&format!("the number of {counted}"), b)
+        .filter(|(_, rest)| rest.trim().is_empty())
+        .or_else(|| {
+            b.targets.truncate(after.0);
+            (b.it, b.it_player) = (after.1.clone(), after.2.clone());
+            let p = plural.as_ref()?;
+            super::value_grammar::parse_value(&format!("the number of {p}"), b)
+                .filter(|(_, rest)| rest.trim().is_empty())
+        });
+    let Some((count, _)) = count else {
+        restore(b);
+        return None;
+    };
+    let amount = Value::Sum(vec![n, Value::Mul(Box::new(m), Box::new(count))]);
+    let Some(e) = super::r107_numbers::substitute_x(&e, &amount) else {
+        restore(b);
+        return None;
+    };
+    // "Target player loses ... life" read as that player doing it: the plain instruction
+    // (whose amount "that much" then refers to).
+    let e = match e {
+        Effect::AsPlayer { who, effect } => match *effect {
+            Effect::LoseLife {
+                who: PlayerRef::You,
+                n,
+            } => Effect::LoseLife { who, n },
+            Effect::GainLife {
+                who: PlayerRef::You,
+                n,
+            } => Effect::GainLife { who, n },
+            other => Effect::AsPlayer {
+                who,
+                effect: Box::new(other),
+            },
+        },
+        e => e,
+    };
+    Some(e)
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: N life plus M life for each [amount]", priority: 50, parse: n_plus_m_for_each } }
