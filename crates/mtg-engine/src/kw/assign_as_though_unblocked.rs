@@ -22,16 +22,20 @@ use crate::types::ObjectId;
 
 /// `StaticEffect::Custom` name of the ability.
 pub const MAY_ASSIGN_UNBLOCKED: &str = "may assign combat damage as though unblocked";
+/// `StaticEffect::Custom` name of a granted ability with no choice: the creature assigns
+/// its combat damage as though it weren't blocked ("X target blocked creatures assign
+/// their combat damage this turn as though they weren't blocked", Outmaneuver).
+pub const ASSIGNS_UNBLOCKED: &str = "assigns combat damage as though unblocked";
 /// `PlayerModification::Custom` name: creatures the player controls assign their combat
 /// damage as though they weren't blocked.
 pub const ALL_ASSIGN_UNBLOCKED: &str = "creatures assign combat damage as though unblocked";
 
 pub struct AssignAsThoughUnblocked;
 
-fn has_ability(g: &Game, id: ObjectId) -> bool {
+fn has_ability(g: &Game, id: ObjectId, name: &str) -> bool {
     g.obj(id).chars.abilities.iter().any(|a| {
         matches!(&a.kind, AbilityKind::Static(s)
-            if matches!(&s.effect, StaticEffect::Custom(n) if n == MAY_ASSIGN_UNBLOCKED))
+            if matches!(&s.effect, StaticEffect::Custom(n) if n == name))
     })
 }
 
@@ -47,7 +51,10 @@ impl KeywordRules for AssignAsThoughUnblocked {
         ) {
             return true;
         }
-        if !has_ability(g, creature) {
+        if has_ability(g, creature, ASSIGNS_UNBLOCKED) {
+            return true;
+        }
+        if !has_ability(g, creature, MAY_ASSIGN_UNBLOCKED) {
             return false;
         }
         // Blocked by a creature with banding: the defending player decides, as they assign
