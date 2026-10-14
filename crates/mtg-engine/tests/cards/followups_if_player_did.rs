@@ -120,3 +120,35 @@ fn binding_negotiation_they_discard_the_chosen_card() {
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert!(t.in_hand(P1, "Forest"));
 }
+
+#[test]
+fn breaking_wave_untaps_and_taps_simultaneously() {
+    cr!("608.2c", "701.26a");
+    supported("Breaking Wave");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.g.tap(a);
+    t.lands(P0, "Island", 4);
+    let spell = t.hand(P0, "Breaking Wave");
+    t.cast(P0, spell).go();
+    t.resolve();
+    assert!(!t.obj_now(a).tapped);
+    assert!(t.obj_now(b).tapped);
+}
+
+#[test]
+fn starving_revenant_draws_for_each_card_left_on_top() {
+    cr!("701.25a");
+    supported("Starving Revenant");
+    supported("Chandra, Chill of Compliance");
+    supported("Covenant of Minds");
+    let mut t = TestGame::new(2);
+    let hand = t.hand_size(P0);
+    t.enter(P0, "Starving Revenant");
+    t.g.flush_events();
+    t.resolve_all();
+    // The default keeps both cards on top: two cards drawn, 6 life lost.
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.life(P0), 14);
+}

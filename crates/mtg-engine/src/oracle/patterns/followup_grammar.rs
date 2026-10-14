@@ -810,6 +810,146 @@ inventory::submit! { super::EffectPattern { name: "followups: [instruction] or [
 
 
 
+/// The selections "Simultaneously untap ... and tap ..." acts on, fixed before either
+/// happens.
+const UNTAPPING: Var = vars::USER + 9653;
+const TAPPING: Var = vars::USER + 9654;
+
+/// "Simultaneously untap all tapped creatures and tap all untapped creatures." (Breaking
+/// Wave): which permanents are untapped and which are tapped is determined before either
+/// happens, so each one changes once.
+fn simultaneously_untap_and_tap(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("simultaneously ")?;
+    let (a, c) = r.split_once(" and ")?;
+    let ea = crate::oracle::effects::parse_clause(a, b)?;
+    let ec = crate::oracle::effects::parse_clause(c, b)?;
+    let (Effect::Untap { what: Sel::All(fa) }, Effect::Tap { what: Sel::All(fc) }) = (&ea, &ec)
+    else {
+        return None;
+    };
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: UNTAPPING,
+            sel: Sel::All(fa.clone()),
+        },
+        Effect::Store {
+            var: TAPPING,
+            sel: Sel::All(fc.clone()),
+        },
+        Effect::Untap {
+            what: Sel::Var(UNTAPPING),
+        },
+        Effect::Tap {
+            what: Sel::Var(TAPPING),
+        },
+    ]))
+}
+
+inventory::submit! { super::EffectPattern { name: "followups: simultaneously untap ... and tap ...", priority: 120, parse: simultaneously_untap_and_tap } }
+
+/// Whether the last instruction of `e` is a surveil by you.
+fn surveils(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.last().is_some_and(surveils),
+        Effect::Surveil {
+            who: PlayerRef::You,
+            ..
+        }
+        | Effect::Scry {
+            who: PlayerRef::You,
+            ..
+        } => true,
+        _ => false,
+    }
+}
+
+/// "Surveil 1. If you put a noncreature, nonland card into your graveyard this way, put
+/// that card into your hand." (Chandra, Chill of Compliance; Enlightened Confidant): the
+/// cards the surveil put into the graveyard (CR 701.25a).
+fn if_you_put_into_graveyard_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("if you put ") else {
+        return false;
+    };
+    let Some((desc, rest)) = r.split_once(" into your graveyard this way, ") else {
+        return false;
+    };
+    if !matches!(last_instruction(prev), Effect::Surveil { .. }) || !surveils(prev) {
+        return false;
+    }
+    let desc = desc
+        .strip_prefix("a ")
+        .or_else(|| desc.strip_prefix("an "))
+        .unwrap_or(desc);
+    let Some(q) = super::card_flow_search::card_filter(desc, b) else {
+        return false;
+    };
+    let those = Sel::Matching(
+        Box::new(Sel::Var(crate::scry_rules::SURVEILED_TO_GRAVEYARD)),
+        q,
+    );
+    let named = b.named.len();
+    b.named.push(("that card".into(), those.clone()));
+    let e = crate::oracle::effects::parse_clause(rest, b);
+    b.named.truncate(named);
+    let Some(e) = e else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::SelNonEmpty(those),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups: if you put a card into your graveyard this way (surveil)", priority: 120, apply: if_you_put_into_graveyard_this_way } }
+
+/// "Surveil 2. Then for each card you put on top of your library, you draw a card and you
+/// lose 3 life." (Starving Revenant).
+fn for_each_card_put_on_top(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let Some(rest) = l.strip_prefix("for each card you put on top of your library, ") else {
+        return false;
+    };
+    if !surveils(prev) {
+        return false;
+    }
+    let Some(e) = crate::oracle::effects::parse_clause(rest, b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::Repeat {
+            times: Value::CountSel(Box::new(Sel::Var(crate::scry_rules::LOOKED_ON_TOP))),
+            effect: Box::new(e),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups: for each card you put on top of your library (surveil)", priority: 120, apply: for_each_card_put_on_top } }
+
+/// "Target opponent may choose to put those cards into your hand." (Covenant of Minds):
+/// that player decides whether it's done ("may have you put those cards into your
+/// hand").
+fn may_choose_to(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (who, r) = l.split_once(" may choose to ")?;
+    if who == "you" || r.contains(" they ") || r.contains(" their ") {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&format!("{who} may have you {r}"), b)
+}
+
+inventory::submit! { super::EffectPattern { name: "followups: [player] may choose to [instruction]", priority: 120, parse: may_choose_to } }
+
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::card::Layout;
