@@ -155,6 +155,8 @@ impl Renderer<'_> {
             self.trigger_player = Some("{alt:that spell's controller|that player}");
         } else if targeted(&t.trigger) {
             self.trigger_player = Some("that spell's controller");
+        } else if matches!(t.trigger, TriggerCond::PlayerAttacks(PlayerRel::Opponent)) {
+            self.trigger_player = Some(super::players::OPPONENT_EVENT);
         }
         let trig = self.trigger_text(&t.trigger);
         self.trigger_names_opponent =

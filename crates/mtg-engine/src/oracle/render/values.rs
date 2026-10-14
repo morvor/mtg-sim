@@ -367,6 +367,7 @@ impl Renderer<'_> {
                     .iter()
                     .map(|x| match x {
                         Value::Count(f) => Some(f.zone().unwrap_or(ZoneKind::Battlefield)),
+                        Value::HandSize(_) => Some(ZoneKind::Hand),
                         _ => None,
                     })
                     .collect();

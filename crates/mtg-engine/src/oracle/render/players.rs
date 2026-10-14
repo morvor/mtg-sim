@@ -35,6 +35,10 @@ pub enum Case {
     Poss,
 }
 
+/// [`Renderer::trigger_player`] for an event an opponent performs ("Whenever an opponent
+/// attacks"): "that opponent" as well as "that player".
+pub(crate) const OPPONENT_EVENT: &str = "that opponent";
+
 fn decline(s: String, case: Case) -> String {
     match case {
         // Alternative wordings each take the possessive.
@@ -930,6 +934,15 @@ impl Renderer<'_> {
             PlayerRef::OwnerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
                 format!("{s} owner")
+            }
+            // "Whenever an opponent attacks with creatures, ... that opponent loses 3
+            // life".
+            PlayerRef::TriggerPlayer if self.trigger_player == Some(OPPONENT_EVENT) => {
+                return match case {
+                    Case::Subj => "{alt:that player|that opponent|they}".into(),
+                    Case::Obj => "{alt:that player|that opponent|them}".into(),
+                    Case::Poss => "{alt:that player's|that opponent's|their}".into(),
+                };
             }
             PlayerRef::TriggerPlayer if self.trigger_player.is_some() => {
                 self.trigger_player.unwrap_or("that player").into()

@@ -59,6 +59,39 @@ impl Renderer<'_> {
                 ))
             }
             (E::Where { event, cond }, action) => self.qualified_where_replacement(event, cond, action),
+            // "Prevent all combat damage that would be dealt by creatures other than target
+            // creature this turn": the target is named here first.
+            (
+                E::Damage {
+                    source: Filter::And(v),
+                    to_players: Some(PlayerFilter::Any),
+                    to_objects: Some(Filter::Any),
+                    combat_only,
+                },
+                A::Prevent,
+            ) => {
+                let new_target = |x: &Filter| -> Option<u8> {
+                    match x {
+                        Filter::Not(n) => match n.as_ref() {
+                            Filter::In(s) => match s.as_ref() {
+                                Sel::Target(i) => Some(*i),
+                                _ => None,
+                            },
+                            _ => None,
+                        },
+                        _ => None,
+                    }
+                };
+                let i = v.iter().find_map(new_target)?;
+                if self.introduced.get(i as usize).copied().unwrap_or(true) {
+                    return None;
+                }
+                let rest = Filter::and(v.iter().filter(|x| new_target(x).is_none()).cloned().collect());
+                let n = self.noun(&rest, Num::Many);
+                let t = self.target_mention(i, super::players::Case::Obj);
+                let kind = if *combat_only { "combat damage" } else { "damage" };
+                Some(format!("prevent all {kind} that would be dealt by {n} other than {t}"))
+            }
             // "If you would begin your draw step, you may skip that step instead. If you
             // do, you gain 2 life."
             (E::SkipStep { step, whose }, A::Instead(e)) if def.optional => {

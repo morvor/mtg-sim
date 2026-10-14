@@ -134,6 +134,43 @@ impl Renderer<'_> {
                 let s = self.effect(&other);
                 Some(format!("if it's paired with a creature, {s}"))
             }
+            // "At the beginning of the next end step, exile that token unless ~ is your
+            // Ring-bearer": an instruction done if a condition is false.
+            Effect::If {
+                cond: Condition::Not(c),
+                then,
+                otherwise,
+            } if matches!(otherwise.as_ref(), Effect::Noop)
+                && matches!(c.as_ref(), Condition::SelMatches(Sel::This, Filter::Custom(_))) =>
+            {
+                let neg = self.condition(&Condition::Not(c.clone()));
+                let pos = self.condition(c);
+                let x = self.effect(then);
+                Some(format!("{{alt:if {neg}, {x}|{x} unless {pos}}}"))
+            }
+            // "You may draw an additional card if ~ is enchanted": the choice and the
+            // condition, either way round.
+            Effect::May { who, effect } => {
+                let Effect::If {
+                    cond,
+                    then,
+                    otherwise,
+                } = effect.as_ref()
+                else {
+                    return None;
+                };
+                if !matches!(otherwise.as_ref(), Effect::Noop)
+                    || !matches!(cond, Condition::SelMatches(Sel::This, _))
+                {
+                    return None;
+                }
+                let c = self.condition(cond);
+                let m = self.effect(&Effect::May {
+                    who: who.clone(),
+                    effect: then.clone(),
+                });
+                Some(format!("{{alt:if {c}, {m}|{m} if {c}}}"))
+            }
             _ => None,
         }
     }
@@ -198,7 +235,7 @@ impl Renderer<'_> {
                     return None;
                 };
                 let w = self.player(p, Case::Subj);
-                Some(format!("who has more life than {w} do"))
+                Some(format!("who has more life than {w}"))
             }
             PlayerFilter::HandSize(Cmp::Ge, v) => {
                 let Value::Sum(parts) = v.as_ref() else {
@@ -209,7 +246,7 @@ impl Renderer<'_> {
                 };
                 let w = self.player(p, Case::Subj);
                 Some(format!(
-                    "who has at least {} more cards in hand than {w} do",
+                    "who has at least {} more cards in hand than {w}",
                     number_word(*k)
                 ))
             }
@@ -218,7 +255,7 @@ impl Renderer<'_> {
                     return None;
                 };
                 let w = self.player(p, Case::Subj);
-                Some(format!("who has more cards in hand than {w} do"))
+                Some(format!("who has more cards in hand than {w}"))
             }
             PlayerFilter::Controls(f, Cmp::Gt, v) => {
                 let Value::Count(g) = v.as_ref() else {
@@ -245,16 +282,21 @@ impl Renderer<'_> {
                     Ok(p) => self.player(&p, Case::Subj),
                     Err(r) => self.rel_subject(r),
                 };
-                Some(format!("who controls more {n} than {w} do"))
+                Some(format!("who controls more {n} than {w}"))
+            }
+            // "who has more life than you do as you activate this ability".
+            PlayerFilter::AsChosen(x) => {
+                let q = self.player_quality_terms(x)?;
+                Some(format!("{q} do as you activate this ability"))
             }
             // "who controls more lands than they do and is their opponent".
             PlayerFilter::And(v) => {
                 let [PlayerFilter::OpponentOf(r), q] = v.as_slice() else {
                     return None;
                 };
-                let q = self.player_quality_terms(q)?;
+                let q = format!("{} do", self.player_quality_terms(q)?);
                 let p = self.player(r, Case::Poss);
-                Some(format!("{q} and is {p} opponent"))
+                Some(format!("{q} and {{opt:that player}} is {p} opponent"))
             }
             _ => None,
         }

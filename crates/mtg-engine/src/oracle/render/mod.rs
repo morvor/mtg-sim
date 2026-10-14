@@ -845,6 +845,9 @@ pub struct Renderer<'a> {
     /// What a target slot of the ability a cost change is about is called ("the
     /// creature it targets"), while a cost change of that ability is rendered.
     pub(crate) targeted_noun: Option<&'static str>,
+    /// Rendering a noun phrase both with and without its shared qualities factored out
+    /// (see `nouns::factor_or`).
+    pub(crate) factoring: bool,
     /// The target an effect done "for each" target is about (a single target).
     pub(crate) each_target: Option<u8>,
     /// Targets remembered in variables, first mentioned through them: (variable, target
@@ -951,6 +954,7 @@ impl<'a> Renderer<'a> {
             target_vars: Vec::new(),
             target_stack: Vec::new(),
             targeted_noun: None,
+            factoring: false,
         }
     }
 

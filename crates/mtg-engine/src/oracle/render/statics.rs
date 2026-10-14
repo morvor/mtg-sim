@@ -1192,7 +1192,33 @@ impl Renderer<'_> {
                 format!("{}{who}{}", &target[..i], &target[i..]),
                 String::new(),
             ),
+            // "Noncreature spells your opponents cast with mana value 4 or greater": the
+            // caster before or after a quality.
+            _ if who.split_whitespace().count() >= 2
+                && matches!(
+                    cm.change,
+                    CostChange::ReduceGeneric(_) | CostChange::IncreaseGeneric(_)
+                )
+                && !target.contains('{')
+                && target.contains(" with ") =>
+            {
+                let i = target.find(" with ").unwrap_or(0);
+                (
+                    format!(
+                        "{{alt:{target}{who}|{}{who}{}}}",
+                        &target[..i],
+                        &target[i..]
+                    ),
+                    String::new(),
+                )
+            }
             _ => (target, who),
+        };
+        // "Abilities you activate that aren't mana abilities": abilities a player
+        // activates are activated abilities (CR 602.1).
+        let target = match target.strip_prefix("activated abilities you activate ") {
+            Some(r) => format!("{{opt:activated}} abilities you activate {r}"),
+            None => target,
         };
         let act = if is_spell { "to cast" } else { "to activate" };
         let costs = if matches!(cm.applies_to, CostTarget::ThisSpell) {
@@ -3327,6 +3353,16 @@ impl Renderer<'_> {
                     })
                     .collect();
                 let m = match rest.as_slice() {
+                    // "Your starting deck contains only cards with even mana values".
+                    [Filter::Custom(n)] if n == crate::kw::companion::EVEN_MANA_VALUE => {
+                        return format!(
+                            "{{alt:your starting deck contains only {} with even mana values|each {e} in your starting deck has an even mana value}}",
+                            plural(&e)
+                        );
+                    }
+                    [Filter::Custom(n)] if n == crate::kw::companion::HAS_ACTIVATED_ABILITY => {
+                        "has an activated ability".to_string()
+                    }
                     // "has mana value 2 or less".
                     [Filter::ManaValue(c, v)] => {
                         let v = self.value(v);

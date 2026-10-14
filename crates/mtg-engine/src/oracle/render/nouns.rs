@@ -918,14 +918,6 @@ impl Renderer<'_> {
             // "each other permanent with the same name as that permanent": other than
             // the target just named.
             // "it gets +1/+1 for each other creature you control": other than "it".
-            // "creatures other than target creature": a target not named before.
-            Filter::In(s)
-                if matches!(s.as_ref(), Sel::Target(i)
-                    if !self.introduced.get(*i as usize).copied().unwrap_or(true)) =>
-            {
-                let t = self.sel(s, Case::Obj);
-                np.post.push(format!("other than {t}"));
-            }
             Filter::In(s)
                 if matches!(
                     s.as_ref(),
@@ -1026,6 +1018,15 @@ impl Renderer<'_> {
                 let w = self.shared_with(x);
                 np.rel
                     .push(format!("that {{alt:doesn't|don't}} share {what} with {w}"));
+            }
+            // "each creature except for tokens you control": the same objects.
+            other @ Filter::And(_) => {
+                let s = self.noun(other, Num::One);
+                let many = self.noun(other, Num::Many);
+                np.rel.push(format!(
+                    "{{alt:that isn't {}|except for {many}}}",
+                    with_article(&s)
+                ));
             }
             other => {
                 let s = self.noun(other, Num::One);
@@ -1503,6 +1504,18 @@ impl Renderer<'_> {
 
     /// A determiner + noun phrase.
     pub(crate) fn noun_det(&mut self, f: &Filter, det: Det) -> String {
+        // "Auras you control and Equipment you control" or "Auras and Equipment you
+        // control": cards say the shared qualities once or for each alternative.
+        if !self.factoring {
+            let g = factor_or(f);
+            if format!("{g:?}") != format!("{f:?}") {
+                self.factoring = true;
+                let d2 = det.clone();
+                let (a, b) = self.two_ways(|r| r.noun_det(f, det), |r| r.noun_det(&g, d2));
+                self.factoring = false;
+                return if a == b { a } else { format!("{{alt:{a}|{b}}}") };
+            }
+        }
         if let Filter::Custom(n) = f {
             if let Some(s) = self.custom_noun(n) {
                 return s;
@@ -1528,7 +1541,7 @@ impl Renderer<'_> {
         }
         // A complex union inside a conjunction: "basic land card or Gate card in your
         // library" is "basic land card in your library or Gate card in your library".
-        let f = &flatten_or(&distribute_or(&factor_or(f)));
+        let f = &flatten_or(&distribute_or(f));
         // A complex union: each alternative gets the determiner ("~ or another creature");
         // a count applies to all of them ("up to two basic land cards and/or Gate cards").
         if let Filter::Or(v) = f {
