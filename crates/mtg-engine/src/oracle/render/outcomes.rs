@@ -195,6 +195,7 @@ impl Renderer<'_> {
         known: &mut Vec<(Var, OutcomeVerb)>,
     ) -> Option<(usize, String)> {
         self.tail_seq_part(v, i)
+            .or_else(|| self.remembered_group_part(v, i))
             .or_else(|| self.block_pair_phase_part(v, i))
             .or_else(|| self.chosen_from_targets_part(v, i))
             .or_else(|| self.any_opponent_sacrifices_part(v, i))

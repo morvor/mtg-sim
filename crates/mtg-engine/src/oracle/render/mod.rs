@@ -45,6 +45,7 @@ mod opt_in;
 mod outcomes;
 mod play_terms;
 mod players;
+mod remembered_groups;
 mod replacement_terms;
 mod spell_cost_terms;
 mod statics;

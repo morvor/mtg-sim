@@ -132,3 +132,25 @@ fn mog_sees_the_cards_every_player_discarded() {
     assert_eq!(moogles.len(), 1, "{}", t.dump_log());
     assert_eq!(t.counters(moogles[0], "+1/+1"), 1, "{}", t.dump_log());
 }
+
+#[test]
+fn behemoth_of_vault_0_destroys_the_dies_triggers_target() {
+    cr!("603.12", "115.1");
+    ruling!(
+        "Behemoth of Vault 0",
+        "You choose the target of Behemoth of Vault 0’s last ability when it triggers"
+    );
+    // "When this creature dies, you may pay an amount of {E} equal to target nonland
+    // permanent's mana value. When you do, destroy that permanent."
+    let mut t = TestGame::new(2);
+    let behemoth = t.battlefield(P0, "Behemoth of Vault 0");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.add_counters(Entity::Player(P0), "energy", 3, None);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_yes(P0, true);
+    t.g.destroy(behemoth, None);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"), "{}", t.dump_log());
+    assert_eq!(t.g.player(P0).counter("energy"), 1);
+}

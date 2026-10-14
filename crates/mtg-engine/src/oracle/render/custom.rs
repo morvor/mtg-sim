@@ -603,6 +603,30 @@ impl Renderer<'_> {
             n if n.starts_with("door unlocked:") => "when you unlock this door".into(),
             "mutates:self" => format!("{} mutates", self.me()),
             "die:highest natural result:you" => "you roll a die's highest natural result".into(),
+            // "When you roll a natural 20", "whenever you roll your third die each turn"
+            // (CR 706.2).
+            n if n.starts_with(crate::dice::NATURAL_N) || n.starts_with(crate::dice::NTH_DIE) => {
+                let natural = n.starts_with(crate::dice::NATURAL_N);
+                let rest = n
+                    .strip_prefix(crate::dice::NATURAL_N)
+                    .or_else(|| n.strip_prefix(crate::dice::NTH_DIE))
+                    .unwrap_or_default();
+                let (k, who) = match rest.trim_start_matches(':').split_once(':') {
+                    Some((k, w)) => (k.parse::<u32>().ok(), w),
+                    None => (None, ""),
+                };
+                let (subj, poss) = match who {
+                    "you" => ("you roll", "your"),
+                    "opponent" => ("an opponent rolls", "their"),
+                    "any" => ("a player rolls", "their"),
+                    _ => return self.gap(format!("TriggerCond::Custom({n})")),
+                };
+                match (k, natural) {
+                    (Some(k), true) => format!("{subj} a natural {k}"),
+                    (Some(k), false) => format!("{subj} {poss} {} die each turn", ordinal_word(k)),
+                    _ => self.gap(format!("TriggerCond::Custom({n})")),
+                }
+            }
             n if n.starts_with("class becomes level:") => {
                 let l = &n["class becomes level:".len()..];
                 format!("{} becomes level {l}", self.me())
@@ -839,12 +863,19 @@ impl Renderer<'_> {
             crate::kw::game_rules::ENCHANTED_ONLY_MANA_OR_LOYALTY => {
                 "enchanted player can't activate abilities that aren't mana abilities or loyalty abilities".into()
             }
+            crate::block_choice::ATTACKING_PLAYER_CHOOSES_BLOCKS => {
+                "the attacking player chooses how each creature blocks each combat".into()
+            }
             other => self.gap(format!("Restriction::Custom({other})")),
         }
     }
 
     /// A modification implemented in code (`Modification::Custom`), as a verb phrase.
     pub(crate) fn custom_modification(&mut self, name: &str) -> String {
+        // Layer 6 (CR 613.1f).
+        if name == crate::kw::mana_grammar::EXCEPT_MANA_ABILITIES {
+            return "lose all abilities except mana abilities".into();
+        }
         match self.custom_modification_more(name) {
             Some(s) => s,
             None => match self.custom_modification_extra(name) {

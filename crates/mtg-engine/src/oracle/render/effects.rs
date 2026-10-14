@@ -2651,7 +2651,13 @@ impl Renderer<'_> {
             // ability says "that player" (CR 607.1).
             Effect::NoteLinked { .. } => String::new(),
             Effect::Reflexive { body } => {
-                let b = self.in_event_scope(|r| r.body(body));
+                // A reflexive trigger without targets of its own refers to the targets of
+                // the ability that created it ("destroy that permanent").
+                let b = if body.targets.is_empty() && body.modal.is_none() && !self.targets.is_empty() {
+                    self.in_event_scope(|r| r.effect_sentences(&body.effect))
+                } else {
+                    self.in_event_scope(|r| r.body(body))
+                };
                 format!("when you do, {}", lower_first(&b))
             }
             Effect::AtNext { step, effect } => {
@@ -2930,6 +2936,10 @@ impl Renderer<'_> {
                     } else {
                         format!("{{alt:{w} is no longer suspected|{w} becomes no longer suspected|have {w} become no longer suspected}}")
                     };
+                } else if spec.undo && spec.action == KeywordAction::Goad {
+                    // "Each creature you control is no longer goaded" (CR 701.15).
+                    let w = self.sel(&spec.what, Case::Subj);
+                    s = format!("{w} is no longer goaded");
                 } else if spec.undo {
                     s = format!("{s} (undo)");
                     s = self.gap(format!("keyword action undo: {s}"));
