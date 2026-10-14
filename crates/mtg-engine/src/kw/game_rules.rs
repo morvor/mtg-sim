@@ -30,6 +30,9 @@ pub fn neighbor(g: &Game, p: PlayerId, left: bool) -> PlayerId {
     p
 }
 
+/// `Condition::Custom` name: the current turn is an extra turn (CR 500.7).
+pub const EXTRA_TURN: &str = "game rules:it's an extra turn";
+
 /// `Filter::Custom` name: a Ring-bearer, of any player ("protection from Ring-bearers",
 /// CR 701.54e).
 pub const ANY_RING_BEARER: &str = "game rules:a ring-bearer";
@@ -94,6 +97,10 @@ pub struct GameRules;
 impl KeywordRules for GameRules {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
+    }
+
+    fn custom_condition(&self, g: &Game, name: &str, _ctx: &Ctx) -> Option<bool> {
+        (name == EXTRA_TURN).then_some(g.turn.extra)
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {

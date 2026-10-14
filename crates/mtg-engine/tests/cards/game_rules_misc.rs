@@ -146,3 +146,20 @@ fn lord_of_the_nazgul_wraiths_have_protection_from_ring_bearers() {
     assert!(t.g.matches(bears, &prot[0], &ctx));
     assert!(!t.g.matches(giant, &prot[0], &ctx));
 }
+
+#[test]
+fn medomai_cant_attack_during_extra_turns() {
+    cr!("500.7", "508.1c");
+    assert_supported(&["Medomai the Ageless"]);
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Medomai the Ageless");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.g.turn.extra = true;
+    t.attack(&[(m, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 20);
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Medomai the Ageless");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(m, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 16);
+}

@@ -67,3 +67,26 @@ fn source_and_it_phase_out(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "game rules: ~ and that creature phase out", priority: 100, parse: source_and_it_phase_out } }
+
+/// "~ can't attack during extra turns." (Medomai the Ageless): the restriction applies
+/// while the current turn is an extra turn (CR 500.7).
+fn during_extra_turns(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_suffix(" during extra turns")?;
+    let parsed = crate::oracle::statics::parse_static(r, ctx)?;
+    parsed
+        .into_iter()
+        .map(|a| {
+            let AbilityKind::Static(s) = &a.kind else {
+                return None;
+            };
+            if s.condition.is_some() {
+                return None;
+            }
+            let mut s = s.clone();
+            s.condition = Some(Condition::Custom(crate::kw::game_rules::EXTRA_TURN.into()));
+            Some(AbilityDef::new(AbilityKind::Static(s), text))
+        })
+        .collect()
+}
+
+inventory::submit! { super::StaticPattern { name: "game rules: [static] during extra turns", priority: 100, parse: during_extra_turns } }
