@@ -44,7 +44,7 @@ and docs/roundtrip-passing.txt; `roundtrip --check` must pass.
 
 Re-run on the branch (Oct 14): the clusters kept their shape, with one or two more cards
 each (`--clusters 80`); the taken clusters hold 120 cards. 25,597 of 28,918 cards passed
-at the start; 25,767 of 28,971 pass after (merged with origin, whose passing list had 25,593 before this item).
+at the start; 25,767 of 28,971 pass after (merged with origin, whose passing list had 25,593 before this item); 25,861 of 28,994 after merging roundtrip-clusters-3 and the other landings for the review.
 
 Renderer changes (all in `crates/mtg-engine/src/oracle/render/`, new files
 `block_pairs.rs`, `chosen_from_targets.rs`, `flashback_reduction.rs`, `joined_lines.rs`):

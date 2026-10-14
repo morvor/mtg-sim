@@ -3,6 +3,7 @@
 //! face-down pile and a face-up pile." (Riddles in the Dark, Curator of Destinies),
 //! "Target opponent looks at the top three cards of your library and separates them into
 //! a face-down pile and a face-up pile." (Atris, Oracle of Half-Truths; Fortune's Favor),
+//! "Choose an opponent. They look at ... and separate them into ..." (Sauron's Ransom),
 //! followed by "An opponent chooses one of the piles." and where the piles go (see
 //! `r700_piles.rs`). The face-up pile's cards are revealed; the face-down pile's aren't,
 //! wherever they go.
@@ -37,6 +38,12 @@ fn face_down_piles(l: &str, b: &mut Builder) -> Option<Effect> {
             " cards of your library and separate them into a face-down pile and a face-up pile",
         )?;
         (None, r)
+    } else if let Some(r) = l.strip_prefix("they look at the top ") {
+        // "Choose an opponent. They look at ...": the chosen opponent.
+        let r = r.strip_suffix(
+            " cards of your library and separate them into a face-down pile and a face-up pile",
+        )?;
+        (Some("they"), r)
     } else {
         let (subject, r) = l.split_once(" looks at the top ")?;
         let r = r.strip_suffix(
@@ -54,6 +61,11 @@ fn face_down_piles(l: &str, b: &mut Builder) -> Option<Effect> {
     n.as_const()?;
     let separator = match separator {
         None => PlayerRef::You,
+        // "They": the opponent an earlier "Choose an opponent." chose.
+        Some("they") => match b.it_player {
+            PlayerRef::ChosenOpponent => PlayerRef::ChosenOpponent,
+            _ => return None,
+        },
         Some(subject) => {
             let (who, rest) = player_ref(subject, b)?;
             if !rest.trim().is_empty() {
@@ -79,6 +91,9 @@ fn choose_one_of_the_piles(l: &str, _b: &mut Builder) -> Option<Effect> {
     (end(l) == "an opponent chooses one of the piles").then(|| {
         Effect::Piles(Box::new(PileAction::Choose {
             chooser: PlayerRef::EachOpponent,
+            picked_by: None,
+            of: None,
+            at_random: false,
         }))
     })
 }

@@ -1280,14 +1280,20 @@ impl Renderer<'_> {
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
             CostChange::ReduceColored(c, v) => {
                 let sym = mana_symbol(crate::mana::ManaType::from_color(*c));
-                let s = match v {
-                    Value::Const(n) if *n > 0 => sym.repeat(*n as usize),
-                    other => {
-                        let v = self.value(other);
-                        format!("{sym} for each {v}")
-                    }
+                let (s, tail) = match v {
+                    Value::Const(n) if *n > 0 => (sym.repeat(*n as usize), String::new()),
+                    // "~ costs {G} less to cast for each green creature you control".
+                    other => match self.per_each(other) {
+                        Some((k, each)) if k > 0 => {
+                            (sym.repeat(k as usize), format!(" for each {each}"))
+                        }
+                        _ => {
+                            let v = self.value(other);
+                            (sym.to_string(), format!(" for each {v}"))
+                        }
+                    },
                 };
-                format!("{target}{who} {costs} {s} less {act}")
+                format!("{target}{who} {costs} {s} less {act}{tail}")
             }
             CostChange::ReduceMana { mana, colored_only } => {
                 // "As an additional cost to cast green permanent spells, you may pay 2 life.
@@ -1511,10 +1517,15 @@ impl Renderer<'_> {
                 let sym = mana_symbol(crate::mana::ManaType::from_color(*c));
                 match v {
                     Value::Const(n) if *n > 0 => ("less", sym.repeat(*n as usize), String::new()),
-                    other => {
-                        let v = self.value(other);
-                        ("less", sym.to_string(), format!(" for each {v}"))
-                    }
+                    other => match self.per_each(other) {
+                        Some((k, each)) if k > 0 => {
+                            ("less", sym.repeat(k as usize), format!(" for each {each}"))
+                        }
+                        _ => {
+                            let v = self.value(other);
+                            ("less", sym.to_string(), format!(" for each {v}"))
+                        }
+                    },
                 }
             }
             other => {
@@ -1663,10 +1674,36 @@ impl Renderer<'_> {
                 ("{1}".into(), format!(" for {}", join_list(&parts, "and")))
             }
             other => {
+                // "{2} less to cast for each creature card in your graveyard": an amount
+                // for each of something counted.
+                if let Some((k, each)) = self.per_each(other) {
+                    return (format!("{{{k}}}"), format!(" for each {each}"));
+                }
                 let s = self.value(other);
                 ("{X}".into(), format!(", where X is {s}"))
             }
         }
+    }
+
+    /// A number written as an amount "for each" thing counted: (the amount per thing,
+    /// the thing). `2 × the number of creature cards in your graveyard` is {2} for each
+    /// creature card in your graveyard; the amount of life gained is one for each 1 life.
+    pub(crate) fn per_each(&mut self, v: &Value) -> Option<(i32, String)> {
+        let (k, inner) = match v {
+            Value::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
+                (Value::Const(k), x) | (x, Value::Const(k)) if *k > 0 => (*k, x),
+                _ => return None,
+            },
+            other => (1, other),
+        };
+        if let Value::Count(f) = inner {
+            return Some((k, self.for_each_noun(f)));
+        }
+        let s = self.value(inner);
+        if let Some(r) = s.strip_prefix("the number of ") {
+            return Some((k, r.to_string()));
+        }
+        None
     }
 
     /// The text of a restriction (a rule-modifying effect, CR 613.11).
@@ -2485,7 +2522,16 @@ impl Renderer<'_> {
                     (Some(f), None) => format!("leave {}", self.zone_src(*f)),
                     (None, None) => "change zones".into(),
                 };
-                let then = self.replacement_then(action, "it");
+                let then = match action {
+                    // "reveal ~ and shuffle it into its owner's library instead": the
+                    // object itself is revealed, named again in the instruction.
+                    A::RevealAndMoveInstead(d) if matches!(filter, Filter::Source) => {
+                        let me = self.me();
+                        let t = self.replacement_then(&A::MoveInstead(d.clone()), "it");
+                        format!("reveal {me} and {t}")
+                    }
+                    _ => self.replacement_then(action, "it"),
+                };
                 format!("if {subj} would {where_}, {then}")
             }
             (E::Destroy(f), action) => {
@@ -3493,7 +3539,13 @@ impl Renderer<'_> {
         match d {
             D::ExtraDie { who } => {
                 let w = self.rel_subject(*who);
-                format!("if {w} would roll one or more dice, instead {w} roll that many dice plus one and ignore the lowest roll")
+                // "instead roll that many dice": you, told to.
+                let w2 = if w == "you" {
+                    "{opt:you}".to_string()
+                } else {
+                    w.clone()
+                };
+                format!("if {w} would roll one or more dice, instead {w2} roll that many dice plus one and ignore the lowest roll")
             }
             D::ExtraCoin { who } => {
                 let w = self.rel_subject(*who);

@@ -115,7 +115,9 @@ impl Renderer<'_> {
                 let words: Vec<String> = (a..=m).map(number_word).collect();
                 Some(join_list(&words, "or"))
             }
-            (Some(1), Some(m)) if m > 1 && m < 100 => Some(format!("one or {}", number_word(m))),
+            // "One or more target creatures" (no upper bound, as "any number" is written).
+            (Some(1), Some(m)) if m >= 99 => Some("one or more".into()),
+            (Some(1), Some(m)) if m > 1 && m < 99 => Some(format!("one or {}", number_word(m))),
             (Some(0), Some(_)) | (Some(0), None) if matches!(t.max, Value::Const(_)) => {
                 Some("any number of".into())
             }
@@ -467,6 +469,16 @@ impl Renderer<'_> {
                 Case::Obj => "them".into(),
                 Case::Poss => "their".into(),
             };
+        }
+        // "~ deals 3 damage to any target. ... to that permanent or player": a target
+        // that may be a player or an object.
+        if matches!(case, Case::Obj)
+            && self
+                .targets
+                .get(idx)
+                .is_some_and(|t| matches!(t.what, TargetKind::AnyTarget))
+        {
+            return "{alt:it|that permanent or player}".into();
         }
         match case {
             Case::Poss => "its".into(),
@@ -873,8 +885,7 @@ impl Renderer<'_> {
             Sel::TopOfLibrary(p, n) => {
                 let p = self.player(p, Case::Poss);
                 let s = match n {
-                    Value::Const(1) => format!("the top card of {p} library"),
-                    Value::Const(k) => format!("the top {} cards of {p} library", number_word(*k)),
+                    Value::Const(_) | Value::EventAmount | Value::Prev => self.top_cards(n, &p),
                     other => {
                         let v = self.value(other);
                         format!("the top {v} cards of {p} library")

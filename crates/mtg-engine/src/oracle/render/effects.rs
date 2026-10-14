@@ -360,6 +360,10 @@ impl Renderer<'_> {
             }
         }
         let s = self.player(who, Case::Subj);
+        // "Target opponent reveals their hand. ... They discard that card."
+        if s == "that player" && matches!(who, PlayerRef::Target(_)) {
+            return format!("{{alt:that player|they}} {}", third_person(vp));
+        }
         format!("{s} {}", third_person(vp))
     }
 
@@ -1147,6 +1151,17 @@ impl Renderer<'_> {
                     match self.remember_union(var, parts) {
                         Some(s) => s,
                         None => self.gap(format!("remembering {sel:?}")),
+                    }
+                }
+                // "Choose a creature at random" (CR 608.2d): the one chosen is "it" later.
+                Sel::AtRandom { filter, count, .. } => {
+                    let det = self.det_for(count);
+                    let n = self.noun_det(filter, det);
+                    match n.split_once(" that ") {
+                        Some((head, rel)) => format!(
+                            "{{alt:choose {head} at random that {rel}|choose {n} at random}}"
+                        ),
+                        None => format!("choose {n} at random"),
                     }
                 }
                 other => self.gap(format!("remembering {other:?}")),
@@ -2072,7 +2087,12 @@ impl Renderer<'_> {
                 format!("regenerate {w}")
             }
             Effect::Attach { what, to } | Effect::AttachAsCreature { what, to } => {
+                // (Naming a target doesn't make "it" in "to it" the target.)
+                let salient = self.self_salient;
                 let w = self.sel(what, Case::Obj);
+                if matches!(to, Sel::This) && !matches!(what, Sel::This) {
+                    self.self_salient = salient;
+                }
                 // "attach ~ to another instant card in a graveyard": other than the card it
                 // enchants.
                 if let Sel::Choose {
@@ -2089,7 +2109,13 @@ impl Renderer<'_> {
                         }
                     }
                 }
+                // "attach target Equipment to it": "it" isn't the object being attached.
+                let saved = self.other_salient;
+                if matches!(to, Sel::This) && !matches!(what, Sel::This) {
+                    self.other_salient = false;
+                }
                 let t = self.sel(to, Case::Obj);
+                self.other_salient = saved;
                 format!("attach {w} to {t}")
             }
             Effect::Unattach { what } => {
@@ -2997,24 +3023,85 @@ impl Renderer<'_> {
                         format!("{s} {}", third_person(&vp))
                     }
                 }
-                crate::piles::PileAction::Separate { what, separator } => {
+                crate::piles::PileAction::Separate {
+                    what,
+                    separator,
+                    count,
+                    face_down,
+                    own,
+                } => {
                     let w = self.sel(what, Case::Obj);
                     let s = self.some_player(separator);
-                    let vp = format!("separate {w} into two piles");
-                    if s == "you" {
-                        vp
+                    let n = if *count == 3 { "three" } else { "two" };
+                    let piles = if *face_down {
+                        format!("{n} face-down piles")
                     } else {
-                        format!("{s} separates {w} into two piles")
+                        format!("{n} piles")
+                    };
+                    let _ = own;
+                    if s == "you" {
+                        format!("separate {w} into {piles}")
+                    } else {
+                        format!("{s} separates {w} into {piles}")
                     }
                 }
-                crate::piles::PileAction::Choose { chooser } => {
+                crate::piles::PileAction::Choose {
+                    chooser,
+                    picked_by,
+                    of,
+                    at_random,
+                } => {
                     let c = self.some_player(chooser);
-                    if c == "you" {
-                        "choose one of those piles".to_string()
+                    let piles = if of.is_some() { "their piles" } else { "those piles" };
+                    if *at_random {
+                        format!("{c} chooses one of {piles} at random")
+                    } else if picked_by.is_some() {
+                        format!("one of {piles} is chosen by {c} of their choice")
+                    } else if c == "you" {
+                        format!("choose one of {piles}")
                     } else {
                         format!("{c} chooses one of {{alt:those|the}} piles")
                     }
                 }
+                crate::piles::PileAction::ExileAsPile {
+                    what,
+                    pile,
+                    face_down,
+                    ..
+                } => {
+                    let w = self.sel(what, Case::Obj);
+                    let kind = if *face_down { "face-down" } else { "face-up" };
+                    let a = if *pile > 0 { "another" } else { "a" };
+                    format!("exile {w} in {a} {kind} pile")
+                }
+                crate::piles::PileAction::Look { what } => {
+                    format!("look at {}", self.sel(what, Case::Obj))
+                }
+                crate::piles::PileAction::TurnFaceUp { chooser } => {
+                    let c = self.some_player(chooser);
+                    if c == "you" {
+                        "turn a pile of your choice face up".to_string()
+                    } else {
+                        format!("{c} turns a pile face up")
+                    }
+                }
+                crate::piles::PileAction::Recall { .. } => String::new(),
+                crate::piles::PileAction::Shuffle { what } => {
+                    format!("shuffle {}", self.sel(what, Case::Obj))
+                }
+                crate::piles::PileAction::Top { from } => {
+                    format!("the top card of {}", self.sel(from, Case::Obj))
+                }
+                crate::piles::PileAction::PutOnLibrary { what } => {
+                    format!(
+                        "put {} on top of your library",
+                        self.sel(what, Case::Obj)
+                    )
+                }
+                crate::piles::PileAction::SearchPile { what } => format!(
+                    "search {} for a card, put it into your hand, then shuffle the rest of that pile into your library",
+                    self.sel(what, Case::Obj)
+                ),
             },
             Effect::Exchange(x) => self.exchange(x),
             Effect::Custom(name) => self.custom_effect(name),
@@ -3352,7 +3439,7 @@ impl Renderer<'_> {
                     // "Choose one of those piles. Put that pile ..." is "put one pile ..."
                     // when you choose.
                     let you_chose = i > 0
-                        && matches!(&v[i - 1], Effect::Piles(p) if matches!(p.as_ref(), crate::piles::PileAction::Choose { chooser: PlayerRef::You }));
+                        && matches!(&v[i - 1], Effect::Piles(p) if matches!(p.as_ref(), crate::piles::PileAction::Choose { chooser: PlayerRef::You, at_random: false, .. }));
                     if you_chose
                         && parts
                             .last()
@@ -3363,6 +3450,33 @@ impl Renderer<'_> {
                     } else {
                         parts.push(format!("put that pile {da} and the other {db}"));
                     }
+                    i += 2;
+                    continue;
+                }
+            }
+            // "Look at the top four cards ... You may reveal a land card from among them and
+            // put it into your hand. ... If you didn't put a card into your hand this way,
+            // proliferate.": whether the dig took a card (CR 608.2c).
+            if let (
+                Some(dig @ Effect::Dig { take, take_to, .. }),
+                Some(Effect::If {
+                    cond: Condition::Not(c),
+                    then,
+                    otherwise,
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if take_to.zone == ZoneKind::Hand
+                    && !matches!(take, Value::Const(0))
+                    && matches!(c.as_ref(), Condition::PrevHappened)
+                    && matches!(otherwise.as_ref(), Effect::Noop)
+                {
+                    let d = self.effect(dig);
+                    let t = self.effect(then);
+                    parts.push(d);
+                    parts.push(format!(
+                        "{{alt:if you don't|if you didn't put a card into your hand this way}}, {t}"
+                    ));
                     i += 2;
                     continue;
                 }
@@ -3378,9 +3492,19 @@ impl Renderer<'_> {
             {
                 if !format!("{:?}", &v[i + 2..]).contains("ChosenOpponent") {
                     let n = self.effect(next);
-                    if let Some(rest) = n.strip_prefix("the chosen opponent ") {
-                        if !rest.contains("chosen opponent") {
-                            parts.push(format!("an opponent {rest}"));
+                    // The one mention of the chosen opponent: "an opponent gains control
+                    // of ~", "look at an opponent's hand" (as "clash with an opponent"
+                    // means "choose an opponent. You and that opponent each clash", CR
+                    // 701.30b).
+                    let chosen = [
+                        ("the chosen {alt:opponent|player}", "an opponent"),
+                        ("the chosen {alt:opponent's|player's}", "an opponent's"),
+                        ("the chosen opponent", "an opponent"),
+                    ];
+                    let mentions: usize = chosen.iter().map(|(c, _)| n.matches(*c).count()).sum();
+                    if mentions == 1 && !n.contains("chosen player") {
+                        if let Some((c, r)) = chosen.iter().find(|(c, _)| n.contains(*c)) {
+                            parts.push(n.replacen(c, r, 1));
                             i += 2;
                             continue;
                         }
@@ -4084,6 +4208,20 @@ impl Renderer<'_> {
             }
             // "X. If C, Y instead." (the comparison treats "If C, Y. Otherwise, X." the
             // same): the default effect comes first, so it names the targets.
+            // "If ~ is suspected, put a +1/+1 counter on it. Otherwise, suspect it.": the
+            // condition names the object first (the comparison reorders either form).
+            _ if !else_empty
+                && matches!(cond, Condition::SelMatches(Sel::This, _))
+                && [then, otherwise].iter().all(|e| {
+                    let d = format!("{e:?}");
+                    d.contains("This") && !d.contains("Target(")
+                }) =>
+            {
+                let c = self.condition(cond);
+                let t = self.effect(then);
+                let o = self.effect(otherwise);
+                format!("If {c}, {t}. Otherwise, {o}")
+            }
             _ if !else_empty => {
                 let o = self.effect(otherwise);
                 let c = self.condition(cond);
@@ -4095,6 +4233,7 @@ impl Renderer<'_> {
                     if same_sel(a, b) {
                         if let Some(head) = t
                             .strip_suffix(" to it")
+                            .or_else(|| t.strip_suffix(" to {alt:it|that permanent or player}"))
                             .or_else(|| t.strip_suffix(" to them"))
                         {
                             t = format!("{head} {{opt:to it}}");
@@ -4577,9 +4716,9 @@ impl Renderer<'_> {
                     let c = self.player(c, Case::Poss);
                     s.push_str(&format!(" under {c} control"));
                 }
-                None if !yours => {
-                    s.push_str(&format!(" under {owner} control"));
-                }
+                // No controller named: the player putting it there (CR 110.2a), whoever
+                // owns it ("return a card exiled with ~ to the battlefield").
+                None if !yours && !self.in_as_player => s.push_str(" {opt:under your control}"),
                 None => {}
             }
             if let Some(a) = &to.attached_to {
@@ -4930,18 +5069,13 @@ impl Renderer<'_> {
             self.possessive_for(who)
         };
         let top = match n {
-            Value::Const(1) => format!("the top card of {p} library"),
-            Value::Const(k) => format!("the top {} cards of {p} library", number_word(*k)),
             // "that many cards from the top of your library": the amount paid by "pay any
             // amount of ...".
             Value::X if self.extra.x_paid => format!(
                 "{{alt:the top X cards of {p} library|that many cards from the top of {p} library}}"
             ),
             // "the top X cards of your library, where X is ...".
-            other => {
-                let (v, w) = self.amount(other);
-                format!("the top {v} cards of {p} library{}", w.unwrap_or_default())
-            }
+            other => self.top_cards(other, &p),
         };
         let look = if reveal { "reveal" } else { "look at" };
         if only_look {
@@ -6036,7 +6170,8 @@ impl Renderer<'_> {
             ChoiceKind::CreatureTypeOtherThan(v) => {
                 format!("a creature type other than {}", join_list(v, "or"))
             }
-            ChoiceKind::CardName => "a card name".into(),
+            // "choose any card name": any card in the Oracle card reference (CR 201.4).
+            ChoiceKind::CardName => "{alt:a|any} card name".into(),
             ChoiceKind::CardNameFiltered(f) => format!("a {f} card name"),
             ChoiceKind::Number { min, max } => format!("a number from {min} to {max}"),
             ChoiceKind::Opponent => "an opponent".into(),
