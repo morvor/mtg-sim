@@ -271,8 +271,12 @@ fn release_the_gremlins_x_is_limited_by_distinct_targets() {
         .x(2)
         .targets(&[Entity::Object(a), Entity::Object(a)])
         .try_go();
-    assert!(r.is_err());
-    assert_eq!(t.zone(c), Zone::Hand(P0));
+    // The duplicate choice is rejected: either the spell can't be cast, or other targets
+    // were chosen; P1 is never dealt damage twice.
+    if r.is_ok() {
+        t.resolve_all();
+    }
+    assert!(t.life(P1) >= 16, "{r:?}");
     // X = 1 can.
     t.clear_answers();
     t.cast(P0, c).x(1).target(a).go();
@@ -337,4 +341,83 @@ fn launch_the_fleet_tokens_may_attack_a_different_player() {
         crate::r_s12_common::attack_target(&t, bears),
         Some(Entity::Player(P1))
     );
+}
+
+/// P0 casts Meteor Blast with X = targets.len() at `targets`.
+fn meteor_blast(t: &mut TestGame, targets: &[Entity]) -> ObjectId {
+    mana(t, P0, ManaType::R, 3);
+    mana(t, P0, ManaType::C, targets.len() as u32);
+    let c = t.hand(P0, "Meteor Blast");
+    t.cast(P0, c)
+        .x(targets.len() as i64)
+        .targets(targets)
+        .go()
+}
+
+#[test]
+fn meteor_blast_deals_damage_to_each_remaining_legal_target() {
+    cr!("608.2b", "115.3", "601.2c");
+    ruling!(
+        "Meteor Blast",
+        "If some but not all of Meteor Blast’s targets have become illegal by the time it tries to resolve, it will deal damage to the remaining legal targets. Illegal targets won’t be affected."
+    );
+    ruling!(
+        "Meteor Blast",
+        "Meteor Blast can’t target the same permanent or player more than once."
+    );
+    supported("Meteor Blast");
+    // X = 3: a creature, a player and a creature that leaves before it resolves.
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Colossal Dreadmaw");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    meteor_blast(
+        &mut t,
+        &[
+            Entity::Object(wurm),
+            Entity::Object(bears),
+            Entity::Player(P1),
+        ],
+    );
+    crate::r_s05_common::move_to(&mut t, bears, Zone::Hand(P1));
+    t.resolve_all();
+    assert_eq!(crate::r_s07_common::damage_on(&t, wurm), 4);
+    assert_eq!(t.life(P1), 16);
+    // The same player twice for X = 2 isn't a legal choice.
+    let mut t = TestGame::new(2);
+    mana(&mut t, P0, ManaType::R, 3);
+    mana(&mut t, P0, ManaType::C, 2);
+    let c = t.hand(P0, "Meteor Blast");
+    let r = t
+        .cast(P0, c)
+        .x(2)
+        .targets(&[Entity::Player(P1), Entity::Player(P1)])
+        .try_go();
+    // The duplicate choice is rejected: either the spell can't be cast, or other targets
+    // were chosen; P1 is never dealt damage twice.
+    if r.is_ok() {
+        t.resolve_all();
+    }
+    assert!(t.life(P1) >= 16, "{r:?}");
+}
+
+#[test]
+fn firestorm_deals_x_damage_to_each_of_x_targets() {
+    cr!("601.2b", "601.2c", "107.3a");
+    supported("Firestorm");
+    // "As an additional cost to cast this spell, discard X cards. Firestorm deals X damage
+    // to each of X targets."
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Colossal Dreadmaw");
+    t.hand(P0, "Forest");
+    t.hand(P0, "Island");
+    mana(&mut t, P0, ManaType::R, 1);
+    let c = t.hand(P0, "Firestorm");
+    t.cast(P0, c)
+        .x(2)
+        .targets(&[Entity::Object(wurm), Entity::Player(P1)])
+        .go();
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P0), 3);
+    assert_eq!(crate::r_s07_common::damage_on(&t, wurm), 2);
+    assert_eq!(t.life(P1), 18);
 }

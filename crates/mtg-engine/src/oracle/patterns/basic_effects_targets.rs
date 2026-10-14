@@ -714,6 +714,20 @@ fn damage_to_each_of(l: &str, b: &mut Builder) -> Option<Effect> {
             });
         }
     }
+    // "each of X targets" (Meteor Blast): exactly X different "any target"s (CR 115.3,
+    // 601.2c).
+    if end(r) == "x targets" {
+        let mut spec = TargetSpec::any_target();
+        spec.min = Value::X;
+        spec.max = Value::X;
+        spec.text = "x targets".to_string();
+        let slot = b.add_target(spec, "targets");
+        return Some(Effect::DealDamage {
+            source,
+            amount,
+            to: Sel::Target(slot),
+        });
+    }
     let (sels, tail) = object_list(r, b)?;
     if sels.len() < 2 || !end(&tail).is_empty() {
         return None;
