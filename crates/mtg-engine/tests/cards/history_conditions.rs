@@ -1029,3 +1029,72 @@ fn frodo_wins_if_the_ring_has_tempted_you_four_or_more_times_this_game() {
         }
     }
 }
+
+#[test]
+fn vessel_of_the_all_consuming_counts_the_damage_it_dealt_to_that_player() {
+    cr!("603.4", "104.3a");
+    let c = card("Hidetsugu Consumes All // Vessel of the All-Consuming");
+    assert!(c.unsupported_text().is_empty(), "{:?}", c.unsupported_text());
+    // Three players, so the game goes on after one loses.
+    let mut t = TestGame::new(3);
+    let vessel = t.custom(P0, CardDef::custom(c.faces[1].chars.clone()), Zone::Battlefield);
+    // 9 damage to P1 and 5 to P2: neither has been dealt 10 by it.
+    t.g.deal_damage(vessel, Entity::Player(P1), 9, false);
+    t.g.deal_damage(vessel, Entity::Player(P2), 5, false);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(!t.has_lost(P1) && !t.has_lost(P2));
+    // Another source's damage doesn't count.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.deal_damage(bears, Entity::Player(P1), 2, false);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(!t.has_lost(P1));
+    t.g.deal_damage(vessel, Entity::Player(P1), 1, false);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(t.has_lost(P1));
+    assert!(!t.has_lost(P2));
+}
+
+#[test]
+fn some_one_source_must_have_dealt_the_damage() {
+    cr!("603.4", "120.3");
+    let c = card("Dragon Cultist");
+    assert!(c.unsupported_text().is_empty(), "{:?}", c.unsupported_text());
+    // The ability Dragon Cultist grants, on a creature of its own.
+    let mut def = (*card("Grizzly Bears")).clone();
+    let granted = mtg_engine::oracle::compile(
+        "At the beginning of your end step, if a source you controlled dealt 5 or more damage this turn, create a 4/4 red Dragon creature token with flying.",
+        &mtg_engine::oracle::CompileContext {
+            card_name: "Grizzly Bears",
+            full_name: "Grizzly Bears",
+            type_line: &mtg_engine::types::TypeLine::parse("Creature — Bear"),
+            layout: mtg_engine::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        },
+    );
+    assert!(granted.unsupported.is_empty());
+    def.faces[0].chars.abilities = granted.abilities.into_iter().collect();
+    let mut t = TestGame::new(2);
+    t.custom(P0, def.clone(), Zone::Battlefield);
+    let a = t.battlefield(P0, "Hill Giant");
+    let b = t.battlefield(P0, "Hill Giant");
+    // 3 + 3 from two sources: not one source dealing 5.
+    t.g.deal_damage(a, Entity::Player(P1), 3, false);
+    t.g.deal_damage(b, Entity::Player(P1), 3, false);
+    t.g.flush_events();
+    to_end_step(&mut t, P0);
+    assert_eq!(count_named(&t, P0, "Dragon Token"), 0);
+    let mut t = TestGame::new(2);
+    t.custom(P0, def, Zone::Battlefield);
+    let a = t.battlefield(P0, "Hill Giant");
+    t.g.deal_damage(a, Entity::Player(P1), 3, false);
+    t.g.deal_damage(a, Entity::Player(P1), 2, false);
+    t.g.flush_events();
+    to_end_step(&mut t, P0);
+    assert_eq!(count_named(&t, P0, "Dragon Token"), 1);
+}

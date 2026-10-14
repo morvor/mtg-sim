@@ -170,6 +170,9 @@ struct Clause {
     distinct: bool,
     /// For a clause about objects, its predicate as written ("attacked this combat").
     pred: String,
+    /// An amount some one of the objects reached ("a source you controlled dealt 5 or
+    /// more damage this turn"): the greatest among them.
+    per_object: bool,
 }
 
 impl Clause {
@@ -183,6 +186,7 @@ impl Clause {
             per_player: None,
             distinct: false,
             pred: String::new(),
+            per_object: false,
         }
     }
 }
@@ -386,6 +390,7 @@ fn player_clause_as(c: &str) -> Option<Clause> {
                 per_player: None,
                 distinct: false,
                 pred: String::new(),
+                per_object: false,
             },
             subj,
         ));
@@ -465,6 +470,7 @@ fn dealt_damage(subj: &str, negated: bool, x: &str) -> Option<Clause> {
             per_player: None,
             distinct: n2 > 1,
             pred: String::new(),
+            per_object: false,
         });
     }
     if !x.is_empty() {
@@ -481,6 +487,7 @@ fn dealt_damage(subj: &str, negated: bool, x: &str) -> Option<Clause> {
             per_player: None,
             distinct: false,
             pred: String::new(),
+            per_object: false,
         },
         subj,
     ))
@@ -514,6 +521,11 @@ fn object_clause(c: &str) -> Option<Clause> {
             .replace(" an opponent controlled", " an opponent controls")
             .replace(" your opponents controlled", " your opponents control");
         let rest = words[i..].join(" ");
+        // "has dealt", "have attacked": the perfect is the past here.
+        let rest = match rest.strip_prefix("has ").or_else(|| rest.strip_prefix("have ")) {
+            Some(r) if !r.starts_with("been ") => r.to_string(),
+            _ => rest,
+        };
         let mut negated = false;
         let mut present = None;
         for (p, pr) in PASSIVE {
@@ -536,17 +548,24 @@ fn object_clause(c: &str) -> Option<Clause> {
         }
         let Some(present) = present else { continue };
         let present = present.trim_end().to_string();
-        // "was dealt 4 or more damage": the total dealt to it.
-        let (present, amount) = match present
-            .strip_prefix("is dealt ")
-            .and_then(parse_number)
-        {
-            Some((Value::Const(k), r)) if r.starts_with("or more ") && r.ends_with("damage") => {
-                let kind = r["or more ".len()..].trim();
-                (format!("is dealt {kind}"), Some(k))
+        // "was dealt 4 or more damage": the total dealt to it; "dealt 5 or more damage
+        // [to a player]": the total it dealt.
+        let mut amount = None;
+        let mut present = present;
+        for verb in ["is dealt ", "deals "] {
+            let Some((Value::Const(k), r)) = present.strip_prefix(verb).and_then(parse_number)
+            else {
+                continue;
+            };
+            let Some(kind) = r.strip_prefix("or more ") else {
+                continue;
+            };
+            if kind.starts_with("damage") || kind.starts_with("combat damage") {
+                present = format!("{verb}{kind}");
+                amount = Some(k);
+                break;
             }
-            _ => (present, None),
-        };
+        }
         let np_s = if np == "~" {
             np.clone()
         } else if plural {
@@ -558,6 +577,8 @@ fn object_clause(c: &str) -> Option<Clause> {
             // A singular phrase must read whole.
             match parse_object_phrase(&np) {
                 Some((_, false, tail)) if tail.trim().is_empty() => np.clone(),
+                // "a source you controlled": the trigger grammar reads damage sources.
+                _ if matches!(np.as_str(), "source" | "source you control") => np.clone(),
                 _ => continue,
             }
         };
@@ -582,6 +603,8 @@ fn object_clause(c: &str) -> Option<Clause> {
             }
             cl.n = k;
             cl.amount = true;
+            // "a source you controlled dealt 5 or more damage": some one source did.
+            cl.per_object = subj != "~" && present.starts_with("deals ");
         }
         return Some(cl);
     }
@@ -684,6 +707,33 @@ fn clause_condition(cl: Clause, w: &Option<HistoryWindow>) -> Option<Condition> 
     } else {
         Tally::Events
     };
+    // Some one source's total: the greatest among the sources (each in `vars::TESTED`).
+    if cl.per_object {
+        let TriggerCond::DealsDamage {
+            to, combat_only, ..
+        } = cond.clone()
+        else {
+            return None;
+        };
+        let each = TriggerCond::DealsDamage {
+            source: Filter::In(Box::new(Sel::Var(vars::TESTED))),
+            to,
+            combat_only,
+        };
+        let (total, sources) = match w {
+            None => (
+                Value::EventsThisTurn(Box::new(each), Tally::Amount),
+                Sel::ThisTurn(Box::new(cond)),
+            ),
+            Some(w) => (
+                Value::EventsDuring(w.clone(), Box::new(each), Tally::Amount),
+                Sel::EventsDuring(w.clone(), Box::new(cond)),
+            ),
+        };
+        let v = Value::Extreme(Box::new(total), Box::new(sources), true);
+        let cmp = Condition::Compare(v, cl.cmp, Value::Const(cl.n));
+        return Some(if cl.negated { not(cmp) } else { cmp });
+    }
     let mut v = match (cl.distinct, w) {
         (true, None) => Value::CountSel(Box::new(Sel::ThisTurn(Box::new(cond)))),
         (true, Some(w)) => Value::CountSel(Box::new(Sel::EventsDuring(w.clone(), Box::new(cond)))),
@@ -890,6 +940,39 @@ pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Opt
         }
         _ => c,
     };
+    // "... to that player": the player the ability is about.
+    if let Some((x, y)) = c.split_once(" to that player ") {
+        let rel = match &b.it_player {
+            PlayerRef::TriggerPlayer => PlayerRel::TriggerPlayer,
+            PlayerRef::Target(t) => PlayerRel::Target(*t),
+            _ => return None,
+        };
+        let cond = referent_history(&format!("{x} to a player {y}"), b)?;
+        let mut json = serde_json::to_value(&cond).ok()?;
+        let rel = serde_json::to_value(rel).ok()?;
+        let mut n = 0;
+        fn walk(v: &mut serde_json::Value, rel: &serde_json::Value, n: &mut usize) {
+            match v {
+                serde_json::Value::Object(m) => {
+                    for (k, x) in m.iter_mut() {
+                        if k == "to" && x.get("Player").is_some_and(|p| p == "Any") {
+                            *x = serde_json::json!({ "Player": rel });
+                            *n += 1;
+                        } else {
+                            walk(x, rel, n);
+                        }
+                    }
+                }
+                serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, rel, n)),
+                _ => {}
+            }
+        }
+        walk(&mut json, &rel, &mut n);
+        if n == 0 {
+            return None;
+        }
+        return serde_json::from_value(json).ok();
+    }
     let before = b.targets.len();
     let saved = b.it.clone();
     let r = crate::oracle::effects::object_ref(c, b);
