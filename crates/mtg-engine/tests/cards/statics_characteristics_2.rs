@@ -671,3 +671,269 @@ fn jumbo_cactuar_flavor_word_with_a_thousands_separator() {
     t.attack(&[(j, Entity::Player(P1))], &[]);
     assert_eq!(t.life(P1), 20000 - 10000);
 }
+
+// ---------------------------------------------------------------------------
+// Characteristic bundles: Auras, names, base power and toughness, modes
+// ---------------------------------------------------------------------------
+
+#[test]
+fn bronzehide_lion_returns_as_an_aura_on_a_creature_you_control() {
+    cr!("303.4f", "303.4g", "611.3c");
+    ruling!("Bronzehide Lion", "If there's nothing it can legally enchant, it remains in its owner's graveyard");
+    assert_supported("Bronzehide Lion");
+    let mut t = TestGame::new(2);
+    let lion = t.battlefield(P0, "Bronzehide Lion");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.g.destroy(lion, None);
+    t.resolve_all();
+    let aura = t.named_on_battlefield("Bronzehide Lion");
+    assert_eq!(aura.len(), 1);
+    assert!(is(&mut t, aura[0], CardType::Enchantment));
+    assert!(!is(&mut t, aura[0], CardType::Creature));
+    assert_eq!(t.g.obj(aura[0]).attached_to, Some(Entity::Object(bears)));
+    // Only the granted abilities: no trample of its own.
+    assert!(!has_kw(&mut t, aura[0], KeywordKind::Trample));
+    // With no creature it could enchant, it stays in the graveyard.
+    let mut t = TestGame::new(2);
+    let lion = t.battlefield(P0, "Bronzehide Lion");
+    t.battlefield(P1, "Hill Giant");
+    t.g.destroy(lion, None);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Bronzehide Lion").is_empty());
+    assert!(t.in_graveyard(P0, "Bronzehide Lion"));
+}
+
+#[test]
+fn honest_work_makes_a_humble_merchant() {
+    cr!("612.8", "613.1f", "613.4b");
+    ruling!("Honest Work", "It can still gain new abilities after it is enchanted");
+    assert_supported("Honest Work");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Serra Angel");
+    let hw = t.battlefield(P0, "Honest Work");
+    t.g.attach(hw, Entity::Object(giant));
+    t.g.recompute();
+    let c = t.obj_now(giant).chars.clone();
+    assert_eq!(c.name, "Humble Merchant");
+    assert!(!c.has_keyword(KeywordKind::Flying));
+    assert!(c.subtypes.iter().any(|s| s == "Citizen"));
+    assert!(!c.subtypes.iter().any(|s| s == "Angel"));
+    assert_eq!(t.pt(giant), (1, 1));
+    assert!(c.abilities.iter().any(|a| matches!(&a.kind, ability::AbilityKind::Activated(x) if x.is_mana_ability)));
+}
+
+#[test]
+fn goddric_is_a_dragon_after_celebration() {
+    cr!("613.1d", "613.4b");
+    ruling!("Goddric, Cloaked Reveler", "he's still a Dragon creature with base power and toughness 4/4");
+    assert_supported("Goddric, Cloaked Reveler");
+    let mut t = TestGame::new(2);
+    let g = t.battlefield(P0, "Goddric, Cloaked Reveler");
+    assert!(!has_subtype(&mut t, g, "Dragon"));
+    t.enter(P0, "Grizzly Bears");
+    t.enter(P0, "Hill Giant");
+    assert!(has_subtype(&mut t, g, "Dragon"));
+    assert!(has_kw(&mut t, g, KeywordKind::Flying));
+    assert_eq!(t.pt(g), (4, 4));
+}
+
+#[test]
+fn tenth_district_hero_becomes_mileva() {
+    cr!("612.8", "205.1a", "613.4b");
+    ruling!("Tenth District Hero", "5/5 legendary Human Detective named Mileva, the Stalwart");
+    assert_supported("Tenth District Hero");
+    let mut t = TestGame::new(2);
+    let h = t.battlefield(P0, "Tenth District Hero");
+    t.lands(P0, "Plains", 5);
+    for _ in 0..2 {
+        t.graveyard(P0, "Hill Giant");
+    }
+    t.activate(P0, h, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(has_subtype(&mut t, h, "Detective"));
+    t.activate(P0, h, 1, &[]).unwrap();
+    t.resolve_all();
+    t.g.recompute();
+    let c = t.obj_now(h).chars.clone();
+    assert_eq!(c.name, "Mileva, the Stalwart");
+    assert!(c.supertypes.contains(Supertype::Legendary));
+    assert!(c.subtypes.iter().any(|s| s == "Detective"));
+    assert_eq!(t.pt(h), (5, 5));
+}
+
+#[test]
+fn wall_of_tombstones_base_toughness_counts_creature_cards() {
+    cr!("613.4b", "608.2h");
+    assert_supported("Wall of Tombstones");
+    let mut t = TestGame::new(2);
+    let w = t.battlefield(P0, "Wall of Tombstones");
+    t.graveyard(P0, "Hill Giant");
+    t.graveyard(P0, "Grizzly Bears");
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    t.g.recompute();
+    assert_eq!(t.pt(w).1, 3);
+}
+
+#[test]
+fn wild_shape_mode_sets_power_toughness_type_and_ability() {
+    cr!("700.2", "613.4b", "205.1a");
+    ruling!("Wild Shape", "The creature loses all other creature types, but it retains its abilities");
+    assert_supported("Wild Shape");
+    assert_supported("Genku, Future Shaper");
+    assert_supported("Outlaws' Merriment");
+    let mut t = TestGame::new(2);
+    let angel = t.battlefield(P0, "Serra Angel");
+    t.lands(P0, "Forest", 1);
+    let ws = t.hand(P0, "Wild Shape");
+    t.cast(P0, ws).modes(&[0]).target(angel).go();
+    t.resolve_all();
+    assert_eq!(t.pt(angel), (1, 3));
+    assert!(has_subtype(&mut t, angel, "Turtle"));
+    assert!(!has_subtype(&mut t, angel, "Angel"));
+    assert!(has_kw(&mut t, angel, KeywordKind::Hexproof));
+    assert!(has_kw(&mut t, angel, KeywordKind::Flying));
+}
+
+#[test]
+fn genku_creates_the_chosen_bundle_token() {
+    cr!("700.2", "111.4");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Genku, Future Shaper");
+    let land = t.battlefield(P0, "Forest");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+    t.g.destroy(land, None);
+    t.resolve_all();
+    let toks = t.named_on_battlefield("Moonfolk Token");
+    let toks = if toks.is_empty() {
+        t.g.battlefield
+            .clone()
+            .into_iter()
+            .filter(|o| t.g.obj(*o).chars.subtypes.iter().any(|s| s == "Moonfolk"))
+            .collect()
+    } else {
+        toks
+    };
+    assert_eq!(toks.len(), 1);
+    assert_eq!(t.pt(toks[0]), (1, 2));
+    assert!(has_kw(&mut t, toks[0], KeywordKind::Flying));
+    t.g.recompute();
+    assert_eq!(t.obj_now(toks[0]).chars.colors, ColorSet::single(Color::Blue));
+}
+
+#[test]
+fn walking_bulwark_creature_assigns_damage_by_toughness() {
+    cr!("510.1a", "702.3b");
+    ruling!("Walking Bulwark", "changes only the amount of combat damage it assigns");
+    assert_supported("Walking Bulwark");
+    assert_supported("The Pride of Hull Clade");
+    let mut t = TestGame::new(2);
+    let bw = t.battlefield(P0, "Walking Bulwark");
+    let wall = t.battlefield(P0, "Wall of Wood");
+    t.lands(P0, "Wastes", 2);
+    t.activate(P0, bw, 0, &[Entity::Object(wall)]).unwrap();
+    t.resolve_all();
+    assert!(has_kw(&mut t, wall, KeywordKind::Haste));
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(wall, Entity::Player(P1))], &[]);
+    // Wall of Wood is 0/3.
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.pt(wall), (0, 3));
+}
+
+#[test]
+fn crown_of_convergence_pumps_creatures_sharing_a_color_with_the_top_card() {
+    cr!("611.3a");
+    ruling!("Crown of Convergence", "A colorless creature on top of your library never gives a bonus");
+    assert_supported("Crown of Convergence");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Crown of Convergence");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let lions = t.battlefield(P0, "Savannah Lions");
+    t.library_top(P0, "Llanowar Elves");
+    t.g.recompute();
+    assert_eq!(t.pt(bears), (3, 3));
+    assert_eq!(t.pt(lions), (2, 1));
+    t.library_top(P0, "Lightning Bolt");
+    t.g.recompute();
+    assert_eq!(t.pt(bears), (2, 2));
+}
+
+#[test]
+fn dance_of_the_manse_makes_four_four_creatures_only_with_x_six() {
+    cr!("611.3c", "107.3a");
+    ruling!("Dance of the Manse", "enter the battlefield as 4/4 creatures");
+    assert_supported("Dance of the Manse");
+    for (x, creature) in [(3, false), (6, true)] {
+        let mut t = TestGame::new(2);
+        let anthem = t.graveyard(P0, "Glorious Anthem");
+        t.lands(P0, "Plains", 7);
+        t.lands(P0, "Island", 1);
+        let d = t.hand(P0, "Dance of the Manse");
+        t.cast(P0, d).x(x).targets(&[Entity::Object(anthem)]).go();
+        t.resolve_all();
+        let back = t.named_on_battlefield("Glorious Anthem");
+        assert_eq!(back.len(), 1);
+        assert_eq!(is(&mut t, back[0], CardType::Creature), creature);
+        assert!(is(&mut t, back[0], CardType::Enchantment));
+        if creature {
+            // Its own anthem gives it +1/+1.
+            assert_eq!(t.pt(back[0]), (5, 5));
+        }
+    }
+}
+
+#[test]
+fn new_blood_changes_a_creature_type_to_vampire() {
+    cr!("612.2");
+    ruling!("New Blood", "The creature you gain control of won't be a Vampire if you don't choose");
+    assert_supported("New Blood");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let bear_i = subtype_lists()
+        .creature
+        .iter()
+        .position(|x| x == "Bear")
+        .unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    let _ = bear_i;
+    t.lands(P0, "Swamp", 4);
+    t.battlefield(P0, "Vampire Interloper");
+    let nb = t.hand(P0, "New Blood");
+    t.cast(P0, nb).target(bears).go();
+    t.resolve_all();
+    assert_eq!(t.g.obj(t.g.current(bears)).controller, P0);
+    // The creature types on it are offered first: Bear became Vampire.
+    assert!(has_subtype(&mut t, bears, "Vampire"));
+    assert!(!has_subtype(&mut t, bears, "Bear"));
+}
+
+#[test]
+fn teferi_emblem_untaps_and_draws_on_opponents_turns() {
+    cr!("502.3", "504.1");
+    ruling!("Teferi, Who Slows the Sunset", "your permanents will untap at the same time as your opponent's permanents");
+    assert_supported("Teferi, Who Slows the Sunset");
+    let mut t = TestGame::new(2);
+    let teferi = t.battlefield(P0, "Teferi, Who Slows the Sunset");
+    t.g.objects[teferi.0 as usize].counters.insert("loyalty".into(), 7);
+    let n = t
+        .g
+        .obj(teferi)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, ability::AbilityKind::Activated(_)))
+        .count();
+    t.activate(P0, teferi, n - 1, &[]).unwrap();
+    t.resolve_all();
+    let land = t.battlefield(P0, "Forest");
+    t.g.objects[land.0 as usize].tapped = true;
+    let hand = t.hand_size(P0);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!t.g.obj(land).tapped);
+    t.advance_to(P1, Step::PrecombatMain);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
