@@ -65,6 +65,7 @@ Each surviving mutant is classified as
 | triggers.rs | 474 | 48 (1/10) | 32 | 16 | 0 | 0 | 66.7% | TBD |
 | resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | TBD |
 | actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | TBD |
+| layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
 
 ### sba.rs
 
@@ -397,3 +398,28 @@ suite hang and count as detected (timeout).
   Game::token_entry` (a token copy of a double-faced permanent with no card of its own):
   **(b) not killed**. Every path found that copies a double-faced permanent into a token
   gives the token its card, so the guard's false branch isn't reached by the tests.
+
+### layers.rs
+
+Run 2026-10-14, 43 of 423 mutants (round-robin 0/10), 72 minutes. One mutant (`741:17` in
+`layer_candidates`) made the suite hang (timeout, detected).
+
+- `layers.rs:1092:28: delete ! in Game::apply_effect_in_layer` (remember the objects a
+  filter-defined resolved effect started applying to, CR 613.6): **(a) equivalent (dead
+  path)**. `Affected::Filter` is never constructed: resolved effects lock in their objects
+  (`Affected::Objects`, CR 611.2c), and the CR 613.6 examples for those are covered in
+  `tests/cr/r609_613_layers.rs`.
+- `layers.rs:1489:49: replace + with * in Game::compute_player_effects` and
+  `layers.rs:1550:56: replace | with & in key_order`: **(a) equivalent**. Both change only
+  the tie-break between effects with the same timestamp; the effects in question (several
+  player effects created at once, several static abilities of one object) keep their
+  relative order because the sort is stable and they're collected in that order.
+- `layers.rs:1519:28: replace match guard crate::choices::filter_mentions_choice(&f) with
+  true in Game::compute_player_effects`: **(a) equivalent in practice**. Binding the
+  source's choices into a protection filter that mentions no choice leaves it unchanged;
+  it would differ only for a player protection effect with no source, which nothing
+  creates.
+- `layers.rs:2018:12: delete ! in drop_ungainable_subtypes` (CR 205.3d: a copy
+  exception's "every creature type" on a noncreature copy is dropped): **(b) not killed**.
+  No card found gives a copy of a noncreature permanent all creature types as a copy
+  exception.
