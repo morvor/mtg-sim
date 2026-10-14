@@ -116,6 +116,18 @@ impl Ctx {
         Ctx::new(Some(id), g.obj(id).controller)
     }
     pub fn set_var(&mut self, v: Var, e: Vec<Entity>) {
+        // The cards a dig put somewhere are "put ... this way" only until another
+        // instruction acts on other objects (`dig_steps::DUG_PLACED`).
+        if v == vars::IT {
+            let placed = crate::dig_steps::DUG_PLACED;
+            if self
+                .vars
+                .get(&placed)
+                .is_some_and(|p| !e.iter().all(|x| p.contains(x)))
+            {
+                self.vars.remove(&placed);
+            }
+        }
         self.vars.insert(v, e);
     }
     /// `p`'s running total under `var` (0 if none).
@@ -340,6 +352,58 @@ impl Game {
             PlayerFilter::AttackedThisTurn => {
                 self.turn.active == p && !self.history.attackers.is_empty()
             }
+            PlayerFilter::AttackRelation {
+                attacking,
+                other,
+                past,
+                planeswalkers,
+            } => {
+                // (attacking player, attacked player, attacked directly) pairs.
+                let pairs: Vec<(PlayerId, PlayerId, bool)> = if *past {
+                    self.history
+                        .attacks
+                        .iter()
+                        .filter(|(_, t, _)| match t {
+                            Entity::Player(_) => true,
+                            // A battle isn't a player or a planeswalker of theirs.
+                            Entity::Object(o) => self.obj(*o).is(CardType::Planeswalker),
+                        })
+                        .map(|(a, t, dp)| {
+                            (self.obj(*a).controller, *dp, matches!(t, Entity::Player(_)))
+                        })
+                        .collect()
+                } else {
+                    self.combat
+                        .as_ref()
+                        .map(|c| {
+                            c.attackers
+                                .iter()
+                                .filter_map(|a| {
+                                    let t = a.target?;
+                                    let dp = crate::combat::entity_defender(self, t);
+                                    let pw = matches!(t, Entity::Object(o)
+                                        if self.obj(o).is(CardType::Planeswalker));
+                                    let direct = matches!(t, Entity::Player(_));
+                                    (direct || pw).then_some((
+                                        self.obj(a.id).controller,
+                                        dp,
+                                        direct,
+                                    ))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                };
+                pairs.iter().any(|(a, d, direct)| {
+                    (*direct || *planeswalkers)
+                        && if *attacking {
+                            *a == p && self.player_filter_matches(other, *d, ctx)
+                        } else {
+                            *d == p && self.player_filter_matches(other, *a, ctx)
+                        }
+                })
+            }
+            PlayerFilter::HasInitiative => self.initiative == Some(p),
             // CR 810.10d: poisoned if the team has a poison counter.
             PlayerFilter::Poisoned => {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
@@ -609,6 +673,18 @@ impl Game {
                     Entity::Player(p) => self.player_rel_matches(*rel, p, ctx),
                     Entity::Object(_) => false,
                 }),
+            Filter::BandedWith(sel) => self
+                .eval_sel_objects(sel, ctx)
+                .into_iter()
+                .any(|o| crate::kw::banding::band_mates(self, o).contains(&id)),
+            Filter::AttackingObject(of) => self
+                .combat
+                .as_ref()
+                .and_then(|cb| cb.attack_target(id))
+                .is_some_and(|t| match t {
+                    Entity::Object(o) => self.matches(o, of, ctx),
+                    Entity::Player(_) => false,
+                }),
             Filter::BlockingSource => ctx.source.is_some_and(|s| {
                 self.combat.as_ref().is_some_and(|cb| {
                     cb.blockers_of(s).contains(&id) || self.left_combat_pair(s, id, s)
@@ -619,10 +695,20 @@ impl Game {
                     cb.blockers_of(id).contains(&s) || self.left_combat_pair(s, s, id)
                 })
             }),
+            Filter::ControlledSinceTurnBegan => {
+                let o = self.obj(id);
+                !o.summoning_sick || o.control_since < self.history.began_at
+            }
+            Filter::BlockRelation { rel, other, when } => {
+                let others = self.eval_sel_objects(other, ctx);
+                crate::kw::block_history::block_relation(self, id, *rel, &others, *when)
+            }
             Filter::BlockingAnyOf(sel) => self.combat.as_ref().is_some_and(|cb| {
+                // Once the object has left the battlefield, the creatures that were
+                // blocking it ("{B}, Sacrifice ~: Destroy target creature blocking it").
                 self.eval_sel_objects(sel, ctx)
                     .into_iter()
-                    .any(|a| cb.blockers_of(a).contains(&id))
+                    .any(|a| cb.blockers_of(a).contains(&id) || self.left_combat_pair(a, id, a))
             }),
             Filter::TargetOf(sel) => self.eval_sel_objects(sel, ctx).into_iter().any(|s| {
                 self.obj(s).stack.as_ref().is_some_and(|si| {
@@ -652,12 +738,16 @@ impl Game {
                 cmp.eval(mv as i64, self.eval_value(v, ctx))
             }
             Filter::Loyalty(cmp, v) => cmp.eval(o.loyalty() as i64, self.eval_value(v, ctx)),
-            Filter::Named(n) => c.has_name(n),
-            Filter::SameNameAs(sel) => self
-                .eval_sel(sel, ctx)
-                .iter()
-                .filter_map(|e| e.object())
-                .any(|x| c.shares_name_with(&self.obj(x).chars)),
+            Filter::Named(n) => {
+                c.has_name(n) || crate::counts_as_named::counts_as_named(self, id, n, ctx)
+            }
+            Filter::SameNameAs(sel) => {
+                self.eval_sel(sel, ctx)
+                    .iter()
+                    .filter_map(|e| e.object())
+                    .any(|x| c.shares_name_with(&self.obj(x).chars))
+                    || crate::counts_as_named::counts_as_named_like(self, id, sel, ctx)
+            }
             Filter::DifferentNameFrom(sel) => {
                 let others = self.eval_sel_objects(sel, ctx);
                 crate::names::has_different_name(c, others.iter().map(|x| &self.obj(*x).chars))
@@ -766,6 +856,10 @@ impl Game {
                 .prev
                 .is_some_and(|p| self.history.creatures_died.contains(&p)),
             Filter::AttackedThisTurn => self.history.attackers.contains(&id),
+            Filter::AttackedThisCombat => self
+                .combat
+                .as_ref()
+                .is_some_and(|c| c.declared_attackers.iter().any(|(a, _)| *a == id)),
             Filter::LinkedChosenColor => self
                 .linked_choice(ctx)
                 .and_then(|ch| ch.color)
@@ -913,6 +1007,26 @@ impl Game {
                 Filter::And(v) => v.iter().find_map(within),
                 other => within(other),
             };
+            // Particular objects (an ability bound to the object granting it, "if ~ is
+            // exiled", `granted_by`) are wherever they are too.
+            let listed = match f {
+                Filter::Objects(v) => Some(v),
+                Filter::And(v) => v.iter().find_map(|f| match f {
+                    Filter::Objects(v) => Some(v),
+                    _ => None,
+                }),
+                _ => None,
+            };
+            if let (None, Some(ids)) = (&sel, listed) {
+                // (A permanent spell's object is also the permanent it became, CR 609.7a.)
+                let mut out: Vec<ObjectId> = Vec::new();
+                for id in ids.iter().flat_map(|x| [*x, self.current(*x)]) {
+                    if !out.contains(&id) && self.is_live(id) && self.matches(id, f, ctx) {
+                        out.push(id);
+                    }
+                }
+                return out;
+            }
             if let Some(sel) = sel {
                 return self
                     .eval_sel_objects(&sel, ctx)

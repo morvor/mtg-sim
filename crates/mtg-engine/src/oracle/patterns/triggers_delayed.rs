@@ -170,10 +170,10 @@ fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     // "Until your next turn, whenever ...": it lasts until its controller's next turn.
     let mut until_next_turn = false;
     let (cond_s, eff) = if let Some(r) = l.strip_prefix("until end of turn, whenever ") {
-        let (c, e) = split_at_comma(r)?;
+        let (c, e) = split_condition(r)?;
         (c.to_string(), e)
     } else if let Some(r) = l.strip_prefix("until your next turn, whenever ") {
-        let (c, e) = split_at_comma(r)?;
+        let (c, e) = split_condition(r)?;
         until_next_turn = true;
         (c.to_string(), e)
     } else {
@@ -225,6 +225,30 @@ fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
         once: false,
     });
     Some(Effect::seq(stores))
+}
+
+/// Splits "[condition], [effect]" at the first comma outside quotes after which the
+/// condition reads as one ("a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks,
+/// draw a card").
+fn split_condition(s: &str) -> Option<(&str, &str)> {
+    let mut in_quote = false;
+    let mut first = None;
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '"' => in_quote = !in_quote,
+            ',' if !in_quote => {
+                let split = (&s[..i], s[i + 1..].trim_start());
+                first.get_or_insert(split);
+                if crate::oracle::triggers::parse_trigger_condition(&format!("whenever {}", split.0))
+                    .is_some()
+                {
+                    return Some(split);
+                }
+            }
+            _ => {}
+        }
+    }
+    first
 }
 
 /// Splits at the first comma outside quotes.

@@ -437,6 +437,12 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((Filter::SameNameAs(Box::new(Sel::This)), r));
         }
     }
+    // "named Sound the Call" (a card's name kept in a quoted ability, CR 201.2).
+    if let Some(r) = t.strip_prefix("named ") {
+        if let Some((name, rest)) = super::value_grammar::literal_card_name(r) {
+            return Some((Filter::Named(name.into()), rest));
+        }
+    }
     // "with power greater than the number of cards in your hand", "with power less than
     // the number of Islands you control"
     for (p, cmp) in [
@@ -1692,7 +1698,7 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
     // (CR 201.2), in the card's own capitalization.
     if let Some((x, name)) = r.rsplit_once(" named ") {
         let name = name.trim();
-        if !name.is_empty() && !name.contains(['"', '~', ',']) && name.split(' ').count() <= 4 {
+        if !name.is_empty() && !name.contains(['"', '~']) && name.split(' ').count() <= 6 {
             let raw = crate::oracle::raw_text();
             let original = (raw.len() == raw.to_lowercase().len())
                 .then(|| {
@@ -1700,6 +1706,16 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
                     raw.get(i..i + name.len()).map(str::to_string)
                 })
                 .flatten()?;
+            // A name with a comma ("Mileva, the Stalwart", "Everflame, Heroes' Legacy"):
+            // its words are capitalized but for "the" and "of", so it's one name rather than
+            // a list.
+            let title = |w: &str| {
+                w.starts_with(|c: char| c.is_uppercase()) || matches!(w, "the" | "of")
+            };
+            if name.contains(',') && !original.split([' ', ',']).filter(|w| !w.is_empty()).all(title)
+            {
+                return None;
+            }
             let mut out = type_predicate(x, subj)?;
             out.push(Out::Mod(Modification::SetName(original.into())));
             return Some(out);
@@ -1722,6 +1738,20 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
             return None;
         }
         return m(vec![Modification::AllCreatureTypes]);
+    }
+    // "is every land type in addition to its other types" (Omo, Queen of Vesuva): each
+    // land type of CR 205.3i.
+    if r == "every land type in addition to its other types" || r == "every land type" {
+        if !subj.lands {
+            return None;
+        }
+        let mut types: Vec<Subtype> = crate::types::subtype_lists()
+            .land
+            .iter()
+            .map(|t| Subtype::from(t.as_str()))
+            .collect();
+        types.sort();
+        return m(vec![Modification::AddSubtypes(types)]);
     }
     if r == "every nonbasic land type" {
         // "~ is every nonbasic land type." (Planar Nexus): the land types of CR 205.3i
@@ -1996,6 +2026,22 @@ fn restriction_predicate_core(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
         "assigns no combat damage" | "assign no combat damage" => {
             return Some(vec![Restriction::AssignsNoCombatDamage(fc)])
         }
+        // CR 609.4: evasion that doesn't stop it from blocking (see
+        // `Restriction::BlockIgnoringEvasion`).
+        "can block creatures with shadow as though they didn't have shadow" => {
+            return Some(vec![Restriction::BlockIgnoringEvasion {
+                blocker: fc,
+                attackers: Filter::Any,
+                evasion: crate::keywords::KeywordKind::Shadow,
+            }])
+        }
+        "can block creatures with landwalk abilities as though they didn't have those abilities" => {
+            return Some(vec![Restriction::BlockIgnoringEvasion {
+                blocker: fc,
+                attackers: Filter::Any,
+                evasion: crate::keywords::KeywordKind::Landwalk,
+            }])
+        }
         "attack or block each combat if able" | "attacks or blocks each combat if able" => {
             return Some(vec![
                 Restriction::MustAttack(fc.clone()),
@@ -2028,6 +2074,21 @@ fn restriction_predicate_core(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
         return Some(vec![Restriction::CantBeTargeted {
             what: fc,
             by: TargetRestriction::Sources(targeting_sources(x)?),
+        }]);
+    }
+    // "can block Dragons as though it had reach" (CR 609.4, 702.17b).
+    if let Some(x) = p
+        .strip_prefix("can block ")
+        .and_then(|r| r.strip_suffix(" as though it had reach"))
+    {
+        let (a, plural) = whole_object_phrase(x)?;
+        if !plural {
+            return None;
+        }
+        return Some(vec![Restriction::BlockIgnoringEvasion {
+            blocker: fc,
+            attackers: a,
+            evasion: crate::keywords::KeywordKind::Flying,
         }]);
     }
     // "can't block it", "can't block creatures with power 2 or greater", "Cowards can't

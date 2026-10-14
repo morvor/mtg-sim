@@ -102,39 +102,59 @@ fn is_library_top(g: &Game, p: PlayerId, card: ObjectId) -> bool {
     g.obj(card).zone == Zone::Library(p) && g.player(p).library.last() == Some(&card)
 }
 
-/// The plot cost of `card` for `p`: its own plot ability's, or its mana cost if it's the
-/// top card of `p`'s library and an effect gives that card plot.
-fn plot_cost(g: &Game, p: PlayerId, card: ObjectId) -> Option<Cost> {
+/// The plot costs of `card` for `p`: its own plot abilities', and its mana cost if it's
+/// the top card of `p`'s library and an effect gives that card plot. A card with plot of
+/// its own that an effect also gives plot may be plotted using either cost (Fblthp, Lost
+/// on the Range's rulings).
+fn plot_costs(g: &Game, p: PlayerId, card: ObjectId) -> Vec<Cost> {
     let o = g.obj(card);
-    if let Some(k) = o.chars.keywords().find(|k| k.kind == KeywordKind::Plot) {
-        return Some(k.cost.clone().unwrap_or_default());
-    }
+    let mut costs: Vec<Cost> = o
+        .chars
+        .keywords()
+        .filter(|k| k.kind == KeywordKind::Plot)
+        .map(|k| k.cost.clone().unwrap_or_default())
+        .collect();
     if is_library_top(g, p, card) && controls_custom(g, p, TOP_CARD_HAS_PLOT) {
-        return o.chars.mana_cost.clone().map(Cost::mana);
+        if let Some(m) = o.chars.mana_cost.clone() {
+            costs.push(Cost::mana(m));
+        }
     }
-    None
+    costs
 }
 
-/// The cost `p` pays to plot `card`, after effects that change the cost of plotting
-/// (CR 702.170e).
-fn total_plot_cost(g: &Game, p: PlayerId, card: ObjectId) -> Option<Cost> {
-    let mut cost = plot_cost(g, p, card)?;
-    if g.obj(card).zone == Zone::Hand(p) {
-        let less: u32 = g
-            .statics
+/// The costs `p` may pay to plot `card` (one for each plot cost it has), after effects
+/// that change the cost of plotting (CR 702.170e).
+fn total_plot_costs(g: &Game, p: PlayerId, card: ObjectId) -> Vec<Cost> {
+    let less: u32 = if g.obj(card).zone == Zone::Hand(p) {
+        g.statics
             .customs
             .iter()
             .filter(|(_, ctl, _)| *ctl == p)
             .filter_map(|(_, _, n)| n.strip_prefix(FROM_HAND_COSTS_LESS))
             .filter_map(|n| n.parse::<u32>().ok())
-            .sum();
-        if less > 0 {
-            if let Some(m) = cost.mana.as_mut() {
-                m.reduce_generic(less);
+            .sum()
+    } else {
+        0
+    };
+    plot_costs(g, p, card)
+        .into_iter()
+        .map(|mut cost| {
+            if less > 0 {
+                if let Some(m) = cost.mana.as_mut() {
+                    m.reduce_generic(less);
+                }
             }
-        }
-    }
-    Some(cost)
+            cost
+        })
+        .collect()
+}
+
+/// The plot costs of `card` that `p` can pay now.
+fn payable_plot_costs(g: &Game, p: PlayerId, card: ObjectId) -> Vec<Cost> {
+    total_plot_costs(g, p, card)
+        .into_iter()
+        .filter(|cost| g.can_pay_cost(p, cost, Some(card), &Ctx::new(Some(card), p)))
+        .collect()
 }
 
 /// Whether `p` could plot `card` now: from their hand, or from the top of their library if
@@ -145,7 +165,7 @@ fn can_plot(g: &Game, p: PlayerId, card: ObjectId) -> bool {
         || (is_library_top(g, p, card)
             && !o.chars.is(CardType::Land)
             && controls_custom(g, p, PLOT_FROM_LIBRARY_TOP));
-    zone_ok && g.has_priority(p) && g.is_sorcery_timing(p) && plot_cost(g, p, card).is_some()
+    zone_ok && g.has_priority(p) && g.is_sorcery_timing(p) && !plot_costs(g, p, card).is_empty()
 }
 
 /// Whether `card` is a plotted card (CR 702.170a, 702.170c), and the turn it became one.
@@ -179,10 +199,7 @@ impl KeywordRules for Plot {
         cards
             .into_iter()
             .filter(|c| can_plot(g, p, *c))
-            .filter(|c| {
-                let cost = total_plot_cost(g, p, *c).unwrap_or_default();
-                g.can_pay_cost(p, &cost, Some(*c), &Ctx::new(Some(*c), p))
-            })
+            .filter(|c| !payable_plot_costs(g, p, *c).is_empty())
             .map(|card| Action::Special(SpecialAction::Plot { card }))
             .collect()
     }
@@ -200,7 +217,17 @@ impl KeywordRules for Plot {
         if !g.is_live(card) || !can_plot(g, p, card) {
             return Some(Err(Illegal("can't plot that card".into())));
         }
-        let cost = total_plot_cost(g, p, card).unwrap_or_default();
+        // With more than one plot cost it can pay, the player chooses which to pay.
+        let mut costs = payable_plot_costs(g, p, card);
+        if costs.is_empty() {
+            return Some(Err(Illegal("can't pay the plot cost".into())));
+        }
+        let names: Vec<String> = costs
+            .iter()
+            .map(|c| format!("Plot for {}", crate::resolve::describe_cost(c)))
+            .collect();
+        let i = g.ask_option(p, Some(card), "Choose the plot cost to pay", names);
+        let cost = costs.swap_remove(i.min(costs.len() - 1));
         if !crate::special_actions::pay(g, p, &cost, Some(card), &Ctx::new(Some(card), p)) {
             return Some(Err(Illegal("can't pay the plot cost".into())));
         }

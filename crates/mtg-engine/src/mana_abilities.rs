@@ -1188,7 +1188,9 @@ pub fn mana_sources_with(
                 continue;
             }
             // "Its activated abilities can't be activated" covers mana abilities.
-            if g.activation_prohibited(p, o.id, true) {
+            if g.activation_prohibited(p, o.id, true)
+                || !crate::kw::activation_allowed(g, p, o.id, a)
+            {
                 continue;
             }
             // A player controlled by another may be restricted to lands' mana abilities

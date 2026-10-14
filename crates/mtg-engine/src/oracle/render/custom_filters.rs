@@ -136,7 +136,10 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             rel("that was turned face up this turn")
         }
         crate::kw::activated_ability_kind::ATTACKING_YOU_OR_YOUR_PLANESWALKER => {
-            rel("attacking you and/or planeswalkers you control")
+            rel("{alt:attacking you and/or planeswalkers you control|that's attacking you or a planeswalker you control}")
+        }
+        crate::oracle::patterns::noun_phrase_predicates::ATTACKING_YOUR_PLANESWALKER => {
+            rel("that's attacking a planeswalker you control")
         }
         n if n.starts_with(crate::kw::spell_cost_grammar::MANA_COST_IS) => Some(Rel(format!(
             "with mana cost {}",
@@ -148,7 +151,7 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             "Library" => rel("from the top of your library"),
             _ => None,
         },
-        _ => None,
+        n => super::tail_filters::custom_rel_more(n),
     }
 }
 

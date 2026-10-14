@@ -309,7 +309,8 @@ impl Renderer<'_> {
             Filter::Colorless => "colorless".into(),
             Filter::ChosenColor | Filter::LinkedChosenColor => "the chosen color".into(),
             Filter::ChosenCardType => "the chosen card type".into(),
-            Filter::ChosenName => "the chosen name".into(),
+            // "protection from the chosen card name" (Runed Halo).
+            Filter::ChosenName => "the chosen {opt:card} name".into(),
             Filter::ControlledBy(PlayerRel::Chosen) => "the chosen player".into(),
             // CR 702.16i, 702.16k: protection from each opponent.
             Filter::ControlledBy(PlayerRel::Opponent) => "each of your opponents".into(),

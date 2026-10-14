@@ -20,6 +20,7 @@ fn clone_def() -> CardDef {
             ReplacementAction::EnterAsCopy {
                 filter: Filter::creature(),
                 optional: true,
+                tapped: false,
             },
         )],
     )

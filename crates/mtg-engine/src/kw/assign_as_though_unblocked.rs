@@ -15,7 +15,8 @@
 //! it weren't blocked, with no further choice.
 
 use super::{KeywordRegistration, KeywordRules};
-use crate::ability::{AbilityKind, PlayerModification, StaticEffect};
+use crate::ability::{AbilityKind, PlayerModification, Restriction, StaticEffect};
+use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::types::ObjectId;
@@ -54,7 +55,22 @@ impl KeywordRules for AssignAsThoughUnblocked {
         if has_ability(g, creature, ASSIGNS_UNBLOCKED) {
             return true;
         }
-        if !has_ability(g, creature, MAY_ASSIGN_UNBLOCKED) {
+        // Rule effects (`Restriction::AssignAsThoughUnblocked`): "X target blocked
+        // creatures assign their combat damage this turn as though they weren't blocked"
+        // (no choice), "for each creature you control, you may have that creature assign
+        // ..." (a choice for each creature as it assigns its damage).
+        let mut may = has_ability(g, creature, MAY_ASSIGN_UNBLOCKED);
+        for (s, c, r, locked) in g.all_restrictions() {
+            if let Restriction::AssignAsThoughUnblocked { what, may: m } = &r {
+                if g.restriction_applies(creature, what, &Ctx::new(s, c), &locked) {
+                    if !*m {
+                        return true;
+                    }
+                    may = true;
+                }
+            }
+        }
+        if !may {
             return false;
         }
         // Blocked by a creature with banding: the defending player decides, as they assign
