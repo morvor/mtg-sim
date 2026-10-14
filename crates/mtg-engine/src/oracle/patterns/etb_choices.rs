@@ -749,7 +749,7 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
                 who: PlayerRef::You,
                 kind: ChoiceKind::Opponent,
             },
-            Effect::RevealHand {
+            Effect::LookAtHand {
                 who: PlayerRef::ChosenOpponent,
             },
         ]));

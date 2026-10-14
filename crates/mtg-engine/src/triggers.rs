@@ -1420,7 +1420,7 @@ impl Game {
                 }
             }
             (
-                TriggerCond::CountersRemoved { filter, kind },
+                TriggerCond::CountersRemoved { filter, kind, each },
                 Event::CountersRemoved {
                     target: Entity::Object(o),
                     kind: k,
@@ -1429,13 +1429,18 @@ impl Game {
                 },
             ) => {
                 if kind.as_ref().is_none_or(|x| x == k) && self.matches(*o, filter, &ctx) {
-                    one(EventInfo {
-                        object: Some(*o),
-                        // The player who removed them.
-                        player: *by,
-                        amount: *n as i32,
-                        ..Default::default()
-                    })
+                    // "Whenever a [kind] counter is removed from …" triggers for each
+                    // counter.
+                    let (times, amount) = if *each { (*n, 1) } else { (1, *n as i32) };
+                    (0..times)
+                        .map(|_| EventInfo {
+                            object: Some(*o),
+                            // The player who removed them.
+                            player: *by,
+                            amount,
+                            ..Default::default()
+                        })
+                        .collect()
                 } else {
                     none()
                 }
