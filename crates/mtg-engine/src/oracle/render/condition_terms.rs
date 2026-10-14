@@ -71,6 +71,45 @@ impl Renderer<'_> {
             {
                 Some("you have the most life or are tied for most life".into())
             }
+            // "If a creature spell you cast this turn was countered by a spell or ability
+            // an opponent controlled".
+            Condition::AllTriggerConditionsThisTurn(v) => {
+                let [TriggerCond::CounteredBy { filter, by }] = v.as_slice() else {
+                    return None;
+                };
+                // "a creature spell you cast this turn".
+                let cast_by = |f: &Filter| match f {
+                    Filter::And(v) if v.iter().any(|x| matches!(x, Filter::Custom(n) if n == crate::custom::WAS_CAST)) => {
+                        v.iter().find_map(|x| match x {
+                            Filter::ControlledBy(r) => Some(*r),
+                            _ => None,
+                        })
+                    }
+                    _ => None,
+                };
+                let n = match (cast_by(filter), filter) {
+                    (Some(r), Filter::And(v)) => {
+                        let rest: Vec<Filter> = v
+                            .iter()
+                            .filter(|x| !matches!(x, Filter::ControlledBy(_) | Filter::Custom(_)))
+                            .cloned()
+                            .collect();
+                        let n = self.noun_det(&Filter::and(rest), super::nouns::Det::A);
+                        let w = self.rel_subject(r);
+                        format!("{n} {w} cast")
+                    }
+                    _ => self.noun_det(filter, super::nouns::Det::A),
+                };
+                let by = match by {
+                    PlayerRel::Opponent => " an opponent controlled",
+                    PlayerRel::You => " you controlled",
+                    PlayerRel::Any => "",
+                    _ => return None,
+                };
+                Some(format!(
+                    "{n} this turn was countered by a spell or ability{by}"
+                ))
+            }
             _ => None,
         }
     }

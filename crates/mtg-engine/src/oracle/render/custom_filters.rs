@@ -298,7 +298,9 @@ impl Renderer<'_> {
                 .collect();
             let n = self.noun_det(&Filter::and(rest), super::nouns::Det::A);
             let w = self.rel_subject(who);
-            return Some(format!("{n} {w} {{alt:cast|'ve cast|have cast}}"));
+            let have = if w == "you" { "you've" } else { "has" };
+            let have = if w == "you" { have.to_string() } else { format!("{w} {have}") };
+            return Some(format!("{n} {have} cast"));
         }
         if name == "soulbond:the creature this is paired with" {
             return Some("a creature ~it is paired with".into());

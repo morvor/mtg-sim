@@ -1420,6 +1420,11 @@ impl Renderer<'_> {
                     k.name().to_lowercase()
                 )
             }
+            // "You may pay {0} rather than pay ~'s mana cost": an alternative cost of
+            // nothing, as casting it without paying its mana cost is (CR 118.5, 118.9).
+            CostChange::AlternativeCost(c) if c.is_free() && c.mana.is_some() => {
+                "you may pay {0} rather than pay ~'s mana cost".to_string()
+            }
             CostChange::AlternativeCost(c) if c.is_free() => {
                 let m = self.me();
                 format!("you may cast {m} without paying its mana cost")
