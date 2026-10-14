@@ -516,11 +516,10 @@ fn modifies(m: &DieModifier, d: &RolledDie) -> bool {
     m.natural.is_none_or(|v| d.natural == v) && m.sides.is_none_or(|s| d.sides == s)
 }
 
-/// CR 706.7: the planar die was rolled. Abilities that trigger on rolling dice trigger,
-/// but it has no numerical result.
 /// Rolls the planar die for `p` (CR 901.9): its natural result 1–6 (see
 /// [`crate::planechase::face_for`]) after any rerolls `p` and others choose to apply
-/// (Monitor Monitor's reroll applies to any die roll, CR 706.2).
+/// (Monitor Monitor's reroll applies to any die roll, CR 706.2). Modifiers that refer to
+/// a numerical result or a number of sides ignore it (CR 706.7).
 pub fn roll_planar_natural(g: &mut Game, p: PlayerId) -> u32 {
     let mut dice = [RolledDie {
         sides: 6,
@@ -531,6 +530,8 @@ pub fn roll_planar_natural(g: &mut Game, p: PlayerId) -> u32 {
     dice[0].natural as u32
 }
 
+/// CR 706.7: the planar die was rolled. Abilities that trigger on rolling dice trigger,
+/// but it has no numerical result.
 pub fn planar_die_rolled(g: &mut Game, p: PlayerId) {
     g.emit(Event::DieRolled {
         player: p,

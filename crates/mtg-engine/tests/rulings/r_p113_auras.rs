@@ -52,7 +52,7 @@ fn oppressive_rays_taxes_only_activated_abilities() {
 
 #[test]
 fn brainwash_is_paid_as_attackers_are_declared() {
-    cr!("508.1d", "508.1h");
+    cr!("508.1h", "508.1j");
     ruling!(
         "Brainwash",
         "This ability is paid for during the declare attackers step of the combat phase."

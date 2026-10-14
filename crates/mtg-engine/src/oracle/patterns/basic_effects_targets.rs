@@ -675,9 +675,7 @@ fn damage_parts(l: &str, b: &mut Builder) -> Option<Effect> {
         let (to, r, _) = damage_recipient(&r, b)?;
         parts.push((n, to));
         rest = r;
-        // A recipient phrase may hand back its rest without the leading space ("target
-        // creature and 1 damage to any target of an opponent's choice").
-        let next = [", and ", ", ", " and ", "and "]
+        let next = [", and ", ", ", " and "]
             .iter()
             .find_map(|sep| rest.strip_prefix(sep).map(str::to_string));
         match next {

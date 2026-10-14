@@ -690,6 +690,10 @@ fn betrayal_at_the_vault_with_a_target_gone() {
     t.answer_targets(P0, &[ent(giant)]);
     t.answer_targets(P0, &[ent(bears), ent(giant)]);
     assert!(t.cast(P0, card).try_go().is_err());
+    assert_eq!(t.zone(card), Zone::Hand(P0));
+    t.answer_targets(P0, &[ent(giant)]);
+    t.answer_targets(P0, &[ent(bears)]);
+    assert!(t.cast(P0, card).try_go().is_err(), "only one other target");
 }
 
 #[test]
@@ -712,4 +716,16 @@ fn spinning_wheel_kick_deals_damage_to_each_of_x_targets() {
     assert_eq!(damage_on(&t, wurm), 3);
     assert!(!t.on_battlefield(jace), "3 damage to a 3-loyalty Jace");
     assert_eq!(damage_on(&t, giant), 0);
+    // X = 4 needs exactly four different targets: with only three creatures, it can't be
+    // cast.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.lands(P0, "Forest", 10);
+    let card = t.hand(P0, "Spinning Wheel Kick");
+    t.answer_targets(P0, &[ent(giant)]);
+    t.answer_targets(P0, &[ent(bears), ent(wurm), ent(giant)]);
+    assert!(t.cast(P0, card).x(4).try_go().is_err());
+    assert_eq!(t.zone(card), Zone::Hand(P0));
 }

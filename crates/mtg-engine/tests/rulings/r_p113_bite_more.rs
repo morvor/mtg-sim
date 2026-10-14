@@ -271,24 +271,23 @@ fn graceful_takedown_with_some_targets_illegal() {
 }
 
 #[test]
-fn friendly_rivalry_second_creature_must_be_legendary() {
+fn friendly_rivalry_second_creature_must_be_another_legendary() {
     cr!("601.2c", "115.3");
     supported("Friendly Rivalry");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
-    let giant = t.battlefield(P0, "Hill Giant");
+    // Jasmine Boreal: a legendary 4/5.
+    let jasmine = t.battlefield(P0, "Jasmine Boreal");
     let wurm = t.battlefield(P1, "Craw Wurm");
     crate::r_s25_common::lands_for_cost(&mut t, P0, "Friendly Rivalry");
     let card = t.hand(P0, "Friendly Rivalry");
     let from = t.asked().len();
-    t.answer_targets(P0, &[ent(bears)]);
     t.answer_targets(P0, &[ent(isamaru)]);
+    t.answer_targets(P0, &[ent(jasmine)]);
     t.answer_targets(P0, &[ent(wurm)]);
     t.cast(P0, card).go();
-    // The second target's candidates: legendary creatures P0 controls other than the
-    // first target.
-    let second = t.asked()[from..]
+    let asked: Vec<Vec<Entity>> = t.asked()[from..]
         .iter()
         .filter_map(|(_, d)| match d {
             mtg_engine::decision::Decision::ChooseTargets { candidates, .. } => {
@@ -296,12 +295,14 @@ fn friendly_rivalry_second_creature_must_be_legendary() {
             }
             _ => None,
         })
-        .nth(1)
-        .expect("second target");
-    assert_eq!(second, vec![ent(isamaru)]);
-    let _ = giant;
+        .collect();
+    // The first target: any creature P0 controls.
+    assert!(asked[0].contains(&ent(bears)) && asked[0].contains(&ent(isamaru)));
+    // The second: legendary creatures P0 controls other than the first target.
+    assert_eq!(asked[1], vec![ent(jasmine)]);
     t.resolve_all();
-    assert!(!t.on_battlefield(wurm), "2 + 2 damage to a 6/4");
+    assert!(!t.on_battlefield(wurm), "2 + 4 damage to a 6/4");
+    assert_eq!(damage_on(&t, isamaru), 0);
 }
 
 #[test]
@@ -339,6 +340,38 @@ fn feral_encounter_delayed_trigger_needs_a_later_combat_this_turn() {
     t.advance_to(P0, Step::BeginningOfCombat);
     t.resolve_all();
     assert!(!t.on_battlefield(bears), "the Giant deals 3 at the next combat");
+}
+
+/// "each Garruk you control" on Garruk, Cursed Huntsman's Wolves names the planeswalker
+/// type (CR 205.3j), not Garruk, Cursed Huntsman himself.
+#[test]
+fn garruk_wolves_add_loyalty_to_each_garruk_you_control() {
+    cr!("205.3j", "306.3");
+    supported("Garruk, Cursed Huntsman");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let huntsman = t.battlefield(P0, "Garruk, Cursed Huntsman");
+    t.activate(P0, huntsman, 0, &[]).expect("0: wolves");
+    t.resolve_all();
+    let wolves: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P0 && o.chars.has_subtype("Wolf"))
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(wolves.len(), 2);
+    // Garruk, Cursed Huntsman is gone; another Garruk of P0's and one of P1's remain.
+    crate::r_s02_common::destroy(&mut t, huntsman);
+    let mine = t.battlefield(P0, "Garruk Wildspeaker");
+    let theirs = t.battlefield(P1, "Garruk Wildspeaker");
+    let (m0, t0) = (
+        t.counters(mine, counters::LOYALTY),
+        t.counters(theirs, counters::LOYALTY),
+    );
+    crate::r_s02_common::destroy(&mut t, wolves[0]);
+    t.resolve_all();
+    assert_eq!(t.counters(mine, counters::LOYALTY), m0 + 1);
+    assert_eq!(t.counters(theirs, counters::LOYALTY), t0);
 }
 
 #[test]
@@ -394,7 +427,7 @@ fn garruk_dies_before_his_wolf_trigger_can_save_him() {
 
 /// "~ deals 3 damage to target player and 1 damage to each creature that player
 /// controls." (Radiating Lightning): a damage list whose second recipient follows a
-/// target phrase, compiled with the same fix as Cuombajj Witches.
+/// target phrase.
 #[test]
 fn radiating_lightning_damages_the_player_and_their_creatures() {
     cr!("120.3", "115.1a");
