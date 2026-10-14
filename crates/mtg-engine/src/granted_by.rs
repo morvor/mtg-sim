@@ -244,3 +244,105 @@ pub fn is_bound_granter(sel: &Sel) -> bool {
 pub fn refers_to_granter(a: &Ability) -> bool {
     serde_json::to_string(&a.kind).is_ok_and(|s| s.contains(GRANTER))
 }
+
+/// How a quoted ability of a token names the card that creates it.
+pub enum TokenQuote {
+    /// Only in "card named [card name]": the name (CR 201.2; the quote as it is, whose
+    /// "card named ~" is compiled as the name, see `card_flow_search`).
+    Named(String),
+    /// "This token's power and toughness are each equal to the number of slime counters
+    /// on Gutter Grime.": the characteristic-defining ability refers to the object that
+    /// created the token (CR 201.5a: "each Ooze token remembers which one created it").
+    Creator,
+}
+
+/// How the quoted ability `normalized` (of a token the card being compiled creates) names
+/// that card, if it's a way this module handles.
+pub fn token_quote_naming(
+    normalized: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<TokenQuote> {
+    let raw = crate::oracle::raw_text();
+    let bare = |s: &str| s.trim().trim_end_matches(',').to_string();
+    let q = quoted(&raw)
+        .into_iter()
+        .find(|q| bare(&crate::oracle::normalize(q, ctx)) == bare(normalized))?;
+    let tl = crate::types::TypeLine::default();
+    let anonymous = crate::oracle::CompileContext {
+        card_name: "\u{1}",
+        full_name: "\u{1}",
+        type_line: &tl,
+        layout: crate::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let names_card =
+        |s: &str| crate::oracle::normalize(s, ctx) != crate::oracle::normalize(s, &anonymous);
+    // "named [card name]" (CR 201.2): kept as the name.
+    let named = format!("named {}", ctx.card_name);
+    if q.contains(&named) {
+        let marked = q.replace(&named, "named \u{2}");
+        if names_card(&marked) {
+            return None;
+        }
+        return Some(TokenQuote::Named(bare(normalized)));
+    }
+    // A characteristic-defining ability whose value names the creating card.
+    for subject in ["This token's", "This creature's"] {
+        let Some(rest) = q.strip_prefix(subject) else {
+            continue;
+        };
+        let rest = rest.strip_prefix(" power and toughness are each equal to ")?;
+        if crate::oracle::normalize(rest, &anonymous).contains('~') {
+            return None;
+        }
+        return Some(TokenQuote::Creator);
+    }
+    None
+}
+
+/// The quoted segments of a text.
+fn quoted(text: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(i) = rest.find('"') {
+        let after = &rest[i + 1..];
+        let Some(j) = after.find('"') else { break };
+        out.push(&after[..j]);
+        rest = &after[j + 1..];
+    }
+    out
+}
+
+/// A token's characteristic-defining ability compiled from a quote of
+/// [`TokenQuote::Creator`] form: "~" in its values is the creating object (bound as the
+/// token's characteristics are built, see `tokens::token_characteristics_in`).
+pub fn refer_cda_to_creator(a: &Ability) -> Option<Ability> {
+    let AbilityKind::Static(st) = &a.kind else {
+        return None;
+    };
+    if !st.is_cda {
+        return None;
+    }
+    let StaticEffect::Continuous { affected, mods } = &st.effect else {
+        return None;
+    };
+    if !matches!(affected, Filter::Source) {
+        return None;
+    }
+    let this = json(&Sel::This)?;
+    let to = json(&Sel::All(Filter::Custom(GRANTER.into())))?;
+    let v = replace(serde_json::to_value(mods).ok()?, &this, &to);
+    let mut st = st.clone();
+    st.effect = StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: serde_json::from_value(v).ok()?,
+    };
+    Some(AbilityDef::with_link(
+        AbilityKind::Static(st),
+        a.text.clone(),
+        a.link,
+    ))
+}
