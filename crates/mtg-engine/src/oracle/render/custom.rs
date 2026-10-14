@@ -790,6 +790,15 @@ impl Renderer<'_> {
                 "you may choose not to untap {} during your untap step",
                 self.me()
             ),
+            crate::kw::game_rules::NO_LOYALTY_EACH => {
+                "players can't activate planeswalkers' loyalty abilities".into()
+            }
+            crate::kw::game_rules::NO_LOYALTY_OPPONENTS => {
+                "your opponents can't activate planeswalkers' loyalty abilities".into()
+            }
+            crate::kw::game_rules::ENCHANTED_ONLY_MANA_OR_LOYALTY => {
+                "enchanted player can't activate abilities that aren't mana abilities or loyalty abilities".into()
+            }
             other => self.gap(format!("Restriction::Custom({other})")),
         }
     }

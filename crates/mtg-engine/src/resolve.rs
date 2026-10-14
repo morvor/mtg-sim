@@ -3082,6 +3082,23 @@ impl Game {
                 }
                 cs.iter().map(ManaType::from_color).collect()
             }
+            ManaProduction::DevotionToChosenColor => {
+                let c = self.choose_mana_color(
+                    p,
+                    ctx,
+                    &[
+                        ManaType::W,
+                        ManaType::U,
+                        ManaType::B,
+                        ManaType::R,
+                        ManaType::G,
+                    ],
+                );
+                let k = c.color().map_or(0, |col| {
+                    self.eval_value(&Value::Devotion(ColorSet::single(col)), ctx)
+                });
+                vec![c; k.max(0) as usize]
+            }
             ManaProduction::CommanderIdentity => {
                 // CR 903.4f: undefined without a commander; no mana.
                 let types = crate::mana_abilities::commander_identity_types(self, p);
