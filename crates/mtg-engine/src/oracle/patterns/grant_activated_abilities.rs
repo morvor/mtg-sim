@@ -56,6 +56,7 @@ fn has_activated_abilities_of(l: &str, text: &str, _ctx: &CompileContext) -> Opt
             mods: vec![Modification::AddAbilitiesOf {
                 from: Box::new(Sel::All(from)),
                 which: AbilitySelection::ACTIVATED,
+                terms: GainedTerms::default(),
             }],
         })),
         text,
@@ -92,6 +93,7 @@ fn gains_activated_abilities_of(l: &str, b: &mut Builder) -> Option<Effect> {
         mods: vec![Modification::AddAbilitiesOf {
             from: Box::new(Sel::Target(slot)),
             which: AbilitySelection::ACTIVATED,
+            terms: GainedTerms::default(),
         }],
         duration: Duration::EndOfTurn,
     })

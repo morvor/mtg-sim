@@ -321,6 +321,7 @@ fn counters_arent_retained_when_an_object_changes_zones() {
             TriggerCond::CountersRemoved {
                 filter: Filter::Any,
                 kind: None,
+                each: false,
             },
             Body::effect(gain(1)),
         ))

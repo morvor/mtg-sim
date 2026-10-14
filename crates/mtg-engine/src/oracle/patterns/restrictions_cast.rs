@@ -10,17 +10,26 @@ use crate::oracle::patterns::statics::{
 };
 use crate::oracle::phrases::end;
 
-/// "[players] can't cast [spells] [this turn / until your next turn]".
+/// "[players] can't cast [spells] [this turn / until your next turn / until the end of
+/// your next turn]".
 fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim());
     let (dur, main) = match l.strip_prefix("until end of turn, ") {
         Some(m) => (Duration::EndOfTurn, m),
-        None => duration_suffix(l),
+        // "Players can't cast creature or planeswalker spells until the end of your next
+        // turn." (Single Combat)
+        None => match l.strip_suffix(" until the end of your next turn") {
+            Some(m) => (Duration::UntilEndOfYourNextTurn, m),
+            None => duration_suffix(l),
+        },
     };
     // "until a player planeswalks" (CR 901.11, Eloren Wilds).
     if !matches!(
         dur,
-        Duration::EndOfTurn | Duration::UntilYourNextTurn | Duration::UntilPlaneswalk { .. }
+        Duration::EndOfTurn
+            | Duration::UntilYourNextTurn
+            | Duration::UntilEndOfYourNextTurn
+            | Duration::UntilPlaneswalk { .. }
     ) {
         return None;
     }

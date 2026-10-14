@@ -1,0 +1,176 @@
+cards	text	example_card	pending_item
+1	Dark One's Own Luck — Whenever you roll one or more dice, ~ gains flying and menace until end of turn. If any of those results was N or higher, draw a card.	Farideh, Devil's Chosen	cards-dice-un
+1	Flip ~ onto the playing area from a height of at least one foot. ~ deals N damage to each creature it lands on. Tap all creatures dealt damage by ~. If ~ doesn't turn completely over at least once during the flip, it has no effect.	Falling Star	cards-dice-un
+1	Roll three six-sided dice. For each different result, create a N/N white Clown Robot artifact creature token.	Circuits Act	cards-dice-un
+1	Roll two six-sided dice. Return any number of cards with total mana value X or less from your graveyard to your hand, where X is the total of those results. Exile ~.	Pair o' Dice Lost	cards-dice-un
+1	{N}, Roll a d8: Monstrosity X, where X is the result.	Clay Golem	cards-dice-un
+1	+N: Target creature without first strike, double strike, or vigilance can't attack or block until your next turn.	Grand Master of Flowers	cards-filters-noun-phrases
+1	+N: You draw a card. Each opponent exiles a card from their hand or a permanent they control.	Nicol Bolas, Dragon-God	cards-filters-noun-phrases
+1	At the beginning of your upkeep, put a despair counter on ~, then each player exiles X permanents they control and/or cards from their hand, where X is the number of despair counters on ~.	Descent into Madness	cards-filters-noun-phrases
+1	At the beginning of your upkeep, you may exchange control of ~ and target permanent you neither own nor control.	Conjured Currency	cards-filters-noun-phrases
+1	During your turn, each non-Equipment artifact and non-Aura enchantment you control with mana value N or greater is a N/N Elemental creature in addition to its other types and has indestructible, haste, and "Whenever ~ deals combat damage to a player, draw a card."	Bello, Bard of the Brambles	cards-filters-noun-phrases
+1	Each creature with mana value of the chosen quality has haste.	Ashling's Prerogative	cards-filters-noun-phrases
+1	Once during each of your turns, you may cast a noncreature or Robot spell from your hand without paying its mana cost.	Vision, Spectral Synthezoid	cards-filters-noun-phrases
+1	The owner of target spell, nonland permanent, or card in a graveyard puts it on their choice of the top or bottom of their library.	Endless Detour	cards-filters-noun-phrases
+1	Whenever an opponent casts a spell with mana value of the chosen quality, choose one that hasn't been chosen — / • Put a +N/+N counter on ~. / • Each opponent loses N life and you gain N life. / • Draw a card.	Gollum, Riddle Master	cards-filters-noun-phrases
+1	Whenever you attack, choose odd or even. Creatures with mana value of that quality can't block this turn.	Twins of Discord	cards-filters-noun-phrases
+1	Whenever you attack, double the number of each kind of counter on each Spider and legendary creature you control.	Miles Morales // Ultimate Spider-Man	cards-filters-noun-phrases
+1	Whenever ~ attacks, exile up to one target legendary or Rat card from your graveyard and copy it. You may cast the copy.	Nashi, Moon's Legacy	cards-filters-noun-phrases
+1	Whenever ~ attacks, target creature card in your graveyard that's an artifact or that has mana value N or less gains escape until end of turn. The escape cost is equal to its mana cost plus exile two other cards from your graveyard.	Desdemona, Freedom's Edge	cards-filters-noun-phrases
+1	Whenever ~ becomes tapped, exile the top six cards of your library. You may cast a Vehicle or artifact creature spell from among them. Then put the rest on the bottom of your library in a random order.	Sanwell, Avenger Ace	cards-filters-noun-phrases
+1	You may put a +N/+N counter on a creature. Then choose odd or even. Return each creature with power of the chosen quality to its owner's hand.	Zimone's Hypothesis	cards-filters-noun-phrases
+1	{N}, Exile ~ and four other artifact creatures and/or Vehicles you control: Create Mechtitan, a legendary N/N Construct artifact creature token with flying, vigilance, trample, lifelink, and haste that's all colors. When that token leaves the battlefield, return all cards exiled with ~ except ~ to the battlefield tapped under their owners' control.	Mechtitan Core	cards-filters-noun-phrases
+1	{N}{R}, Remove a time counter from a permanent you control or suspended card you own: ~ gets +N/+N until end of turn.	Rift Elemental	cards-filters-noun-phrases
+1	{T}, Sacrifice a black or artifact creature: Add an amount of {B} equal to the sacrificed creature's mana value.	Soldevi Adnate	cards-filters-noun-phrases
+1	{T}: Add one mana of any color. If you control a God, a Demigod, or a legendary enchantment, you gain N life.	Altar of the Pantheon	cards-filters-noun-phrases
+1	~ deals N damage to target creature you don't control and N damage to target creature of an opponent's choice you don't control.	Volcanic Offering	cards-filters-noun-phrases
+1	~ deals X damage to target opponent or planeswalker and half X damage, rounded up, to you, where X is the number of Mountains you control.	Eternal Flame	cards-filters-noun-phrases
+1	Exile the top ten cards of your library. You may cast spells with exactly three colors from among them this turn. Add {W}{W}{U}{U}{B}{B}{R}{R}{G}{G}. Spend this mana only to cast spells with exactly three colors.	Meeting of the Five	cards-filters-noun-phrases, cards-mana
+1	As long as you control one or more creatures with a name you noted for cards named ~, ~ and those creatures get +N/+N and have lifelink.	Noble Banneret	cards-game-rules
+1	Choose target spell. You get {E}{E} , then you may pay any amount of {E}. Counter that spell unless its controller pays {N} for each {E} paid this way.	Aether Spike	cards-game-rules
+1	If you removed a creature card with flying from the draft with cards named ~, ~ has flying. The same is true for first strike, double strike, deathtouch, haste, hexproof, indestructible, lifelink, menace, reach, and vigilance.	Animus of Predation	cards-game-rules
+1	Landfall — Whenever a land you control enters, if it's your main phase, there's an additional combat phase after this phase. At the beginning of that combat, untap all creatures you control.	Moraug, Fury of Akoum	cards-game-rules
+1	Other creatures you control of a type you noted for cards named ~ get +N/+N.	Paliano Vanguard	cards-game-rules
+1	Search your library and/or outside the game for exactly four legendary creature cards you own with different names, then reveal those cards. An opponent chooses two of them. Put the chosen cards into your hand and shuffle the rest into your library.	Turtles Forever	cards-game-rules
+1	When ~ enters, if you guessed correctly for a card named ~, draw a card.	Spire Phantasm	cards-game-rules
+1	When ~ enters, you may search your library for a card with a name you noted for cards named ~, reveal it, put it into your hand, then shuffle.	Smuggler Captain	cards-game-rules
+1	You may reveal exactly two cards you own with different names from outside the game. An opponent chooses one of them. You put that card into your hand.	Extrapolate the Impossible	cards-game-rules
+1	{N}, {T}, Pay life equal to the number of colors in your commanders' color identity: Draw a card.	War Room	cards-game-rules
+1	{N}, {T}: Add one mana of any color. When you spend this mana to cast your commander, scry X, where X is the number of times it's been cast from the command zone this game.	Study Hall	cards-game-rules
+1	{T}: Add one mana of any color in your commander's color identity. When that mana is spent to cast a creature spell that shares a creature type with your commander, scry N.	Path of Ancestry	cards-game-rules
+1	{T}: Draw a card. Activate only if you've paid or lost four or more {E} this turn.	Izzet Generatorium	cards-game-rules
+1	~ attacks a player you noted for cards named ~ each combat if able.	Cogwork Tracker	cards-game-rules
+1	~ costs {N} less to cast if a player's life total is less than or equal to half their starting life total.	Game Over	cards-game-rules
+1	~ enters with X +N/+N counters on it, where X is the number of cards you removed from the draft with cards named ~.	Cogwork Grinder	cards-game-rules
+1	+N: You may discard a card. If you do, draw a card. If a creature card was discarded this way, draw two cards instead.	Mila, Crafty Companion // Lukka, Wayward Bonder	cards-history-conditions
+1	At the beginning of each player's end step, that player may draw a card if a player other than you lost life this turn.	Ludevic, Necro-Alchemist	cards-history-conditions
+1	At the beginning of each player's end step, ~ deals N damage to that player unless one of their opponents was dealt damage this turn.	Antagonism	cards-history-conditions
+1	At the beginning of each player's upkeep, ~ deals X damage to that player, where X is the number of untapped lands they controlled at the beginning of this turn.	Power Surge	cards-history-conditions
+1	At the beginning of each upkeep, if an opponent was dealt noncombat damage last turn, return ~ from your graveyard to your hand.	Command the Stage	cards-history-conditions
+1	At the beginning of the end step of enchanted creature's controller, ~ deals N damage to that player unless that creature attacked this turn.	Insubordination	cards-history-conditions
+1	At the beginning of your end step, choose an opponent. At the beginning of that player's next end step, you draw a card if they didn't attack you that turn. Otherwise, create three N/N white Human Soldier creature tokens.	Faramir, Prince of Ithilien	cards-history-conditions
+1	At the beginning of your end step, choose target artifact or creature card in an opponent's graveyard that was put there from their library this turn. Put it onto the battlefield under your control.	Captain N'ghathrod	cards-history-conditions
+1	At the beginning of your end step, gain control of target nonland permanent controlled by a player who was dealt combat damage by three or more Pirates this turn.	Admiral Beckett Brass	cards-history-conditions
+1	At the beginning of your end step, you may draw a card. If you do, discard a card unless a permanent entered the battlefield face down under your control this turn or you turned a permanent face up this turn.	Oblivious Bookworm	cards-history-conditions
+1	At the beginning of your upkeep, for each color, put a +N/+N counter on a Dragon you control of that color. If you put +N/+N counters on five Dragons this way, you win the game.	Call the Spirit Dragons	cards-history-conditions
+1	At the beginning of your upkeep, look at the top card of your library. If it's an artifact or creature card, you may reveal it and put it into your hand. If you put a card into your hand this way, create a Food token and transform ~.	Sidequest: Catch a Fish // Cooking Campsite	cards-history-conditions
+1	At the beginning of your upkeep, ~ deals X damage to target opponent previously dealt damage by it, where X is the number of infection counters on it.	Diseased Vermin	cards-history-conditions
+1	Cast ~ only if you were dealt damage this turn by a red instant or sorcery spell.	Suffocation	cards-history-conditions
+1	Choose a player who cast one or more sorcery spells this turn. ~ deals damage to that player equal to half the damage dealt by one of those sorcery spells this turn, rounded down.	Backdraft	cards-history-conditions
+1	Counter target spell. If that spell is countered this way, its controller may put a creature card from their hand onto the battlefield.	Fold into Aether	cards-history-conditions
+1	Creatures that attacked during their controller's last turn can't attack.	Halls of Mist	cards-history-conditions
+1	Destroy target nonblack creature that entered since your last turn ended.	Premature Burial	cards-history-conditions
+1	Draw cards equal to the number of cards target opponent discarded this turn.	Dream Salvage	cards-history-conditions
+1	Each creature you control enters with an additional +N/+N counter on it for each mana from an artifact source spent to cast it.	Coin of Mastery	cards-history-conditions
+1	Each opponent who attacked with a creature this turn can't cast spells.	Angelic Arbiter	cards-history-conditions
+1	Each opponent who attacked you or a planeswalker you control this turn can't cast spells.	Unstable Glyphbridge // Sandswirl Wanderglyph	cards-history-conditions
+1	Each opponent who cast a spell this turn can't attack with creatures.	Angelic Arbiter	cards-history-conditions
+1	Each player reveals the top card of their library. For each creature card revealed this way, create a token that's a copy of that card, except it's N/N, it's a Spirit in addition to its other types, and it has flying. If no creature cards were revealed this way, return ~ to its owner's hand.	Haunting Imitation	cards-history-conditions
+1	Each player sacrifices a creature of their choice. If you sacrificed a creature this way, you may return another permanent card from your graveyard to the battlefield.	Rise of the Witch-king	cards-history-conditions
+1	Each player sacrifices a creature or planeswalker of their choice. If you sacrificed a permanent this way, you may return another permanent card from your graveyard to your hand.	Deadly Brew	cards-history-conditions
+1	Flying, protection from spells and from permanents that were cast this turn	Emrakul, the World Anew	cards-history-conditions
+1	GOOOOAAAALLL! — {T}, Sacrifice ~: Draw two cards. Activate only if an opponent was dealt combat damage by a legendary creature this turn.	Blitzball	cards-history-conditions
+1	Gain control of target nonartifact, nonblack creature that attacked you this turn and put a -N/-N counter on it.	Jabari's Influence	cards-history-conditions
+1	If a creature dealt damage this turn by a source you controlled would die, exile it instead.	Kumano Faces Kakkazan // Etching of Kumano	cards-history-conditions
+1	If ~ hasn't been exerted this turn, you may exert it as it attacks. When you do, untap all other creatures you control and after this phase, there is an additional combat phase.	Combat Celebrant	cards-history-conditions
+1	If ~ is the first spell you've cast this game, you may cast it without paying its mana cost.	Once Upon a Time	cards-history-conditions
+1	If ~ would enter and it wasn't cast or no mana was spent to cast it, exile it instead.	Primeval Spawn	cards-history-conditions
+1	Mill four cards. You may put a permanent card from among the cards milled this way into your hand. If you control a Squirrel or returned a Squirrel card to your hand this way, create a Food token.	Cache Grab	cards-history-conditions
+1	Once during each of your turns, you may cast a spell from among cards in your graveyard that were milled this turn.	Raul, Trouble Shooter	cards-history-conditions
+1	Once during each of your turns, you may play a land or cast a permanent spell from among cards in your graveyard that were put there from your library this turn.	Kagha, Shadow Archdruid	cards-history-conditions
+1	Other creatures you control enter with an additional +N/+N counter on them for each mana from a Treasure spent to cast them.	Kalain, Reclusive Painter	cards-history-conditions
+1	Pray — Once during each of your turns, you may cast a creature spell from among cards in your graveyard that were put there from anywhere other than the battlefield this turn.	Banon, the Returners' Leader	cards-history-conditions
+1	Return all nonland permanents to their owners' hands. If you return four or more nontoken permanents you control this way, you may put a permanent card from your hand onto the battlefield.	Flood of Tears	cards-history-conditions
+1	Reveal the top seven cards of your library, then put those cards on the bottom of your library in any order. If a card named ~ was revealed this way, ~ deals N damage to any target.	Stomping Slabs	cards-history-conditions
+1	Sacrifice ~: Until your next turn, target player who was dealt combat damage by ~ this turn can't cast noncreature spells.	Hope of Ghirapur	cards-history-conditions
+1	Search your library for a nonland card and reveal it. Each opponent who cast a spell this turn with the same name as that card loses N life. Then shuffle.	Grim Reminder	cards-history-conditions
+1	Target creature you control gets +N/+N until end of turn for each mana from a Treasure that was spent to cast ~. Then that creature deals damage equal to its power to target creature an opponent controls.	Spoils of the Hunt	cards-history-conditions
+1	Target opponent reveals their hand. You choose a nonland card from it. Exile that card. If an instant card or a card with flash is exiled this way, they lose N life. Otherwise, you lose N life.	Check for Traps	cards-history-conditions
+1	Target opponent reveals their hand. You may choose a nonland card from it. If you do, that player exiles that card. If a nonblack card is exiled this way, exile a card from your hand.	Specter's Shriek	cards-history-conditions
+1	When enchanted creature dies, return that card to its owner's hand. If that card is returned to its owner's hand this way, you may pay {U}{U}{U}. If you do, return ~ to its owner's hand.	Puppet Master	cards-history-conditions
+1	When ~ dies during combat, it deals N damage to each creature it blocked this combat.	Cathedral Membrane	cards-history-conditions
+1	When ~ dies, create X N/N black Rat creature tokens with "~ can't block", where X is the amount of damage dealt to it this turn.	Tangled Colony	cards-history-conditions
+1	When ~ enters, choose one — / • Put a +N/+N counter on ~ for each creature that left the battlefield under your control this turn. / • You gain N life and scry N. / • Exile target player's graveyard.	Kutzil's Flanker	cards-history-conditions
+1	When ~ enters, choose target player. You create a tapped Powerstone token for each nonland card in that player's graveyard that was put there from the battlefield this turn.	Wreck Hunter	cards-history-conditions
+1	When ~ enters, create a N/N black Bat creature token with flying for each mana from a Cave spent to cast it.	Bat Colony	cards-history-conditions
+1	When ~ enters, draw three cards, then discard two cards at random. If two cards that share a card type are discarded this way, put two +N/+N counters on ~.	Rowdy Crew	cards-history-conditions
+1	When ~ enters, for each player, destroy up to one target creature that player controls. If a creature you controlled was destroyed this way, put two +N/+N counters on ~.	Demonic Junker	cards-history-conditions
+1	When ~ enters, it deals N damage to any target and you gain N life. If a player is dealt damage this way, they discard a card.	Sonic Shrieker	cards-history-conditions
+1	When ~ enters, target opponent reveals X cards from their hand, where X is the number of Goblins you control. You choose one of those cards. That player exiles it. If an instant or sorcery card is exiled this way, you may cast it for as long as you control ~, and mana of any type can be spent to cast that spell.	Taster of Wares	cards-history-conditions
+1	Whenever a creature or planeswalker an opponent controls is dealt excess damage, if a Giant, Wizard, or spell you controlled dealt damage to it this turn, draw a card.	Aegar, the Freezing Flame	cards-history-conditions
+1	Whenever a creature you control becomes tapped during your turn, if it's the first time that creature has become tapped this turn, untap it.	Captain America, Living Legend	cards-history-conditions
+1	Whenever a land enters under an opponent's control, if that player had another land enter the battlefield under their control this turn, ~ deals N damage to that player.	Tunnel Ignus	cards-history-conditions
+1	Whenever an opponent becomes the monarch, if you were the monarch as the turn began, that player loses N life and you gain N life.	Knights of the Black Rose	cards-history-conditions
+1	Whenever an opponent casts a spell or activates an ability, if mana from a Treasure was spent to cast it or activate it, put a +N/+N counter on target creature, then draw a card.	Vazi, Keen Negotiator	cards-history-conditions
+1	Whenever another player loses the game, you gain life equal to that player's life total as the turn began.	Sengir, the Dark Baron	cards-history-conditions
+1	Whenever one or more Rogues you control deal combat damage to a player, that player mills a card for each N damage dealt to them. If the player mills at least one creature card this way, you draw a card.	Anowon, the Ruin Thief	cards-history-conditions
+1	Whenever one or more counters are put on a creature you control, if it's the first time counters have been put on that creature this turn, put a +N/+N counter on that creature.	Stalwart Successor	cards-history-conditions
+1	Whenever one or more tokens you control attack a player, exile the top card of your library. During any turn you attacked with a token, you may play that card.	Neyali, Suns' Vanguard	cards-history-conditions
+1	Whenever you cast a permanent spell using mana produced by ~, discover X, where X is that spell's mana value.	Brass's Tunnel-Grinder // Tecutlan, the Searing Rift	cards-history-conditions
+1	Whenever you cast a spell, if it's the first instant spell, the first sorcery spell, or the first Otter spell other than ~ you've cast this turn, you may have target opponent draw a card. If you do, copy that spell. You may choose new targets for the copy.	Alania, Divergent Storm	cards-history-conditions
+1	Whenever you cast an artifact or creature spell using mana produced by ~, create a white Gnome Soldier artifact creature token with "~'s power and toughness are each equal to the number of artifacts and/or creatures you control."	Thousand Moons Smithy // Barracks of the Thousand	cards-history-conditions
+1	Whenever you draw a card, target opponent mills two cards. If two nonland cards that share a color were milled this way, repeat this process.	Sphinx's Tutelage	cards-history-conditions
+1	Whenever ~ and/or one or more other nontoken creatures you control enter, if none of them were cast or no mana was spent to cast them, draw a card.	Satoru, the Infiltrator	cards-history-conditions
+1	Whenever ~ attacks, draw cards equal to the number of cards in defending player's hand minus the number of cards in your hand. If you didn't draw cards this way, you may put a creature card from your hand onto the battlefield.	Mr. Foxglove	cards-history-conditions
+1	Whenever ~ attacks, exile a number of cards from the top of your library equal to the number of differently named tokens you control. During any turn you attacked with a commander, you may play those cards.	Neriv, Crackling Vanguard	cards-history-conditions
+1	Whenever ~ attacks, if defending player has more cards in hand than you, exile the top card of their library. During any turn you attacked with a Rogue, you may cast that card and you may spend mana as though it were mana of any color to cast that spell.	Robber of the Rich	cards-history-conditions
+1	Whenever ~ deals combat damage to a player or planeswalker, return to your hand target creature or planeswalker card in your graveyard that wasn't put there this combat.	Storrev, Devkarin Lich	cards-history-conditions
+1	Whenever ~ deals combat damage to a player, choose up to one target card in a graveyard that was discarded or put there from a library this turn. Put that card into its owner's hand.	Ghost of Ramirez DePietro	cards-history-conditions
+1	Whenever ~ enters or attacks, exile up to one other target creature until ~ leaves the battlefield. If a creature is put into exile this way, return each other card exiled with ~ to the battlefield under its owner's control.	Mysterious Limousine	cards-history-conditions
+1	Whenever ~ is dealt damage, it deals that much damage to any other target. If a player is dealt damage this way, they can't gain life for the rest of the game.	Screaming Nemesis	cards-history-conditions
+1	You can't cast ~ if you've played a land this turn.	Rock Jockey	cards-history-conditions
+1	You may have ~ enter as a copy of any creature card in a graveyard that was put there from the battlefield this turn, except it's a Phyrexian in addition to its other types.	Activated Sleeper	cards-history-conditions
+1	You may play lands and cast spells from among cards in your graveyard you've surveilled this turn. If you cast a spell this way, you pay life equal to its mana value rather than paying its mana cost.	Eye of Duskmantle	cards-history-conditions
+1	{B}: Target player dealt damage by ~ this turn loses N life.	Wicked Akuba	cards-history-conditions
+1	{B}{R}: Return ~ from your graveyard to the battlefield with a finality counter on it. Activate only if an opponent has been dealt noncombat damage this turn.	Grim Repriser	cards-history-conditions
+1	{B}{R}: Target player who lost life this turn loses N life.	Rix Maadi Guildmage	cards-history-conditions
+1	{CHAPTER} II, III — You may put an Aura or Equipment card from your hand or graveyard onto the battlefield. If an Equipment is put onto the battlefield this way, you may attach it to a creature you control.	Vault 101: Birthday Party	cards-history-conditions
+1	{CHAPTER} IV — Target opponent faces a villainous choice — Destroy all Dalek creatures and each of your opponents loses life equal to the total power of Daleks that died this turn, or destroy all non-Dalek creatures.	Genesis of the Daleks	cards-history-conditions
+1	{N}, {T}, Sacrifice ~: Destroy target nonland permanent. This ability costs {N} less to activate if you attacked with a Spacecraft this turn.	Thaumaton Torpedo	cards-history-conditions
+1	{N}, {T}, Sacrifice ~: Each opponent who lost life this turn sacrifices a creature with the greatest power among creatures they control.	Papalymo Totolymo	cards-history-conditions
+1	{N}, {T}: Create a N/N red Phyrexian Goblin creature token. Activate only if an oil counter was removed from a permanent you controlled this turn or a permanent with an oil counter on it was put into a graveyard this turn.	Churning Reservoir	cards-history-conditions
+1	{N}{B}{B}, {T}: Target player discards a card unless they put a card from their hand on top of their library. If that player discards a card this way, ~ deals N damage to each creature and each player. Activate only as a sorcery.	Tainted Specter	cards-history-conditions
+1	{N}{R}, {T}: Transform ~. Activate only if red sources you controlled dealt N or more noncombat damage this turn and only as a sorcery.	Ojer Axonil, Deepest Might // Temple of Power	cards-history-conditions
+1	{N}{R}: Level N / Whenever you cast a spell, if mana from a Treasure was spent to cast it, ~ deals damage equal to that spell's mana value to each opponent.	Alchemist's Talent	cards-history-conditions
+1	{T}, Pay N life: Add {C}. If that mana is spent on an instant or sorcery spell, that spell can't be countered.	Boseiju, Who Shelters All	cards-history-conditions
+1	{T}, Pay N life: Draw a card. Activate only if three or more cards left your graveyard this turn or if you've sacrificed a Food this turn.	Bonecache Overseer	cards-history-conditions
+1	{T}: Create a N/N white and blue Golem artifact creature token. Activate only if ~ or another artifact entered the battlefield under your control this turn.	Master's Guide-Mural // Master's Manufactory	cards-history-conditions
+1	{T}: Create a Treasure token. Activate only if you control a creature that fought this turn.	Boxing Ring	cards-history-conditions
+1	{T}: Draw a card. Activate only if you created a token this turn.	Idol of Oblivion	cards-history-conditions
+1	{T}: Mill a card. You may put a land card milled this way into your hand. You gain N life if a Lesson card is milled this way.	Sparring Dummy	cards-history-conditions
+1	{T}: Put a +N/+N counter on each creature that entered the battlefield under your control this turn.	Shaile, Dean of Radiance // Embrose, Dean of Shadow	cards-history-conditions
+1	{T}: ~ deals N damage to target player or planeswalker. If ~ has dealt N or more damage this turn, exile her, then return her to the battlefield transformed under her owner's control.	Chandra, Fire of Kaladesh // Chandra, Roaring Flame	cards-history-conditions
+1	{U}: Regenerate ~. Activate only if ~ blocked or was blocked by a blue creature this turn.	Sea Troll	cards-history-conditions
+1	{W}{U}: Return ~ from your graveyard to the battlefield with a finality counter on it. Activate only if you've scried or surveilled this turn.	Proctor of Potential	cards-history-conditions
+1	~ can attack players who attacked you during their last turn as though it didn't have defender.	Weathered Sentinels	cards-history-conditions
+1	~ can't be the target of spells unless it attacked or blocked this turn.	Lurker	cards-history-conditions
+1	~ costs {N} less to cast for each {E} you've paid or lost this turn.	Blaster Hulk	cards-history-conditions
+1	~ deals N damage to any target. If a player is dealt damage this way, scry N.	Play with Fire	cards-history-conditions
+1	~ deals X damage divided as you choose among any number of target creatures, where X is the greatest amount of damage dealt by a source to a permanent or player this turn.	Impact Resonance	cards-history-conditions
+1	~ deals X damage to each creature. For each mana from a Desert spent to cast ~, create a tapped Treasure token.	Cataclysmic Prospecting	cards-history-conditions
+1	~ has indestructible as long as two or more creatures died under your control this turn.	Gimli, Mournful Avenger	cards-history-conditions
+1	Return X target cards with different mana values from your graveyard to your hand. If eight or more cards were returned to your hand this way, your life total becomes equal to your starting life total. Exile ~.	Long Rest	cards-history-conditions, cards-game-rules
+1	At the beginning of each player's first main phase, that player may put a +N/+N counter on ~. If they do, they add {C} for each counter on it.	Cheering Crowd	cards-mana
+1	At the beginning of each player's upkeep, that player chooses a color. Until end of turn, lands tapped for mana produce mana of the chosen color instead of any other color.	Hall of Gemstone	cards-mana
+1	At the beginning of your upkeep, you may add {C}{C}. This mana can't be spent to cast spells.	Thran Turbine	cards-mana
+1	For each artifact or creature card in target opponent's graveyard, add {C} and you gain N life.	Spoils of Evil	cards-mana
+1	If a basic land you control is tapped for mana, it produces mana of a color of your choice instead of any other type.	Pulse of Llanowar	cards-mana
+1	If a land is tapped for two or more mana, it produces {C} instead of any other type and amount.	Damping Sphere	cards-mana
+1	Until end of turn, spells and abilities you control that would add colored mana instead add that much white mana. Until end of turn, you may spend white mana as though it were mana of any color.	False Dawn	cards-mana
+1	When you unlock this door, create an X/X blue Spirit creature token with flying, where X is the number of unlocked doors among Rooms you control.	Smoky Lounge // Misty Salon	cards-mana
+1	Whenever a land you control is tapped for mana, add an additional one mana of any type that land produced for each other land you control with the same name as it.	Sasaya, Orochi Ascendant // Sasaya's Essence	cards-mana
+1	Whenever one or more Treefolk you control attack, add twice that much {G}.	Fangorn, Tree Shepherd	cards-mana
+1	You may pay {R}{G} rather than pay ~'s mana cost. Spend only mana produced by Treasures to cast it this way.	Security Rhox	cards-mana
+1	{G}, {T}, Discard a card: Until end of turn, if you tap a land for mana, it produces one mana of a color of your choice instead of any other type and amount.	Harvest Mage	cards-mana
+1	{N}, {T}: Choose a color. Add an amount of mana of that color equal to the number of creatures you control of the chosen type.	Three Tree City	cards-mana
+1	{T}, Mill a card: For each colored mana symbol in the milled card's mana cost, add one mana of that color.	Charmed Pendant	cards-mana
+1	{T}, Pay N life: Add two mana of any one color. Spend this mana only to cast spells you don't own.	Thieving Varmint	cards-mana
+1	{T}: Add one mana of any type that a land you control could produce. If ~ has a +N/+N counter on it, add three mana of that type instead.	Incubation Druid	cards-mana
+1	{T}: Add two mana of any one color. Spend this mana only to turn permanents face up.	Overgrown Zealot	cards-mana
+1	{T}: Add {C}. Spend this mana only to cast a face-down creature spell, pay a mana cost to turn a manifested creature face up, or pay a morph cost.	Qarsi Deceiver	cards-mana
+1	{T}: Add {R}{G}. Spend this mana only to cast face-down spells or to turn creatures face up.	Tin Street Gossip	cards-mana
+1	{T}: Add {U}. Spend this mana only to cast an enchantment spell, unlock a door, or turn a permanent face up.	Creeping Peeper	cards-mana
+1	{T}: Choose a color. Add one mana of that color for each charge counter on ~.	Astral Cornucopia	cards-mana
+1	{T}: Destroy target artifact if its mana value is equal to the amount of unspent mana you have.	Glissa Sunseeker	cards-mana
+1	~ costs {N} less to cast for each land your opponents control that could produce {C}.	Obsidian Charmaw	cards-mana
+1	~ gets +N/+N for each unspent green mana you have.	Omnath, Locus of Mana	cards-mana

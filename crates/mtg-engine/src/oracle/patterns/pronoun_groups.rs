@@ -422,9 +422,6 @@ pub fn blocking_it(f: Filter, rest: &str, b: &mut Builder) -> Option<(Filter, St
         (r.is_empty() || r.starts_with(' ') || r.starts_with(','))
             && matches!(singular_it(b), Sel::This)
     }) {
-        if crate::oracle::raw_text().to_lowercase().contains("sacrifice") {
-            return None;
-        }
         return Some((Filter::and(vec![f, Filter::BlockedBySource]), r.to_string()));
     }
     let r = r.strip_prefix("that's ").unwrap_or(r);
@@ -451,14 +448,26 @@ pub fn blocking_it(f: Filter, rest: &str, b: &mut Builder) -> Option<(Filter, St
             tail,
         ));
     }
+    // "target creature blocking or blocked by it" (Steadfast Armasaur), "each creature
+    // blocking or blocked by it" (Vortex Elemental), "it" being the source: as "blocking
+    // or blocked by ~".
+    if let Some(r) = r.strip_prefix("blocking or blocked by it") {
+        if (r.is_empty() || r.starts_with(' ') || r.starts_with(','))
+            && matches!(singular_it(b), Sel::This)
+        {
+            let either = Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]);
+            return Some((Filter::and(vec![f, either]), r.to_string()));
+        }
+        return None;
+    }
     let r = r.strip_prefix("blocking it")?;
     if !(r.is_empty() || r.starts_with(' ') || r.starts_with(',')) {
         return None;
     }
     // Once "it" has left the battlefield (sacrificed as a cost or by an earlier
     // instruction: "{B}, Sacrifice ~: Destroy target creature blocking it."), the creatures
-    // that were blocking it are those of its last known information, which combat keeps
-    // (`CombatState::blockers_of_last_known`).
+    // that were blocking it are those of its last known information
+    // (`Game::left_combat_pair`).
     let blocking = match singular_it(b) {
         Sel::This => Filter::BlockingSource,
         sel @ (Sel::TriggerObject | Sel::AttachedTo) => Filter::BlockingAnyOf(Box::new(sel)),

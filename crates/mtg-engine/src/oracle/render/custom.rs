@@ -493,6 +493,9 @@ impl Renderer<'_> {
             }
             "card_left_your_graveyard_this_turn" => "a card left your graveyard this turn".into(),
             "you_lost_life_last_turn" => "you lost life last turn".into(),
+            crate::oracle::patterns::r603_entered_last_turn::CREATURE_ENTERED_LAST_TURN => {
+                "you had another creature enter the battlefield under your control last turn".into()
+            }
             "turn:this dealt damage to an opponent" => {
                 format!("{} dealt damage to an opponent this turn", me(self))
             }
@@ -545,6 +548,9 @@ impl Renderer<'_> {
             }
             n if n.starts_with(crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN) => {
                 let t = &n[crate::oracle::patterns::grant_conditions::SACRIFICED_THIS_TURN.len()..];
+                let t = t
+                    .strip_prefix(crate::oracle::patterns::grant_conditions::SACRIFICED_SUBTYPE)
+                    .unwrap_or(t);
                 format!("you've sacrificed {} this turn", with_article(t))
             }
             other => match self
@@ -619,6 +625,10 @@ impl Renderer<'_> {
             "exert as it attacks" => format!("you may exert {} as it attacks", me(self)),
             "commander:can be your commander" => format!("{} can be your commander", me(self)),
             "deck:any number" => format!("a deck can have any number of cards named {}", me(self)),
+            "assigns combat damage as though unblocked" => format!(
+                "{} assigns its combat damage as though it weren't blocked",
+                me(self)
+            ),
             "may assign combat damage as though unblocked" => format!(
                 "you may have {} assign its combat damage as though it weren't blocked",
                 me(self)
