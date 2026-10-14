@@ -462,6 +462,12 @@ fn grudge_keeper_considers_only_the_vote_that_triggered_it() {
     plea(&mut t);
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.life(P0), 20);
+    // The third vote: P1 votes only for what P0 didn't vote for in this vote, though P0
+    // voted for it in an earlier one.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer(P1, DecisionKind::Option, Answer::Index(0));
+    plea(&mut t);
+    assert_eq!(t.life(P1), 16);
 }
 
 #[test]

@@ -848,3 +848,46 @@ fn crafty_cutpurse_tapped_and_attacking_tokens_dont_attack_for_you() {
         .iter()
         .all(|i| t.obj(*i).tapped && !crate::r_s10_common::attacking(&t, *i)));
 }
+
+#[test]
+fn crafty_cutpurse_doesnt_take_the_creating_effects_delayed_trigger() {
+    cr!("603.7e", "701.21a");
+    ruling!(
+        "Crafty Cutpurse",
+        "If the effect that creates the token also creates a delayed triggered ability, Crafty Cutpurse doesn’t change who controls that ability."
+    );
+    supported("Kiki-Jiki, Mirror Breaker");
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    enter(&mut t, P0, "Crafty Cutpurse");
+    t.resolve_all();
+    let kiki = t.battlefield(P1, "Kiki-Jiki, Mirror Breaker");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.activate(P1, kiki, 0, &[obj(bears)]).unwrap();
+    t.resolve_all();
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 1);
+    // P1's delayed trigger can't sacrifice P0's token.
+    t.advance_to(P1, Step::End);
+    t.resolve_all();
+    assert!(t.on_battlefield(toks[0]));
+    assert_eq!(tokens(&t, P0).len(), 1);
+}
+
+#[test]
+fn crafty_cutpurse_doesnt_take_tokens_already_on_the_battlefield() {
+    cr!("614.1");
+    ruling!(
+        "Crafty Cutpurse",
+        "Crafty Cutpurse won’t retroactively change the control of tokens that have already entered the battlefield."
+    );
+    let mut t = TestGame::new(2);
+    create_token(&mut t, P1, "Soldier");
+    enter(&mut t, P0, "Crafty Cutpurse");
+    t.resolve_all();
+    assert_eq!(tokens(&t, P1).len(), 1);
+    assert!(tokens(&t, P0).is_empty());
+    create_token(&mut t, P1, "Soldier");
+    assert_eq!(tokens(&t, P1).len(), 1);
+    assert_eq!(tokens(&t, P0).len(), 1);
+}
