@@ -1430,6 +1430,15 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         // "counters on ~" etc.: the core phrases.
         return None;
     }
+    // "different color pairs among permanents you control that are exactly two colors"
+    // (CR 105.5; only objects that are exactly two colors have a color pair).
+    for p in ["different color pairs among ", "color pairs among "] {
+        if let Some(x) = r.strip_prefix(p) {
+            let x = x.replacen(" that are exactly two colors", "", 1);
+            let (f, tail) = objects(&x, b)?;
+            return Some((Value::ColorPairsAmong(f), tail));
+        }
+    }
     // Kinds of things among objects ("card types among cards in your graveyard"), or
     // in one object ("colors that spell is").
     if let Some((kind, rest)) = among_kind(r) {
@@ -1445,6 +1454,18 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             return Some((Value::DistinctAmong(kind, Box::new(Sel::All(f))), tail));
         }
         if kind == Among::Colors {
+            // "the number of colors it is" (Jared Carthalion): of the object "it" means.
+            for p in ["it is", "it was"] {
+                if let Some(after) = rest.strip_prefix(p) {
+                    if word_end(after) {
+                        let (sel, _) = referent("it", b)?;
+                        return Some((
+                            Value::DistinctAmong(Among::Colors, Box::new(sel)),
+                            after.to_string(),
+                        ));
+                    }
+                }
+            }
             // "the number of colors that spell is", "... that creature was".
             if let Some(x) = rest.strip_prefix("that ") {
                 for verb in [" is", " was"] {

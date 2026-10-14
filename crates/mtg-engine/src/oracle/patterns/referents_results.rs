@@ -519,6 +519,30 @@ fn for_each_amount_leading(l: &str, b: &mut crate::oracle::effects::Builder) -> 
     if x.contains('"') || y.contains(" for each ") {
         return None;
     }
+    // "{1}, Remove X ki counters from ~: For each counter removed, ~ gets +2/+0 until end
+    // of turn.": X, the number the cost removed.
+    if x == "counter removed" {
+        let raw = crate::oracle::raw_text().to_lowercase();
+        let cost = raw.split(':').next().unwrap_or("");
+        if !(cost.contains("remove x ") && super::value_grammar::x_defined()) {
+            return None;
+        }
+        let e = crate::oracle::effects::parse_sentence(y, b)?;
+        return Some(super::iteration_grammar::times_over(e, Value::X));
+    }
+    // "For each five counters removed this way": in groups of five, rounded down (an
+    // amount of life or damage in groups is the value grammar's own).
+    let (group, x) = match crate::oracle::phrases::parse_number(x) {
+        Some((n, rest))
+            if n.as_const().is_some_and(|k| k > 1)
+                && rest.starts_with(' ')
+                && !rest.contains(" life ")
+                && !rest.contains("damage") =>
+        {
+            (n.as_const(), rest.trim_start())
+        }
+        _ => (None, x),
+    };
     let refers_back = [
         "it", "its", "they", "them", "their", "that", "those", "he", "she", "his", "her",
     ]
@@ -553,6 +577,10 @@ fn for_each_amount_leading(l: &str, b: &mut crate::oracle::effects::Builder) -> 
     let Some(e) = crate::oracle::effects::parse_sentence(y, b) else {
         restore(b);
         return None;
+    };
+    let times = match group {
+        Some(k) => Value::Div(Box::new(times), k, false),
+        None => times,
     };
     Some(super::iteration_grammar::times_over(e, times))
 }
@@ -685,4 +713,55 @@ fn attached_as_it_left(
         ))),
         rest,
     ))
+}
+
+/// "Put a +1/+1 counter on the creature tapped to pay ~'s additional cost." (Swallow
+/// Whole): the permanent the spell's "tap an untapped [permanent]" additional cost tapped
+/// (recorded as the cost is paid, `zones::record_cost_moved`).
+fn tapped_to_pay_additional_cost(
+    l: &str,
+    b: &mut crate::oracle::effects::Builder,
+) -> Option<Effect> {
+    const PHRASES: [&str; 2] = [
+        "the creature tapped to pay ~'s additional cost",
+        "the creature tapped to pay this spell's additional cost",
+    ];
+    let lower = l.to_lowercase();
+    let p = PHRASES.iter().find(|p| lower.contains(*p))?;
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("as an additional cost to cast this spell, tap an untapped ") {
+        return None;
+    }
+    let key = p.to_string();
+    b.named.push((key.clone(), Sel::Var(vars::TAPPED)));
+    let e = crate::oracle::effects::parse_clause(&lower, b);
+    b.named.retain(|(n, _)| *n != key);
+    e
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: the creature tapped to pay ~'s additional cost", priority: 1500, parse: tapped_to_pay_additional_cost } }
+
+/// "the life lost this way" / "the amount of life lost this way" after a life-loss
+/// instruction ("Each opponent loses two times X life. You gain life equal to the life
+/// lost this way."): the total that instruction made players lose (CR 119.3, 608.2c).
+pub(crate) fn atom_ext(
+    s: &str,
+    _b: &mut crate::oracle::effects::Builder,
+) -> Option<(Value, String)> {
+    for p in ["the life lost this way", "the amount of life lost this way"] {
+        if let Some(rest) = s.strip_prefix(p) {
+            if rest.is_empty() || rest.starts_with([' ', ',', '.', ';', '"']) {
+                // The instruction before is a life loss.
+                let raw = crate::oracle::raw_text().to_lowercase();
+                let i = raw.find("life lost this way")?;
+                let before = &raw[..i];
+                let last = before.rfind(". ").map_or(before, |j| &before[..j]);
+                if !(last.contains(" lose ") || last.contains(" loses ")) {
+                    return None;
+                }
+                return Some((Value::Prev, rest.to_string()));
+            }
+        }
+    }
+    None
 }

@@ -246,3 +246,63 @@ fn subject_then_each(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "referents: each player [x], then [y], then [z] (the same subject)", priority: 1500, parse: subject_then_each } }
+
+/// "Until end of turn, target creature gains trample and gets +1/+0 for each card you've
+/// drawn this turn.", "Target creature you control gets +1/+1 until end of turn for each
+/// card in your hand and can't be blocked this turn.": two instructions with one subject,
+/// one of them with a "for each" amount.
+fn shared_subject_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains(" for each ") {
+        return None;
+    }
+    let (prefix, r) = match l.strip_prefix("until end of turn, ") {
+        Some(r) => ("until end of turn, ", r),
+        None => ("", l),
+    };
+    if !r.starts_with("target ") {
+        return None;
+    }
+    const VERBS: [&str; 4] = ["gets ", "gains ", "can't ", "has "];
+    let i = VERBS
+        .iter()
+        .filter_map(|v| r.find(&format!(" {v}")))
+        .min()?;
+    let subject = &r[..i];
+    let vp = &r[i + 1..];
+    let (vp1, vp2) = vp
+        .match_indices(" and ")
+        .map(|(j, _)| (&vp[..j], &vp[j + " and ".len()..]))
+        .find(|(_, y)| VERBS.iter().any(|v| y.starts_with(v)))?;
+    if vp2.contains(" and ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+    };
+    let Some(first) = crate::oracle::effects::parse_clause(&format!("{prefix}{subject} {vp1}"), b)
+    else {
+        restore(b);
+        return None;
+    };
+    if b.targets.len() != saved.0 + 1 {
+        restore(b);
+        return None;
+    }
+    // The second instruction is about the same target.
+    let slot = saved.0 as u8;
+    b.it = Sel::Target(slot);
+    let Some(second) = crate::oracle::effects::parse_clause(&format!("{prefix}it {vp2}"), b) else {
+        restore(b);
+        return None;
+    };
+    if b.targets.len() != saved.0 + 1 {
+        restore(b);
+        return None;
+    }
+    Some(Effect::seq(vec![first, second]))
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: [target] [does x] and [does y] (one subject, a for-each amount)", priority: 1500, parse: shared_subject_for_each } }

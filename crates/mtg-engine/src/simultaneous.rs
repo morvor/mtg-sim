@@ -316,6 +316,8 @@ struct Frame {
     nums: BTreeMap<Var, Option<i64>>,
     prev_happened: bool,
     prev_value: i64,
+    /// Whether this player's instructions set `prev_value` (an amount they lost, ...).
+    prev_set: bool,
     prev_affected: Vec<Entity>,
     /// The value of X this player's instructions defined ("..., then loses life equal to
     /// the result": each player's own roll).
@@ -341,6 +343,7 @@ struct Frames {
 struct Snapshot {
     vars: BTreeMap<Var, Vec<Entity>>,
     nums: BTreeMap<Var, i64>,
+    prev_value: i64,
 }
 
 impl Frames {
@@ -376,6 +379,7 @@ impl Frames {
                     nums: BTreeMap::new(),
                     prev_happened: ctx.prev_happened,
                     prev_value: ctx.prev_value,
+                    prev_set: false,
                     prev_affected: ctx.prev_affected.clone(),
                     x: ctx.x,
                     x_defined: ctx.x_defined,
@@ -447,6 +451,7 @@ impl Frames {
         Snapshot {
             vars: ctx.vars.clone(),
             nums: ctx.nums.clone(),
+            prev_value: ctx.prev_value,
         }
     }
 
@@ -455,6 +460,7 @@ impl Frames {
     fn leave(&mut self, i: usize, ctx: &Ctx, before: Snapshot, shared: bool) {
         let f = &mut self.frames[i];
         f.prev_happened = ctx.prev_happened;
+        f.prev_set |= ctx.prev_value != before.prev_value;
         f.prev_value = ctx.prev_value;
         f.prev_affected = ctx.prev_affected.clone();
         f.x = ctx.x;
@@ -528,6 +534,18 @@ impl Frames {
                 }
             }
             ctx.vars.insert(var, all);
+        }
+        // "Each opponent loses two times X life. You gain life equal to the life lost this
+        // way.": the amount of each player's instructions, all of them together.
+        if matches!(self.frames.first().map(|f| f.item), Some(Item::Player(_)))
+            && self.frames.iter().any(|f| f.prev_set)
+        {
+            ctx.prev_value = self
+                .frames
+                .iter()
+                .filter(|f| f.prev_set)
+                .map(|f| f.prev_value)
+                .sum();
         }
         ctx.controller = self.controller;
         ctx.resolving_controller = self.resolving;

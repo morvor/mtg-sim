@@ -48,6 +48,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// A whole value phrase ("the amount of damage dealt to you this turn"). Tried before the
 /// value grammar's own readings.
 pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // Amounts of earlier instructions (`referents_results`).
+    if let Some(v) = super::referents_results::atom_ext(s, b) {
+        return Some(v);
+    }
     if let Some(v) = trigger_spell_value(s, b) {
         return Some(v);
     }

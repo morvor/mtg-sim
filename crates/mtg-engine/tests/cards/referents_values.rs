@@ -437,3 +437,159 @@ fn unquenchable_fury_deals_damage_equal_to_the_defending_players_hand() {
     // 4 from the trigger, 2 combat damage.
     assert_eq!(t.life(P1), 14);
 }
+
+#[test]
+fn fangorn_adds_twice_as_much_green_as_treefolk_attacking() {
+    cr!("603.2c", "508.3c");
+    compiles("Fangorn, Tree Shepherd");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Fangorn, Tree Shepherd");
+    let a = t.battlefield(P0, "Ironroot Treefolk");
+    let b = t.battlefield(P0, "Ironroot Treefolk");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![
+            (a, Entity::Player(P1)),
+            (b, Entity::Player(P1)),
+            (bear, Entity::Player(P1)),
+        ]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.resolve_all();
+    assert_eq!(t.g.player(P0).mana_pool.count(mana::ManaType::G), 4);
+}
+
+#[test]
+fn swallow_whole_counters_the_creature_tapped_for_its_cost() {
+    cr!("601.2b", "118.8");
+    ruling!(
+        "Swallow Whole",
+        "The target tapped creature will be exiled even if the creature you tapped leaves the battlefield"
+    );
+    compiles("Swallow Whole");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 1);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let other = t.battlefield(P0, "Llanowar Elves");
+    let victim = t.battlefield(P1, "Hill Giant");
+    t.g.tap(victim);
+    let spell = t.hand(P0, "Swallow Whole");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(bear)]);
+    t.cast(P0, spell).target(Entity::Object(victim)).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(victim));
+    assert!(t.g.obj(bear).tapped);
+    assert_eq!(t.counters(bear, "+1/+1"), 1);
+    assert_eq!(t.counters(other, "+1/+1"), 0);
+}
+
+#[test]
+fn fists_of_flame_counts_the_card_it_drew() {
+    cr!("608.2h");
+    ruling!(
+        "Fists of Flame",
+        "The bonus that the target creature receives is locked in as Fists of Flame resolves"
+    );
+    compiles("Fists of Flame");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    let spell = t.hand(P0, "Fists of Flame");
+    t.advance_to(P0, Step::Draw);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).target(Entity::Object(bear)).go();
+    t.resolve_all();
+    t.g.recompute();
+    // The card drawn in the draw step and the one Fists of Flame drew.
+    assert_eq!(t.pt(bear), (4, 2));
+    assert!(t
+        .g
+        .obj(bear)
+        .chars
+        .has_keyword(keywords::KeywordKind::Trample));
+}
+
+#[test]
+fn jared_carthalion_counts_the_colors_of_each_creature() {
+    cr!("105.2");
+    compiles("Jared Carthalion");
+    let mut t = TestGame::new(2);
+    let jared = t.battlefield(P0, "Jared Carthalion");
+    t.g.add_counters(Entity::Object(jared), "loyalty", 3, None);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let charm = t.battlefield(P0, "Kitchen Finks");
+    t.advance_to(P0, Step::PrecombatMain);
+    // Both creatures for the one "up to two targets" slot.
+    t.answer_targets(P0, &[Entity::Object(bear), Entity::Object(charm)]);
+    t.activate(P0, jared, 1, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(bear, "+1/+1"), 1);
+    assert_eq!(t.counters(charm, "+1/+1"), 2, "green and white");
+}
+
+#[test]
+fn debt_to_the_deathless_gains_the_total_life_lost() {
+    cr!("119.3", "608.2c");
+    compiles("Debt to the Deathless");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Swamp", 4);
+    let spell = t.hand(P0, "Debt to the Deathless");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).x(2).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(t.life(PlayerId(2)), 16);
+    assert_eq!(t.life(P0), 28);
+}
+
+#[test]
+fn niv_mizzet_guildpact_counts_different_color_pairs() {
+    cr!("105.5");
+    ruling!(
+        "Niv-Mizzet, Guildpact",
+        "A \"color pair\" is exactly two colors."
+    );
+    compiles("Niv-Mizzet, Guildpact");
+    let mut t = TestGame::new(2);
+    // Niv-Mizzet (white, blue, black, red, green: five colors) isn't a color pair.
+    let niv = t.battlefield(P0, "Niv-Mizzet, Guildpact");
+    t.battlefield(P0, "Azorius Guildmage");
+    t.battlefield(P0, "Azorius Guildmage");
+    t.battlefield(P0, "Kitchen Finks");
+    t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    let hand = t.hand_size(P0);
+    t.attack(&[(niv, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    // Two different pairs (white-blue, green-white): 2 damage, 2 cards, 2 life.
+    assert_eq!(t.life(P1), 20 - 6 - 2);
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.life(P0), 22);
+}
+
+#[test]
+fn blademane_baku_gets_a_bonus_for_each_counter_removed() {
+    cr!("107.3a", "602.2b");
+    compiles("Blademane Baku");
+    let mut t = TestGame::new(2);
+    let baku = t.battlefield(P0, "Blademane Baku");
+    t.g.add_counters(Entity::Object(baku), "ki", 3, None);
+    t.lands(P0, "Mountain", 1);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    let idx = 0;
+    t.activate(P0, baku, idx, &[]).unwrap();
+    t.resolve_all();
+    t.g.recompute();
+    assert_eq!(t.counters(baku, "ki"), 1);
+    assert_eq!(t.pt(baku), (1 + 4, 1));
+}
