@@ -16,7 +16,11 @@
 //! * damage dealt to each of them is dealt at once, so a source with lifelink causes one
 //!   life gain event (CR 120.3f, 608.2f);
 //! * a search: each searches, then the cards found are moved together;
-//! * life gained or lost: each amount is determined before anyone's life total changes.
+//! * life gained or lost: each amount is determined before anyone's life total changes;
+//! * control changes: every player's objects are determined (and chosen, by whoever
+//!   chooses them, each chooser knowing the earlier choices) before any control changes,
+//!   then control of all of them changes at the same time ("each player gains control of
+//!   all creatures their opponents control" swaps them; Aminatou, Scrambleverse rulings).
 //!
 //! An instruction that isn't one of those is performed for each player in turn, in APNAP
 //! order (CR 608.2f); "you may ..." questions and conditions are still settled for every
@@ -499,12 +503,17 @@ impl Frames {
         // Atraxa): what "it" came to mean for each player (the objects their instructions
         // acted on) is, after them, all of those objects, not only the last player's
         // (CR 608.2c: later text refers to what the earlier instructions did).
-        if matches!(self.frames.first().map(|f| f.item), Some(Item::Player(_)))
-            && self.local_vars.contains(&vars::IT)
-        {
+        // The same for the tokens each player created ("Each player creates a Treasure
+        // token. Tap those tokens.").
+        for var in [vars::IT, vars::CREATED] {
+            if !matches!(self.frames.first().map(|f| f.item), Some(Item::Player(_)))
+                || !self.local_vars.contains(&var)
+            {
+                continue;
+            }
             let mut all: Vec<Entity> = Vec::new();
             for f in &self.frames {
-                let Some(mine) = f.vars.get(&vars::IT) else {
+                let Some(mine) = f.vars.get(&var) else {
                     continue;
                 };
                 for e in mine.iter().flatten() {
@@ -513,7 +522,7 @@ impl Frames {
                     }
                 }
             }
-            ctx.vars.insert(vars::IT, all);
+            ctx.vars.insert(var, all);
         }
         ctx.controller = self.controller;
         ctx.resolving_controller = self.resolving;
@@ -554,6 +563,8 @@ enum Plan {
         reveal: bool,
         shuffle: bool,
     },
+    /// A control change, made together with the other players' (`None`: nothing).
+    Control(Option<crate::control_change::Grant>),
     /// Life the player chose to pay for "[effect] unless they pay N life", paid together
     /// with the other players' actions (CR 101.4, 118.12).
     PayLife { player: PlayerId, cost: Cost },
@@ -602,6 +613,8 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
             p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
         }
         Effect::DealDamage { source, to, .. } => chosen_by(g, &[source, to], ctx, p),
+        // Whoever makes the choices: no control changes until all are made.
+        Effect::GainControl { .. } => true,
         // "For each creature, its controller sacrifices it unless they pay X life" (Killing
         // Wave): each player decides whether to pay, then they all pay and sacrifice
         // together (CR 101.4, 118.12).
@@ -687,6 +700,7 @@ fn plan(
             }
         }
         Effect::Move { what, to } if plannable(g, e, ctx, p) => {
+            let what = &crate::attach::only_enterable(g, what, to, ctx);
             let objs: Vec<ObjectId> = g
                 .resolve_objects(what, ctx)
                 .into_iter()
@@ -859,6 +873,21 @@ fn plan(
                 reveal: *reveal,
                 shuffle: *shuffle,
             }
+        }
+        Effect::GainControl {
+            what,
+            who,
+            duration,
+        } if plannable(g, e, ctx, p) => {
+            let grant = crate::control_change::plan_gain_control(g, what, who, duration, ctx);
+            if has_choice(what) {
+                let mut by = Vec::new();
+                choosers(g, what, ctx, &mut by);
+                if let (Some(c), Some(gr)) = (by.first(), &grant) {
+                    g.record_apnap_choice(*c, gr.objs.clone());
+                }
+            }
+            Plan::Control(grant)
         }
         Effect::PayOptional {
             who,
@@ -1135,6 +1164,19 @@ fn perform_plans(
             }
         }
     }
+    // Control changes: at the same time.
+    let mut changed_control = false;
+    for (i, plan) in plans.iter().enumerate() {
+        if let Some(Plan::Control(Some(grant))) = plan {
+            let before = frames.enter(i, ctx);
+            crate::control_change::apply(g, grant, ctx);
+            frames.leave(i, ctx, before, true);
+            changed_control = true;
+        }
+    }
+    if changed_control {
+        g.recompute();
+    }
     // Damage: dealt at once (CR 120.3f, 702.15e).
     let evs: Vec<(ObjectId, Entity, u32)> = plans
         .iter()
@@ -1160,6 +1202,7 @@ fn perform_plans(
 fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
     match plan {
         Plan::Nothing | Plan::Exec(_) => {}
+        Plan::Control(grant) => crate::control_change::record(grant.as_ref(), ctx),
         Plan::PayLife { .. } => ctx.prev_happened = true,
         Plan::Move { battlefield, .. } => {
             let res: Vec<ObjectId> = outcome.moved.into_iter().flatten().collect();

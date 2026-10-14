@@ -474,6 +474,17 @@ impl Game {
                 enchanted: has(self, "Aura"),
                 equipped: has(self, "Equipment"),
                 attached: false,
+                blocks: self
+                    .combat
+                    .as_ref()
+                    .map(|c| {
+                        c.blockers
+                            .iter()
+                            .flat_map(|b| b.blocking.iter().map(move |a| (b.id, *a)))
+                            .filter(|(b, a)| *b == old_id || *a == old_id)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
             };
             self.objects[old_id.0 as usize].left_battlefield = Some(Box::new(status));
             crate::combat::remove_from_combat(self, old_id);

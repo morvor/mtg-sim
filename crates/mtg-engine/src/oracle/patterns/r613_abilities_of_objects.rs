@@ -146,7 +146,29 @@ fn subject(s: &str) -> Option<Filter> {
 /// "[subject] has/have all activated abilities of [objects]", with an optional "As long as
 /// ~ is on the battlefield, " (where its static abilities function anyway) or "As long as
 /// the top card of your library is [a card], " condition.
-fn has_abilities_of(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+fn has_abilities_of(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    // "[...]. You may spend mana as though it were mana of any color to activate those
+    // abilities." (CR 113.10a; see `gained_terms`).
+    if let Some((first, rest)) = end(l).split_once(". ") {
+        let mut v = has_abilities_of(first, text, ctx)?;
+        let [a] = v.as_mut_slice() else {
+            return None;
+        };
+        let AbilityKind::Static(st) = &a.kind else {
+            return None;
+        };
+        let mut st = st.clone();
+        let StaticEffect::Continuous { mods, .. } = &mut st.effect else {
+            return None;
+        };
+        let terms = super::gained_terms::last_terms(mods)?;
+        for r in rest.split(". ") {
+            if !super::gained_terms::add_rider(r, terms) {
+                return None;
+            }
+        }
+        return Some(vec![AbilityDef::new(AbilityKind::Static(st), text)]);
+    }
     let l = end(l);
     let (cond, top_card, body) = if let Some(r) = l.strip_prefix("as long as ~ is on the battlefield, ") {
         (None, false, r)
@@ -197,6 +219,7 @@ fn has_abilities_of(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
     let mut mods = vec![Modification::AddAbilitiesOf {
         from: Box::new(from),
         which,
+        terms: GainedTerms::default(),
     }];
     mods.extend(also);
     let mut s = StaticAbility::new(StaticEffect::Continuous { affected, mods });
@@ -228,6 +251,7 @@ fn gains_abilities_of(l: &str, b: &mut Builder) -> Option<Effect> {
         mods: vec![Modification::AddAbilitiesOf {
             from: Box::new(from),
             which,
+            terms: GainedTerms::default(),
         }],
         duration,
     })

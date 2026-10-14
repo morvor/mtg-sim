@@ -154,7 +154,8 @@ pub(crate) fn granted_abilities_to(
             // "{T}, Unattach Surestrike Trident: This creature deals damage ...".
             cost_names_granter = true;
         } else {
-            return None;
+            // "Whenever this creature attacks, you may sacrifice Spare Dagger. ...".
+            return mixed_granted_abilities(orig, ctx);
         }
     }
     let mut tl = TypeLine::default();
@@ -190,6 +191,70 @@ pub(crate) fn granted_abilities_to(
             .collect();
     }
     Some(v.into_iter().map(not_a_cda).collect())
+}
+
+/// The self-references a quote granted to another object may use besides the card's
+/// name, and how the granting object would call that object.
+const HOST_PROXIES: [(&str, &str); 4] = [
+    ("this creature", "enchanted creature"),
+    ("This creature", "Enchanted creature"),
+    ("this permanent", "enchanted permanent"),
+    ("This permanent", "Enchanted permanent"),
+];
+
+/// A quoted ability (normalized) granted to other objects that names the granting card
+/// and also refers to the object that has it ("this creature"): compiled as the granting
+/// object would say it, with "this creature" read as "enchanted creature", then turned
+/// into the granted object's ability (`granted_by::refer_mixed_to_granter`): the name is
+/// the granter (CR 201.5a), "this creature" the object that has the ability (CR 113.7).
+fn mixed_granted_abilities(normalized: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let raw = crate::oracle::raw_text();
+    let tl = TypeLine::default();
+    let anonymous = CompileContext {
+        card_name: "\u{1}",
+        full_name: "\u{1}",
+        type_line: &tl,
+        layout: crate::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let bare = |s: &str| s.trim().trim_end_matches(',').to_string();
+    let q = quoted_segments(&raw)
+        .into_iter()
+        .find(|q| bare(&crate::oracle::normalize(q, ctx)) == bare(normalized))?;
+    // The proxy must not be ambiguous with what the quote already says.
+    let lower = q.to_lowercase();
+    if lower.contains("enchanted") || lower.contains("equipped") {
+        return None;
+    }
+    let mut proxy = q.to_string();
+    for (from, to) in HOST_PROXIES {
+        proxy = proxy.replace(from, to);
+    }
+    // Any other self-reference ("this token") isn't translated.
+    if crate::oracle::normalize(&proxy, &anonymous).contains('~') {
+        return None;
+    }
+    let text = crate::oracle::normalize(&proxy, ctx);
+    let v = super::tokens_copies_create::parse_with_nested_quotes(
+        text.trim().trim_end_matches(','),
+        ctx,
+    )?;
+    if v.is_empty()
+        || v.iter()
+            .any(|a| matches!(a.kind, AbilityKind::Unsupported(_)))
+    {
+        return None;
+    }
+    v.iter()
+        .map(|a| {
+            let a = crate::granted_by::refer_mixed_to_granter(a)?;
+            let text = normalized.trim().trim_end_matches(',').to_string();
+            Some(not_a_cda(AbilityDef::with_link(a.kind.clone(), text, a.link)))
+        })
+        .collect()
 }
 
 /// Whether every self-reference of a quoted ability (normalized) is the card's name:
