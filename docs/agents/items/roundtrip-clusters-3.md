@@ -33,3 +33,84 @@ For each card: triage — parser bug (fix + in-game test in `tests/cards/roundtr
 (fix, independently of the parser), or a CR-justified equivalence. Add a "Remaining"
 section listing each still-mismatching card with its reason. Regenerate docs/ROUNDTRIP.md
 and docs/roundtrip-passing.txt; `roundtrip --check` must pass.
+
+## Parser bugs found
+
+Tests in `crates/mtg-engine/tests/cards/roundtrip_clusters_3.rs`; each fails on the old code.
+
+- Adventure Awaits, Contagious Vorrac, Blossom Prancer, Pulsar Squadron Ace, Rosecot Knight:
+  "You may reveal a [card] from among them and put it into your hand. ... If you didn't put
+  a card into your hand this way, ...": `library::dig` never recorded whether it took a card,
+  so the condition read an earlier instruction's result (you took the card and also drew).
+  Fixed in `library::dig`.
+- Sorcerous Spyglass, Anointed Peacekeeper, Arachne, Psionic Weaver: "look at an opponent's
+  hand" revealed the hand to every player (and emitted reveal events). Now `LookAtHand`
+  (`patterns/etb_choices.rs`).
+- Akoum Hellkite: "~ deals 1 damage to any target. If that land is a Mountain, ~ deals 2
+  damage instead": "that land" was the target (so a player target never got 2). Found
+  because the new "that permanent or player" rendering of an any-target pronoun no longer
+  matched "that land". Fixed in `patterns/conditions_referents.rs`.
+
+Also a renderer error, not a parser bug: a move to the battlefield with no controller named
+was rendered "under its owner's control"; it enters under the control of the player putting
+it there (CR 110.2a), which the engine does (Purgatory's ruling). Cauldron's Gift, Tomb
+Tyrant, Moldgraf Monstrosity, Hedge Shredder, Purgatory now pass.
+
+Checked and kept: Arashin War Beast triggers once for two blockers (test, its ruling).
+
+## Remaining
+
+Mismatches left in the taken clusters, each checked against the AST:
+
+- Darksteel Colossus, Blightsteel Colossus, Progenitus, Nexus of Fate, Legacy Weapon:
+  "reveal ~ and shuffle it into its owner's library instead" drops the reveal (a parser
+  omission: the replacement is a modified move, `ReplacementAction::MoveInstead`, which has
+  no way to reveal; replacing it with an `Instead` effect broke "sacrifice" costs such as
+  offering, so it's left for an AST hook). The shuffle itself is right.
+- Garruk's Harbinger: "a creature card or Garruk planeswalker card" as "a creature or Garruk
+  planeswalker card" (same filter).
+- Arachne, Psionic Weaver: "a card type other than creature" as the list of the other
+  card types (same choice).
+- Anointed Peacekeeper: the cost-increase statics' word order ("spells your opponents cast
+  with the chosen name"; "unless they're mana abilities").
+- The Nipton Lottery: "all other creatures" as "each creature that isn't among them" (the
+  chosen one).
+- Allure of the Unknown, Fervent Mastery, Ingenious Mastery: the chosen opponent is named
+  twice ("an opponent ..., then draws", "That opponent may cast"); rendered "choose an
+  opponent. The chosen opponent ..." (the rulings: you choose the opponent).
+- Devastating Mastery: "returns them" said by the opponent; rendered as an imperative inside
+  the opponent's instruction (same player performs it).
+- Animal Magnetism: "An opponent chooses a creature card from among them" rendered "puts";
+  the dig step keeps the card among them for "Put that card onto the battlefield" (under
+  your control).
+- Slumbering Trudge: one paragraph compiled as two abilities ("If X is 2 or less, it enters
+  tapped" as its own replacement).
+- Arrow Storm, Lightning Surge: the "instead" sentence is its own paragraph on the card;
+  rendered as one ability (same effect).
+- Stinging Vitriol, Pumpkin Bombs, The Fall of Kroog, Cerebral Vortex, Curse Artifact: "they"
+  for the target player rendered "that player" where the subject isn't rendered through
+  `with_subject` (a pronoun-only difference).
+- Draco: the upkeep cost "{10}, reduced by {2} for each ..." as "{X}, where X is the greater
+  of 0 and 10 minus ...". Licia, Bloodsoaked Insight: "{1} less for each 1 life" as "{X}
+  less, where X is the amount of life" (cards with the "{X}, where X" form exist, e.g.
+  Ezzaroot Channeler).
+- Death-Rattle Oni: "creatures that were dealt damage" vs "each creature that was" (number).
+- Kheru Lich Lord: "instead of putting it anywhere else" as "instead".
+- Optimus Prime: "converted" vs "transformed" (CR 701.28 convert is transform's name for
+  these cards); "the chosen creature" vs "it".
+- Lumbering Megasloth: "for each counter among players and permanents" as a sum of two
+  counts.
+- Squirrel Squatters: "a token ... for each Attraction you've visited" as "X tokens, where X
+  is the number of Attractions you've visited".
+- Myth Unbound: "your commander" as "commander spells you own"; "your command zone".
+- Frodo, Sauron's Bane: the "Otherwise" order inside the granted ability's quotes.
+- Glissa Sunseeker: where the target is first named ("if its mana value ... destroy target
+  artifact").
+- Leyline Tyrant: "that much damage" as "X damage, where X is that many".
+- Cinderheart Giant: "to a creature an opponent controls chosen at random" as "choose a
+  creature ... at random. ~ deals 7 damage to it" (same).
+- Path of Mettle // Metzali: face 1 now renders ("choose a creature at random that
+  attacked this turn"); face 0's "that doesn't have" vs "without" and the attack trigger's
+  quality list are outside the taken clusters.
+- Aetherworks Marvel: the second ability's "from among them" wording (outside the cluster).
+- Natural Balance: still `Effect::Custom(look: opt in)`.

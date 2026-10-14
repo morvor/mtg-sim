@@ -5934,7 +5934,8 @@ impl Renderer<'_> {
             ChoiceKind::CreatureTypeOtherThan(v) => {
                 format!("a creature type other than {}", join_list(v, "or"))
             }
-            ChoiceKind::CardName => "a card name".into(),
+            // "choose any card name": any card in the Oracle card reference (CR 201.4).
+            ChoiceKind::CardName => "{alt:a|any} card name".into(),
             ChoiceKind::CardNameFiltered(f) => format!("a {f} card name"),
             ChoiceKind::Number { min, max } => format!("a number from {min} to {max}"),
             ChoiceKind::Opponent => "an opponent".into(),
