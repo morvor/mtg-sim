@@ -382,23 +382,30 @@ fn mangara_uses_last_known_attack_target_of_creatures_that_left() {
     supported("Tomik, Wielder of Law");
     // P0 attacks P1 (Mangara, or Tomik with the same condition) with two creatures; with
     // the trigger on the stack one of them dies (P1 still draws) or is removed from combat
-    // (P1 doesn't draw).
+    // (P1 doesn't draw), or is removed from combat and then dies (it wasn't attacking as
+    // it last existed: P1 doesn't draw).
     for card in ["Mangara, the Diplomat", "Tomik, Wielder of Law"] {
-        for dies in [true, false] {
+        for (dies, removed) in [(true, false), (false, true), (true, true)] {
             let mut t = TestGame::new(2);
             t.battlefield(P1, card);
             let a = t.battlefield(P0, "Grizzly Bears");
             let b = t.battlefield(P0, "Hill Giant");
             attack_with(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
             assert_eq!(t.stack_len(), 1);
+            if removed {
+                remove_from_combat(&mut t.g, a);
+            }
             if dies {
                 crate::r_s02_common::destroy(&mut t, a);
-            } else {
-                remove_from_combat(&mut t.g, a);
             }
             let hand = t.hand_size(P1);
             t.resolve_all();
-            assert_eq!(t.hand_size(P1), hand + dies as usize, "{card} dies: {dies}");
+            let draws = dies && !removed;
+            assert_eq!(
+                t.hand_size(P1),
+                hand + draws as usize,
+                "{card} dies: {dies}, removed: {removed}"
+            );
         }
     }
     // A planeswalker attacked counts too, even after the attacker died.

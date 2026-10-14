@@ -184,10 +184,20 @@ impl KeywordRules for ActivatedAbilityKind {
                 if g.is_live(cur) && g.obj(cur).zone == crate::object::Zone::Battlefield {
                     return None;
                 }
+                // It must still have been attacking as it left: one removed from combat
+                // before it left wasn't.
+                if !g
+                    .obj(id)
+                    .left_battlefield
+                    .as_ref()
+                    .is_some_and(|s| s.attacking)
+                {
+                    return None;
+                }
                 c.removed_attack_targets
                     .iter()
                     .rev()
-                    .find(|(o, _)| *o == id || *o == cur)
+                    .find(|(o, _)| *o == id)
                     .map(|(_, t)| *t)
             });
             return Some(target.is_some_and(|t| match t {

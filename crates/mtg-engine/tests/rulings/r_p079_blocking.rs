@@ -204,7 +204,7 @@ fn mirror_mockery_tokens_are_all_exiled_and_copy_a_tokens_original_values() {
 
 #[test]
 fn defensive_formation_the_defender_makes_trample_assignments() {
-    cr!("510.1c", "510.1d", "702.19b");
+    cr!("510.1c", "702.19b");
     ruling!(
         "Defensive Formation",
         "Damage assignment choices from Trample and other things which allow alternative damage assignments for attacking creatures are all made by you."
@@ -334,4 +334,19 @@ fn banding_defender_may_assign_a_tramplers_excess_damage_to_themselves() {
     go_to(&mut t, Step::EndOfCombat);
     assert!(!t.on_battlefield(hero));
     assert_eq!(t.life(P1), 15);
+    // Left to the default, P1 keeps it all on the Hero; P0 is never asked.
+    let mut t = TestGame::new(2);
+    let maw = t.battlefield(P0, "Colossal Dreadmaw");
+    let hero = t.battlefield(P1, "Benalish Hero");
+    to_blockers(&mut t, &[(maw, Entity::Player(P1))], &[(hero, maw)]);
+    let from = t.asked().len();
+    go_to(&mut t, Step::EndOfCombat);
+    let asked = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::AssignCombatDamage { .. }))
+        .map(|(p, _)| *p)
+        .collect::<Vec<_>>();
+    assert_eq!(asked, vec![P1]);
+    assert!(!t.on_battlefield(hero));
+    assert_eq!(t.life(P1), 20);
 }
