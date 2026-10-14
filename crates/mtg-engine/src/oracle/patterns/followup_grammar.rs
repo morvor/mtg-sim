@@ -503,6 +503,47 @@ fn serial_then(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { super::EffectPattern { name: "followups: A, B, then C (a series of instructions)", priority: 990, parse: serial_then } }
 
+/// "Choose a color. Add one mana of that color unless any player pays {1}." (Rhystic
+/// Cave): the chosen color.
+fn mana_of_that_color(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains(" mana of that color") {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let first = l.split(" mana of that color").next()?;
+    if !raw.contains(&format!("choose a color. {first} mana of that color")) {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&l.replace(" mana of that color", " mana of the chosen color"), b)
+}
+
+inventory::submit! { super::EffectPattern { name: "followups: add mana of that color (the chosen color)", priority: 980, parse: mana_of_that_color } }
+
+/// "Then that player discards another card at random unless they pay {1}." (Flay), "draw
+/// another card" (Hymn of the Faller): a card other than the one an earlier instruction
+/// had them discard or draw — which is no longer in their hand or library anyway.
+fn another_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let verbs = [
+        "discards another card",
+        "discard another card",
+        "draws another card",
+        "draw another card",
+    ];
+    let v = verbs.iter().find(|v| l.contains(*v))?;
+    let raw = crate::oracle::raw_text().to_lowercase();
+    // Only after the same instruction with "a card".
+    let first = v.replace("another card", "a card");
+    let base = first.trim_end_matches(" a card").trim_end_matches('s');
+    if !raw.contains(&format!("{base} a card")) && !raw.contains(&format!("{base}s a card")) {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&l.replace("another card", "a card"), b)
+}
+
+inventory::submit! { super::EffectPattern { name: "followups: discard/draw another card", priority: 980, parse: another_card } }
+
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::card::Layout;

@@ -195,6 +195,10 @@ fn known_payability(e: &Effect) -> bool {
             what: Sel::Choose { up_to: false, .. },
             ..
         } => true,
+        Effect::AddCounters {
+            what: Sel::Choose { up_to: false, .. },
+            ..
+        } => true,
         _ => false,
     }
 }
@@ -420,7 +424,7 @@ enum PayerPhrase<'a> {
 }
 
 fn payer_phrase(r: &str) -> Option<PayerPhrase<'_>> {
-    for p in ["they ", "that player ", "that opponent "] {
+    for p in ["they ", "that player ", "that opponent ", "the player "] {
         if let Some(rest) = r.strip_prefix(p) {
             return Some(PayerPhrase::Pronoun(rest));
         }
@@ -612,11 +616,27 @@ fn unless_player_does(l: &str, b: &mut Builder) -> Option<Effect> {
     if let Some(r) = l.strip_prefix("unless ") {
         let (cond, eff) = r.split_once(", ")?;
         let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        // "Unless target player pays {3}, that player loses 5 life": the player is named
+        // first; "unless you sacrifice an Island, sacrifice ~".
+        let named = match payer_phrase(&format!("{cond} ")) {
+            Some(PayerPhrase::Phrase(p, action)) => player_ref(p, b)
+                .filter(|(_, tail)| tail.trim().is_empty())
+                .map(|(who, _)| {
+                    if !matches!(who, PlayerRef::You) {
+                        b.it_player = who.clone();
+                    }
+                    (who, action.trim().to_string())
+                }),
+            _ => None,
+        };
         let effect = parse_clause(eff, b);
         let r = effect.and_then(|effect| {
-            let (who, action) = match payer_phrase(&format!("{cond} "))? {
-                PayerPhrase::Any(who, action) => (who, action.trim().to_string()),
-                _ => return None,
+            let (who, action) = match named {
+                Some(n) => n,
+                None => match payer_phrase(&format!("{cond} "))? {
+                    PayerPhrase::Any(who, action) => (who, action.trim().to_string()),
+                    _ => return None,
+                },
             };
             let pays = payments(&action, b)?;
             Some(unless_paid(who, pays, effect))
