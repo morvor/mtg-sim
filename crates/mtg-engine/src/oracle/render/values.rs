@@ -448,6 +448,7 @@ impl Renderer<'_> {
             }
             Value::Custom(name) => self.custom_value(name),
             Value::EventsThisTurn(c, t) => self.events_this_turn(c, *t),
+            Value::EventsDuring(w, c, t) => self.gap(format!("EventsDuring({w:?}, {c:?}, {t:?})")),
         }
     }
 

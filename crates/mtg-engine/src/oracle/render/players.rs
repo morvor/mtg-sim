@@ -734,6 +734,10 @@ impl Renderer<'_> {
                 let g = self.gap(format!("Sel::ThisTurn({c:?})"));
                 decline(g, case)
             }
+            Sel::EventsDuring(w, c) => {
+                let g = self.gap(format!("Sel::EventsDuring({w:?}, {c:?})"));
+                decline(g, case)
+            }
             // "the creatures destroyed this way": the objects an earlier instruction acted
             // on.
             Sel::Matching(inner, f)

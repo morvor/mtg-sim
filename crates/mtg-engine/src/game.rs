@@ -609,6 +609,9 @@ pub struct Game {
     pub events: Vec<Event>,
     /// All events this turn (for look-back queries).
     pub turn_events: Vec<Event>,
+    /// The events of the latest turns before this one, for "last turn", "during your last
+    /// turn" and "since your last turn" (see `history_query.rs`).
+    pub past_turns: Vec<crate::history_query::PastTurn>,
     /// While positive, the events of the instructions being performed form one batch
     /// (see [`Game::end_event_batch`]).
     pub batch_hold: u32,
@@ -800,6 +803,7 @@ impl Game {
             agents: Agents(Arc::new(Mutex::new(agents))),
             events: vec![],
             turn_events: vec![],
+            past_turns: vec![],
             batch_hold: 0,
             log: vec![],
             logging: false,

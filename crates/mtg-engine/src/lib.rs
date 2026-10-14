@@ -77,6 +77,7 @@ pub mod game;
 pub mod game_end;
 pub mod game_terms;
 pub mod granted_by;
+pub mod history_query;
 pub mod keyword_actions;
 pub mod keyword_actions_impl;
 pub mod keyword_impls;

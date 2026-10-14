@@ -39,14 +39,20 @@ fn quantity(s: &str) -> Option<(Cmp, i32, bool, &str)> {
             return Some((cmp, n, plural, r));
         }
     }
-    let (s, exactly) = match s.strip_prefix("exactly ") {
-        Some(r) => (r, true),
-        None => (s.strip_prefix("at least ").unwrap_or(s), false),
+    let (s, exactly, at_least) = if let Some(r) = s.strip_prefix("exactly ") {
+        (r, true, false)
+    } else if let Some(r) = s.strip_prefix("at least ") {
+        (r, false, true)
+    } else {
+        (s, false, false)
     };
     let (v, r) = parse_number(s)?;
     let Value::Const(n) = v else { return None };
     if exactly {
         return Some((Cmp::Eq, n, n != 1, r));
+    }
+    if at_least {
+        return Some((Cmp::Ge, n, n != 1, r));
     }
     let r = r.strip_prefix("or more ")?;
     Some((Cmp::Ge, n, true, r))
@@ -161,6 +167,8 @@ struct Clause {
     /// Counts the different objects the events were about ("attacked with three or more
     /// Merfolk", "dealt damage by two or more creatures"), not the events.
     distinct: bool,
+    /// For a clause about objects, its predicate as written ("attacked this combat").
+    pred: String,
 }
 
 impl Clause {
@@ -173,6 +181,7 @@ impl Clause {
             amount: false,
             per_player: None,
             distinct: false,
+            pred: String::new(),
         }
     }
 }
@@ -346,6 +355,7 @@ fn player_clause(c: &str) -> Option<Clause> {
                 amount,
                 per_player: None,
                 distinct: false,
+                pred: String::new(),
             },
             subj,
         ));
@@ -424,6 +434,7 @@ fn dealt_damage(subj: &str, negated: bool, x: &str) -> Option<Clause> {
             amount,
             per_player: None,
             distinct: n2 > 1,
+            pred: String::new(),
         });
     }
     if !x.is_empty() {
@@ -439,6 +450,7 @@ fn dealt_damage(subj: &str, negated: bool, x: &str) -> Option<Clause> {
             amount,
             per_player: None,
             distinct: false,
+            pred: String::new(),
         },
         subj,
     ))
@@ -511,12 +523,19 @@ fn object_clause(c: &str) -> Option<Clause> {
         // "enters the battlefield under an opponent's control": "[objects] an opponent
         // controls enters" (the trigger grammar's wording).
         let (np_s, present) = control_qualifier(np_s, present);
+        // "one other creature": "another creature".
+        let np_s = match np_s.strip_prefix("other ") {
+            Some(x) => format!("another {x}"),
+            None => np_s,
+        };
         let subj = if np_s == "~" || np_s.starts_with("another ") {
             np_s
         } else {
             format!("{} {np_s}", article(&np_s))
         };
-        return Some(Clause::new(format!("{subj} {present}"), cmp, n, negated));
+        let mut cl = Clause::new(format!("{subj} {present}"), cmp, n, negated);
+        cl.pred = rest;
+        return Some(cl);
     }
     None
 }
@@ -588,7 +607,7 @@ fn trigger_of(text: &str) -> Option<TriggerCond> {
 }
 
 /// A clause's condition.
-fn clause_condition(cl: Clause) -> Option<Condition> {
+fn clause_condition(cl: Clause, w: &Option<HistoryWindow>) -> Option<Condition> {
     let mut cond = trigger_of(&cl.trigger)?;
     if cl.per_player.is_some() {
         cond = iterated_player(cond)?;
@@ -598,10 +617,11 @@ fn clause_condition(cl: Clause) -> Option<Condition> {
     } else {
         Tally::Events
     };
-    let mut v = if cl.distinct {
-        Value::CountSel(Box::new(Sel::ThisTurn(Box::new(cond))))
-    } else {
-        Value::EventsThisTurn(Box::new(cond), tally)
+    let mut v = match (cl.distinct, w) {
+        (true, None) => Value::CountSel(Box::new(Sel::ThisTurn(Box::new(cond)))),
+        (true, Some(w)) => Value::CountSel(Box::new(Sel::EventsDuring(w.clone(), Box::new(cond)))),
+        (false, None) => Value::EventsThisTurn(Box::new(cond), tally),
+        (false, Some(w)) => Value::EventsDuring(w.clone(), Box::new(cond), tally),
     };
     if let Some(pf) = cl.per_player {
         v = Value::OverPlayers(AggOp::Max, pf, Box::new(v));
@@ -639,35 +659,48 @@ fn iterated_player(c: TriggerCond) -> Option<TriggerCond> {
 
 /// A history clause (without its window): one clause, or two joined by "and"/"or" ("you
 /// gained and lost life", "you've played a land or cast a spell", "you attacked with a
-/// Hero this turn or a Hero entered the battlefield under your control"), or "both [A]
-/// and [B]".
-fn clause_or_joined(c: &str) -> Option<Condition> {
-    let c = c.strip_suffix(" this turn").unwrap_or(c);
+/// Hero this turn or a Hero entered the battlefield under your control"), "both [A] and
+/// [B]", or two subjects of one predicate ("~ and at least two other creatures
+/// attacked").
+fn clause_or_joined(c: &str, w: &Option<HistoryWindow>) -> Option<Condition> {
+    let c = c.strip_suffix(window_suffix(w)).unwrap_or(c);
     if let Some(cl) = player_clause(c).or_else(|| object_clause(c)) {
-        if let Some(cond) = clause_condition(cl) {
+        if let Some(cond) = clause_condition(cl, w) {
             return Some(cond);
         }
     }
     // "[player] [verb] both [A] and [B]".
     if let Some((subj, second, negated, r)) = player_subject(c) {
         if !negated {
-            let (verb, rest) = conjugate(r, second, false)?;
-            let _ = verb;
-            if let Some(x) = rest.strip_prefix("both ") {
-                let (a, b) = x.split_once(" and ")?;
-                let past = split_word(r).0;
-                let ca = clause_or_joined(&format!("{subj} {past} {a}"))?;
-                let cb = clause_or_joined(&format!("{subj} {past} {b}"))?;
-                return Some(Condition::And(vec![ca, cb]));
+            if let Some((_, rest)) = conjugate(r, second, false) {
+                if let Some(x) = rest.strip_prefix("both ") {
+                    let (a, b) = x.split_once(" and ")?;
+                    let past = split_word(r).0;
+                    let ca = clause_or_joined(&format!("{subj} {past} {a}"), w)?;
+                    let cb = clause_or_joined(&format!("{subj} {past} {b}"), w)?;
+                    return Some(Condition::And(vec![ca, cb]));
+                }
             }
         }
     }
     for (sep, all) in [(" or ", false), (" and ", true)] {
         for (i, _) in c.match_indices(sep) {
             let (x, y) = (&c[..i], &c[i + sep.len()..]);
+            // Two subjects, one predicate: "~ and at least two other creatures attacked".
+            if all {
+                if let Some(cy) = object_clause(y) {
+                    if let Some(cx) = object_clause(&format!("{x} {}", cy.pred)) {
+                        if let (Some(a), Some(b)) =
+                            (clause_condition(cx, w), clause_condition(cy, w))
+                        {
+                            return Some(Condition::And(vec![a, b]));
+                        }
+                    }
+                }
+            }
             // The same object, elided: "you gained and lost life" (the object after the
             // second verb).
-            let Some(cx) = clause_or_joined(x).or_else(|| {
+            let Some(cx) = clause_or_joined(x, w).or_else(|| {
                 let (_, _, _, r) = player_subject(x)?;
                 if r.contains(' ') {
                     return None;
@@ -676,17 +709,17 @@ fn clause_or_joined(c: &str) -> Option<Condition> {
                 if obj.is_empty() {
                     return None;
                 }
-                clause_or_joined(&format!("{x} {obj}"))
+                clause_or_joined(&format!("{x} {obj}"), w)
             }) else {
                 continue;
             };
             // The same subject, elided: "you gained and lost life".
-            let cy = clause_or_joined(y).or_else(|| {
+            let cy = clause_or_joined(y, w).or_else(|| {
                 let (subj, _, negated, _) = player_subject(x)?;
                 if negated {
                     return None;
                 }
-                clause_or_joined(&format!("{subj} {y}"))
+                clause_or_joined(&format!("{subj} {y}"), w)
             });
             if let Some(cy) = cy {
                 return Some(if all {
@@ -700,17 +733,46 @@ fn clause_or_joined(c: &str) -> Option<Condition> {
     None
 }
 
-/// "if [history clause] this turn" without referents. "this turn" may come before a
-/// "from anywhere ..." qualifier.
+/// How a window is written at the end of a clause.
+fn window_suffix(w: &Option<HistoryWindow>) -> &'static str {
+    match w {
+        None => " this turn",
+        Some(HistoryWindow::ThisCombat) => " this combat",
+        Some(HistoryWindow::LastTurn) => " last turn",
+        Some(HistoryWindow::PlayersLastTurn(_)) => " during your last turn",
+        Some(HistoryWindow::SinceLastTurn(_)) => " since your last turn",
+        Some(HistoryWindow::SinceLastUpkeep(_)) => " since your last upkeep",
+    }
+}
+
+/// The window a clause ends with, and the clause without it. "this turn" may come before
+/// a "from anywhere ..." qualifier.
+fn split_window(c: &str) -> Option<(String, Option<HistoryWindow>)> {
+    let you = || PlayerRef::You;
+    // Longer suffixes first ("since your last turn" before "last turn").
+    for w in [
+        None,
+        Some(HistoryWindow::ThisCombat),
+        Some(HistoryWindow::PlayersLastTurn(you())),
+        Some(HistoryWindow::SinceLastTurn(you())),
+        Some(HistoryWindow::SinceLastUpkeep(you())),
+        Some(HistoryWindow::LastTurn),
+    ] {
+        if let Some(b) = c.strip_suffix(window_suffix(&w)) {
+            return Some((b.to_string(), w));
+        }
+    }
+    let i = c.find(" this turn from ")?;
+    Some((
+        format!("{}{}", &c[..i], &c[i + " this turn".len()..]),
+        None,
+    ))
+}
+
+/// "if [history clause] [window]" without referents.
 pub fn history_condition(c: &str) -> Option<Condition> {
-    let c = end(c);
-    let body = if let Some(b) = c.strip_suffix(" this turn") {
-        b.to_string()
-    } else {
-        let i = c.find(" this turn from ")?;
-        format!("{}{}", &c[..i], &c[i + " this turn".len()..])
-    };
-    clause_or_joined(&body)
+    let (body, w) = split_window(end(c))?;
+    clause_or_joined(&body, &w)
 }
 
 inventory::submit! { super::ConditionPattern { name: "history: [subject] [past verb] [objects] this turn", priority: 50, parse: history_condition } }
@@ -722,7 +784,10 @@ inventory::submit! { super::ConditionPattern { name: "history: [subject] [past v
 /// 400.7).
 pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Option<Condition> {
     let c = end(c);
-    if c.contains('~') || !c.ends_with(" this turn") {
+    if let Some(cond) = cast_condition(c, b) {
+        return Some(cond);
+    }
+    if c.contains('~') || split_window(c).is_none() {
         return None;
     }
     let before = b.targets.len();
@@ -769,6 +834,341 @@ fn about(cond: Condition, sel: &Sel) -> Option<Condition> {
     serde_json::from_value(out).ok()
 }
 
+// ---------------------------------------------------------------------------
+// How a spell was cast and paid for
+// ---------------------------------------------------------------------------
+
+use crate::kw::cast_history as ch;
+use crate::oracle::effects::Builder;
+
+/// The spell a cast-status or mana-spent condition is about.
+#[derive(Clone, Debug)]
+enum Whose {
+    /// The source's own spell: a resolving spell, or the spell a permanent was.
+    Own,
+    /// The spell that caused the ability to trigger.
+    TriggerSpell,
+    /// Another object (a permanent that entered, a target).
+    Obj(Sel),
+}
+
+/// The trigger condition of the ability being compiled, lowercased with the card's name
+/// as "~" (granted abilities in quotes included).
+fn trigger_texts() -> Vec<String> {
+    let mut raw = crate::oracle::raw_text().to_lowercase();
+    let name = crate::oracle::card_name().to_lowercase();
+    if !name.is_empty() {
+        raw = raw.replace(&name, "~");
+        if let Some((short, _)) = name.split_once(", ") {
+            raw = raw.replace(short, "~");
+        }
+    }
+    let raw = raw.replace("this creature", "~");
+    raw.split(['"', '\n'])
+        .filter_map(|part| {
+            let i = part.find("whenever ").or_else(|| part.find("when "))?;
+            Some(part[i..].split(',').next().unwrap_or("").to_string())
+        })
+        .collect()
+}
+
+/// Whether the ability triggers on a spell being cast ("whenever you cast a noncreature
+/// spell").
+fn cast_trigger(b: &Builder) -> bool {
+    b.in_trigger
+        && trigger_texts()
+            .iter()
+            .any(|t| t.contains(" cast ") || t.contains(" casts ") || t.ends_with(" cast"))
+}
+
+/// Whether the trigger object is the source itself ("When ~ enters").
+fn self_trigger(b: &Builder) -> bool {
+    b.in_trigger
+        && trigger_texts().iter().any(|t| {
+            let t = t.trim_start_matches("whenever ").trim_start_matches("when ");
+            t.starts_with("~ enters") || t.starts_with("~ enter ")
+        })
+}
+
+/// What a subject word of a cast-status condition refers to.
+fn whose(word: &str, b: Option<&mut Builder>) -> Option<Whose> {
+    if matches!(word, "~" | "this spell" | "this creature") {
+        return Some(Whose::Own);
+    }
+    let b = b?;
+    let pronoun = matches!(
+        word,
+        "it" | "he" | "she" | "they" | "him" | "her" | "them" | "that spell" | "that creature"
+    );
+    if !pronoun {
+        return None;
+    }
+    if cast_trigger(b)
+        && matches!(b.it, Sel::TriggerSpell | Sel::TriggerObject)
+        && word != "that creature"
+    {
+        return Some(Whose::TriggerSpell);
+    }
+    if word == "that spell" {
+        return None;
+    }
+    if word == "that creature" {
+        let before = b.targets.len();
+        let (sel, rest) = crate::oracle::effects::object_ref(word, b)?;
+        if b.targets.len() != before || !rest.trim().is_empty() {
+            b.targets.truncate(before);
+            return None;
+        }
+        return Some(Whose::Obj(sel));
+    }
+    match &b.it {
+        Sel::This => Some(Whose::Own),
+        Sel::TriggerObject if self_trigger(b) => Some(Whose::Own),
+        it if super::oracle_hardening_referents::is_no_referent(it) => None,
+        it => Some(Whose::Obj(it.clone())),
+    }
+}
+
+/// A status of the spell: own conditions for the source's own spell, filters otherwise.
+fn status(w: &Whose, own: Condition, filter: Filter) -> Condition {
+    match w {
+        Whose::Own => own,
+        Whose::TriggerSpell => Condition::SelMatches(Sel::TriggerSpell, filter),
+        Whose::Obj(sel) => Condition::SelMatches(sel.clone(), filter),
+    }
+}
+
+fn not(c: Condition) -> Condition {
+    Condition::Not(Box::new(c))
+}
+
+/// "was cast from [zone]" / "entered from [zone]": the zone.
+fn zone_phrase(z: &str) -> Option<ZoneKind> {
+    Some(match z {
+        "your hand" => ZoneKind::Hand,
+        "your graveyard" | "a graveyard" => ZoneKind::Graveyard,
+        "exile" => ZoneKind::Exile,
+        "your library" => ZoneKind::Library,
+        _ => return None,
+    })
+}
+
+fn was_cast(w: &Whose) -> Condition {
+    status(w, Condition::WasCast, Filter::Custom(ch::WAS_CAST.into()))
+}
+
+fn cast_from(w: &Whose, z: ZoneKind) -> Condition {
+    status(
+        w,
+        Condition::CastFrom(z),
+        Filter::Custom(format!("{}{z:?}", ch::CAST_FROM).into()),
+    )
+}
+
+/// "[S] entered from [zone]": the permanent came from that zone (CR 400.7).
+fn entered_from(w: &Whose, z: ZoneKind) -> Condition {
+    let f = Filter::Custom(crate::kw::played_from_zone::came_from(z).into());
+    match w {
+        Whose::Own => Condition::SelMatches(Sel::This, f),
+        Whose::TriggerSpell => Condition::Never,
+        Whose::Obj(sel) => Condition::SelMatches(sel.clone(), f),
+    }
+}
+
+const SUBJECTS: &[&str] = &[
+    "~", "this spell", "this creature", "it", "he", "she", "they", "that spell",
+    "that creature",
+];
+const OBJECTS: &[&str] = &[
+    "~", "this spell", "this creature", "it", "him", "her", "them", "that spell",
+    "that creature",
+];
+
+/// One cast-status clause: "[S] was cast [from Z]", "[S] wasn't cast", "you cast [S]
+/// [from Z | from anywhere other than your hand]", "you didn't cast [S]", "[S] was
+/// kicked", "[S] entered from [Z]".
+fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition> {
+    let c = c.trim();
+    for (p, neg) in [("you cast ", false), ("you didn't cast ", true)] {
+        if let Some(r) = c.strip_prefix(p) {
+            let (word, rest) = OBJECTS
+                .iter()
+                .filter_map(|w| r.strip_prefix(w).map(|x| (*w, x)))
+                .find(|(_, x)| word_end(x))?;
+            let w = whose(word, b.as_deref_mut())?;
+            let cond = match rest.trim() {
+                "" => was_cast(&w),
+                "from anywhere other than your hand" => Condition::And(vec![
+                    was_cast(&w),
+                    not(cast_from(&w, ZoneKind::Hand)),
+                ]),
+                z => cast_from(&w, zone_phrase(z.strip_prefix("from ")?)?),
+            };
+            return Some(if neg { not(cond) } else { cond });
+        }
+    }
+    let (word, rest) = SUBJECTS
+        .iter()
+        .filter_map(|w| c.strip_prefix(w).map(|x| (*w, x)))
+        .find(|(_, x)| x.starts_with(' '))?;
+    let rest = rest.trim();
+    let w = whose(word, b.as_deref_mut())?;
+    for (p, neg) in [
+        ("was cast", false),
+        ("were cast", false),
+        ("wasn't cast", true),
+        ("weren't cast", true),
+    ] {
+        if let Some(x) = rest.strip_prefix(p) {
+            let cond = match x.trim() {
+                "" => was_cast(&w),
+                z => cast_from(&w, zone_phrase(z.strip_prefix("from ")?)?),
+            };
+            return Some(if neg { not(cond) } else { cond });
+        }
+    }
+    if matches!(rest, "was kicked" | "were kicked") {
+        return Some(status(
+            &w,
+            Condition::CostPaid("kicker".into()),
+            Filter::Custom(ch::KICKED.into()),
+        ));
+    }
+    if let Some(z) = rest.strip_prefix("entered from ") {
+        return Some(entered_from(&w, zone_phrase(z)?));
+    }
+    None
+}
+
+/// Cast-status clauses joined by "or" ("it entered from your graveyard or you cast it
+/// from your graveyard", "it entered from your library or was cast from your library").
+fn cast_status(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
+    if let Some(cond) = cast_status_clause(c, &mut b) {
+        return Some(cond);
+    }
+    let (x, y) = c.split_once(" or ")?;
+    let cx = cast_status_clause(x, &mut b)?;
+    let cy = cast_status_clause(y, &mut b).or_else(|| {
+        // The same subject, elided: "... or was cast from your library".
+        let subj = SUBJECTS
+            .iter()
+            .find(|w| x.starts_with(&format!("{w} ")))?;
+        cast_status_clause(&format!("{subj} {y}"), &mut b)
+    })?;
+    Some(Condition::Or(vec![cx, cy]))
+}
+
+/// "[amount] [mana] was spent to cast [S]" / "... to activate this ability": the
+/// payment's Value::Custom prefix argument.
+fn payment_whose(r: &str, b: &mut Option<&mut Builder>) -> Option<(&'static str, Whose)> {
+    if r == "activate this ability" {
+        return Some(("this ability", Whose::Own));
+    }
+    let word = r.strip_prefix("cast ")?;
+    if !OBJECTS.contains(&word) {
+        return None;
+    }
+    match whose(word, b.as_deref_mut())? {
+        Whose::Own => Some(("self", Whose::Own)),
+        Whose::TriggerSpell => Some(("that spell", Whose::TriggerSpell)),
+        Whose::Obj(_) => None,
+    }
+}
+
+/// Mana-spent conditions: "no mana was spent to cast it", "no colored mana was spent to
+/// cast it", "at least four mana was spent to cast it", "mana from a Treasure was spent
+/// to cast it", "three or more mana from creatures was spent to cast it", "{C} wasn't spent
+/// to cast it", "exactly three colors of mana were spent to activate this ability", "the
+/// amount of mana spent to cast it was less than its mana value".
+fn mana_spent(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
+    let c = c.trim();
+    // "the amount of mana spent to cast [S] was less than its mana value".
+    if let Some(r) = c.strip_prefix("the amount of mana spent to ") {
+        for (sep, cmp) in [
+            (" was less than ", Cmp::Lt),
+            (" is less than ", Cmp::Lt),
+            (" was greater than ", Cmp::Gt),
+            (" is greater than ", Cmp::Gt),
+        ] {
+            let Some((x, y)) = r.split_once(sep) else {
+                continue;
+            };
+            let (key, w) = payment_whose(x, &mut b)?;
+            let sel = match w {
+                Whose::Own => Sel::This,
+                Whose::TriggerSpell => Sel::TriggerSpell,
+                Whose::Obj(_) => return None,
+            };
+            let other = match y {
+                "its mana value" | "that spell's mana value" => Value::ManaValueOf(Box::new(sel)),
+                "~'s power" => Value::PowerOf(Box::new(Sel::This)),
+                _ => return None,
+            };
+            let spent = Value::Custom(ch::spent(key, "total").into());
+            return Some(Condition::Compare(spent, cmp, other));
+        }
+        return None;
+    }
+    let (amount, neg, r) = [
+        (" was spent to ", false),
+        (" were spent to ", false),
+        (" wasn't spent to ", true),
+    ]
+    .iter()
+    .find_map(|(sep, neg)| c.split_once(sep).map(|(a, r)| (a, *neg, r)))?;
+    let (key, w) = payment_whose(r, &mut b)?;
+    // Mana symbols: the symbol grammar's, about the source's own spell.
+    if amount.starts_with('{') {
+        // The symbol grammar reads "[symbols] was spent to cast ~" itself.
+        if !neg || !matches!(w, Whose::Own) || key != "self" {
+            return None;
+        }
+        let cond = crate::oracle_ext::parse_condition_ext(&format!("{amount} was spent to cast ~"))?;
+        return Some(if neg { not(cond) } else { cond });
+    }
+    if neg {
+        return None;
+    }
+    let v = |what: &str| Value::Custom(ch::spent(key, what).into());
+    let cmp = |what: &str, cmp: Cmp, n: i32| Condition::Compare(v(what), cmp, Value::Const(n));
+    let cond = match amount {
+        "no mana" => cmp("total", Cmp::Eq, 0),
+        "no colored mana" => cmp("colored", Cmp::Eq, 0),
+        "mana from a treasure" => cmp("source subtype:Treasure", Cmp::Ge, 1),
+        _ => {
+            let (q, n, _, rest) = quantity(amount)?;
+            if q != Cmp::Ge && q != Cmp::Eq {
+                return None;
+            }
+            match rest {
+                "mana" => cmp("total", q, n),
+                "mana from creatures" | "mana from a creature" => {
+                    cmp("source type:Creature", q, n)
+                }
+                "colors of mana" | "color of mana" => cmp("colors", q, n),
+                _ => return None,
+            }
+        }
+    };
+    Some(cond)
+}
+
+/// Cast-status and mana-spent conditions without referents ("~ wasn't cast from your
+/// hand", "at least three mana was spent to cast ~").
+fn cast_condition_free(c: &str) -> Option<Condition> {
+    let c = end(c);
+    cast_status(c, None).or_else(|| mana_spent(c, None))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history: how ~ was cast and paid for", priority: 60, parse: cast_condition_free } }
+
+/// Cast-status and mana-spent conditions about a referent ("if it was cast", "if he was
+/// kicked", "if no mana was spent to cast it" in a cast trigger).
+pub fn cast_condition(c: &str, b: &mut Builder) -> Option<Condition> {
+    let c = end(c);
+    cast_status(c, Some(b)).or_else(|| mana_spent(c, Some(b)))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::card::Layout;
@@ -812,7 +1212,7 @@ mod tests {
                 let cl = super::player_clause(&c).or_else(|| super::object_clause(&c));
                 let t = cl.as_ref().map(|x| x.trigger.clone());
                 let tc = t.as_deref().and_then(super::trigger_of);
-                let hc = super::history_condition(&format!("{c} this turn"));
+                let hc = super::history_condition(&c);
                 println!("H {c}\n  clause={t:?}\n  trigger={tc:?}\n  cond={hc:?}");
             } else if let Some(c) = line.strip_prefix("U: ") {
                 let def = crate::card::card(c);
