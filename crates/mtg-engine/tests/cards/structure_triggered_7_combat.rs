@@ -13,7 +13,7 @@ use mtg_engine::types::{counters, Color};
 use mtg_engine::*;
 
 /// Runs a combat on P0's turn: `attackers` attack P1, who blocks with `blocks`.
-fn fight(t: &mut TestGame, attackers: &[ObjectId], blocks: &[(ObjectId, ObjectId)]) {
+pub fn fight(t: &mut TestGame, attackers: &[ObjectId], blocks: &[(ObjectId, ObjectId)]) {
     let a: Vec<(ObjectId, Entity)> = attackers.iter().map(|a| (*a, Entity::Player(P1))).collect();
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&a, blocks);

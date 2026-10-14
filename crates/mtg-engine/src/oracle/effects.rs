@@ -1919,10 +1919,11 @@ pub fn parse_token_description(s: &str) -> Option<TokenSpec> {
         let mods = keyword_mods(r)?;
         for m in mods {
             if let Modification::AddKeyword(k) = m {
-                abilities.push(AbilityDef::new(
-                    AbilityKind::Keyword(k.clone()),
-                    k.kind.name(),
-                ));
+                // A keyword the token is created with is part of its definition: a
+                // changeling token also has the characteristic-defining ability
+                // (CR 702.73a, 604.3).
+                let name = k.kind.name();
+                abilities.extend(crate::oracle::keywords::compile_keyword(k, name));
             }
         }
     } else if !end(rest).is_empty() {
