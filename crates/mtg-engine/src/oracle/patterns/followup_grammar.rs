@@ -323,8 +323,8 @@ fn if_player_did(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if you != matches!(who, PlayerRef::You) {
         return false;
     }
-    // "If you do/don't" after "you may" is the core's.
-    if you && optional(last) {
+    // "If you do/don't" is the core's.
+    if you && did != Did::Cant {
         return false;
     }
     // Whether the player did it is whether they did all of it: an instruction for
