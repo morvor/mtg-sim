@@ -46,6 +46,13 @@ fn tainted_isle_adds_two_colors_only_with_a_swamp() {
         t.g.player_mut(P0).mana_pool.mana.clear();
         t.g.untap(isle);
     }
+    // "A Swamp" is the land type: a nonbasic Swamp counts.
+    let mut t = TestGame::new(2);
+    let isle = t.battlefield(P0, "Tainted Isle");
+    t.battlefield(P0, "Bayou");
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    act(&mut t, P0, isle, "add {u} or {b}", &[]).unwrap();
+    assert_eq!(pool(&t, P0, ManaType::B), 1);
 }
 
 #[test]

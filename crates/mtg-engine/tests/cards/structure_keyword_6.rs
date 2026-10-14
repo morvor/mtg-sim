@@ -13,17 +13,24 @@ fn plainswalk_is_unblockable_while_the_defender_controls_a_plains() {
     cr!("702.14c", "509.1b");
     // Zodiac Rooster: "Plainswalk"
     supported("Zodiac Rooster");
-    for (defender_plains, my_plains) in [(true, false), (false, true), (false, false)] {
+    // (defender's land, P0's land): a nonbasic Plains (Scrubland) counts too.
+    for (defender_land, my_land) in [
+        (Some("Plains"), None),
+        (Some("Scrubland"), None),
+        (None, Some("Plains")),
+        (None, None),
+    ] {
+        let defender_plains = defender_land.is_some();
         let mut t = TestGame::new(2);
         let r = t.battlefield(P0, "Zodiac Rooster");
         let bears = t.battlefield(P0, "Grizzly Bears");
         let wall = t.battlefield(P1, "Wall of Stone");
         t.battlefield(P1, "Island");
-        if defender_plains {
-            t.battlefield(P1, "Plains");
+        if let Some(l) = defender_land {
+            t.battlefield(P1, l);
         }
-        if my_plains {
-            t.battlefield(P0, "Plains");
+        if let Some(l) = my_land {
+            t.battlefield(P0, l);
         }
         t.set_step(P0, Step::BeginningOfCombat);
         declare(&mut t, &[(r, Entity::Player(P1)), (bears, Entity::Player(P1))]);
@@ -31,7 +38,7 @@ fn plainswalk_is_unblockable_while_the_defender_controls_a_plains() {
         assert_eq!(
             t.g.can_block(wall, r),
             !defender_plains,
-            "defender controls a Plains: {defender_plains}"
+            "{defender_land:?} / {my_land:?}"
         );
         assert!(t.g.can_block(wall, bears), "no landwalk");
     }

@@ -449,4 +449,14 @@ fn distress_makes_a_player_discard_a_nonland_card_you_choose() {
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert!(t.in_hand(P1, "Lightning Bolt") && t.in_hand(P1, "Forest"));
     assert_eq!(t.hand_size(P1), 2);
+    // Only lands in hand: nothing is discarded.
+    let mut t = TestGame::new(2);
+    t.hand(P1, "Forest");
+    t.hand(P1, "Island");
+    t.lands(P0, "Swamp", 2);
+    let s = t.hand(P0, "Distress");
+    t.cast(P0, s).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), 2);
+    assert_eq!(t.graveyard_size(P1), 0);
 }

@@ -191,7 +191,7 @@ fn silkwing_scout_sacrifices_to_fetch_a_basic_land_tapped() {
 
 #[test]
 fn sneaking_guide_makes_a_small_creature_unblockable() {
-    cr!("602.2", "115.1", "509.1b", "514.2");
+    cr!("602.2", "115.1", "509.1b", "514.2", "608.2b");
     // "{2}, {T}: Target creature with power 2 or less can't be blocked this turn."
     supported("Sneaking Guide");
     let mut t = TestGame::new(2);
@@ -213,6 +213,20 @@ fn sneaking_guide_makes_a_small_creature_unblockable() {
     t.advance_to(P0, Step::PrecombatMain);
     attack(&mut t, P0, P1, &[bears]);
     assert!(t.g.can_block(wall, bears), "only this turn");
+    // A target whose power rose above 2 before resolution is illegal (CR 608.2b).
+    let mut t = TestGame::new(2);
+    let g = t.battlefield(P0, "Sneaking Guide");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    t.lands(P0, "Wastes", 2);
+    t.lands(P0, "Forest", 1);
+    act(&mut t, P0, g, "blocked", &[Entity::Object(bears)]).unwrap();
+    let gg = t.hand(P0, "Giant Growth");
+    t.cast(P0, gg).target(bears).go();
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (5, 5));
+    attack(&mut t, P0, P1, &[bears]);
+    assert!(t.g.can_block(wall, bears), "the ability did nothing");
 }
 
 #[test]
@@ -774,6 +788,14 @@ fn triskelion_removes_counters_to_ping() {
         "no counter left"
     );
     assert_eq!(t.life(P1), 19);
+    // "It" still deals the damage if Triskelion has left the battlefield.
+    let mut t = TestGame::new(2);
+    let tr = with_p1p1(&mut t, P0, "Triskelion", 1);
+    act(&mut t, P0, tr, "damage", &[Entity::Player(P1)]).unwrap();
+    assert!(t.g.destroy(tr, None));
+    assert!(t.in_graveyard(P0, "Triskelion"));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19, "last known information");
 }
 
 #[test]
