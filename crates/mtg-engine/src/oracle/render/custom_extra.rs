@@ -560,6 +560,18 @@ impl Renderer<'_> {
         if let Some(r) = self.countered_source(v) {
             return Some(r);
         }
+        // "You may look at and play those cards for as long as they remain exiled."
+        if let [Effect::Custom(n), next, ..] = v {
+            if n.as_str() == crate::zones::MAY_LOOK_AT_EXILED {
+                // (The cards looked at and played were exiled.)
+                let saved = std::mem::replace(&mut self.after_exile, true);
+                let s = self.effect(next);
+                self.after_exile = saved;
+                if let Some(rest) = s.strip_prefix("you may play ") {
+                    return Some((format!("you may look at and play {rest}"), 2));
+                }
+            }
+        }
         // "An opponent chooses one of them. Put that card into your hand.": the chosen
         // card, first mentioned as "that card".
         if let [st @ Effect::Store { var, sel: Sel::Choose { chooser: PlayerRef::Var(_), filter: Filter::In(_), count: Value::Const(1), up_to: false, .. } }, ..] = v {
@@ -1036,5 +1048,31 @@ impl Renderer<'_> {
             }
             _ => None,
         }
+    }
+}
+
+impl Renderer<'_> {
+    /// Numbers put into words here: "the number of creatures sacrificed this way" (the
+    /// objects a repeatable additional cost of the card acted on).
+    pub(crate) fn value_extra(&mut self, v: &Value) -> Option<String> {
+        let Value::CountSel(s) = v else {
+            return None;
+        };
+        let Sel::Matching(inner, f) = s.as_ref() else {
+            return None;
+        };
+        let Sel::Var(var) = inner.as_ref() else {
+            return None;
+        };
+        let done = match *var {
+            vars::SACRIFICED => "sacrificed",
+            vars::TAPPED => "tapped",
+            _ => return None,
+        };
+        if !self.extra.paid_costs.iter().any(|(_, _, d)| *d == done) {
+            return None;
+        }
+        let n = self.noun(f, Num::Many);
+        Some(format!("the number of {n} {done} this way"))
     }
 }
