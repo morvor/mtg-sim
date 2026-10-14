@@ -30,70 +30,173 @@ pub fn refer_cost_to_granter(a: &Ability) -> Option<Ability> {
 }
 
 fn refer_to_granter_in(a: &Ability, in_body: bool) -> Option<Ability> {
-    let AbilityKind::Activated(act) = &a.kind else {
-        return None;
+    rewrite(
+        a,
+        if in_body {
+            Rewrite::Names
+        } else {
+            Rewrite::CostOnly
+        },
+    )
+}
+
+/// [`refer_to_granter`] for an ability compiled from the granting object's point of view
+/// (see `oracle::patterns::statics`): a quote that names the granting card and also says
+/// "this creature" ("Whenever this creature attacks, you may sacrifice Spare Dagger. When
+/// you do, this creature deals 1 damage to any target.") is compiled with "this creature"
+/// read as "enchanted creature"; here "~" becomes the granter and "enchanted creature"
+/// the object that has the ability (CR 113.7, 201.5a).
+pub fn refer_mixed_to_granter(a: &Ability) -> Option<Ability> {
+    rewrite(a, Rewrite::Mixed)
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Rewrite {
+    /// Every "~" is the granter.
+    Names,
+    /// Only "~" in the cost is the granter.
+    CostOnly,
+    /// "~" is the granter and "enchanted creature" the object that has the ability.
+    Mixed,
+}
+
+/// Constructs that refer to the object an ability is on in ways this rewriting doesn't
+/// translate: such quotes are left unsupported.
+const UNTRANSLATED: [&str; 8] = [
+    "\"AttachedToThis\"",
+    "\"BlockingSource\"",
+    "\"BlockedBySource\"",
+    "\"WhileSourceOnBattlefield\"",
+    "\"WhileYouControlSource\"",
+    "\"ExertSelf\"",
+    "\"AddThisAbility\"",
+    "attached_to_host",
+];
+
+fn rewrite(a: &Ability, how: Rewrite) -> Option<Ability> {
+    let granter_all = Sel::All(Filter::Custom(GRANTER.into()));
+    let this = json(&Sel::This)?;
+    let source = json(&Filter::Source)?;
+    let all_granter = json(&granter_all)?;
+    let granter_filter = json(&Filter::Custom(GRANTER.into()))?;
+    let attached_to = json(&Sel::AttachedTo)?;
+    let attached_to_source = json(&Filter::AttachedToSource)?;
+    // "other than ~": other than the granter (`Filter::Other` is other than the object
+    // that has the ability).
+    let other = json(&Filter::Other)?;
+    let not_granter = json(&Filter::Not(Box::new(Filter::Custom(GRANTER.into()))))?;
+    let granterize = |v: serde_json::Value, sel: &serde_json::Value| -> serde_json::Value {
+        let v = replace(v, &this, sel);
+        let v = replace(v, &source, &granter_filter);
+        replace(v, &other, &not_granter)
     };
-    let mut act = act.clone();
-    let mut sacrifices = false;
-    let this = serde_json::to_value(Sel::This).ok()?;
-    let all_granter = serde_json::to_value(Sel::All(Filter::Custom(GRANTER.into()))).ok()?;
-    for p in act.cost.parts.iter_mut() {
-        match p {
-            CostPart::SacrificeSelf => {
-                *p = CostPart::Sacrifice {
-                    filter: Filter::Custom(GRANTER.into()),
-                    count: Value::c(1),
-                };
-                sacrifices = true;
-            }
-            // "{15}, Exile The Dominion Bracelet: ..." (the granter, which its controller
-            // must control, like a sacrificed one).
-            CostPart::ExileSelf => {
-                *p = CostPart::Exile {
-                    filter: Filter::Custom(GRANTER.into()),
-                    zone: ZoneKind::Battlefield,
-                    count: Value::c(1),
-                };
-            }
-            // "{T}, Unattach Heartseeker: ..." (CR 701.3d): the granting Equipment is
-            // unattached, not the creature.
-            CostPart::Effect(e) => {
-                let v = serde_json::to_value(&**e).ok()?;
-                **e = serde_json::from_value(replace(v, &this, &all_granter)).ok()?;
-            }
-            _ => {}
+    // After "~" became the granter: "enchanted creature" is the object with the ability.
+    let host_to_self = |v: serde_json::Value| -> serde_json::Value {
+        if how != Rewrite::Mixed {
+            return v;
         }
-    }
-    // Other costs naming "~" (discarding or returning it) aren't supported here. ({T} is
-    // the creature's own: it's the source of the ability.)
-    if act
-        .cost
-        .parts
-        .iter()
-        .any(|p| matches!(p, CostPart::DiscardSelf | CostPart::ReturnSelfToHand))
-    {
+        let v = replace(v, &attached_to, &this);
+        replace(v, &attached_to_source, &source)
+    };
+    let kind = match &a.kind {
+        AbilityKind::Activated(act) => {
+            let mut act = act.clone();
+            let mut sacrifices = false;
+            let mut removed_kinds = Vec::new();
+            for p in act.cost.parts.iter_mut() {
+                match p {
+                    CostPart::SacrificeSelf => {
+                        *p = CostPart::Sacrifice {
+                            filter: Filter::Custom(GRANTER.into()),
+                            count: Value::c(1),
+                        };
+                        sacrifices = true;
+                    }
+                    // "{15}, Exile The Dominion Bracelet: ..." (the granter, which its
+                    // controller must control, like a sacrificed one).
+                    CostPart::ExileSelf => {
+                        *p = CostPart::Exile {
+                            filter: Filter::Custom(GRANTER.into()),
+                            zone: ZoneKind::Battlefield,
+                            count: Value::c(1),
+                        };
+                    }
+                    // "{T}, Unattach Heartseeker: ..." (CR 701.3d): the granting Equipment
+                    // is unattached, not the creature.
+                    CostPart::Effect(_) => {
+                        let v = serde_json::to_value(&*p).ok()?;
+                        let v = replace(v, &this, &all_granter);
+                        *p = serde_json::from_value(host_to_self(v)).ok()?;
+                    }
+                    // Other costs naming "~" (discarding, exerting or returning it) aren't
+                    // supported here. ({T} is the creature's own: it's the source of the
+                    // ability.)
+                    // "Remove all aim counters from Hankyu": from the granter.
+                    CostPart::RemoveCounters { kind, count } => {
+                        let count = serde_json::to_value(&*count).ok()?;
+                        let count = replace(count, &this, &all_granter);
+                        removed_kinds.push(kind.clone());
+                        *p = CostPart::RemoveCountersFromAmong {
+                            kind: Some(kind.clone()),
+                            filter: Filter::Custom(GRANTER.into()),
+                            count: serde_json::from_value(host_to_self(count)).ok()?,
+                        };
+                    }
+                    CostPart::DiscardSelf
+                    | CostPart::ReturnSelfToHand
+                    | CostPart::ExertSelf
+                    | CostPart::AddCounters { .. } => return None,
+                    _ => {}
+                }
+            }
+            if how == Rewrite::CostOnly {
+                // "Remove all aim counters from Hankyu": all of the granter's.
+                for k in &removed_kinds {
+                    let from = json(&Value::CountersOn(Box::new(Sel::This), Some(k.clone())))?;
+                    let to = json(&Value::CountersOn(
+                        Box::new(granter_all.clone()),
+                        Some(k.clone()),
+                    ))?;
+                    let cond = replace(serde_json::to_value(&act.condition).ok()?, &from, &to);
+                    act.condition = serde_json::from_value(cond).ok()?;
+                }
+                AbilityKind::Activated(act)
+            } else {
+                let granter = if sacrifices {
+                    Sel::Var(vars::SACRIFICED)
+                } else {
+                    granter_all.clone()
+                };
+                let to = serde_json::to_value(&granter).ok()?;
+                let body = serde_json::to_value(&act.body).ok()?;
+                let body = granterize(body, &to);
+                act.body = serde_json::from_value(host_to_self(body)).ok()?;
+                let cond = serde_json::to_value(&act.condition).ok()?;
+                let cond = granterize(cond, &all_granter);
+                act.condition = serde_json::from_value(host_to_self(cond)).ok()?;
+                AbilityKind::Activated(act)
+            }
+        }
+        AbilityKind::Triggered(_) | AbilityKind::Static(_) if how != Rewrite::CostOnly => {
+            let v = serde_json::to_value(&a.kind).ok()?;
+            serde_json::from_value(host_to_self(granterize(v, &all_granter))).ok()?
+        }
+        _ => return None,
+    };
+    let s = serde_json::to_string(&kind).ok()?;
+    if UNTRANSLATED.iter().any(|m| s.contains(m)) {
         return None;
     }
-    if !in_body {
-        return Some(AbilityDef::with_link(
-            AbilityKind::Activated(act),
-            a.text.clone(),
-            a.link,
-        ));
+    // Compiled from the granter's point of view, "enchanted creature" must have meant the
+    // object it's attached to, not any enchanted or equipped creature.
+    if how == Rewrite::Mixed && (s.contains("\"Enchanted\"") || s.contains("\"Equipped\"")) {
+        return None;
     }
-    let granter = if sacrifices {
-        Sel::Var(vars::SACRIFICED)
-    } else {
-        Sel::All(Filter::Custom(GRANTER.into()))
-    };
-    let body = serde_json::to_value(&act.body).ok()?;
-    let to = serde_json::to_value(&granter).ok()?;
-    act.body = serde_json::from_value(replace(body, &this, &to)).ok()?;
-    Some(AbilityDef::with_link(
-        AbilityKind::Activated(act),
-        a.text.clone(),
-        a.link,
-    ))
+    Some(AbilityDef::with_link(kind, a.text.clone(), a.link))
+}
+
+fn json<T: serde::Serialize>(x: &T) -> Option<serde_json::Value> {
+    serde_json::to_value(x).ok()
 }
 
 fn replace(
@@ -130,6 +233,11 @@ pub fn bind_granter(a: &Ability, granter: ObjectId) -> Ability {
         Ok(kind) => AbilityDef::with_link(kind, a.text.clone(), a.link),
         Err(_) => a.clone(),
     }
+}
+
+/// Whether `sel` is the granter of an acquired ability, as [`bind_granter`] wrote it.
+pub fn is_bound_granter(sel: &Sel) -> bool {
+    matches!(sel, Sel::All(Filter::Objects(v)) if v.len() == 1)
 }
 
 /// Whether an ability refers to its granter.

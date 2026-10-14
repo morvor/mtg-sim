@@ -345,8 +345,10 @@ impl Game {
             }
             Effect::SacrificeObjects { what } => {
                 // "Sacrifice ~": the ability's controller sacrifices its source, which they
-                // can't do if another player controls it now (CR 701.21a).
-                let own_source = matches!(what, Sel::This);
+                // can't do if another player controls it now (CR 701.21a). The same for
+                // "sacrifice Spare Dagger" in an ability it grants (`granted_by`).
+                let own_source =
+                    matches!(what, Sel::This) || crate::granted_by::is_bound_granter(what);
                 let objs = self.resolve_objects(what, ctx);
                 let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 // Sacrificed at the same time (CR 101.4).
