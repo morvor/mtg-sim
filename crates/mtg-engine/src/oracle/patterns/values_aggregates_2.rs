@@ -145,3 +145,39 @@ fn the_same_way(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "aggregates: [players do the other parts] the same way", priority: 100, apply: the_same_way } }
+
+/// "Choose target player. Return half the creatures they control to their owner's hand,
+/// rounded up." (Split the Party): the spell's controller chooses which (Split the Party
+/// ruling), half of them rounded as the text says (CR 107.1a).
+fn return_half(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("return half the ")?;
+    let (noun, r) = r.split_once(" they control to their owner's hand, ")?;
+    let up = match r {
+        "rounded up" => true,
+        "rounded down" => false,
+        _ => return None,
+    };
+    let rel = match &b.it_player {
+        PlayerRef::Target(n) => PlayerRel::Target(*n),
+        _ => return None,
+    };
+    let f = permanents(noun)?;
+    let theirs = Filter::and(vec![
+        f,
+        Filter::InZone(ZoneKind::Battlefield),
+        Filter::ControlledBy(rel),
+    ]);
+    Some(Effect::Move {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: theirs.clone(),
+            count: Value::Div(Box::new(Value::Count(theirs)), 2, up),
+            up_to: false,
+            store: None,
+        },
+        to: Destination::zone(ZoneKind::Hand),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "aggregates: return half the creatures they control, rounded", priority: 100, parse: return_half } }

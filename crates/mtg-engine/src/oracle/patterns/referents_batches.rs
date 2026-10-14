@@ -203,3 +203,46 @@ fn where_x_their(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec
 }
 
 inventory::submit! { super::AbilityPattern { name: "referents: where X is ... their (the one player named)", priority: 50, parse: where_x_their } }
+
+/// "Each player loses half their life, then discards half the cards in their hand, then
+/// sacrifices half the creatures they control of their choice." (Fraying Omnipotence):
+/// each instruction after the first has the same subject, and is performed after the one
+/// before it is finished (each player in turn, CR 101.4; Fraying Omnipotence rulings).
+fn subject_then_each(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let subject = ["each player ", "each opponent "]
+        .into_iter()
+        .find(|s| l.starts_with(s))?;
+    let parts: Vec<&str> = l.split(", then ").collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    // Every later part is a verb phrase without a subject ("discards ...").
+    let verb_only = |p: &str| {
+        let w = p.split(' ').next().unwrap_or("");
+        w.len() > 2 && w.ends_with('s') && !["each", "it", "they", "this", "that"].contains(&w)
+    };
+    if !parts[1..].iter().all(|p| verb_only(p)) {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let mut out = Vec::new();
+    for (i, p) in parts.iter().enumerate() {
+        let s = if i == 0 {
+            p.to_string()
+        } else {
+            format!("{subject}{p}")
+        };
+        match crate::oracle::effects::parse_clause(&s, b) {
+            Some(e) => out.push(e),
+            None => {
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1, saved.2);
+                return None;
+            }
+        }
+    }
+    Some(Effect::seq(out))
+}
+
+inventory::submit! { super::EffectPattern { name: "referents: each player [x], then [y], then [z] (the same subject)", priority: 1500, parse: subject_then_each } }
