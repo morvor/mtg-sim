@@ -415,3 +415,48 @@ fn sudden_substitution_does_nothing_between_one_players_spell_and_creature() {
     let stones = t.named_on_battlefield("Mind Stone");
     assert_eq!(controller(&t, stones[0]), P0);
 }
+
+#[test]
+fn inniaz_in_two_headed_giant_ignores_teams() {
+    cr!("608.2f", "101.4");
+    ruling!(
+        "Inniaz, the Gale Force",
+        "The leftmost player on each team gains control of a teammate"
+    );
+    ruling!(
+        "Inniaz, the Gale Force",
+        "triggers just once, no matter how many creatures with flying attack beyond the third"
+    );
+    let mut t = TestGame::with_config(
+        4,
+        mtg_engine::game::GameConfig {
+            variant: mtg_engine::game::Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    );
+    let inniaz = t.battlefield(P0, "Inniaz, the Gale Force");
+    let crows: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Storm Crow")).collect();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let wurm = t.battlefield(P2, "Craw Wurm");
+    let stone = t.battlefield(P3, "Mind Stone");
+    // P0 takes from P3 (to its right), P1 from its teammate P0, P2 from P1, P3 from its
+    // teammate P2.
+    t.answer_choose(P0, &[Entity::Object(stone)]);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.answer_choose(P0, &[Entity::Object(wurm)]);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    let d = Entity::Player(P2);
+    let from = t.asked().len();
+    t.attack(
+        &[(inniaz, d), (crows[0], d), (crows[1], d), (crows[2], d)],
+        &[],
+    );
+    assert_eq!(choosers_since(&t, from).len(), 4, "one trigger");
+    assert_eq!(controller(&t, stone), P0);
+    assert_eq!(controller(&t, bears), P1);
+    assert_eq!(controller(&t, giant), P2);
+    assert_eq!(controller(&t, wurm), P3);
+}

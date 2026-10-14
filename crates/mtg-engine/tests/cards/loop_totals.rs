@@ -97,6 +97,10 @@ fn hypergenesis_lets_a_player_who_declined_put_a_card_later() {
         "choose not to put a card onto the battlefield during one loop of the process"
     );
     ruling!("Hypergenesis", "The permanents enter the battlefield sequentially");
+    ruling!(
+        "Hypergenesis",
+        "If a player chooses not to put a card onto the battlefield but the process repeats"
+    );
     assert_supported("Hypergenesis");
     let mut t = TestGame::new(2);
     t.set_step(P1, Step::PrecombatMain);
@@ -166,6 +170,10 @@ fn plague_of_vermin_gives_each_player_rats_for_all_the_life_they_paid() {
         "Plague of Vermin",
         "the process ends when all N players in sequence"
     );
+    ruling!(
+        "Plague of Vermin",
+        "you can't spend life you haven't got"
+    );
     assert_supported("Plague of Vermin");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -186,6 +194,16 @@ fn plague_of_vermin_gives_each_player_rats_for_all_the_life_they_paid() {
         .filter(|e| matches!(e, Event::LifeLost { player, .. } if *player == P0))
         .count();
     assert_eq!(losses, 3);
+    // Each amount offered was at most the player's life at the time.
+    let maxes: Vec<i64> = t
+        .asked()
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseNumber { max, .. } if *p == P0 => Some(*max),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(maxes, vec![20, 17, 16, 15]);
 }
 
 #[test]
@@ -225,6 +243,10 @@ fn thieves_auction_puts_each_card_back_one_at_a_time_in_turn_order() {
     ruling!(
         "Thieves' Auction",
         "can still be chosen by you or another player later in the auction"
+    );
+    ruling!(
+        "Thieves' Auction",
+        "players make choices in turn order"
     );
     assert_supported("Thieves' Auction");
     let mut t = TestGame::new(2);

@@ -262,21 +262,36 @@ fn mystic_barrier_doesnt_affect_creatures_entering_attacking() {
         "Mystic Barrier",
         "doesn’t affect creatures that enter the battlefield attacking"
     );
-    let mut t = four_players();
-    t.answer(P0, DecisionKind::Option, Answer::Index(LEFT));
-    t.enter(P0, "Mystic Barrier");
-    t.resolve_all();
-    let hero = t.battlefield(P0, "Hero of Bladehold");
-    t.advance_to(P0, Step::BeginningOfCombat);
-    // Hero of Bladehold attacks P1; its Soldier tokens enter attacking P2.
-    t.answer_choose(P0, &[Entity::Player(P2)]);
-    t.answer_choose(P0, &[Entity::Player(P2)]);
-    t.attack(&[(hero, Entity::Player(P1))], &[]);
-    t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Soldier Token").len(), 2);
-    // The Soldiers dealt their combat damage to P2.
-    assert!(t.life(P2) < 20);
-    assert_eq!(t.life(P1), 17);
+    ruling!(
+        "Teyo, Geometric Tactician",
+        "last ability doesn't affect creatures that enter the battlefield attacking"
+    );
+    for teyo in [false, true] {
+        let mut t = four_players();
+        t.set_step(P0, Step::PrecombatMain);
+        t.answer(P0, DecisionKind::Option, Answer::Index(LEFT));
+        if teyo {
+            let teyo = t.battlefield(P0, "Teyo, Geometric Tactician");
+            t.g.objects[teyo.0 as usize]
+                .counters
+                .insert("loyalty".into(), 5);
+            t.activate(P0, teyo, 1, &[]).unwrap();
+        } else {
+            t.enter(P0, "Mystic Barrier");
+        }
+        t.resolve_all();
+        let hero = t.battlefield(P0, "Hero of Bladehold");
+        t.advance_to(P0, Step::BeginningOfCombat);
+        // Hero of Bladehold attacks P1; its Soldier tokens enter attacking P2.
+        t.answer_choose(P0, &[Entity::Player(P2)]);
+        t.answer_choose(P0, &[Entity::Player(P2)]);
+        t.attack(&[(hero, Entity::Player(P1))], &[]);
+        t.resolve_all();
+        assert_eq!(t.named_on_battlefield("Soldier Token").len(), 2);
+        // The Soldiers dealt their combat damage to P2.
+        assert!(t.life(P2) < 20, "teyo: {teyo}");
+        assert_eq!(t.life(P1), 17);
+    }
 }
 
 #[test]
