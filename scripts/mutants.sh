@@ -7,7 +7,7 @@
 #   SAMPLE=1 scripts/mutants.sh trigger_timing   # every mutant instead of a 1-in-N sample
 #
 # Each file stem names crates/mtg-engine/src/<stem>.rs. Mutants run in a persistent copy of
-# the tree (target/mutsrc, `--in-place` there) so every file reuses one incremental build;
+# the committed tree (target/mutsrc, `--in-place` there) so every file reuses one incremental build;
 # results land in target/mutants/<stem>/mutants.out and a summary line is printed.
 # Sampling: cargo-mutants' round-robin shard 0/SAMPLE (default 10: mutants 0, 10, 20, ...
 # in source order), except files with fewer than 60 mutants, which run in full.
@@ -23,10 +23,11 @@ LOCK=${LOCK:-/tmp/cargo-heavy.lock}
 mkdir -p "$MS" "$OUT"
 
 for stem in "$@"; do
-  # Fresh, unmutated source (an interrupted --in-place run may have left a mutation behind).
-  find "$MS" -mindepth 1 -maxdepth 1 ! -name target -exec rm -rf {} +
+  # Fresh, unmutated source of the committed tree (an interrupted --in-place run may have
+  # left a mutation behind; uncommitted work in progress must not break the baseline).
   # -m: fresh mtimes, so cargo rebuilds rather than reusing the last mutant's binaries.
-  tar -C "$WT" --exclude=./target --exclude=./.git -cf - . | tar -C "$MS" -xmf -
+  find "$MS" -mindepth 1 -maxdepth 1 ! -name target -exec rm -rf {} +
+  git -C "$WT" archive HEAD | tar -C "$MS" -xmf -
   file=crates/mtg-engine/src/$stem.rs
   n=$(cd "$MS" && cargo mutants --list -f "$file" | wc -l)
   k=$SAMPLE
