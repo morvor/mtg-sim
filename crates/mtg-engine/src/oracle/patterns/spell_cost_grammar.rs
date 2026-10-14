@@ -140,7 +140,7 @@ fn take(s: &mut String, q: &str) -> bool {
 /// The spell phrase left once the qualifiers are taken out: "spells", "instant and
 /// sorcery spells", "Cleric, Rogue, Warrior, and Wizard spells", "green enchantment spells
 /// and white enchantment spells", "creature spell with flying", "kicked spell".
-fn spell_noun(s: &str, singular: bool) -> Option<Vec<Filter>> {
+pub(crate) fn spell_noun(s: &str, singular: bool) -> Option<Vec<Filter>> {
     let s = s.trim();
     let mut parts = Vec::new();
     let mut s = s.to_string();
