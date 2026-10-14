@@ -868,6 +868,7 @@ pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Opt
         return Some(Condition::Or(vec![cx, cy]));
     }
     if let Some(cond) = cast_condition(c, b)
+        .or_else(|| their_last_turn(c, Some(b)))
         .or_else(|| phase_condition(c))
         .or_else(|| resolved_ordinal(c))
         .or_else(|| nth_spell(c, b))
@@ -1555,6 +1556,126 @@ fn either_if(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "history: [instruction] if [condition] or if [condition]", priority: 240, parse: either_if } }
+
+/// "[instruction] if [condition] and [instruction] if [condition]" where the second
+/// instruction leaves out what it shares with the first ("Target player can't play lands
+/// this turn if {R} was spent to cast ~ and can't cast creature spells this turn if {W}
+/// was spent to cast ~", "You gain X life if {G} was spent to cast ~ and X life if {W} was
+/// spent to cast ~"): each instruction happens if its own condition holds.
+fn two_conditional_instructions(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if l.matches(" if ").count() != 2 || l.contains(',') {
+        return None;
+    }
+    let (x1, rest) = l.split_once(" if ")?;
+    let (mid, c2) = rest.rsplit_once(" if ")?;
+    let (c1, x2) = mid.rsplit_once(" and ")?;
+    let cond1 = crate::oracle::statics::parse_condition(c1, b.ctx)?;
+    let cond2 = crate::oracle::statics::parse_condition(c2, b.ctx)?;
+    let first = b.targets.len();
+    let e1 = crate::oracle::effects::parse_clause(x1, b)?;
+    let after1 = b.targets.len();
+    // The second instruction's shared words: the first instruction's opening words, with
+    // "target player" as "that player" (the same player).
+    let words: Vec<String> = x1
+        .replacen("target player", "that player", 1)
+        .split(' ')
+        .map(str::to_string)
+        .collect();
+    for k in 1..words.len().min(5) {
+        let x2_full = format!("{} {x2}", words[..k].join(" "));
+        let saved = (b.it.clone(), b.it_player.clone());
+        if let Some(e2) = crate::oracle::effects::parse_clause(&x2_full, b) {
+            if b.targets.len() == after1 {
+                return Some(Effect::Seq(vec![
+                    Effect::If {
+                        cond: cond1,
+                        then: Box::new(e1),
+                        otherwise: Box::new(Effect::Noop),
+                    },
+                    Effect::If {
+                        cond: cond2,
+                        then: Box::new(e2),
+                        otherwise: Box::new(Effect::Noop),
+                    },
+                ]));
+            }
+        }
+        b.targets.truncate(after1);
+        b.it = saved.0;
+        b.it_player = saved.1;
+    }
+    b.targets.truncate(first);
+    None
+}
+
+inventory::submit! { super::EffectPattern { name: "history: [instruction] if [c1] and [instruction] if [c2]", priority: 245, parse: two_conditional_instructions } }
+
+/// "[a player | that player] [past verb] ... during their last turn" ("if a player
+/// attacked you during their last turn", "if that player attacked you during their last
+/// turn"): what the player did during their own latest turn.
+fn their_last_turn(c: &str, b: Option<&Builder>) -> Option<Condition> {
+    let body = end(c).strip_suffix(" during their last turn")?;
+    let (subj, rest) = body.split_once(' ')?;
+    let (subj, rest) = match subj {
+        "a" => ("a player", rest.strip_prefix("player ")?),
+        "that" => ("that player", rest.strip_prefix("player ")?),
+        "they" => ("that player", rest),
+        _ => return None,
+    };
+    // Read as "a player [did it]", then made about the player whose turn it was.
+    let cl = player_clause_as(&format!("a player {rest}"))?;
+    if cl.amount || cl.distinct || cl.per_player.is_some() {
+        return None;
+    }
+    let cond = trigger_of(&cl.trigger)?;
+    let (rel, who, over) = match subj {
+        "a player" => (PlayerRel::Iterated, PlayerRef::Iterated, true),
+        _ => {
+            let b = b?;
+            let rel = match &b.it_player {
+                PlayerRef::TriggerPlayer => PlayerRel::TriggerPlayer,
+                PlayerRef::Target(t) => PlayerRel::Target(*t),
+                _ => return None,
+            };
+            (rel, b.it_player.clone(), false)
+        }
+    };
+    // The actor of the event ("attacker", "who") is that player.
+    let mut json = serde_json::to_value(&cond).ok()?;
+    let rel = serde_json::to_value(rel).ok()?;
+    let mut n = 0;
+    if let serde_json::Value::Object(m) = &mut json {
+        for inner in m.values_mut() {
+            if let serde_json::Value::Object(f) = inner {
+                for key in ["attacker", "who"] {
+                    if f.get(key).is_some_and(|v| v == "Any") {
+                        f.insert(key.into(), rel.clone());
+                        n += 1;
+                    }
+                }
+            }
+        }
+    }
+    if n != 1 {
+        return None;
+    }
+    let cond: TriggerCond = serde_json::from_value(json).ok()?;
+    let v = Value::EventsDuring(HistoryWindow::PlayersLastTurn(who), Box::new(cond), Tally::Events);
+    let v = if over {
+        Value::OverPlayers(AggOp::Max, PlayerFilter::Any, Box::new(v))
+    } else {
+        v
+    };
+    let cmp = Condition::Compare(v, cl.cmp, Value::Const(cl.n));
+    Some(if cl.negated { not(cmp) } else { cmp })
+}
+
+fn their_last_turn_free(c: &str) -> Option<Condition> {
+    their_last_turn(c, None)
+}
+
+inventory::submit! { super::ConditionPattern { name: "history: a player [did] during their last turn", priority: 900, parse: their_last_turn_free } }
 
 #[cfg(test)]
 mod tests {

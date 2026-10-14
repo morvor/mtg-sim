@@ -896,3 +896,67 @@ fn curious_obsession_any_creature_attacking_satisfies_it() {
     to_end_step(&mut t, P0);
     assert!(!t.on_battlefield(co), "no creature attacked: sacrificed");
 }
+
+#[test]
+fn firespout_damages_by_the_colors_spent() {
+    cr!("601.2h", "608.2c");
+    assert_supported("Firespout");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let bird = t.battlefield(P1, "Suntail Hawk");
+    t.lands(P0, "Mountain", 3);
+    let fs = t.hand(P0, "Firespout");
+    t.cast(P0, fs).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears), "{{R}} spent: creatures without flying");
+    assert!(t.on_battlefield(bird));
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let bird = t.battlefield(P1, "Suntail Hawk");
+    t.lands(P0, "Forest", 3);
+    let fs = t.hand(P0, "Firespout");
+    t.cast(P0, fs).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert!(!t.on_battlefield(bird), "{{G}} spent: creatures with flying");
+}
+
+#[test]
+fn avenge_costs_less_if_a_player_attacked_you_during_their_last_turn() {
+    cr!("601.2f", "500.1");
+    assert_supported("Avenge");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    for p in [P0, P1] {
+        for _ in 0..4 {
+            t.library_top(p, "Island");
+        }
+    }
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P0))], &[]);
+    t.advance_to(P0, Step::PrecombatMain);
+    // P1 attacked P0 during P1's last turn: {2}{W}{W}.
+    t.lands(P0, "Plains", 4);
+    let avenge = t.hand(P0, "Avenge");
+    t.cast(P0, avenge).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+}
+
+#[test]
+fn avenge_costs_full_price_without_an_attack() {
+    cr!("601.2f");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Grizzly Bears");
+    for p in [P0, P1] {
+        for _ in 0..4 {
+            t.library_top(p, "Island");
+        }
+    }
+    t.set_step(P0, Step::End);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Plains", 4);
+    let avenge = t.hand(P0, "Avenge");
+    assert!(t.cast(P0, avenge).try_go().is_err());
+}
