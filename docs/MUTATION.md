@@ -59,6 +59,7 @@ Each surviving mutant is classified as
 | simultaneous.rs | 171 | 18 (1/10) | 6 | 12 | 0 | 0 | 33.3% | TBD |
 | turn.rs | 234 | 24 (1/10) | 21 | 2 | 0 | 1 | 91.3% | TBD |
 | mana.rs | 228 | 23 (1/10) | 15 | 6 | 0 | 2 | 71.4% | TBD |
+| eval.rs | 268 | 27 (1/10) | 25 | 0 | 0 | 2 | 100% | 100% |
 
 ### sba.rs
 
@@ -230,3 +231,8 @@ Run 2026-10-14, 23 of 228 mutants (round-robin 0/10), 28 minutes.
   paying exceeded the life total and the spell couldn't be cast. Killed by
   `tests/cr/r107_004f_phyrexian_payment_backtracking.rs` ({B/G}{G/P}{G/P} from {G}{B}
   with 3 life).
+
+### eval.rs
+
+Run 2026-10-14, 27 of 268 mutants (round-robin 0/10), 39 minutes: every viable mutant was
+caught.
