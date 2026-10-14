@@ -634,8 +634,11 @@ fn activated_zone(cost: &str, effect: &str) -> FunctionZone {
                     // Not "counters on ~ from your graveyard" (Wishing Well: "... card
                     // with mana value equal to the number of coin counters on ~ from
                     // your graveyard"), where the zone is another card's.
+                    // Nor "a card named ~ from your graveyard" (a name, CR 201.2).
                     let before = s[..i].trim_end();
-                    !(before.ends_with(" on") || before.ends_with(" of"))
+                    !(before.ends_with(" on")
+                        || before.ends_with(" of")
+                        || before.ends_with(" named"))
                 })
         })
     };

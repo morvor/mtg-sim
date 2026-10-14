@@ -1544,7 +1544,7 @@ fn mod_values(g: &Game, mods: &[Modification], layer: Layer, ctx: &Ctx) -> Vec<i
             }
             // What abilities it gives depends on the abilities other objects have, which
             // other layer-6 effects can change (CR 613.8a).
-            Modification::AddAbilitiesOf { from, which } => {
+            Modification::AddAbilitiesOf { from, which, .. } => {
                 out.extend(crate::ability_grants::copied_uids(g, from, which, ctx))
             }
             Modification::AddKeywordsOf { kinds, from } => {
@@ -1865,8 +1865,8 @@ pub fn apply_mod(
                 apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
             }
         }
-        Modification::AddAbilitiesOf { from, which } => c.abilities.extend(
-            crate::ability_grants::abilities_for(g, from, which, ctx, _target),
+        Modification::AddAbilitiesOf { from, which, terms } => c.abilities.extend(
+            crate::ability_grants::abilities_for(g, from, which, terms, ctx, _target),
         ),
         Modification::RemoveKeyword(k) => c
             .abilities

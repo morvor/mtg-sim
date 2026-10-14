@@ -863,6 +863,13 @@ impl Renderer<'_> {
                 let s = self.targets_filter(tf);
                 np.rel.push(s);
             }
+            Filter::CastBy(r) => {
+                np.controller_matches = Some(match r {
+                    PlayerRel::You => "you cast".into(),
+                    PlayerRel::Opponent => "your opponents cast".into(),
+                    other => format!("{} casts", self.rel_subject(*other)),
+                });
+            }
             // Worded in `np_text`, where the owner is known.
             Filter::CastFrom(z) => {
                 np.cast_from = Some(*z);

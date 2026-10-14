@@ -832,6 +832,20 @@ impl Game {
                         })
                     })
             }
+            Filter::CastBy(rel) => {
+                o.zone == Zone::Stack && o.stack.as_ref().is_some_and(|si| si.cast.was_cast) && {
+                    // The caster (this turn's record; otherwise its owner, who
+                    // normally cast it).
+                    let caster = self
+                        .history
+                        .spells_cast
+                        .iter()
+                        .rev()
+                        .find(|(_, s)| *s == id)
+                        .map_or(o.owner, |(p, _)| *p);
+                    self.player_rel_matches(*rel, caster, ctx)
+                }
+            }
             Filter::CastFrom(z) => {
                 o.zone == Zone::Stack
                     && o.stack
