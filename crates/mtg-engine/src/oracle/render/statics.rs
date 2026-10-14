@@ -1101,6 +1101,12 @@ impl Renderer<'_> {
     /// creatures had haste" (CR 602.5d, 606.3, 302.6).
     pub(crate) fn activation_permission(&mut self, who: &str, ap: &ActivationPermission) -> String {
         let what = self.ability_scope(&ap.scope);
+        // Only activated abilities are activated (CR 602.1): "activate abilities of
+        // creatures you control".
+        let what = match what.strip_prefix("activated abilities ") {
+            Some(rest) => format!("{{opt:activated}} abilities {rest}"),
+            None => what,
+        };
         let mut parts = Vec::new();
         if ap.instant_timing {
             parts.push("any time you could cast an instant".to_string());
@@ -2669,7 +2675,8 @@ impl Renderer<'_> {
                         let v = self.value(v);
                         format!("{they} gain that much life plus {v} instead")
                     }
-                    A::Prevent => "they gain no life instead".into(),
+                    A::Prevent if w == "you" => "you gain no life instead".into(),
+                    A::Prevent => "{alt:they|that player} gain no life instead".into(),
                     other => self.replacement_then(other, ""),
                 };
                 format!("if {w} would gain life, {then}")
@@ -3400,6 +3407,7 @@ impl Renderer<'_> {
                 format!("all {kind} that would be dealt{to_s} is dealt to {t} instead")
             }
             other => {
+                let src_named = src.clone();
                 let s = src.unwrap_or_else(|| "a source".into());
                 // "it deals double that damage to that player or permanent instead".
                 let both = to_players.is_some() && to_objects.is_some();
@@ -3439,6 +3447,13 @@ impl Renderer<'_> {
                     }
                     other => self.replacement_then(other, "it"),
                 };
+                // Damage is always dealt by a source (CR 120.1): "if damage would be dealt
+                // to ~" when what replaces it doesn't name the source.
+                if src_named.is_none() && !then.starts_with("it ") {
+                    return format!(
+                        "if {{alt:{kind} would be dealt{to_s}|a source would deal {kind}{to_s}}}, {then}"
+                    );
+                }
                 format!("if {s} would deal {kind}{to_s}, {then}")
             }
         }

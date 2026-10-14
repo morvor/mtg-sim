@@ -620,9 +620,11 @@ impl Game {
                 })
             }),
             Filter::BlockingAnyOf(sel) => self.combat.as_ref().is_some_and(|cb| {
+                // Once the object has left the battlefield, the creatures that were
+                // blocking it ("{B}, Sacrifice ~: Destroy target creature blocking it").
                 self.eval_sel_objects(sel, ctx)
                     .into_iter()
-                    .any(|a| cb.blockers_of(a).contains(&id))
+                    .any(|a| cb.blockers_of(a).contains(&id) || self.left_combat_pair(a, id, a))
             }),
             Filter::TargetOf(sel) => self.eval_sel_objects(sel, ctx).into_iter().any(|s| {
                 self.obj(s).stack.as_ref().is_some_and(|si| {
@@ -864,7 +866,8 @@ impl Game {
             }
             Filter::AbilityFrom(inner) => match o.stack.as_deref().map(|si| &si.kind) {
                 Some(StackKind::Activated { source, .. } | StackKind::Triggered { source, .. }) => {
-                    self.matches_view(view, *source, inner, ctx)
+                    !crate::monarch_initiative::is_sourceless(self, *source)
+                        && self.matches_view(view, *source, inner, ctx)
                 }
                 _ => false,
             },
@@ -991,6 +994,10 @@ impl Game {
             Sel::Var(v) => {
                 crate::merge::with_components_of(self, ctx.vars.get(v).cloned().unwrap_or_default())
             }
+            Sel::EventsDuring(w, cond) => crate::history_query::objects_during(self, w, cond, ctx)
+                .into_iter()
+                .map(Entity::Object)
+                .collect(),
             Sel::ThisTurn(cond) => {
                 crate::kw::value_results::event_objects_this_turn(self, cond, ctx)
                     .into_iter()
@@ -1487,6 +1494,9 @@ impl Game {
                 }
             }
             Value::Custom(name) => crate::custom::custom_value(self, name, ctx),
+            Value::EventsDuring(w, cond, tally) => {
+                crate::history_query::events_during(self, w, cond, *tally, ctx)
+            }
             Value::EventsThisTurn(cond, tally) => {
                 crate::kw::value_results::events_this_turn(self, cond, *tally, ctx)
             }

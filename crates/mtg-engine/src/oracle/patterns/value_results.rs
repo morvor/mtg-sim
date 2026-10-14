@@ -1277,7 +1277,21 @@ fn trigger_spell_value(s: &str, b: &Builder) -> Option<(Value, String)> {
 /// damage" trigger "that excess damage" (the triggering event's).
 fn excess(s: &str, b: &Builder) -> Option<(Value, String)> {
     if let Some(rest) = s.strip_prefix("that excess damage") {
-        if word_end(rest) && b.in_trigger {
+        // Only a trigger on excess damage has one (not "Whenever ~ deals combat damage to
+        // a creature, if that creature was dealt excess damage this turn, ...").
+        let raw = crate::oracle::raw_text().to_lowercase();
+        let excess_trigger = raw.split(['\n', '"']).any(|part| {
+            part.find("whenever ")
+                .or_else(|| part.find("when "))
+                .is_some_and(|i| {
+                    part[i..]
+                        .split(',')
+                        .next()
+                        .unwrap_or("")
+                        .contains(" excess ")
+                })
+        });
+        if word_end(rest) && b.in_trigger && excess_trigger {
             return Some((Value::EventAmount, rest.to_string()));
         }
         return None;
@@ -1395,6 +1409,26 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
             rest.to_string(),
         ));
     }
+    // "creatures that died this way" (Reign of Terror, Hellfire): the permanents the
+    // instruction put into a graveyard from the battlefield (CR 700.4), judged as they last
+    // existed there; one destroyed but moved elsewhere by a replacement didn't die.
+    if let Some(noun) = head
+        .strip_suffix(" that died")
+        .or_else(|| head.strip_suffix(" died"))
+    {
+        let (f, _, tail) = parse_object_phrase(noun)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        let died = Sel::Matching(
+            Box::new(Sel::Var(vars::IT)),
+            Filter::InZone(ZoneKind::Graveyard),
+        );
+        return Some((
+            Sel::Matching(Box::new(Sel::Before(Box::new(died))), f),
+            rest.to_string(),
+        ));
+    }
     // The cards an earlier sentence revealed (not read apart from the ability's text, as
     // in a cost: the hand/graveyard grammar reads those).
     if head.ends_with(" revealed") && b.sentences == 0 {
@@ -1408,8 +1442,12 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     // one per player, and the results would be only the last player's.
     let split_subject = raw_text_named().lines().any(|l| {
         l.contains(" this way")
-            && l.find("you and ")
-                .is_some_and(|i| l[i..].split(['.', ',']).next().is_some_and(|c| c.contains(" each ")))
+            && l.find("you and ").is_some_and(|i| {
+                l[i..]
+                    .split(['.', ','])
+                    .next()
+                    .is_some_and(|c| c.contains(" each "))
+            })
     });
     if split_subject {
         return None;
@@ -2319,7 +2357,8 @@ fn x_cant_be_greater(block: &str, ctx: &crate::oracle::CompileContext) -> Option
         return None;
     }
     let cap = end(cap);
-    let mut abilities = crate::oracle::parse_ability(&format!("{}.", head.trim_end_matches('.')), ctx)?;
+    let mut abilities =
+        crate::oracle::parse_ability(&format!("{}.", head.trim_end_matches('.')), ctx)?;
     let [a] = abilities.as_mut_slice() else {
         return None;
     };
@@ -2480,4 +2519,3 @@ mod tests {
         }
     }
 }
-
