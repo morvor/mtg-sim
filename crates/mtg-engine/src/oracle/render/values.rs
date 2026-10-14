@@ -1325,6 +1325,26 @@ impl Renderer<'_> {
             }
             PlayerFilter::Monarch => "is the monarch".into(),
             PlayerFilter::Poisoned => "is poisoned".into(),
+            PlayerFilter::HasInitiative => format!("{have} the initiative"),
+            PlayerFilter::AttackRelation {
+                attacking,
+                other,
+                past,
+                planeswalkers,
+            } => {
+                let o = self.player_filter_object(other);
+                let pw = if *planeswalkers {
+                    " and/or a planeswalker you control"
+                } else {
+                    ""
+                };
+                match (attacking, past) {
+                    (true, false) => format!("{{alt:is|are}} attacking {o}{pw}"),
+                    (true, true) => format!("attacked {o}{pw}"),
+                    (false, false) => format!("{{alt:is|are}} being attacked by {o}"),
+                    (false, true) => format!("{{alt:was|were}} attacked by {o}"),
+                }
+            }
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
             PlayerFilter::VotedLikeYou(true) => "voted for a choice you voted for".into(),
             PlayerFilter::VotedLikeYou(false) => "voted for a choice you didn't vote for".into(),

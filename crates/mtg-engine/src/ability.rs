@@ -1167,6 +1167,20 @@ pub enum PlayerFilter {
     AttackedThisTurn,
     /// A player with one or more poison counters (CR 122.1f).
     Poisoned,
+    /// CR 508.6: a player who is attacking (controls a creature attacking) a player
+    /// matching `other`, or with `past` has attacked one (declared one or more creatures
+    /// as attackers attacking them this turn); with `planeswalkers`, attacking a
+    /// planeswalker that player controls counts too. With `attacking: false`, the other
+    /// way around: a player being attacked (or who was attacked) by a player matching
+    /// `other` ("players being attacked", "a player you're attacking").
+    AttackRelation {
+        attacking: bool,
+        other: Box<PlayerFilter>,
+        past: bool,
+        planeswalkers: bool,
+    },
+    /// The player who has the initiative (CR 725).
+    HasInitiative,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
     /// In the vote the ability triggered on ("whenever players finish voting", CR

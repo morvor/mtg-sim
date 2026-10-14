@@ -376,3 +376,56 @@ fn attacking_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "combat referents: creatures attacking that player", priority: 90, parse: attacking_that_player } }
+
+/// Players' attacks in a "whenever a player attacks" trigger's intervening "if" (CR
+/// 508.6; "they" and "that player" are the trigger's player): "one or more players being
+/// attacked are poisoned", "they aren't attacking you", "they attacked you and/or a
+/// planeswalker you control", "you or a player you're attacking has the initiative", "no
+/// other creatures are attacking that player".
+fn attack_conditions(c: &str) -> Option<Condition> {
+    let rel = |attacking: bool, other: PlayerFilter, past: bool, planeswalkers: bool| {
+        PlayerFilter::AttackRelation {
+            attacking,
+            other: Box::new(other),
+            past,
+            planeswalkers,
+        }
+    };
+    let some_player =
+        |f: PlayerFilter| Condition::Compare(Value::CountPlayers(f), Cmp::Ge, Value::c(1));
+    Some(match end(c.trim()) {
+        "one or more players being attacked are poisoned" => some_player(PlayerFilter::And(vec![
+            rel(false, PlayerFilter::Any, false, false),
+            PlayerFilter::Poisoned,
+        ])),
+        "they aren't attacking you" | "that player isn't attacking you" => {
+            Condition::Not(Box::new(Condition::PlayerMatches(
+                PlayerRef::TriggerPlayer,
+                rel(true, PlayerFilter::You, false, false),
+            )))
+        }
+        "they attacked you and/or a planeswalker you control" => Condition::PlayerMatches(
+            PlayerRef::TriggerPlayer,
+            rel(true, PlayerFilter::You, true, true),
+        ),
+        "you or a player you're attacking has the initiative" => Condition::Or(vec![
+            Condition::HasInitiative,
+            some_player(PlayerFilter::And(vec![
+                rel(false, PlayerFilter::You, false, false),
+                PlayerFilter::HasInitiative,
+            ])),
+        ]),
+        "no other creatures are attacking that player" => Condition::Compare(
+            Value::Count(Filter::and(vec![
+                Filter::creature(),
+                Filter::not(Filter::In(Box::new(Sel::TriggerObject))),
+                Filter::AttackingPlayer(PlayerRel::TriggerPlayer),
+            ])),
+            Cmp::Eq,
+            Value::c(0),
+        ),
+        _ => return None,
+    })
+}
+
+inventory::submit! { super::ConditionPattern { name: "combat referents: players' attacks", priority: 100, parse: attack_conditions } }

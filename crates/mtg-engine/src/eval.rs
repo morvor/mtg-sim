@@ -340,6 +340,53 @@ impl Game {
             PlayerFilter::AttackedThisTurn => {
                 self.turn.active == p && !self.history.attackers.is_empty()
             }
+            PlayerFilter::AttackRelation {
+                attacking,
+                other,
+                past,
+                planeswalkers,
+            } => {
+                // (attacking player, attacked player, attacked directly) pairs.
+                let pairs: Vec<(PlayerId, PlayerId, bool)> = if *past {
+                    self.history
+                        .attacks
+                        .iter()
+                        .map(|(a, t, dp)| {
+                            (self.obj(*a).controller, *dp, matches!(t, Entity::Player(_)))
+                        })
+                        .collect()
+                } else {
+                    self.combat
+                        .as_ref()
+                        .map(|c| {
+                            c.attackers
+                                .iter()
+                                .filter_map(|a| {
+                                    let t = a.target?;
+                                    let dp = crate::combat::entity_defender(self, t);
+                                    let pw = matches!(t, Entity::Object(o)
+                                        if self.obj(o).is(CardType::Planeswalker));
+                                    let direct = matches!(t, Entity::Player(_));
+                                    (direct || pw).then_some((
+                                        self.obj(a.id).controller,
+                                        dp,
+                                        direct,
+                                    ))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                };
+                pairs.iter().any(|(a, d, direct)| {
+                    (*direct || *planeswalkers)
+                        && if *attacking {
+                            *a == p && self.player_filter_matches(other, *d, ctx)
+                        } else {
+                            *d == p && self.player_filter_matches(other, *a, ctx)
+                        }
+                })
+            }
+            PlayerFilter::HasInitiative => self.initiative == Some(p),
             // CR 810.10d: poisoned if the team has a poison counter.
             PlayerFilter::Poisoned => {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
