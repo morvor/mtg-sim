@@ -1,7 +1,9 @@
 //! roundtrip-tail-4 (docs/agents/items/roundtrip-tail-4.md): parser bugs the round trip
 //! found in its clusters, and cards whose rendering differs in wording, checked in play.
 
+use mtg_engine::ability::*;
 use mtg_engine::object::Zone;
+use mtg_engine::types::CardType;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -99,5 +101,81 @@ fn king_narfis_betrayal_exiles_a_card_from_each_graveyard() {
     t.resolve_all();
     assert!(t.in_exile("Grizzly Bears"), "{}", t.dump_log());
     assert!(t.in_exile("Hill Giant"), "{}", t.dump_log());
-    let _ = Zone::Battlefield;
+    // II: the exiled cards can be cast (they were exiled with the Saga).
+    let saga = t.named_on_battlefield("King Narfi's Betrayal")[0];
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    t.lands(P0, "Mountain", 4);
+    let giant_now = t
+        .g
+        .objects
+        .iter()
+        .find(|o| o.zone == Zone::Exile && o.chars.name == "Hill Giant")
+        .map(|o| o.id)
+        .expect("exiled Hill Giant");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.cast(P0, giant_now).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1, "{}", t.dump_log());
+}
+
+#[test]
+fn song_of_blood_counts_creature_cards_milled_into_the_graveyard() {
+    cr!("603.7a", "608.2c");
+    // "Mill four cards. Whenever a creature attacks this turn, it gets +1/+0 until end of
+    // turn for each creature card put into your graveyard this way."
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let spell = t.hand(P0, "Song of Blood");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (4, 2), "{}", t.dump_log());
+}
+
+#[test]
+fn verdant_command_counters_only_a_loyalty_ability_of_a_planeswalker() {
+    cr!("606.2", "115.1");
+    // "Counter target loyalty ability of a planeswalker.": other permanents can have
+    // loyalty abilities (CR 606.2); the source must be a planeswalker.
+    for still_planeswalker in [true, false] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+        let w = t.battlefield(P0, "Ajani Goldmane");
+        let vc = t.hand(P1, "Verdant Command");
+        t.lands(P1, "Forest", 2);
+        t.activate(P0, w, 0, &[]).expect("+1");
+        let ability = *t.g.stack.last().expect("on the stack");
+        if !still_planeswalker {
+            let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+            ctx.targets = vec![vec![Entity::Object(w)]];
+            let e = Effect::Modify {
+                what: Sel::Target(0),
+                mods: vec![Modification::RemoveTypes(vec![CardType::Planeswalker])],
+                duration: Duration::EndOfTurn,
+            };
+            t.g.exec(&e, &mut ctx);
+            t.g.recompute();
+        }
+        let _ = t
+            .cast(P1, vc)
+            .modes(&[1, 3])
+            .target(Entity::Object(ability))
+            .target(P1)
+            .try_go();
+        t.resolve_all();
+        // Ajani's +1: "You gain 2 life" (countered only while Ajani is a planeswalker).
+        let expected = if still_planeswalker { 20 } else { 22 };
+        assert_eq!(t.life(P0), expected, "{still_planeswalker}\n{}", t.dump_log());
+    }
 }

@@ -1070,6 +1070,17 @@ impl Renderer<'_> {
                     with_article(&s)
                 ));
             }
+            // "target creature other than enchanted creature", "an artifact other than
+            // ~" (in an ability an Equipment grants): one particular object, named
+            // without an article.
+            Filter::AttachedToSource => {
+                let s = self.noun(inner, Num::One);
+                np.rel.push(format!("other than {s}"));
+            }
+            Filter::Custom(n) if n == crate::granted_by::GRANTER => {
+                let s = self.noun(inner, Num::One);
+                np.rel.push(format!("other than {s}"));
+            }
             other => {
                 let s = self.noun(other, Num::One);
                 np.rel.push(format!("that isn't {}", with_article(&s)));

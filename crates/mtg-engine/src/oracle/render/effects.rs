@@ -3287,6 +3287,11 @@ impl Renderer<'_> {
                 i += used;
                 continue;
             }
+            if let Some((s, used)) = self.seq_per_owner(&v[i..]) {
+                parts.push(s);
+                i += used;
+                continue;
+            }
             // "Roll a d20. Create X Treasure tokens, where X is the result.": the number
             // X stands for is said where X is first used (CR 107.3).
             if let Effect::SetX { value } = &v[i] {

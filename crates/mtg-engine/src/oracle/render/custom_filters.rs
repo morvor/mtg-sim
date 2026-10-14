@@ -148,7 +148,7 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             "Library" => rel("from the top of your library"),
             _ => None,
         },
-        _ => None,
+        n => super::tail_filters::custom_rel_more(n),
     }
 }
 
