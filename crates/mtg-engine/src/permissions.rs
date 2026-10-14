@@ -434,9 +434,15 @@ pub fn attach(
         }
         let chars = g.option_characteristics(card, &opt);
         for perm in allowing(g, p, card, &chars, false) {
+            // "as an Adventure": only that way (CR 715.3).
+            if perm.terms.cast_face.is_some_and(|f| f != opt.face) {
+                continue;
+            }
             let changes_the_way = perm.terms.flash
                 || perm.requires_cost()
                 || perm.terms.cost_reduction > 0
+                || perm.terms.cast_face.is_some()
+                || perm.terms.cost_increase_each.is_some()
                 || perm.terms.spend_any_type
                 || perm.terms.spend_as_any_color;
             if is_own && !changes_the_way {

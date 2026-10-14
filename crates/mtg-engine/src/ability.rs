@@ -3544,6 +3544,15 @@ pub struct PlayTerms {
     /// player's.
     #[serde(default)]
     pub any_owner: bool,
+    /// "you may cast it from your graveyard as an Adventure": spells are cast with the
+    /// permission only as that face or half (CR 715.3).
+    #[serde(default)]
+    pub cast_face: Option<crate::object::FaceState>,
+    /// "if you pay {1} more to cast it for each other creature card in your graveyard": a
+    /// generic cost increase for spells cast with the permission (CR 601.2f), counted
+    /// relative to the permission's source and player as the cost is determined.
+    #[serde(default)]
+    pub cost_increase_each: Option<Value>,
     /// The effect that gave the permission (0: none recorded), which "cast this way"
     /// refers to (see `permissions::PermissionUse`).
     #[serde(default)]
@@ -3609,6 +3618,12 @@ impl PlayTerms {
             });
         }
         self.any_owner |= other.any_owner;
+        if other.cast_face.is_some() {
+            self.cast_face = other.cast_face;
+        }
+        if other.cost_increase_each.is_some() {
+            self.cost_increase_each = other.cost_increase_each.clone();
+        }
         if other.graveyard_instead.is_some() {
             self.graveyard_instead = other.graveyard_instead.clone();
         }

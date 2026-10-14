@@ -1972,7 +1972,15 @@ impl Game {
         // "A spell cast this way costs {2} more to cast": an increase that comes with the
         // permission it's cast with.
         let more = match &opt.permission {
-            Some(c) => c.terms.cost_increase,
+            Some(c) => {
+                // "if you pay {1} more to cast it for each other creature card in your
+                // graveyard" (counted as the cost is determined).
+                let each = c.terms.cost_increase_each.as_ref().map_or(0, |v| {
+                    let ctx = Ctx::new(c.source, p);
+                    self.eval_value(v, &ctx).max(0) as u32
+                });
+                c.terms.cost_increase + each
+            }
             None => crate::kw::play_permission_terms::cost_increase(self, card),
         };
         if more > 0 {

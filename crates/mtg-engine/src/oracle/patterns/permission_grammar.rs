@@ -79,6 +79,8 @@ pub enum From {
     GraveyardTop,
     /// "from any graveyard".
     AnyGraveyard,
+    /// "from your hand, from your graveyard, or from among cards you own in exile".
+    HandGraveyardOwnedExile,
 }
 
 /// A parsed permission phrase.
@@ -478,6 +480,19 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
         p.zone_filter = Some(f);
         return Some((From::Exile, rest));
     }
+    // "from among face-up cards your opponents own from exile" (Ashiok, Nightmare Muse).
+    if let Some(r) = s.strip_prefix(" from among face-up cards your opponents own from exile") {
+        p.zone_filter = Some(Filter::and(vec![
+            Filter::not(Filter::FaceDown),
+            Filter::OwnedBy(PlayerRel::Opponent),
+        ]));
+        return Some((From::Exile, r));
+    }
+    // "from your hand, from your graveyard, or from among cards you own in exile" (Kaya
+    // the Inexorable's emblem): any of those zones.
+    if let Some(r) = s.strip_prefix(" from your hand, from your graveyard, or from among cards you own in exile") {
+        return Some((From::HandGraveyardOwnedExile, r));
+    }
     for (p, z) in [
         (" from your graveyard", From::Graveyard),
         (" from the top of your graveyard", From::GraveyardTop),
@@ -551,6 +566,29 @@ fn strip_tails(mut s: &str, p: &mut Perm) -> Option<()> {
             return Some(());
         }
         let mut done = false;
+        // "if you pay {1} more to cast it [for each other creature card in your
+        // graveyard]": a cost increase for spells cast with the permission (CR 601.2f).
+        if let Some((head, more)) = t.rsplit_once(" if you pay {") {
+            let (n, rest) = more.split_once("} more to cast it")?;
+            let n: u32 = n.parse().ok()?;
+            if p.terms.cost_increase > 0 || p.terms.cost_increase_each.is_some() {
+                return None;
+            }
+            match rest.strip_prefix(" for each ") {
+                Some(what) => {
+                    let v = super::statics::parse_for_each(what, None)?;
+                    p.terms.cost_increase_each = Some(if n == 1 {
+                        v
+                    } else {
+                        Value::Mul(Box::new(Value::c(n as i32)), Box::new(v))
+                    });
+                }
+                None if rest.is_empty() => p.terms.cost_increase = n,
+                None => return None,
+            }
+            s = head;
+            continue;
+        }
         // "you may play cards exiled with ~ as long as you attacked this turn": the
         // condition's own "this turn", not the permission's duration.
         let cond_tail = t
@@ -1235,6 +1273,14 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
             Filter::InZone(ZoneKind::Exile),
             p.zone_filter.clone()?,
         ]),
+        From::HandGraveyardOwnedExile => Filter::and(vec![
+            Filter::Or(vec![
+                Filter::InZone(ZoneKind::Hand),
+                Filter::InZone(ZoneKind::Graveyard),
+                Filter::InZone(ZoneKind::Exile),
+            ]),
+            Filter::OwnedBy(PlayerRel::You),
+        ]),
         _ => return None,
     };
     if p.from != Some(From::Exile) && p.zone_filter.is_some() {
@@ -1441,7 +1487,7 @@ fn class_permission_from(
             }
             (ZoneKind::Exile, false, Filter::and(v))
         }
-        From::AmongReferent => return None,
+        From::AmongReferent | From::HandGraveyardOwnedExile => return None,
     };
     // Spells cast from the hand "without paying their mana costs" are offered that cost
     // by `casting.rs`; nothing else changes how they're cast from there.
