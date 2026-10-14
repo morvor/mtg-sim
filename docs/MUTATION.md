@@ -67,6 +67,8 @@ Each surviving mutant is classified as
 | resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | TBD |
 | actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | TBD |
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
+| casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | TBD (survivor tests not written yet) |
+| combat.rs | 831 | not run yet | | | | | | |
 
 ### sba.rs
 
@@ -424,3 +426,48 @@ Run 2026-10-14, 43 of 423 mutants (round-robin 0/10), 72 minutes. One mutant (`7
   exception's "every creature type" on a noncreature copy is dropped): **(b) not killed**.
   No card found gives a copy of a noncreature permanent all creature types as a copy
   exception.
+
+### casting.rs
+
+Run 2026-10-14/15, 85 of 841 mutants (round-robin 0/10), about 3 hours. Survivors are
+triaged; tests for the (b) ones haven't been written yet (the run was paused).
+
+- `casting.rs:511:18: replace && with || in Game::permission_allows_with` (any nonland card
+  passes the commander-in-the-command-zone permission): **(b) not killed, needs a closer
+  look**. No test failed although the mutant lets every nonland card through this
+  permission check, so the tested callers must reject cards outside the hand on another
+  path first; the next step is a test that reaches this check with a card in a graveyard
+  or library and no permission (CR 601.3).
+- `casting.rs:884:61: replace && with || in Game::can_begin_cast` ("X can't be 0" with an
+  alternative cost that has X only in its mana or only in its other parts): **(b) not
+  killed**.
+- `casting.rs:957:21: replace && with || in Game::flash_permitted` (a "next spell" effect
+  that doesn't give flash still gave it when its filter matched): **(b) not killed**; a
+  test needs a next-spell cost effect without flash and a spell cast at instant speed.
+- `casting.rs:2142:21: replace + with - in Game::can_activate` (upper bound of X for a
+  loyalty ability with X): **(b) not killed**.
+- `casting.rs:2309:24: replace * with + in Game::ability_total_cost_and_x` (the generic
+  mana {X}{X} stands for, before cost reductions): **(b) not killed**; needs an activated
+  ability with {X} and a cost reduction.
+- `casting.rs:2713:51: replace && with || in Game::any_color_mana` ("this spell" cost
+  modifiers also applied to abilities): **(b) not killed**.
+- `casting.rs:2960:43: delete - in Game::cost_part_payable` (a "−N" loyalty cost counted as
+  payable with less than N loyalty): **(b) not killed**. The cost still can't be paid when
+  it's actually paid, which is why no test noticed; a test should check that the ability
+  isn't offered as a legal action (CR 606.6).
+- `casting.rs:3663:41: replace && with || in Game::pay_cost_part` (a reveal-from-hand cost
+  could offer the card that's the source): **(b) not killed**.
+- `casting.rs:3903:9: delete match arm CostPart::Loyalty(_) in cost_part_has_x`: **(a)
+  equivalent**. The arm returns `false`, as the catch-all arm does.
+
+## Status (2026-10-15)
+
+Paused at the coordinator's request after casting.rs. Remaining work:
+
+1. Run combat.rs (`scripts/mutants.sh combat`, about 3 hours).
+2. Write tests for the casting.rs (b) survivors above.
+3. Re-run the survivors of every file with new tests (`RERUN=1 scripts/mutants.sh
+   trigger_timing permissions simultaneous turn mana stack replacement triggers resolve
+   casting combat`) and fill in the "After new tests" column. Each new test above was
+   written against its mutant's code and checked to pass on the unmutated engine; the
+   re-run is what confirms the kill.
