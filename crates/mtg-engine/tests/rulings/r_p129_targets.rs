@@ -703,6 +703,10 @@ fn royal_scions_ultimate_targets_after_you_draw() {
     t.resolve_all();
     assert_eq!(t.life(P1), 20 - (hand as i32 + 4));
 
+    ruling!(
+        "The Royal Scions",
+        "If you draw fewer than four cards while resolving the last ability of The Royal Scions, its reflexive triggered ability doesn't trigger."
+    );
     // Regression: "Draw four cards. When you do, ..." is done only if four cards were
     // drawn. With the first draw replaced by dredge, the reflexive ability doesn't trigger
     // (CR 614.6, 702.52a).

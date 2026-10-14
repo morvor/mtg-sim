@@ -10,8 +10,10 @@ use mtg_engine::*;
 
 pub use crate::r_p130_common::*;
 pub use crate::r_s01_common::{stack_library, tokens, with_subtype};
-pub use crate::r_s04_common::{add_mana, cycle, next_upkeep, stack_items};
-pub use crate::r_s25_common::creature_tokens;
+pub use crate::r_s04_common::{
+    ability_targets, add_mana, cycle, next_upkeep, run_with, spell_targets, stack_items,
+};
+pub use crate::r_s25_common::{creature_tokens, x_of};
 pub use crate::r_s28_common::energy;
 
 /// Gives player `p` `n` energy counters.

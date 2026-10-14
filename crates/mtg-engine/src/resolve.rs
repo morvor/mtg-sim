@@ -1360,7 +1360,11 @@ impl Game {
                 // "Draw four cards. When you do, ...": done only if every card was drawn
                 // (a draw from an empty library or a replaced draw isn't one, CR 121.3,
                 // 614.6, 603.12; The Royal Scions rulings).
-                ctx.prev_happened = k > 0 && drawn.len() == k as usize * n;
+                // (Drawing zero cards leaves it as it was: "you may draw cards equal to its
+                // power. If you do, ..." with power 0, Champion of Wits.)
+                if k > 0 {
+                    ctx.prev_happened = drawn.len() == k as usize * n;
+                }
                 ctx.prev_value = drawn.len() as i64;
                 ctx.set_var(
                     vars::REVEALED,
@@ -1490,6 +1494,8 @@ impl Game {
                 restriction,
             } => {
                 crate::mana_abilities::resolve_add_mana(self, who, mana, restriction, ctx);
+                // "Add {R}. When you do, ..." (Rubble Rouser): adding mana is done.
+                ctx.prev_happened = true;
             }
             Effect::AddManaWithSpentTrigger {
                 add,
