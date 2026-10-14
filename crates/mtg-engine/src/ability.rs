@@ -1141,6 +1141,11 @@ pub enum PlayerFilter {
     Poisoned,
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
+    /// In the vote the ability triggered on ("whenever players finish voting", CR
+    /// 701.38): a player who voted for a choice you voted for (`true`), or who voted only
+    /// for choices you didn't vote for (`false`; Grudge Keeper's rulings). See
+    /// `kwa::vote::voted_like`.
+    VotedLikeYou(bool),
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,
@@ -2419,6 +2424,11 @@ pub enum ReplacementAction {
     EnterUnderControl(PlayerRef),
     /// Put into a different zone instead ("exile it instead").
     MoveInstead(Destination),
+    /// The moving card is revealed, then put into a different zone instead ("you may
+    /// reveal that card and put it on top of your library instead of putting it anywhere
+    /// else", CR 701.20a, 614.1a). It's still the same event (a card discarded is still
+    /// discarded).
+    RevealAndMoveInstead(Destination),
     /// Nothing happens (skip, prevention of the entire event).
     Prevent,
     /// Prevent N damage (a shield that is used up).
@@ -2431,6 +2441,10 @@ pub enum ReplacementAction {
     /// event also creates `count` of these tokens under the same player's control
     /// (`Value::EventAmount` is how many tokens the event creates, "that many").
     PlusTokens { spec: TokenSpec, count: Value },
+    /// "that many [token] are created instead" (CR 614.1a, Divine Visitation): the tokens
+    /// the event creates have these characteristics instead of their own; everything else
+    /// the creating effect specifies (tapped, attacking) still applies.
+    TokensInstead { spec: TokenSpec },
     /// Subtract N from the amount.
     Subtract(Value),
     /// Redirect damage to the selection.
@@ -4484,6 +4498,11 @@ pub enum Effect {
     CopySpellRetargeted {
         what: Sel,
         target: Option<Sel>,
+        /// "for each other [creature you control] that spell could target": only the
+        /// other legal targets that are objects matching this filter (evaluated for the
+        /// player who copies), not every other object or player.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        among: Option<Filter>,
     },
     /// "Copy [card]": a copy of each selected card, created in the zone the card is in
     /// (CR 707.12); "create a copy of the card with the chosen/noted name" (`named`):

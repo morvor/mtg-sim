@@ -189,6 +189,7 @@ fn a_spell_copied_for_each_other_object_it_could_target() {
         &mut t,
         P0,
         Effect::CopySpellRetargeted {
+            among: None,
             what: Sel::Target(0),
             target: None,
         },
@@ -223,6 +224,7 @@ fn a_spell_copied_with_a_specified_new_target() {
         &mut t,
         P0,
         Effect::CopySpellRetargeted {
+            among: None,
             what: Sel::Target(0),
             target: Some(Sel::Target(1)),
         },
@@ -237,6 +239,7 @@ fn a_spell_copied_with_a_specified_new_target() {
         &mut t,
         P0,
         Effect::CopySpellRetargeted {
+            among: None,
             what: Sel::Target(0),
             target: Some(Sel::Target(1)),
         },
@@ -251,6 +254,7 @@ fn a_spell_copied_with_a_specified_new_target() {
         &mut t,
         P0,
         Effect::CopySpellRetargeted {
+            among: None,
             what: Sel::Target(0),
             target: Some(Sel::Target(1)),
         },

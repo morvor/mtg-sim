@@ -41,14 +41,24 @@ fn source_description(s: &str) -> Option<(Filter, &str)> {
 }
 
 /// "copy target activated or triggered ability you control [from a ... source]",
-/// "copy target triggered ability you control".
+/// "copy target triggered ability you control", "copy target instant spell, sorcery
+/// spell, activated ability, or triggered ability".
 fn copy_target_ability(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("copy ")?;
     if !r.starts_with("target ") {
         return None;
     }
-    let (mut spec, tail) = parse_target(r)?;
-    let TargetKind::Ability(f) = &mut spec.what else {
+    // "target instant spell, sorcery spell, activated ability, or triggered ability": a
+    // list of kinds of spells and abilities.
+    let listed = super::basic_effects_counter::stack_target(r)
+        .filter(|(s, _)| matches!(s.what, TargetKind::SpellOrAbility(_)));
+    let (mut spec, tail) = match listed {
+        Some(x) => x,
+        None => parse_target(r)?,
+    };
+    // "copy target instant spell, sorcery spell, activated ability, or triggered ability"
+    // (Return the Favor): a spell or an ability.
+    let (TargetKind::Ability(f) | TargetKind::SpellOrAbility(f)) = &mut spec.what else {
         return None;
     };
     let mut parts = vec![f.clone()];

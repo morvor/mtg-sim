@@ -137,3 +137,23 @@ impl Game {
         r
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::TriggerTiming;
+
+    /// A snapshot of the game taken in the middle of an atomic action (a spell cast while
+    /// an effect resolves, rolled back when the cast turns out to be illegal) still counts
+    /// the actions in progress once it's restored, so no trigger check happens in the
+    /// middle of them; only the "being detected right now" flag is the original's own.
+    #[test]
+    fn a_copy_keeps_the_actions_in_progress_but_not_the_check_in_progress() {
+        let t = TriggerTiming {
+            atomic: 2,
+            flushing: true,
+        };
+        let c = t.clone();
+        assert_eq!(c.atomic, 2);
+        assert!(!c.flushing);
+    }
+}
