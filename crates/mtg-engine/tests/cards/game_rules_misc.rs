@@ -95,3 +95,30 @@ fn dream_fighter_and_its_blocker_phase_out() {
     assert!(t.obj_now(d).phased_out);
     assert!(t.obj_now(bears).phased_out);
 }
+
+#[test]
+fn brothers_yamazaki_two_copies_are_exempt_from_the_legend_rule() {
+    cr!("704.5j");
+    assert_supported(&["Brothers Yamazaki", "Hall of Echoes"]);
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Brothers Yamazaki");
+    let b = t.battlefield(P0, "Brothers Yamazaki");
+    t.settle();
+    assert!(t.on_battlefield(a) && t.on_battlefield(b));
+    // A third: there aren't exactly two any more, and the legend rule applies.
+    t.battlefield(P0, "Brothers Yamazaki");
+    t.settle();
+    assert_eq!(t.named_on_battlefield("Brothers Yamazaki").len(), 1);
+}
+
+#[test]
+fn hall_of_echoes_suspends_the_legend_rule_this_turn() {
+    cr!("704.5j", "707.2");
+    let mut t = TestGame::new(2);
+    let hall = t.battlefield(P0, "Hall of Echoes");
+    let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
+    t.lands(P0, "Wastes", 5);
+    t.activate(P0, hall, 1, &[Entity::Object(isamaru)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda").len(), 2);
+}
