@@ -27,6 +27,9 @@ pub const COULD_PRODUCE: &str = "could produce:";
 /// `Value::Custom` prefix, followed by a color letter: that color's mana symbols in the
 /// mana costs of cards in the controller's graveyard.
 pub const CHROMA_GRAVEYARD: &str = "chroma:graveyard:";
+/// `Value::Custom`: the number of unlocked doors among Rooms the controller controls
+/// (CR 709.5).
+pub const UNLOCKED_DOORS: &str = "rooms:unlocked doors you control";
 /// `PlayerModification::Custom`: losing unspent mana loses that much life.
 pub const MANA_BURN: &str = "mana burn";
 
@@ -66,6 +69,17 @@ impl KeywordRules for ManaGrammarRules {
     }
 
     fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name == UNLOCKED_DOORS {
+            let n: usize = g
+                .battlefield
+                .iter()
+                .filter(|o| {
+                    g.obj(**o).controller == ctx.controller && g.obj(**o).chars.has_subtype("Room")
+                })
+                .map(|o| crate::rooms::unlocked(g, *o).iter().filter(|u| **u).count())
+                .sum();
+            return Some(n as i64);
+        }
         let c = name.strip_prefix(CHROMA_GRAVEYARD)?;
         let color = Color::from_letter(c.chars().next()?)?;
         let p = ctx.controller;

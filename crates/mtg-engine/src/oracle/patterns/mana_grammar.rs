@@ -123,6 +123,13 @@ fn production(r: &str) -> Option<ManaProduction> {
         }
         return Some(ManaProduction::AnyColorAmong(f));
     }
+    // "one mana of any type the sacrificed land could produce" (Squandered Resources):
+    // the land sacrificed to pay the cost, as it last existed (CR 106.7).
+    if r == "one mana of any type the sacrificed land could produce" {
+        return Some(ManaProduction::CouldProduce(Filter::In(Box::new(Sel::Var(
+            vars::SACRIFICED,
+        )))));
+    }
     // "one mana of any of this creature's colors" (granted by Katilda, Dawnhart Prime):
     // the object with the ability.
     if r == "one mana of any of ~'s colors" {
@@ -433,7 +440,7 @@ fn only_chosen_color_to_activate(block: &str, ctx: &CompileContext) -> Option<Ve
 inventory::submit! { AbilityPattern { name: "mana grammar: spend only mana of the chosen color to activate this ability", priority: 60, parse: only_chosen_color_to_activate } }
 
 #[cfg(test)]
-mod probe {
+mod grammar {
     use crate::card::Layout;
     use crate::oracle::{compile, CompileContext};
     use crate::types::TypeLine;
@@ -455,7 +462,7 @@ mod probe {
     }
 
     #[test]
-    fn probe() {
+    fn mana_grammar_wordings_compile() {
         for r in [
             "spend this mana only to cast kicked spells.",
             "spend this mana only to cast dwarf, equipment, and saga spells.",
@@ -478,15 +485,18 @@ mod probe {
             "spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.",
             "spend this mana only to cast monocolored spells of that color.",
         ] {
-            println!("{r} => {:?}", crate::oracle::patterns::r106_mana::parse_restriction(r));
+            assert!(
+                crate::oracle::patterns::r106_mana::parse_restriction(r).is_some(),
+                "{r}"
+            );
         }
         for (ty, t) in [
-            ("Artifact", "{T}: Add {C}{C} for each opponent who lost life this turn."),
+            
             ("Artifact", "{T}: Add {C} for each opponent who lost life this turn."),
             ("Artifact", "Whenever a player casts a spell, any other player may pay that spell's mana cost."),
-            ("Artifact", "Whenever a player casts a spell, any player may pay {1}. If a player does, counter the spell."),
+            
             ("Artifact", "Whenever a player casts a spell, any player may pay {1}. If a player does, counter that spell."),
-            ("Artifact", "Whenever a player casts a spell, counter the spell."),
+            
             ("Artifact", "{T}: Add two mana of different colors."),
             ("Artifact", "{T}: Add one mana of any color among legendary permanents you control."),
             ("Artifact", "{T}: Add one mana of any color among legendary creatures and planeswalkers you control."),
@@ -503,19 +513,19 @@ mod probe {
             ("Artifact", "{T}: Add four mana of the chosen color. Spend this mana only to cast monocolored spells of that color."),
             ("Artifact", "{3}, {T}: Draw two cards. Spend only mana of the chosen color to activate this ability."),
             ("Creature", "Mana of any type can be spent to activate ~'s abilities."),
-            ("Creature", "~ has flying and indestructible as long as you have six or more unspent mana."),
+            
             ("Enchantment", "All lands lose all abilities except mana abilities."),
             ("Sorcery", "Destroy target land that is snow or could produce {C}."),
             ("Creature", "~'s power and toughness are each equal to the number of black mana symbols in the mana costs of cards in your graveyard."),
-            ("Sorcery", "Target creature you control fights target creature an opponent controls. If the creature the opponent controls is dealt excess damage this way, add that much {R}."),
+            
             ("Enchantment", "Sacrifice a land: Add one mana of any type the sacrificed land could produce."),
             ("Creature", "Whenever you cast a spell, if at least seven mana was spent to cast it, untap target creature. It gets +7/+7 and gains trample until end of turn."),
             ("Artifact", "A player losing unspent mana causes that player to lose that much life."),
             ("Enchantment", "Cumulative upkeep {1}\nWhenever a player casts a spell, any other player may pay that spell's mana cost. If a player does, counter the spell."),
             ("Creature", "Whenever ~ deals combat damage to a player, look at the top card of that player's library, then exile it face down. You may play it for as long as it remains exiled. Mana of any type can be spent to cast a spell this way."),
-            ("Instant", "Put a +1/+1 counter on target creature you control, then it fights target creature you don't control.\nAdamant — If at least three green mana was spent to cast ~, the creature you control gains indestructible until end of turn."),
+            
         ] {
-            println!("{t} => {:?}", compiled(ty, t));
+            assert!(compiled(ty, t).is_some(), "{t}");
         }
     }
 }

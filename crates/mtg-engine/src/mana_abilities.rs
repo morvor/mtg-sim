@@ -213,7 +213,12 @@ pub fn commander_identity_types(g: &Game, p: PlayerId) -> Vec<ManaType> {
 pub fn types_could_produce(g: &Game, f: &Filter, ctx: &Ctx) -> Vec<ManaType> {
     let mut path = Vec::new();
     let mut out: Vec<ManaType> = Vec::new();
-    for o in g.objects_matching(f, ctx) {
+    // "the sacrificed land": the object as it last existed (Squandered Resources).
+    let objs = match f {
+        Filter::In(sel) if matches!(**sel, Sel::Var(_)) => g.eval_sel_objects(sel, ctx),
+        _ => g.objects_matching(f, ctx),
+    };
+    for o in objs {
         for t in could_produce_of(g, o, &mut path) {
             if !out.contains(&t) {
                 out.push(t);

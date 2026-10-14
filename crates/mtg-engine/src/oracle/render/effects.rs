@@ -5769,6 +5769,11 @@ impl Renderer<'_> {
                 let syms: Vec<String> = types.iter().map(|t| mana_symbol(*t)).collect();
                 join_list(&syms, "or")
             }
+            ManaProduction::CouldProduce(Filter::In(s))
+                if matches!(**s, Sel::Var(crate::ability::vars::SACRIFICED)) =>
+            {
+                "one mana of any type the sacrificed land could produce".into()
+            }
             ManaProduction::CouldProduce(f) => {
                 let n = self.noun_det(f, Det::A);
                 format!("one mana of any type that {n} could produce")

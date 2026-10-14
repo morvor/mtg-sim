@@ -2482,7 +2482,14 @@ impl Game {
             ctx.cost_of = Some(crate::rule_statics::payment::CostOf::ManaAbility);
             let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx);
             ctx.cost_of = None;
-            paid?;
+            let paid = paid?;
+            // "the sacrificed land" (Squandered Resources).
+            if !paid.sacrificed.is_empty() {
+                ctx.vars.insert(
+                    vars::SACRIFICED,
+                    paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
+                );
+            }
             self.record_activation(p, src, a.uid);
             self.emit(Event::AbilityActivated {
                 ability: None,

@@ -8,6 +8,7 @@
 
 use mtg_engine::decision::{Action, SpecialAction};
 use mtg_engine::mana::{Mana, ManaRestriction, ManaType, SpendPurpose};
+use mtg_engine::rooms;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -84,6 +85,8 @@ fn mana_grammar_cards_compile() {
         "Raggadragga, Goreguts Boss",
         "Ice Cave",
         "Katilda, Dawnhart Prime",
+        "Squandered Resources",
+        "Smoky Lounge // Misty Salon",
     ]);
 }
 
@@ -579,6 +582,77 @@ fn cast_trigger_with_at_least_seven_mana_spent() {
     t.cast(P0, big).go();
     t.settle();
     assert_eq!(t.stack_len(), 1);
+    t.resolve();
+    // Seven mana: it triggers.
+    t.lands(P0, "Forest", 7);
+    let tusker = t.hand(P0, "Krosan Tusker"); // {5}{G}{G}
+    t.answer_targets(P0, &[Entity::Object(bear)]);
+    t.cast(P0, tusker).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    t.resolve();
+    // Grizzly Bears 2/2 with Giant Growth's +3/+3, and +7/+7.
+    assert_eq!(t.pt(bear), (12, 12));
+}
+
+#[test]
+fn any_type_the_sacrificed_land_could_produce() {
+    cr!("106.7");
+    ruling!(
+        "Squandered Resources",
+        "Can sacrifice a land which can’t produce mana"
+    );
+    let mut t = TestGame::new(2);
+    let res = t.battlefield(P0, "Squandered Resources");
+    let forest = t.battlefield(P0, "Forest");
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    t.activate(P0, res, 0, &[]).unwrap();
+    assert!(!t.on_battlefield(forest));
+    assert_eq!(pool(&t, P0), vec![ManaType::G]);
+}
+
+#[test]
+fn granted_mana_ability_of_its_own_colors() {
+    cr!("106.1");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Katilda, Dawnhart Prime");
+    let elder = t.battlefield(P0, "Thraben Inspector"); // white Human Soldier
+    t.g.recompute();
+    t.activate(P0, elder, 0, &[]).unwrap();
+    assert_eq!(pool(&t, P0), vec![ManaType::W]);
+}
+
+#[test]
+fn room_spells_and_unlocking_doors() {
+    cr!("106.6", "709.5e");
+    let mut t = TestGame::new(2);
+    add_restricted(
+        &mut t,
+        P0,
+        ManaType::U,
+        4,
+        ManaRestriction::Purpose(SpendPurpose::UnlockDoor),
+    );
+    // Not for a spell that isn't a Room.
+    let drake = t.hand(P0, "Wind Drake");
+    t.set_step(P0, Step::PrecombatMain);
+    assert!(t.cast(P0, drake).try_go().is_err());
+    assert_eq!(t.g.player(P0).mana_pool.total(), 4);
+    // It pays Misty Salon's unlock cost {3}{U}.
+    let room = t.battlefield(P0, "Smoky Lounge // Misty Salon");
+    rooms::unlock(&mut t.g, room, 0, P0);
+    t.g.recompute();
+    t.g.turn.priority = Some(P0);
+    t.g.perform_action(
+        P0,
+        Action::Special(SpecialAction::Other {
+            name: format!("{}1", rooms::UNLOCK_ACTION),
+            obj: Some(room),
+        }),
+    )
+    .unwrap();
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+    assert_eq!(rooms::unlocked(&t.g, room), [true, true]);
 }
 
 #[test]
@@ -595,4 +669,27 @@ fn any_other_player_may_pay_that_spells_mana_cost() {
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
     assert!(t.in_graveyard(P0, "Lightning Bolt"));
+}
+
+#[test]
+fn misty_salon_counts_unlocked_doors() {
+    cr!("709.5h");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let room = t.battlefield(P0, "Smoky Lounge // Misty Salon");
+    rooms::unlock(&mut t.g, room, 0, P0);
+    t.g.recompute();
+    rooms::unlock(&mut t.g, room, 1, P0);
+    t.g.recompute();
+    t.settle();
+    t.resolve_all();
+    let spirits: Vec<ObjectId> = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|o| t.g.obj(*o).chars.has_subtype("Spirit"))
+        .collect();
+    assert_eq!(spirits.len(), 1);
+    assert_eq!(t.pt(spirits[0]), (2, 2));
 }
