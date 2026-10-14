@@ -19,6 +19,17 @@ pub const GRANTER: &str = "granted_by:source";
 /// sacrificed granter (or the granter, for an ability that doesn't sacrifice it). Only
 /// activated abilities, whose source is otherwise never referred to.
 pub fn refer_to_granter(a: &Ability) -> Option<Ability> {
+    refer_to_granter_in(a, true)
+}
+
+/// [`refer_to_granter`] for an ability that names the granting card only in its cost
+/// ("{T}, Unattach Surestrike Trident: This creature deals ..."): "~" in its effect is
+/// the object that has the ability.
+pub fn refer_cost_to_granter(a: &Ability) -> Option<Ability> {
+    refer_to_granter_in(a, false)
+}
+
+fn refer_to_granter_in(a: &Ability, in_body: bool) -> Option<Ability> {
     let AbilityKind::Activated(act) = &a.kind else {
         return None;
     };
@@ -53,6 +64,13 @@ pub fn refer_to_granter(a: &Ability) -> Option<Ability> {
         )
     }) {
         return None;
+    }
+    if !in_body {
+        return Some(AbilityDef::with_link(
+            AbilityKind::Activated(act),
+            a.text.clone(),
+            a.link,
+        ));
     }
     let granter = if sacrifices {
         Sel::Var(vars::SACRIFICED)

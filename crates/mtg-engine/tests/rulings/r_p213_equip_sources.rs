@@ -192,6 +192,10 @@ fn unattach_costs_leave_the_equipment_on_the_battlefield() {
         "Leonin Bola",
         "“Unattach Leonin Bola” means just that — Leonin Bola moves off the creature it was equipping and remains on the battlefield."
     );
+    ruling!(
+        "Surestrike Trident",
+        "“Unattach Surestrike Trident” means just that — Surestrike Trident moves off the creature it was equipping and remains on the battlefield."
+    );
     supported("Heartseeker");
     supported("Leonin Bola");
     // Heartseeker: "{T}, Unattach Heartseeker: Destroy target creature."
@@ -214,6 +218,20 @@ fn unattach_costs_leave_the_equipment_on_the_battlefield() {
     assert!(t.obj_now(giant).tapped);
     assert!(t.on_battlefield(bola));
     assert_eq!(attached_to(&t, bola), None);
+    // Surestrike Trident: "{T}, Unattach Surestrike Trident: This creature deals damage
+    // equal to its power to target player or planeswalker." The power is the creature's
+    // once the Trident is unattached (it gives no bonus anyway).
+    supported("Surestrike Trident");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let trident = attach_new(&mut t, P0, "Surestrike Trident", giant);
+    assert!(has_kw(&t, giant, mtg_engine::keywords::KeywordKind::FirstStrike));
+    t.activate(P0, giant, 0, &[Entity::Player(P1)]).unwrap();
+    assert_eq!(attached_to(&t, trident), None);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert!(t.on_battlefield(trident));
+    assert!(!has_kw(&t, giant, mtg_engine::keywords::KeywordKind::FirstStrike));
 }
 
 #[test]
@@ -227,7 +245,12 @@ fn the_equipped_creatures_controller_activates_the_granted_ability() {
         "Leonin Bola",
         "The equipped creature’s controller chooses whether or not to activate the activated ability. It doesn’t matter who controls Leonin Bola."
     );
-    for name in ["Heartseeker", "Leonin Bola"] {
+    ruling!(
+        "Surestrike Trident",
+        "The equipped creature’s controller chooses whether or not to activate the activated ability. It doesn’t matter who controls Surestrike Trident."
+    );
+    for name in ["Heartseeker", "Leonin Bola", "Surestrike Trident"] {
+        supported(name);
         // P1 controls the Equipment; it's attached to P0's Grizzly Bears.
         let mut t = TestGame::new(2);
         let bears = t.battlefield(P0, "Grizzly Bears");
@@ -235,9 +258,15 @@ fn the_equipped_creatures_controller_activates_the_granted_ability() {
         give_control(&mut t, eq, P1);
         assert_eq!(attached_to(&t, eq), Some(Entity::Object(bears)));
         let giant = t.battlefield(P1, "Hill Giant");
-        assert!(t.activate(P1, bears, 0, &[Entity::Object(giant)]).is_err());
+        // Surestrike Trident's ability targets a player or planeswalker.
+        let target = if name == "Surestrike Trident" {
+            Entity::Player(P1)
+        } else {
+            Entity::Object(giant)
+        };
+        assert!(t.activate(P1, bears, 0, &[target]).is_err());
         t.clear_answers();
-        t.activate(P0, bears, 0, &[Entity::Object(giant)]).unwrap();
+        t.activate(P0, bears, 0, &[target]).unwrap();
         t.resolve_all();
         assert!(t.on_battlefield(eq), "{name}");
         assert_eq!(attached_to(&t, eq), None, "{name}");
