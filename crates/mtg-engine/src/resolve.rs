@@ -776,6 +776,17 @@ impl Game {
                 duration,
             } => {
                 let objects = self.lock_restriction_objects(restriction, ctx);
+                // "For as long as they control it": the players a condition about the
+                // affected objects names are those as the effect begins.
+                let duration = &match duration {
+                    Duration::WhileCondition(Condition::SelMatches(s, f)) if matches!(s, Sel::Var(v) if *v == vars::AFFECTED) => {
+                        Duration::WhileCondition(Condition::SelMatches(
+                            s.clone(),
+                            self.bind_target_players(f, ctx),
+                        ))
+                    }
+                    d => d.clone(),
+                };
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
                 // objects it applies to, "for as long as it remains tapped", is checked
                 // for them).
@@ -1255,6 +1266,20 @@ impl Game {
                 for o in self.resolve_objects(what, ctx) {
                     crate::combat::remove_from_combat(self, o);
                 }
+            }
+            Effect::BecomeUnblocked { what } => {
+                let mut any = false;
+                for o in self.resolve_objects(what, ctx) {
+                    any |= crate::combat::become_unblocked(self, o);
+                }
+                ctx.prev_happened = any;
+            }
+            Effect::BlockAttackerOfChoice { blocker } => {
+                let mut any = false;
+                for b in self.resolve_objects(blocker, ctx) {
+                    any |= crate::combat::block_attacker_of_choice(self, b, ctx.controller);
+                }
+                ctx.prev_happened = any;
             }
             Effect::Choose { who, kind } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
@@ -2596,6 +2621,9 @@ impl Game {
                 // "Creatures target player controls don't untap ...": the objects that
                 // player controls, whichever they are later.
                 *f = self.bind_target_players(f, ctx);
+                // "Creatures of the creature type of your choice attack this turn if
+                // able": the type chosen as the effect began (CR 608.2h).
+                self.lock_chosen_type(f, ctx);
             }
         }
         // "Target creature blocks this creature this combat if able": both creatures are
@@ -2639,6 +2667,20 @@ impl Game {
         // can't be evaluated later.
         if let Restriction::CantCast { what, .. } = &mut r {
             self.lock_filter_amounts(what, ctx);
+        }
+        // "This turn, creatures can't attack unless their controller pays {X} for each
+        // attacking creature they control": X is fixed as the effect begins (CR 608.2h).
+        if let Restriction::AttackCost { cost, .. }
+        | Restriction::BlockCost { cost, .. }
+        | Restriction::BlockCostAgainst { cost, .. } = &mut r
+        {
+            if let Some(m) = cost.mana.as_mut().filter(|m| m.has_x()) {
+                *m = m.with_x(ctx.x.max(0) as u32);
+                // X = 0: a cost of {0}, still a cost (CR 118.5; War Tax rulings).
+                if m.symbols.is_empty() {
+                    m.symbols.push(crate::mana::ManaSymbol::Generic(0));
+                }
+            }
         }
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
@@ -2708,6 +2750,28 @@ impl Game {
         }
     }
 
+    /// Replaces "the chosen type" in a filter with the creature or basic land type chosen
+    /// for the effect's source as it begins.
+    fn lock_chosen_type(&self, f: &mut Filter, ctx: &Ctx) {
+        match f {
+            Filter::ChosenType => {
+                if let Some(t) = self
+                    .source_choices(ctx)
+                    .and_then(|ch| ch.creature_type.clone().or(ch.basic_land_type.clone()))
+                {
+                    *f = Filter::Subtype(t);
+                }
+            }
+            Filter::And(v) | Filter::Or(v) => {
+                for x in v.iter_mut() {
+                    self.lock_chosen_type(x, ctx);
+                }
+            }
+            Filter::Not(x) => self.lock_chosen_type(x, ctx),
+            _ => {}
+        }
+    }
+
     /// Replaces the amounts of a filter's comparisons that refer to the resolving spell's
     /// or ability's objects ("the same mana value as that spell", "X") with their values
     /// now (CR 608.2h).
@@ -2715,6 +2779,11 @@ impl Game {
         fn refers_to_ctx(v: &Value) -> bool {
             match v {
                 Value::X | Value::Var(_) | Value::EventAmount | Value::Chosen => true,
+                // The object the restriction is checked for (an attacker for "can't be
+                // blocked by creatures with greater power") is compared when checked.
+                Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s) if matches!(**s, Sel::Var(v) if v == vars::AFFECTED) => {
+                    false
+                }
                 Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s) => matches!(
                     **s,
                     Sel::Target(_)
@@ -3269,13 +3338,22 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         Restriction::AttackTogether { attackers, .. }
         | Restriction::MustAttackOtherThan { attackers, .. } => Some(attackers),
         Restriction::CantActivate { sources, .. } => Some(sources),
-        Restriction::ExtraBlocks { blocker, .. } => Some(blocker),
+        Restriction::ExtraBlocks { blocker, .. }
+        | Restriction::ExtraBlocksCounted { blocker, .. } => Some(blocker),
+        Restriction::AssignAsThoughUnblocked { what, .. } => Some(what),
+        Restriction::AttackOnlyWith { attackers: f, .. }
+        | Restriction::BlockOnlyWith { blockers: f, .. }
+        | Restriction::BlockCostAgainst { blockers: f, .. }
+        | Restriction::MinBlockersCounted { attacker: f, .. }
+        | Restriction::BlockIgnoringEvasion { blocker: f, .. }
+        | Restriction::CantAttackPlayerAgain(f) => Some(f),
         Restriction::MinBlockers { attacker, .. }
         | Restriction::MaxBlockedBy { attacker, .. }
         | Restriction::MustBeBlockedBy { attacker, .. }
         | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
+        | Restriction::CantAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,
     }
@@ -3303,6 +3381,9 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
             players: defender, ..
         }
         | Restriction::MaxBlockersOf { who: defender, .. }
+        | Restriction::PlayerMustAttack {
+            players: defender, ..
+        }
         | Restriction::MaxAttackersAgainst {
             player: Some(defender),
             ..

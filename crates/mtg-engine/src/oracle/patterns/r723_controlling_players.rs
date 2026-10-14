@@ -9,6 +9,10 @@
 //!   Bloodbending);
 //! * "You control your opponents while they're searching their libraries." (Opposition
 //!   Agent);
+//! * "The first player controls the second player during the second player's next turn,
+//!   and the second player controls the first player during the first player's next
+//!   turn." (Cruel Entertainment, after "Choose target player and another target
+//!   player.");
 //! * Word of Command's instructions (CR 723.7).
 
 use super::{EffectPattern, FollowupPattern, StaticPattern};
@@ -17,7 +21,7 @@ use crate::oracle::effects::Builder;
 use crate::oracle::phrases::end;
 use crate::oracle::CompileContext;
 use crate::player_control::{
-    control_effect, parse_control_effect, word_of_command, ControlSpan, ADDITIONAL_COST_PAID,
+    control_effect, control_effect_by, parse_control_effect, word_of_command, ControlSpan, ADDITIONAL_COST_PAID,
     CONTROL_WHILE_SEARCHING, WORD_OF_COMMAND,
 };
 use smol_str::SmolStr;
@@ -46,6 +50,36 @@ fn control_target_player(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "r723 control target player during their next turn", priority: 60, parse: control_target_player } }
+
+/// "[target player] controls [another target player] during [that player]'s next turn",
+/// joined by ", and ": each controlling and controlled player is one the text chose as a
+/// target ("the first player", "the second player").
+fn target_controls_target(l: &str, b: &mut Builder) -> Option<Effect> {
+    let slot_of = |s: &str, b: &mut Builder| -> Option<(u8, String)> {
+        match super::choice_grammar::player_phrase(s, b)? {
+            (PlayerRef::Target(slot), rest) => Some((slot, rest)),
+            _ => None,
+        }
+    };
+    let mut effects = vec![];
+    for part in end(l).split(", and ") {
+        let (by, rest) = slot_of(part, b)?;
+        let rest = rest.trim_start().strip_prefix("controls ")?;
+        let (slot, rest) = slot_of(rest, b)?;
+        let whose = rest
+            .trim_start()
+            .strip_prefix("during ")?
+            .strip_suffix("'s next turn")?;
+        let (whose, tail) = slot_of(whose, b)?;
+        if whose != slot || by == slot || !tail.trim().is_empty() {
+            return None;
+        }
+        effects.push(control_effect_by(slot, by));
+    }
+    Some(Effect::seq(effects))
+}
+
+inventory::submit! { EffectPattern { name: "r723 target player controls another target player during their next turn", priority: 60, parse: target_controls_target } }
 
 /// "After that turn, that player takes an extra turn." / "If ~'s additional cost was
 /// paid, you control that player during their next turn instead."
