@@ -50,6 +50,12 @@ fn exile_from_hand_looked_at(l: &str, prev: &mut Effect, b: &mut Builder) -> boo
             None => return false,
         },
     };
+    // "... until ~ leaves the battlefield" (Deep-Cavern Bat): the card returns to that
+    // hand immediately after ~ leaves the battlefield (CR 610.3).
+    let (r, until) = match r.strip_suffix(" until ~ leaves the battlefield") {
+        Some(r) => (r, true),
+        None => (r, false),
+    };
     // Only "a [card] from it" (a single card).
     let Some(desc) = r.strip_suffix(" from it") else {
         return false;
@@ -67,9 +73,33 @@ fn exile_from_hand_looked_at(l: &str, prev: &mut Effect, b: &mut Builder) -> boo
         (*prev, b.it, b.it_player) = saved;
         return false;
     }
+    if until && !exile_until_source_leaves(prev) {
+        (*prev, b.it, b.it_player) = saved;
+        return false;
+    }
     // "that card" now names the exiled card (CR 400.7).
     b.it = Sel::Var(vars::IT);
     true
+}
+
+/// Makes the last face-up exile instruction of `e` last until its source leaves the
+/// battlefield. Returns whether there was one.
+fn exile_until_source_leaves(e: &mut Effect) -> bool {
+    match e {
+        Effect::Exile {
+            what,
+            face_down: false,
+            ..
+        } => {
+            *e = Effect::ExileUntil {
+                what: what.clone(),
+                until: UntilEvent::SourceLeavesBattlefield,
+            };
+            true
+        }
+        Effect::Seq(v) => v.last_mut().is_some_and(exile_until_source_leaves),
+        _ => false,
+    }
 }
 
 /// Whether the effect ends by exiling cards face up.

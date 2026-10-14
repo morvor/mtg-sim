@@ -458,3 +458,33 @@ fn targeting_yourself_reveals_your_whole_hand() {
         assert!(!seen.is_empty() && seen.iter().all(|n| *n == 3), "{name}: {seen:?}");
     }
 }
+
+#[test]
+fn deep_cavern_bat_exiles_until_it_leaves_and_nothing_if_it_left_first() {
+    cr!("610.3", "610.3c");
+    ruling!(
+        "Deep-Cavern Bat",
+        "If Deep-Cavern Bat leaves the battlefield before its last ability resolves, you'll still look at the target opponent's hand, but you won't exile any cards from it."
+    );
+    supported("Deep-Cavern Bat");
+    // It resolves: the Bolt is exiled until the Bat leaves.
+    let mut t = TestGame::new(2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[obj(bolt)]);
+    let bat = t.enter(P0, "Deep-Cavern Bat");
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), Zone::Exile);
+    destroy(&mut t, bat);
+    assert!(t.in_hand(P1, "Lightning Bolt"));
+    // The Bat leaves first: nothing is exiled.
+    let mut t = TestGame::new(2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[obj(bolt)]);
+    let bat = t.enter(P0, "Deep-Cavern Bat");
+    t.settle();
+    destroy(&mut t, bat);
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), Zone::Hand(P1));
+}
