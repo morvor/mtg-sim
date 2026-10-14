@@ -84,6 +84,17 @@ fn miracle_with_x_casts_for_the_miracle_cost() {
     t.resolve_all();
     assert_eq!(t.g.find_in_zone(Zone::Hand(P0), "Entreat the Angels").len(), 1);
     assert_eq!(count_subtype(&t, P0, "Angel"), 0);
+    // Declining to cast it ("may"): it stays in hand and nothing is paid.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Entreat the Angels");
+    t.lands(P0, "Plains", 4);
+    t.answer_yes(P0, true); // reveal
+    t.answer_yes(P0, false); // don't cast
+    t.g.draw_cards(P0, 1);
+    t.resolve_all();
+    assert_eq!(t.g.find_in_zone(Zone::Hand(P0), "Entreat the Angels").len(), 1);
+    assert_eq!(untapped(&t), 4);
+    assert_eq!(count_subtype(&t, P0, "Angel"), 0);
 }
 
 /// The number of untapped Plains P0 controls.
@@ -96,20 +107,25 @@ fn untapped(t: &TestGame) -> usize {
 
 #[test]
 fn ward_with_mana_and_life_needs_both_paid() {
-    cr!("702.21a", "118.3");
+    cr!("702.21a", "118.3", "119.4");
     // Gisa, the Hellraiser: "Ward—{2}, Pay 2 life."
     supported("Gisa, the Hellraiser");
-    // (swamps, life, pays): the spell resolves only if both parts are paid.
-    for (swamps, life, resolves) in [(4, 20, true), (2, 20, false), (4, 1, false)] {
+    // (swamps, life, pays, resolves): the spell resolves only if both parts are paid.
+    for (swamps, life, pays, resolves) in [
+        (4, 20, true, true),
+        (4, 20, false, false),
+        (2, 20, true, false),
+        (4, 1, true, false),
+    ] {
         let mut t = TestGame::new(2);
         let gisa = t.battlefield(P0, "Gisa, the Hellraiser");
         t.g.player_mut(P1).life = life;
         t.lands(P1, "Swamp", swamps);
         let s = t.hand(P1, "Go for the Throat");
         t.cast(P1, s).target(gisa).go();
-        t.answer_yes(P1, true);
+        t.answer_yes(P1, pays);
         t.resolve_all();
-        let case = format!("{swamps} Swamps, {life} life");
+        let case = format!("{swamps} Swamps, {life} life, pays: {pays}");
         assert_eq!(!t.on_battlefield(gisa), resolves, "{case}");
         assert!(t.in_graveyard(P1, "Go for the Throat"), "{case}");
         if resolves {

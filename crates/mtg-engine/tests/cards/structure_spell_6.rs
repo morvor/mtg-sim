@@ -46,6 +46,34 @@ fn psychic_strike_counters_and_mills_the_spells_controller() {
     assert_eq!(t.graveyard_size(P1), 3);
     assert_eq!(t.library_size(P0), l0, "the caster mills nothing");
     assert_eq!(t.graveyard_size(P0), 1);
+    // "Its controller", not its owner: P0 gains control of P1's Bolt with Commandeer.
+    supported("Commandeer");
+    let mut t = TestGame::new(2);
+    for _ in 0..3 {
+        t.library_top(P1, "Forest");
+        t.library_top(P0, "Island");
+    }
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let spell = t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.lands(P0, "Island", 7);
+    let c = t.hand(P0, "Commandeer");
+    t.answer_yes(P0, false); // keep the Bolt's target
+    t.cast(P0, c).target(Entity::Object(spell)).go();
+    t.resolve();
+    assert_eq!(t.obj_now(spell).controller, P0);
+    assert_eq!(t.obj_now(spell).owner, P1);
+    t.battlefield(P1, "Island");
+    t.battlefield(P1, "Swamp");
+    t.battlefield(P1, "Wastes");
+    let (l0, l1) = (t.library_size(P0), t.library_size(P1));
+    let s = t.hand(P1, "Psychic Strike");
+    t.cast(P1, s).target(Entity::Object(spell)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20, "the Bolt was countered");
+    assert_eq!(t.library_size(P0), l0 - 2, "its controller milled two");
+    assert_eq!(t.library_size(P1), l1, "its owner mills nothing");
+    assert!(t.in_graveyard(P1, "Lightning Bolt"), "to its owner's graveyard");
 }
 
 #[test]
@@ -118,6 +146,11 @@ fn true_ancestry_returns_a_permanent_card_and_creates_a_clue() {
     assert_eq!(clues.len(), 1);
     assert!(t.obj_now(clues[0]).is_token());
     assert!(t.obj_now(clues[0]).chars.is(CardType::Artifact));
+    assert!(t.obj_now(clues[0]).chars.colors.is_colorless());
+    assert!(
+        t.obj_now(clues[0]).chars.abilities.iter().any(|a| a.text.contains("Draw a card")),
+        "the predefined Clue ability"
+    );
     assert_eq!(count_subtype(&t, P1, "Clue"), 0);
     // With no target, it still creates a Clue.
     let mut t = TestGame::new(2);

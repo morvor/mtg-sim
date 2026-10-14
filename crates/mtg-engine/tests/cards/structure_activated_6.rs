@@ -31,23 +31,6 @@ fn entity_choices(t: &TestGame, p: PlayerId) -> Vec<Vec<Entity>> {
         .collect()
 }
 
-/// `p` gains control of the permanent.
-fn gain_control(t: &mut TestGame, p: PlayerId, id: ObjectId) {
-    let mut ctx = mtg_engine::eval::Ctx::new(None, p);
-    ctx.targets = vec![vec![Entity::Object(t.g.current(id))]];
-    t.g.exec(
-        &ability::Effect::GainControl {
-            what: ability::Sel::Target(0),
-            who: ability::PlayerRef::You,
-            duration: ability::Duration::Permanent,
-        },
-        &mut ctx,
-    );
-    t.g.recompute();
-    t.g.flush_events();
-    t.settle();
-}
-
 #[test]
 fn myr_matrix_creates_a_myr_token() {
     cr!("602.2", "111.1", "118.3");
@@ -238,8 +221,10 @@ fn fencer_clique_returns_to_the_top_of_its_owners_library() {
     let f = t.battlefield(P1, "Fencer Clique");
     t.library_top(P1, "Forest");
     t.library_top(P0, "Island");
-    gain_control(&mut t, P0, f);
-    let f = t.g.current(f);
+    t.lands(P0, "Mountain", 3);
+    let treason = t.hand(P0, "Act of Treason");
+    t.cast(P0, treason).target(f).go();
+    t.resolve_all();
     assert_eq!(t.obj_now(f).controller, P0);
     t.lands(P0, "Island", 1);
     let (l0, l1) = (t.library_size(P0), t.library_size(P1));
@@ -828,7 +813,7 @@ fn destructive_digger_sacrifices_an_artifact_or_land_to_draw() {
 
 #[test]
 fn dirty_wererat_discards_to_regenerate() {
-    cr!("602.2", "118.3", "701.9a", "701.19a");
+    cr!("602.2", "118.3", "701.9a", "701.19a", "514.2");
     // "{B}, Discard a card: Regenerate this creature."
     supported("Dirty Wererat");
     let mut t = TestGame::new(2);
@@ -847,6 +832,17 @@ fn dirty_wererat_discards_to_regenerate() {
     assert!(t.on_battlefield(w));
     assert!(t.obj_now(w).tapped, "regenerated: tapped");
     assert!(t.g.destroy(w, None), "the shield is used up");
+    assert!(t.in_graveyard(P0, "Dirty Wererat"));
+    // An unused shield ends with the turn (CR 514.2).
+    let mut t = TestGame::new(2);
+    let w = t.battlefield(P0, "Dirty Wererat");
+    t.lands(P0, "Swamp", 1);
+    let card = t.hand(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(card)]);
+    act(&mut t, P0, w, "regenerate", &[]).unwrap();
+    t.resolve_all();
+    next_turn(&mut t);
+    assert!(t.g.destroy(w, None), "no shield left next turn");
     assert!(t.in_graveyard(P0, "Dirty Wererat"));
 }
 
@@ -868,6 +864,22 @@ fn expendable_troops_sacrifice_to_damage_an_attacker() {
     assert!(!c.contains(&Entity::Object(idle)));
     t.resolve_all();
     assert!(!t.on_battlefield(attacker), "2 damage kills the 2/2");
+    assert!(t.on_battlefield(idle));
+    // A blocking creature.
+    let mut t = TestGame::new(2);
+    let attacker = t.battlefield(P1, "Hill Giant");
+    let tr = t.battlefield(P1, "Expendable Troops");
+    let blocker = t.battlefield(P0, "Grizzly Bears");
+    let idle = t.battlefield(P0, "Grizzly Bears");
+    attack(&mut t, P1, P0, &[attacker]);
+    block(&mut t, P0, &[(blocker, attacker)]);
+    go_to(&mut t, Step::DeclareBlockers);
+    act(&mut t, P1, tr, "damage", &[Entity::Object(blocker)]).unwrap();
+    let c = target_choices(&t, P1).pop().unwrap();
+    assert!(c.contains(&Entity::Object(blocker)) && c.contains(&Entity::Object(attacker)));
+    assert!(!c.contains(&Entity::Object(idle)), "neither attacking nor blocking");
+    t.resolve_all();
+    assert!(!t.on_battlefield(blocker));
     assert!(t.on_battlefield(idle));
 }
 
