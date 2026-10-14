@@ -166,6 +166,21 @@ impl Renderer<'_> {
             ));
         }
         Some(match name {
+            // CR 701.52a: the Attractions you visited after rolling to visit them.
+            crate::kw::visit::VISITED_THIS_TURN => {
+                "the number of Attractions you've visited this turn".into()
+            }
+            // CR 903.8: how many times the commander was cast from the command zone.
+            crate::kw::game_rules::TIMES_IT_WAS_CAST => {
+                "the number of times it's been cast from the command zone this game".into()
+            }
+            crate::kwa::ring::TIMES_TEMPTED => {
+                "the number of times the Ring has tempted you this game".into()
+            }
+            // CR 106.4: the mana in your mana pool.
+            crate::kw::unspent_mana_value::UNSPENT_MANA_YOU_HAVE => {
+                "the amount of unspent mana you have".into()
+            }
             "noncombat damage dealt this turn to:opponents" => {
                 "the total amount of noncombat damage dealt to your opponents this turn".into()
             }
@@ -1057,6 +1072,17 @@ impl Renderer<'_> {
     /// before), "the rest" / "the other" (the group without what was chosen from it).
     pub(crate) fn sel_extra(&mut self, s: &Sel, case: Case) -> Option<String> {
         match s {
+            // "Exile it. If you do, exile the top card of your library. ... one of those
+            // cards": the cards both instructions moved, worded as "those cards" (see
+            // `permission_grammar::keep_earlier_moved`).
+            Sel::Union(parts)
+                if matches!(parts.as_slice(), [Sel::All(Filter::And(f)), Sel::Var(v)]
+                    if *v == vars::IT
+                        && matches!(f.first(), Some(Filter::In(s)) if matches!(s.as_ref(),
+                            Sel::Var(e) if *e == crate::oracle::patterns::permission_grammar::EARLIER_MOVED))) =>
+            {
+                Some(self.sel(&Sel::Var(vars::IT), case))
+            }
             Sel::Choose {
                 chooser: PlayerRef::You,
                 filter: Filter::In(g),
