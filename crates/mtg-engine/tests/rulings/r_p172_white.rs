@@ -879,3 +879,82 @@ fn martyrs_soul_checks_tapped_lands_on_entering_and_on_resolution() {
     t.resolve_all();
     assert_eq!(t.counters(ms, "+1/+1"), 2);
 }
+
+/// P0 controls Ephara; during P0's turn `during` happens; then the game advances to P1's
+/// upkeep. Returns how many Ephara triggers are on the stack and P0's cards drawn as they
+/// resolve.
+fn ephara_next_upkeep(during: fn(&mut TestGame)) -> (usize, usize) {
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Ephara, God of the Polis");
+    during(&mut t);
+    t.resolve_all();
+    t.advance_to(P1, Step::Upkeep);
+    t.settle();
+    let n = t.stack_len();
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    (n, t.hand_size(P0) - hand)
+}
+
+#[test]
+fn ephara_checks_last_turn_once_whatever_happened_since() {
+    cr!("603.4", "603.2");
+    ruling!(
+        "Ephara, God of the Polis",
+        "Ephara's last ability checks at the beginning of each upkeep whether another creature entered the battlefield under your control last turn. If one did, it will trigger; otherwise, it won't. The ability will trigger only once no matter how many creatures entered the battlefield under your control that turn, as long as at least one did."
+    );
+    ruling!(
+        "Ephara, God of the Polis",
+        "The last ability will trigger regardless of what has happened to the creature that entered the battlefield on the previous turn. It doesn't matter whether it's still under your control or whether it's still on the battlefield."
+    );
+    supported("Ephara, God of the Polis");
+    fn nothing(_: &mut TestGame) {}
+    assert_eq!(ephara_next_upkeep(nothing), (0, 0));
+    fn two_creatures_gone(t: &mut TestGame) {
+        let a = enter(t, P0, "Grizzly Bears");
+        let b = enter(t, P0, "Hill Giant");
+        move_to(t, a, Zone::Hand(P0));
+        give_control(t, b, P1);
+    }
+    assert_eq!(ephara_next_upkeep(two_creatures_gone), (1, 1));
+    // An opponent's creature doesn't count.
+    fn theirs(t: &mut TestGame) {
+        enter(t, P1, "Grizzly Bears");
+    }
+    assert_eq!(ephara_next_upkeep(theirs), (0, 0));
+    // Only last turn: the turn after, it doesn't trigger again.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Ephara, God of the Polis");
+    enter(&mut t, P0, "Grizzly Bears");
+    t.advance_to(P1, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn ephara_ignores_a_noncreature_permanent_that_becomes_a_creature() {
+    cr!("603.4");
+    ruling!(
+        "Ephara, God of the Polis",
+        "If a noncreature permanent you control (such as an Aura with bestow) becomes a creature, it will not cause Ephara's last ability to trigger the following turn. This is true even if that noncreature permanent became a creature the same turn it entered the battlefield."
+    );
+    fn animated(t: &mut TestGame) {
+        let stone = enter(t, P0, "Mind Stone");
+        modify(
+            t,
+            stone,
+            vec![
+                Modification::AddTypes(vec![CardType::Creature]),
+                Modification::SetPT(Some(Value::c(2)), Some(Value::c(2))),
+            ],
+        );
+        assert!(t.obj_now(stone).is(CardType::Creature));
+    }
+    assert_eq!(ephara_next_upkeep(animated), (0, 0));
+}
