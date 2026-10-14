@@ -257,3 +257,103 @@ fn increasing_confusion_mills_twice_x_from_a_graveyard() {
     t.resolve_all();
     assert_eq!(t.graveyard_size(P1), 4);
 }
+
+#[test]
+fn kylox_exiles_cards_equal_to_the_sacrificed_creatures_total_power() {
+    cr!("608.2h", "107.3c");
+    ruling!(
+        "Kylox, Visionary Inventor",
+        "Use the power of the sacrificed creatures as they last existed on the battlefield to determine the value of X."
+    );
+    compiles("Kylox, Visionary Inventor");
+    let mut t = TestGame::new(2);
+    let kylox = t.battlefield(P0, "Kylox, Visionary Inventor");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 1, None);
+    for _ in 0..10 {
+        t.library_top(P0, "Island");
+    }
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer_choose(P0, &[Entity::Object(bear), Entity::Object(giant)]);
+    t.attack(&[(kylox, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bear) && !t.on_battlefield(giant));
+    // 3 (the Bears with its counter) + 3.
+    let exiled = t
+        .g
+        .exile
+        .iter()
+        .filter(|id| t.g.obj(**id).chars.name.as_str() == "Island")
+        .count();
+    assert_eq!(exiled, 6);
+}
+
+#[test]
+fn herald_of_ilharg_deals_damage_equal_to_its_counters() {
+    cr!("603.2");
+    compiles("Herald of Ilharg");
+    let mut t = TestGame::new(2);
+    let herald = t.battlefield(P0, "Herald of Ilharg");
+    t.lands(P0, "Forest", 6);
+    let wurm = t.hand(P0, "Craw Wurm");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, wurm).go();
+    t.resolve_all();
+    assert_eq!(t.counters(herald, "+1/+1"), 2);
+    assert_eq!(t.life(P1), 18);
+    // A smaller creature spell: counters, no damage.
+    t.lands(P0, "Forest", 2);
+    let bear = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bear).go();
+    t.resolve_all();
+    assert_eq!(t.counters(herald, "+1/+1"), 4);
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn seeds_of_innocence_gives_each_controller_the_mana_value_of_their_artifacts() {
+    cr!("608.2h");
+    compiles("Seeds of Innocence");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 3);
+    t.battlefield(P0, "Bonesplitter");
+    t.battlefield(P1, "Mind Stone");
+    t.battlefield(P1, "Coat of Arms");
+    let spell = t.hand(P0, "Seeds of Innocence");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+    assert_eq!(t.life(P1), 20 + 2 + 5);
+}
+
+#[test]
+fn sudden_salvation_draws_for_each_opponent_who_controls_a_returned_permanent() {
+    cr!("608.2c");
+    compiles("Sudden Salvation");
+    let mut t = TestGame::new(3);
+    let p2 = PlayerId(2);
+    t.lands(P0, "Plains", 4);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let c = t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(p2, "Llanowar Elves");
+    for o in [a, b, c] {
+        t.g.destroy(o, None);
+    }
+    t.resolve_all();
+    let targets: Vec<Entity> = [a, b, c]
+        .iter()
+        .map(|o| Entity::Object(t.g.current(*o)))
+        .collect();
+    let spell = t.hand(P0, "Sudden Salvation");
+    t.advance_to(P0, Step::PrecombatMain);
+    let hand = t.hand_size(P0);
+    t.answer_targets(P0, &targets);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // One opponent controls returned permanents: one card (the spell left the hand).
+    assert_eq!(t.hand_size(P0), hand - 1 + 1);
+}

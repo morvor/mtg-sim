@@ -400,6 +400,30 @@ pub(crate) fn count_ext(
     r: &str,
     b: &mut crate::oracle::effects::Builder,
 ) -> Option<(Value, String)> {
+    // "opponents who control one or more of those permanents" (Sudden Salvation).
+    for p in [
+        "opponent who controls one or more of those permanents",
+        "opponents who control one or more of those permanents",
+    ] {
+        if let Some(rest) = r.strip_prefix(p) {
+            let them = match super::pronoun_groups::plural_object_ref("those permanents", b) {
+                Some(Some((sel, _))) if !matches!(sel, Sel::None) => sel,
+                _ => return None,
+            };
+            if super::oracle_hardening_referents::is_no_referent(&them) {
+                return None;
+            }
+            let f = PlayerFilter::And(vec![
+                PlayerFilter::Opponent,
+                PlayerFilter::Controls(
+                    Box::new(Filter::In(Box::new(them))),
+                    Cmp::Ge,
+                    Box::new(Value::c(1)),
+                ),
+            ]);
+            return Some((Value::CountPlayers(f), rest.to_string()));
+        }
+    }
     // "Auras you controlled that were attached to it" after it left the battlefield: the
     // permanents attached to it as it last existed there, each as it last existed (CR
     // 608.2h; Hateful Eidolon rulings).
@@ -748,6 +772,11 @@ pub(crate) fn atom_ext(
     s: &str,
     _b: &mut crate::oracle::effects::Builder,
 ) -> Option<(Value, String)> {
+    // "the greatest power among those creatures", "their total power": an aggregate over
+    // the objects a plural pronoun refers to (CR 608.2h).
+    if let Some(v) = aggregate_over_them(s, _b) {
+        return Some(v);
+    }
     for p in ["the life lost this way", "the amount of life lost this way"] {
         if let Some(rest) = s.strip_prefix(p) {
             if rest.is_empty() || rest.starts_with([' ', ',', '.', ';', '"']) {
@@ -990,7 +1019,10 @@ fn join_named_followups(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String
                 && !prev.contains(':')
                 && !prev.contains('•')
                 && !prev.starts_with('(')
+                && !prev.contains('—')
                 && crate::oracle::strip_ability_word(prev) == prev
+                && crate::oracle::keywords::parse_keyword_line(prev, ctx).is_none()
+                && crate::oracle::statics::parse_spell_static(prev, ctx).is_none()
         };
         match out.last_mut() {
             Some(prev)
@@ -1010,3 +1042,135 @@ fn join_named_followups(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String
 }
 
 inventory::submit! { super::BlockGroupPattern { name: "referents: a spell paragraph naming what an earlier one chose", priority: 95, group: join_named_followups } }
+
+/// "the greatest power among those creatures" (Shriekwood Devourer, after "whenever you
+/// attack with one or more creatures"), "their total power" (Kylox, after "sacrifice any
+/// number of other creatures"), "the total power of those creatures".
+fn aggregate_over_them(
+    s: &str,
+    b: &mut crate::oracle::effects::Builder,
+) -> Option<(Value, String)> {
+    let (op, stat, pron, rest) = if let Some(r) = s.strip_prefix("their total ") {
+        let (stat, rest) = super::value_grammar::stat_word(r)?;
+        (AggOp::Sum, stat, "them", rest)
+    } else if let Some(r) = s.strip_prefix("the total ") {
+        let (stat, r) = super::value_grammar::stat_word(r)?;
+        let rest = r.strip_prefix(" of those creatures")?;
+        (AggOp::Sum, stat, "those creatures", rest)
+    } else {
+        let (op, r) = [
+            ("the greatest ", AggOp::Max),
+            ("the highest ", AggOp::Max),
+            ("the least ", AggOp::Min),
+            ("the lowest ", AggOp::Min),
+        ]
+        .into_iter()
+        .find_map(|(p, op)| s.strip_prefix(p).map(|r| (op, r)))?;
+        let (stat, r) = super::value_grammar::stat_word(r)?;
+        let rest = r
+            .strip_prefix(" among those creatures")
+            .or_else(|| r.strip_prefix(" among them"))?;
+        (op, stat, "those creatures", rest)
+    };
+    if !(rest.is_empty() || rest.starts_with([' ', ',', '.', ';', '"'])) {
+        return None;
+    }
+    let sel = match super::pronoun_groups::plural_object_ref(pron, b) {
+        Some(Some((sel, _))) if !matches!(sel, Sel::None) => sel,
+        // "sacrifice any number of other creatures, then ..., where X is their total
+        // power": the sacrificed creatures, as they last existed (CR 608.2h).
+        _ if pron == "them" && sacrificed_any_number_before() => Sel::Var(vars::SACRIFICED),
+        _ => return None,
+    };
+    if super::oracle_hardening_referents::is_no_referent(&sel) {
+        return None;
+    }
+    Some((Value::Aggregate(op, stat, Box::new(sel)), rest.to_string()))
+}
+
+/// Whether the sentence being read sacrificed "any number of" creatures before "their".
+fn sacrificed_any_number_before() -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    raw.split(['.', '\n']).any(|sentence| {
+        sentence
+            .find("sacrifice any number of ")
+            .zip(sentence.find("their total "))
+            .is_some_and(|(i, j)| i < j)
+    })
+}
+
+/// "~ deals damage equal to the number of counters on it to each opponent" (Herald of
+/// Ilharg, after "If that spell has mana value 5 or greater"): "it" is the subject, ~.
+fn counters_on_it_the_subject(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if in_standard() {
+        return None;
+    }
+    const P: &str = "~ deals damage equal to the number of counters on it ";
+    if !block.contains(P) {
+        return None;
+    }
+    let rewritten = block.replacen(P, "~ deals damage equal to the number of counters on ~ ", 1);
+    reread(block, &rewritten, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "referents: ~ deals damage equal to the counters on it (the subject)", priority: 50, parse: counters_on_it_the_subject } }
+
+/// "Destroy all artifacts. They can't be regenerated. The controller of each of those
+/// artifacts gains life equal to its mana value." (Seeds of Innocence): each destroyed
+/// permanent's controller, as it last existed on the battlefield (CR 608.2h).
+fn controller_of_each_destroyed(s: &str, prev: &mut Effect, b: &mut crate::oracle::effects::Builder) -> bool {
+    let lower = s.to_lowercase();
+    let l = crate::oracle::phrases::end(&lower);
+    let Some(r) = l.strip_prefix("the controller of each of those ") else {
+        return false;
+    };
+    let Some((noun, r)) = r.split_once(' ') else {
+        return false;
+    };
+    let (gains, stat) = match r {
+        "gains life equal to its mana value" => (true, Stat::ManaValue),
+        "gains life equal to its power" => (true, Stat::Power),
+        "loses life equal to its mana value" => (false, Stat::ManaValue),
+        "loses life equal to its power" => (false, Stat::Power),
+        _ => return false,
+    };
+    fn destroys_all(e: &Effect) -> Option<&Filter> {
+        match e {
+            Effect::Seq(v) => v.iter().rev().find_map(destroys_all),
+            Effect::Destroy {
+                what: Sel::All(f), ..
+            } => Some(f),
+            _ => None,
+        }
+    }
+    let Some(f) = destroys_all(prev) else {
+        return false;
+    };
+    // The noun names what was destroyed ("Destroy all artifacts. ... each of those
+    // artifacts").
+    let Some((nf, true, tail)) = crate::oracle::phrases::parse_object_phrase(noun) else {
+        return false;
+    };
+    if !tail.trim().is_empty() || !format!("{f:?}").contains(&format!("{nf:?}")) {
+        return false;
+    }
+    let _ = b;
+    let each = vars::USER + 12_006;
+    let who = PlayerRef::ControllerOf(Box::new(Sel::Var(each)));
+    let n = super::value_grammar::of_referent(stat, Sel::Var(each));
+    let act = if gains {
+        Effect::GainLife { who, n }
+    } else {
+        Effect::LoseLife { who, n }
+    };
+    let e = Effect::ForEach {
+        sel: Sel::Var(crate::kw::value_results::DESTROYED),
+        var: each,
+        effect: Box::new(act),
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "referents: the controller of each of those [destroyed] gains life equal to its mana value", priority: 1500, apply: controller_of_each_destroyed } }
