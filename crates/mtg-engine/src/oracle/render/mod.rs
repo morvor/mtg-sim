@@ -11,6 +11,8 @@
 //! card a mismatch: nothing is silently dropped.
 
 pub mod compare;
+mod condition_terms;
+mod activation_triggers;
 mod copy_exceptions;
 mod costs;
 mod counter_replacements;
@@ -29,6 +31,8 @@ mod once_each_turn;
 mod outcomes;
 mod play_terms;
 mod players;
+mod replacement_terms;
+mod spell_cost_terms;
 mod statics;
 mod tail_parts;
 mod this_turn;

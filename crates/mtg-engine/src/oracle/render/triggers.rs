@@ -282,6 +282,9 @@ impl Renderer<'_> {
     /// Event with a determiner for its object ("a creature" / "one or more creatures").
     fn trigger_event(&mut self, t: &TriggerCond, det: Det) -> Ev {
         let obj = |r: &mut Self, f: &Filter| -> String { r.noun_det(f, det.clone()) };
+        if let Some((s, vp)) = self.qualified_trigger_event(t, &det) {
+            return Ev::new(s, vp);
+        }
         match t {
             // "When ~ enters untapped".
             TriggerCond::EntersBattlefield(Filter::And(v))

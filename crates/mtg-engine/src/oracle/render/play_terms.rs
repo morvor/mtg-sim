@@ -23,6 +23,8 @@ fn cast_only_of<'a>(e: &'a Effect, x: &Sel) -> Option<(&'a PlayTerms, &'a Effect
     let not_land = |f: &Filter| matches!(f, Filter::Not(l) if matches!(l.as_ref(), Filter::Type(CardType::Land)));
     let in_exile = match cond {
         f if not_land(f) => false,
+        // "You may cast ~ for as long as it remains exiled": a permission to cast.
+        Filter::InZone(ZoneKind::Exile) => true,
         Filter::And(v)
             if v.len() == 2
                 && v.iter().any(not_land)

@@ -18,6 +18,9 @@ pub(crate) enum CustomQuality {
     /// Says nothing the noun doesn't: a rule of the instruction it's in ("attach it to a
     /// creature": only one it can legally be attached to, CR 701.3b).
     Implied,
+    /// An adjective that says where the object is, and a quality after the noun: "exiled
+    /// card used to craft it".
+    AdjRelInExile(&'static str, String),
 }
 
 /// The quality of a custom filter after a noun, if this module knows it.
@@ -102,6 +105,40 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             let k: i32 = n[8..].parse().ok()?;
             Some(Rel(format!("with base {what} {} or less", number_word(k))))
         }
+        // "you may attach an Equipment you control to it": only one that can be
+        // attached to it (CR 701.3b).
+        crate::kw::attach_choice::CAN_ATTACH_TO_RECIPIENT => Some(Implied),
+        crate::kw::attach_choice::ANOTHER_AURA_ATTACHED => rel("with another Aura attached to it"),
+        // CR 702.167a: "the exiled cards used to craft it".
+        crate::kw::craft::USED_TO_CRAFT => Some(AdjRelInExile("exiled", "used to craft ~it".into())),
+        // CR 702.143c.
+        crate::kw::foretell::FORETOLD_CARD => Some(Adj("foretold")),
+        crate::kwa::harness::HARNESSED => Some(Adj("harnessed")),
+        // CR 712.1.
+        crate::kw::dig_filters::DOUBLE_FACED => Some(Adj("double-faced")),
+        crate::kw::choice_grammar::DEALT_COMBAT_DAMAGE_TO_YOU => {
+            rel("that dealt combat damage to you this turn")
+        }
+        crate::kw::grant_filters::ATTACKING_SAME_AS_SOURCE => {
+            rel("attacking the same player or planeswalker")
+        }
+        crate::kw::permanent_cast_this_turn::YOU_CAST_THIS_TURN => rel("you cast this turn"),
+        crate::kw::dealt_damage_to_you::CONTROLLER_DEALT_COMBAT_DAMAGE_BY_SOURCE => {
+            rel("whose controller was dealt combat damage by ~ this turn")
+        }
+        crate::kw::dealt_damage_to_source::DEALT_DAMAGE_TO_SOURCE => {
+            rel("that dealt damage to ~it this turn")
+        }
+        crate::kw::activated_ability_kind::TURNED_FACE_UP_THIS_TURN => {
+            rel("that was turned face up this turn")
+        }
+        crate::kw::activated_ability_kind::ATTACKING_YOU_OR_YOUR_PLANESWALKER => {
+            rel("attacking you and/or planeswalkers you control")
+        }
+        n if n.starts_with(crate::kw::spell_cost_grammar::MANA_COST_IS) => Some(Rel(format!(
+            "with mana cost {}",
+            &n[crate::kw::spell_cost_grammar::MANA_COST_IS.len()..]
+        ))),
         n if n.starts_with("came from:") => match &n["came from:".len()..] {
             "Exile" => rel("from exile"),
             "Graveyard" => rel("from your graveyard"),

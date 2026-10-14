@@ -1117,6 +1117,9 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn cost_modifier(&mut self, cm: &CostModifier) -> String {
+        if let Some(s) = self.qualified_cost_modifier(cm) {
+            return s;
+        }
         // "The first creature spell you cast each turn costs {2} less to cast."
         let first = match &cm.applies_to {
             CostTarget::Spells(f) => Self::first_each_turn(f),
@@ -2251,6 +2254,9 @@ impl Renderer<'_> {
         use ReplacementAction as A;
         use ReplacementEvent as E;
         let _ = uses;
+        if let Some(s) = self.qualified_replacement(def) {
+            return s;
+        }
         match (&def.event, &def.action) {
             // --- Entering the battlefield (CR 614.1c).
             (E::EntersBattlefield(f), action) => {

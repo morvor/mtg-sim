@@ -869,6 +869,11 @@ impl Renderer<'_> {
                             np.zone_said = true;
                         }
                         Q::Implied => {}
+                        Q::AdjRelInExile(a, s) => {
+                            np.status.push(a.to_string());
+                            np.rel.push(s);
+                            np.zone_said = true;
+                        }
                         Q::Kind(k) => np.kind = Some(k),
                         Q::Adj(a) => np.status.push(a.to_string()),
                     }

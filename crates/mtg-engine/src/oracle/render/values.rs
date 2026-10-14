@@ -901,6 +901,11 @@ impl Renderer<'_> {
     }
 
     fn negated_condition(&mut self, c: &Condition) -> String {
+        if let Condition::Custom(n) = c {
+            if let Some(s) = self.custom_condition_terms(n, true) {
+                return s;
+            }
+        }
         match c {
             Condition::Exists(f) => self.exists(f, true),
             Condition::YourTurn => "it's not your turn".into(),
@@ -1652,6 +1657,13 @@ impl Renderer<'_> {
                 )
             }
             Duration::WhileYouControlSource => format!("for as long as you control {}", self.me()),
+            // "until ~ is cast from exile": once it's cast, it's no longer in exile.
+            Duration::WhileCondition(Condition::Not(c))
+                if matches!(c.as_ref(), Condition::Custom(n)
+                    if n == crate::oracle::patterns::grant_conditions::SOURCE_CAST_FROM_EXILE) =>
+            {
+                format!("until {} is cast from exile", self.me())
+            }
             Duration::WhileCondition(c) => {
                 let c = self.condition(c);
                 format!("for as long as {c}")
