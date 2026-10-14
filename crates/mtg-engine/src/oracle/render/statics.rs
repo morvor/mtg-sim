@@ -2418,12 +2418,24 @@ impl Renderer<'_> {
                         format!("~ escapes with {c} on {it}{}", w.unwrap_or_default())
                     }
                     A::AsEnters(e) => self.as_enters(&subj, e),
-                    A::EnterAsCopy { filter, optional } => {
+                    A::EnterAsCopy {
+                        filter,
+                        optional,
+                        tapped,
+                    } => {
                         // A copy of a permanent (CR 707.5): "any creature on the
                         // battlefield", "any creature on the battlefield with mana value 3
-                        // or less", "a creature you control".
+                        // or less", "a creature you control"; or of a card in another zone
+                        // ("any land card in a graveyard", CR 707.2).
                         let noun = self.noun(filter, Num::One);
-                        let mut alts = vec![format!("any {noun} on the battlefield")];
+                        let elsewhere = filter
+                            .zone()
+                            .is_some_and(|z| z != crate::ability::ZoneKind::Battlefield);
+                        let mut alts = vec![if elsewhere {
+                            format!("any {noun}")
+                        } else {
+                            format!("any {noun} on the battlefield")
+                        }];
                         if let Some((head, rest)) = noun.split_once(" with ") {
                             alts.push(format!("any {head} on the battlefield with {rest}"));
                         }
@@ -2442,10 +2454,11 @@ impl Renderer<'_> {
                         } else {
                             format!("{{alt:{}}}", alts.join("|"))
                         };
+                        let t = if *tapped { " tapped" } else { "" };
                         if *optional {
-                            format!("you may have {subj} enter as a copy of {n}")
+                            format!("you may have {subj} enter{t} as a copy of {n}")
                         } else {
-                            format!("{subj} enters as a copy of {n}")
+                            format!("{subj} enters{t} as a copy of {n}")
                         }
                     }
                     A::EnterUnderControl(p) => {

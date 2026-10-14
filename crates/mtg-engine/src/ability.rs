@@ -2461,8 +2461,13 @@ pub enum ReplacementAction {
     /// enters. Conditional ETB replacements ("enters tapped unless ...") are expressed as
     /// `AsEnters(If { .. })`.
     AsEnters(Box<Effect>),
-    /// Enters as a copy of (chosen) object (CR 707.9).
-    EnterAsCopy { filter: Filter, optional: bool },
+    /// Enters as a copy of (chosen) object (CR 707.9). `tapped`: "enter tapped as a copy
+    /// of": it enters tapped only if it copies something (Vesuva's rulings).
+    EnterAsCopy {
+        filter: Filter,
+        optional: bool,
+        tapped: bool,
+    },
     /// Enters under another player's control.
     EnterUnderControl(PlayerRef),
     /// Put into a different zone instead ("exile it instead").
