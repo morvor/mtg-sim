@@ -405,6 +405,13 @@ fn own_alternative(
         _ => None,
     };
     let pending: Vec<Filter> = heads.drain(group_start.min(heads.len())..).collect();
+    // Only card types and subtypes are narrowed ("spell or nonland permanent" is a spell
+    // or a nonland permanent).
+    let narrowing = narrowing.filter(|_| {
+        pending
+            .iter()
+            .all(|h| matches!(h, Filter::Type(_) | Filter::Subtype(_)))
+    });
     let pending = match pending.len() {
         0 => None,
         1 => pending.into_iter().next(),

@@ -517,10 +517,12 @@ pub(crate) fn source(s: &str, b: &mut OneShot) -> Option<Src> {
             .split_once(" and each ")
             .filter(|(one, _)| matches!(*one, "it" | "that creature"))
         {
-            if is_no_referent(&bb.it) {
+            // The one object "it" names (not a group the previous instruction acted on).
+            let it = super::pronoun_groups::singular_it(bb);
+            if is_no_referent(&it) || !super::filters_relational::names_one_object(&it) {
                 return None;
             }
-            let first = Filter::In(Box::new(bb.it.clone()));
+            let first = Filter::In(Box::new(it));
             let saved = bb.targets.len();
             let (sel, rest) = crate::oracle::effects::object_ref(&format!("each {others}"), bb)?;
             let Sel::All(f) = sel else { return None };
