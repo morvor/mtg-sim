@@ -49,7 +49,8 @@ inventory::submit! { EffectPattern { name: "game rules: that permanent card (the
 /// "Draw another card if you've completed a dungeon.": a conditional instruction.
 fn draw_another_if(l: &str, b: &mut Builder) -> Option<Effect> {
     let c = end(l).strip_prefix("draw another card if ")?;
-    let cond = crate::oracle::statics::parse_condition(c, b.ctx)?;
+    let cond = super::conditions_referents::parse_condition_with(c, b)
+        .or_else(|| crate::oracle::statics::parse_condition(c, b.ctx))?;
     Some(Effect::If {
         cond,
         then: Box::new(Effect::Draw {

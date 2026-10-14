@@ -326,3 +326,31 @@ fn banes_contingency_draws_when_the_spell_targets_your_commander() {
     assert!(t.on_battlefield(bears));
     assert_eq!(t.hand_size(P0), before - 1);
 }
+
+#[test]
+fn tevesh_szat_draws_another_card_for_a_sacrificed_commander() {
+    cr!("903.3", "608.2h");
+    assert_supported(&["Tevesh Szat, Doom of Fools"]);
+    let mut t = commander_game();
+    let tevesh = t.battlefield(P0, "Tevesh Szat, Doom of Fools");
+    let cmdr = commander_on_battlefield(&mut t, P0, "Grizzly Bears");
+    let before = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(cmdr)]);
+    // CR 903.9a: it stays in the graveyard.
+    t.answer_yes(P0, false);
+    t.activate(P0, tevesh, 1, &[]).unwrap();
+    t.resolve_all();
+    assert!(!t.on_battlefield(cmdr));
+    assert_eq!(t.hand_size(P0), before + 3);
+    // A noncommander: two cards.
+    let mut t = commander_game();
+    let tevesh = t.battlefield(P0, "Tevesh Szat, Doom of Fools");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let before = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.activate(P0, tevesh, 1, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 2);
+}
