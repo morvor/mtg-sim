@@ -129,11 +129,30 @@ pub fn substitute<T: serde::Serialize + serde::de::DeserializeOwned>(x: &T, it: 
 /// means there (`b.it`). Returns None if "it" has no antecedent. "Other" in a phrase
 /// related to "it" means other than it ("each other creature that shares a color with
 /// it", "other creatures you control that share a creature type with it").
+/// What a qualifier's "it" means where the effect parser uses it: what "it" refers to,
+/// or, where that's the source by default, a creature the text sacrificed ("You may
+/// sacrifice another creature. If you do, reveal cards ... until you reveal a
+/// nonlegendary creature card with lesser mana value": compared with the creature
+/// sacrificed, which the text names last, `value_results::note_sacrificed`).
+pub fn qualifier_it(b: &Builder) -> Sel {
+    let it = super::pronoun_groups::singular_it(b);
+    if matches!(it, Sel::This)
+        || crate::oracle::patterns::oracle_hardening_referents::is_no_referent(&it)
+    {
+        if let Some((_, sel)) = b.named.iter().rev().find(|(n, s)| {
+            n == "that creature" && matches!(s, Sel::Var(v) if *v == vars::SACRIFICED)
+        }) {
+            return sel.clone();
+        }
+    }
+    it
+}
+
 pub fn resolve_referent(f: Filter, b: &Builder) -> Option<Filter> {
     if !mentions_referent(&f) {
         return Some(f);
     }
-    let it = super::pronoun_groups::singular_it(b);
+    let it = qualifier_it(b);
     if !names_one_object(&it) {
         return None;
     }
@@ -851,7 +870,7 @@ pub fn resolve_in_sentence(e: Effect, b: &Builder, before: (Sel, usize)) -> Opti
     if !same_it || b.targets.len() != n {
         return Some(e);
     }
-    let it = super::pronoun_groups::singular_it(b);
+    let it = qualifier_it(b);
     if !names_one_object(&it) {
         return Some(e);
     }

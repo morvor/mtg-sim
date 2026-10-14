@@ -247,3 +247,44 @@ fn return_from_graveyard_reordered(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "return from your graveyard to [zone] [objects]", priority: 100, parse: return_from_graveyard_reordered } }
+
+/// "For each spell and ability your opponents control, counter it unless its controller
+/// pays {4}." (Whirlwind Denial): the spells and the activated and triggered abilities on
+/// the stack as one group (CR 701.6b: an ability can be countered).
+fn each_spell_and_ability(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for each spell and ability ")?;
+    let e = parse_clause(&format!("for each spell {r}"), b)?;
+    let Effect::ForEach {
+        sel: Sel::All(f),
+        var,
+        effect,
+    } = e
+    else {
+        return None;
+    };
+    let spells_or_abilities = Filter::Or(vec![
+        Filter::Spell,
+        Filter::Custom(crate::game_terms::ACTIVATED_ABILITY.into()),
+        Filter::Custom(crate::game_terms::TRIGGERED_ABILITY.into()),
+    ]);
+    let Filter::And(parts) = f else {
+        return None;
+    };
+    if !parts.iter().any(|p| matches!(p, Filter::Spell)) {
+        return None;
+    }
+    let parts = parts
+        .into_iter()
+        .map(|p| match p {
+            Filter::Spell => spells_or_abilities.clone(),
+            p => p,
+        })
+        .collect();
+    Some(Effect::ForEach {
+        sel: Sel::All(Filter::And(parts)),
+        var,
+        effect,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "for each spell and ability [...], ...", priority: 60, parse: each_spell_and_ability } }

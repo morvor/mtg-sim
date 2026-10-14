@@ -1249,7 +1249,7 @@ fn signed_value(s: &str) -> Option<Value> {
 pub fn parse_simple(l: &str, b: &mut Builder) -> Option<Effect> {
     // "it" in an object qualifier ("search for a creature card with lesser mana value")
     // means what "it" meant as the clause began (see `patterns::filters_relational`).
-    let it = super::patterns::pronoun_groups::singular_it(b);
+    let it = super::patterns::filters_relational::qualifier_it(b);
     let e = parse_simple_clause(l, b)?;
     let e = super::patterns::filters_relational::resolve_clause(e, &it);
     super::patterns::filters_relational::note_sacrificed(&e, b);
