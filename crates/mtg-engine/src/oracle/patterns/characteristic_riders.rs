@@ -411,7 +411,12 @@ inventory::submit! { super::StaticPattern { name: "characteristic riders: [objec
 /// last predicate grants quoted abilities (layer 6, CR 613.1f).
 fn becomes_it_has_it_gains(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    if !l.contains(" becomes ") || !(l.contains(", it has ") || l.contains(", and it gains ")) {
+    // (With a quoted ability: "[...], and it gains [keyword]" is left to the patterns
+    // for keywords.)
+    if !l.contains(" becomes ")
+        || !l.contains('"')
+        || !(l.contains(", it has ") || l.contains(", and it gains "))
+    {
         return None;
     }
     let (masked, quotes) = super::statics::mask_quotes(l)?;
@@ -653,6 +658,11 @@ fn conditional_rider(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some((cond, rider)) = l.strip_prefix("if ").and_then(|r| r.split_once(", ")) else {
         return false;
     };
+    // A condition about the permanent itself ("If it's a creature, it's a Zombie ...") is
+    // checked once it's on the battlefield (see `conditional_followups`).
+    if ["it ", "it's ", "that ", "they "].iter().any(|p| cond.starts_with(p)) {
+        return false;
+    }
     let rider = rider
         .replacen("those permanents are ", "they're ", 1)
         .replacen("those creatures are ", "they're ", 1);

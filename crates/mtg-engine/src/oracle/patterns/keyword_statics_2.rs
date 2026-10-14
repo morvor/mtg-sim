@@ -367,6 +367,10 @@ fn otherwise_statics(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
     if let Some(i) = l.find(". otherwise, ") {
         let first = &block[..i + 1];
         let second = &block[i + ". otherwise, ".len()..];
+        // A pronoun refers to the first sentence's subject: left to `statics_sentences`.
+        if ["it ", "they ", "its "].iter().any(|p| second.to_lowercase().starts_with(p)) {
+            return None;
+        }
         let a = single(first)?;
         let cond = a.condition.clone()?;
         let mut b = single(&capitalize(second))?;

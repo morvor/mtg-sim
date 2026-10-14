@@ -16,6 +16,48 @@ fn is_word(c: char) -> bool {
     c.is_alphanumeric() || c == '-'
 }
 
+/// Replaces "named [name]" inside quotes, for each of the card's `names`, by a placeholder
+/// that [`restore_names`] turns back into the name: in an ability granted to another
+/// object, the name is the name, not "~".
+pub fn protect_names_in_quotes(s: &str, names: &[String]) -> (String, Vec<String>) {
+    let mut out = String::with_capacity(s.len());
+    let mut kept = Vec::new();
+    for (i, part) in s.split('"').enumerate() {
+        if i > 0 {
+            out.push('"');
+        }
+        if i % 2 == 0 {
+            out.push_str(part);
+            continue;
+        }
+        let mut p = part.to_string();
+        for n in names {
+            if n.is_empty() {
+                continue;
+            }
+            // Only a count of permanents by name ("the number of permanents named Food
+            // Fight you control"); other phrases with the card's name read "named ~".
+            let pat = format!("permanents named {n}");
+            if p.contains(&pat) {
+                let k = kept.len();
+                kept.push(n.clone());
+                p = p.replace(&pat, &format!("permanents named \u{3}{k}\u{3}"));
+            }
+        }
+        out.push_str(&p);
+    }
+    (out, kept)
+}
+
+/// Undoes [`protect_names_in_quotes`].
+pub fn restore_names(s: &str, kept: &[String]) -> String {
+    let mut out = s.to_string();
+    for (k, n) in kept.iter().enumerate() {
+        out = out.replace(&format!("\u{3}{k}\u{3}"), n);
+    }
+    out
+}
+
 /// "1,000" → "1000" (digits grouped by commas, CR 107.1).
 pub fn thousands(s: &str) -> String {
     let b = s.as_bytes();

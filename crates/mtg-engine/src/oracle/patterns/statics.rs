@@ -437,6 +437,12 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((Filter::SameNameAs(Box::new(Sel::This)), r));
         }
     }
+    // "named Sound the Call" (a card's name kept in a quoted ability, CR 201.2).
+    if let Some(r) = t.strip_prefix("named ") {
+        if let Some((name, rest)) = super::value_grammar::literal_card_name(r) {
+            return Some((Filter::Named(name.into()), rest));
+        }
+    }
     // "with power greater than the number of cards in your hand", "with power less than
     // the number of Islands you control"
     for (p, cmp) in [

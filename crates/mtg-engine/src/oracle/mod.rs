@@ -209,6 +209,19 @@ fn normalize_impl(text: &str, ctx: &CompileContext, alt: bool) -> String {
         }
     }
     names.sort_by_key(|n| std::cmp::Reverse(n.len()));
+    // In a quoted ability granted to other objects, "named [the card's name]" is that name,
+    // not a reference to the object that has the ability (Food Fight: "permanents named
+    // Food Fight").
+    // (A quote's text normalized on its own counts as quoted.)
+    let quoted_alone =
+        !s.contains('"') && RAW_TEXT.with(|r| r.borrow().contains(&format!("\"{}", text.trim())));
+    let protected = if quoted_alone {
+        let (inner, kept) = self_refs::protect_names_in_quotes(&format!("\"{s}\""), &names);
+        (inner[1..inner.len() - 1].to_string(), kept)
+    } else {
+        self_refs::protect_names_in_quotes(&s, &names)
+    };
+    s = protected.0;
     for n in &names {
         // A short name, or a name that's also a subtype ("Assembly-Worker"), is the card
         // only as a whole word not used as the subtype (see `self_refs`).
@@ -269,7 +282,7 @@ fn normalize_impl(text: &str, ctx: &CompileContext, alt: bool) -> String {
     for r in SELF_REFS {
         s = replace_ci(&s, r, "~");
     }
-    s
+    self_refs::restore_names(&s, &protected.1)
 }
 
 /// [`normalize`], with a planeswalker's first name that's its subtype read as its name
