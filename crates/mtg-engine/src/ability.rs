@@ -2851,6 +2851,56 @@ pub enum Restriction {
         blocker: Filter,
         n: Value,
     },
+    /// "~ can't attack unless a black or green creature also attacks" (CR 508.1c): each
+    /// such creature can attack only if another creature matching `companion` (relative
+    /// to the source) attacks too (Scarred Puma ruling: "other than itself").
+    AttackOnlyWith {
+        attackers: Filter,
+        companion: Filter,
+    },
+    /// "~ can't block unless a creature with greater power also blocks" (CR 509.1b).
+    BlockOnlyWith {
+        blockers: Filter,
+        companion: Filter,
+    },
+    /// "~ can't block creatures with power 2 or greater unless you pay {1}", "Nonblue
+    /// creatures can't block creatures you control unless their controller pays 1 life for
+    /// each blocking creature they control", "Enchanted creature can't be blocked unless
+    /// defending player pays {1} for each creature they control that's blocking it": each
+    /// creature matching `blockers` that blocks a creature matching `attackers` costs its
+    /// controller `cost` (once per blocking creature; CR 509.1c-d).
+    BlockCostAgainst {
+        blockers: Filter,
+        attackers: Filter,
+        cost: Cost,
+    },
+    /// "Each opponent must attack [you or a planeswalker you control] with at least one
+    /// creature each combat if able": a requirement on the attacking player's declaration
+    /// as a whole (CR 508.1d): at least one of their creatures attacks (with `defender`,
+    /// attacks that player, or with `planeswalkers` a planeswalker they control).
+    PlayerMustAttack {
+        players: PlayerFilter,
+        defender: Option<PlayerFilter>,
+        planeswalkers: bool,
+    },
+    /// "~ can't be blocked unless all creatures defending player controls block it": it
+    /// can't be blocked except by at least `n` creatures (menace-like, CR 509.1b).
+    MinBlockersCounted {
+        attacker: Filter,
+        n: Value,
+    },
+    /// "~ can block Dragons as though it had reach", "can block creatures with landwalk
+    /// abilities as though they didn't have those abilities", "can block creatures with
+    /// shadow as though they didn't have shadow" (CR 509.1b with 609.4): the evasion
+    /// ability `evasion` of attackers matching `attackers` doesn't stop it from blocking
+    /// them.
+    BlockIgnoringEvasion {
+        blocker: Filter,
+        attackers: Filter,
+        evasion: crate::keywords::KeywordKind,
+    },
+    /// "~ can't attack a player it has already attacked this turn" (CR 508.1c, 508.6).
+    CantAttackPlayerAgain(Filter),
     /// "can't block creatures with power greater than this"...
     Custom(SmolStr),
 }

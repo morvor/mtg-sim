@@ -138,3 +138,201 @@ fn p_since_turn_began(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "combat requirements: controlled since the beginning of the turn", priority: 90, parse: p_since_turn_began } }
+
+fn restriction(r: Restriction, text: &str) -> Ability {
+    AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(r))),
+        text,
+    )
+}
+
+/// "a black or green creature", "a creature with greater power" (than ~): one creature,
+/// relative to the source.
+fn companion(s: &str) -> Option<Filter> {
+    let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    // "with greater power": greater than the source's.
+    if let Some(noun) = s.strip_suffix(" with greater power") {
+        let (f, plural) = super::statics::whole_object_phrase(noun)?;
+        if plural {
+            return None;
+        }
+        return Some(Filter::and(vec![
+            f,
+            Filter::Power(Cmp::Gt, Box::new(Value::PowerOf(Box::new(Sel::This)))),
+        ]));
+    }
+    let (f, plural) = super::statics::whole_object_phrase(s)?;
+    if plural
+        || serde_json::to_string(&f)
+            .unwrap_or_default()
+            .contains("Source")
+    {
+        return None;
+    }
+    Some(f)
+}
+
+/// Static combat restrictions on the source: "~ can't attack unless [a creature] also
+/// attacks", "~ can't block unless [a creature] also blocks", "~ can't be blocked unless
+/// all creatures defending player controls block it", "~ can't attack a player it has
+/// already attacked this turn", "~ can't block creatures with power 2 or greater unless
+/// you pay {1}".
+fn source_restrictions(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l.trim());
+    if let Some(c) = l
+        .strip_prefix("~ can't attack unless ")
+        .and_then(|r| r.strip_suffix(" also attacks"))
+    {
+        return Some(vec![restriction(
+            Restriction::AttackOnlyWith {
+                attackers: Filter::Source,
+                companion: companion(c)?,
+            },
+            text,
+        )]);
+    }
+    if let Some(c) = l
+        .strip_prefix("~ can't block unless ")
+        .and_then(|r| r.strip_suffix(" also blocks"))
+    {
+        return Some(vec![restriction(
+            Restriction::BlockOnlyWith {
+                blockers: Filter::Source,
+                companion: companion(c)?,
+            },
+            text,
+        )]);
+    }
+    if l == "~ can't be blocked unless all creatures defending player controls block it" {
+        return Some(vec![restriction(
+            Restriction::MinBlockersCounted {
+                attacker: Filter::Source,
+                n: Value::Count(Filter::and(vec![
+                    Filter::creature(),
+                    Filter::ControlledBy(PlayerRel::Defending),
+                ])),
+            },
+            text,
+        )]);
+    }
+    if l == "~ can't attack a player it has already attacked this turn" {
+        return Some(vec![restriction(
+            Restriction::CantAttackPlayerAgain(Filter::Source),
+            text,
+        )]);
+    }
+    // "~ can't block creatures with power 2 or greater unless you pay {1}".
+    if let Some(r) = l.strip_prefix("~ can't block ") {
+        let (attackers, pay) = r.split_once(" unless you pay ")?;
+        let (a, plural) = super::statics::whole_object_phrase(attackers)?;
+        if !plural {
+            return None;
+        }
+        let cost = super::counters_resources_pay::resolution_cost(pay)?;
+        return Some(vec![restriction(
+            Restriction::BlockCostAgainst {
+                blockers: Filter::Source,
+                attackers: a,
+                cost,
+            },
+            text,
+        )]);
+    }
+    None
+}
+
+inventory::submit! { super::StaticPattern { name: "combat requirements: restrictions on ~", priority: 120, parse: source_restrictions } }
+
+/// Block taxes keyed to the attacker: "[blockers] can't block [attackers] unless their
+/// controller pays [cost] for each blocking creature they control" (Heat Wave),
+/// "enchanted creature can't be blocked unless defending player pays [cost] for each
+/// creature they control that's blocking it" (Awesome Presence).
+fn block_taxes(l: &str, text: &str, _ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l.trim());
+    if let Some(r) = l
+        .strip_prefix("enchanted creature can't be blocked unless defending player pays ")
+        .or_else(|| {
+            l.strip_prefix("equipped creature can't be blocked unless defending player pays ")
+        })
+    {
+        let pay = r.strip_suffix(" for each creature they control that's blocking it")?;
+        let cost = super::counters_resources_pay::resolution_cost(pay)?;
+        return Some(vec![restriction(
+            Restriction::BlockCostAgainst {
+                blockers: Filter::creature(),
+                attackers: Filter::AttachedToSource,
+                cost,
+            },
+            text,
+        )]);
+    }
+    let (subject, r) = l.split_once(" can't block ")?;
+    let (attackers, pay) = r.split_once(" unless their controller pays ")?;
+    let pay = pay.strip_suffix(" for each blocking creature they control")?;
+    let (b, plural) = super::statics::whole_object_phrase(subject)?;
+    let (a, plural2) = super::statics::whole_object_phrase(attackers)?;
+    if !plural || !plural2 {
+        return None;
+    }
+    let cost = super::counters_resources_pay::resolution_cost(pay)?;
+    Some(vec![restriction(
+        Restriction::BlockCostAgainst {
+            blockers: b,
+            attackers: a,
+            cost,
+        },
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "combat requirements: block taxes keyed to the attacker", priority: 120, parse: block_taxes } }
+
+/// "Each opponent must attack [you or a planeswalker you control] with at least one
+/// creature each combat if able."
+fn player_must_attack(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("each opponent must attack ")?;
+    let r = r.strip_suffix("with at least one creature each combat if able")?;
+    let (defender, planeswalkers) = match r.trim() {
+        "" => (None, false),
+        "you" => (Some(PlayerFilter::You), false),
+        "you or a planeswalker you control" => (Some(PlayerFilter::You), true),
+        _ => return None,
+    };
+    Some(vec![restriction(
+        Restriction::PlayerMustAttack {
+            players: PlayerFilter::Opponent,
+            defender,
+            planeswalkers,
+        },
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "combat requirements: each opponent must attack", priority: 120, parse: player_must_attack } }
+
+/// "The attacking player chooses how each creature blocks each combat." (Invasion Plans)
+fn attacking_player_chooses_blocks(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    (end(l.trim()) == "the attacking player chooses how each creature blocks each combat").then(
+        || {
+            vec![restriction(
+                Restriction::Custom(crate::block_choice::ATTACKING_PLAYER_CHOOSES_BLOCKS.into()),
+                text,
+            )]
+        },
+    )
+}
+
+inventory::submit! { super::StaticPattern { name: "combat requirements: the attacking player chooses blocks", priority: 120, parse: attacking_player_chooses_blocks } }

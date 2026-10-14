@@ -3278,6 +3278,12 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         Restriction::ExtraBlocks { blocker, .. }
         | Restriction::ExtraBlocksCounted { blocker, .. } => Some(blocker),
         Restriction::AssignAsThoughUnblocked { what, .. } => Some(what),
+        Restriction::AttackOnlyWith { attackers: f, .. }
+        | Restriction::BlockOnlyWith { blockers: f, .. }
+        | Restriction::BlockCostAgainst { blockers: f, .. }
+        | Restriction::MinBlockersCounted { attacker: f, .. }
+        | Restriction::BlockIgnoringEvasion { blocker: f, .. }
+        | Restriction::CantAttackPlayerAgain(f) => Some(f),
         Restriction::MinBlockers { attacker, .. }
         | Restriction::MaxBlockedBy { attacker, .. }
         | Restriction::MustBeBlockedBy { attacker, .. }
@@ -3311,6 +3317,9 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
             players: defender, ..
         }
         | Restriction::MaxBlockersOf { who: defender, .. }
+        | Restriction::PlayerMustAttack {
+            players: defender, ..
+        }
         | Restriction::MaxAttackersAgainst {
             player: Some(defender),
             ..
