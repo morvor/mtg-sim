@@ -25,7 +25,8 @@ mkdir -p "$MS" "$OUT"
 for stem in "$@"; do
   # Fresh, unmutated source (an interrupted --in-place run may have left a mutation behind).
   find "$MS" -mindepth 1 -maxdepth 1 ! -name target -exec rm -rf {} +
-  tar -C "$WT" --exclude=./target --exclude=./.git -cf - . | tar -C "$MS" -xf -
+  # -m: fresh mtimes, so cargo rebuilds rather than reusing the last mutant's binaries.
+  tar -C "$WT" --exclude=./target --exclude=./.git -cf - . | tar -C "$MS" -xmf -
   file=crates/mtg-engine/src/$stem.rs
   n=$(cd "$MS" && cargo mutants --list -f "$file" | wc -l)
   k=$SAMPLE

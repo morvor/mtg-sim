@@ -50,3 +50,21 @@ Each surviving mutant is classified as
 - **(c) engine bug**: fixed with a regression test.
 
 ## Results
+
+| File | Mutants (all) | Sampled | Caught | Missed | Timeout | Unviable | Kill rate | After new tests |
+|---|---|---|---|---|---|---|---|---|
+| sba.rs | 154 | 16 (1/10) | 14 | 2 | 0 | 0 | 87.5% | 87.5% (both survivors equivalent) |
+
+### sba.rs
+
+Run 2026-10-14, 16 of 154 mutants (round-robin 0/10), 23 minutes.
+
+- `sba.rs:293:34: replace || with && in Game::check_sbas` (704.5p, `!(is_aura || is_equipment
+  || is_fortification)` becomes `!(is_aura && is_equipment || is_fortification)`): **(a)
+  equivalent**. The two differ only for a permanent with the Aura subtype that is not an
+  enchantment, not a creature and not a battle (Auras that are enchantments take the branch
+  above). CR 205.3d does not allow that object: Aura is an enchantment subtype, and an object
+  that stops being an enchantment loses it.
+- `sba.rs:369:26: replace > with >= in Game::check_sbas` (704.5z roles, `ids.len() > 1`):
+  **(a) equivalent**. With exactly one Role the mutant sorts the one-element list, pops it
+  and puts nothing into the graveyard, the same result as skipping it.
