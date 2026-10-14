@@ -295,3 +295,119 @@ fn valgavoth_spells_cast_from_its_exile_cost_life() {
     let b = on_bf(&t, "Grizzly Bears");
     assert_eq!(t.obj_now(b).controller, P0);
 }
+
+#[test]
+fn ignite_the_future_cast_from_graveyard_lets_the_cards_be_cast_free() {
+    cr!("118.9", "702.34a");
+    assert_supported(&["Ignite the Future"]);
+    // Flashback: the exiled spell may be cast without paying its mana cost.
+    let mut t = TestGame::new(2);
+    let ignite = t.graveyard(P0, "Ignite the Future");
+    t.lands(P0, "Mountain", 8);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    t.cast(P0, ignite)
+        .method(CastMethod::Keyword(KeywordKind::Flashback))
+        .go();
+    t.resolve_all();
+    let bears = t.g.current(bears);
+    assert_eq!(t.zone(bears), Zone::Exile);
+    t.cast(P0, bears).method(CastMethod::Free).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // Cast from the hand: the cards must be paid for.
+    let mut t = TestGame::new(2);
+    let ignite = t.hand(P0, "Ignite the Future");
+    t.lands(P0, "Mountain", 4);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    t.cast(P0, ignite).go();
+    t.resolve_all();
+    let bears = t.g.current(bears);
+    assert!(t.cast(P0, bears).method(CastMethod::Free).try_go().is_err());
+}
+
+#[test]
+fn nahiri_equipment_spells_cast_this_way_are_free() {
+    cr!("118.9");
+    assert_supported(&["Nahiri, Forged in Fury"]);
+    let setup = |top: &str| {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Nahiri, Forged in Fury");
+        let bear = t.battlefield(P0, "Grizzly Bears");
+        let eq = t.battlefield(P0, "Bonesplitter");
+        t.g.attach(eq, Entity::Object(bear));
+        let card = t.library_top(P0, top);
+        t.attack(&[(bear, Entity::Player(P1))], &[]);
+        t.advance_to(P0, Step::PostcombatMain);
+        let card = t.g.current(card);
+        assert_eq!(t.zone(card), Zone::Exile);
+        (t, card)
+    };
+    let (mut t, card) = setup("Short Sword");
+    t.cast(P0, card).method(CastMethod::Free).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Short Sword").len(), 1);
+    // Not an Equipment: only for its mana cost.
+    let (mut t, card) = setup("Ornithopter");
+    assert!(t.cast(P0, card).method(CastMethod::Free).try_go().is_err());
+    t.cast(P0, card).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
+}
+
+fn foods(t: &TestGame) -> usize {
+    t.g.battlefield
+        .iter()
+        .filter(|o| t.g.obj(**o).chars.has_subtype("Food"))
+        .count()
+}
+
+#[test]
+fn the_fourth_doctor_creates_food_when_a_card_is_played_this_way() {
+    cr!("400.7i", "603.2");
+    assert_supported(&["The Fourth Doctor"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Fourth Doctor");
+    let land = t.library_top(P0, "Academy Ruins");
+    t.play_land(P0, land).unwrap();
+    t.resolve_all();
+    assert_eq!(foods(&t), 1);
+    // A land from the hand: no Food.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Fourth Doctor");
+    let land = t.hand(P0, "Academy Ruins");
+    t.play_land(P0, land).unwrap();
+    t.resolve_all();
+    assert_eq!(foods(&t), 0);
+}
+
+#[test]
+fn quintorius_spell_cast_this_way_goes_to_the_bottom_of_the_library() {
+    cr!("614.1a", "118.9");
+    assert_supported(&["Quintorius, Loremaster"]);
+    let mut t = TestGame::new(2);
+    let q = t.battlefield(P0, "Quintorius, Loremaster");
+    t.lands(P0, "Mountain", 2);
+    t.battlefield(P0, "Plains");
+    t.library_top(P0, "Island");
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Object(bolt)]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let bolt = t.g.current(bolt);
+    assert_eq!(t.zone(bolt), Zone::Exile);
+    t.activate(P0, q, 0, &[Entity::Object(bolt)]).unwrap();
+    t.resolve_all();
+    t.cast(P0, bolt)
+        .method(CastMethod::Free)
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    let bottom = t.g.player(P0).library[0];
+    assert_eq!(t.g.obj(bottom).chars.name, "Lightning Bolt");
+    assert!(!t.in_graveyard(P0, "Lightning Bolt"));
+}

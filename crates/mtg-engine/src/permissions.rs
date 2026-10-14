@@ -228,6 +228,7 @@ pub fn allowing(
             once: None,
             qualities,
         });
+        free_option(g, card, chars, land, &ctx, &mut out);
     }
     // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission to
     // cast spells "with certain qualities" only by a player who may look at it (and then
@@ -274,6 +275,7 @@ pub fn allowing(
             once: once.clone().map(|slot| (*src, slot)),
             qualities: Some((spell_qualities(&f), Some(*src), *ctl)),
         });
+        free_option(g, card, chars, land, &ctx, &mut out);
     }
     out.sort_by_key(|c| {
         (
@@ -283,6 +285,40 @@ pub fn allowing(
         )
     });
     out
+}
+
+/// "You may cast Equipment spells this way without paying their mana costs": the
+/// permission just added to `out` also lets a spell with those qualities be cast without
+/// paying its mana cost (CR 118.9), offered as the same permission used that way.
+fn free_option(
+    g: &Game,
+    card: ObjectId,
+    chars: &Characteristics,
+    land: bool,
+    ctx: &Ctx,
+    out: &mut Vec<CastPermission>,
+) {
+    let Some(last) = out.last() else {
+        return;
+    };
+    let Some(f) = last.terms.free_option.as_ref() else {
+        return;
+    };
+    if land || last.free || last.terms.alt_cost.is_some() {
+        return;
+    }
+    let f = crate::casting::as_spell_filter(f);
+    if !matches_with_chars(g, card, chars, &f, ctx) {
+        return;
+    }
+    let mut free = last.clone();
+    free.free = true;
+    // The spell must still have those qualities once proposed (CR 601.2e).
+    free.qualities = Some(match free.qualities.take() {
+        Some((q, src, ctl)) => (Filter::and(vec![q, f]), src, ctl),
+        None => (f, ctx.source, ctx.controller),
+    });
+    out.push(free);
 }
 
 /// The qualities of a permission's filter a spell must still have once its proposal is
@@ -696,6 +732,29 @@ pub fn spell_cast_with(g: &mut Game, perm: Option<&CastPermission>, spell: Objec
         ctx.set_var(vars::IT, vec![Entity::Object(spell)]);
         g.exec(e, &mut ctx);
         g.dirty = true;
+    }
+    // "If that spell would be put into a graveyard, put it on the bottom of its owner's
+    // library instead."
+    if let Some(d) = &c.terms.graveyard_instead {
+        let mut ctx = Ctx::new(c.source, g.obj(spell).controller);
+        ctx.set_var(vars::IT, vec![Entity::Object(spell)]);
+        g.exec(
+            &Effect::AddReplacement {
+                def: ReplacementDef {
+                    event: ReplacementEvent::ZoneChange {
+                        filter: Filter::In(Box::new(Sel::Var(vars::IT))),
+                        from: None,
+                        to: Some(ZoneKind::Graveyard),
+                    },
+                    action: ReplacementAction::MoveInstead(d.clone()),
+                    self_replacement: false,
+                    optional: false,
+                },
+                duration: Duration::Permanent,
+                uses: None,
+            },
+            &mut ctx,
+        );
     }
     if c.terms.exile_instead {
         let mut ctx = Ctx::new(c.source, g.obj(spell).controller);

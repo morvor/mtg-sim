@@ -168,6 +168,50 @@ fn apply_inner(l: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b: &Bu
         terms.cost_reduction += n;
         return true;
     }
+    // "You may cast Equipment spells this way without paying their mana costs.", "you may
+    // play cards this way without paying their mana costs".
+    if let Some(r) = l
+        .strip_prefix("you may cast ")
+        .or_else(|| l.strip_prefix("you may play "))
+        .and_then(|r| r.strip_suffix(" this way without paying their mana costs"))
+    {
+        if !spells || terms.free_option.is_some() || terms.alt_cost.is_some() {
+            return false;
+        }
+        let f = if r == "cards" || r == "spells" {
+            Filter::Any
+        } else {
+            let Some(card) = r.strip_suffix(" spells") else {
+                return false;
+            };
+            let phrase = format!("{card} cards");
+            let Some((f, true, rest)) = crate::oracle::phrases::parse_object_phrase(&phrase)
+            else {
+                return false;
+            };
+            if !end(rest).trim().is_empty() {
+                return false;
+            }
+            f
+        };
+        terms.free_option = Some(f);
+        return true;
+    }
+    // "If that spell would be put into a graveyard, put it on the bottom of its owner's
+    // library instead."
+    if matches!(
+        l,
+        "if that spell would be put into a graveyard, put it on the bottom of its owner's library instead"
+            | "if a spell cast this way would be put into a graveyard, put it on the bottom of its owner's library instead"
+    ) {
+        if !spells || terms.graveyard_instead.is_some() || terms.exile_instead {
+            return false;
+        }
+        let mut to = Destination::zone(ZoneKind::Library);
+        to.position = LibraryPosition::Bottom;
+        terms.graveyard_instead = Some(to);
+        return true;
+    }
     // "Mana of any type can be spent to cast spells this way."
     if matches!(
         l,
@@ -261,12 +305,65 @@ fn apply_inner(l: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b: &Bu
     true
 }
 
+/// "When you do, X" after a static permission: "When you play a card this way, X" (or
+/// "When you cast a spell this way, X" for a permission to cast spells), see
+/// `played_this_way`.
+pub(crate) fn when_you_do(s: &str, spells: bool, lands: bool) -> String {
+    let t = s.trim();
+    let lower = t.to_lowercase();
+    if lower.starts_with("when you do, ") {
+        let x = &t["when you do, ".len()..];
+        if lands && spells {
+            return format!("When you play a card this way, {x}");
+        }
+        if spells {
+            return format!("When you cast a spell this way, {x}");
+        }
+    }
+    t.to_string()
+}
+
 /// After an effect that gives a permission ("{T}: Until end of turn, you may cast creature
 /// spells from your graveyard by foraging in addition to paying their other costs. If you
 /// cast a spell this way, ...", "You may cast an artifact spell from among them this turn.
 /// If you do, it has affinity for artifacts."): the rider becomes part of its terms.
 fn f_rider(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l.trim()).trim().to_lowercase();
+    // "If ~ was cast from a graveyard, you may play cards this way without paying their
+    // mana costs.": the permission with that term if the condition holds as the effect
+    // resolves.
+    if let Some((c, r)) = l
+        .strip_prefix("if ")
+        .and_then(|r| r.split_once(", "))
+        .filter(|(_, r)| r.starts_with("you may "))
+    {
+        let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+            return false;
+        };
+        let target = match prev {
+            Effect::Seq(v) => match v.last_mut() {
+                Some(x) => x,
+                None => return false,
+            },
+            other => other,
+        };
+        let mut copy = target.clone();
+        let lands = last_allows_lands(&copy);
+        let Some(terms) = terms_of_last(&mut copy) else {
+            return false;
+        };
+        let lands = lands && !terms.spells_only;
+        if !apply(r, terms, true, lands, b) {
+            return false;
+        }
+        let original = std::mem::take(target);
+        *target = Effect::If {
+            cond,
+            then: Box::new(copy),
+            otherwise: Box::new(original),
+        };
+        return true;
+    }
     let mut copy = prev.clone();
     let lands = last_allows_lands(&copy);
     let Some(terms) = terms_of_last(&mut copy) else {
@@ -315,5 +412,61 @@ fn terms_of_last(e: &mut Effect) -> Option<&mut PlayTerms> {
         _ => None,
     }
 }
+
+/// "At the beginning of your next upkeep, you may cast that card without paying its mana
+/// cost. If that spell would be put into your graveyard, exile it instead." (Power Pack):
+/// the delayed triggered ability's spell (CR 603.7, 614.1a).
+fn f_delayed_cast_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l.trim()).trim().to_lowercase();
+    if !matches!(
+        l.as_str(),
+        "if that spell would be put into your graveyard, exile it instead"
+            | "if that spell would be put into a graveyard, exile it instead"
+    ) {
+        return false;
+    }
+    fn last_delayed(e: &mut Effect) -> Option<&mut Effect> {
+        if matches!(e, Effect::DelayedTrigger { .. }) {
+            return Some(e);
+        }
+        match e {
+            Effect::Seq(v) => v.last_mut().and_then(last_delayed),
+            _ => None,
+        }
+    }
+    fn ends_casting(e: &Effect) -> bool {
+        match e {
+            Effect::CastCard { .. } => true,
+            Effect::Seq(v) => v.last().is_some_and(ends_casting),
+            _ => false,
+        }
+    }
+    let Some(Effect::DelayedTrigger { body, .. }) = last_delayed(prev) else {
+        return false;
+    };
+    if !ends_casting(&body.effect) {
+        return false;
+    }
+    let replacement = Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::ZoneChange {
+                filter: Filter::In(Box::new(it())),
+                // (Only the spell: "it" is still the card if none was cast.)
+                from: Some(ZoneKind::Stack),
+                to: Some(ZoneKind::Graveyard),
+            },
+            action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+            self_replacement: false,
+            optional: false,
+        },
+        duration: Duration::Permanent,
+        uses: None,
+    };
+    let old = std::mem::take(&mut body.effect);
+    body.effect = Effect::seq(vec![old, replacement]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "permission riders: the spell a delayed trigger casts is exiled instead", priority: 40, apply: f_delayed_cast_exiled } }
 
 inventory::submit! { FollowupPattern { name: "permission riders: a rider on the spells cast with an effect's permission", priority: 96, apply: f_rider } }

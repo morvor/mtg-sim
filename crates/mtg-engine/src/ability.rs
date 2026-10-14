@@ -3518,6 +3518,15 @@ pub struct PlayTerms {
     /// for spells cast with the permission.
     #[serde(default)]
     pub cost_reduction: u32,
+    /// "You may cast Equipment spells this way without paying their mana costs": spells
+    /// with these qualities (relative to the permission's source and player) may also be
+    /// cast with the permission without paying their mana costs (CR 118.9).
+    #[serde(default)]
+    pub free_option: Option<Filter>,
+    /// "If that spell would be put into a graveyard, put it on the bottom of its owner's
+    /// library instead": where each spell cast with the permission goes instead (CR 614.1a).
+    #[serde(default)]
+    pub graveyard_instead: Option<Destination>,
     /// The effect that gave the permission (0: none recorded), which "cast this way"
     /// refers to (see `permissions::PermissionUse`).
     #[serde(default)]
@@ -3576,6 +3585,15 @@ impl PlayTerms {
             });
         }
         self.cost_reduction += other.cost_reduction;
+        if let Some(f) = &other.free_option {
+            self.free_option = Some(match self.free_option.take() {
+                Some(w) => Filter::Or(vec![w, f.clone()]),
+                None => f.clone(),
+            });
+        }
+        if other.graveyard_instead.is_some() {
+            self.graveyard_instead = other.graveyard_instead.clone();
+        }
     }
 }
 

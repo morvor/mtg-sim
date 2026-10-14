@@ -232,6 +232,8 @@ const LEADS: &[Lead] = &[
         p.your_turn = true;
         set_duration(p, Duration::UntilEndOfYourNextTurn)
     }),
+    // "For each card exiled this way, you may play that card ..." (each of them).
+    ("for each card exiled this way, ", |_| true),
     ("during your turn, ", |p| {
         p.your_turn = true;
         true
@@ -1187,7 +1189,6 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
     if p.lands
         || terms.flash
         || terms.extra_cost.is_some()
-        || terms.spend_any_type
         || terms.spend_as_any_color
         || terms.condition.is_some()
     {
@@ -1222,11 +1223,12 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
     if p.from != Some(From::Exile) && p.zone_filter.is_some() {
         return None;
     }
-    Some(Effect::CastCard {
+    let filter = Filter::and(vec![zone, what]);
+    let cast = Effect::CastCard {
         who: PlayerRef::You,
         what: Sel::Choose {
             chooser: PlayerRef::You,
-            filter: Filter::and(vec![zone, what]),
+            filter: filter.clone(),
             count: Value::c(if single {
                 1
             } else {
@@ -1237,7 +1239,20 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
         },
         free: p.free,
         optional: false,
-    })
+    };
+    // "..., and mana of any type can be spent to cast that spell" (CR 118.14): for the
+    // cards it may be cast from among.
+    if terms.spend_any_type {
+        return Some(Effect::seq(vec![
+            Effect::SpendAnyTypeMana {
+                who: PlayerRef::You,
+                what: Sel::All(filter),
+                duration: Duration::EndOfTurn,
+            },
+            cast,
+        ]));
+    }
+    Some(cast)
 }
 
 /// The cards a spell is chosen among as the effect resolves ("you may cast a spell from
@@ -2025,7 +2040,10 @@ fn statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
                 &Builder::new(ctx),
             )
         {
-            extra = super::played_this_way::static_rider(second, &mut p.terms, text, ctx)?;
+            // "When you do, create a Food token." (The Fourth Doctor): when a card is
+            // played with the permission.
+            let second = super::permission_riders::when_you_do(second, spells, lands);
+            extra = super::played_this_way::static_rider(&second, &mut p.terms, text, ctx)?;
         }
         let mut v = to_statics(&p, text, ctx)?;
         v.extend(extra);
