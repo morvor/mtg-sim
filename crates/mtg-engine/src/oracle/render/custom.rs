@@ -466,6 +466,9 @@ impl Renderer<'_> {
             }
             "card_left_your_graveyard_this_turn" => "a card left your graveyard this turn".into(),
             "you_lost_life_last_turn" => "you lost life last turn".into(),
+            crate::oracle::patterns::r603_entered_last_turn::CREATURE_ENTERED_LAST_TURN => {
+                "you had another creature enter the battlefield under your control last turn".into()
+            }
             "turn:this dealt damage to an opponent" => {
                 format!("{} dealt damage to an opponent this turn", me(self))
             }
