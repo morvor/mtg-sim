@@ -1028,12 +1028,30 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
 }
 
 /// Whether `e` is a process of several steps performed by one player (see
-/// [`perform_instruction`]).
+/// [`perform_instruction`]): at least two of its instructions are actions that happen in
+/// the game. One action with bookkeeping around it ("may have ~ deal 5 damage to them",
+/// recording who did; "search for a basic land card and put it onto the battlefield",
+/// recording who searched; "exile a card from their hand and may play that card") is
+/// still one action, performed for all of them as one event.
 fn is_process(e: &Effect) -> bool {
     match e {
         Effect::AsPlayer { effect, .. } | Effect::May { effect, .. } => is_process(effect),
-        Effect::Seq(v) => v.len() > 1 && !crate::trigger_timing::creates_tokens_together(v),
+        Effect::Seq(v) => {
+            !crate::trigger_timing::creates_tokens_together(v)
+                && v.iter().map(process_steps).sum::<usize>() > 1
+        }
         _ => false,
+    }
+}
+
+/// How many actions that happen in the game `e` consists of, for [`is_process`]:
+/// bookkeeping and play permissions granted aren't events.
+fn process_steps(e: &Effect) -> usize {
+    match e {
+        Effect::Seq(v) => v.iter().map(process_steps).sum(),
+        Effect::GrantPlayPermission { .. } => 0,
+        e if is_bookkeeping(e) => 0,
+        _ => 1,
     }
 }
 

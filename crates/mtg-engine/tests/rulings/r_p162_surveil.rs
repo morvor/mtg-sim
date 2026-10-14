@@ -58,7 +58,7 @@ fn eat_to_extinction_illegal_target_means_no_surveil_and_kept_card_stays_on_top(
 
 #[test]
 fn celestus_sanctifier_the_other_card_stays_on_top() {
-    cr!("701.25a", "726.2");
+    cr!("701.25a", "731.1");
     ruling!(
         "Celestus Sanctifier",
         "The card you don't put into your graveyard stays on top of your library."
@@ -80,7 +80,7 @@ fn celestus_sanctifier_the_other_card_stays_on_top() {
 
 #[test]
 fn gutless_plunderer_with_fewer_than_three_cards() {
-    cr!("701.25a", "401.5");
+    cr!("609.3");
     ruling!(
         "Gutless Plunderer",
         "If there are fewer than three cards remaining in your library when Gutless Plunderer's last ability resolves, look at all of the cards in your library and follow the instructions in order."
@@ -232,7 +232,7 @@ fn cephalid_inkmage_stays_blocked() {
 
 #[test]
 fn lodestone_needle_can_target_a_tapped_permanent() {
-    cr!("115.3", "122.1g");
+    cr!("701.26a", "609.3");
     ruling!(
         "Lodestone Needle // Guidestone Compass",
         "Lodestone Needle's enters-the-battlefield ability can target an artifact or creature that's already tapped. If so, you'll just put two stun counters on that artifact or creature."
@@ -428,6 +428,21 @@ fn ponder_and_natural_selection() {
         .filter(|c| t.zone(**c) == Zone::Hand(P0))
         .count();
     assert_eq!(in_lib + in_hand, 3);
+    // The library was shuffled, with those cards in it.
+    let shuffles = |t: &TestGame| {
+        t.g.turn_events
+            .iter()
+            .filter(|e| matches!(e, mtg_engine::events::Event::Shuffled { player } if *player == P0))
+            .count()
+    };
+    assert_eq!(shuffles(&t), 1);
+    // Not shuffling: the top card (as put back) is drawn.
+    let mut t = TestGame::new(2);
+    let cards = stack_library(&mut t, P0, &["Hill Giant", "Grizzly Bears", "Craw Wurm"]);
+    t.answer_yes(P0, false);
+    cast_resolve(&mut t, P0, "Ponder", &[]);
+    assert_eq!(shuffles(&t), 0);
+    assert_eq!(cards.iter().filter(|c| t.zone(**c) == Zone::Hand(P0)).count(), 1);
     // Natural Selection targets a player: it can't target one with hexproof.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Leyline of Sanctity");

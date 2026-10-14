@@ -131,7 +131,7 @@ fn putting_a_land_onto_the_battlefield_first_still_leaves_the_land_play() {
 
 #[test]
 fn into_the_wilds_leaves_a_nonland_card_on_top() {
-    cr!("401.5", "504.1");
+    cr!("504.1");
     ruling!(
         "Into the Wilds",
         "If the card is not a land card, or you choose not to put it onto the battlefield, it will stay on top of your library. In most cases, you’ll then draw it during your draw step."

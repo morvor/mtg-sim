@@ -78,7 +78,7 @@ fn requiting_hex_illegal_target_no_life_even_with_blight_paid() {
 
 #[test]
 fn cradle_of_vitality_triggers_per_life_gain_event() {
-    cr!("119.9", "603.2", "603.3d", "608.2b");
+    cr!("119.9", "603.2", "603.3d");
     ruling!(
         "Cradle of Vitality",
         "Cradle of Vitality triggers just once for each life-gaining event, whether it’s 1 life from Deathgreeter or 8 life from Soul’s Grace. You pay the cost just once, but the targeted creature will get a number of counters equal to the amount of life you gained."

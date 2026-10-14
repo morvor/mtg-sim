@@ -62,7 +62,7 @@ fn a_state_trigger_sees_a_momentary_state_and_doesnt_recheck() {
 
 #[test]
 fn lurebound_scarecrow_without_a_chosen_color_never_triggers() {
-    cr!("603.8", "607.2a");
+    cr!("603.8", "607.2d", "607.5a");
     ruling!(
         "Lurebound Scarecrow",
         "If you control a Lurebound Scarecrow but no color was chosen for it (perhaps because your Cemetery Puca turned into a Lurebound Scarecrow), the trigger condition will have an undefined value in it. It’ll never trigger, so you won’t have to sacrifice the Scarecrow."

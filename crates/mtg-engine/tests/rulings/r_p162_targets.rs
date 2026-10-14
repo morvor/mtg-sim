@@ -271,12 +271,8 @@ fn release_the_gremlins_x_is_limited_by_distinct_targets() {
         .x(2)
         .targets(&[Entity::Object(a), Entity::Object(a)])
         .try_go();
-    // The duplicate choice is rejected: either the spell can't be cast, or other targets
-    // were chosen; P1 is never dealt damage twice.
-    if r.is_ok() {
-        t.resolve_all();
-    }
-    assert!(t.life(P1) >= 16, "{r:?}");
+    assert!(r.is_err(), "{r:?}");
+    assert_eq!(t.zone(c), Zone::Hand(P0));
     // X = 1 can.
     t.clear_answers();
     t.cast(P0, c).x(1).target(a).go();
@@ -382,27 +378,39 @@ fn meteor_blast_deals_damage_to_each_remaining_legal_target() {
     t.resolve_all();
     assert_eq!(crate::r_s07_common::damage_on(&t, wurm), 4);
     assert_eq!(t.life(P1), 16);
-    // The same player twice for X = 2 isn't a legal choice.
+    // The same player twice for X = 2 isn't a legal choice: the answer is rejected, and
+    // the spell has two different targets.
     let mut t = TestGame::new(2);
-    mana(&mut t, P0, ManaType::R, 3);
-    mana(&mut t, P0, ManaType::C, 2);
-    let c = t.hand(P0, "Meteor Blast");
-    let r = t
-        .cast(P0, c)
-        .x(2)
-        .targets(&[Entity::Player(P1), Entity::Player(P1)])
-        .try_go();
-    // The duplicate choice is rejected: either the spell can't be cast, or other targets
-    // were chosen; P1 is never dealt damage twice.
-    if r.is_ok() {
-        t.resolve_all();
-    }
-    assert!(t.life(P1) >= 16, "{r:?}");
+    let spell = meteor_blast(&mut t, &[Entity::Player(P1), Entity::Player(P1)]);
+    assert_eq!(chosen_targets(&t, spell).len(), 2);
+    let mut chosen = chosen_targets(&t, spell);
+    chosen.dedup();
+    assert_eq!(chosen.len(), 2, "{chosen:?}");
+}
+
+/// The targets chosen for the spell `spell` on the stack (its only target slot).
+fn chosen_targets(t: &TestGame, spell: ObjectId) -> Vec<Entity> {
+    let si = t.g.obj(spell).stack.as_ref().expect("on the stack");
+    let mut v = si.chosen[0].targets[0].clone();
+    v.sort();
+    v
 }
 
 #[test]
 fn firestorm_deals_x_damage_to_each_of_x_targets() {
-    cr!("601.2b", "601.2c", "107.3a");
+    cr!("601.2b", "601.2c", "107.3a", "115.3");
+    ruling!(
+        "Firestorm",
+        "For example, if you discard four cards, you must target four different creatures and/or players. Firestorm will deal 4 damage to each of them."
+    );
+    ruling!(
+        "Firestorm",
+        "The same permanent or player can’t be targeted more than once."
+    );
+    ruling!(
+        "Firestorm",
+        "The value of X can’t exceed the number of cards in your hand or the number of available legal targets, whichever is smaller. X can be 0."
+    );
     supported("Firestorm");
     // "As an additional cost to cast this spell, discard X cards. Firestorm deals X damage
     // to each of X targets."
@@ -412,12 +420,58 @@ fn firestorm_deals_x_damage_to_each_of_x_targets() {
     t.hand(P0, "Island");
     mana(&mut t, P0, ManaType::R, 1);
     let c = t.hand(P0, "Firestorm");
-    t.cast(P0, c)
+    let spell = t
+        .cast(P0, c)
         .x(2)
         .targets(&[Entity::Object(wurm), Entity::Player(P1)])
         .go();
+    assert_eq!(
+        chosen_targets(&t, spell),
+        vec![Entity::Player(P1), Entity::Object(wurm)]
+    );
     t.resolve_all();
     assert_eq!(t.graveyard_size(P0), 3);
     assert_eq!(crate::r_s07_common::damage_on(&t, wurm), 2);
     assert_eq!(t.life(P1), 18);
+    // Fewer targets than X, or the same one twice, aren't legal: X different ones are
+    // chosen.
+    for answer in [vec![Entity::Player(P1)], vec![Entity::Player(P1), Entity::Player(P1)]] {
+        let mut t = TestGame::new(2);
+        t.hand(P0, "Forest");
+        t.hand(P0, "Island");
+        mana(&mut t, P0, ManaType::R, 1);
+        let c = t.hand(P0, "Firestorm");
+        let spell = t.cast(P0, c).x(2).targets(&answer).go();
+        assert_eq!(
+            chosen_targets(&t, spell),
+            vec![Entity::Player(P0), Entity::Player(P1)],
+            "{answer:?}"
+        );
+    }
+    // X = 0: no cards discarded, no targets, nothing dealt.
+    let mut t = TestGame::new(2);
+    let forest = t.hand(P0, "Forest");
+    mana(&mut t, P0, ManaType::R, 1);
+    let c = t.hand(P0, "Firestorm");
+    let spell = t.cast(P0, c).x(0).targets(&[]).go();
+    assert!(chosen_targets(&t, spell).is_empty());
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Hand(P0));
+    assert_eq!(t.graveyard_size(P0), 1);
+    assert_eq!((t.life(P0), t.life(P1)), (20, 20));
+    // X can't exceed the number of cards in hand: with one other card, X = 2 isn't
+    // possible.
+    let mut t = TestGame::new(2);
+    t.hand(P0, "Forest");
+    mana(&mut t, P0, ManaType::R, 1);
+    let c = t.hand(P0, "Firestorm");
+    let r = t
+        .cast(P0, c)
+        .x(2)
+        .targets(&[Entity::Player(P0), Entity::Player(P1)])
+        .try_go();
+    if let Ok(spell) = r {
+        let x = t.g.obj(spell).stack.as_ref().and_then(|s| s.x);
+        assert!(x.is_some_and(|x| x <= 1), "{x:?}");
+    }
 }

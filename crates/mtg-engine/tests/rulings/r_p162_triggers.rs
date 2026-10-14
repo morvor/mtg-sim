@@ -180,7 +180,7 @@ fn symmetry_matrix_sees_static_abilities_applying_to_the_entering_creature() {
 
 #[test]
 fn master_symmetrist_checks_only_when_it_attacks() {
-    cr!("603.4", "611.2c");
+    cr!("603.2");
     ruling!(
         "Master Symmetrist",
         "Master Symmetrist’s triggered ability only looks at the power and toughness of a creature when it attacks. Once the ability has triggered, changing the creature’s power or toughness will not stop it from gaining trample or remove trample from it."
@@ -200,7 +200,7 @@ fn master_symmetrist_checks_only_when_it_attacks() {
 
 #[test]
 fn liliana_s_reaver_creates_the_zombie_with_an_empty_hand() {
-    cr!("603.2", "608.2b");
+    cr!("609.3");
     ruling!(
         "Liliana's Reaver",
         "If the player’s hand is empty when the triggered ability resolves, you’ll still put a Zombie token onto the battlefield."
@@ -275,7 +275,7 @@ fn pain_magnification_needs_three_damage_at_once() {
 
 #[test]
 fn damage_reflection_triggers_even_if_the_creature_dies() {
-    cr!("603.10a", "603.2");
+    cr!("603.2", "113.7a");
     ruling!(
         "Spitemare",
         "Even if the amount of damage dealt to Spitemare is enough to destroy it, Spitemare’s ability will trigger and it will deal the full amount of damage to the target."
