@@ -1206,7 +1206,19 @@ impl Game {
             ReplKey::Instance(i) => (1u64 << 63) | i as u64,
             ReplKey::Player(p, u) => (3u64 << 62) ^ ((p.0 as u64) << 48) ^ u,
         };
-        let action = cand.def.action.clone();
+        let mut action = cand.def.action.clone();
+        // "Reveal that card and put it on top of your library instead": the card is
+        // revealed where it is (CR 701.20b) by the player it's moving away from, then the
+        // event is modified as any other move elsewhere.
+        if let (ReplacementAction::RevealAndMoveInstead(dest), ReplEvent::Move(m)) = (&action, &ev)
+        {
+            let who = match self.obj(m.obj).zone {
+                Zone::Hand(p) | Zone::Library(p) | Zone::Graveyard(p) => p,
+                _ => self.obj(m.obj).controller,
+            };
+            crate::reveal::reveal_in(self, who, &[m.obj], Some(&ctx));
+            action = ReplacementAction::MoveInstead(dest.clone());
+        }
         match (action, ev) {
             (
                 ReplacementAction::Prevent
@@ -1580,8 +1592,22 @@ impl Game {
                 // The amount may depend on the event's ("half that many, rounded down").
                 let mut c = ctx.clone();
                 c.event = Some(event_info_of(&ev));
-                let d = self.eval_value(&v, &c).max(0) as u32;
-                let e = scale_event(ev, |n| n.saturating_sub(d));
+                let e = match &v {
+                    // "it deals 2 damage instead": the amount minus (the amount minus 2) is
+                    // 2, even when that's more than the amount ("If any source would deal
+                    // 1 or more damage ..., it deals 2 damage ... instead").
+                    Value::Diff(a, b)
+                        if matches!(a.as_ref(), Value::EventAmount)
+                            && matches!(b.as_ref(), Value::Const(_)) =>
+                    {
+                        let k = self.eval_value(b, &c).max(0) as u32;
+                        scale_event(ev, |_| k)
+                    }
+                    _ => {
+                        let d = self.eval_value(&v, &c).max(0) as u32;
+                        scale_event(ev, |n| n.saturating_sub(d))
+                    }
+                };
                 if event_amount(&e) == Some(0) {
                     vec![]
                 } else {

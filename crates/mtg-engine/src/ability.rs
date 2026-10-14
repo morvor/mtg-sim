@@ -2419,6 +2419,11 @@ pub enum ReplacementAction {
     EnterUnderControl(PlayerRef),
     /// Put into a different zone instead ("exile it instead").
     MoveInstead(Destination),
+    /// The moving card is revealed, then put into a different zone instead ("you may
+    /// reveal that card and put it on top of your library instead of putting it anywhere
+    /// else", CR 701.20a, 614.1a). It's still the same event (a card discarded is still
+    /// discarded).
+    RevealAndMoveInstead(Destination),
     /// Nothing happens (skip, prevention of the entire event).
     Prevent,
     /// Prevent N damage (a shield that is used up).
