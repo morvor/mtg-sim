@@ -225,6 +225,12 @@ fn plausible_end(rest: &str) -> bool {
 }
 
 fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // CR 119.1: "your starting life total".
+    if let Some(r) = s.strip_prefix("your starting life total") {
+        if word_end(r) {
+            return Some((Value::StartingLife, r.to_string()));
+        }
+    }
     // "the number of cards you've drawn this turn" (Fractal Anomaly).
     if let Some(r) = s.strip_prefix("the number of cards you've drawn this turn") {
         if word_end(r) {
