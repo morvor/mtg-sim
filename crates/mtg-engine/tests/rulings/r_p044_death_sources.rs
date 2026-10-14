@@ -470,3 +470,30 @@ fn conjured_currency_exchange_between_two_other_players() {
     assert_eq!(t.obj_now(cc).controller, P2);
     assert_eq!(t.obj_now(bears).controller, P1);
 }
+
+#[test]
+fn glissa_compares_with_the_mana_already_in_your_pool() {
+    cr!("106.4", "608.2c", "605.3a");
+    ruling!(
+        "Glissa Sunseeker",
+        "The artifact's mana value must be exactly equal to the amount of unspent mana you have when the ability resolves. If there's less mana or more mana, the artifact won't be destroyed."
+    );
+    ruling!(
+        "Glissa Sunseeker",
+        "You need to have the unspent mana before the ability resolves. The ability doesn't allow you to activate mana abilities while it's resolving."
+    );
+    supported("Glissa Sunseeker");
+    // Mind Stone has mana value 2. Untapped lands don't count.
+    for (pool, lands, destroyed) in [(2, 0, true), (1, 0, false), (3, 0, false), (0, 2, false)] {
+        let mut t = TestGame::new(2);
+        let g = t.battlefield(P0, "Glissa Sunseeker");
+        let stone = t.battlefield(P1, "Mind Stone");
+        t.lands(P0, "Forest", lands);
+        t.g.players[0]
+            .mana_pool
+            .add_type(mtg_engine::mana::ManaType::C, pool);
+        t.activate(P0, g, 0, &[Entity::Object(stone)]).unwrap();
+        t.resolve_all();
+        assert_eq!(!t.on_battlefield(stone), destroyed, "{pool} mana, {lands} lands");
+    }
+}
