@@ -184,6 +184,15 @@ pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) 
         Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } if creates == 1 => {
             b.it = Sel::Var(vars::CREATED);
         }
+        // "You may sacrifice a creature. If you do, you gain life equal to its power.":
+        // the sacrificed permanent, as it last existed.
+        Effect::Sacrifice {
+            who: PlayerRef::You,
+            count: Value::Const(1),
+            ..
+        } if !introduced => {
+            b.it = Sel::Var(vars::SACRIFICED);
+        }
         Effect::Search { .. } => {
             let search = std::mem::replace(last, Effect::Noop);
             *last = Effect::Seq(vec![

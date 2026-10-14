@@ -106,7 +106,7 @@ fn joins_another_subject(r: &str) -> bool {
 /// The predicate `r` (after a third-person subject, lowercase) worded for "you": the
 /// first word must be a third-person verb; verbs starting the later joined clauses are
 /// put in the base form too, and the subject's "their"/"they" become "your"/"you".
-fn as_you(r: &str) -> Option<String> {
+pub(crate) fn as_you(r: &str) -> Option<String> {
     if mentions_you(r) || joins_another_subject(r) {
         return None;
     }
@@ -510,7 +510,7 @@ fn split_tail(pred: &str) -> (&str, Option<&str>) {
 /// without a subject ("draw a card") or with "you" ("you become the monarch"); failing
 /// that, the original third-person predicate (`orig`) as patterns for "that player" read
 /// it, with "that player" meaning the player performing it ("you" in `Effect::AsPlayer`).
-fn instruction(text: &str, orig: Option<&str>, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn instruction(text: &str, orig: Option<&str>, b: &mut Builder) -> Option<Effect> {
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let restore = |b: &mut Builder| {
         b.targets.truncate(saved.0);

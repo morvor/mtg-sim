@@ -454,8 +454,57 @@ fn action_of(e: &Effect) -> Option<&Effect> {
 
 inventory::submit! { FollowupPattern { name: "followups: if [player] does/doesn't/can't", priority: 970, apply: if_player_did } }
 
+/// "they discard a card, they lose 2 life, you draw a card, then you sacrifice ~", "amass
+/// Orcs 5, mill five cards, then return a creature card from your graveyard to the
+/// battlefield": a series of three or more instructions separated by commas, the last
+/// after ", then" (each one performed in order, CR 608.2c).
+fn serial_then(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, last) = l.rsplit_once(", then ")?;
+    if head.contains('"') || last.contains('"') {
+        return None;
+    }
+    let parts: Vec<&str> = head.split(", ").collect();
+    if parts.len() < 2 || parts.iter().any(|p| p.is_empty() || p.starts_with("and ")) {
+        return None;
+    }
+    let saved = (
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.group.clone(),
+    );
+    let named = b.named.len();
+    let mut acc = Effect::Noop;
+    let n = parts.len();
+    for (i, p) in parts.into_iter().chain(std::iter::once(last)).enumerate() {
+        let parsed = if i == n && p.starts_with("you may ") {
+            parse_sentence(p, b)
+        } else {
+            crate::oracle::effects::parse_simple(p, b)
+        };
+        if let Some(e) = parsed {
+            acc = Effect::seq(vec![acc, e]);
+            continue;
+        }
+        if i == n
+            && !matches!(acc, Effect::Noop)
+            && crate::oracle_ext::apply_followup_ext(p, &mut acc, b)
+        {
+            continue;
+        }
+        b.targets.truncate(saved.0);
+        b.named.truncate(named);
+        (b.it, b.it_player, b.group) = (saved.1, saved.2, saved.3);
+        return None;
+    }
+    Some(acc)
+}
+
+inventory::submit! { super::EffectPattern { name: "followups: A, B, then C (a series of instructions)", priority: 990, parse: serial_then } }
+
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::card::Layout;
     use crate::oracle::{compile, CompileContext};
     use crate::types::TypeLine;
@@ -488,6 +537,7 @@ mod tests {
             ("Sorcery", "Target opponent sacrifices a creature. If they can't, they lose 2 life and you draw a card."),
             ("Sorcery", "Each opponent sacrifices a creature. If they can't, they lose 2 life."),
             ("Sorcery", "Target opponent sacrifices a creature. If that player does, you gain 2 life."),
+            ("Sorcery", "Target opponent discards a card, they lose 2 life, you draw a card, then you gain 2 life."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
         }
