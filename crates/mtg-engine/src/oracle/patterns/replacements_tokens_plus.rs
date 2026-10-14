@@ -66,6 +66,9 @@ fn created_tokens(kind: &str) -> Option<ReplacementEvent> {
 
 fn tokens_plus(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l);
+    if let Some(r) = l.strip_prefix("if you would create a ") {
+        return each_also(r, text);
+    }
     let (event, plus) = if let Some(r) = l.strip_prefix("if one or more ") {
         let (kind, r) = r.split_once(" would be created under your control, those tokens plus ")?;
         let plus = r.strip_suffix(" are created instead")?;
@@ -81,6 +84,39 @@ fn tokens_plus(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability
             ReplacementDef {
                 event,
                 action: ReplacementAction::PlusTokens { spec, count },
+                self_replacement: false,
+                optional: false,
+            },
+        ))),
+        text,
+    )])
+}
+
+/// "If you would create a Food token, instead create a Food token and a Treasure token."
+/// (Bilbo, Fellow Conspirator): creating some number of tokens of that predefined kind
+/// creates that many of the other kind too (CR 614.1a). Each such effect applies once to
+/// the event (CR 614.5), so two of them make twice that many of the other kind.
+fn each_also(r: &str, text: &str) -> Option<Vec<Ability>> {
+    let (kind, r) = r.split_once(" token, instead create a ")?;
+    let (same, other) = r.split_once(" token and a ")?;
+    let other = other.strip_suffix(" token")?;
+    if same != kind || other == kind || kind.contains(' ') {
+        return None;
+    }
+    let kind_spec = crate::tokens::predefined(kind)?;
+    let spec = crate::tokens::predefined(other)?;
+    let sub = kind_spec.subtypes.first()?.clone();
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+            ReplacementDef {
+                event: ReplacementEvent::CreateTokensMatching {
+                    who: PlayerFilter::You,
+                    tokens: Filter::Subtype(sub),
+                },
+                action: ReplacementAction::PlusTokens {
+                    spec,
+                    count: Value::EventAmount,
+                },
                 self_replacement: false,
                 optional: false,
             },

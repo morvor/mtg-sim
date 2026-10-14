@@ -1443,6 +1443,25 @@ impl Game {
                 }
                 vec![ReplEvent::Move(m)]
             }
+            (
+                ReplacementAction::EnterUnderControl(r),
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec,
+                    count,
+                    source,
+                },
+            ) => {
+                // "each token that would be created under an opponent's control this turn
+                // is created under your control instead" (Crafty Cutpurse).
+                let controller = self.eval_player(&r, &ctx).unwrap_or(controller);
+                vec![ReplEvent::CreateTokens {
+                    controller,
+                    spec,
+                    count,
+                    source,
+                }]
+            }
             (ReplacementAction::EnterUnderControl(r), ReplEvent::Move(mut m)) => {
                 // "enters under the control of an opponent of your choice": the player
                 // who would control it chooses among them (CR 614.12a).
@@ -1587,6 +1606,32 @@ impl Game {
                         source,
                     },
                 ]
+            }
+            (
+                ReplacementAction::TokensInstead { spec },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                },
+            ) => {
+                // The tokens' characteristics are entirely replaced; how the effect creates
+                // them (tapped, attacking) still applies.
+                let instead = TokenCreate {
+                    chars: crate::tokens::token_characteristics_in(self, &spec, &ctx),
+                    card: crate::tokens::predefined_card(&spec),
+                    tapped: tokens.tapped,
+                    attacking: tokens.attacking,
+                    copy_of: None,
+                    copy_exceptions: vec![],
+                };
+                vec![ReplEvent::CreateTokens {
+                    controller,
+                    spec: Box::new(instead),
+                    count,
+                    source,
+                }]
             }
             (ReplacementAction::Subtract(v), ev) => {
                 // The amount may depend on the event's ("half that many, rounded down").
@@ -1790,6 +1835,13 @@ impl crate::eval::View for EnteringView {
 fn repl_class(d: &ReplacementDef, ev: &ReplEvent) -> u8 {
     if d.self_replacement {
         return 0;
+    }
+    // An effect that changes under whose control tokens would be created applies before
+    // the effects that modify how they're created (Divine Visitation's rulings).
+    if matches!(ev, ReplEvent::CreateTokens { .. })
+        && matches!(d.action, ReplacementAction::EnterUnderControl(_))
+    {
+        return 1;
     }
     if let ReplEvent::Move(m) = ev {
         if m.to == Zone::Battlefield {

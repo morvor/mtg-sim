@@ -1654,6 +1654,16 @@ impl Renderer<'_> {
                 duration,
                 uses,
             } => {
+                // Crafty Cutpurse.
+                if let (
+                    ReplacementEvent::CreateTokens(PlayerFilter::Opponent),
+                    ReplacementAction::EnterUnderControl(PlayerRef::You),
+                    Duration::EndOfTurn,
+                    None,
+                ) = (&def.event, &def.action, duration, uses)
+                {
+                    return "each token that would be created under an opponent's control this turn is created under your control instead".into();
+                }
                 let s = self.replacement(def, *uses);
                 let d = self.duration(duration);
                 // "All damage that would be dealt to target creature this turn is dealt to
@@ -3069,6 +3079,33 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            // "Sacrifice X Foods." with X chosen as they're sacrificed (CR 107.3f,
+            // `patterns/sacrifice_x.rs`).
+            if let (
+                Effect::Store {
+                    var,
+                    sel:
+                        Sel::Choose {
+                            chooser: PlayerRef::You,
+                            filter,
+                            up_to: true,
+                            ..
+                        },
+                },
+                Some(Effect::SetX {
+                    value: Value::CountSel(x),
+                }),
+                Some(Effect::SacrificeObjects { what: Sel::Var(w) }),
+            ) = (&v[i], v.get(i + 1), v.get(i + 2))
+            {
+                if matches!(x.as_ref(), Sel::Var(a) if a == var) && w == var {
+                    let what = self.noun(filter, Num::Many);
+                    let what = what.replacen(" you control", " {opt:you control}", 1);
+                    parts.push(format!("sacrifice X {what}"));
+                    i += 3;
+                    continue;
+                }
+            }
             if let Some((s, used)) = self.seq_extra(&v[i..]) {
                 parts.push(s);
                 i += used;

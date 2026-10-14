@@ -48,6 +48,7 @@ impl Renderer<'_> {
             return Some(format!("pay {}", "{E}".repeat(n.max(0) as usize)));
         }
         Some(match name {
+            crate::kwa::vote::CHOOSES_VOTES => "you choose how each player votes this turn".into(),
             crate::kw::game_rules::RIGHT_GAINS_CONTROL => {
                 "the player to your right gains control of ~".into()
             }

@@ -2420,6 +2420,7 @@ impl Renderer<'_> {
                     | A::Multiply(_)
                     | A::Add(_)
                     | A::PlusTokens { .. }
+                    | A::TokensInstead { .. }
                     | A::Subtract(_)
                     | A::Redirect(_)
                     | A::RedirectNext(..)
@@ -2777,6 +2778,23 @@ impl Renderer<'_> {
             (E::CreateTokensMatching { who, tokens }, action) => {
                 let w = self.player_filter_subject(who);
                 let t = self.noun(tokens, Num::Many);
+                if let (
+                    PlayerFilter::You,
+                    Filter::Subtype(sub),
+                    A::PlusTokens {
+                        spec,
+                        count: Value::EventAmount,
+                    },
+                ) = (who, tokens, action)
+                {
+                    // "If you would create a Food token, instead create a Food token and a
+                    // Treasure token." (Bilbo, Fellow Conspirator).
+                    let (d, tail) = self.token_desc(spec);
+                    return format!(
+                        "if you would create a {sub} token, instead create a {sub} token and {} token{tail}",
+                        with_article(&d)
+                    );
+                }
                 let then = match action {
                     A::Multiply(2) => {
                         "twice that many of those tokens are created instead".to_string()
@@ -3174,6 +3192,10 @@ impl Renderer<'_> {
                     format!("{c} {d} tokens{tail}")
                 };
                 format!("those tokens plus {tokens} are created instead")
+            }
+            A::TokensInstead { spec } => {
+                let (d, tail) = self.token_desc(spec);
+                format!("that many {d} tokens{tail} are created instead")
             }
             A::Redirect(sel) => {
                 let t = self.sel(sel, Case::Obj);
