@@ -81,6 +81,7 @@ fn the_copy_targets_source(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool
                 *e = Effect::CopySpellRetargeted {
                     what: what.clone(),
                     target: Some(target.clone()),
+                    among: None,
                 };
                 true
             }

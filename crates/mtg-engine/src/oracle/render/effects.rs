@@ -306,9 +306,25 @@ impl Renderer<'_> {
         if matches!(f, Filter::Any) {
             return "card".into();
         }
+        let n = self.card_noun_plain(f);
+        // "a land or double-faced card": the shared qualities said once, or for each
+        // alternative (see `nouns::factor_or`).
+        let g = super::nouns::factor_or(f);
+        if format!("{g:?}") == format!("{f:?}") {
+            return n;
+        }
+        let m = self.card_noun_plain(&g);
+        if m == n {
+            n
+        } else {
+            format!("{{alt:{n}|{m}}}")
+        }
+    }
+
+    fn card_noun_plain(&mut self, f: &Filter) -> String {
         let n = self.noun(&f.clone().in_zone(ZoneKind::Hand), Num::One);
         // The zone is implied.
-        n.trim_end_matches(" in a hand").to_string()
+        n.replacen(" in a hand", "", 1)
     }
 
     /// "[subject] [vp]": "you" is dropped for imperative verbs.
@@ -362,6 +378,10 @@ impl Renderer<'_> {
 
     fn effect_inner(&mut self, e: &Effect) -> String {
         self.new_clause();
+        // Instructions worded as a whole (`effect_terms.rs`).
+        if let Some(s) = self.effect_terms(e) {
+            return s;
+        }
         // "For each {B}{B} spent to cast it, each opponent discards a card": one action on
         // that many, said as the instruction for each.
         if let Some(each) = per_mana_spent(e) {
@@ -1649,6 +1669,13 @@ impl Renderer<'_> {
                 if d == "until end of turn" && s.starts_with("if ") && s.contains(" would die,") {
                     return s.replacen(" would die,", " would die this turn,", 1);
                 }
+                // "If any source would deal 1 or more damage to a permanent or player this
+                // turn, it deals 2 damage to that permanent or player instead."
+                if d == "until end of turn" && s.starts_with("if ") && s.contains(" or more damage to ") {
+                    if let Some((ev, then)) = s.split_once(", ") {
+                        return format!("{ev} this turn, {then}");
+                    }
+                }
                 // "The next time you would draw a card this turn, ... instead": one use.
                 if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
                     if let Some(rest) = s.strip_prefix("if ") {
@@ -2799,11 +2826,33 @@ impl Renderer<'_> {
                 };
                 format!("the next {f} you cast{d} {vp}")
             }
-            Effect::CopySpellRetargeted { what, target } => {
+            Effect::CopySpellRetargeted {
+                what,
+                target,
+                among,
+            } => {
                 let w = self.sel(what, Case::Obj);
-                match target {
-                    None => format!("copy {w} for each other object or player it could target"),
-                    Some(t) => {
+                match (target, among) {
+                    // "copy that spell for each other creature you control that the spell
+                    // could target. Each copy targets a different one of those creatures."
+                    (None, Some(f)) => {
+                        let w = if matches!(what, Sel::TriggerSpell) {
+                            "that spell".to_string()
+                        } else {
+                            w
+                        };
+                        let n = self.noun(f, Num::One);
+                        // "those creatures": the kind, without "you control".
+                        let ns = self.noun(f, Num::Many);
+                        let ns = ns.strip_suffix(" you control").unwrap_or(&ns).to_string();
+                        format!(
+                            "copy {w} for each other {n} {{alt:that the spell|that spell}} could target. Each copy targets a different one of those {ns}"
+                        )
+                    }
+                    (None, None) => {
+                        format!("copy {w} for each other object or player it could target")
+                    }
+                    (Some(t), _) => {
                         let t = self.sel(t, Case::Obj);
                         format!("copy {w}. The copy targets {t}")
                     }
@@ -2994,8 +3043,9 @@ impl Renderer<'_> {
                 "prevent that damage. You gain life equal to the damage prevented this way"
                     .to_string()
             }
+            // "that source's controller": the damage event's source (CR 614.1a).
             ReplacementAction::Redirect(t) => {
-                let t = self.sel(t, Case::Obj);
+                let t = self.in_event_scope(|r| r.sel(t, Case::Obj));
                 format!("that damage is dealt to {t} instead")
             }
             _ => return None,
@@ -4225,7 +4275,13 @@ impl Renderer<'_> {
         // A permanent put onto the battlefield is under the control of the player who put
         // it there (CR 110.2a), "put" or "return": the instruction is yours.
         let d = if to.zone == ZoneKind::Battlefield {
-            d.replacen(" under your control", " {opt:under your control}", 1)
+            // Cards say it before or after "tapped and attacking".
+            d.replacen(
+                " tapped and attacking under your control",
+                " {alt:tapped and attacking {opt:under your control}|under your control tapped and attacking}",
+                1,
+            )
+            .replacen(" under your control", " {opt:under your control}", 1)
         } else {
             d
         };
@@ -4305,6 +4361,18 @@ impl Renderer<'_> {
             // the player putting it there; cards still say "under your control" when the
             // object isn't theirs, and "under its owner's control" when it goes back.
             match &to.controller {
+                // "onto the battlefield under your control tapped and attacking": the
+                // control said before the status.
+                Some(PlayerRef::You) if yours && to.tapped && to.attacking && !to.transformed => {
+                    let st = " tapped and attacking";
+                    if let Some(head) = s.strip_suffix(st) {
+                        s = format!(
+                            "{head} {{alt:tapped and attacking {{opt:under your control}}|under your control tapped and attacking}}"
+                        );
+                    } else {
+                        s.push_str(" {opt:under your control}");
+                    }
+                }
                 // The player putting it there controls it (CR 110.2a): cards may say so.
                 Some(PlayerRef::You) if yours => s.push_str(" {opt:under your control}"),
                 // Its owner is you: a card from your graveyard enters under your control
@@ -4819,6 +4887,13 @@ impl Renderer<'_> {
             }
             _ => "the rest",
         };
+        // "the other back on top of your library": where it came from.
+        if left == "the other"
+            && rest_to.zone == ZoneKind::Library
+            && matches!(rest_to.position, LibraryPosition::Top)
+        {
+            rest = format!("{{opt:back}} {rest}");
+        }
         // The rest stay where they are ("..., then shuffle").
         if rest_to.zone == ZoneKind::Library
             && matches!(rest_to.position, LibraryPosition::FromTop(_))

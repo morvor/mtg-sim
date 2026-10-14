@@ -131,6 +131,12 @@ pub fn is_player_targeted(name: &str) -> bool {
     name.starts_with(PLAYER_TARGETED)
 }
 
+/// The (who, by) of a [`player_targeted`] name.
+pub fn player_targeted_parts(name: &str) -> Option<(PlayerRel, PlayerRel)> {
+    let (who, by) = name.strip_prefix(PLAYER_TARGETED)?.split_once(':')?;
+    Some((word_rel(who)?, word_rel(by)?))
+}
+
 pub struct ActivatedAbilityKind;
 
 impl KeywordRules for ActivatedAbilityKind {

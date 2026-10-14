@@ -12,7 +12,7 @@ use mtg_engine::types::{CardType, Color, ColorSet};
 use mtg_engine::*;
 
 /// The names of the cards in `p`'s hand.
-fn hand_names(t: &TestGame, p: PlayerId) -> Vec<String> {
+pub fn hand_names(t: &TestGame, p: PlayerId) -> Vec<String> {
     t.g.player(p)
         .hand
         .iter()
