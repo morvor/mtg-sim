@@ -186,7 +186,10 @@ impl Renderer<'_> {
             },
             other => match self.custom_effect_more(other) {
                 Some(s) => s,
-                None => return self.gap(format!("Effect::Custom({other})")),
+                None => match self.custom_effect_extra(other) {
+                    Some(s) => s,
+                    None => return self.gap(format!("Effect::Custom({other})")),
+                },
             },
         };
         s
@@ -199,6 +202,8 @@ impl Renderer<'_> {
             crate::kw::haunt::HAUNTED => "the creature ~it haunts".into(),
             // CR 702.95: "both creatures have flying" / "each of those creatures has ...".
             crate::kw::soulbond::THE_PAIR => "{alt:each of those creatures|both creatures}".into(),
+            // In a granted ability: the object granting it, by its name.
+            crate::granted_by::GRANTER => "~".into(),
             _ => return None,
         })
     }
@@ -248,10 +253,13 @@ impl Renderer<'_> {
                 let cost = &n[crate::kw::offered_costs::PAID_OFFERED_COST.len()..];
                 (false, format!("for which you chose to {cost}"))
             }
-            other => {
-                let g = self.gap(format!("Filter::Custom({other})"));
-                (false, g)
-            }
+            other => match self.custom_filter_extra(other) {
+                Some(q) => q,
+                None => {
+                    let g = self.gap(format!("Filter::Custom({other})"));
+                    (false, g)
+                }
+            },
         }
     }
 
@@ -306,6 +314,19 @@ impl Renderer<'_> {
                 "the number of poison counters your opponents have".into()
             }
             "players being attacked" => "the number of players being attacked".into(),
+            crate::kw::mana_grammar::UNLOCKED_DOORS => {
+                "the number of unlocked doors among Rooms you control".into()
+            }
+            n if n.starts_with(crate::kw::mana_grammar::CHROMA_GRAVEYARD) => {
+                let c = n[crate::kw::mana_grammar::CHROMA_GRAVEYARD.len()..]
+                    .chars()
+                    .next()
+                    .and_then(crate::types::Color::from_letter)
+                    .map_or("", |c| c.word());
+                format!(
+                    "the number of {c} mana symbols in the mana costs of cards in your graveyard"
+                )
+            }
             "cards_in_all_hands" => "the total number of cards in all players' hands".into(),
             "life_lost_by_opponents_this_turn" => {
                 "the total life lost by your opponents this turn".into()
@@ -319,7 +340,10 @@ impl Renderer<'_> {
             "bushido:points of bushido it has" => "the number of points of bushido it has".into(),
             other => match self.custom_value_more(other) {
                 Some(s) => s,
-                None => self.gap(format!("Value::Custom({other})")),
+                None => match self.custom_value_extra(other) {
+                    Some(s) => s,
+                    None => self.gap(format!("Value::Custom({other})")),
+                },
             },
         }
     }
@@ -327,6 +351,9 @@ impl Renderer<'_> {
     /// A comparison of a custom value with a number, as cards word it ("{U} was spent to
     /// cast ~", "you've cast two or more spells this turn").
     pub(crate) fn custom_compare(&mut self, name: &str, cmp: Cmp, n: i32) -> Option<String> {
+        if let Some(s) = self.custom_compare_extra(name, cmp, n) {
+            return Some(s);
+        }
         // Thresholds: "N or more".
         let min = match (cmp, n) {
             (Cmp::Ge, n) => n,
@@ -523,7 +550,10 @@ impl Renderer<'_> {
                     .unwrap_or(t);
                 format!("you've sacrificed {} this turn", with_article(t))
             }
-            other => match self.custom_condition_more(other) {
+            other => match self
+                .custom_condition_more(other)
+                .or_else(|| self.custom_condition_terms(other, false))
+            {
                 Some(s) => s,
                 None => self.gap(format!("Condition::Custom({other})")),
             },
@@ -744,7 +774,10 @@ impl Renderer<'_> {
             ),
             other => match self.custom_static_more(other) {
                 Some(s) => s,
-                None => self.gap(format!("StaticEffect::Custom({other})")),
+                None => match self.custom_static_extra(other) {
+                    Some(s) => s,
+                    None => self.gap(format!("StaticEffect::Custom({other})")),
+                },
             },
         }
     }
@@ -765,6 +798,15 @@ impl Renderer<'_> {
                 "you may choose not to untap {} during your untap step",
                 self.me()
             ),
+            crate::kw::game_rules::NO_LOYALTY_EACH => {
+                "players can't activate planeswalkers' loyalty abilities".into()
+            }
+            crate::kw::game_rules::NO_LOYALTY_OPPONENTS => {
+                "your opponents can't activate planeswalkers' loyalty abilities".into()
+            }
+            crate::kw::game_rules::ENCHANTED_ONLY_MANA_OR_LOYALTY => {
+                "enchanted player can't activate abilities that aren't mana abilities or loyalty abilities".into()
+            }
             other => self.gap(format!("Restriction::Custom({other})")),
         }
     }
@@ -773,7 +815,10 @@ impl Renderer<'_> {
     pub(crate) fn custom_modification(&mut self, name: &str) -> String {
         match self.custom_modification_more(name) {
             Some(s) => s,
-            None => self.gap(format!("Modification::Custom({name})")),
+            None => match self.custom_modification_extra(name) {
+                Some(s) => s,
+                None => self.gap(format!("Modification::Custom({name})")),
+            },
         }
     }
 

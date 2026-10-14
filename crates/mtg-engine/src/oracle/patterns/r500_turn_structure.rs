@@ -220,6 +220,17 @@ fn skip_next(l: &str, b: &mut Builder) -> Option<Effect> {
         .strip_prefix("their next ")
         .or_else(|| rest.strip_prefix("your next "))
         .or_else(|| rest.strip_prefix("his or her next "))?;
+    // "target opponent skips their next X turns, where X is ..." (Ral Zarek, Guest
+    // Lecturer): X is determined once (CR 107.3), then that many turns are skipped.
+    if let Some(r) = rest.strip_prefix("x ") {
+        if crate::oracle::patterns::value_grammar::x_defined() {
+            let step = step_kind(r.trim())?;
+            return Some(Effect::Repeat {
+                times: Value::X,
+                effect: Box::new(Effect::Skip { who, step }),
+            });
+        }
+    }
     let (n, rest) = match parse_number(rest) {
         Some((Value::Const(n), r)) if r.trim_start().starts_with(|c: char| c.is_alphabetic()) => {
             (n, r)
