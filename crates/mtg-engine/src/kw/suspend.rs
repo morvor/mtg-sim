@@ -101,6 +101,7 @@ impl KeywordRules for Suspend {
                 trigger: Box::new(TriggerCond::CountersRemoved {
                     filter: Filter::Source,
                     kind: Some(counters::TIME.into()),
+                    each: false,
                 }),
                 cond: Condition::Compare(time_counters(Sel::This), Cmp::Eq, Value::c(0)),
             },

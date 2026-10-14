@@ -196,11 +196,18 @@ impl Game {
             // Recorded before detection so "for the first time each turn" can see which
             // events of this turn precede this one.
             self.turn_events.push(ev.clone());
+            self.excess_ahead = events[i + 1..]
+                .iter()
+                .take_while(|e| !matches!(e, Event::BatchBoundary))
+                .filter(|e| matches!(e, Event::ExcessDamage { .. }))
+                .cloned()
+                .collect();
             if let Some(f) = self.observer.as_ref().map(|o| o.on_event.clone()) {
                 f(self, ev);
             }
             once_delayed.extend(self.detect_triggers(ev, &recent, &born_later));
         }
+        self.excess_ahead.clear();
         self.check_batch_triggers(&events[batch_start..], &born_later);
         self.fire_once_delayed(once_delayed);
         // Static abilities' conditions can depend on what happened this turn ("as long as
@@ -1413,7 +1420,7 @@ impl Game {
                 }
             }
             (
-                TriggerCond::CountersRemoved { filter, kind },
+                TriggerCond::CountersRemoved { filter, kind, each },
                 Event::CountersRemoved {
                     target: Entity::Object(o),
                     kind: k,
@@ -1422,13 +1429,18 @@ impl Game {
                 },
             ) => {
                 if kind.as_ref().is_none_or(|x| x == k) && self.matches(*o, filter, &ctx) {
-                    one(EventInfo {
-                        object: Some(*o),
-                        // The player who removed them.
-                        player: *by,
-                        amount: *n as i32,
-                        ..Default::default()
-                    })
+                    // "Whenever a [kind] counter is removed from …" triggers for each
+                    // counter.
+                    let (times, amount) = if *each { (*n, 1) } else { (1, *n as i32) };
+                    (0..times)
+                        .map(|_| EventInfo {
+                            object: Some(*o),
+                            // The player who removed them.
+                            player: *by,
+                            amount,
+                            ..Default::default()
+                        })
+                        .collect()
                 } else {
                     none()
                 }
@@ -2098,6 +2110,11 @@ impl Game {
                 continue;
             }
             let ctx = Ctx::new(Some(src), ctl);
+            // CR 607.5a: a trigger condition with an undefined choice in it ("no
+            // permanents of the chosen color" when no color was chosen) never holds.
+            if crate::choices::condition_refers_to_undefined_choice(c, self.source_choices(&ctx)) {
+                continue;
+            }
             if self.eval_cond(c, &ctx) {
                 self.state_triggers_active.insert(key);
                 self.trigger_order += 1;

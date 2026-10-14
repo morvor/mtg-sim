@@ -405,6 +405,7 @@ fn last_time_counter_removed_while_exiled(
             trigger: Box::new(TriggerCond::CountersRemoved {
                 filter: Filter::Source,
                 kind: Some(counters::TIME.into()),
+                each: false,
             }),
             cond: Condition::Compare(
                 Value::CountersOn(Box::new(Sel::This), Some(counters::TIME.into())),

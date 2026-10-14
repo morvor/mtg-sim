@@ -1277,7 +1277,21 @@ fn trigger_spell_value(s: &str, b: &Builder) -> Option<(Value, String)> {
 /// damage" trigger "that excess damage" (the triggering event's).
 fn excess(s: &str, b: &Builder) -> Option<(Value, String)> {
     if let Some(rest) = s.strip_prefix("that excess damage") {
-        if word_end(rest) && b.in_trigger {
+        // Only a trigger on excess damage has one (not "Whenever ~ deals combat damage to
+        // a creature, if that creature was dealt excess damage this turn, ...").
+        let raw = crate::oracle::raw_text().to_lowercase();
+        let excess_trigger = raw.split(['\n', '"']).any(|part| {
+            part.find("whenever ")
+                .or_else(|| part.find("when "))
+                .is_some_and(|i| {
+                    part[i..]
+                        .split(',')
+                        .next()
+                        .unwrap_or("")
+                        .contains(" excess ")
+                })
+        });
+        if word_end(rest) && b.in_trigger && excess_trigger {
             return Some((Value::EventAmount, rest.to_string()));
         }
         return None;
@@ -1408,8 +1422,12 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     // one per player, and the results would be only the last player's.
     let split_subject = raw_text_named().lines().any(|l| {
         l.contains(" this way")
-            && l.find("you and ")
-                .is_some_and(|i| l[i..].split(['.', ',']).next().is_some_and(|c| c.contains(" each ")))
+            && l.find("you and ").is_some_and(|i| {
+                l[i..]
+                    .split(['.', ','])
+                    .next()
+                    .is_some_and(|c| c.contains(" each "))
+            })
     });
     if split_subject {
         return None;
@@ -2319,7 +2337,8 @@ fn x_cant_be_greater(block: &str, ctx: &crate::oracle::CompileContext) -> Option
         return None;
     }
     let cap = end(cap);
-    let mut abilities = crate::oracle::parse_ability(&format!("{}.", head.trim_end_matches('.')), ctx)?;
+    let mut abilities =
+        crate::oracle::parse_ability(&format!("{}.", head.trim_end_matches('.')), ctx)?;
     let [a] = abilities.as_mut_slice() else {
         return None;
     };
@@ -2480,4 +2499,3 @@ mod tests {
         }
     }
 }
-

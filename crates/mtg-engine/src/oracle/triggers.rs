@@ -82,8 +82,25 @@ fn parse_triggered_at(
             let mentions_it = c
                 .split(|ch: char| !ch.is_alphanumeric() && ch != '\'')
                 .any(|w| matches!(w, "it" | "its" | "it's"));
+            // "Whenever a player attacks one of your opponents, if that opponent has ...":
+            // the trigger has no single "that player", but "that opponent" can only be the
+            // attacked one, the trigger's player (CR 508.3b).
+            let cond_player = if matches!(it_player, PlayerRef::Iterated)
+                && c.starts_with("that opponent ")
+                && matches!(
+                    &trigger,
+                    TriggerCond::PlayerAttacked {
+                        attacker,
+                        defender: PlayerFilter::Opponent,
+                        ..
+                    } if !matches!(attacker, PlayerRel::You)
+                ) {
+                PlayerRef::TriggerPlayer
+            } else {
+                it_player.clone()
+            };
             let parsed = super::statics::parse_condition(c, ctx).or_else(|| {
-                super::patterns::that_player_conditions::that_player_condition(c, &it_player)
+                super::patterns::that_player_conditions::that_player_condition(c, &cond_player)
             });
             // A condition read as being about the triggering object ("if it had counters
             // on it", CR 603.10a; "if it doesn't have the same name as another creature
@@ -105,7 +122,8 @@ fn parse_triggered_at(
             let parsed = if (mentions_it && !matches!(it, Sel::This) && !about_trigger_object)
                 || parsed.is_none()
             {
-                match super::patterns::conditions_referents::intervening(c, ctx, &it, &it_player) {
+                match super::patterns::conditions_referents::intervening(c, ctx, &it, &cond_player)
+                {
                     Some((cond, subject)) => {
                         match (&subject, &it) {
                             (Some(sel @ Sel::AttachedTo), Sel::This) => body_it = Some(sel.clone()),

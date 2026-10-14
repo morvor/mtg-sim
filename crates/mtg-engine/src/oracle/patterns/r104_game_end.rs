@@ -262,6 +262,7 @@ fn last_counter_removed(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
             trigger: Box::new(TriggerCond::CountersRemoved {
                 filter: Filter::Source,
                 kind: Some(kind),
+                each: false,
             }),
             cond: Condition::And(cond),
         },
