@@ -117,6 +117,45 @@ fn qualities<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
             r,
         ));
     }
+    // "with doctor's companion" (CR 702.124m).
+    if let Some(r) = t.strip_prefix("with doctor's companion") {
+        return Some((
+            Filter::Custom(crate::kw::dig_filters::DOCTORS_COMPANION.into()),
+            r,
+        ));
+    }
+    // "without mana value of the chosen quality" (Ashling's Prerogative).
+    if let Some(r) = t.strip_prefix("without mana value of the chosen quality") {
+        return Some((Filter::not(Filter::ManaValueOfChosenQuality), r));
+    }
+    // "with mana value, power, or toughness equal to the chosen number": any of them.
+    if let Some(r) = t.strip_prefix("with mana value, power, or toughness equal to the chosen number") {
+        let v = || Box::new(Value::Chosen);
+        return Some((
+            Filter::Or(vec![
+                Filter::ManaValue(Cmp::Eq, v()),
+                Filter::Power(Cmp::Eq, v()),
+                Filter::Toughness(Cmp::Eq, v()),
+            ]),
+            r,
+        ));
+    }
+    // "that shares a color or mana value with the exiled card": either.
+    for p in [
+        "that shares a color or mana value with ",
+        "that share a color or mana value with ",
+    ] {
+        if let Some(x) = t.strip_prefix(p) {
+            let (sel, rest) = super::filters_relational::object_in(x)?;
+            return Some((
+                Filter::Or(vec![
+                    Filter::SharesColor(Box::new(sel.clone())),
+                    Filter::ManaValue(Cmp::Eq, Box::new(Value::ManaValueOf(Box::new(sel)))),
+                ]),
+                rest,
+            ));
+        }
+    }
     if let Some(r) = t.strip_prefix("with two or more card types") {
         return Some((Filter::Custom(TWO_CARD_TYPES.into()), r));
     }
@@ -210,6 +249,60 @@ fn qualities<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     None
 }
 
+/// A list of card names "A, B, and C" at the start of `x` (lowercase; "~" is the card's
+/// own name), each name from the card database, and the rest of the text.
+fn name_list(x: &str) -> Option<(Vec<smol_str::SmolStr>, &str)> {
+    let raw = crate::oracle::raw_text();
+    let me = crate::oracle::card_name();
+    let (head, last_and_rest) = x.split_once(", and ")?;
+    let mut names: Vec<String> = head.split(", ").map(|n| n.to_string()).collect();
+    // The last name ends where the original text's name ends: find it in the raw text.
+    let lower_raw = raw.to_lowercase();
+    let last = names_from_raw(&lower_raw, last_and_rest, &me)?;
+    let rest = &last_and_rest[last.len()..];
+    names.push(last);
+    let mut out = vec![];
+    for n in names {
+        let n = if n == "~" { me.to_lowercase() } else { n };
+        // Recover the printed capitalization from the raw text.
+        let i = lower_raw.find(&n)?;
+        out.push(smol_str::SmolStr::new(&raw[i..i + n.len()]));
+    }
+    Some((out, rest))
+}
+
+/// Every card name (lowercase), from the card data.
+fn card_names() -> &'static std::collections::HashSet<String> {
+    static N: std::sync::OnceLock<std::collections::HashSet<String>> = std::sync::OnceLock::new();
+    N.get_or_init(|| {
+        mtg_data::cards()
+            .iter()
+            .flat_map(|c| {
+                let mut v = vec![c.name.to_lowercase()];
+                v.extend(c.name.split(" // ").map(|n| n.to_lowercase()));
+                v
+            })
+            .collect()
+    })
+}
+
+/// The longest prefix of `s` that is a name in the raw text followed by a non-name word.
+fn names_from_raw(lower_raw: &str, s: &str, me: &str) -> Option<String> {
+    if s.starts_with("~") {
+        return Some("~".to_string());
+    }
+    let _ = me;
+    let words: Vec<&str> = s.split(' ').collect();
+    for k in (1..=words.len().min(5)).rev() {
+        let joined = words[..k].join(" ");
+        let cand = joined.trim_end_matches([',', '.']).to_string();
+        if lower_raw.contains(&cand) && card_names().contains(&cand) {
+            return Some(cand);
+        }
+    }
+    None
+}
+
 fn other_than_tested(f: Filter) -> Filter {
     match f {
         Filter::Other => Filter::Any,
@@ -219,3 +312,98 @@ fn other_than_tested(f: Filter) -> Filter {
 }
 
 inventory::submit! { FilterSuffixPattern { name: "filter qualities", priority: 120, parse: qualities } }
+
+/// "named Sword of Kaldra, ~, and Helm of Kaldra": any of the names (CR 201.2). Before the
+/// single-name qualifiers, which would read only the first name.
+fn named_list<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let x = t.strip_prefix("named ")?;
+    if !x.contains(", and ") {
+        return None;
+    }
+    let (list, rest) = name_list(x)?;
+    Some((Filter::Or(list.into_iter().map(Filter::Named).collect()), rest))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "filter qualities: named A, B, and C", priority: 1, parse: named_list } }
+
+/// "If you control Equipment named ~, Sword of Kaldra, and Shield of Kaldra, create
+/// Kaldra, ... token. Attach those Equipment to it." (Helm of Kaldra): you control an
+/// object with each of the names; "those [objects]" are the ones you control with any of
+/// them.
+fn if_you_control_named_list(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if you control ")?;
+    let (noun, x) = r.split_once(" named ")?;
+    let (kind, _, tail) = parse_object_phrase(noun)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let (names, rest) = name_list(x)?;
+    let rest = rest.strip_prefix(", ")?;
+    let mine = |f: Filter| Filter::and(vec![kind.clone(), f, Filter::ControlledBy(PlayerRel::You)]);
+    let cond = Condition::And(
+        names
+            .iter()
+            .map(|n| Condition::Exists(mine(Filter::Named(n.clone()))))
+            .collect(),
+    );
+    let all = Sel::All(mine(Filter::Or(names.into_iter().map(Filter::Named).collect())));
+    b.named.push((format!("those {noun}"), all));
+    let then = crate::oracle::effects::parse_clause(rest, b)?;
+    Some(Effect::If {
+        cond,
+        then: Box::new(then),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "if you control [objects] named A, B, and C, ...", priority: 50, parse: if_you_control_named_list } }
+
+/// "Attach those Equipment to it." after the objects were named and a token created
+/// (Helm of Kaldra): each of them to the token (CR 701.3).
+fn attach_those_to_it(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("attach ")?;
+    let (those, to) = r.split_once(" to ")?;
+    if to != "it" || !those.starts_with("those ") {
+        return None;
+    }
+    let what = b
+        .named
+        .iter()
+        .rev()
+        .find(|(n, _)| n == those)
+        .map(|(_, s)| s.clone())?;
+    if !matches!(b.it, Sel::Var(v) if v == vars::CREATED) {
+        return None;
+    }
+    Some(Effect::Attach {
+        what,
+        to: b.it.clone(),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "attach those [objects] to it", priority: 50, parse: attach_those_to_it } }
+
+/// "Each creature without mana value of the chosen quality enters tapped." (CR 614.1c):
+/// the same as "[objects] enter tapped".
+fn each_enters_tapped(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("each ")?.strip_suffix(" enters tapped")?;
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    if plural || !rest.trim().is_empty() || super::filters_relational::mentions_referent(&f) {
+        return None;
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(f),
+            action: ReplacementAction::EnterTapped,
+            self_replacement: false,
+            optional: false,
+        }))),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "each [object] enters tapped", priority: 100, parse: each_enters_tapped } }

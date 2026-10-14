@@ -2015,6 +2015,20 @@ fn target_group_suffix<'a>(
     let Some((rest, grp)) = group_phrase(t) else {
         return Some((f, r));
     };
+    // "... a different mana value X or less": each also has mana value X or less.
+    let mut bound = None;
+    let rest = match (&grp, parse_number(rest)) {
+        (TargetGroup::DifferentManaValues, Some((n, r2))) => {
+            match r2.trim_start().strip_prefix("or less") {
+                Some(r3) => {
+                    bound = Some(Filter::ManaValue(Cmp::Le, Box::new(n)));
+                    r3
+                }
+                None => rest,
+            }
+        }
+        _ => rest,
+    };
     *together = Some(grp);
     // The object phrase's own suffixes may follow ("... from your graveyard"): parsed
     // after a stand-in noun, which is then dropped.
@@ -2022,6 +2036,7 @@ fn target_group_suffix<'a>(
     let (more, _, tail) = parse_object_phrase(&probe)?;
     let rest = &rest[rest.len() - tail.len()..];
     let mut parts = vec![f];
+    parts.extend(bound);
     match more {
         Filter::Card => {}
         Filter::And(v) => parts.extend(v.into_iter().filter(|x| !matches!(x, Filter::Card))),
@@ -2052,6 +2067,12 @@ pub fn group_phrase(t: &str) -> Option<(&str, TargetGroup)> {
         ("with different names", TargetGroup::DifferentNames),
         (
             "with different mana values",
+            TargetGroup::DifferentManaValues,
+        ),
+        // "any number of target creature cards that each have a different mana value X
+        // or less" (Agadeem's Awakening).
+        (
+            "that each have a different mana value",
             TargetGroup::DifferentManaValues,
         ),
         ("with different powers", TargetGroup::DifferentPowers),

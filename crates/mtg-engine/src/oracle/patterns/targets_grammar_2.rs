@@ -233,3 +233,17 @@ fn gets_and_fights(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "[subject] gets ... and fights [object]", priority: 100, parse: gets_and_fights } }
+
+/// "Return from your graveyard to the battlefield any number of target creature cards
+/// ..." (Agadeem's Awakening): the objects after the zones.
+fn return_from_graveyard_reordered(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("return from your graveyard to ")?;
+    for dest in ["the battlefield", "your hand"] {
+        if let Some(objs) = r.strip_prefix(dest).and_then(|x| x.strip_prefix(' ')) {
+            return parse_clause(&format!("return {objs} from your graveyard to {dest}"), b);
+        }
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "return from your graveyard to [zone] [objects]", priority: 100, parse: return_from_graveyard_reordered } }
