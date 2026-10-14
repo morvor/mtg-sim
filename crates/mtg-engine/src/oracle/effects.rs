@@ -1612,12 +1612,22 @@ fn p_exile(l: &str, b: &mut Builder) -> Option<Effect> {
 /// graveyard to your hand", "... to the battlefield [tapped [and attacking]]".
 fn p_return(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("return ")?;
-    let (what, tail) = object_ref(r, b)?;
+    let (mut what, tail) = object_ref(r, b)?;
     let t = tail.trim();
-    let t = t
-        .strip_prefix("from your graveyard")
-        .map(str::trim)
-        .unwrap_or(t);
+    let from_your_graveyard = t.strip_prefix("from your graveyard").map(str::trim);
+    // "Return ~ from your graveyard to the battlefield": only if the card (the object the
+    // source became, CR 400.7) is in its controller's graveyard — not when another player
+    // controlled the source and it went to its owner's graveyard (CR 404.2).
+    if from_your_graveyard.is_some() && matches!(what, Sel::This) {
+        what = Sel::All(Filter::and(vec![
+            Filter::Custom(SmolStr::new(
+                crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT,
+            )),
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+        ]));
+    }
+    let t = from_your_graveyard.unwrap_or(t);
     let t = t
         .strip_prefix("from a graveyard")
         .map(str::trim)
