@@ -115,6 +115,7 @@ fn instructions_are_followed_in_order_and_later_text_can_modify_earlier_text() {
 #[test]
 fn choices_are_made_while_applying_the_effect_and_cant_be_impossible() {
     cr!("608.2d");
+    cr_example!("608.2d", "You may sacrifice a creature. If you don’t, you lose 4 life.");
     // "You may sacrifice a creature. If you don't, you lose 4 life."
     let def = instant(
         "Grim Bargain",
@@ -438,6 +439,7 @@ fn look_back_effects_dont_need_objects_to_still_be_where_they_were() {
 #[test]
 fn effects_check_only_the_specified_characteristics() {
     cr!("608.2j");
+    cr_example!("608.2j", "Destroy all black creatures");
     let wb = || {
         CB::new("Orzhov Test")
             .creature(2, 2)

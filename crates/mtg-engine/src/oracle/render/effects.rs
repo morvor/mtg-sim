@@ -2241,6 +2241,19 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Obj);
                 format!("regenerate {w}")
             }
+            Effect::RegenerateWith { what, then } => {
+                let w = self.sel(what, Case::Obj);
+                match then.as_ref() {
+                    Effect::Reflexive { body } => {
+                        let e = self.effect(&body.effect);
+                        format!("regenerate {w}. When it regenerates this way, {e}")
+                    }
+                    e => {
+                        let e = self.effect(e);
+                        format!("regenerate {w}. {e} if it regenerates this way")
+                    }
+                }
+            }
             Effect::Attach { what, to } | Effect::AttachAsCreature { what, to } => {
                 // (Naming a target doesn't make "it" in "to it" the target.)
                 let salient = self.self_salient;
@@ -3834,6 +3847,15 @@ impl Renderer<'_> {
                     parts.push(format!(
                         "{{alt:if you don't|if you didn't put a card into your hand this way}}, {t}"
                     ));
+                    i += 2;
+                    continue;
+                }
+            }
+            // "secretly choose an opponent" (`choices.rs`).
+            if let (Some(Effect::Custom(n)), Some(next)) = (v.get(i), v.get(i + 1)) {
+                if n == crate::choices::SECRET_NEXT {
+                    let e = self.effect(next);
+                    parts.push(format!("secretly {e}"));
                     i += 2;
                     continue;
                 }
@@ -6723,6 +6745,22 @@ impl Renderer<'_> {
             ChoiceKind::CardType => "a card type".into(),
             ChoiceKind::OddOrEven => "odd or even".into(),
             ChoiceKind::Word(v) => join_list(v, "or"),
+            ChoiceKind::Distinct(n, v)
+                if *v == ["Plains", "Island", "Swamp", "Mountain", "Forest"] =>
+            {
+                format!(
+                    "{} basic land types",
+                    crate::oracle::render::number_word(*n as i32)
+                )
+            }
+            ChoiceKind::Players(n) => {
+                format!("{} players", crate::oracle::render::number_word(*n as i32))
+            }
+            ChoiceKind::Distinct(n, v) => format!(
+                "{} abilities from among {}",
+                crate::oracle::render::number_word(*n as i32),
+                join_list(v, "and")
+            ),
         }
     }
 
@@ -7673,6 +7711,10 @@ pub(crate) fn either_form(a: String, b: String) -> String {
 }
 
 pub(crate) fn third_person(vp: &str) -> String {
+    // An adverb before the verb: "secretly chooses".
+    if let Some(r) = vp.strip_prefix("secretly ") {
+        return format!("secretly {}", third_person(r));
+    }
     let (verb, rest) = match vp.split_once(' ') {
         Some((v, r)) => (v, format!(" {r}")),
         None => (vp, String::new()),

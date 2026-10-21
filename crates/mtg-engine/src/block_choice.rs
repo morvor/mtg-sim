@@ -54,26 +54,39 @@ pub fn costs_accepted(
 
 /// The player who declares blockers instead of the defending players `defenders`, if an
 /// effect says so: the controller of the latest such effect that applies to all their
-/// creatures and whose controller is still in the game.
-pub fn block_decider(g: &Game, defenders: &[PlayerId]) -> Option<PlayerId> {
-    g.all_restrictions()
-        .into_iter()
-        .rev()
-        .find_map(|(_, controller, r, _)| {
-            let Restriction::Custom(n) = &r else {
-                return None;
-            };
-            let decider = match n.as_str() {
-                CHOOSES_BLOCKS => controller,
-                CHOOSES_OPPONENTS_BLOCKS
-                    if defenders.iter().all(|d| g.are_opponents(controller, *d)) =>
-                {
-                    controller
-                }
-                // CR 506.2: the active player is the attacking player.
-                ATTACKING_PLAYER_CHOOSES_BLOCKS => g.turn.active,
-                _ => return None,
-            };
-            g.player(decider).in_game().then_some(decider)
-        })
+/// creatures and whose controller is still in the game. "The attacking player" is the
+/// active player (CR 506.2); with shared team turns, the attacking player the effect's
+/// controller chooses (CR 805.10c).
+pub fn block_decider(g: &mut Game, defenders: &[PlayerId]) -> Option<PlayerId> {
+    let (source, controller, attacking) =
+        g.all_restrictions()
+            .into_iter()
+            .rev()
+            .find_map(|(source, controller, r, _)| {
+                let Restriction::Custom(n) = &r else {
+                    return None;
+                };
+                let decider = match n.as_str() {
+                    CHOOSES_BLOCKS => controller,
+                    CHOOSES_OPPONENTS_BLOCKS
+                        if defenders.iter().all(|d| g.are_opponents(controller, *d)) =>
+                    {
+                        controller
+                    }
+                    ATTACKING_PLAYER_CHOOSES_BLOCKS => {
+                        return Some((source, controller, true));
+                    }
+                    _ => return None,
+                };
+                g.player(decider)
+                    .in_game()
+                    .then_some((source, controller, false))
+            })?;
+    if !attacking {
+        return Some(controller);
+    }
+    let ctx = crate::eval::Ctx::new(source, controller);
+    let candidates = crate::teams::attacking_player_candidates(g, &ctx);
+    crate::teams::choose_one_attacking_player(g, controller, source, &candidates)
+        .filter(|p| g.player(*p).in_game())
 }

@@ -209,6 +209,14 @@ impl TestGame {
             // No main phase has begun yet this turn.
             g.turn.main_phases = 0;
         }
+        // The combat phases this turn has had so far (counted as `BeginningOfCombat`
+        // begins): a step in or after the combat phase is in or after the first one, so
+        // "the first combat phase of the turn" and an added combat phase count right.
+        if step <= Step::PrecombatMain {
+            g.turn.combat_phases = 0;
+        } else {
+            g.turn.combat_phases = g.turn.combat_phases.max(1);
+        }
         if step.is_combat() && g.combat.is_none() {
             crate::combat::begin_combat(g);
         }

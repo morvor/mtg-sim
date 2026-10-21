@@ -554,6 +554,15 @@ impl Game {
             for (link, c) in linked {
                 n.linked_choices.entry(link).or_insert(c);
             }
+            // So are the cards exiled with it as it entered ("As this creature enters,
+            // exile a creature card from your graveyard", CR 607.2b, 614.12).
+            let n = &mut self.objects[new_id.0 as usize];
+            for (link, o) in m.etb.exiled_as_it_entered.iter() {
+                let v = n.linked.entry(*link).or_default();
+                if !v.contains(o) {
+                    v.push(*o);
+                }
+            }
             // So are the objects noted as it entered ("As this creature enters, choose
             // another creature you control", see `linked_notes`).
             crate::linked_notes::carry(self, old_id, new_id);
@@ -989,6 +998,15 @@ impl Game {
 
     pub(crate) fn run_post_replacement_effects(&mut self) {
         while let Some((mut c, e)) = self.post_replacement_effects.pop() {
+            if c.nums.remove(&crate::replacement::FOLLOW_IT).is_some() {
+                if let Some(v) = c.vars.get_mut(&vars::IT) {
+                    for e in v.iter_mut() {
+                        if let Entity::Object(o) = e {
+                            *o = self.current(*o);
+                        }
+                    }
+                }
+            }
             self.exec(&e, &mut c);
         }
     }
@@ -2085,6 +2103,11 @@ impl Game {
             self.recompute();
         }
         if !self.is_live(obj) || self.obj(obj).zone != Zone::Battlefield {
+            return false;
+        }
+        // CR 702.26b: a phased-out permanent is treated as though it doesn't exist; an
+        // effect can't attach it (Robe of Stars phased out in response to its equip).
+        if self.obj(obj).phased_out {
             return false;
         }
         if self.obj(obj).attached_to == Some(to) {

@@ -124,9 +124,25 @@ fn source_phrase(s: &str) -> Option<Filter> {
                 Filter::Or(alts)
             });
         }
+        // "a source you control with an odd mana value": a quality after the controller.
+        let (after, quality) = match after.find(" with ") {
+            Some(i) => {
+                let q = &after[i + 1..];
+                let so_far = Filter::and(parts.clone());
+                let (f, rest) = super::filter_suffix_patterns()
+                    .iter()
+                    .find_map(|p| (p.parse)(q, &so_far))?;
+                if !rest.trim().is_empty() {
+                    return None;
+                }
+                (&after[..i], Some(f))
+            }
+            None => (after, None),
+        };
         if let Some(rel) = controller_suffix(after)? {
             parts.push(Filter::ControlledBy(rel));
         }
+        parts.extend(quality);
         return Some(Filter::and(parts));
     }
     let (f, plural, rest) = parse_object_phrase(r)?;
@@ -178,7 +194,9 @@ fn recipient(s: &str) -> Option<Recipient> {
         let (item, next) = split_item(rest);
         match item {
             "you" => out.0 = or_players(out.0.take(), PlayerFilter::You),
-            "an opponent" => out.0 = or_players(out.0.take(), PlayerFilter::Opponent),
+            "an opponent" | "one of your opponents" => {
+                out.0 = or_players(out.0.take(), PlayerFilter::Opponent)
+            }
             "a player" => out.0 = or_players(out.0.take(), PlayerFilter::Any),
             "enchanted player" => {
                 out.0 = or_players(
@@ -258,6 +276,12 @@ fn restated_recipient(s: &str) -> bool {
     )
 }
 
+/// A value an amount of damage is compared with: "~'s power" (and what follows it).
+fn amount_value(s: &str) -> Option<(Value, &str)> {
+    let r = s.strip_prefix("~'s power")?;
+    Some((Value::PowerOf(Box::new(Sel::This)), r))
+}
+
 /// The replacement: "prevent that damage", "prevent N of that damage" (static only),
 /// "it deals double that damage [to ...] instead", "it deals that much damage plus N [to
 /// ...] instead".
@@ -309,6 +333,19 @@ fn damage_replacement(l: &str, is_static: bool) -> Option<(ReplacementDef, bool)
     let (src, r) = r.split_once(" would deal ")?;
     let source = source_phrase(src)?;
     let (cond, act) = r.split_once(", ")?;
+    // "would deal an amount of noncombat damage less than ~'s power to an opponent, that
+    // source deals damage equal to ~'s power instead" (CR 614.1a): the amount becomes the
+    // value when it's less.
+    let (cond, at_least) = match cond.strip_prefix("an amount of ") {
+        Some(c) => {
+            let i = c.find(" less than ")?;
+            let after = &c[i + " less than ".len()..];
+            let (v, rest) = amount_value(after)?;
+            (format!("{}{rest}", &c[..i]), Some(v))
+        }
+        None => (cond.to_string(), None),
+    };
+    let cond = cond.as_str();
     let (kind, cond) = if let Some(x) = cond.strip_prefix("combat damage") {
         (Some(true), x)
     } else if let Some(x) = cond.strip_prefix("noncombat damage") {
@@ -338,7 +375,19 @@ fn damage_replacement(l: &str, is_static: bool) -> Option<(ReplacementDef, bool)
     } else {
         source
     };
-    let action = damage_action(act, is_static)?;
+    let action = match &at_least {
+        Some(v) => {
+            let r = end(act)
+                .strip_prefix("that source deals damage equal to ")
+                .or_else(|| end(act).strip_prefix("it deals damage equal to "))?;
+            let (v2, rest) = amount_value(r)?;
+            if rest.trim() != "instead" || format!("{v:?}") != format!("{v2:?}") {
+                return None;
+            }
+            ReplacementAction::Add(Value::Diff(Box::new(v.clone()), Box::new(Value::EventAmount)))
+        }
+        None => damage_action(act, is_static)?,
+    };
     let event = match kind {
         Some(false) => ReplacementEvent::NoncombatDamage {
             source,
@@ -351,6 +400,13 @@ fn damage_replacement(l: &str, is_static: bool) -> Option<(ReplacementDef, bool)
             to_objects: to.1,
             combat_only: combat == Some(true),
         },
+    };
+    let event = match at_least {
+        Some(v) => ReplacementEvent::Where {
+            event: Box::new(event),
+            cond: Condition::Compare(Value::EventAmount, Cmp::Lt, v),
+        },
+        None => event,
     };
     Some((
         ReplacementDef {
@@ -376,7 +432,10 @@ fn s_damage_replacement(l: &str, text: &str, _ctx: &CompileContext) -> Option<Ve
 
 inventory::submit! { StaticPattern { name: "replacements: if a source would deal damage, prevent/double", priority: 70, parse: s_damage_replacement } }
 
-fn p_damage_replacement(l: &str, _b: &mut Builder) -> Option<Effect> {
+fn p_damage_replacement(l: &str, b: &mut Builder) -> Option<Effect> {
+    if let Some(e) = for_a_duration(l, b) {
+        return Some(e);
+    }
     let (def, this_turn) = damage_replacement(l, false)?;
     if !this_turn {
         return None;
@@ -384,6 +443,39 @@ fn p_damage_replacement(l: &str, _b: &mut Builder) -> Option<Effect> {
     Some(Effect::AddReplacement {
         def,
         duration: Duration::EndOfTurn,
+        uses: None,
+    })
+}
+
+/// "Until your next turn, if that creature would deal combat damage to one of your
+/// opponents, it deals triple that damage to that player instead." (after "Choose target
+/// creature"): the target, locked in as the effect is created (CR 611.2c).
+fn for_a_duration(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (dur, r) = super::replacement_grammar::duration_prefix(end(l));
+    let dur = dur?;
+    if matches!(dur, Duration::EndOfTurn) {
+        return None;
+    }
+    let r = r.strip_prefix("if that creature would ")?;
+    let k = b.targets.len().checked_sub(1)? as u8;
+    if !matches!(b.targets[k as usize].what, TargetKind::Object(_)) {
+        return None;
+    }
+    let (mut def, false) = damage_replacement(&format!("if ~ would {r}"), false)? else {
+        return None;
+    };
+    let target = Filter::In(Box::new(Sel::Target(k)));
+    match &mut def.event {
+        ReplacementEvent::Damage { source, .. } | ReplacementEvent::NoncombatDamage { source, .. }
+            if matches!(source, Filter::Source) =>
+        {
+            *source = target;
+        }
+        _ => return None,
+    }
+    Some(Effect::AddReplacement {
+        def,
+        duration: dur,
         uses: None,
     })
 }

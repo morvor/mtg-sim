@@ -16,6 +16,7 @@ fn effects_apply_only_to_permanents_unless_they_say_otherwise() {
     // CR 609.2 example: an effect that turns all lands into creatures doesn't affect land
     // cards in graveyards; an effect making spells cost more applies to spells on the stack.
     cr!("609.2");
+    cr_example!("609.2", "An effect that changes all lands into creatures");
     let mut t = TestGame::new(2);
     t.custom(
         P1,
@@ -64,6 +65,7 @@ fn impossible_effects_do_as_much_as_possible() {
     // CR 609.3 examples: "Discard two cards" with one card in hand discards that card;
     // an effect moving more cards out of a library than it has moves as many as possible.
     cr!("609.3");
+    cr_example!("609.3", "Discard two cards");
     let mut t = TestGame::new(2);
     t.g.players[1].hand.clear();
     t.hand(P1, "Grizzly Bears");

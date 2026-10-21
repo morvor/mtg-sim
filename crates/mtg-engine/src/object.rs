@@ -391,6 +391,34 @@ pub struct Choices {
     /// "The color or colors of your choice" (one or more colors).
     #[serde(default)]
     pub colors: Option<ColorSet>,
+    /// Each player's own choices for this object ("each player chooses war or peace",
+    /// CR 607.2d): what that player chose most recently. See `choices.rs`.
+    #[serde(default)]
+    pub by_player: Vec<(PlayerId, Choices)>,
+    /// The players whose choices for this object are secret: made without showing them
+    /// to the other players, until they're revealed ("secretly choose an opponent").
+    #[serde(default)]
+    pub secret: Vec<PlayerId>,
+    /// The choices made for this object from now on are secret (until revealed).
+    #[serde(default)]
+    pub secret_next: bool,
+    /// For a player's own choices (`by_player`): the spell or ability on the stack whose
+    /// resolution they were made in, if any.
+    #[serde(default)]
+    pub made_during: Option<ObjectId>,
+    /// The words, types and names chosen for this object, in the order they were chosen
+    /// ("choose two basic land types" + "the first chosen type", "the second chosen
+    /// type"; "choose two abilities from among ..." + "each of the chosen abilities").
+    #[serde(default)]
+    pub list: Vec<SmolStr>,
+    /// The players chosen for this object by a choice of several players ("choose two
+    /// players").
+    #[serde(default)]
+    pub players: Vec<PlayerId>,
+    /// The objects chosen or revealed for this spell as it was cast ("choose a creature
+    /// you control or reveal a creature card from your hand"), as they were then.
+    #[serde(default)]
+    pub objects: Vec<ObjectId>,
 }
 
 /// A game object. Objects in zones are referenced by id; when an object changes zones

@@ -122,8 +122,20 @@ fn cost_modifier(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Abilit
     };
     let change = change(rest, floor, ctx)?;
     let mut who = PlayerRel::Any;
+    let mut your_turn = false;
     let mut scope;
-    if let Some((group, kind)) = subject.split_once("'s ").filter(|(_, k)| {
+    if let Some(t) = subject
+        .strip_prefix("the first activated ability you activate during your turn that targets ")
+    {
+        // "The first activated ability you activate during your turn that targets a
+        // creature you control" (Professor Hojo): the first such ability each of your
+        // turns.
+        who = PlayerRel::You;
+        your_turn = true;
+        scope = AbilityScope::new(Filter::Any, AbilityClass::Any);
+        scope.targeting = Some(sources(t)?);
+        scope.first_each_turn = true;
+    } else if let Some((group, kind)) = subject.split_once("'s ").filter(|(_, k)| {
         (k.ends_with(" ability") || k.ends_with(" abilities")) && !k.starts_with("activated ")
     }) {
         // "~'s equip abilities", "~'s equip ability".
@@ -192,11 +204,14 @@ fn cost_modifier(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Abilit
         scope.targeting = Some(t);
     }
     scope.nonmana |= nonmana_suffix;
-    let s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+    let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
         applies_to: CostTarget::ActivatedAbilities(Box::new(scope)),
         who,
         change,
     }));
+    if your_turn {
+        s.condition = Some(Condition::YourTurn);
+    }
     Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
 }
 
