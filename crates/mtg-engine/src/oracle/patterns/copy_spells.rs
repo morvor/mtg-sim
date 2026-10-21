@@ -83,6 +83,11 @@ fn new_targets_for_copy(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         "you may choose new targets for the copy"
             | "you may choose new targets for the copies"
             | "you may choose new targets for that copy"
+            // "copy ~. You may choose a new target for the copy." (a spell with one
+            // target, Ancestral Communion).
+            | "you may choose a new target for the copy"
+            // "you may copy it. If you do, you may choose new targets for the copy."
+            | "if you do, you may choose new targets for the copy"
     ) {
         return false;
     }

@@ -90,6 +90,17 @@ fn stack_target(s: &str, b: &mut Builder) -> Option<Sel> {
     Some(Sel::Target(slot))
 }
 
+/// Whether the ability's text triggers on a spell being cast ("whenever a player casts a
+/// spell that targets ~").
+fn cast_trigger_text() -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    raw.lines().any(|l| {
+        (l.starts_with("whenever ") || l.starts_with("when "))
+            && (l.contains(" casts a") || l.contains("you cast a"))
+            && l.contains(" spell")
+    })
+}
+
 /// "change the target of X", "change the targets of X", "change a target of X", "change
 /// any targets of X", "choose new targets for X", each optionally ending "to ~".
 fn change_targets(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -112,6 +123,12 @@ fn change_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     // (Commandeer): "it" is the target spell of the sentence before.
     let what = match (what, &b.it) {
         ("it", Sel::Target(n)) if is_stack_target(b, *n) => Sel::Target(*n),
+        // "Whenever a player casts a spell that targets ~, ... You may choose new targets
+        // for that spell." (Speedball, New Warrior): the spell the ability triggered on.
+        ("that spell" | "it", Sel::TriggerSpell) => Sel::TriggerSpell,
+        // ... after another sentence about something else ("~ gets +2/+2 until end of
+        // turn. You may choose new targets for that spell.").
+        ("that spell", _) if b.in_trigger && cast_trigger_text() => Sel::TriggerSpell,
         _ => stack_target(what, b)?,
     };
     // "You may choose new targets for target instant or sorcery spell. Then copy that

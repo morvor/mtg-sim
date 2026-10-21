@@ -1215,16 +1215,27 @@ impl Game {
             }
             Effect::ChangeTargets { what, who, how, to } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                // The new target(s) must be among these ("to this creature", "to another
+                // creature", "the new target must be a player").
                 let forced = match to {
-                    Some(sel) => match self.resolve_sel(sel, ctx).into_iter().next() {
-                        Some(e) => Some(e),
-                        None => return,
-                    },
+                    Some(sel) => {
+                        let v = self.resolve_sel(sel, ctx);
+                        if v.is_empty() {
+                            return;
+                        }
+                        Some(v)
+                    }
                     None => None,
                 };
                 let mut changed = false;
                 for o in self.resolve_objects(what, ctx) {
-                    changed |= crate::target_rules::change_targets(self, p, o, *how, forced);
+                    changed |= crate::target_rules::change_targets_among(
+                        self,
+                        p,
+                        o,
+                        *how,
+                        forced.as_deref(),
+                    );
                 }
                 ctx.prev_happened = changed;
             }
