@@ -429,6 +429,17 @@ fn player_clause_as(c: &str) -> Option<Clause> {
     if rest.starts_with("both ") {
         return None;
     }
+    // "[did something] four or more times": the number of events (Yidaro, Wandering
+    // Monster: "you've cycled a card named ~ four or more times this game").
+    if let Some(head) = rest.strip_suffix(" or more times") {
+        if let Some((obj, num)) = head.rsplit_once(' ') {
+            if let Some((Value::Const(k), "")) = parse_number(num) {
+                if obj.starts_with("a ") || obj.starts_with("an ") {
+                    return Some(Clause::new(format!("{subj} {verb} {obj}"), Cmp::Ge, k, negated));
+                }
+            }
+        }
+    }
     // A counted object: "two or more cards", "a creature spell".
     let (obj, cmp, n) = counted_object(rest).unwrap_or((rest.to_string(), Cmp::Ge, 1));
     let trigger = if obj.is_empty() {
@@ -927,6 +938,7 @@ fn window_suffix(w: &Option<HistoryWindow>) -> &'static str {
         Some(HistoryWindow::PlayersLastTurn(_)) => " during your last turn",
         Some(HistoryWindow::SinceLastTurn(_)) => " since your last turn",
         Some(HistoryWindow::SinceLastUpkeep(_)) => " since your last upkeep",
+        Some(HistoryWindow::ThisGame) => " this game",
     }
 }
 
@@ -942,6 +954,7 @@ fn split_window(c: &str) -> Option<(String, Option<HistoryWindow>)> {
         Some(HistoryWindow::SinceLastTurn(you())),
         Some(HistoryWindow::SinceLastUpkeep(you())),
         Some(HistoryWindow::LastTurn),
+        Some(HistoryWindow::ThisGame),
     ] {
         if let Some(b) = c.strip_suffix(window_suffix(&w)) {
             return Some((b.to_string(), w));

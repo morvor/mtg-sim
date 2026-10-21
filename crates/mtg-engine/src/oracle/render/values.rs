@@ -108,6 +108,7 @@ impl Renderer<'_> {
                 format!("{p} life total")
             }
             Value::StartingLife => "your starting life total".into(),
+            Value::AsTurnBegan(stat, who) => self.as_turn_began(*stat, who),
             Value::HandSize(p) => {
                 let p = self.player(p, Case::Poss);
                 format!("the number of cards in {p} hand")

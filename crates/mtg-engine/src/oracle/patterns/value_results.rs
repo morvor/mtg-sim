@@ -48,6 +48,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// A whole value phrase ("the amount of damage dealt to you this turn"). Tried before the
 /// value grammar's own readings.
 pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // A player's state as the turn began (`history_conditions_4`).
+    if let Some(v) = super::history_conditions_4::value_atom(s, b) {
+        return Some(v);
+    }
     // Values as the spell became cast (`referents_values_4`).
     if let Some(v) = super::referents_values_4::atom(s, b) {
         return Some(v);

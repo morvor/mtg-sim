@@ -649,6 +649,10 @@ pub struct Game {
     /// The events of the latest turns before this one, for "last turn", "during your last
     /// turn" and "since your last turn" (see `history_query.rs`).
     pub past_turns: Vec<crate::history_query::PastTurn>,
+    /// Each player's state as this turn began (`turn_start.rs`).
+    pub turn_start: crate::turn_start::TurnStart,
+    /// The events of earlier turns kept for "this game" queries (`turn_start.rs`).
+    pub game_events: Vec<Event>,
     /// While positive, the events of the instructions being performed form one batch
     /// (see [`Game::end_event_batch`]).
     pub batch_hold: u32,
@@ -865,6 +869,8 @@ impl Game {
             turn_events: vec![],
             excess_ahead: vec![],
             past_turns: vec![],
+            turn_start: Default::default(),
+            game_events: vec![],
             batch_hold: 0,
             log: vec![],
             logging: false,

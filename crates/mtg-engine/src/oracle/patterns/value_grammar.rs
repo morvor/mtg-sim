@@ -1569,6 +1569,18 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                 }
             }
             let (f, tail) = objects(x, b)?;
+            // "among permanents you control and/or cards in your graveyard" (Happily Ever
+            // After): among the objects of both groups.
+            if let Some(y) = tail.strip_prefix(" and/or ") {
+                let (f2, tail2) = objects(y, b)?;
+                return Some((
+                    Value::DistinctAmong(
+                        kind,
+                        Box::new(Sel::Union(vec![Sel::All(f), Sel::All(f2)])),
+                    ),
+                    tail2,
+                ));
+            }
             return Some((Value::DistinctAmong(kind, Box::new(Sel::All(f))), tail));
         }
         if kind == Among::Colors {

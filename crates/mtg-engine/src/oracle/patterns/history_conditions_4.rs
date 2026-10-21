@@ -47,3 +47,218 @@ fn under_your_control(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "history 4: [objects] died under your control this turn", priority: 900, parse: under_your_control } }
+
+// ---------------------------------------------------------------------------
+// As the turn began (`turn_start.rs`)
+// ---------------------------------------------------------------------------
+
+/// A player subject without a builder: "you" only.
+fn you_subject(c: &str) -> Option<(PlayerRef, &str)> {
+    c.strip_prefix("you ").map(|r| (PlayerRef::You, r))
+}
+
+/// "[you] were the monarch as the turn began", "[you] had no cards in hand at the
+/// beginning of this turn", "[you] had a card in hand at the beginning of this turn".
+fn turn_began_clause(who: PlayerRef, r: &str) -> Option<Condition> {
+    let stat = |s| Value::AsTurnBegan(s, who.clone());
+    let cmp = |v, c, n| Some(Condition::Compare(v, c, Value::Const(n)));
+    match r {
+        "were the monarch as the turn began" | "was the monarch as the turn began" => {
+            cmp(stat(TurnStartStat::Monarch), Cmp::Ge, 1)
+        }
+        "weren't the monarch as the turn began" | "wasn't the monarch as the turn began" => {
+            cmp(stat(TurnStartStat::Monarch), Cmp::Eq, 0)
+        }
+        "had no cards in hand at the beginning of this turn" => {
+            cmp(stat(TurnStartStat::HandSize), Cmp::Eq, 0)
+        }
+        "had a card in hand at the beginning of this turn"
+        | "had one or more cards in hand at the beginning of this turn" => {
+            cmp(stat(TurnStartStat::HandSize), Cmp::Ge, 1)
+        }
+        // "If you had a card in hand, ..." right after a condition about the beginning of
+        // this turn (Mindstorm Crown): the same moment.
+        "had a card in hand"
+            if crate::oracle::raw_text()
+                .to_lowercase()
+                .contains("cards in hand at the beginning of this turn. if you had a card in hand,") =>
+        {
+            cmp(stat(TurnStartStat::HandSize), Cmp::Ge, 1)
+        }
+        _ => None,
+    }
+}
+
+fn turn_began(c: &str) -> Option<Condition> {
+    let (who, r) = you_subject(end(c))?;
+    turn_began_clause(who, r)
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: you were the monarch as the turn began / had no cards in hand at the beginning of this turn", priority: 900, parse: turn_began } }
+
+/// "a player's life total is less than or equal to half their starting life total" (Game
+/// Over), "an opponent's life total is ... half their starting life total": each player's
+/// own starting life total (CR 119.1).
+fn half_starting_life(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let (base, r) = if let Some(r) = c.strip_prefix("a player's life total is ") {
+        (PlayerFilter::Any, r)
+    } else if let Some(r) = c.strip_prefix("an opponent's life total is ") {
+        (PlayerFilter::Opponent, r)
+    } else {
+        return None;
+    };
+    let cmp = match r.strip_suffix(" half their starting life total")? {
+        "less than or equal to" | "at most" => Cmp::Le,
+        "less than" => Cmp::Lt,
+        "greater than or equal to" | "at least" => Cmp::Ge,
+        "greater than" => Cmp::Gt,
+        _ => return None,
+    };
+    Some(Condition::Compare(
+        Value::CountPlayers(PlayerFilter::And(vec![
+            base,
+            PlayerFilter::HalfStartingLife(cmp),
+        ])),
+        Cmp::Ge,
+        Value::Const(1),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: a player's life total is at most half their starting life total", priority: 900, parse: half_starting_life } }
+
+/// A player the text names in a value phrase: "you"/"your", "they"/"their"/"that
+/// player('s)" (the player the ability is about).
+fn named_player<'a>(
+    s: &'a str,
+    b: &crate::oracle::effects::Builder,
+    possessive: bool,
+) -> Option<(PlayerRef, &'a str)> {
+    use super::oracle_hardening_referents::is_no_player_referent;
+    let words: &[(&str, bool)] = if possessive {
+        &[("your ", true), ("their ", false), ("that player's ", false)]
+    } else {
+        &[("you ", true), ("they ", false), ("that player ", false)]
+    };
+    for (w, you) in words {
+        if let Some(r) = s.strip_prefix(w) {
+            if *you {
+                return Some((PlayerRef::You, r));
+            }
+            if matches!(b.it_player, PlayerRef::You) || is_no_player_referent(&b.it_player) {
+                return None;
+            }
+            return Some((b.it_player.clone(), r));
+        }
+    }
+    None
+}
+
+/// "the number of untapped lands they controlled at the beginning of this turn" (Power
+/// Surge), "that player's life total as the turn began" (Sengir, the Dark Baron).
+pub fn value_atom(
+    s: &str,
+    b: &mut crate::oracle::effects::Builder,
+) -> Option<(Value, String)> {
+    if let Some(r) = s.strip_prefix("the number of untapped lands ") {
+        let (who, r) = named_player(r, b, false)?;
+        let rest = r.strip_prefix("controlled at the beginning of this turn")?;
+        return Some((
+            Value::AsTurnBegan(TurnStartStat::UntappedLands, who),
+            rest.to_string(),
+        ));
+    }
+    let (who, r) = named_player(s, b, true)?;
+    let rest = r.strip_prefix("life total as the turn began")?;
+    Some((
+        Value::AsTurnBegan(TurnStartStat::Life, who),
+        rest.to_string(),
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Conditions joined by "and"
+// ---------------------------------------------------------------------------
+
+/// A condition without referents, read by the whole condition grammar.
+fn free_condition(c: &str) -> Option<Condition> {
+    let tl = crate::types::TypeLine::default();
+    let ctx = crate::oracle::CompileContext {
+        card_name: "",
+        full_name: "",
+        type_line: &tl,
+        layout: crate::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    crate::oracle::statics::parse_condition(c, &ctx)
+}
+
+/// "[condition] and [condition]", "[condition], [condition], and [condition]" (Frodo,
+/// Adventurous Hobbit: "~ is your Ring-bearer and the Ring has tempted you two or more
+/// times this game"; Happily Ever After): each part a whole condition of its own.
+fn conditions_and(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let parts: Vec<String> = if let Some((list, last)) = c.rsplit_once(", and ") {
+        let mut v: Vec<String> = list.split(", ").map(str::to_string).collect();
+        v.push(last.to_string());
+        v
+    } else {
+        // Two parts: each split point in turn.
+        for (i, _) in c.match_indices(" and ") {
+            let (x, y) = (&c[..i], &c[i + " and ".len()..]);
+            if let (Some(a), Some(b)) = (free_condition(x), free_condition(y)) {
+                return Some(Condition::And(vec![a, b]));
+            }
+        }
+        return None;
+    };
+    if parts.len() < 3 {
+        return None;
+    }
+    let conds: Option<Vec<Condition>> = parts.iter().map(|p| free_condition(p)).collect();
+    Some(Condition::And(conds?))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: [condition] and [condition]", priority: 990, parse: conditions_and } }
+
+// ---------------------------------------------------------------------------
+// The first spell you've cast this game
+// ---------------------------------------------------------------------------
+
+/// "If ~ is the first spell you've cast this game, you may cast it without paying its
+/// mana cost." (Once Upon a Time): an alternative cost of nothing (CR 118.9) while you
+/// haven't cast a spell this game (a copy isn't cast, CR 707.10).
+fn first_spell_free(
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let lower = text.to_lowercase();
+    let l = end(lower.trim());
+    let (when, body) = l.split_once(", you may ")?;
+    let window = match when {
+        "if ~ is the first spell you've cast this game" => HistoryWindow::ThisGame,
+        _ => return None,
+    };
+    if body != "cast it without paying its mana cost" {
+        return None;
+    }
+    let cast = TriggerCond::CastSpell {
+        who: PlayerRel::You,
+        filter: Filter::Spell,
+    };
+    let none_yet = Condition::Compare(
+        Value::EventsDuring(window, Box::new(cast), Tally::Events),
+        Cmp::Eq,
+        Value::Const(0),
+    );
+    Some(vec![super::costs_casting_self::this_spell_cost_ability(
+        CostChange::AlternativeCost(Cost::free()),
+        Some(none_yet),
+        text,
+    )])
+}
+
+inventory::submit! { super::AbilityPattern { name: "history 4: if ~ is the first spell you've cast this game, you may cast it without paying its mana cost", priority: 80, parse: first_spell_free } }

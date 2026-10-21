@@ -58,4 +58,24 @@ impl Renderer<'_> {
             None => format!("such that {s}"),
         }
     }
+
+    /// [`Value::AsTurnBegan`]: "that player's life total as the turn began".
+    pub(crate) fn as_turn_began(&mut self, stat: TurnStartStat, who: &PlayerRef) -> String {
+        use super::players::Case;
+        match stat {
+            TurnStartStat::Life => {
+                let p = self.player(who, Case::Poss);
+                format!("{p} life total as the turn began")
+            }
+            TurnStartStat::HandSize => {
+                let p = self.player(who, Case::Poss);
+                format!("the number of cards in {p} hand at the beginning of this turn")
+            }
+            TurnStartStat::UntappedLands => {
+                let p = self.player(who, Case::Subj);
+                format!("the number of untapped lands {p} controlled at the beginning of this turn")
+            }
+            TurnStartStat::Monarch => self.gap("monarch as the turn began"),
+        }
+    }
 }

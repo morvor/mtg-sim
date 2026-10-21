@@ -301,6 +301,15 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
                     return Some((Subject::Each(who, Some(cond)), pred));
                 }
             }
+            // "each player ~ attacked this turn", "each opponent dealt combat damage this
+            // game by a creature named ~" (`history_filters_4`): checked as each performs
+            // it ("you" is that player).
+            if let Some((pf, pred)) = super::history_filters_4::player_qualifier(r) {
+                if !r.starts_with("who ") {
+                    let cond = Condition::PlayerMatches(PlayerRef::You, pf);
+                    return Some((Subject::Each(who, Some(cond)), pred.trim_start().to_string()));
+                }
+            }
             return Some((Subject::Each(who, None), r.to_string()));
         }
     }

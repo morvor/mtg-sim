@@ -84,10 +84,18 @@ fn parse_triggered_at(
                     && head_noun(last).is_none()
                     && (adjective(next).is_some() || head_noun(next).is_some()))
         };
-        let split = r
+        let splits: Vec<usize> = r
             .match_indices(", ")
             .map(|(i, _)| i)
-            .find(|&i| !continues_list(&r[..i], &r[i + 2..]))
+            .filter(|&i| !continues_list(&r[..i], &r[i + 2..]))
+            .collect();
+        // "if A, B, and C, [effect]" (Happily Ever After): a list of conditions, when it
+        // reads as one.
+        let listed = splits.iter().copied().find(|&i| {
+            r[..i].contains(", and ") && super::statics::parse_condition(&r[..i], ctx).is_some()
+        });
+        let split = listed
+            .or_else(|| splits.first().copied())
             .map(|i| (&r[..i], &r[i + 2..]));
         if let Some((c, _)) = split {
             // Conditions are parsed without a referent: "it" in them means the source

@@ -454,6 +454,10 @@ impl Game {
                 crate::kwa::vote::voted_like(self, ctx, p) == Some(*like)
             }
             // Twice the life total against the starting life total: no rounding.
+            PlayerFilter::HalfStartingLife(cmp) => cmp.eval(
+                2 * self.player(p).life as i64,
+                crate::life_totals::starting_life(self, p) as i64,
+            ),
             PlayerFilter::LessThanHalfStartingLife => {
                 2 * self.player(p).life < crate::life_totals::starting_life(self, p)
             }
@@ -1459,6 +1463,7 @@ impl Game {
                 .map_or(0, |p| self.player(p).life as i64),
             // "Your starting life total": the variant's (CR 119.1a-e).
             Value::StartingLife => crate::life_totals::starting_life(self, ctx.controller) as i64,
+            Value::AsTurnBegan(..) => crate::turn_start::value(self, v, ctx),
             // CR 800.4i: for a player who left the game, as last known.
             Value::HandSize(r) => self.eval_player(r, ctx).map_or(0, |p| {
                 crate::multiplayer::zone_size(self, p, ZoneKind::Hand) as i64

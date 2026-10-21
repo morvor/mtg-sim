@@ -287,6 +287,21 @@ fn iterated(c: Condition) -> Option<Condition> {
 /// Returns the filter and the rest.
 pub fn player_qualifier(s: &str) -> Option<(PlayerFilter, &str)> {
     let t = s.trim_start();
+    // "~ attacked this turn" (Angel of Destiny): the player is the object of the clause.
+    if let Some(r) = t.strip_prefix("~ attacked this turn") {
+        if clause_end(r) {
+            let c = iterated(history_condition("~ attacked you this turn")?)?;
+            return Some((PlayerFilter::History(Box::new(c)), r));
+        }
+    }
+    // "previously dealt damage by it" (Diseased Vermin): at any earlier time this game,
+    // by the source ("it").
+    if let Some(r) = t.strip_prefix("previously dealt damage by it") {
+        if clause_end(r) {
+            let c = player_predicate("was dealt damage by ~", " this game")?;
+            return Some((PlayerFilter::History(Box::new(c)), r));
+        }
+    }
     let (body, participle) = if let Some(r) = t.strip_prefix("who ") {
         (r, false)
     } else if t.starts_with("dealt ") {
@@ -295,7 +310,8 @@ pub fn player_qualifier(s: &str) -> Option<(PlayerFilter, &str)> {
         return None;
     };
     for (pred, window, rest) in windowed(body) {
-        if pred.is_empty() {
+        // "dealt combat damage this game by ...": the window isn't the clause's end.
+        if pred.is_empty() || rest.starts_with(" by ") {
             continue;
         }
         let pred = if participle {
@@ -305,6 +321,30 @@ pub fn player_qualifier(s: &str) -> Option<(PlayerFilter, &str)> {
         };
         if let Some(c) = player_predicate(&pred, window) {
             return Some((PlayerFilter::History(Box::new(c)), rest));
+        }
+    }
+    // "dealt combat damage this game by a creature named ~" (Gollum, Obsessed Stalker):
+    // the window before the source.
+    if participle {
+        for (w, as_written) in WINDOWS {
+            let Some(i) = body.find(&format!("{w} by ")) else {
+                continue;
+            };
+            let (head, by) = (&body[..i], &body[i + w.len()..]);
+            // The source phrase runs to the end of the clause: try each end.
+            let words: Vec<&str> = by.split(' ').collect();
+            for k in (2..=words.len()).rev() {
+                let src = words[..k].join(" ");
+                let consumed = src.len();
+                let rest = &by[consumed..];
+                if !clause_end(rest) {
+                    continue;
+                }
+                if let Some(c) = player_predicate(&format!("was {head}{src}"), as_written) {
+                    let n = rest.len();
+                    return Some((PlayerFilter::History(Box::new(c)), &t[t.len() - n..]));
+                }
+            }
         }
     }
     None

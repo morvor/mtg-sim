@@ -1308,6 +1308,10 @@ pub enum PlayerFilter {
     /// with the player as the iterated player (`PlayerRel::Iterated`,
     /// `PlayerRef::Iterated`; see `oracle/patterns/history_filters_4.rs`).
     History(Box<Condition>),
+    /// A player whose life total compares so with half their own starting life total ("a
+    /// player's life total is less than or equal to half their starting life total"):
+    /// twice the life total against the starting life total, no rounding (CR 119.1).
+    HalfStartingLife(Cmp),
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     /// A requirement on a target player checked only as the target is chosen ("target
@@ -1763,6 +1767,11 @@ pub enum Value {
     PlayerCounters(PlayerRef, CounterKind),
     LifeTotal(PlayerRef),
     StartingLife,
+    /// A player's state as the turn began ("that player's life total as the turn began",
+    /// "the number of untapped lands they controlled at the beginning of this turn", 1 if
+    /// they were the monarch), recorded as each turn begins (`turn_start.rs`); the sum
+    /// for several players.
+    AsTurnBegan(TurnStartStat, PlayerRef),
     HandSize(PlayerRef),
     LibrarySize(PlayerRef),
     GraveyardSize(PlayerRef),
@@ -1914,6 +1923,19 @@ pub enum HistoryWindow {
     /// "since [player's] last upkeep": from the latest upkeep of the player's before this
     /// one, including this turn so far.
     SinceLastUpkeep(PlayerRef),
+    /// "this game": the events of the whole game kept for such queries (spells cast,
+    /// cards cycled, damage dealt; `turn_start::kept_for_game`).
+    ThisGame,
+}
+
+/// What [`Value::AsTurnBegan`] reads of a player's state as the turn began.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TurnStartStat {
+    Life,
+    HandSize,
+    /// 1 if the player was the monarch (CR 725), else 0.
+    Monarch,
+    UntappedLands,
 }
 
 /// How [`Value::EventsThisTurn`] tallies the events it finds.
