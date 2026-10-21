@@ -2632,6 +2632,8 @@ impl Renderer<'_> {
                     | A::Add(_)
                     | A::PlusTokens { .. }
                     | A::TokensInstead { .. }
+                    | A::TokensInsteadOf { .. }
+                    | A::TokenCopiesInstead { .. }
                     | A::Subtract(_)
                     | A::Redirect(_)
                     | A::RedirectNext(..)
@@ -3437,6 +3439,34 @@ impl Renderer<'_> {
                 let (d, tail) = self.token_desc(spec);
                 format!("that many {d} tokens{tail} are created instead")
             }
+            A::TokensInsteadOf { specs, each } => {
+                if *each {
+                    "instead create one of each".to_string()
+                } else {
+                    let list: Vec<String> = specs
+                        .iter()
+                        .map(|s| {
+                            let (d, tail) = self.token_desc(s);
+                            format!("that many {d} tokens{tail}")
+                        })
+                        .collect();
+                    format!("instead create {}", list.join(" or "))
+                }
+            }
+            A::TokenCopiesInstead { of, choose } => match (of, choose) {
+                (Some(sel), _) => {
+                    let o = self.sel(sel, Case::Obj);
+                    format!("instead create that many tokens that are copies of {o}")
+                }
+                (None, Some(f)) => {
+                    let n = self.noun(f, Num::One);
+                    format!(
+                        "instead choose {} and create that many tokens that are copies of that creature",
+                        with_article(&n)
+                    )
+                }
+                (None, None) => self.gap("token copies instead of nothing"),
+            },
             A::Redirect(sel) => {
                 let t = self.sel(sel, Case::Obj);
                 format!("that damage is dealt to {t} instead")

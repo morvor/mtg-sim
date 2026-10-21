@@ -326,6 +326,7 @@ pub fn trigger_matches(
                     object: target.object(),
                     player: Some(*by),
                     amount,
+                    counter_kind: Some(k.clone()),
                     ..Default::default()
                 })
                 .collect()
