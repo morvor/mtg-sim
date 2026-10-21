@@ -62,6 +62,13 @@ pub struct ZoneState {
     /// see [`crate::entry_costs`]).
     #[serde(default)]
     pub entry_payments: Vec<crate::entry_costs::EntryPayment>,
+    /// While the objects of a move are entering the battlefield: the limited-use
+    /// replacement effects (`ReplacementInstance::uses`) used up by one of them. Such an
+    /// effect is used once for all the objects entering at the same time ("the next time
+    /// one or more creatures enter this turn, they ..."), so it still applies to the others
+    /// (see [`Game::move_objects`]).
+    #[serde(skip)]
+    pub entry_batch_uses: Option<Vec<u32>>,
     /// The zone moves of the state-based actions being performed while replaced losses of
     /// the game are applied (CR 704.3; see [`contradictory_moves`]).
     #[serde(skip)]

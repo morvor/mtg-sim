@@ -274,8 +274,27 @@ fn put_from_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some((desc, dest)) = r.split_once(" from it ") else {
         return false;
     };
+    // "... tapped and attacking that player or a planeswalker they control" (Zara,
+    // Renegade Recruiter): the player whose hand it was (CR 508.4).
+    let mut to = Destination::battlefield().under_your_control();
+    let mut defender = None;
     if dest != "onto the battlefield under your control" {
-        return false;
+        let Some(r) = dest.strip_prefix("onto the battlefield under your control ") else {
+            return false;
+        };
+        if r == "tapped and attacking" {
+            to.tapped = true;
+            to.attacking = true;
+        } else {
+            match super::combat_4::split_defender(r) {
+                Some(("tapped and attacking", "that player", walkers)) => {
+                    to.tapped = true;
+                    to.attacking = true;
+                    defender = Some((owner.clone(), walkers));
+                }
+                _ => return false,
+            }
+        }
     }
     let Some(desc) = desc.strip_prefix("a ").or_else(|| desc.strip_prefix("an ")) else {
         return false;
@@ -301,9 +320,15 @@ fn put_from_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             var: FROM_HAND,
             sel: choose,
         },
-        Effect::Move {
-            what: Sel::Var(FROM_HAND),
-            to: Destination::battlefield().under_your_control(),
+        {
+            let mv = Effect::Move {
+                what: Sel::Var(FROM_HAND),
+                to,
+            };
+            match defender {
+                Some((p, walkers)) => super::combat_4::join_attacking(mv, p, walkers),
+                None => mv,
+            }
         },
     ]);
     // "That creature gains haste. Sacrifice it at the beginning of the next end step."

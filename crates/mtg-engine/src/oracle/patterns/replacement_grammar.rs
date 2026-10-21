@@ -103,7 +103,10 @@ pub(crate) fn word<'a>(s: &'a str, p: &str) -> Option<&'a str> {
 }
 
 /// List separators between recipients.
-const SEPS: [&str; 7] = [
+const SEPS: [&str; 9] = [
+    // "to ~ and to creatures banded with ~" (Camel): the preposition repeated.
+    ", and to ",
+    " and to ",
     ", and/or ",
     ", or ",
     ", and ",

@@ -286,6 +286,7 @@ impl Renderer<'_> {
         }
         match name {
             "party_size" => "the number of creatures in your party".into(),
+            crate::choices::CHOSEN_OBJECT_POWER => self.beheld_power(),
             crate::kw::hand_graveyard_actions::THAT_MANY => "that many".into(),
             "spell_targets_beyond_first" => "the number of targets beyond the first".into(),
             "opus:mana spent to cast that spell" => {
@@ -359,6 +360,7 @@ impl Renderer<'_> {
                 None => match self
                     .custom_value_extra(other)
                     .or_else(|| self.cast_history_value(other))
+                    .or_else(|| self.chosen_number_value(other))
                 {
                     Some(s) => s,
                     None => self.gap(format!("Value::Custom({other})")),
@@ -370,6 +372,9 @@ impl Renderer<'_> {
     /// A comparison of a custom value with a number, as cards word it ("{U} was spent to
     /// cast ~", "you've cast two or more spells this turn").
     pub(crate) fn custom_compare(&mut self, name: &str, cmp: Cmp, n: i32) -> Option<String> {
+        if let Some(s) = self.custom_compare_named(name, cmp, n) {
+            return Some(s);
+        }
         if let Some(s) = self.custom_compare_extra(name, cmp, n) {
             return Some(s);
         }
@@ -580,6 +585,7 @@ impl Renderer<'_> {
                 .custom_condition_more(other)
                 .or_else(|| self.custom_condition_terms(other, false))
                 .or_else(|| self.custom_condition_tail(other))
+                .or_else(|| self.chosen_number_condition(other))
             {
                 Some(s) => s,
                 None => self.gap(format!("Condition::Custom({other})")),
@@ -650,6 +656,7 @@ impl Renderer<'_> {
                 // "[keyword]:[event]" names describe the event: "exploit:this exploits a
                 // creature", "training:this creature trains".
                 let known = [
+                    "foretell:",
                     "mutate:",
                     "mentor:",
                     "visit:",
@@ -837,7 +844,10 @@ impl Renderer<'_> {
             ),
             other => match self.custom_static_more(other) {
                 Some(s) => s,
-                None => match self.custom_static_extra(other) {
+                None => match self
+                    .custom_static_extra(other)
+                    .or_else(|| self.named_static(other))
+                {
                     Some(s) => s,
                     None => self.gap(format!("StaticEffect::Custom({other})")),
                 },
@@ -885,7 +895,10 @@ impl Renderer<'_> {
         }
         match self.custom_modification_more(name) {
             Some(s) => s,
-            None => match self.custom_modification_extra(name) {
+            None => match self
+                .custom_modification_extra(name)
+                .or_else(|| self.named_modification(name))
+            {
                 Some(s) => s,
                 None => self.gap(format!("Modification::Custom({name})")),
             },
@@ -949,7 +962,9 @@ impl Renderer<'_> {
             "may look at the top card of their library any time" => {
                 format!("{subj} may look at the top card of {poss} library any time")
             }
-            other => match custom_player_mod_more(other, subj) {
+            other => match custom_player_mod_more(other, subj)
+                .or_else(|| self.named_player_mod(other, subj))
+            {
                 Some(s) => s,
                 None => self.gap(format!("PlayerModification::Custom({other})")),
             },

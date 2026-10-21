@@ -498,3 +498,51 @@ fn objects_chosen_secretly_are_hidden_from_the_other_player_until_revealed() {
     }
     assert!(!t.on_battlefield(giant));
 }
+
+#[test]
+fn stalking_leonins_chosen_opponent_is_secret_until_revealed_to_exile() {
+    cr!("607.2d");
+    ruling!(
+        "Stalking Leonin",
+        "There are several ways to secretly choose an opponent, including writing that player's name on a piece of paper that's kept with Stalking Leonin."
+    );
+    // P0's Stalking Leonin secretly chooses P2. Nobody else sees the choice until P0
+    // reveals it to exile P2's attacker.
+    let mut t = TestGame::new(3);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let leonin = t.enter(P0, "Stalking Leonin");
+    t.resolve_all();
+    let view = |t: &TestGame, v: PlayerId| {
+        observe(&t.g, Some(v))
+            .battlefield
+            .into_iter()
+            .find(|o| o.id == leonin.0)
+            .unwrap()
+            .choices
+    };
+    assert_eq!(view(&t, P0), vec!["P0 chose P2".to_string()]);
+    for v in [P1, P2] {
+        assert_eq!(view(&t, v), vec!["P0 chose secretly".to_string()], "{v:?}");
+        let j = json(&observe(&t.g, Some(v)));
+        assert!(!j.contains("chose P2"), "{v:?}: {j}");
+    }
+    // P2's Grizzly Bears attack P0; P0 reveals the choice and exiles them.
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    t.set_step(P2, mtg_engine::turn::Step::BeginningOfCombat);
+    t.answer(
+        P2,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(bears, Entity::Player(P0))]),
+    );
+    t.g.run_until(10_000, |g| {
+        g.turn.step == mtg_engine::turn::Step::DeclareAttackers
+            && g.turn.stage == mtg_engine::turn::Stage::Priority
+    });
+    t.settle();
+    t.activate(P0, leonin, 0, &[Entity::Object(bears)]).unwrap();
+    for v in [P1, P2] {
+        assert_eq!(view(&t, v), vec!["P0 chose P2".to_string()], "{v:?}");
+    }
+    t.resolve_all();
+    assert_eq!(t.zone(bears), mtg_engine::object::Zone::Exile);
+}

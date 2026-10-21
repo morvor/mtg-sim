@@ -108,6 +108,7 @@ fn a_creature_that_phases_in_can_attack() {
 #[test]
 fn a_phased_out_permanent_is_treated_as_though_it_doesnt_exist() {
     cr!("702.26b");
+    cr_example!("702.26b", "Destroy all creatures");
     ruling!(
         "Clever Concealment",
         "Phased out permanents are treated as though they don’t exist"

@@ -73,6 +73,7 @@ impl Game {
         );
         let prev_entry_sacrifices = std::mem::take(&mut self.zones.entry_sacrifices);
         let prev_entry_payments = std::mem::take(&mut self.zones.entry_payments);
+        let prev_batch_uses = std::mem::replace(&mut self.zones.entry_batch_uses, Some(vec![]));
         // CR 616.1: when several players choose among replacement effects for
         // simultaneous events, they do so in APNAP order.
         let apnap = self.apnap();
@@ -124,6 +125,7 @@ impl Game {
                 finals.push((i, e));
             }
         }
+        self.zones.entry_batch_uses = prev_batch_uses;
         // CR 614.12b: the life and energy chosen to be paid for objects entering at the same
         // time are paid once all the choices have been made.
         let payments = std::mem::replace(&mut self.zones.entry_payments, prev_entry_payments);

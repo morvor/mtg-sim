@@ -72,6 +72,17 @@ fn player_mods(s: &str) -> Option<Vec<PlayerModification>> {
         // CR 702.18a
         return Some(vec![PlayerModification::Shroud]);
     }
+    // CR 702.11d, 702.11f: "hexproof from blue and from black" (Veil of Summer).
+    if s.starts_with("hexproof from ") {
+        let ks = keyword_list(s)?;
+        if ks.is_empty() || ks.iter().any(|k| k.kind != KeywordKind::Hexproof) {
+            return None;
+        }
+        return ks
+            .into_iter()
+            .map(|k| k.filter.map(PlayerModification::HexproofFrom))
+            .collect();
+    }
     let q = s.strip_prefix("protection from ")?;
     Some(
         protection_qualities(q)?

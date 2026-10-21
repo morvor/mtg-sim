@@ -63,6 +63,19 @@ pub fn schedule(g: &mut Game, who: &PlayerRef, part: NextTurnPart, effect: &Effe
             .map(Whose::Player)
             .collect(),
     };
+    // "During that combat phase": the combat phase before it is the one it waits after.
+    let created_combats = if part == NextTurnPart::AddedCombatPhase {
+        match ctx
+            .nums
+            .get(&crate::kw::added_combat_phases::ADDED_COMBAT)
+            .copied()
+        {
+            Some(k) if k >= 1 => k as u32 - 1,
+            _ => return,
+        }
+    } else {
+        g.turn.combat_phases
+    };
     for w in whose {
         g.scheduled.push(Scheduled {
             whose: w,
@@ -70,7 +83,7 @@ pub fn schedule(g: &mut Game, who: &PlayerRef, part: NextTurnPart, effect: &Effe
             ctx: ctx.clone(),
             effect: effect.clone(),
             created_turn: g.turn.number,
-            created_combats: g.turn.combat_phases,
+            created_combats,
         });
     }
 }
@@ -78,6 +91,10 @@ pub fn schedule(g: &mut Game, who: &PlayerRef, part: NextTurnPart, effect: &Effe
 /// As a turn begins: creates the effects waiting for the turn of one of its active
 /// players. Effects for players who left the game are dropped (CR 800.4a).
 pub fn turn_began(g: &mut Game) {
+    // An added combat phase of an earlier turn that never began (CR 500.8).
+    let turn = g.turn.number;
+    g.scheduled
+        .retain(|s| s.part != NextTurnPart::AddedCombatPhase || s.created_turn >= turn);
     start(g, |g, s| {
         s.part == NextTurnPart::Turn && g.turn.number > s.created_turn
     });
@@ -87,8 +104,11 @@ pub fn turn_began(g: &mut Game) {
 /// waiting for the next combat phase of one of the turn's active players.
 pub fn combat_began(g: &mut Game) {
     start(g, |g, s| {
-        s.part == NextTurnPart::CombatPhase
-            && (g.turn.number > s.created_turn || g.turn.combat_phases > s.created_combats)
+        (s.part == NextTurnPart::CombatPhase
+            && (g.turn.number > s.created_turn || g.turn.combat_phases > s.created_combats))
+            || (s.part == NextTurnPart::AddedCombatPhase
+                && g.turn.number == s.created_turn
+                && g.turn.combat_phases == s.created_combats + 1)
     });
 }
 
