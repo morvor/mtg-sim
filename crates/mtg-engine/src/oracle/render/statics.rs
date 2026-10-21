@@ -1299,6 +1299,10 @@ impl Renderer<'_> {
                 let n = self.noun(&f, Num::Many);
                 format!("spend only mana produced by {n} to cast ~")
             }
+            CostChange::Rule(CostRule::XAtMost(v)) => {
+                let v = self.value(v);
+                format!("X can't be greater than {v}")
+            }
             CostChange::Rule(r) => cost_rule_text(r),
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
             CostChange::ReduceColored(c, v) => {
@@ -2635,7 +2639,8 @@ impl Renderer<'_> {
                     | A::PreventAndThen(..)
                     | A::LifeFloor(_)
                     | A::ManaTypeInstead(_)
-                    | A::RevealAndMoveInstead(_)) => {
+                    | A::RevealAndMoveInstead(_)
+                    | A::Then(..)) => {
                         let then = self.replacement_then(other, "it");
                         format!("if {subj} would enter, {then}")
                     }
@@ -3387,6 +3392,17 @@ impl Renderer<'_> {
                 let e = self.effect(e);
                 format!("{e} as well")
             }
+            A::Then(inner, e) => {
+                let first = self.replacement_then(inner, it);
+                let then = match e.as_ref() {
+                    Effect::Reflexive { body } => {
+                        let b = self.effect(&body.effect);
+                        format!("When you do, {b}")
+                    }
+                    other => capitalize(&self.effect(other)),
+                };
+                format!("{first}. {then}")
+            }
             A::Prevent => "prevent that event".into(),
             A::PreventAmount(v) | A::PreventPortion(v) => {
                 let v = self.value(v);
@@ -3842,6 +3858,8 @@ pub(crate) fn cost_rule_text(r: &CostRule) -> String {
             }
             s
         }
+        // (Rendered with its value where a renderer is at hand.)
+        CostRule::XAtMost(_) => "X can't be greater than that value".into(),
         CostRule::NoMana => "you can't spend mana to cast ~".into(),
         CostRule::OnlyManaFrom(_) => "spend only mana produced by permanents to cast ~".into(),
         CostRule::OnlyChosenColor => {

@@ -18,7 +18,7 @@ use crate::oracle::phrases::end;
 use crate::types::CardType;
 
 /// "the top [type] card of [whose] graveyard", and what follows it.
-fn top_card_phrase(s: &str) -> Option<(Filter, &str)> {
+pub(crate) fn top_card_phrase(s: &str) -> Option<(Filter, &str)> {
     let r = s.strip_prefix("the top ")?;
     let (ty, r) = r.split_once(" card of ")?;
     let t = CardType::from_word(ty)?;

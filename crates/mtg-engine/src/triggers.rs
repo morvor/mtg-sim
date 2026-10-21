@@ -1115,9 +1115,30 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::Attacks(f), Event::AttackersDeclared { attackers, player }) => attackers
+            (
+                TriggerCond::Attacks(f),
+                Event::AttackersDeclared {
+                    attackers,
+                    player,
+                    as_declared,
+                },
+            ) => attackers
                 .iter()
-                .filter(|(a, _)| self.matches(*a, f, &ctx))
+                .enumerate()
+                .filter(|(i, (a, _))| match as_declared.get(*i) {
+                    // As it was declared (the same now, as the attack triggers are
+                    // detected; it may have changed since for a look-back, CR 608.2i).
+                    Some((chars, controller)) => {
+                        let view = crate::eval::AsDeclared {
+                            id: *a,
+                            chars,
+                            controller: *controller,
+                        };
+                        self.matches_view(&view, *a, f, &ctx)
+                    }
+                    None => self.matches(*a, f, &ctx),
+                })
+                .map(|(_, x)| x)
                 .map(|(a, t)| EventInfo {
                     object: Some(*a),
                     player: match t {
@@ -1136,7 +1157,12 @@ impl Game {
                     e
                 })
                 .collect(),
-            (TriggerCond::PlayerAttacks(rel), Event::AttackersDeclared { attackers, player }) => {
+            (
+                TriggerCond::PlayerAttacks(rel),
+                Event::AttackersDeclared {
+                    attackers, player, ..
+                },
+            ) => {
                 if !attackers.is_empty() && self.player_rel_matches(*rel, *player, &ctx) {
                     one(EventInfo {
                         player: Some(*player),
@@ -1155,7 +1181,9 @@ impl Game {
                     with,
                     min,
                 },
-                Event::AttackersDeclared { attackers, player },
+                Event::AttackersDeclared {
+                    attackers, player, ..
+                },
             ) => {
                 if !self.player_rel_matches(*attacker, *player, &ctx) {
                     return none();

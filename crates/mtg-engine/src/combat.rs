@@ -1317,9 +1317,20 @@ fn perform_attack_declaration(
     // CR 508.1m: abilities that trigger on attackers being declared.
     if !final_decl.is_empty() {
         g.log(|_g| format!("{ap} attacks with {} creature(s)", final_decl.len()));
+        // What each attacker is as it's declared (attacking now, CR 508.1k).
+        g.dirty = true;
+        g.recompute();
+        let as_declared = final_decl
+            .iter()
+            .map(|(a, _)| {
+                let o = g.obj(*a);
+                (std::sync::Arc::new(o.chars.clone()), o.controller)
+            })
+            .collect();
         g.emit(Event::AttackersDeclared {
             player: ap,
             attackers: final_decl,
+            as_declared,
         });
     }
     g.dirty = true;

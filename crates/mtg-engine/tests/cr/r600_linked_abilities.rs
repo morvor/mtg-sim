@@ -343,6 +343,7 @@ fn cards_exiled_by_a_replacement_effect_are_linked_to_it() {
 #[test]
 fn a_choice_is_linked_to_the_abilities_that_refer_to_it() {
     cr!("607.2d", "607.4");
+    cr_example!("607.4", "Paradise Plume");
     // Paradise Plume: "As this artifact enters, choose a color." / "Whenever a player casts
     // a spell of the chosen color, you may gain 1 life." / "{T}: Add one mana of the
     // chosen color."

@@ -603,6 +603,9 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         // still on the battlefield": the choice is the delayed ability's (see
         // `patterns::delayed_grammar_2`).
         || (l.starts_with("you may ") && l.ends_with(" if ~ is still on the battlefield"))
+        // "... as though those cards were in your graveyard": a permission (CR 609.4, see
+        // `patterns::graveyard_play_swap`).
+        || (l.starts_with("you may ") && l.ends_with(" as though those cards were in your graveyard"))
     {
         if let Some(e) = parse_simple(l, b) {
             return Some(e);
@@ -614,6 +617,11 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         if let Some(e) = super::patterns::basic_effects_choose::may_pay_action(l, b) {
             return Some(e);
         }
+    }
+    // "You may discard a card or pay {2}": an optional cost that is a choice of two (see
+    // `patterns::cost_choices_2`).
+    if let Some(e) = super::patterns::cost_choices_2::may_pay_either(l, b) {
+        return Some(e);
     }
     if let Some(r) = l.strip_prefix("you may ") {
         let e = parse_clause(r, b)?;

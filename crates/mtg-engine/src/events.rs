@@ -213,6 +213,11 @@ pub enum Event {
     AttackersDeclared {
         player: PlayerId,
         attackers: Vec<(ObjectId, Entity)>,
+        /// Each attacker's characteristics and controller as it was declared, in the
+        /// order of `attackers`: abilities that look back at the creatures that attacked
+        /// check what they were then, not what they are now (CR 608.2i).
+        #[serde(default)]
+        as_declared: Vec<(std::sync::Arc<crate::object::Characteristics>, PlayerId)>,
     },
     BlockersDeclared {
         blocks: Vec<(ObjectId, ObjectId)>,
