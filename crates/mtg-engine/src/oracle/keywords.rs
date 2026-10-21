@@ -481,6 +481,14 @@ fn single_quality(s: &str) -> Option<Filter> {
         // "protection from each mana value of the chosen quality" (odd or even, CR
         // 607.2d; Lavabrink Venturer).
         "each mana value of the chosen quality" => return Some(Filter::ManaValueOfChosenQuality),
+        // "protection from each mana value other than the chosen number" (Haktos the
+        // Unscarred): every mana value but that one (CR 702.16a).
+        "each mana value other than the chosen number" => {
+            return Some(Filter::not(Filter::ManaValue(
+                Cmp::Eq,
+                Box::new(Value::Chosen),
+            )))
+        }
         "each of your opponents" | "your opponents" => {
             return Some(Filter::ControlledBy(PlayerRel::Opponent))
         }
@@ -493,6 +501,26 @@ fn single_quality(s: &str) -> Option<Filter> {
             ]))
         }
         _ => {}
+    }
+    // "each color among permanents you control" (Pledge of Loyalty), "each mana value
+    // among artifacts you control" (Rebbec): one quality per color or mana value those
+    // objects have (CR 702.16h), determined continuously (see `layers::apply_mod`).
+    for (p, color) in [
+        ("each color among ", true),
+        ("each mana value among ", false),
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            let (f, plural, tail) = super::phrases::parse_object_phrase(r)?;
+            if !plural || !tail.trim().is_empty() {
+                return None;
+            }
+            let sel = Box::new(Sel::All(f));
+            return Some(if color {
+                Filter::SharesColor(sel)
+            } else {
+                Filter::SharesManaValue(sel)
+            });
+        }
     }
     if let Some(r) = s.strip_prefix("mana value ") {
         let (n, cmp) = if let Some(n) = r.strip_suffix(" or greater") {

@@ -289,6 +289,7 @@ impl Renderer<'_> {
                     Among::CardTypes => "card types",
                     Among::PermanentTypes => "permanent types",
                     Among::CreatureTypes => "creature types",
+                    Among::PlaneswalkerTypes => "planeswalker types",
                     Among::BasicLandTypes => "basic land types",
                     Among::Colors => "colors",
                     // "five or more mana values among cards in your graveyard": distinct

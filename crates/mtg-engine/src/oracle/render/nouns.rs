@@ -790,6 +790,10 @@ impl Renderer<'_> {
                 let s = self.shared_with(s);
                 np.rel.push(format!("that shares a color with {s}"));
             }
+            Filter::SharesManaValue(s) => {
+                let s = self.shared_with(s);
+                np.rel.push(format!("with the same mana value as {s}"));
+            }
             Filter::HasKeyword(k) => np.with.push(self.keyword_kind_word(*k)),
             Filter::HasCounter(k) => np.with_on.push(match k {
                 Some(k) => counter_name(k),
@@ -818,6 +822,22 @@ impl Renderer<'_> {
             // "a creature dealt damage this way".
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
                 np.post.push("dealt damage this way".into())
+            }
+            // "each creature tapped this way" (the most recent tap instruction or cost).
+            Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::TAPPED)) => {
+                np.post.push("tapped this way".into())
+            }
+            // "each artifact that became a creature this way".
+            Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::MODIFIED)) => {
+                np.post.push("that became a creature this way".into())
+            }
+            // "all cards exiled this way" (`referents_values_4`).
+            Filter::In(s)
+                if matches!(s.as_ref(), Sel::Var(v)
+                    if *v == crate::oracle::patterns::referents_values_4::EXILED_SNAPSHOT) =>
+            {
+                np.post.push("exiled this way".into());
+                np.kind.get_or_insert("card");
             }
             // "a card exiled with ~": the cards an ability of this object exiled
             // (CR 607.2a).

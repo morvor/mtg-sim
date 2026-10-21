@@ -53,10 +53,18 @@ fn object_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let forms: [(&str, &str, Option<Condition>); 6] = [
         (" explores", EXPLORED, None),
         (" explores a land card", EXPLORED, amount(REVEALED_LAND)),
-        (" explores a nonland card", EXPLORED, amount(REVEALED_NONLAND)),
+        (
+            " explores a nonland card",
+            EXPLORED,
+            amount(REVEALED_NONLAND),
+        ),
         (" connives", crate::kwa::connive::CONNIVED, None),
         (" endures", crate::kwa::endure::ENDURED, None),
-        (" becomes monstrous", crate::kwa::monstrosity::MONSTROUS, None),
+        (
+            " becomes monstrous",
+            crate::kwa::monstrosity::MONSTROUS,
+            None,
+        ),
     ];
     for (suffix, name, extra) in forms {
         if let Some(subj) = r.strip_suffix(suffix) {
@@ -177,13 +185,21 @@ pub(crate) fn substitute_x<T: serde::Serialize + serde::de::DeserializeOwned>(
     t: &T,
     x: &Value,
 ) -> Option<T> {
-    fn subst(v: serde_json::Value, from: &serde_json::Value, to: &serde_json::Value) -> serde_json::Value {
+    fn subst(
+        v: serde_json::Value,
+        from: &serde_json::Value,
+        to: &serde_json::Value,
+    ) -> serde_json::Value {
         use serde_json::Value as J;
         if &v == from {
             return to.clone();
         }
         match v {
-            J::Object(m) => J::Object(m.into_iter().map(|(k, x)| (k, subst(x, from, to))).collect()),
+            J::Object(m) => J::Object(
+                m.into_iter()
+                    .map(|(k, x)| (k, subst(x, from, to)))
+                    .collect(),
+            ),
             J::Array(a) => J::Array(a.into_iter().map(|x| subst(x, from, to)).collect()),
             other => other,
         }
@@ -202,7 +218,10 @@ fn monstrous_x_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     let words: Vec<&str> = eff
         .split(|c: char| !c.is_alphanumeric() && c != '/')
         .collect();
-    if !words.iter().any(|w| *w == "x" || w.contains("x/") || w.contains("/x")) {
+    if !words
+        .iter()
+        .any(|w| *w == "x" || w.contains("x/") || w.contains("/x"))
+    {
         return None;
     }
     let start = t.len() - eff.len();
@@ -265,7 +284,9 @@ fn ring_bearer_condition(c: &str) -> Option<Condition> {
     let rb = || Filter::Custom(SmolStr::new(crate::kwa::ring::RING_BEARER));
     Some(match end(c) {
         "~ is your ring-bearer" | "it's your ring-bearer" => Condition::SelMatches(Sel::This, rb()),
-        "~ isn't your ring-bearer" => Condition::Not(Box::new(Condition::SelMatches(Sel::This, rb()))),
+        "~ isn't your ring-bearer" => {
+            Condition::Not(Box::new(Condition::SelMatches(Sel::This, rb())))
+        }
         "you chose a creature other than ~ as your ring-bearer" => Condition::And(vec![
             Condition::SelNonEmpty(Sel::TriggerObject),
             Condition::Not(Box::new(Condition::SelMatches(
@@ -364,6 +385,7 @@ fn support_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
         max: n,
         distinct_from: vec![],
         divide: None,
+        divide_up_to: false,
         chosen_by_opponent: false,
         text: String::new(),
         condition: None,
@@ -387,9 +409,7 @@ inventory::submit! { EffectPattern { name: "a701 support", priority: 60, parse: 
 /// [ability]" (CR 701.64).
 fn infinity(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let t = block.trim();
-    let rest = t
-        .strip_prefix("∞ — ")
-        .or_else(|| t.strip_prefix("∞ - "))?;
+    let rest = t.strip_prefix("∞ — ").or_else(|| t.strip_prefix("∞ - "))?;
     let granted = crate::oracle::parse_ability(rest, ctx)?;
     if granted
         .iter()

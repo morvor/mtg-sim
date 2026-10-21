@@ -418,7 +418,32 @@ fn adjective_alternative(r: &str) -> Option<(Filter, bool, &str, &str)> {
     let (f, plural, rest) = parse_object_phrase(r)?;
     let consumed = r[..r.len() - rest.len()].trim_end();
     let noun = consumed.rsplit(' ').next()?;
-    if consumed.contains(" or ") || consumed.contains(',') || head_noun(noun).is_none() {
+    if head_noun(noun).is_none() {
+        // "each artifact or non-Aura enchantment you control": who controls them is
+        // said of both alternatives, so the alternative ends with its noun.
+        let words: Vec<&str> = consumed.split(' ').collect();
+        let k = words.iter().position(|w| head_noun(w).is_some())?;
+        let prefix_len = words[..=k].join(" ").len();
+        let after = r.get(prefix_len..)?;
+        let shared = [
+            "you control",
+            "you don't control",
+            "an opponent controls",
+            "your opponents control",
+        ];
+        if !shared.iter().any(|p| after.trim_start().starts_with(p)) {
+            return None;
+        }
+        if r[..prefix_len].contains(" or ") || r[..prefix_len].contains(',') {
+            return None;
+        }
+        let (f2, pl2, rest2) = parse_object_phrase(&r[..prefix_len])?;
+        if !rest2.trim().is_empty() {
+            return None;
+        }
+        return Some((f2, pl2, after, words[k]));
+    }
+    if consumed.contains(" or ") || consumed.contains(',') {
         return None;
     }
     Some((f, plural, rest, noun))
@@ -1951,6 +1976,7 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         max,
         distinct_from: vec![],
         divide: None,
+        divide_up_to: false,
         chosen_by_opponent,
         text: String::new(),
         condition: None,

@@ -284,7 +284,8 @@ impl Game {
         // CR 702.3b, unless an effect lets it attack as though it didn't have defender.
         if o.has_keyword(KeywordKind::Defender)
             && !self.restricted_obj(id, |r| match r {
-                Restriction::AttackDespiteDefender(f) => Some(f),
+                Restriction::AttackDespiteDefender(f)
+                | Restriction::AttackPlayersDespiteDefender { attackers: f, .. } => Some(f),
                 _ => None,
             })
         {
@@ -293,6 +294,25 @@ impl Game {
         !self.restricted_obj(id, |r| match r {
             Restriction::CantAttack(f) | Restriction::CantAttackOrBlock(f) => Some(f),
             _ => None,
+        })
+    }
+
+    /// Whether an "attack players who ... as though it didn't have defender" restriction
+    /// lets the creature `id` attack `target` (a player it covers).
+    fn defender_may_attack_player(&self, id: ObjectId, target: Entity) -> bool {
+        let Entity::Player(p) = target else {
+            return false;
+        };
+        self.all_restrictions().iter().any(|(s, c, r, locked)| {
+            let Restriction::AttackPlayersDespiteDefender { attackers, players } = r else {
+                return false;
+            };
+            let mut ctx = Ctx::new(*s, *c);
+            if !self.restriction_applies(id, attackers, &ctx, locked) {
+                return false;
+            }
+            ctx.iter_player = Some(p);
+            self.eval_cond(players, &ctx)
         })
     }
 
@@ -326,6 +346,17 @@ impl Game {
                 return false;
             }
         }
+        // "can attack players who ... as though it didn't have defender": only those
+        // players, unless it can attack as though it didn't have defender at all.
+        if o.has_keyword(KeywordKind::Defender)
+            && !self.restricted_obj(id, |r| match r {
+                Restriction::AttackDespiteDefender(f) => Some(f),
+                _ => None,
+            })
+            && !self.defender_may_attack_player(id, target)
+        {
+            return false;
+        }
         // "can't attack a player it has already attacked this turn" (CR 508.6).
         if let Entity::Player(p) = target {
             if self.restricted_obj(id, |r| match r {
@@ -354,6 +385,17 @@ impl Game {
                             && self.restriction_applies(id, attackers, &ctx, locked)
                             && self.player_filter_matches(pf, p, &ctx)
                     })
+                }
+                // "can't attack a permanent you control": a planeswalker or battle that
+                // player controls (not one they protect).
+                Restriction::CantAttackPermanentsOf {
+                    attackers,
+                    controller,
+                } => {
+                    let ctx = Ctx::new(*s, *c);
+                    matches!(target, Entity::Object(o)
+                        if self.player_filter_matches(controller, self.obj(o).controller, &ctx))
+                        && self.restriction_applies(id, attackers, &ctx, locked)
                 }
                 _ => false,
             })
@@ -850,7 +892,9 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
                 defender,
             } = &r
             {
-                let ctx = Ctx::new(s, c);
+                let mut ctx = Ctx::new(s, c);
+                // "... attacks the other chosen player": relative to the creature.
+                ctx.set_var(vars::AFFECTED, vec![Entity::Object(id)]);
                 if g.restriction_applies(id, attackers, &ctx, &locked) {
                     for p in g.players_in_game() {
                         if g.player_filter_matches(defender, p, &ctx) {
@@ -966,6 +1010,8 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
             let mut ctx = Ctx::new(s, c);
             // "where X is the number of counters on that creature": the attacker.
             ctx.set_var(vars::AFFECTED, vec![Entity::Object(creature)]);
+            // "... that's attacking a planeswalker you control": what it would attack.
+            ctx.set_var(crate::kw::combat_history_4::ATTACK_TARGET, vec![target]);
             if !g.restriction_applies(creature, attackers, &ctx, &locked) {
                 continue;
             }
@@ -1158,7 +1204,12 @@ pub fn declare_attackers_step(g: &mut Game) {
         ) {
             Answer::Attackers(v)
                 if attack_declaration_legal_with(g, &options, &v, &reqs, max)
-                    && g.can_pay_cost(ap, &total_attack_cost(g, &v), None, &Ctx::new(None, ap)) =>
+                    && g.can_pay_cost(
+                        ap,
+                        &total_attack_cost(g, &v),
+                        None,
+                        &declaring_ctx(ap, v.iter().map(|(a, _)| *a)),
+                    ) =>
             {
                 v
             }
@@ -1187,6 +1238,18 @@ pub fn declare_attackers_step(g: &mut Game) {
         g.roll_back(snapshot);
         perform_attack_declaration(g, ap, best, &had_to, false);
     }
+}
+
+/// The context of a player's costs to attack or block: the creatures being declared as
+/// attackers or blockers ("tap an untapped creature you control not declared as an
+/// attacking or blocking creature this combat", see `kw::combat_history_4`).
+fn declaring_ctx(p: PlayerId, declared: impl Iterator<Item = ObjectId>) -> Ctx {
+    let mut ctx = Ctx::new(None, p);
+    ctx.set_var(
+        crate::kw::combat_history_4::BEING_DECLARED,
+        declared.map(Entity::Object).collect(),
+    );
+    ctx
 }
 
 /// Performs a declaration of attackers: taps (CR 508.1f), costs (508.1g–j), attacking
@@ -1234,7 +1297,14 @@ fn perform_attack_declaration(
     }
     // CR 508.1h–j: the total cost is locked in, then paid (mana abilities may be activated).
     let required = total_attack_cost(g, &declared);
-    if !required.is_free() && !g.pay_cost(ap, &required, None, &Ctx::new(None, ap)) {
+    if !required.is_free()
+        && !g.pay_cost(
+            ap,
+            &required,
+            None,
+            &declaring_ctx(ap, declared.iter().map(|(a, _)| *a)),
+        )
+    {
         return false;
     }
     for (a, cost, _) in &optional {
@@ -1932,9 +2002,14 @@ pub fn declare_blockers_step(g: &mut Game) {
                 Answer::Blockers(v)
                     if block_restrictions_ok(g, &rules, &options, &v)
                         && obeyed_block_requirements(&reqs, &v) >= max
-                        && block_costs_by_player(g, &v)
-                            .iter()
-                            .all(|(p, c)| g.can_pay_cost(*p, c, None, &Ctx::new(None, *p))) =>
+                        && block_costs_by_player(g, &v).iter().all(|(p, c)| {
+                            g.can_pay_cost(
+                                *p,
+                                c,
+                                None,
+                                &declaring_ctx(*p, v.iter().map(|(b, _)| *b)),
+                            )
+                        }) =>
                 {
                     v
                 }
@@ -1956,9 +2031,14 @@ pub fn declare_blockers_step(g: &mut Game) {
             blocks
         } else {
             let snapshot = g.clone();
-            let ok = costs
-                .iter()
-                .all(|(p, c)| g.pay_cost(*p, c, None, &Ctx::new(None, *p)));
+            let ok = costs.iter().all(|(p, c)| {
+                g.pay_cost(
+                    *p,
+                    c,
+                    None,
+                    &declaring_ctx(*p, blocks.iter().map(|(b, _)| *b)),
+                )
+            });
             if ok {
                 blocks
             } else {

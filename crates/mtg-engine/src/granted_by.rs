@@ -85,17 +85,28 @@ fn rewrite(a: &Ability, how: Rewrite) -> Option<Ability> {
     // that has the ability).
     let other = json(&Filter::Other)?;
     let not_granter = json(&Filter::Not(Box::new(Filter::Custom(GRANTER.into()))))?;
+    // "attach ~ to a creature or land you control": one the granter could be attached to.
+    let source_can_attach = json(&Filter::Custom(crate::attach::SOURCE_CAN_ATTACH.into()))?;
+    let granter_can_attach = json(&Filter::CanBeAttachedBy(Box::new(granter_all.clone())))?;
     let granterize = |v: serde_json::Value, sel: &serde_json::Value| -> serde_json::Value {
         let v = replace(v, &this, sel);
         let v = replace(v, &source, &granter_filter);
+        let v = replace(v, &source_can_attach, &granter_can_attach);
         replace(v, &other, &not_granter)
     };
+    // "sacrifice this permanent", read as "sacrifice enchanted permanent" (the quote itself
+    // says neither "enchanted" nor "equipped", see `mixed_granted_abilities`): the object
+    // that has the ability.
+    let enchanted = json(&Filter::Enchanted)?;
+    let equipped = json(&Filter::Equipped)?;
     // After "~" became the granter: "enchanted creature" is the object with the ability.
     let host_to_self = |v: serde_json::Value| -> serde_json::Value {
         if how != Rewrite::Mixed {
             return v;
         }
         let v = replace(v, &attached_to, &this);
+        let v = replace(v, &enchanted, &source);
+        let v = replace(v, &equipped, &source);
         replace(v, &attached_to_source, &source)
     };
     let kind = match &a.kind {
