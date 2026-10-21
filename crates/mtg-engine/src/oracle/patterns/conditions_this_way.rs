@@ -690,7 +690,11 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let keeps = |e: &Effect| {
         matches!(
             e,
-            Effect::GrantPlayPermission { .. } | Effect::GainLife { .. } | Effect::LoseLife { .. }
+            Effect::GrantPlayPermission { .. }
+                | Effect::GainLife { .. }
+                | Effect::LoseLife { .. }
+                // Dealing damage doesn't reveal, move or otherwise affect cards.
+                | Effect::DealDamage { .. }
         )
     };
     // "Exile target creature you control, then return that card to the battlefield. If a

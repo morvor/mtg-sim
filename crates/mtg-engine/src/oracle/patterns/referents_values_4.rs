@@ -1312,10 +1312,13 @@ fn count_colors_then_search(l: &str, b: &mut Builder) -> Option<Effect> {
         Cmp::Eq,
         Box::new(Value::Sum(vec![colors(sel), Value::c(plus)])),
     );
-    let Effect::Search { filter, .. } = &mut e else {
+    let Effect::SearchCards(spec) = &mut e else {
         return None;
     };
-    *filter = Filter::and(vec![filter.clone(), f]);
+    let [part] = spec.parts.as_mut_slice() else {
+        return None;
+    };
+    part.filter = Filter::and(vec![part.filter.clone(), f]);
     Some(e)
 }
 
@@ -1338,13 +1341,53 @@ fn instruction_if_condition(l: &str, b: &mut Builder) -> Option<Effect> {
     if x.contains(" if ") || c.contains(", ") || c.starts_with("you do") || c.starts_with("able") {
         return None;
     }
+    // "[first instruction], then [instruction] if [condition]": the condition is only of
+    // the second instruction, checked after the first is performed.
+    let (first, x) = match x.split_once(", then ") {
+        Some((f, x)) => (Some(f), x),
+        None => (None, x),
+    };
     // Only an instruction about an object the text named before ("the chosen permanent").
     if !(x.starts_with("destroy the ") || x.starts_with("exile the ")) {
         return None;
     }
-    TRAILING_IF.with(|f| f.set(true));
     let saved = (b.targets.len(), b.it.clone());
+    let first = match first {
+        Some(f) => match parse_clause(f, b) {
+            Some(e) => Some(e),
+            None => {
+                b.targets.truncate(saved.0);
+                b.it = saved.1;
+                return None;
+            }
+        },
+        None => None,
+    };
+    // "Choose target creature, planeswalker, or Vehicle. ... the chosen permanent": the one
+    // earlier target, when it can only be a permanent.
+    let named_before = b.named.len();
+    if x.contains("the chosen permanent") && !b.named.iter().any(|(p, _)| p == "the chosen permanent")
+    {
+        if let [t] = b.targets.as_slice() {
+            let kinds = t.text.strip_prefix("target ").unwrap_or("");
+            let permanent = |w: &str| {
+                matches!(
+                    w,
+                    "creature" | "planeswalker" | "vehicle" | "artifact" | "enchantment" | "land"
+                        | "battle" | "permanent" | "or" | ""
+                )
+            };
+            if matches!(t.what, TargetKind::Object(_))
+                && matches!(t.max, Value::Const(1))
+                && kinds.split([' ', ',']).all(permanent)
+            {
+                b.named.push(("the chosen permanent".into(), Sel::Target(0)));
+            }
+        }
+    }
+    TRAILING_IF.with(|f| f.set(true));
     let e = parse_clause(x, b);
+    b.named.truncate(named_before);
     let cond = e
         .as_ref()
         .and_then(|_| super::conditions_referents::parse_condition_with(c, b));
@@ -1354,10 +1397,14 @@ fn instruction_if_condition(l: &str, b: &mut Builder) -> Option<Effect> {
         b.it = saved.1;
         return None;
     };
-    Some(Effect::If {
+    let e = Effect::If {
         cond,
         then: Box::new(e),
         otherwise: Box::new(Effect::Noop),
+    };
+    Some(match first {
+        Some(f) => Effect::Seq(vec![f, e]),
+        None => e,
     })
 }
 
@@ -1513,3 +1560,65 @@ fn exile_and_life_for_each(l: &str, prev: &mut Effect, b: &mut Builder) -> bool 
 }
 
 inventory::submit! { FollowupPattern { name: "exile ..., and you lose N life for each of the exiled cards", priority: 140, apply: exile_and_life_for_each } }
+
+/// The cards "you" and the other player discarded, recorded after each discard.
+const MY_DISCARD: Var = vars::USER + 14_014;
+const THEIR_DISCARD: Var = vars::USER + 14_015;
+
+/// "You and defending player each draw a card, then discard a card. Put two +1/+1
+/// counters on ~ if you discarded the card with the greatest mana value among those cards
+/// or tied for greatest." (Cait, Cage Brawler): the mana value of the card you discarded
+/// against the other discarded card's.
+fn if_you_discarded_the_greatest(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(x) = l.strip_suffix(
+        " if you discarded the card with the greatest mana value among those cards or tied for greatest",
+    ) else {
+        return false;
+    };
+    let Effect::Seq(v) = &*prev else {
+        return false;
+    };
+    // [you draw, you discard, (the other player draws and discards)].
+    let ok = matches!(
+        v.as_slice(),
+        [
+            Effect::Draw { who: PlayerRef::You, .. },
+            Effect::Discard { who: PlayerRef::You, .. },
+            Effect::AsPlayer { effect, .. }
+        ] if matches!(&**effect, Effect::Seq(w) if matches!(w.last(), Some(Effect::Discard { .. })))
+    );
+    if !ok {
+        return false;
+    }
+    let Some(e) = parse_clause(x, b) else {
+        return false;
+    };
+    let discarded = Sel::Var(crate::discard_rules::DISCARDED);
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    v.insert(
+        2,
+        Effect::Store {
+            var: MY_DISCARD,
+            sel: discarded.clone(),
+        },
+    );
+    v.push(Effect::Store {
+        var: THEIR_DISCARD,
+        sel: discarded,
+    });
+    let mv = |var| Value::Aggregate(AggOp::Max, Stat::ManaValue, Box::new(Sel::Var(var)));
+    v.push(Effect::If {
+        cond: Condition::And(vec![
+            Condition::SelNonEmpty(Sel::Var(MY_DISCARD)),
+            Condition::Compare(mv(MY_DISCARD), Cmp::Ge, mv(THEIR_DISCARD)),
+        ]),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    });
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "if you discarded the card with the greatest mana value among those cards", priority: 140, apply: if_you_discarded_the_greatest } }

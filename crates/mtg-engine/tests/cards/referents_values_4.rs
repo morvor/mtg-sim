@@ -1965,3 +1965,26 @@ fn mysterious_limousine_returns_the_other_exiled_cards() {
     assert!(t.in_exile("Craw Wurm"));
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
 }
+
+#[test]
+fn cait_gets_counters_if_you_discarded_the_greatest_mana_value() {
+    cr!("608.2c", "701.9a");
+    compiles("Cait, Cage Brawler");
+    for (mine, theirs, grows) in [
+        ("Hill Giant", "Grizzly Bears", true),
+        ("Grizzly Bears", "Hill Giant", false),
+        ("Grizzly Bears", "Grizzly Bears", true),
+    ] {
+        let mut t = TestGame::new(2);
+        let cait = t.battlefield(P0, "Cait, Cage Brawler");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.library_top(P0, mine);
+        t.library_top(P1, theirs);
+        t.attack(&[(cait, Entity::Player(P1))], &[]);
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), 0);
+        assert_eq!(t.hand_size(P1), 0);
+        let n = if grows { 2 } else { 0 };
+        assert_eq!(t.counters(cait, "+1/+1"), n, "{mine} vs {theirs}");
+    }
+}
