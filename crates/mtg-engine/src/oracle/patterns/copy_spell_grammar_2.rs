@@ -670,3 +670,74 @@ fn the_copy_targets_the_chosen(l: &str, prev: &mut Effect, b: &mut Builder) -> b
 }
 
 inventory::submit! { FollowupPattern { name: "copy spell grammar 2: the copy targets the chosen [object]", priority: 45, apply: the_copy_targets_the_chosen } }
+
+/// "a permanent or player", "a creature": what a spell's targets are checked against.
+fn targets_noun(s: &str) -> Option<TargetsFilter> {
+    let s = end(s);
+    let s = s
+        .strip_prefix("a ")
+        .or_else(|| s.strip_prefix("an "))
+        .unwrap_or(s);
+    let (s, players) = match s.strip_suffix(" or player") {
+        Some(x) => (x, Some(PlayerFilter::Any)),
+        None => (s, None),
+    };
+    let (f, false, tail) = parse_object_phrase(s)? else {
+        return None;
+    };
+    end(tail).is_empty().then(|| TargetsFilter::Targets {
+        objects: Some(f),
+        players,
+    })
+}
+
+/// "copy that spell if it targets a permanent or player, and you may choose new targets
+/// for the copy" (Shiko and Narset, Unified): only a spell with such a target is copied
+/// (CR 115.9b).
+fn copy_that_spell_if_it_targets(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    let r = end(l).strip_prefix("copy that spell if it targets ")?;
+    let (noun, new_targets) = match r.strip_suffix(", and you may choose new targets for the copy")
+    {
+        Some(n) => (n, true),
+        None => (r, false),
+    };
+    let tf = targets_noun(noun)?;
+    Some(Effect::If {
+        cond: Condition::SelMatches(Sel::TriggerSpell, Filter::StackTargets(Box::new(tf))),
+        then: Box::new(Effect::CopySpell {
+            what: Sel::TriggerSpell,
+            count: Value::c(1),
+            new_targets,
+        }),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "copy spell grammar 2: copy that spell if it targets [noun]", priority: 80, parse: copy_that_spell_if_it_targets } }
+
+/// "If you don't copy a spell this way, draw a card." after a conditional copy.
+fn if_you_dont_copy(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(r) = end(&lower).strip_prefix("if you don't copy a spell this way, ") else {
+        return false;
+    };
+    let Effect::If {
+        then, otherwise, ..
+    } = prev
+    else {
+        return false;
+    };
+    if !matches!(**then, Effect::CopySpell { .. }) || !matches!(**otherwise, Effect::Noop) {
+        return false;
+    }
+    let Some(e) = crate::oracle::effects::parse_clause(r, b) else {
+        return false;
+    };
+    **otherwise = e;
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "copy spell grammar 2: if you don't copy a spell this way", priority: 90, apply: if_you_dont_copy } }

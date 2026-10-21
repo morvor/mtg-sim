@@ -127,3 +127,36 @@ fn lightning_storm_ability_may_choose_a_new_target_for_it() {
     assert!(!t.on_battlefield(bears));
     assert_eq!(t.life(P1), 20);
 }
+
+#[test]
+fn shiko_and_narset_copies_a_second_spell_that_targets_or_draws() {
+    cr!("707.10", "115.9b");
+    supported("Shiko and Narset, Unified");
+    // The second spell targets a player: it's copied.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Shiko and Narset, Unified");
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Mountain", 1);
+    let opt = t.hand(P0, "Opt");
+    t.cast(P0, opt).go();
+    t.resolve_all();
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    // The second spell has no targets: draw a card instead.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Shiko and Narset, Unified");
+    t.lands(P0, "Island", 3);
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    let div = t.hand(P0, "Divination");
+    let hand = t.hand_size(P0);
+    t.cast(P0, div).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.hand_size(P0), hand - 1 + 1 + 2);
+}
