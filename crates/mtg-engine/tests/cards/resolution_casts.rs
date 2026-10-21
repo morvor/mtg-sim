@@ -136,6 +136,11 @@ fn jadzi_casts_the_revealed_card_for_one_mana() {
     t.resolve_all();
     // Craw Wurm ({4}{G}{G}) cast for {1}: both Islands are tapped (Opt and the {1}).
     assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
+    assert!(t
+        .g
+        .permanents()
+        .filter(|o| o.chars.name == "Island")
+        .all(|o| o.tapped));
 }
 
 #[test]

@@ -128,6 +128,58 @@ fn headliner_scarlett_looks_at_and_plays_the_exiled_card() {
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
 
+/// Headliner Scarlett exiles `top` face down during P0's upkeep; returns the exiled card.
+fn scarlett_exiles(t: &mut TestGame, top: &str) -> (ObjectId, ObjectId) {
+    let s = t.battlefield(P0, "Headliner Scarlett");
+    t.library_top(P0, "Island");
+    t.library_top(P0, top);
+    t.advance_to(P1, Step::End);
+    let card = t.g.library_top(P0).unwrap();
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let card = t.g.current(card);
+    assert_eq!(t.zone(card), Zone::Exile);
+    assert!(t.obj_now(card).face_down);
+    (s, card)
+}
+
+#[test]
+fn headliner_scarlett_permission_lasts_the_turn_even_if_she_leaves() {
+    cr!("611.2a");
+    ruling!(
+        "Headliner Scarlett",
+        "If Headliner Scarlett leaves the battlefield, the effect allowing you to look at and play the exiled card continues to apply for the rest of the turn."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    let (s, bears) = scarlett_exiles(&mut t, "Grizzly Bears");
+    t.g.destroy(s, None);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Headliner Scarlett"));
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
+
+#[test]
+fn headliner_scarlett_card_cant_be_played_after_that_turn() {
+    // "this turn": the permission to play it ends with the turn; the card stays face down
+    // in exile. (Having been allowed to look at it, the player may still look at it while
+    // it stays exiled: CR 406.3.)
+    cr!("611.2a", "406.3");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    let (_, bears) = scarlett_exiles(&mut t, "Grizzly Bears");
+    t.advance_to(P1, Step::PrecombatMain);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(t.zone(bears), Zone::Exile);
+    assert!(t.obj_now(bears).face_down);
+    assert!(t.cast(P0, bears).try_go().is_err());
+    assert!(mtg_engine::facedown::can_look_at(&t.g, P0, bears));
+    assert!(!mtg_engine::facedown::can_look_at(&t.g, P1, bears));
+}
+
 #[test]
 fn hildibrand_cast_from_graveyard_only_as_an_adventure() {
     cr!("715.3", "601.3");

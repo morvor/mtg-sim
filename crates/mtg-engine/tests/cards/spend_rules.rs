@@ -56,9 +56,13 @@ fn celestial_dawn_white_as_any_color_other_mana_only_colorless() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let growth = t.hand(P0, "Giant Growth");
     assert!(t.cast(P0, growth).target(bears).try_go().is_err());
+    // Nor green mana already in the pool.
+    t.g.players[P0.idx()]
+        .mana_pool
+        .add_type(mtg_engine::mana::ManaType::G, 1);
+    assert!(t.cast(P0, growth).target(bears).try_go().is_err());
+    t.g.players[P0.idx()].mana_pool = Default::default();
     // It pays a generic cost.
-    let thopter = t.hand(P0, "Ornithopter");
-    let _ = thopter;
     let wall = t.hand(P0, "Bottle Gnomes");
     t.lands(P0, "Plains", 2);
     t.cast(P0, wall).go();

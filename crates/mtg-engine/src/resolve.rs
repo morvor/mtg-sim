@@ -2089,7 +2089,7 @@ impl Game {
                 // The permissions the effect gives come with the terms.
                 let before = self.play_grants.len();
                 // Spells cast as the effect resolves are cast with the terms too.
-                crate::permissions::with_resolution_terms(terms, || self.exec(effect, ctx));
+                crate::permissions::with_resolution_terms(self, terms, |g| g.exec(effect, ctx));
                 for g in self.play_grants.iter_mut().skip(before) {
                     g.terms.merge(terms);
                 }

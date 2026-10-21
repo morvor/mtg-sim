@@ -60,13 +60,20 @@ fn henzie_big_creature_spells_have_blitz_for_their_mana_cost() {
     t.battlefield(P0, "Henzie \"Toolbox\" Torre");
     let wurm = t.hand(P0, "Craw Wurm");
     let bears = t.hand(P0, "Grizzly Bears");
-    t.lands(P0, "Forest", 8);
+    // The blitz cost is {4}{G}{G}: exactly six Forests.
+    t.lands(P0, "Forest", 6);
     t.cast(P0, wurm)
         .method(CastMethod::Keyword(KeywordKind::Blitz))
         .go();
     t.resolve_all();
     let w = t.named_on_battlefield("Craw Wurm")[0];
     assert!(t.obj_now(w).has_keyword(KeywordKind::Haste));
+    assert!(t
+        .g
+        .permanents()
+        .filter(|o| o.chars.name == "Forest")
+        .all(|o| o.tapped));
+    t.lands(P0, "Forest", 2);
     // Mana value 2: no blitz.
     assert!(t
         .cast(P0, bears)

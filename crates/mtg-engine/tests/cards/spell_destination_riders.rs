@@ -52,6 +52,13 @@ fn soulfire_grand_master_not_for_a_spell_cast_from_the_graveyard() {
         .go();
     t.resolve_all();
     assert!(t.in_exile("Think Twice"));
+    // That spell didn't use it up: the next instant cast from the hand returns to it.
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_hand(P0, "Lightning Bolt"));
 }
 
 #[test]

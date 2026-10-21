@@ -60,10 +60,8 @@ fn world_war_hulk_next_red_or_green_creature_spell_is_free() {
     t.enter(P0, "World War Hulk");
     t.settle();
     t.resolve_all();
-    // A colorless creature spell isn't red or green: not free.
-    let thopter = t.hand(P0, "Ornithopter");
+    // A green creature spell: free.
     let giant = t.hand(P0, "Craw Wurm");
-    let _ = thopter;
     t.cast(P0, giant).method(CastMethod::Free).go();
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
@@ -71,6 +69,7 @@ fn world_war_hulk_next_red_or_green_creature_spell_is_free() {
     t.enter(P0, "World War Hulk");
     t.settle();
     t.resolve_all();
+    // A colorless creature spell isn't red or green: not free.
     let wall = t.hand(P0, "Steel Wall");
     assert!(t.cast(P0, wall).method(CastMethod::Free).try_go().is_err());
 }

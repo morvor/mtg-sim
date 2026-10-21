@@ -228,7 +228,7 @@ pub fn cast_during_resolution_as(
     if method == CastMethod::Normal
         && !keyword_way
         && face == FaceState::Front
-        && crate::permissions::resolution_alt_cost().is_none()
+        && crate::permissions::resolution_alt_cost(g).is_none()
     {
         let mut alts = resolution_alternative_costs(g, p, card);
         if !alts.is_empty() {
@@ -242,7 +242,7 @@ pub fn cast_during_resolution_as(
     }
     opt.any_time = true;
     // "You may cast that card by paying {1} rather than paying its mana cost" (CR 118.9).
-    if let Some(cost) = crate::permissions::resolution_alt_cost()
+    if let Some(cost) = crate::permissions::resolution_alt_cost(g)
         .filter(|_| method == CastMethod::Normal && opt.alt_cost.is_none())
     {
         let mv = g
