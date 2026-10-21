@@ -1321,3 +1321,25 @@ fn zimone_does_nothing_with_four_lands() {
     t.resolve_all();
     assert!(t.named_on_battlefield("Primo, the Indivisible").is_empty());
 }
+
+#[test]
+fn stalwart_successor_adds_a_counter_only_the_first_time_each_creature_gets_counters() {
+    cr!("603.2c", "122.6");
+    assert_supported("Stalwart Successor");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Stalwart Successor");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.g.add_counters(Entity::Object(a), "+1/+1", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(a, "+1/+1"), 2, "its own counter is the second time");
+    t.g.add_counters(Entity::Object(a), "+1/+1", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(a, "+1/+1"), 3, "not the first time this turn");
+    t.g.add_counters(Entity::Object(b), "+1/+1", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(b, "+1/+1"), 2, "each creature's first time");
+}

@@ -1130,3 +1130,39 @@ fn prime_that_many(block: &str, ctx: &crate::oracle::CompileContext) -> Option<V
 }
 
 inventory::submit! { super::AbilityPattern { name: "history 4: a prime number of lands ... that many", priority: 40, parse: prime_that_many } }
+
+/// "Whenever one or more counters are put on a creature you control, if it's the first
+/// time counters have been put on that creature this turn, ..." (Stalwart Successor): for
+/// each creature, the first batch of counters put on it this turn (counters of several
+/// kinds put at once are one time, CR 122.6); it stays the first time as the ability
+/// resolves.
+fn first_time_counters(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let marker = ", if it's the first time counters have been put on that creature this turn, ";
+    let i = lower.find(marker)?;
+    if !lower.starts_with("whenever one or more counters are put on ") {
+        return None;
+    }
+    let rewritten = format!("{}, {}", &t[..i], &t[i + marker.len()..]);
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    let mut out = Vec::new();
+    for a in v {
+        let mut d = (*a).clone();
+        let AbilityKind::Triggered(tr) = &mut d.kind else {
+            return None;
+        };
+        if !matches!(tr.trigger, TriggerCond::CountersPut { .. }) || tr.intervening_if.is_some() {
+            return None;
+        }
+        tr.trigger = TriggerCond::Batched {
+            trigger: Box::new(TriggerCond::FirstTimeEachTurn(Box::new(tr.trigger.clone()))),
+            per: BatchPer::Object,
+        };
+        d.text = t.to_string();
+        out.push(std::sync::Arc::new(d));
+    }
+    Some(out)
+}
+
+inventory::submit! { super::AbilityPattern { name: "history 4: if it's the first time counters have been put on that creature this turn", priority: 40, parse: first_time_counters } }
