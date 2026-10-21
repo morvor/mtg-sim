@@ -471,6 +471,16 @@ pub trait KeywordRules: Sync + Send {
     /// The permanents `active` untaps during their untap step (CR 502.3), about to be
     /// untapped: a replacement effect may take some out and do something else instead.
     fn untap_step(&self, g: &mut Game, active: PlayerId, to_untap: &mut Vec<ObjectId>) {}
+    /// Whether the permanent `o` can't be attacked (an exception to CR 506.3c, 508.1b):
+    /// it's no attack target.
+    fn cant_be_attacked(&self, g: &Game, o: ObjectId) -> bool {
+        false
+    }
+    /// Whether attacking doesn't cause the creature `attacker` to tap (CR 508.1f), as
+    /// vigilance does (CR 702.20b).
+    fn attacks_without_tapping(&self, g: &Game, attacker: ObjectId) -> bool {
+        false
+    }
     /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         None
@@ -1179,6 +1189,18 @@ pub fn on_event(g: &mut Game, ev: &Event) {
 /// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
 pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
     registry().iter().any(|r| r.keeps_unattached_aura(g, aura))
+}
+
+/// See [`KeywordRules::cant_be_attacked`].
+pub fn cant_be_attacked(g: &Game, o: ObjectId) -> bool {
+    registry().iter().any(|k| k.cant_be_attacked(g, o))
+}
+
+/// See [`KeywordRules::attacks_without_tapping`].
+pub fn attacks_without_tapping(g: &Game, attacker: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.attacks_without_tapping(g, attacker))
 }
 
 /// See [`KeywordRules::additional_spell_copies`].

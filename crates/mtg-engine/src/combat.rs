@@ -610,7 +610,11 @@ impl Game {
             Entity::Player(p) => self.player(p).in_game() && defending.contains(&p),
             Entity::Object(o) => {
                 let ob = self.obj(o);
-                if !self.is_live(o) || ob.zone != Zone::Battlefield || ob.phased_out {
+                if !self.is_live(o)
+                    || ob.zone != Zone::Battlefield
+                    || ob.phased_out
+                    || crate::kw::cant_be_attacked(self, o)
+                {
                     return false;
                 }
                 (ob.is(CardType::Planeswalker) && defending.contains(&ob.controller))
@@ -706,6 +710,9 @@ pub fn attack_targets(g: &Game) -> Vec<Entity> {
         }
         out.push(Entity::Player(*p));
         for o in g.permanents() {
+            if crate::kw::cant_be_attacked(g, o.id) {
+                continue;
+            }
             if o.is(CardType::Planeswalker) && o.controller == *p {
                 out.push(Entity::Object(o.id));
             }
@@ -1179,7 +1186,9 @@ fn perform_attack_declaration(
     let bands = announce_bands(g, ap, &declared);
     // CR 508.1f: tap attackers (vigilance: 702.20b).
     for (a, _) in &declared {
-        if !g.obj(*a).has_keyword(KeywordKind::Vigilance) {
+        if !g.obj(*a).has_keyword(KeywordKind::Vigilance)
+            && !crate::kw::attacks_without_tapping(g, *a)
+        {
             g.tap(*a);
         }
     }
