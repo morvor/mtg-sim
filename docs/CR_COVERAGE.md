@@ -6,11 +6,22 @@ A rule is **cited** when a test calls `cr!("<rule>")` (which also verifies the r
 
 | | Rules | % |
 |---|---:|---:|
-| Cited by tests | 2904 | 91.7% |
-| Covered via subrules | 72 | 2.3% |
-| Exempt (with reason) | 53 | 1.7% |
-| **Uncovered** | **137** | 4.3% |
+| Cited by tests | 3036 | 95.9% |
+| Covered via subrules | 78 | 2.5% |
+| Exempt (with reason) | 52 | 1.6% |
+| **Uncovered** | **0** | 0.0% |
 | Total numbered rules | 3166 | |
+
+## Worked examples
+
+The paragraphs starting "Example:" that follow a rule. An example is **covered** when a test cites it with `cr_example!("<rule>", "<substring>")` (which fails unless exactly one of that rule's examples contains the substring), or **exempt** with a reason in `docs/cr-exemptions/examples.tsv`. List them with `cr-coverage --examples [--range 600 611]`.
+
+| | Examples | % |
+|---|---:|---:|
+| Covered by tests | 0 | 0.0% |
+| Exempt (with reason) | 0 | 0.0% |
+| **Open** | **277** | 100.0% |
+| Total examples | 277 | |
 
 ## By section
 
@@ -113,7 +124,7 @@ A rule is **cited** when a test calls `cr!("<rule>")` (which also verifies the r
 | 616 | Interaction of Replacement and/or Prevention Effects | 9 | 9 | 0 |
 | 700 | General | 35 | 35 | 0 |
 | 701 | Keyword Actions | 296 | 296 | 0 |
-| 702 | Keyword Abilities | 771 | 634 | 137 |
+| 702 | Keyword Abilities | 771 | 771 | 0 |
 | 703 | Turn-Based Actions | 20 | 20 | 0 |
 | 704 | State-Based Actions | 40 | 40 | 0 |
 | 705 | Flipping a Coin | 3 | 3 | 0 |
@@ -166,143 +177,6 @@ A rule is **cited** when a test calls `cr!("<rule>")` (which also verifies the r
 
 ## Uncovered rules
 
-- **702.154** Enlist
-- **702.154a** Enlist represents a static ability and a triggered ability. Enlist means “As this creature attacks, you may tap up to one untapped creature 
-- **702.154b** Enlist’s static ability represents an optional cost to attack (see rule 508.1g). Its triggered ability is linked to that static ability (see
-- **702.154c** A creature “enlists” another creature when you pay the cost of the creature’s enlist ability by tapping the other creature. Note that it isn
-- **702.154d** Multiple instances of enlist on a single creature function independently. The triggered ability represented by each instance of enlist trigg
-- **702.155** Read Ahead
-- **702.155a** Read ahead is a keyword found on some Saga cards. “Read ahead” means “Chapter abilities of this Saga can’t trigger the turn it entered the b
-- **702.155b** Each Saga with read ahead has the intrinsic abilities “As this Saga enters, choose a number between one and this Saga’s final chapter number
-- **702.155c** Multiple instances of read ahead on the same object are redundant.
-- **702.156** Ravenous
-- **702.156a** Ravenous is a keyword found on some creature cards with {X} in their mana cost. Ravenous represents both a replacement effect and a triggere
-- **702.157** Squad
-- **702.157a** Squad is a keyword that represents two linked abilities. The first is a static ability that functions while the creature spell with squad is
-- **702.157b** If a spell has multiple instances of squad, each is paid separately. If a permanent has multiple instances of squad, each triggers based on 
-- **702.158** Space Sculptor
-- **702.158a** One card (Space Beleren) has the space sculptor ability. This keyword ability causes creatures to gain sector designations.
-- **702.158b** A sector designation is a designation a permanent can have. The sector designations are alpha sector, beta sector, and gamma sector. Only pe
-- **702.158c** Any time a permanent with space sculptor and any creatures without a sector designation are on the battlefield at the same time, each player
-- **702.158d** Some abilities include an instruction to choose a sector along with an instruction to perform an action on each creature in that sector. To 
-- **702.158e** Two permanents are in the same sector if each has the same sector designation.
-- **702.159** Visit
-- **702.159a** Visit is a keyword ability found on Attraction cards (see rule 717). “Visit — [Effect]” means “Whenever you roll to visit your Attractions, 
-- **702.159b** Some Attractions instruct a player to “claim the prize,” followed by a second paragraph that starts with the word “Prize” and a long dash. T
-- **702.160** Prototype
-- **702.160a** Prototype is a static ability that appears on prototype cards that have a secondary set of power, toughness, and mana cost characteristics. 
-- **702.161** Living Metal
-- **702.161a** Living metal is a keyword ability found on some Vehicles. “Living metal” means “During your turn, this permanent is an artifact creature in 
-- **702.162** More Than Meets the Eye
-- **702.162a** More Than Meets the Eye represents a static ability that functions in any zone from which the spell may be cast. “More Than Meets the Eye [c
-- **702.163** For Mirrodin!
-- **702.163a** For Mirrodin! is a triggered ability. “For Mirrodin!” means “When this Equipment enters, create a 2/2 red Rebel creature token, then attach 
-- **702.164** Toxic
-- **702.164a** Toxic is a static ability. It is written “toxic N,” where N is a number.
-- **702.164b** Some rules and effects refer to a creature’s “total toxic value.” A creature’s total toxic value is the sum of all N values of toxic abiliti
-- **702.167** Craft
-- **702.167a** Craft represents an activated ability. It is written as “Craft with [materials] [cost],” where [materials] is a description of one or more o
-- **702.167b** If an object in the [materials] of a craft ability is described using only a card type or subtype without the word “card,” it refers to eith
-- **702.167c** An ability of a permanent may refer to the exiled cards used to craft it. This refers to cards in exile that were exiled to pay the activati
-- **702.168** Disguise
-- **702.168a** Disguise is a static ability that functions in any zone from which you could play the card it’s on, and the disguise effect works any time t
-- **702.168b** To cast a card using its disguise ability, turn the card face down and announce that you are using a disguise ability. It becomes a 2/2 face
-- **702.168c** You can’t normally cast a card face down. A disguise ability allows you to do so.
-- **702.168d** Any time you have priority, you may turn a face-down permanent you control with a disguise ability face up. This is a special action; it doe
-- **702.168e** If a permanent’s disguise cost includes X, other abilities of that permanent may also refer to X. The value of X in those abilities is equal
-- **702.168f** See rule 708, “Face-Down Spells and Permanents,” for more information about how to cast cards with a disguise ability.
-- **702.169** Solved
-- **702.169a** Solved is a keyword ability found on Case cards. See rule 719, “Case Cards.” “Solved” is followed by ability text. Together, they represent 
-- **702.169b** For a static ability, “Solved — [Ability text]” means “As long as this Case is solved, [ability text].”
-- **702.169c** For a triggered ability, “Solved — [Ability text]” means “[Ability text]. This ability triggers only if this Case is solved.”
-- **702.169d** For an activated ability, “Solved — [Ability text]” means “[Ability text]. Activate only if this Case is solved.”
-- **702.170** Plot
-- **702.170c** In addition to the plot special action, some spells and abilities cause a card in exile to become plotted.
-- **702.170e** If an effect refers to plotting a card, it means performing the special action associated with a plot ability.
-- **702.170f** An effect may allow the plot ability of a card to function in a zone other than a player’s hand. In that case, the card is exiled from the z
-- **702.171** Saddle
-- **702.171a** Saddle is an activated ability. “Saddle N” means “Tap any number of other untapped creatures you control with total power N or greater: This
-- **702.171c** A creature “saddles” a permanent as it’s tapped to pay the cost to activate a permanent’s saddle ability.
-- **702.172** Spree
-- **702.172a** Spree is a static ability found on some modal spells (see rule 700.2) that applies while the spell on the stack. Spree means “Choose one or 
-- **702.172b** Cards with the spree ability have a plus sign icon in the upper right corner of the card, and use a plus sign (+) rather than traditional bu
-- **702.173** Freerunning
-- **702.173a** Freerunning is a static ability that functions on the stack. “Freerunning [cost]” means “You may pay [cost] rather than pay this spell’s man
-- **702.174** Gift
-- **702.174a** Gift is a keyword that represents two abilities. It is written “Gift a [something].” The first ability is a static ability that functions wh
-- **702.174b** On a permanent, the second ability represented by gift is “When this permanent enters, if its gift cost was paid, [effect].” On an instant o
-- **702.174c** Some effects trigger whenever a player gives a gift. Such an ability triggers whenever an instant or sorcery spell that player controls whos
-- **702.174d** “Gift a Food” means the effect is “The chosen player creates a Food token.”
-- **702.174e** “Gift a card” means the effect is “The chosen player draws a card.”
-- **702.174f** “Gift a tapped Fish” means the effect is “The chosen player creates a tapped 1/1 blue Fish creature token.”
-- **702.174g** “Gift an extra turn” means the effect is “The chosen player takes an extra turn after this one.”
-- **702.174h** “Gift a Treasure” means the effect is “The chosen player creates a Treasure token.”
-- **702.174i** “Gift an Octopus” means the effect is “The chosen player creates an 8/8 blue Octopus creature token.”
-- **702.174j** For instant and sorcery spells, the effect of a gift ability always happens before any other spell abilities of the card. If the spell is co
-- **702.174k** If a spell’s controller declares the intention to pay a spell’s gift cost, that spell’s gift was promised.
-- **702.174m** If part of a spell’s ability has its effect only if its gift was promised, and that part of the ability includes any targets, the spell’s co
-- **702.175** Offspring
-- **702.175a** Offspring represents two abilities. “Offspring [cost]” means “You may pay an additional [cost] as you cast this spell” and “When this perman
-- **702.175b** If a spell has multiple instances of offspring, each is paid separately and triggers based on the payments made for it, not any other instan
-- **702.176** Impending
-- **702.176a** Impending is a keyword that represents four abilities. The first is a static ability that functions while the spell with impending is on the
-- **702.177** Exhaust
-- **702.177a** Exhaust is a keyword that adds additional rules to the activated ability that follows it. “Exhaust — [Cost]: [Effect]” means “[Cost]: [Effec
-- **702.177b** An effect may allow you to take an action as long as you haven’t activated an exhaust ability this turn. Such an effect allows that action o
-- **702.179** Start Your Engines!
-- **702.179a** Start your engines! is a static ability. If a player controls a permanent with start your engines! and that player has no speed, their speed
-- **702.179b** Players do not have speed until a rule or effect sets their speed to a specific value.
-- **702.179c** If a player has no speed and they are instructed to increase their speed by a certain value, their speed becomes that value.
-- **702.179d** There is an inherent triggered ability associated with a player having 1 or more speed. This ability has no source and is controlled by that
-- **702.179f** Some effects refer to a player’s speed. If that player has no speed, their speed is 0 for the purpose of an effect that refers to speed.
-- **702.180** Harmonize
-- **702.180a** Harmonize represents three static abilities: one that functions while the card is in a player’s graveyard and two that function while the sp
-- **702.180b** You choose which creature to tap as you choose to pay a spell’s harmonize cost (see rule 601.2b), and then tap that creature as you pay the 
-- **702.181** Mobilize
-- **702.181a** Mobilize is a triggered ability. “Mobilize N” means “Whenever this creature attacks, create N 1/1 red Warrior creature tokens. Those tokens 
-- **702.182** Job Select
-- **702.182a** Job select is a triggered ability. “Job select” means “When this Equipment enters, create a 1/1 colorless Hero creature token, then attach t
-- **702.183** Tiered
-- **702.183a** Tiered is a static ability found on some modal spells (see rule 700.2) that applies while the spell is on the stack. Tiered means “Choose on
-- **702.184** Station
-- **702.184a** Station is an activated ability. “Station” means “Tap another untapped creature you control: Put a number of charge counters on this permane
-- **702.184b** Each card printed with a station ability is known as a station card. It has a nonstandard layout and includes station symbols that are thems
-- **702.184c** Static abilities may modify the result of a station ability by causing it to use a characteristic other than the tapped creature’s power to 
-- **702.185** Warp
-- **702.185a** Warp represents two static abilities that function while the card with warp is on the stack, one of which may create a delayed triggered abi
-- **702.185b** Some effects refer to “warped” cards in exile. A warped card in exile is one that was exiled by the delayed triggered ability created by a w
-- **702.185c** Some effects refer to whether “a spell was warped this turn.” This means that a spell was cast for its warp cost this turn.
-- **702.186** ∞ (Infinity)
-- **702.186a** ∞ (the mathematical symbol for infinity) is a keyword found on Infinity cards. “∞” is followed by ability text. Together, they represent a s
-- **702.186b** “∞ — [Ability]” means “As long as this permanent is harnessed, it has [ability].” See rule 701.64, “Harness.”
-- **702.187** Mayhem
-- **702.187a** Mayhem is a static ability that functions while the card with mayhem is in a player’s graveyard.
-- **702.187b** “Mayhem [cost]” means “As long as you discarded this card this turn, you may cast it from your graveyard by paying [cost] rather than paying
-- **702.187c** “Mayhem” without a cost means “You may play this card from your graveyard if you discarded it this turn.”
-- **702.188** Web-slinging
-- **702.188a** Web-slinging is a static ability that functions while the spell with web-slinging is on the stack. “Web-slinging [cost]” means “You may cast
-- **702.189** Firebending
-- **702.189a** Firebending is a triggered ability. “Firebending N” means “Whenever this creature attacks, add N {R}. Until end of combat, you don’t lose th
-- **702.189b** An ability that triggers whenever a player firebends triggers whenever a firebending ability they control resolves.
-- **702.190** Sneak
-- **702.190a** Sneak is a keyword that represents a static ability that functions while the spell with sneak is on the stack. “Sneak [cost]” means “Any tim
-- **702.190b** A permanent spell whose sneak cost was paid enters the battlefield tapped and attacking (see rule 506.3a). It will be attacking the same pla
-- **702.191** Increment
-- **702.191a** Increment is a triggered ability. “Increment” means “Whenever you cast a spell, if this permanent is a creature and the amount of mana spent
-- **702.191b** If a creature has multiple instances of increment, each one triggers separately.
-- **702.192** Paradigm
-- **702.192a** Paradigm represents two spell abilities, one of which creates a delayed triggered ability. Paradigm means “If this is the first time a spell
-- **702.193** Power-up
-- **702.193a** Power-up is a keyword that adds additional rules to the activated ability that follows it. “Power-up — [Cost]: [Effect]” means “[Cost]: [Eff
-- **702.193b** Generic mana in the permanent’s mana cost reduces generic mana in the cost to activate its power-up ability. Colored and colorless mana in t
-- **702.194** Teamwork
-- **702.194a** Teamwork represents a static ability that functions while the spell with teamwork is on the stack. “Teamwork N” means “As an additional cost
-- **702.194b** Abilities may refer to a spell cast “using teamwork” or similar. Such phrases refer to whether the player who cast the spell declared the in
-- **702.194c** If part of a spell’s ability has its effect only if teamwork was used to cast it, and that part of the ability includes any targets, the spe
-- **702.195** Storied
-- **702.195a** Storied is a static ability. It means “Any time you control three or more permanents that are artifacts, Sagas, and/or legendary and you don
-- **702.195b** Enduring story is a designation that has no rules meaning other than to act as a marker that other rules and effects can identify. Any numbe
-- **702.195c** After a player gets an enduring story, continuous effects are reapplied before the game checks to see if the game state or preceding events 
 
 ## Exemptions
 
