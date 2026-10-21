@@ -58,3 +58,60 @@ fn opportunistic_dragon_steals_for_as_long_as_it_remains() {
     assert_eq!(t.obj_now(thopter).controller, P1);
     assert!(t.obj_now(thopter).has_keyword(KeywordKind::Flying));
 }
+
+#[test]
+fn second_doctor_opponents_who_draw_cant_attack_you_next_turn() {
+    cr!("611.2a", "611.2c", "508.1c");
+    interp!("next-turn-effects-start-with-the-turn");
+    supported("The Second Doctor");
+    for draws in [true, false] {
+        let mut t = TestGame::new(3);
+        t.battlefield(P0, "The Second Doctor");
+        for p in [P0, P1, P2] {
+            t.library_top(p, "Island");
+            t.library_top(p, "Island");
+        }
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.answer_yes(P0, false);
+        t.answer_yes(P1, draws);
+        t.answer_yes(P2, false);
+        t.set_step(P0, Step::PostcombatMain);
+        t.advance_to(P1, Step::DeclareAttackers);
+        let targets: Vec<Entity> = mtg_engine::combat::attack_options(&t.g)
+            .into_iter()
+            .filter(|(c, _)| *c == bears)
+            .flat_map(|(_, e)| e)
+            .collect();
+        // It can still attack P2; P0 only if P1 didn't draw.
+        assert!(targets.contains(&Entity::Player(P2)));
+        assert_eq!(targets.contains(&Entity::Player(P0)), !draws, "drew: {draws}");
+    }
+}
+
+#[test]
+fn willie_lumpkin_creatures_entering_later_cant_attack_either() {
+    cr!("611.2c", "508.1c");
+    interp!("next-turn-effects-start-with-the-turn");
+    supported("Willie Lumpkin, Postman");
+    let mut t = TestGame::new(2);
+    let willie = t.battlefield(P0, "Willie Lumpkin, Postman");
+    for p in [P0, P1] {
+        t.library_top(p, "Island");
+        t.library_top(p, "Island");
+    }
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P1, true);
+    t.attack(&[(willie, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), 1);
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::PrecombatMain);
+    // A haste creature that entered during that turn can't attack P0 either.
+    let hasty = t.battlefield(P1, "Raging Goblin");
+    t.set_step(P1, Step::DeclareAttackers);
+    assert!(!can_attack(&mut t, hasty));
+    // The turn after, it can.
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::DeclareAttackers);
+    assert!(can_attack(&mut t, hasty));
+}

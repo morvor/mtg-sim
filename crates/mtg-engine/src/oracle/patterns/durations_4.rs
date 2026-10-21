@@ -77,6 +77,47 @@ fn for_as_long_as_first(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "durations 4: for as long as [condition], [instructions]", priority: 100, parse: for_as_long_as_first } }
 
+/// "that player can't attack you or permanents you control during their next turn"
+/// (Willie Lumpkin, Postman; The Second Doctor's "each opponent who does"): a rule for
+/// that player's next turn — creatures they control (the active player's, then) can't
+/// attack you or planeswalkers you control, whenever they came under their control
+/// (CR 611.2c, 508.1c; see `next_turn.rs` and the interpretation
+/// `next-turn-effects-start-with-the-turn`).
+fn cant_attack_you_during_their_next_turn(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let rest = l
+        .strip_prefix("that player can't attack you")
+        .or_else(|| l.strip_prefix("they can't attack you"))?;
+    let planeswalkers = match rest {
+        " or permanents you control during their next turn"
+        | " or planeswalkers you control during their next turn" => true,
+        " during their next turn" => false,
+        _ => return None,
+    };
+    let who = b.it_player.clone();
+    if matches!(who, PlayerRef::You) {
+        return None;
+    }
+    Some(Effect::DuringNext {
+        who,
+        part: NextTurnPart::Turn,
+        effect: Box::new(Effect::AddRestriction {
+            restriction: Restriction::CantAttackPlayer {
+                attackers: Filter::and(vec![
+                    Filter::creature(),
+                    Filter::ControllerMatches(Box::new(PlayerFilter::Active)),
+                ]),
+                defender: PlayerFilter::You,
+                planeswalkers,
+                battles: false,
+            },
+            duration: Duration::EndOfTurn,
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "durations 4: that player can't attack you during their next turn", priority: 100, parse: cant_attack_you_during_their_next_turn } }
+
 #[cfg(test)]
 mod tests {
     use super::*;
