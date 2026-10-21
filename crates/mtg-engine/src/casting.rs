@@ -190,6 +190,10 @@ pub fn cast_during_resolution(
     cast_during_resolution_as(g, p, card, method, None)
 }
 
+/// `Event::Custom` name: the activated mana ability of `obj` that `player` activated
+/// resolved, producing `amount` mana.
+pub const MANA_ABILITY_RESOLVED: &str = "mana ability resolved";
+
 /// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
 /// the characteristics the effect allows, CR 601.3e), if given.
 pub fn cast_during_resolution_as(
@@ -2616,15 +2620,23 @@ impl Game {
             self.exec(&body.effect, &mut ctx);
             crate::structure::record(a, &src_chars.name, "mana");
             self.mana_ability_resolving = None;
+            let mana: Vec<crate::mana::ManaType> = self
+                .players
+                .iter()
+                .zip(pools_before)
+                .flat_map(|(pl, n)| pl.mana_pool.mana.iter().skip(n).map(|m| m.ty))
+                .collect();
+            // "Whenever a mana ability of [this creature] resolves, ... the amount of mana
+            // [it] produced" (CR 605.3b).
+            self.emit(Event::Custom {
+                name: MANA_ABILITY_RESOLVED.into(),
+                player: Some(p),
+                obj: Some(src),
+                amount: mana.len() as i32,
+            });
             // CR 106.12a: "tapped for mana" triggers when such an ability resolves and
             // produces mana.
             if tapped_for_mana {
-                let mana: Vec<crate::mana::ManaType> = self
-                    .players
-                    .iter()
-                    .zip(pools_before)
-                    .flat_map(|(pl, n)| pl.mana_pool.mana.iter().skip(n).map(|m| m.ty))
-                    .collect();
                 if !mana.is_empty() {
                     self.emit(Event::TappedForMana {
                         obj: src,
