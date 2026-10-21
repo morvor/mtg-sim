@@ -10,6 +10,13 @@
 //! battlefield under the control of that creature's owner." (Reincarnation: the creature
 //! card is chosen as the delayed ability resolves, by its controller; it may be the
 //! creature that died).
+//!
+//! "At the beginning of the next end step, if the player hasn't played the card, they put
+//! it into their graveyard." (Elkin Lair, after "that player exiles a card at random from
+//! their hand. The player may play that card this turn."): read as "if you haven't played
+//! the card, put it into its owner's graveyard" (`delayed_grammar_2.rs` and the
+//! interpretation `delayed-if-not-played-means-still-exiled`: the card is still exiled),
+//! the card's owner being the player who exiled it from their hand.
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -100,3 +107,23 @@ fn return_card_from_its_owners_graveyard(l: &str, b: &mut Builder) -> Option<Eff
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar 3: return a creature card from its owner's graveyard", priority: 100, parse: return_card_from_its_owners_graveyard } }
+
+fn if_the_player_hasnt_played_the_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (delay, rest) = l.split_once(", if the player hasn't played the card, ")?;
+    if !delay.starts_with("at the beginning of ") {
+        return None;
+    }
+    let instr = match rest {
+        "they put it into their graveyard" | "that player puts it into their graveyard" => {
+            "put it into its owner's graveyard"
+        }
+        _ => return None,
+    };
+    crate::oracle::effects::parse_sentence(
+        &format!("{delay}, if you haven't played the card, {instr}"),
+        b,
+    )
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 3: if the player hasn't played the card, they put it into their graveyard", priority: 100, parse: if_the_player_hasnt_played_the_card } }

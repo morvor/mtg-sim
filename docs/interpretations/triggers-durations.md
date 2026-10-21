@@ -36,7 +36,7 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Decision: The condition is read as "if that card is still in exile" (the same object, CR 400.7), checked as the event occurs and as the ability resolves (CR 603.4). Casting or playing the card moves it out of exile; a card that left exile in any other way is a new object the instruction couldn't affect anyway (CR 603.7c).
 - Alternatives: Track whether that player cast or played that very card: identical results, since a card cast or played is no longer in exile, and a card no longer in exile can't be returned; the only difference would be the ability triggering (and doing nothing) for a card that left exile without being played.
 - Why: The outcome is the same in every case; the zone check needs no history of who played what.
-- Affects: Psychic Theft, Planeswalker's Mischief, Grinning Totem, Three Wishes.
+- Affects: Psychic Theft, Planeswalker's Mischief, Grinning Totem, Three Wishes, Elkin Lair ("if the player hasn't played the card").
 - Code: `crates/mtg-engine/src/oracle/patterns/delayed_grammar_2.rs` (`delayed_if_still_exiled`, `delayed_cards_you_didnt_play`).
 - Tests: `tests/cards/td_delayed_conditions.rs` (`psychic_theft_cast_before_the_end_step_doesnt_trigger`).
 

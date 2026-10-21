@@ -56,3 +56,38 @@ fn reincarnation_returns_a_creature_card_from_its_owners_graveyard() {
     assert_eq!(t.obj_now(g[0]).controller, P1);
     assert!(t.in_graveyard(P0, "Serra Angel"));
 }
+
+#[test]
+fn elkin_lair_card_not_played_goes_to_the_graveyard() {
+    cr!("603.7a", "603.4");
+    interp!("delayed-if-not-played-means-still-exiled");
+    ruling!(
+        "Elkin Lair",
+        "You can play the card this turn, not just during the resolution of the ability."
+    );
+    supported("Elkin Lair");
+    for play in [false, true] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Elkin Lair");
+        t.hand(P1, "Forest");
+        t.library_top(P1, "Island");
+        t.set_step(P0, Step::End);
+        t.advance_to(P1, Step::PrecombatMain);
+        t.resolve_all();
+        let exiled: Vec<ObjectId> = t
+            .g
+            .exile
+            .iter()
+            .copied()
+            .filter(|o| t.g.obj(*o).chars.name == "Forest")
+            .collect();
+        assert_eq!(exiled.len(), 1);
+        if play {
+            t.play_land(P1, exiled[0]).expect("play it this turn");
+        }
+        t.advance_to(P1, Step::End);
+        t.resolve_all();
+        assert_eq!(t.in_graveyard(P1, "Forest"), !play, "played: {play}");
+        assert_eq!(t.named_on_battlefield("Forest").len(), play as usize);
+    }
+}
