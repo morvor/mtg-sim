@@ -46,7 +46,10 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
             | PlayerRef::ControllerOf(_)
             | PlayerRef::OwnerOf(_)
             | PlayerRef::DefendingPlayer
-            | PlayerRef::TriggerPlayer => PlayerFilter::Ref(Box::new(r)),
+            | PlayerRef::TriggerPlayer
+            // "that player" of "each opponent ... during that player's next turn"
+            // (`durations_players.rs`).
+            | PlayerRef::Iterated => PlayerFilter::Ref(Box::new(r)),
             _ => return None,
         };
         (who, rest)

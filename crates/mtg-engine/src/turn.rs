@@ -372,6 +372,8 @@ impl Game {
         for p in actives {
             self.expire_until_next_turn(p);
         }
+        // Effects that apply "during [that player's] next turn" begin.
+        crate::next_turn::turn_began(self);
         self.log(|g| format!("--- Turn {} ({}) ---", g.turn.number, active));
         // CR 723.1: player-controlling effects for this turn start (and last turn's end).
         crate::player_control::turn_began(self);
@@ -458,6 +460,8 @@ impl Game {
             }
             Step::BeginningOfCombat => {
                 self.turn.combat_phases += 1;
+                // "... during its controller's next combat phase".
+                crate::next_turn::combat_began(self);
                 crate::combat::begin_combat(self);
             }
             Step::DeclareAttackers => crate::combat::declare_attackers_step(self),

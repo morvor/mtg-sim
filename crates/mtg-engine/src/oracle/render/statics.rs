@@ -1794,6 +1794,15 @@ impl Renderer<'_> {
                 let d = self.player_filter_object(defender);
                 format!("{a} attacks {d} each combat if able")
             }
+            Restriction::MustAttackObject { attackers, target } => {
+                let a = subj(self, attackers);
+                let t = if matches!(target, Filter::Source) {
+                    self.me()
+                } else {
+                    self.noun(target, Num::One)
+                };
+                format!("{a} attacks {t} each combat if able")
+            }
             Restriction::MustBlock(f) => format!("{} blocks each combat if able", subj(self, f)),
             Restriction::MustBeBlocked(f) => {
                 format!("{} must be blocked if able", subj(self, f))

@@ -1006,7 +1006,22 @@ fn requirement_effect(l: &str, b: &mut Builder) -> Option<Effect> {
             Restriction::MustAttack(f.clone()),
             Restriction::MustBlock(f),
         ]
-    } else if let Some(p) = rest
+    } else if rest
+        .strip_prefix("attacks ")
+        .or_else(|| rest.strip_prefix("attack "))
+        == Some("~")
+    {
+        // "Creatures target opponent controls attack ~ if able" (Gideon Jura): only a
+        // planeswalker or battle can be attacked (CR 508.1b).
+        let tl = b.ctx.type_line;
+        if !(tl.card_types.contains(CardType::Planeswalker) || tl.card_types.contains(CardType::Battle)) {
+            return None;
+        }
+        vec![Restriction::MustAttackObject {
+            attackers: f,
+            target: Filter::Source,
+        }]
+   } else if let Some(p) = rest
         .strip_prefix("attacks ")
         .or_else(|| rest.strip_prefix("attack "))
     {

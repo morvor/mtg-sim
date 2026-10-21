@@ -2668,6 +2668,49 @@ impl Renderer<'_> {
                 };
                 format!("when you do, {}", lower_first(&b))
             }
+            Effect::DuringNext { who, part, effect } => {
+                let p = self.player(who, super::players::Case::Poss);
+                let when = match part {
+                    NextTurnPart::Turn => format!("during {p} next turn"),
+                    NextTurnPart::CombatPhase => format!("during {p} next combat phase"),
+                };
+                // "Target opponent skips all combat phases of their next turn."
+                if let Effect::AddReplacement { def, .. } = &**effect {
+                    if let ReplacementEvent::SkipStep {
+                        step: StepKind::Combat,
+                        ..
+                    } = def.event
+                    {
+                        let subj = self.player(who, super::players::Case::Subj);
+                        return format!("{subj} skips all combat phases of their next turn");
+                    }
+                }
+                let e = self.effect(effect);
+                // "Each opponent can't cast ... during that player's next turn."
+                if matches!(who, PlayerRef::EachOpponent | PlayerRef::EachPlayer)
+                    && *part == NextTurnPart::Turn
+                {
+                    if let Some(rest) = e.strip_prefix("{alt:that player|them} ") {
+                        let subj = self.player(who, super::players::Case::Subj);
+                        let rest = rest.replace(" this turn", "");
+                        return format!("{subj} {rest} during that player's next turn");
+                    }
+                }
+                let e = e
+                    .replace(" this turn", "")
+                    .replace(" this combat", "")
+                    .replace(" until end of combat", "");
+                // "that creature can't attack during its controller's next turn", "target
+                // creature ... attacks during its controller's next combat phase if able".
+                if let PlayerRef::ControllerOf(_) = who {
+                    let when = when.replace(&format!("during {p} "), "during its controller's ");
+                    return match e.strip_suffix(" if able") {
+                        Some(r) => format!("{r} {when} if able"),
+                        None => format!("{e} {when}"),
+                    };
+                }
+                format!("{{alt:{when}, {e}|{e} {when}}}")
+            }
             Effect::AtNext { step, effect } => {
                 let s = match step {
                     TriggerStep::EndOfCombat => "at end of combat".to_string(),

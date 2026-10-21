@@ -104,6 +104,7 @@ pub mod mulligan;
 pub mod multiplayer;
 pub mod names;
 pub mod next_spell;
+pub mod next_turn;
 pub mod object;
 pub mod opening_hand;
 pub mod oracle;

@@ -2051,6 +2051,16 @@ pub enum Duration {
     },
 }
 
+/// Which part of a player's next turn an [`Effect::DuringNext`] effect applies during.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NextTurnPart {
+    /// "during [player]'s next turn": the whole turn.
+    Turn,
+    /// "during [player]'s next combat phase": the first combat phase of a turn of that
+    /// player that begins after the effect is created.
+    CombatPhase,
+}
+
 /// A phase or step an effect adds to a turn (CR 500.8–500.10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TurnPart {
@@ -2660,6 +2670,13 @@ pub enum Restriction {
     MustAttackPlayer {
         attackers: Filter,
         defender: PlayerFilter,
+    },
+    /// "[attackers] attack ~ (this turn) if able" (Gideon Jura): a requirement that each
+    /// such creature attacks each permanent matching `target` — a planeswalker or battle —
+    /// if able (CR 508.1d).
+    MustAttackObject {
+        attackers: Filter,
+        target: Filter,
     },
     /// "blocks each combat if able".
     MustBlock(Filter),
@@ -4661,6 +4678,17 @@ pub enum Effect {
     /// "At the beginning of the next end step" / "at end of combat" (common delayed triggers).
     AtNext {
         step: TriggerStep,
+        effect: Box<Effect>,
+    },
+    /// "During [player]'s next turn, [effect]", "[effect] during its controller's next
+    /// combat phase": rule-modifying effects (restrictions, requirements, skips) that apply
+    /// only during that player's next turn (each player's, for several players) or the next
+    /// combat phase of that turn's player. `effect` lasts "this turn" (or until end of
+    /// combat); it's created as that turn (combat phase) begins, with "that player"
+    /// ([`PlayerRef::Iterated`]) the player whose turn it is. See `next_turn.rs`.
+    DuringNext {
+        who: PlayerRef,
+        part: NextTurnPart,
         effect: Box<Effect>,
     },
     /// "[Player] gets an emblem with [ability]" (CR 114.2): each such player puts an

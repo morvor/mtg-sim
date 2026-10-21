@@ -1939,6 +1939,9 @@ impl Game {
                     order: self.trigger_order,
                 });
             }
+            Effect::DuringNext { who, part, effect } => {
+                crate::next_turn::schedule(self, who, *part, effect, ctx);
+            }
             Effect::AtNext { step, effect } => {
                 self.flush_events();
                 let id = self.new_effect_id();
@@ -3422,6 +3425,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
+        | Restriction::MustAttackObject { attackers, .. }
         | Restriction::CantAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,

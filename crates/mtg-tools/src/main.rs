@@ -429,9 +429,26 @@ fn unsupported(args: &[String]) {
     let mut paper = false;
     let mut single = false;
     let mut raw = false;
+    let mut text: Option<String> = None;
+    let mut type_line = "Sorcery".to_string();
+    let mut name = "Probe".to_string();
+    let mut ast = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--text" => {
+                text = Some(args[i + 1].clone());
+                i += 1;
+            }
+            "--type" => {
+                type_line = args[i + 1].clone();
+                i += 1;
+            }
+            "--name" => {
+                name = args[i + 1].clone();
+                i += 1;
+            }
+            "--ast" => ast = true,
             "--paper" => paper = true,
             "--single" => single = true,
             "--raw" => raw = true,
@@ -450,6 +467,32 @@ fn unsupported(args: &[String]) {
             _ => {}
         }
         i += 1;
+    }
+    // `--text "ORACLE" [--type "TYPE LINE"] [--name NAME] [--ast]`: compiles one text (a
+    // probe for grammar work) and prints the blocks it doesn't support.
+    if let Some(text) = text {
+        let tl = mtg_engine::types::TypeLine::parse(&type_line);
+        let ctx = mtg_engine::oracle::CompileContext {
+            card_name: &name,
+            full_name: &name,
+            type_line: &tl,
+            layout: mtg_engine::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: Some("1"),
+            toughness: Some("1"),
+        };
+        let c = mtg_engine::oracle::compile(&text, &ctx);
+        if ast {
+            println!("{:#?}", c.abilities);
+        }
+        if c.unsupported.is_empty() {
+            println!("OK");
+        }
+        for u in c.unsupported {
+            println!("UNSUPPORTED\t{u}");
+        }
+        return;
     }
     let mut patterns: HashMap<String, (usize, String)> = HashMap::new();
     for c in mtg_data::cards().iter() {
