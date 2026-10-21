@@ -20,7 +20,8 @@
 //!   unsupported ability texts with counts (`--card`: only that card's texts, by exact name,
 //!   case-insensitive; `--paper`: only the cards `card-coverage` counts; `--single`: only
 //!   cards whose sole unsupported text is that one, i.e. the cards it alone blocks; `--raw`:
-//!   exact texts, numbers kept, e.g. to write a hand-written ability's `text`). Sticker
+//!   exact texts, numbers kept, e.g. to write a hand-written ability's `text`; `--by-card`:
+//!   one `card<TAB>text` line per card and unsupported text, no counts). Sticker
 //!   sheets are deferred and left out unless named with `--card`.
 //! * `interpretations [--write [PATH]] [--check]` — the interpretation register
 //!   (`docs/interpretations/`): prints its problems (see `mtg_data::interpretations::check`)
@@ -750,6 +751,7 @@ fn unsupported(args: &[String]) {
     let mut paper = false;
     let mut single = false;
     let mut raw = false;
+    let mut by_card = false;
     let mut text: Option<String> = None;
     let mut type_line = "Sorcery".to_string();
     let mut name = "Probe".to_string();
@@ -771,6 +773,7 @@ fn unsupported(args: &[String]) {
             }
             "--ast" => ast = true,
             "--paper" => paper = true,
+            "--by-card" => by_card = true,
             "--single" => single = true,
             "--raw" => raw = true,
             "--limit" => {
@@ -843,9 +846,17 @@ fn unsupported(args: &[String]) {
                 continue;
             }
             let key = if raw { u.to_string() } else { pattern_of(u) };
+            if by_card {
+                // One line per (card, text): the card-to-text map the planning scripts use.
+                println!("{}\t{}", c.name, key.replace('\n', " / "));
+                continue;
+            }
             let e = patterns.entry(key).or_insert((0, c.name.clone()));
             e.0 += 1;
         }
+    }
+    if by_card {
+        return;
     }
     let mut pats: Vec<(String, (usize, String))> = patterns.into_iter().collect();
     pats.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(&b.0)));
