@@ -797,11 +797,13 @@ impl Game {
                 },
             ) = (d.once, infos.is_empty(), &d.trigger)
             {
-                // (Not a condition that picks which player's step it is.)
-                let about_step = format!("{cond:?}");
+                // An intervening "if" is checked again as the ability resolves (CR 603.4):
+                // the body is that check. (A condition only in the trigger picks which
+                // step it is: "at the beginning of the end step of your next turn".)
+                let intervening = matches!(&d.body.effect,
+                    Effect::If { cond: c, .. } if format!("{c:?}") == format!("{cond:?}"));
                 if matches!(inner.as_ref(), TriggerCond::BeginningOf { .. })
-                    && !about_step.contains("TriggerPlayer")
-                    && !about_step.contains("Active")
+                    && intervening
                     && !self.trigger_matches_ctx(inner, &base, ev).is_empty()
                 {
                     spent.push(d.id);
