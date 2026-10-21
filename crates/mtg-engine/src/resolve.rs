@@ -1054,6 +1054,9 @@ impl Game {
                             *new_targets,
                         ));
                     }
+                    if n > 0 {
+                        copies.extend(crate::copy::additional_copies(self, o, ctx.controller));
+                    }
                 }
                 // CR 405.3: the copies are put on the stack at once, in the order
                 // their controller chooses.
@@ -1110,13 +1113,21 @@ impl Game {
                 let fixed = self.fix_mods(mods, ctx);
                 let mut copies = vec![];
                 for o in self.resolve_objects(what, ctx) {
+                    let mut made = vec![];
                     for _ in 0..n {
-                        if let Some(c) =
-                            crate::copy::copy_spell(self, o, ctx.controller, *new_targets)
-                        {
-                            crate::copy::add_copy_exceptions(self, c, ctx.controller, &fixed);
-                            copies.push(c);
-                        }
+                        made.extend(crate::copy::copy_spell(
+                            self,
+                            o,
+                            ctx.controller,
+                            *new_targets,
+                        ));
+                    }
+                    if n > 0 {
+                        made.extend(crate::copy::additional_copies(self, o, ctx.controller));
+                    }
+                    for c in made {
+                        crate::copy::add_copy_exceptions(self, c, ctx.controller, &fixed);
+                        copies.push(c);
                     }
                 }
                 crate::copy::order_copies(self, ctx.controller, &copies);

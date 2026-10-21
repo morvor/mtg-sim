@@ -449,6 +449,28 @@ pub trait KeywordRules: Sync + Send {
     fn cant_be_countered_by(&self, g: &Game, id: ObjectId, cause: Option<ObjectId>) -> bool {
         false
     }
+    /// How many additional copies `controller` makes when an effect would have them copy a
+    /// spell one or more times ("instead copy it that many times plus an additional
+    /// time").
+    fn additional_spell_copies(&self, g: &Game, controller: PlayerId) -> u32 {
+        0
+    }
+    /// Whether the commander tax `p` would pay for casting `card` (CR 903.8) is paid with
+    /// life instead of mana ("pay 2 life that many times").
+    fn commander_tax_paid_with_life(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
+        false
+    }
+    /// `searcher` is about to search their own library (before looking for the cards):
+    /// e.g. "While you're searching your library, you may cast ~ from your library".
+    fn searching_library(&self, g: &mut Game, searcher: PlayerId) {}
+    /// `p` would pay `n` life (CR 119.4), which they can: returns true if this
+    /// implementation's replacement effect did something else instead.
+    fn pay_life_instead(&self, g: &mut Game, p: PlayerId, n: u32) -> bool {
+        false
+    }
+    /// The permanents `active` untaps during their untap step (CR 502.3), about to be
+    /// untapped: a replacement effect may take some out and do something else instead.
+    fn untap_step(&self, g: &mut Game, active: PlayerId, to_untap: &mut Vec<ObjectId>) {}
     /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         None
@@ -1157,6 +1179,40 @@ pub fn on_event(g: &mut Game, ev: &Event) {
 /// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
 pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
     registry().iter().any(|r| r.keeps_unattached_aura(g, aura))
+}
+
+/// See [`KeywordRules::additional_spell_copies`].
+pub fn additional_spell_copies(g: &Game, controller: PlayerId) -> u32 {
+    registry()
+        .iter()
+        .map(|k| k.additional_spell_copies(g, controller))
+        .sum()
+}
+
+/// See [`KeywordRules::commander_tax_paid_with_life`].
+pub fn commander_tax_paid_with_life(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.commander_tax_paid_with_life(g, p, card))
+}
+
+/// See [`KeywordRules::searching_library`].
+pub fn searching_library(g: &mut Game, searcher: PlayerId) {
+    for k in registry() {
+        k.searching_library(g, searcher);
+    }
+}
+
+/// See [`KeywordRules::pay_life_instead`].
+pub fn pay_life_instead(g: &mut Game, p: PlayerId, n: u32) -> bool {
+    registry().iter().any(|k| k.pay_life_instead(g, p, n))
+}
+
+/// See [`KeywordRules::untap_step`].
+pub fn untap_step(g: &mut Game, active: PlayerId, to_untap: &mut Vec<ObjectId>) {
+    for k in registry() {
+        k.untap_step(g, active, to_untap);
+    }
 }
 
 /// Whether counters of `kind` can't be removed from `target` (see

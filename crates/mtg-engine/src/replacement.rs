@@ -1986,6 +1986,8 @@ pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
             e.object = Some(m.obj);
             // Why it would move ("creatures played by your opponents", CR 305.1).
             e.cause = Some(m.cause);
+            // What moves it: a card discarded to pay its own cycling cost was cycled.
+            e.other = m.source;
         }
         ReplEvent::Damage {
             source,

@@ -1999,7 +1999,19 @@ impl Game {
         // CR 903.8: the commander tax (each commander separately, CR 702.124d).
         let tax = crate::kw::partner::commander_tax(self, p, card);
         if tax > 0 {
-            add_cost(&mut cost, &Cost::mana(ManaCost::generic(tax)));
+            if crate::kw::commander_tax_paid_with_life(self, p, card) {
+                // "Rather than pay {2} for each previous time ..., pay 2 life that many
+                // times."
+                add_cost(
+                    &mut cost,
+                    &Cost {
+                        mana: None,
+                        parts: vec![CostPart::PayLife(Value::Const(tax as i32))],
+                    },
+                );
+            } else {
+                add_cost(&mut cost, &Cost::mana(ManaCost::generic(tax)));
+            }
         }
         // "A spell cast this way costs {2} more to cast": an increase that comes with the
         // permission it's cast with.
