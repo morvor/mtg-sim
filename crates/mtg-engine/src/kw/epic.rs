@@ -27,6 +27,10 @@ pub fn copy_without_epic(g: &mut Game, lki: ObjectId, p: PlayerId) -> Option<Obj
         .as_deref()
         .is_some_and(|s| s.chosen.iter().any(|c| c.targets.iter().any(|t| !t.is_empty())));
     let id = crate::copy::copy_spell(g, lki, p, has_targets)?;
+    // Copies an effect adds ("copy it that many times plus an additional time") are
+    // copies made this way too.
+    let mut ids = vec![id];
+    ids.extend(crate::copy::additional_copies(g, lki, p));
     let eid = g.new_effect_id();
     let ts = g.new_timestamp();
     g.effects.push(ContinuousEffect {
@@ -35,7 +39,7 @@ pub fn copy_without_epic(g: &mut Game, lki: ObjectId, p: PlayerId) -> Option<Obj
         controller: p,
         timestamp: ts,
         duration: Duration::Permanent,
-        affected: crate::game::Affected::Objects(vec![id]),
+        affected: crate::game::Affected::Objects(ids),
         mods: vec![Modification::RemoveKeyword(KeywordKind::Epic)],
         layer1: None,
         created_turn: g.turn.number,

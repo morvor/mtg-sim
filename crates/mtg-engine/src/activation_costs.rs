@@ -426,6 +426,7 @@ pub fn loyalty_activations_per_turn(
     permissions(g, p, src, a, act)
         .filter_map(|x| x.loyalty_per_turn)
         .fold(1, u32::max)
+        + crate::kw::extra_loyalty_activations(g, p, src)
 }
 
 /// Whether `p` may activate {T}/{Q} abilities of the creature `src` as though it had

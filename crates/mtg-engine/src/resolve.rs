@@ -1131,6 +1131,9 @@ impl Game {
                             *new_targets,
                         ));
                     }
+                    if n > 0 {
+                        copies.extend(crate::copy::additional_copies(self, o, ctx.controller));
+                    }
                 }
                 // CR 405.3: the copies are put on the stack at once, in the order
                 // their controller chooses.
@@ -1187,13 +1190,21 @@ impl Game {
                 let fixed = self.fix_mods(mods, ctx);
                 let mut copies = vec![];
                 for o in self.resolve_objects(what, ctx) {
+                    let mut made = vec![];
                     for _ in 0..n {
-                        if let Some(c) =
-                            crate::copy::copy_spell(self, o, ctx.controller, *new_targets)
-                        {
-                            crate::copy::add_copy_exceptions(self, c, ctx.controller, &fixed);
-                            copies.push(c);
-                        }
+                        made.extend(crate::copy::copy_spell(
+                            self,
+                            o,
+                            ctx.controller,
+                            *new_targets,
+                        ));
+                    }
+                    if n > 0 {
+                        made.extend(crate::copy::additional_copies(self, o, ctx.controller));
+                    }
+                    for c in made {
+                        crate::copy::add_copy_exceptions(self, c, ctx.controller, &fixed);
+                        copies.push(c);
                     }
                 }
                 crate::copy::order_copies(self, ctx.controller, &copies);
@@ -1412,23 +1423,22 @@ impl Game {
             } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
-                    match &targets {
+                    let made = match &targets {
                         Some(ts) => {
-                            crate::copy_rules::copy_with_target(
-                                self,
-                                o,
-                                ctx.controller,
-                                ts.clone(),
-                            );
+                            crate::copy_rules::copy_with_target(self, o, ctx.controller, ts.clone())
+                                .into_iter()
+                                .count()
                         }
-                        None => {
-                            crate::copy_rules::copy_for_each_target(
-                                self,
-                                o,
-                                ctx.controller,
-                                among.as_ref().map(|f| (f, &*ctx)),
-                            );
-                        }
+                        None => crate::copy_rules::copy_for_each_target(
+                            self,
+                            o,
+                            ctx.controller,
+                            among.as_ref().map(|f| (f, &*ctx)),
+                        )
+                        .len(),
+                    };
+                    if made > 0 {
+                        crate::copy::additional_copies(self, o, ctx.controller);
                     }
                 }
             }
@@ -2390,6 +2400,9 @@ impl Game {
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }
+                // "you and target opponent each secretly choose a creature": not shown to
+                // the other players until revealed.
+                crate::choices::record_secret_objects(self, p, &picked, ctx);
                 picked
             }
             Sel::AtRandom {

@@ -335,7 +335,24 @@ fn separator_of(ctx: &Ctx, st: Store) -> Option<PlayerId> {
     ctx.nums.get(&st.separator()).map(|n| PlayerId(*n as u8))
 }
 
+/// `Event::Custom` name: the spell or ability `obj` had a player group cards or
+/// permanents into piles (CR 700.3).
+pub const GROUPED_INTO_PILES: &str = "grouped into piles";
+
 pub fn perform(g: &mut Game, action: &PileAction, ctx: &mut Ctx) {
+    if matches!(
+        action,
+        PileAction::Separate { .. }
+            | PileAction::SeparateFaceDown { .. }
+            | PileAction::ExileAsPile { .. }
+    ) {
+        g.emit(crate::events::Event::Custom {
+            name: GROUPED_INTO_PILES.into(),
+            player: Some(ctx.controller),
+            obj: ctx.stack_obj.or(ctx.source),
+            amount: 0,
+        });
+    }
     match action {
         PileAction::Separate {
             what,

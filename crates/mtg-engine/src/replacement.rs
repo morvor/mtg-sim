@@ -1228,7 +1228,9 @@ impl Game {
             ReplKey::Player(p, u) => (3u64 << 62) ^ ((p.0 as u64) << 48) ^ u,
         };
         let mut action = cand.def.action.clone();
-        // "... instead. When you do, ...": the instruction after the modified event.
+        // "... instead. When you do, ...": the instruction after the modified event (the
+        // innermost one's first).
+        let mut thens = Vec::new();
         while let ReplacementAction::Then(inner, then) = action {
             let mut c = ctx.clone();
             let info = event_info_of(&ev);
@@ -1237,9 +1239,11 @@ impl Game {
                 c.nums.insert(FOLLOW_IT, 1);
             }
             c.event = Some(info);
-            self.post_replacement_effects.push((c, *then));
+            thens.push((c, *then));
             action = *inner;
         }
+        self.post_replacement_effects
+            .extend(thens.into_iter().rev());
         // "Reveal that card and put it on top of your library instead": the card is
         // revealed where it is (CR 701.20b) by the player it's moving away from, then the
         // event is modified as any other move elsewhere.
@@ -1453,6 +1457,15 @@ impl Game {
                     m.etb.copy_exceptions.extend(em.copy_exceptions);
                     m.etb.copy_extras.extend(em.copy_extras);
                     m.etb.copiable_mods.extend(em.copiable);
+                    // "It enters as a copy of one of those cards" (CR 707.9).
+                    if let Some(o) = em.copy_of {
+                        if m.etb.copy_of.is_some() {
+                            // CR 707.9e, 707.9g: as for `EnterAsCopy`.
+                            m.etb.copy_exceptions = m.etb.own_copy_exceptions.clone();
+                            m.etb.copy_extras.clear();
+                        }
+                        m.etb.copy_of = Some(o);
+                    }
                     // CR 614.1c: "it enters with haste" — performed on the permanent as
                     // it's put onto the battlefield.
                     for e in em.on_entry {
@@ -2143,6 +2156,8 @@ pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
             e.object = Some(m.obj);
             // Why it would move ("creatures played by your opponents", CR 305.1).
             e.cause = Some(m.cause);
+            // What moves it: a card discarded to pay its own cycling cost was cycled.
+            e.other = m.source;
         }
         ReplEvent::Damage {
             source,

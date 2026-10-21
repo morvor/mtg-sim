@@ -826,6 +826,7 @@ impl Game {
             self.choose_untaps(active, &mut to_untap);
             self.limit_untaps(active, &mut to_untap);
             self.untap_during_others_untap_steps(&mut to_untap);
+            crate::kw::untap_step(self, active, &mut to_untap);
             for id in to_untap {
                 self.untap(id);
             }

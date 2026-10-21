@@ -431,6 +431,122 @@ pub trait KeywordRules: Sync + Send {
     fn state_based_actions(&self, g: &mut Game) -> bool {
         false
     }
+    /// Whether the resolving ability `stack_obj` (whose body is `body`) resolves even
+    /// though all its targets have become illegal (an exception to CR 608.2b: "this
+    /// ability still resolves if its target becomes illegal"); its illegal targets are
+    /// still left out as it resolves.
+    fn resolves_despite_illegal_targets(&self, g: &Game, stack_obj: ObjectId, body: &Body) -> bool {
+        false
+    }
+    /// Whether a rule this implementation defines keeps counters of `kind` from being
+    /// removed from `target` ("Stun counters can't be removed from permanents your
+    /// opponents control"): removing them removes nothing (CR 122.8 still lets a
+    /// replacement such as a stun counter's apply).
+    fn counters_cant_be_removed(&self, g: &Game, target: Entity, kind: &str) -> bool {
+        false
+    }
+    /// Whether the planeswalker `pw` isn't put into its owner's graveyard by the
+    /// state-based action for having 0 loyalty (an exception to CR 704.5i).
+    fn keeps_zero_loyalty_planeswalker(&self, g: &Game, pw: ObjectId) -> bool {
+        false
+    }
+    /// Whether the spell or ability `id` can't be countered by `cause` (the spell or
+    /// ability countering it, if any), e.g. "can't be countered by blue or black spells".
+    fn cant_be_countered_by(&self, g: &Game, id: ObjectId, cause: Option<ObjectId>) -> bool {
+        false
+    }
+    /// How many additional copies `controller` makes when an effect would have them copy a
+    /// spell one or more times ("instead copy it that many times plus an additional
+    /// time").
+    fn additional_spell_copies(&self, g: &Game, controller: PlayerId) -> u32 {
+        0
+    }
+    /// Whether the commander tax `p` would pay for casting `card` (CR 903.8) is paid with
+    /// life instead of mana ("pay 2 life that many times").
+    fn commander_tax_paid_with_life(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
+        false
+    }
+    /// `searcher` is about to search their own library (before looking for the cards):
+    /// e.g. "While you're searching your library, you may cast ~ from your library".
+    fn searching_library(&self, g: &mut Game, searcher: PlayerId) {}
+    /// The permanents `active` untaps during their untap step (CR 502.3), about to be
+    /// untapped: a replacement effect may take some out and do something else instead.
+    fn untap_step(&self, g: &mut Game, active: PlayerId, to_untap: &mut Vec<ObjectId>) {}
+    /// Whether the permanent `o` can't be attacked (an exception to CR 506.3c, 508.1b):
+    /// it's no attack target.
+    fn cant_be_attacked(&self, g: &Game, o: ObjectId) -> bool {
+        false
+    }
+    /// Whether attacking doesn't cause the creature `attacker` to tap (CR 508.1f), as
+    /// vigilance does (CR 702.20b).
+    fn attacks_without_tapping(&self, g: &Game, attacker: ObjectId) -> bool {
+        false
+    }
+    /// Whether `p` may activate the mana ability `a` of `src`, a permanent another player
+    /// controls (CR 602.2, 605.3a: normally only its controller may).
+    fn may_activate_others_mana_ability(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        src: ObjectId,
+        a: &crate::ability::Ability,
+    ) -> bool {
+        false
+    }
+    /// A spending restriction (CR 106.6) on mana `p` adds to their pool with a mana
+    /// ability of `src` that carries none of its own.
+    fn added_mana_restriction(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        src: ObjectId,
+    ) -> Option<crate::mana::ManaRestriction> {
+        None
+    }
+    /// `p` is about to planeswalk (CR 701.31, 901.8): "if you would planeswalk, instead
+    /// ..., then planeswalk" replacement effects do their part first.
+    fn before_planeswalk(&self, g: &mut Game, p: PlayerId) {}
+    /// `obj` is adapting: returns true if it adapts as though it had no +1/+1 counters on
+    /// it (CR 701.46a), using up the effect that says so ("the next time ... adapts").
+    fn adapts_ignoring_counters(&self, g: &mut Game, obj: ObjectId) -> bool {
+        false
+    }
+    /// Additional times `p` may activate loyalty abilities of the planeswalker `src` this
+    /// turn (CR 606.3), on top of the usual once.
+    fn extra_loyalty_activations(&self, g: &Game, p: PlayerId, src: ObjectId) -> u32 {
+        0
+    }
+    /// For the check whether `p` could activate the ability `a` of `src`: takes out of
+    /// `cost` what this implementation's rule lets them pay other than with mana.
+    fn activation_payable_otherwise(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        cost: &mut Cost,
+    ) {
+    }
+    /// As `p` pays the total cost of activating `a` of `src` (CR 602.2b, 601.2h): pays part
+    /// of it other than with mana, taking what was paid out of `cost`.
+    fn pay_activation_otherwise(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        cost: &mut Cost,
+    ) {
+    }
+    /// The blocks the defending players `group` make instead of declaring blockers
+    /// (CR 509.1), if a rule this implementation defines replaces their declaration.
+    fn blocks_instead(
+        &self,
+        g: &mut Game,
+        group: &[PlayerId],
+    ) -> Option<Vec<(ObjectId, ObjectId)>> {
+        None
+    }
     /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         None
@@ -1144,6 +1260,163 @@ pub fn pay_life_instead(g: &mut Game, p: PlayerId, n: u32) -> bool {
 /// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
 pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
     registry().iter().any(|r| r.keeps_unattached_aura(g, aura))
+}
+
+/// See [`KeywordRules::adapts_ignoring_counters`] (every implementation is asked, so each
+/// effect that applies is used up).
+pub fn adapts_ignoring_counters(g: &mut Game, obj: ObjectId) -> bool {
+    let mut any = false;
+    for k in registry() {
+        any |= k.adapts_ignoring_counters(g, obj);
+    }
+    any
+}
+
+/// See [`KeywordRules::extra_loyalty_activations`].
+pub fn extra_loyalty_activations(g: &Game, p: PlayerId, src: ObjectId) -> u32 {
+    registry()
+        .iter()
+        .map(|k| k.extra_loyalty_activations(g, p, src))
+        .sum()
+}
+
+/// See [`KeywordRules::activation_payable_otherwise`].
+pub fn activation_payable_otherwise(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+    a: &Ability,
+    cost: &mut Cost,
+) {
+    for k in registry() {
+        k.activation_payable_otherwise(g, p, src, a, cost);
+    }
+}
+
+/// See [`KeywordRules::pay_activation_otherwise`].
+pub fn pay_activation_otherwise(
+    g: &mut Game,
+    p: PlayerId,
+    src: ObjectId,
+    a: &Ability,
+    cost: &mut Cost,
+) {
+    for k in registry() {
+        k.pay_activation_otherwise(g, p, src, a, cost);
+    }
+}
+
+/// See [`KeywordRules::cant_be_attacked`].
+pub fn cant_be_attacked(g: &Game, o: ObjectId) -> bool {
+    registry().iter().any(|k| k.cant_be_attacked(g, o))
+}
+
+/// See [`KeywordRules::attacks_without_tapping`].
+pub fn attacks_without_tapping(g: &Game, attacker: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.attacks_without_tapping(g, attacker))
+}
+
+/// See [`KeywordRules::may_activate_others_mana_ability`].
+pub fn may_activate_others_mana_ability(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+    a: &crate::ability::Ability,
+) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.may_activate_others_mana_ability(g, p, src, a))
+}
+
+/// See [`KeywordRules::added_mana_restriction`].
+pub fn added_mana_restriction(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+) -> Option<crate::mana::ManaRestriction> {
+    registry()
+        .iter()
+        .find_map(|k| k.added_mana_restriction(g, p, src))
+}
+
+/// See [`KeywordRules::before_planeswalk`].
+pub fn before_planeswalk(g: &mut Game, p: PlayerId) {
+    for k in registry() {
+        k.before_planeswalk(g, p);
+    }
+}
+
+/// See [`KeywordRules::blocks_instead`].
+pub fn blocks_instead(g: &mut Game, group: &[PlayerId]) -> Option<Vec<(ObjectId, ObjectId)>> {
+    for k in registry() {
+        if let Some(v) = k.blocks_instead(g, group) {
+            return Some(v);
+        }
+    }
+    None
+}
+
+/// See [`KeywordRules::additional_spell_copies`].
+pub fn additional_spell_copies(g: &Game, controller: PlayerId) -> u32 {
+    registry()
+        .iter()
+        .map(|k| k.additional_spell_copies(g, controller))
+        .sum()
+}
+
+/// See [`KeywordRules::commander_tax_paid_with_life`].
+pub fn commander_tax_paid_with_life(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.commander_tax_paid_with_life(g, p, card))
+}
+
+/// See [`KeywordRules::searching_library`].
+pub fn searching_library(g: &mut Game, searcher: PlayerId) {
+    for k in registry() {
+        k.searching_library(g, searcher);
+    }
+}
+
+/// See [`KeywordRules::untap_step`].
+pub fn untap_step(g: &mut Game, active: PlayerId, to_untap: &mut Vec<ObjectId>) {
+    for k in registry() {
+        k.untap_step(g, active, to_untap);
+    }
+}
+
+/// Whether counters of `kind` can't be removed from `target` (see
+/// [`KeywordRules::counters_cant_be_removed`]).
+pub fn counters_cant_be_removed(g: &Game, target: Entity, kind: &str) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.counters_cant_be_removed(g, target, kind))
+}
+
+/// Whether a planeswalker with 0 loyalty stays on the battlefield (see
+/// [`KeywordRules::keeps_zero_loyalty_planeswalker`]).
+pub fn keeps_zero_loyalty_planeswalker(g: &Game, pw: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.keeps_zero_loyalty_planeswalker(g, pw))
+}
+
+/// Whether `id` can't be countered by `cause` (see
+/// [`KeywordRules::cant_be_countered_by`]).
+pub fn cant_be_countered_by(g: &Game, id: ObjectId, cause: Option<ObjectId>) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.cant_be_countered_by(g, id, cause))
+}
+
+/// Whether an ability resolves although all its targets are illegal (see
+/// [`KeywordRules::resolves_despite_illegal_targets`]).
+pub fn resolves_despite_illegal_targets(g: &Game, stack_obj: ObjectId, body: &Body) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.resolves_despite_illegal_targets(g, stack_obj, body))
 }
 
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
