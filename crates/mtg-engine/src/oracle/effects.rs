@@ -205,6 +205,12 @@ pub fn parse_trigger_body(
     if let Some(body) = reflexive_modal(t, ctx, &it, &it_player) {
         return Some(body);
     }
+    // "choose one and ~ gets +1/+1 until end of turn —" (`patterns::reflexive_modal_4`).
+    if let Some(body) =
+        super::patterns::reflexive_modal_4::modal_with_effect(t, ctx, &it, &it_player)
+    {
+        return Some(body);
+    }
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
     b.named
@@ -257,7 +263,7 @@ fn reflexive_modal(t: &str, ctx: &CompileContext, it: &Sel, it_player: &PlayerRe
 
 /// "Choose one —\n• mode\n• mode" (CR 700.2). In a triggered ability (`trigger`: what
 /// "it" and "that player" refer to), the modes' pronouns refer to what the trigger's do.
-fn parse_modal(
+pub(crate) fn parse_modal(
     t: &str,
     ctx: &CompileContext,
     trigger: Option<(&Sel, &PlayerRef)>,

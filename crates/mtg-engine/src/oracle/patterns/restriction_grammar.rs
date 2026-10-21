@@ -94,6 +94,11 @@ pub(crate) fn object_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> 
         "can't be turned face up" => return Some(vec![Restriction::CantTurnFaceUp(fc)]),
         "can't transform" => return Some(vec![Restriction::CantTransform(fc)]),
         "must be blocked each combat if able" => return Some(vec![Restriction::MustBeBlocked(fc)]),
+        // "~ can't be blocked by more than one creature each combat this turn" (Glorfindel,
+        // Dauntless Rescuer; CR 509.1b).
+        "can't be blocked by more than one creature each combat" => {
+            return Some(vec![Restriction::MaxBlockedBy { attacker: fc, n: 1 }])
+        }
         // "Enchanted creature gets +1/+1 and has first strike, and all creatures able to
         // block it do so": each creature able to block the subject blocks it (CR 509.1c).
         "all creatures able to block it do so" | "all creatures able to block them do so" => {

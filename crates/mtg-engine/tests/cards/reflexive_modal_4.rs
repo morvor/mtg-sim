@@ -3,6 +3,7 @@
 
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 fn supported(name: &str) {
@@ -51,4 +52,50 @@ fn fantastic_four_triggers_on_power_four_and_offers_only_unchosen_modes() {
     let stack_before = t.stack_len();
     t.cast(P0, bears).go();
     assert_eq!(t.stack_len(), stack_before + 1);
+}
+
+#[test]
+fn glorfindel_chosen_mode_then_gets_plus_one() {
+    cr!("700.2", "608.2c", "509.1b");
+    supported("Glorfindel, Dauntless Rescuer");
+    let mut t = TestGame::new(2);
+    let g = t.battlefield(P0, "Glorfindel, Dauntless Rescuer");
+    t.lands(P0, "Island", 1);
+    let opt = t.hand(P0, "Opt");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+    assert_eq!(t.g.max_blocked_by(g), None);
+    t.cast(P0, opt).go();
+    t.resolve_all();
+    assert_eq!(t.pt(g), (4, 3));
+    assert_eq!(t.g.max_blocked_by(g), Some(1));
+}
+
+#[test]
+fn zuko_unchosen_mode_and_you_lose_two_life() {
+    cr!("700.2", "608.2c");
+    supported("Zuko, Conflicted");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Zuko, Conflicted");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    t.advance_to(P0, Step::End);
+    t.advance_to(P0, Step::PrecombatMain);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.life(P0), 18);
+    // Next time, "Draw a card" has been chosen.
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+    t.advance_to(P0, Step::End);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 16);
+    let offered: Vec<Vec<usize>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseModes { available, .. } => Some(available),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered, vec![vec![0, 1, 2, 3], vec![1, 2, 3]]);
 }
