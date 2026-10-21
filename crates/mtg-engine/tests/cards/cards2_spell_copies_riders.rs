@@ -160,3 +160,23 @@ fn shiko_and_narset_copies_a_second_spell_that_targets_or_draws() {
     assert_eq!(t.life(P1), 17);
     assert_eq!(t.hand_size(P0), hand - 1 + 1 + 2);
 }
+
+#[test]
+fn sea_gate_stormcaller_copies_the_next_cheap_spell_twice_if_kicked() {
+    cr!("707.10", "603.7", "702.33d");
+    supported("Sea Gate Stormcaller");
+    for (kicked, life) in [(false, 14), (true, 11)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 7);
+        t.lands(P0, "Mountain", 1);
+        let s = t.hand(P0, "Sea Gate Stormcaller");
+        t.cast(P0, s).kicked(kicked).go();
+        t.resolve_all();
+        let bolt = t.hand(P0, "Lightning Bolt");
+        t.cast(P0, bolt).target(Entity::Player(P1)).go();
+        t.answer_yes(P0, false);
+        t.answer_yes(P0, false);
+        t.resolve_all();
+        assert_eq!(t.life(P1), life, "kicked: {kicked}");
+    }
+}

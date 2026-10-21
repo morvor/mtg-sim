@@ -741,3 +741,53 @@ fn if_you_dont_copy(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "copy spell grammar 2: if you don't copy a spell this way", priority: 90, apply: if_you_dont_copy } }
+
+/// "If this creature was kicked, copy that spell twice instead." after "copy the next
+/// instant or sorcery spell ... you cast this turn when you cast it" (Sea Gate
+/// Stormcaller): the delayed trigger makes two copies if the source was kicked.
+fn kicked_copy_next_spell_twice(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(r) = end(&lower).strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, rest)) = r.split_once(", ") else {
+        return false;
+    };
+    if rest != "copy that spell twice instead" {
+        return false;
+    }
+    let Some(cond) = crate::oracle::statics::parse_condition(c, _b.ctx) else {
+        return false;
+    };
+    if !matches!(cond, Condition::CostPaid(_)) {
+        return false;
+    }
+    fn last_delayed(e: &mut Effect) -> Option<&mut Effect> {
+        match e {
+            Effect::Seq(v) => v.last_mut().and_then(last_delayed),
+            Effect::DelayedTrigger { .. } => Some(e),
+            _ => None,
+        }
+    }
+    let Some(Effect::DelayedTrigger { trigger, body, .. }) = last_delayed(prev) else {
+        return false;
+    };
+    if !matches!(trigger, TriggerCond::ThisTurn(_)) {
+        return false;
+    }
+    let Effect::CopySpell {
+        what: Sel::TriggerSpell,
+        count,
+        ..
+    } = &mut body.effect
+    else {
+        return false;
+    };
+    if !matches!(count, Value::Const(1)) {
+        return false;
+    }
+    *count = Value::If(Box::new(cond), Box::new(Value::c(2)), Box::new(Value::c(1)));
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "copy spell grammar 2: if kicked, copy that spell twice instead", priority: 90, apply: kicked_copy_next_spell_twice } }
