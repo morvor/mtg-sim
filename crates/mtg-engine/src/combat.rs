@@ -1881,6 +1881,11 @@ pub fn declare_blockers_step(g: &mut Game) {
         // "You choose which creatures block this combat and how those creatures block."
         let chosen_by = crate::block_choice::block_decider(g, &group);
         let decider = chosen_by.unwrap_or(decider);
+        // "Instead of declaring blockers, ..." (see `kw::blocks_instead`).
+        if let Some(blocks) = crate::kw::blocks_instead(g, &group) {
+            all_blocks.extend(blocks);
+            continue;
+        }
         let options = block_options(g, &group);
         if options.is_empty() {
             continue;

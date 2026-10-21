@@ -513,6 +513,15 @@ pub trait KeywordRules: Sync + Send {
         cost: &mut Cost,
     ) {
     }
+    /// The blocks the defending players `group` make instead of declaring blockers
+    /// (CR 509.1), if a rule this implementation defines replaces their declaration.
+    fn blocks_instead(
+        &self,
+        g: &mut Game,
+        group: &[PlayerId],
+    ) -> Option<Vec<(ObjectId, ObjectId)>> {
+        None
+    }
     /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         None
@@ -1277,6 +1286,16 @@ pub fn attacks_without_tapping(g: &Game, attacker: ObjectId) -> bool {
     registry()
         .iter()
         .any(|k| k.attacks_without_tapping(g, attacker))
+}
+
+/// See [`KeywordRules::blocks_instead`].
+pub fn blocks_instead(g: &mut Game, group: &[PlayerId]) -> Option<Vec<(ObjectId, ObjectId)>> {
+    for k in registry() {
+        if let Some(v) = k.blocks_instead(g, group) {
+            return Some(v);
+        }
+    }
+    None
 }
 
 /// See [`KeywordRules::additional_spell_copies`].
