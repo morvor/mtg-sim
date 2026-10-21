@@ -381,6 +381,8 @@ fn face_down_objects_are_revealed_when_they_leave_and_at_the_end() {
 #[test]
 fn a_face_down_permanent_that_becomes_a_copy_stays_face_down() {
     cr!("708.10", "707.3");
+    cr_example!("707.3", "becomes a copy of a face-up Branchsnap Lorian");
+    cr_example!("707.3", "becomes a copy of Wandering Ones");
     let mut t = TestGame::new(2);
     let lorian = t.battlefield(P1, "Branchsnap Lorian");
     let demon = put_face_down(&mut t, P0, "Grinning Demon");

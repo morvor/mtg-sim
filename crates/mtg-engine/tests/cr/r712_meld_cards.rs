@@ -176,6 +176,7 @@ fn a_melded_permanent_has_the_combined_back_face_and_its_front_faces_mana_value(
 #[test]
 fn a_melded_permanent_leaving_is_one_permanent_and_two_cards() {
     cr!("712.21", "712.21e");
+    cr_example!("712.21", "Chittering Host, a melded permanent, dies");
     let mut t = TestGame::new(2);
     // Blood Artist: "Whenever Blood Artist or another creature dies, target player loses 1
     // life and you gain 1 life." Planar Void: "Whenever another card is put into a
@@ -316,6 +317,7 @@ fn an_effect_that_finds_the_new_object_finds_both_cards() {
     assert_eq!(t.named_on_battlefield("Graf Rats").len(), 1);
     assert_eq!(t.named_on_battlefield("Midnight Scavengers").len(), 1);
     assert!(t.g.exile.is_empty());
+    cr_example!("712.21c", "False Demise");
     // False Demise: "When enchanted creature dies, return that card to the battlefield
     // under your control." Both cards return.
     supported("False Demise");

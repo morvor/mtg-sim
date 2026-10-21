@@ -48,6 +48,10 @@ pub struct EndState {
     /// A restart of the game requested by a resolving effect (CR 104.6, 727).
     #[serde(skip)]
     pub restart: Option<crate::restart::RestartRequest>,
+    /// Players who lost while several players are losing at the same time (CR 104.4a):
+    /// they leave the game together once all of them have lost (CR 800.4a).
+    #[serde(default)]
+    pub leaving: Vec<PlayerId>,
 }
 
 impl Game {
@@ -206,7 +210,12 @@ impl Game {
         let was = self.losing_simultaneously;
         self.losing_simultaneously = true;
         let mut teams_done: Vec<u8> = Vec::new();
-        for &p in ps {
+        // In APNAP order (CR 101.4), so that what happens as each of them loses doesn't
+        // depend on where the players sit.
+        let order = self.apnap();
+        let mut ps = ps.to_vec();
+        ps.sort_by_key(|p| order.iter().position(|q| q == p).unwrap_or(order.len()));
+        for p in ps {
             if self.config.variant == Variant::TwoHeadedGiant {
                 let team = self.player(p).team;
                 if teams_done.contains(&team) {
@@ -218,7 +227,31 @@ impl Game {
         }
         self.losing_simultaneously = was;
         if !was {
+            self.finish_leaving();
             self.check_game_over();
+        }
+    }
+
+    /// The players who lost at the same time leave the game together (CR 800.4a): their
+    /// objects leave unless the game is over, with no team left to play on (CR 104.4a) —
+    /// whatever the seats of the players who lost.
+    pub(crate) fn finish_leaving(&mut self) {
+        let leaving = std::mem::take(&mut self.end.leaving);
+        if leaving.is_empty() {
+            return;
+        }
+        let teams: BTreeSet<u8> = self
+            .players_in_game()
+            .iter()
+            .map(|p| self.player(*p).team)
+            .collect();
+        for p in leaving {
+            if teams.len() <= 1 {
+                self.players[p.idx()].left_game = true;
+                crate::facedown::reveal_all(self, Some(p));
+            } else {
+                self.after_player_leaves(p);
+            }
         }
     }
 
@@ -512,9 +545,19 @@ impl Game {
             } else {
                 (0, 0)
             };
+            // Its abilities, types and colors: what the continuous effects on it add up
+            // to (see the distinct effects below).
+            let mut abilities: Vec<&str> =
+                o.chars.abilities.iter().map(|a| a.text.as_str()).collect();
+            abilities.sort_unstable();
             format!(
-                "{}|{}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}",
+                "{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}",
                 o.chars.name,
+                abilities,
+                o.chars.card_types,
+                o.chars.subtypes,
+                o.chars.supertypes,
+                o.chars.colors,
                 o.controller.0,
                 o.tapped,
                 o.damage,
@@ -535,9 +578,29 @@ impl Game {
         self.turn.number.hash(&mut h);
         format!("{:?}", self.turn.step).hash(&mut h);
         self.turn.priority.map(|p| p.0).hash(&mut h);
-        // Effects that pile up each time around.
+        // Effects that pile up each time around. Identical continuous effects count once:
+        // an effect created again each time around that only overrides the same earlier
+        // effects ("{0}: This creature gains flying" answered by "{0}: Target creature
+        // loses flying") returns the game to an earlier state (CR 732.3); what the effects
+        // add up to is part of each object's fingerprint.
+        let distinct_effects: std::collections::BTreeSet<String> = self
+            .effects
+            .iter()
+            .map(|e| {
+                format!(
+                    "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}",
+                    e.source,
+                    e.controller.0,
+                    e.duration,
+                    e.affected,
+                    e.mods,
+                    e.layer1,
+                    e.created_turn
+                )
+            })
+            .collect();
         (
-            self.effects.len(),
+            distinct_effects,
             self.rule_effects.len(),
             self.player_effects.len(),
             self.replacements.len(),

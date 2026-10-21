@@ -210,6 +210,18 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Code: `crates/mtg-engine/src/game.rs` (`Game::rng`, `shuffle_library`, `GameConfig::seed`); `crates/mtg-engine/src/dice.rs`.
 - Tests: `tests/cr/interp_decision_defaults.rs` (`random_results_come_from_the_games_seed`).
 
+## ability-ids-depend-on-the-process: Ability ids in requests come from a process-wide counter; answers name options by their place
+- Kind: policy
+- Status: decided
+- Rules: none directly (the agent interface). Abilities have identities because of rules such as 602.5c "If an object acquires an activated ability with a restriction on its use from another object, that restriction applies only to that ability as acquired from that object. It doesn’t apply to other, identically worded abilities." and 607.1 "An object may have two abilities printed on it such that one of them causes actions to be taken or objects or players to be affected and the other one directly refers to those actions, objects, or players. If so, these two abilities are linked: ..."
+- Question: The rules don't number abilities; the engine does, to tell them apart (activation limits, linked abilities, removing one ability). Must the numbers be the same every time a game is played?
+- Decision: No. Ability ids come from one counter the whole process shares (`ability::next_ability_uid`) and are handed out as abilities are first needed: compiled card abilities (cached for every game), abilities effects give, delayed triggers, tokens' abilities. So the ids in agent-protocol requests (`action.ability`) differ between processes, and even between two plays of one game in one process, unless everything before them happened the same way. Answers refer to options by `index`, which doesn't depend on the ids, so a game replays from its answers; replays and the property checks compare ids up to a consistent renaming. The links of abilities effects give, which are also numbers, are numbered per game (`ability_grants::FreshLinks`).
+- Alternatives: Allocate ability ids per game: the same requests in every process, but the caches of compiled and derived abilities, shared by all games, would have to be reworked to renumber per game.
+- Why: Agents never need to send an id back, so stable ids would buy only easier comparison of requests across processes, which renaming already gives.
+- Affects: games with external agents (mtg-api requests and transcripts), replays, the determinism and snapshot properties.
+- Code: `crates/mtg-engine/src/ability.rs` (`next_ability_uid`); `crates/mtg-api/src/replay.rs` (`AbilityRenaming`); `crates/mtg-engine/src/properties/agent.rs` (`rename_uids`).
+- Tests: `tests/cr/interp_ability_ids.rs` (`the_same_game_numbers_a_gained_ability_differently_but_lists_it_in_the_same_place`).
+
 ## unbounded-number-ceiling: "Choose a number" with no upper limit goes up to 1,000,000
 - Kind: deviation
 - Status: decided

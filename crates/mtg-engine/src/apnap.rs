@@ -24,6 +24,33 @@ pub struct ApnapChoice {
 }
 
 impl Game {
+    /// Puts entities into an order that depends on turn order, not on seats: players in
+    /// APNAP order (CR 101.4), then objects grouped by their owners in APNAP order, each
+    /// owner's in the order they were created. Used before choosing among them at random,
+    /// so the chances don't depend on where players sit.
+    pub fn sort_apnap(&self, v: &mut [Entity]) {
+        let order = self.player_ids_apnap();
+        let rank = |p: PlayerId| order.iter().position(|q| *q == p).unwrap_or(order.len());
+        v.sort_by_key(|e| match e {
+            Entity::Player(p) => (0, rank(*p), 0),
+            Entity::Object(o) => (1, rank(self.obj(*o).owner), o.0),
+        });
+    }
+
+    /// Objects in the order of [`Game::sort_apnap`].
+    pub fn sort_objects_apnap(&self, v: &mut [ObjectId]) {
+        let order = self.player_ids_apnap();
+        let rank = |p: PlayerId| order.iter().position(|q| *q == p).unwrap_or(order.len());
+        v.sort_by_key(|o| (rank(self.obj(*o).owner), o.0));
+    }
+
+    /// Every player, in turn order from the active player (players who left included).
+    fn player_ids_apnap(&self) -> Vec<PlayerId> {
+        let n = self.players.len();
+        let a = self.turn.active.idx();
+        (0..n).map(|i| PlayerId(((a + i) % n) as u8)).collect()
+    }
+
     /// Makes simultaneous choices in APNAP order (CR 101.4): each request is one player's
     /// choice; `choose` makes it and returns any further choices it causes. The next
     /// choice is always the outstanding one of the player earliest in APNAP order, so if a

@@ -300,6 +300,7 @@ fn only_the_bestowed_characteristics_are_checked_when_casting_it_bestowed() {
 #[test]
 fn a_permission_to_cast_creature_spells_doesnt_allow_casting_it_bestowed() {
     cr!("702.103d");
+    cr_example!("702.103d", "cast creature spells from the top of your library");
     let mut t = TestGame::new(2);
     // Garruk's Horde: "You may cast creature spells from the top of your library."
     t.battlefield(P0, "Garruk's Horde");

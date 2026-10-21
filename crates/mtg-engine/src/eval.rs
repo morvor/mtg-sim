@@ -897,8 +897,14 @@ impl Game {
             // CR 700.9: counters, being equipped (by anyone's Equipment), or being
             // enchanted by an Aura its controller controls.
             Filter::Modified => {
+                // A permanent that left the battlefield: as it last existed there, with the
+                // permanents attached to it then (CR 608.2h).
+                let attached = match o.left_battlefield.as_deref() {
+                    Some(l) if o.next.is_some() => l.attachments.clone(),
+                    _ => self.attachments_of(Entity::Object(id)),
+                };
                 o.counters.values().any(|n| *n > 0)
-                    || self.attachments_of(Entity::Object(id)).iter().any(|a| {
+                    || attached.iter().any(|a| {
                         let ao = self.obj(*a);
                         ao.chars.has_subtype("Equipment")
                             || (ao.controller == o.controller && ao.chars.has_subtype("Aura"))

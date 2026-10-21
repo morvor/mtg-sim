@@ -999,6 +999,10 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
         "The same choice, made as the instruction that uses it is followed (CR 608.2c).",
     ),
     (
+        "\"If C, you may put/cast Y. Otherwise, X.\" and \"You may put/cast Y if C. Otherwise, X.\" -> \"If C, you may put/cast Y. If you don't, X.\"",
+        "\"Otherwise\" after an optional instruction also covers not doing it (Fecund Greenshell, Treasure Chest and Aid from the Cowl rulings; Bre of Clan Stoutarm).",
+    ),
+    (
         "\"If C, Y. Otherwise, X.\" and \"Y if C. Otherwise, X.\" -> \"X. If C, Y instead.\" (not after \"If you do\", whose \"Otherwise\" is \"If you don't\")",
         "Both state the same choice between two instructions.",
     ),
@@ -1527,6 +1531,30 @@ fn sentence_rewrites(s: &str) -> String {
             .ok()
     }) {
         s = re.replace_all(&s, "${1}$3 unless you pay $2.").to_string();
+    }
+    // "If C, you may put Y. Otherwise, X.": X happens if C doesn't hold or Y isn't done
+    // (Fecund Greenshell, Treasure Chest and Aid from the Cowl rulings), as with "If you
+    // don't, X." after it.
+    static MAY_OTHERWISE: OnceLock<[Option<Regex>; 2]> = OnceLock::new();
+    let [leading, trailing_may] = MAY_OTHERWISE.get_or_init(|| {
+        [
+            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), you may ((?:put|cast) [^.]+)\. otherwise, ([^.]+)\.")
+                .ok(),
+            Regex::new(
+                r"(^|[.:—•] |\n|, )you may ((?:put|cast) [^.,:]+?) if ([^,.]+)\. otherwise, ([^.]+)\.",
+            )
+            .ok(),
+        ]
+    });
+    if let Some(re) = leading {
+        s = re
+            .replace_all(&s, "${1}if $2, you may $3. if you don't, $4.")
+            .to_string();
+    }
+    if let Some(re) = trailing_may {
+        s = re
+            .replace_all(&s, "${1}if $3, you may $2. if you don't, $4.")
+            .to_string();
     }
     // "If C, Y. Otherwise, X." and "X. If C, Y instead." state the same choice.
     static OTHERWISE: OnceLock<[Option<Regex>; 2]> = OnceLock::new();

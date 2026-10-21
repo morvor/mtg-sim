@@ -367,6 +367,62 @@ fn every_players_mana_pool_is_public() {
     assert_eq!(obs.players[1].mana_pool.get("R"), Some(&1));
 }
 
+#[test]
+fn other_players_dont_see_the_order_of_cards_put_on_the_bottom() {
+    cr!("401.2", "701.20a");
+    ruling!(
+        "Sages of the Anima",
+        "Other players don’t get to see the order that you put the cards on the bottom of your library."
+    );
+    // Sages of the Anima: "If you would draw a card, instead reveal the top three cards of
+    // your library. Put all creature cards revealed this way into your hand and the rest
+    // on the bottom of your library in any order."
+    let mut t = TestGame::new(2);
+    t.g.event_feed.enable();
+    t.battlefield(P0, "Sages of the Anima");
+    t.g.players[0].library.clear();
+    for name in ["Wastes", "Forest", "Plains", "Swamp", "Island"] {
+        t.library_top(P0, name);
+    }
+    let before = t.g.event_feed.len();
+    let asked = t.asked().len();
+    t.g.draw_cards(P0, 1);
+    t.g.flush_events();
+    t.settle();
+    // Island, Swamp and Plains were revealed (everyone saw them) and put on the bottom in
+    // an order P0 chose.
+    let order: Vec<_> = t.asked()[asked..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::Order { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(order, vec![P0]);
+    let all = observe(&t.g, None);
+    let bottom: Vec<_> = all.players[0].library_known[2..]
+        .iter()
+        .map(|(_, v)| v.card.name.clone().unwrap_or_default())
+        .collect();
+    let mut sorted = bottom.clone();
+    sorted.sort();
+    assert_eq!(sorted, vec!["Island", "Plains", "Swamp"]);
+    // P1's observation shows no card of that library, and the event feed doesn't tell P1
+    // where in it each revealed card went.
+    let p1 = observe(&t.g, Some(P1));
+    assert_eq!(p1.players[0].library_count, 5);
+    assert!(
+        p1.players[0].library_known.is_empty(),
+        "{:?}",
+        p1.players[0].library_known
+    );
+    let events = t.g.event_feed.since(before);
+    for e in describe_events(&t.g, Some(P1), &events) {
+        assert!(
+            !e.text.contains("bottom") || !bottom.iter().any(|n| e.text.contains(n.as_str())),
+            "{e:?}"
+        );
+    }
+}
+
 /// P1's agent: when asked to choose objects, records how P0 and P1 each see the choices
 /// made for the permanents (`ObjectView::choices`), then chooses the first candidate.
 struct ChoiceSpy(std::sync::Arc<std::sync::Mutex<Vec<(PlayerId, Vec<String>)>>>);
