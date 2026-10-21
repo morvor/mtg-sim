@@ -507,3 +507,72 @@ fn p_when_you_next_attack(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "combat 4: when you next attack this turn", priority: 90, parse: p_when_you_next_attack } }
+
+// ---------------------------------------------------------------------------
+// Combat history (see `kw::combat_history_4`)
+// ---------------------------------------------------------------------------
+
+/// "defending player controls three or more creatures that share a creature type".
+fn c_defending_share_a_type(c: &str) -> Option<Condition> {
+    use crate::kw::combat_history_4 as h;
+    let c = end(c.trim());
+    let r = c
+        .strip_prefix("defending player controls ")?
+        .strip_suffix(" creatures that share a creature type")?;
+    let num = r.strip_suffix(" or more")?;
+    let (n, rest) = crate::oracle::phrases::parse_number(num)?;
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    let n = n.as_const()?;
+    (n >= 2).then(|| Condition::Custom(format!("{}{n}", h::DEFENDING_SHARE_A_TYPE).into()))
+}
+
+inventory::submit! { super::ConditionPattern { name: "combat 4: defending player controls N creatures that share a creature type", priority: 100, parse: c_defending_share_a_type } }
+
+/// "each creature it blocked this combat" (Cathedral Membrane): "it" is the source.
+fn s_it_blocked_this_combat<'a>(s: &'a str, f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = s
+        .strip_prefix("it blocked this combat")
+        .or_else(|| s.strip_prefix("~ blocked this combat"))?;
+    if !(r.is_empty() || r.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    if !serde_json::to_string(f).is_ok_and(|j| j.contains("\"Creature\"")) {
+        return None;
+    }
+    Some((
+        Filter::Custom(crate::kw::combat_history_4::SOURCE_BLOCKED_THIS_COMBAT.into()),
+        r,
+    ))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "combat 4: creature it blocked this combat", priority: 100, parse: s_it_blocked_this_combat } }
+
+/// "Whenever a Wolf you control attacks, ... blocks that Wolf this combat if able"
+/// (Tolsimir, Midnight's Light): "that Wolf" is the trigger's creature.
+fn p_that_trigger_noun(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !b.in_trigger || !matches!(b.it, Sel::TriggerObject) {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let l = end(l.trim());
+    let i = l.find(" that ")?;
+    let word = l[i + " that ".len()..]
+        .split(|c: char| !c.is_alphanumeric())
+        .next()?;
+    if word.is_empty()
+        || matches!(word, "creature" | "player" | "card" | "permanent" | "spell" | "opponent")
+        || !(raw.contains(&format!("whenever a {word} you control attacks"))
+            || raw.contains(&format!("whenever an {word} you control attacks")))
+    {
+        return None;
+    }
+    let rewritten = l.replacen(&format!(" that {word}"), " it", 1);
+    if rewritten.contains(&format!(" that {word}")) {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(&rewritten, b)
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: that [type] (the attacking trigger creature)", priority: 95, parse: p_that_trigger_noun } }

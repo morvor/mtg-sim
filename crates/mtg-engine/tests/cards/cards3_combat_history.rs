@@ -1,0 +1,123 @@
+//! Combat grammar IV: combat history and combat-scoped qualities (CR 506.7, 508.1d,
+//! 508.1h, 509.1c): Firkraag, Tolsimir, Cathedral Membrane, Graxiplon, Onakke Oathkeeper.
+
+use crate::combat2_common::*;
+use mtg_engine::combat::required_attack_cost;
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::*;
+
+fn multi(n: usize) -> TestGame {
+    TestGame::with_config(
+        n,
+        GameConfig {
+            attack_multiple_players: true,
+            ..Default::default()
+        },
+    )
+}
+
+#[test]
+fn firkraag_rewards_only_creatures_that_had_to_attack() {
+    cr!("506.7");
+    supported("Firkraag, Cunning Instigator");
+    let mut t = multi(3);
+    let firk = t.battlefield(P0, "Firkraag, Cunning Instigator");
+    let cyclops = t.battlefield(P1, "Bloodrock Cyclops");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let hand = t.hand_size(P0);
+    declare(
+        &mut t,
+        P1,
+        &[(cyclops, Entity::Player(P2)), (bears, Entity::Player(P2))],
+    );
+    t.advance_to(P1, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.life(P2), 20 - 3 - 2);
+    assert_eq!(t.counters(firk, "+1/+1"), 1);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn tolsimir_forces_a_block_on_the_wolf_only_if_he_attacked() {
+    cr!("509.1c");
+    supported("Tolsimir, Midnight's Light");
+    let mut t = TestGame::new(2);
+    let tol = t.battlefield(P0, "Tolsimir, Midnight's Light");
+    let wolf = t.battlefield(P0, "Timber Wolves");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    declare(
+        &mut t,
+        P0,
+        &[(tol, Entity::Player(P1)), (wolf, Entity::Player(P1))],
+    );
+    t.resolve_all();
+    assert!(!legal_blocks(&mut t, &[]));
+    assert!(!legal_blocks(&mut t, &[(bears, tol)]));
+    assert!(legal_blocks(&mut t, &[(bears, wolf)]));
+}
+
+#[test]
+fn tolsimir_doesnt_force_a_block_if_he_didnt_attack() {
+    cr!("509.1c");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tolsimir, Midnight's Light");
+    let wolf = t.battlefield(P0, "Timber Wolves");
+    t.battlefield(P1, "Grizzly Bears");
+    declare(&mut t, P0, &[(wolf, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(legal_blocks(&mut t, &[]));
+}
+
+#[test]
+fn cathedral_membrane_damages_the_creature_it_blocked() {
+    cr!("509.1", "608.2h");
+    supported("Cathedral Membrane");
+    let mut t = TestGame::new(2);
+    let wall = t.battlefield(P0, "Cathedral Membrane");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    declare(
+        &mut t,
+        P1,
+        &[(giant, Entity::Player(P0)), (bears, Entity::Player(P0))],
+    );
+    declare_blocks(&mut t, P0, &[(wall, giant)]);
+    t.advance_to(P1, Step::EndOfCombat);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Cathedral Membrane"));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn graxiplon_can_be_blocked_only_by_a_player_with_three_creatures_sharing_a_type() {
+    cr!("509.1b");
+    supported("Graxiplon");
+    let mut t = TestGame::new(2);
+    let grax = t.battlefield(P0, "Graxiplon");
+    let b1 = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    declare(&mut t, P0, &[(grax, Entity::Player(P1))]);
+    assert!(!legal_blocks(&mut t, &[(b1, grax)]));
+    t.battlefield(P1, "Grizzly Bears");
+    assert!(legal_blocks(&mut t, &[(b1, grax)]));
+}
+
+#[test]
+fn onakke_taxes_only_attacks_on_planeswalkers() {
+    cr!("508.1d", "508.1h");
+    supported("Onakke Oathkeeper");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Onakke Oathkeeper");
+    let pw = t.battlefield(P1, "Ajani Goldmane");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    to_combat(&mut t, P0);
+    t.g.recompute();
+    let to_pw = required_attack_cost(&t.g, bears, Entity::Object(pw)).expect("taxed");
+    assert_eq!(to_pw.mana.map(|m| m.mana_value()), Some(1));
+    assert!(required_attack_cost(&t.g, bears, Entity::Player(P1)).is_none());
+}

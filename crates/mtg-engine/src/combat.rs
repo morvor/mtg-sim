@@ -966,6 +966,8 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
             let mut ctx = Ctx::new(s, c);
             // "where X is the number of counters on that creature": the attacker.
             ctx.set_var(vars::AFFECTED, vec![Entity::Object(creature)]);
+            // "... that's attacking a planeswalker you control": what it would attack.
+            ctx.set_var(crate::kw::combat_history_4::ATTACK_TARGET, vec![target]);
             if !g.restriction_applies(creature, attackers, &ctx, &locked) {
                 continue;
             }
