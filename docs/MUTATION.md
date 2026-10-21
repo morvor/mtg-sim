@@ -139,9 +139,12 @@ the "each player" machinery is exercised by many card tests, but few of them dis
 player's results from another's.
 
 - `simultaneous.rs:100:31: replace || with && in run` (stop performing the body's
-  instructions once the game is over): **(b) missing test**. Killed by
-  `tests/cr/r104_001_game_ends_during_each_player.rs` (Laboratory Maniac wins the game
-  while each player draws for Burning Inquiry; nobody discards afterwards, CR 104.1).
+  instructions once the game is over): **(a) equivalent**, found by the re-run (the test
+  written for it, `tests/cr/r104_001_game_ends_during_each_player.rs`: Laboratory Maniac
+  wins the game while each player draws for Burning Inquiry and nobody discards
+  afterwards, CR 104.1, passes with the mutant). `Game::exec` performs nothing once the
+  game has ended or is restarting, so the instructions after the one that ended it do
+  nothing whether or not the loop stops; the test stays as the CR 104.1 check.
 - `simultaneous.rs:224:20: replace == with != in updates_number::reads`: **(b) missing
   test, not killed**. The mutant makes every instruction that stores a number count as one
   whose number is shared by all players. The cards whose per-player "that many" goes
@@ -210,12 +213,20 @@ Run 2026-10-14, 24 of 234 mutants (round-robin 0/10), 31 minutes.
   proposing illegal actions kept priority forever and the game stalled. Killed by
   `tests/cr/r733_002_repeated_illegal_actions.rs` (the third illegal attempt in a row
   passes priority).
-- `turn.rs:725:17: replace || with && in Game::current_phase_end`: **(b) missing test**. A
-  step of another phase no longer started a new phase unless it was a main phase, so
-  "after this main phase, there is an additional combat phase" cast in the postcombat main
-  phase put the combat after the ending phase. Killed by
-  `tests/cr/r500_008_combat_after_the_postcombat_main_phase.rs` (Relentless Assault in the
-  postcombat main phase).
+- `turn.rs:725:17: replace || with && in Game::current_phase_end` (`|| s.is_main() ||
+  matches!(s, Untap | BeginningOfCombat)` becomes `|| s.is_main() && matches!(..)`, so
+  only a change of phase or a step earlier than the one before it ends the current
+  phase): **(a) equivalent**, found by the re-run (the test written for it,
+  `tests/cr/r500_008_combat_after_the_postcombat_main_phase.rs`, Relentless Assault in the
+  postcombat main phase, passes with the mutant and stays as the CR 500.8 check). The
+  first step of a phase (a main phase, untap, beginning of combat) that follows a step of
+  the same phase is either earlier in the turn's order than that step (an additional combat
+  phase after this one: beginning of combat after end of combat), which `*s < prev`
+  catches, or the same step again, which would need an additional main phase directly
+  after a main phase, or an additional beginning phase directly after an untap step. No
+  effect adds those: additional main phases come after an additional combat phase
+  ("followed by an additional main phase"), and additional beginning phases come after a
+  main phase (Sphinx of the Second Sun).
 
 ### mana.rs
 
@@ -253,10 +264,16 @@ caught.
 
 Run 2026-10-14, 37 of 361 mutants (round-robin 0/10), 55 minutes.
 
-- `stack.rs:599:62: replace && with || in Game::is_legal_target` ("target spell" also
-  accepted any battlefield object the filter matches): **(b) missing test**. Killed by
-  `tests/cr/r115_001_target_spell_is_on_the_stack.rs` (Counterspell can't target
-  Grizzly Bears on the battlefield).
+- `stack.rs:599:62: replace && with || in Game::is_legal_target` (for "target spell",
+  `ob.zone == Battlefield && filter_allows_permanent(f)` becomes `||`): **(a)
+  equivalent**, found by the re-run. The test written for it,
+  `tests/cr/r115_001_target_spell_is_on_the_stack.rs` (Counterspell can't target Grizzly
+  Bears on the battlefield; Unsubstantiate, "target spell or creature", can't target a
+  creature card in a graveyard), passes with the mutant: the compiled spell filters include
+  `Filter::Spell` for their spell part, and the candidates for "target spell" are the
+  objects on the stack plus, only when the filter allows permanents, the permanents, for
+  which both conditions agree. An answer naming anything else isn't a candidate, and a
+  target that changes zones is a new object (CR 400.7).
 - `stack.rs:740:13: replace || with && in Game::player_untargetable`: **(a) equivalent
   (dead path)**. It changes how `Restriction::PlayerCantBeTargeted` from static abilities
   and from resolved effects combine, but no compiled card or engine code creates that
@@ -291,15 +308,25 @@ Run 2026-10-14, 37 of 361 mutants (round-robin 0/10), 54 minutes.
   is "deals half that damage" (amount minus (amount minus half)), and both branches give
   half.
 - `replacement.rs:1786:9: replace <impl View for EnteringView>::controller_override ->
-  Option<PlayerId> with None`: **(b) missing test**. "Creatures your opponents control
-  enter tapped" was checked against the card's owner instead of the player it enters under
-  (CR 614.12). Killed by `tests/cr/r614_012_enters_under_another_players_control.rs`
-  (Reanimate on a creature card in the opponent's graveyard, Authority of the Consuls).
-- `replacement.rs:1875:5: replace event_amount -> Option<u32> with None`: **(b) missing
-  test**. Damage a replacement reduced to 0 stayed an event, so a later "deals that much
-  damage plus 2" turned it back into damage (CR 120.8: 0 damage isn't dealt). Killed by
-  `tests/cr/r120_008_zero_damage_isnt_dealt.rs` (Benevolent Unicorn and Torbran on Spark
-  Jolt, in both orders).
+  Option<PlayerId> with None`: **(a) equivalent now**, found by the re-run. When it was
+  found, "Creatures your opponents control enter tapped" was checked against the card's
+  owner instead of the player it enters under (CR 614.12), and
+  `tests/cr/r614_012_enters_under_another_players_control.rs` (Reanimate on a creature
+  card in the opponent's graveyard, Authority of the Consuls) was written for it. Since
+  then the effects that modify how a permanent enters are gathered inside
+  `with_hypothetical_entry`, with the object on the battlefield under the player it
+  enters under, so the test passes with the mutant. The override still covers the other
+  replacement effects checked against the entering object in its old zone, but no card
+  has one whose filter names the entering permanent's controller ("If a creature an
+  opponent controls would enter ..." doesn't exist).
+- `replacement.rs:1875:5: replace event_amount -> Option<u32> with None`: **(a)
+  equivalent now**, found by the re-run. When it was found, damage a replacement reduced
+  to 0 stayed an event that a later "deals that much damage plus 2" turned back into
+  damage (CR 120.8), and `tests/cr/r120_008_zero_damage_isnt_dealt.rs` (Benevolent Unicorn
+  and Torbran on Spark Jolt, in both orders) was written for it. Since then
+  `repl_event_matches` itself refuses a damage event of 0 for every damage replacement, so
+  the test passes with the mutant (and stays as the CR 120.8 check); the other amounts this
+  drops (0 life, 0 counters, 0 tokens) do nothing when performed.
 
 ### triggers.rs
 
