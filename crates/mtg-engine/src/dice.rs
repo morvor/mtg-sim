@@ -520,7 +520,8 @@ fn modifies(m: &DieModifier, d: &RolledDie) -> bool {
 }
 
 /// Rolls the planar die for `p` (CR 901.9): its natural result 1–6 (see
-/// [`crate::planechase::face_for`]) after any rerolls `p` and others choose to apply
+/// [`crate::planechase::face_for`]) after any rerolls `p` and others choose to apply;
+/// modifiers that increase or decrease the result may be used but change nothing
 /// (Monitor Monitor's reroll applies to any die roll, CR 706.2). Modifiers that refer to
 /// a numerical result or a number of sides ignore it (CR 706.7).
 pub fn roll_planar_natural(g: &mut Game, p: PlayerId) -> u32 {

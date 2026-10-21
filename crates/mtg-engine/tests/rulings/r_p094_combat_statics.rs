@@ -326,7 +326,12 @@ fn modified_creature_leaving_is_judged_with_its_last_attachments() {
         ("One with the Kami", "Spirit"),
     ] {
         supported(name);
-        for (how, expect) in [("equipment", 1), ("their aura", 0), ("none", 0)] {
+        for (how, expect) in [
+            ("equipment", 1),
+            ("your aura", 1),
+            ("their aura", 0),
+            ("none", 0),
+        ] {
             let mut t = TestGame::new(2);
             if name == "One with the Kami" {
                 // Enchanting another creature of P0's.
@@ -339,6 +344,9 @@ fn modified_creature_leaving_is_judged_with_its_last_attachments() {
             match how {
                 "equipment" => {
                     attach_new(&mut t, P0, "Short Sword", bears);
+                }
+                "your aura" => {
+                    attach_new(&mut t, P0, "Holy Strength", bears);
                 }
                 "their aura" => {
                     attach_new(&mut t, P1, "Pacifism", bears);

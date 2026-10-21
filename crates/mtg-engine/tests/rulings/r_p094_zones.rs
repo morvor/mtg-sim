@@ -272,6 +272,34 @@ fn spatial_binding_on_an_aura_it_stays_and_falls_off() {
     assert!(t.in_graveyard(P0, "Holy Strength"));
 }
 
+/// The same for an Equipment that can't phase out: it stays on the battlefield, becomes
+/// unattached, and isn't reattached when the creature phases back in.
+#[test]
+fn spatial_binding_on_an_equipment_it_stays_and_becomes_unattached() {
+    cr!("702.26g", "704.5n", "702.26c");
+    let mut t = TestGame::new(2);
+    let binding = t.battlefield(P0, "Spatial Binding");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let splitter = attach_new(&mut t, P0, "Bonesplitter", bears);
+    assert_eq!(t.pt(bears), (4, 2));
+    t.activate(P0, binding, 0, &[obj(splitter)]).unwrap();
+    t.resolve_all();
+    cast(&mut t, P0, "Slip Out the Back", &[obj(bears)]);
+    t.resolve_all();
+    assert!(t.obj_now(bears).phased_out);
+    let s = t.obj_now(splitter);
+    assert!(!s.phased_out);
+    assert_eq!(s.zone, Zone::Battlefield);
+    assert_eq!(s.attached_to, None);
+    let bears_now = t.g.current(bears);
+    mtg_engine::keyword_impls::phase_in(&mut t.g, bears_now);
+    t.settle();
+    assert!(!t.obj_now(bears).phased_out);
+    assert_eq!(t.obj_now(splitter).attached_to, None);
+    // Slip Out the Back's +1/+1 counter, but no Bonesplitter.
+    assert_eq!(t.pt(bears), (3, 3));
+}
+
 #[test]
 fn blood_operative_surveiled_into_the_graveyard_triggers_after_surveil() {
     cr!("701.25a", "603.2", "603.3");

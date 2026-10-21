@@ -47,7 +47,7 @@ fn elenda_and_azor_pays_4_life_only_once() {
 
 #[test]
 fn day_of_the_doctor_no_doctors_chosen_exiles_all_creatures() {
-    cr!("714.2c", "608.2c");
+    cr!("714.2b", "608.2c");
     ruling!(
         "The Day of the Doctor",
         "As the last chapter ability resolves, you may choose to exile all other creatures even if you didn't choose any Doctors. In that case, all creatures are exiled."

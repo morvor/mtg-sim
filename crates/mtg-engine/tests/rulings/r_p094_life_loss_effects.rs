@@ -112,7 +112,7 @@ fn far_fortune(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn far_fortune_extra_damage_is_dealt_by_the_original_source() {
-    cr!("614.1a", "702.179f", "702.15b");
+    cr!("614.1a", "702.179e", "702.15b");
     ruling!(
         "Far Fortune, End Boss",
         "The additional 1 damage from Far Fortune’s last ability is dealt by the same source as the original source of damage. The damage isn’t dealt by Far Fortune unless Far Fortune is the original source of damage."
