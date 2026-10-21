@@ -1269,3 +1269,20 @@ fn desolation_punishes_players_who_tapped_land_for_mana_and_sacrificed_a_plains(
     assert!(t.on_battlefield(forest), "P2 didn't tap a land for mana");
     assert_eq!(t.life(P2), 20);
 }
+
+#[test]
+fn unbound_flourishing_copies_an_instant_or_sorcery_with_x_in_its_mana_cost() {
+    cr!("107.3", "707.10");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Unbound Flourishing");
+    t.lands(P0, "Mountain", 4);
+    t.answer_yes(P0, false);
+    let blaze = t.hand(P0, "Blaze");
+    t.cast(P0, blaze).x(2).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16, "Blaze and its copy");
+    let shock = t.hand(P0, "Shock");
+    t.cast_with(P0, shock, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14, "no {{X}}: no copy");
+}

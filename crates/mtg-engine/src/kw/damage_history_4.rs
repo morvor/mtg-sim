@@ -51,6 +51,26 @@ fn entered_face_down(g: &Game, id: ObjectId) -> bool {
 /// to cast them" is that none of them is such an object (Satoru rulings).
 pub const CAST_WITH_MANA: &str = "history:cast with mana spent on it";
 
+/// `Filter::Custom`: a spell whose mana cost contains {X}, or an activated ability on the
+/// stack whose activation cost does (CR 107.3): "if that spell's mana cost or that
+/// ability's activation cost contains {X}" (Unbound Flourishing).
+pub const COST_HAS_X: &str = "history:its mana cost or activation cost contains {X}";
+
+/// Whether a spell's mana cost or an activated ability's cost contains {X}.
+fn cost_has_x(g: &Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    match o.stack.as_ref().map(|si| &si.kind) {
+        Some(crate::object::StackKind::Activated { ability, .. }) => match &ability.kind {
+            crate::ability::AbilityKind::Activated(act) => {
+                act.cost.mana.as_ref().is_some_and(|m| m.has_x())
+            }
+            _ => false,
+        },
+        Some(crate::object::StackKind::Triggered { .. }) => false,
+        _ => o.chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
+    }
+}
+
 /// The greatest amount of damage one source dealt to one recipient this turn.
 pub fn greatest_damage_by_a_source(g: &Game) -> i64 {
     let mut totals: BTreeMap<(ObjectId, Entity), i64> = BTreeMap::new();
@@ -83,6 +103,9 @@ impl KeywordRules for DamageHistory {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == COST_HAS_X {
+            return Some(cost_has_x(g, id));
+        }
         if name == CAST_WITH_MANA {
             return Some(
                 crate::kw::cast_history::object_cast(g, id)

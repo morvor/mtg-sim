@@ -1057,3 +1057,26 @@ fn damage_each_who_sacrificed(l: &str, b: &mut crate::oracle::effects::Builder) 
 }
 
 inventory::submit! { super::EffectPattern { name: "history 4: [damage] to each player who sacrificed [a permanent] this way", priority: 60, parse: damage_each_who_sacrificed } }
+
+/// "if that spell's mana cost or that ability's activation cost contains {X}" (Unbound
+/// Flourishing, after "Whenever you cast an instant or sorcery spell or activate an
+/// ability"), "if that spell's mana cost contains {X}": about the spell or ability the
+/// ability triggered on (CR 107.3).
+fn trigger_cost_has_x(c: &str) -> Option<Condition> {
+    match end(c) {
+        "that spell's mana cost or that ability's activation cost contains {x}"
+        | "that spell's mana cost contains {x}"
+        | "that ability's activation cost contains {x}" => {}
+        _ => return None,
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !(raw.contains("whenever you cast ") || raw.contains(" activate an ability")) {
+        return None;
+    }
+    Some(Condition::SelMatches(
+        Sel::TriggerSpell,
+        Filter::Custom(crate::kw::damage_history_4::COST_HAS_X.into()),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: that spell's mana cost or that ability's activation cost contains {X}", priority: 900, parse: trigger_cost_has_x } }
