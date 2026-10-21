@@ -288,3 +288,45 @@ gbA	Grishnákh, Brash Instigator	When ~ enters, amass Orcs 2. When you do, gain 
 tdA	Twilight Diviner	Whenever one or more other creatures you control enter, if they entered from a graveyard, draw a card.	OK
 zmA	Zimone, Mystery Unraveler	Whenever a land you control enters, turn target face-down permanent you control face up.	OK
 stA	Soulflayer	As long as a creature card with flying was exiled with ~'s delve ability, ~ has flying.	FAIL
+R-costsets	Grizzly Bears	Sacrifice any number of creatures with total power 5 or greater: Draw a card.	OK
+R-costsets2	Grizzly Bears	{T}, Exile cards from your graveyard equal to the number of creatures you control: Draw a card.	FAIL
+R-addcost	Divination	As an additional cost to cast ~, choose a creature you control. Draw two cards.	FAIL
+R-addcost2	Divination	As an additional cost to cast ~, sacrifice one or more creatures. Draw two cards.	FAIL
+R-manasym	Divination	For each green mana symbol in the mana costs of cards in your hand, you gain 1 life.	FAIL
+R-manasym2	Divination	Reveal the top card of your library. You gain life equal to the number of colored mana symbols in its mana cost.	FAIL
+R-mananeut	Grizzly Bears	Whenever a land you control is tapped for mana, its controller may add an additional {G}.	FAIL
+R-manaprov	Grizzly Bears	Whenever you cast a spell, if mana from a Treasure was spent to cast it, draw a card.	OK
+R-manaprov2	Grizzly Bears	Spend only mana produced by Treasures to cast creature spells.	FAIL
+R-manarepl	Grizzly Bears	Lands you control tapped for mana produce {G} instead of any other type.	FAIL
+R-drawrep	Grizzly Bears	If you would draw a card, reveal it instead.	FAIL
+R-drawrep2	Grizzly Bears	{1}: The next time you would draw a card this turn, instead mill a card, then draw a card.	FAIL
+R-prev	Divination	Prevent all damage a source of your choice that shares a color with target creature would deal this turn.	FAIL
+R-prevX	Grizzly Bears	If a source would deal damage to you, prevent X of that damage, where X is the number of +1/+1 counters on ~.	OK
+R-copystatic	Pacifism	Enchanted creature is a copy of target creature.	FAIL
+R-gainabil	Grizzly Bears	~ has all activated abilities of creatures your opponents control.	OK
+R-gainabil2	Divination	Target creature gains all abilities of another target creature until end of turn.	FAIL
+R-batch	Grizzly Bears	Whenever one or more creatures you control die, return one of them to your hand.	FAIL
+R-batch2	Grizzly Bears	Whenever one or more creatures you control deal combat damage to one or more players, draw a card for each player dealt damage this way.	FAIL
+R-results	Divination	Each player mills three cards. You draw a card for each land card put into a graveyard this way.	OK
+R-excess	Divination	~ deals 5 damage to target creature. You gain life equal to the excess damage dealt this way.	OK
+R-costref	Grizzly Bears	{1}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value to any target.	OK
+R-costref2	Grizzly Bears	{T}, Exile a creature card from your graveyard: Draw cards equal to the exiled card's mana value.	OK
+R-values	Divination	X is the number of creature cards in target opponent's graveyard. Draw X cards.	FAIL
+R-spelltgt	Divination	Counter target spell if it targets you.	FAIL
+R-instead	Divination	Search your library for a land card, reveal it, put it into your hand, then shuffle. If you control a Forest, put that card onto the battlefield instead of putting it into your hand.	FAIL
+R-combathist	Grizzly Bears	{T}: Destroy target creature that ~ blocked this turn.	FAIL
+R-zones	Divination	Return target creature card from your graveyard or from exile to your hand.	OK
+R-asenters	Grizzly Bears	As ~ enters, you gain 3 life.	OK
+R-splitctl	Divination	Each opponent may search their library for a basic land card and put it onto the battlefield tapped, then shuffle.	OK
+R-revctl	Divination	Target opponent reveals cards from the top of their library until they reveal a creature card. That player puts that card onto the battlefield, then shuffles.	OK
+R-perm	Grizzly Bears	You may play lands and cast spells from among cards you exiled with ~.	FAIL
+R-grant-ex	Divination	Exile target creature card from your graveyard. It gains "You may cast this card from exile."	OK
+R-monument	Monument to Perfection	{T}: Draw a card. Activate only if there are nine or more lands with different names among the basic, Sphere, and Locus lands you control.	OK
+ca1	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value divided as you choose among one, two, or three targets.	FAIL
+ca2	Captain America, First Avenger	{3}, Unattach an Equipment from ~: He deals damage equal to that Equipment's mana value to any target.	OK
+ca3	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value to any target.	OK
+ca4	Grizzly Bears	{3}: ~ deals damage equal to its power divided as you choose among one, two, or three targets.	OK
+cw1	Cover of Winter	If a creature would deal combat damage to you and/or one or more creatures you control, prevent X of that damage, where X is the number of age counters on ~.	FAIL
+cw2	Cover of Winter	If a creature would deal combat damage to you, prevent X of that damage, where X is the number of age counters on ~.	OK
+cw3	Cover of Winter	If a creature would deal combat damage to you, prevent 1 of that damage.	OK
+eu1	Eumidian Wastewaker	Whenever ~ attacks, you and defending player each discard a card. You draw a card for each land card put into a graveyard this way.	FAIL
