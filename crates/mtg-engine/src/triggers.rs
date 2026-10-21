@@ -304,11 +304,25 @@ impl Game {
                 // enchanted creature becomes tapped or is dealt damage"); the other
                 // alternatives trigger per event.
                 TriggerCond::AnyOf(v) => {
-                    match v.iter().find_map(|c| match c {
-                        TriggerCond::Batched { trigger, per } => Some((trigger, per)),
-                        _ => None,
-                    }) {
-                        Some(x) => x,
+                    // ("Whenever one or more creatures you control fight or become
+                    // blocked": the batched alternative this batch's events match.)
+                    let alts: Vec<(&Box<TriggerCond>, &BatchPer)> = v
+                        .iter()
+                        .filter_map(|c| match c {
+                            TriggerCond::Batched { trigger, per } => Some((trigger, per)),
+                            _ => None,
+                        })
+                        .collect();
+                    let mut probe = Ctx::new(Some(src), ctl);
+                    probe.link = a.link;
+                    probe.ability_uid = a.uid;
+                    let matching = alts.iter().find(|(t, _)| {
+                        batch
+                            .iter()
+                            .any(|ev| !self.trigger_matches_ctx(t, &probe, ev).is_empty())
+                    });
+                    match matching.or(alts.first()) {
+                        Some(x) => *x,
                         None => continue,
                     }
                 }

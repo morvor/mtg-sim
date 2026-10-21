@@ -161,3 +161,37 @@ fn you_pay_life(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "whenever you pay life", priority: 100, parse: you_pay_life } }
+
+/// "Whenever a creature you control fights" (Foe-Razer Regent), "Whenever one or more
+/// creatures you control fight" (Neyith of the Dire Hunt): a creature fights when an
+/// effect instructs it to (CR 701.14a; dealing combat damage isn't fighting).
+fn creature_fights(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (batch, subject) = if let Some(s) = t.strip_suffix(" fight").and_then(|s| s.strip_prefix("one or more ")) {
+        (true, s)
+    } else {
+        (false, t.strip_suffix(" fights")?)
+    };
+    let (f, plural, rest) = parse_object_phrase(subject.strip_prefix("a ").unwrap_or(subject))?;
+    if !rest.trim().is_empty() || plural != batch || f.zone().is_some() {
+        return None;
+    }
+    let fights = TriggerCond::Where {
+        trigger: Box::new(TriggerCond::PlayerAction {
+            name: crate::keyword_actions::FOUGHT.into(),
+            who: PlayerRel::Any,
+        }),
+        cond: Condition::SelMatches(Sel::TriggerObject, f),
+    };
+    let trigger = if batch {
+        TriggerCond::Batched {
+            trigger: Box::new(fights),
+            per: BatchPer::Batch,
+        }
+    } else {
+        fights
+    };
+    Some((trigger, Sel::TriggerObject, PlayerRef::TriggerPlayer))
+}
+
+inventory::submit! { TriggerPattern { name: "whenever a creature you control fights", priority: 100, parse: creature_fights } }

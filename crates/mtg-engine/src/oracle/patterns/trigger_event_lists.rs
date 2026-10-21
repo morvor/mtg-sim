@@ -52,9 +52,10 @@ fn conditions(items: &[&str]) -> Option<Vec<Parsed>> {
     if let Some(v) = items.iter().map(|s| condition(s)).collect::<Option<Vec<_>>>() {
         return Some(v);
     }
-    // A shared subject: the first one, two or three words of the first item.
+    // A shared subject: the first words of the first item, the longest reading first
+    // ("one or more creatures you control", not "one or more creatures").
     let words: Vec<&str> = items[0].split(' ').collect();
-    for k in 1..=3.min(words.len().saturating_sub(1)) {
+    for k in (1..=6.min(words.len().saturating_sub(1))).rev() {
         let subject = words[..k].join(" ");
         let v: Option<Vec<Parsed>> = items
             .iter()
@@ -83,12 +84,24 @@ fn event_list(r: &str) -> Option<Parsed> {
         let Some(parsed) = conditions(&items) else {
             continue;
         };
-        // Batched events aren't combined here.
-        if parsed
+        // Batched events combine only with batched events of the same grouping (each
+        // batch of events triggers it once, `triggers.rs`).
+        let batched: Vec<bool> = parsed
             .iter()
-            .any(|p| super::trigger_grammar_events::is_batched(&p.0))
-        {
-            return None;
+            .map(|p| super::trigger_grammar_events::is_batched(&p.0))
+            .collect();
+        if batched.iter().any(|b| *b) {
+            let per = |c: &TriggerCond| match c {
+                TriggerCond::Batched { per, .. } => Some(*per),
+                _ => None,
+            };
+            let first = per(&parsed[0].0);
+            if !batched.iter().all(|b| *b)
+                || first.is_none()
+                || parsed.iter().any(|p| per(&p.0) != first)
+            {
+                return None;
+            }
         }
         // "that card": the card a sacrificed permanent became in its graveyard, or the
         // discarded card: both the event's object (`EventInfo::object`).

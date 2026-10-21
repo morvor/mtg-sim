@@ -4,6 +4,10 @@
 /// investigate".
 pub const INVESTIGATED: &str = "investigate";
 
+/// `Event::Custom` name of a creature fighting (CR 701.14a), about that creature and its
+/// controller: "whenever a creature you control fights".
+pub const FOUGHT: &str = "fight";
+
 use crate::ability::*;
 use crate::eval::Ctx;
 use crate::game::Game;

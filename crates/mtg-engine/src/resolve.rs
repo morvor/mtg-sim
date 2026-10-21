@@ -569,6 +569,20 @@ impl Game {
                             false,
                         );
                     }
+                    // "Whenever a creature you control fights" (each creature that fought).
+                    let mut fought = vec![a];
+                    if b != a {
+                        fought.push(b);
+                    }
+                    for c in fought {
+                        let player = Some(self.obj(c).controller);
+                        self.emit(crate::events::Event::Custom {
+                            name: crate::keyword_actions::FOUGHT.into(),
+                            player,
+                            obj: Some(c),
+                            amount: 0,
+                        });
+                    }
                 }
             }
             Effect::AddCounters { what, kind, n } => {
