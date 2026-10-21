@@ -1158,6 +1158,16 @@ impl Game {
                         .collect();
                     ctx.set_var(crate::tokens::TOKEN_DEFENDER, d);
                 }
+                // A creature card moved onto the battlefield blocking enters blocking (see
+                // `destinations.rs`); tokens are put into the block once created.
+                let blocked = blocking
+                    .as_ref()
+                    .and_then(|a| self.resolve_objects(a, ctx).first().copied());
+                let saved_block = ctx.vars.get(&crate::tokens::JOIN_BLOCKING).cloned();
+                if let Some(a) = blocked {
+                    ctx.set_var(crate::tokens::JOIN_BLOCKING, vec![Entity::Object(a)]);
+                }
+                let created_before = ctx.vars.get(&vars::CREATED).cloned();
                 self.exec(effect, ctx);
                 match saved {
                     Some(v) => ctx.set_var(crate::tokens::TOKEN_DEFENDER, v),
@@ -1165,13 +1175,21 @@ impl Game {
                         ctx.vars.remove(&crate::tokens::TOKEN_DEFENDER);
                     }
                 }
-                if let Some(a) = blocking {
-                    if let Some(attacker) = self.resolve_objects(a, ctx).first().copied() {
-                        let created: Vec<ObjectId> = ctx
-                            .vars
-                            .get(&vars::CREATED)
-                            .map(|v| v.iter().filter_map(|e| e.object()).collect())
-                            .unwrap_or_default();
+                match saved_block {
+                    Some(v) => ctx.set_var(crate::tokens::JOIN_BLOCKING, v),
+                    None => {
+                        ctx.vars.remove(&crate::tokens::JOIN_BLOCKING);
+                    }
+                }
+                if let Some(attacker) = blocked {
+                    {
+                        let now = ctx.vars.get(&vars::CREATED).cloned();
+                        let created: Vec<ObjectId> = if now == created_before {
+                            vec![]
+                        } else {
+                            now.map(|v| v.iter().filter_map(|e| e.object()).collect())
+                                .unwrap_or_default()
+                        };
                         for t in created {
                             if self.is_live(t) {
                                 crate::combat::put_onto_battlefield_blocking(self, t, attacker);

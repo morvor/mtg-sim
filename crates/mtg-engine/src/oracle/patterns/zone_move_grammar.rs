@@ -1541,6 +1541,14 @@ fn modifiers<'a>(
             to.tapped = true;
             to.attacking = true;
             s = r;
+        } else if let Some(r) = strip_word(t, "attacking").filter(|r| !r.starts_with(" ")) {
+            // "Put it onto the battlefield attacking" (Senu, Keen-Eyed Protector): untapped,
+            // attacking what its controller chooses (CR 508.4).
+            if to.zone != ZoneKind::Battlefield {
+                return s;
+            }
+            to.attacking = true;
+            s = r;
         } else if let Some(r) = strip_word(t, "tapped") {
             if to.zone != ZoneKind::Battlefield {
                 return s;
