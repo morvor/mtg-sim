@@ -85,6 +85,11 @@ impl Renderer<'_> {
                 let n = self.player_filter_noun(pf, Num::Many);
                 format!("the number of {n}")
             }
+            // "the amassed Army's power" (CR 701.47c).
+            Value::PowerOf(s) if matches!(s.as_ref(), Sel::Var(crate::kwa::kvars::AMASSED)) => {
+                let p = self.sel(s, Case::Poss);
+                format!("{{alt:the amassed Army's|{p}}} power")
+            }
             Value::PowerOf(s) => {
                 let s = self.sel(s, Case::Poss);
                 // Several objects: the sum of their powers (`eval`), "their total power".
@@ -596,6 +601,31 @@ impl Renderer<'_> {
 
     /// "a card" / "two cards" / "X cards, where X is ..." (the where clause is returned
     /// separately).
+    /// A count said as "N [things] for each [thing]": (N's words with the noun, "for each
+    /// ..."), for a value that's a number of things, or a multiple of one ("put two
+    /// +1/+1 counters on ~ for each sprout vote").
+    pub(crate) fn counted_for_each(&mut self, v: &Value, noun: &str) -> Option<(String, String)> {
+        let (k, thing) = self.per_each(v)?;
+        if thing.contains(['{', '|']) || k < 1 {
+            return None;
+        }
+        let each = match thing.strip_prefix("times ") {
+            Some(r) => format!("for each time {r}"),
+            None if matches!(v, Value::Count(_))
+                || matches!(v, Value::Mul(_, b) if matches!(b.as_ref(), Value::Count(_))) =>
+            {
+                format!("for each {thing}")
+            }
+            None => format!("for each {}", super::singular(&thing)),
+        };
+        let c = if k == 1 {
+            with_article(noun)
+        } else {
+            format!("{} {}", number_word(k), plural(noun))
+        };
+        Some((c, each))
+    }
+
     pub(crate) fn counted(&mut self, v: &Value, noun: &str) -> (String, Option<String>) {
         if let Some(x) = self.stored_x(v) {
             return (format!("{x} {}", plural(noun)), None);
@@ -1706,6 +1736,27 @@ impl Renderer<'_> {
                 );
             }
         }
+        // "if 4 or more damage was dealt to it this turn".
+        let to_self = |t: &TriggerCond| {
+            matches!(
+                t,
+                TriggerCond::DealsDamage {
+                    source: Filter::Any,
+                    to: DamageRecipient::Object(Filter::Source),
+                    combat_only: false,
+                }
+            )
+        };
+        if let (Value::EventsThisTurn(t, Tally::Amount), Cmp::Ge, Value::Const(k)) = (a, cmp, b) {
+            if to_self(t) {
+                let m = self.me();
+                let v = self.value(a);
+                let w = number_word(*k);
+                return format!(
+                "{{alt:{v} is {w} or {{alt:greater|more}}|{w} or more damage was dealt to {m} this turn}}"
+            );
+            }
+        }
         if let Some(s) = self.attempt(|r| r.events_compare(a, cmp, b, false)) {
             return s;
         }
@@ -1778,6 +1829,16 @@ impl Renderer<'_> {
                 return format!("{who} controls {what}");
             }
         }
+        // "if a player has one or fewer cards in hand".
+        if let (
+            Value::CountPlayers(pf @ (PlayerFilter::HandSize(..) | PlayerFilter::Life(..))),
+            Cmp::Ge,
+            Value::Const(1),
+        ) = (a, cmp, b)
+        {
+            let pred = self.player_predicate(pf, "a player", false);
+            return format!("a player {pred}");
+        }
         // "you have two or more opponents".
         if let (Value::CountPlayers(PlayerFilter::Opponent), Value::Const(n), Cmp::Ge) = (a, b, cmp)
         {
@@ -1829,6 +1890,35 @@ impl Renderer<'_> {
                     )
                 }
             };
+        }
+        // "if a card is exiled with it".
+        if let (Value::Count(f), Cmp::Ge, Value::Const(1)) = (a, cmp, b) {
+            if matches!(f, Filter::And(v) if v.iter().any(|x| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked))))
+            {
+                return self.exists(f, false);
+            }
+        }
+        // "as long as two or more Equipment are attached to it".
+        if let (Value::Count(Filter::And(v)), Cmp::Ge) = (a, cmp) {
+            if let Some(s) = v.iter().find_map(|x| match x {
+                Filter::AttachedToAnyOf(s) => Some(s.as_ref().clone()),
+                _ => None,
+            }) {
+                let rest = Filter::and(
+                    v.iter()
+                        .filter(|x| !matches!(x, Filter::AttachedToAnyOf(_)))
+                        .cloned()
+                        .collect(),
+                );
+                let n = self.count_phrase(&rest, cmp, b);
+                let o = self.sel(&s, Case::Obj);
+                let are = if matches!(b, Value::Const(1)) {
+                    "is"
+                } else {
+                    "are"
+                };
+                return format!("{n} {are} attached to {{alt:it|{o}}}");
+            }
         }
         // "you control three or more creatures".
         if let Value::Count(f) = a {

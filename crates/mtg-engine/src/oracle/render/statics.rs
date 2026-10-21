@@ -2775,7 +2775,20 @@ impl Renderer<'_> {
                     A::EnterUntapped => format!("{subj} enters untapped"),
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
-                        format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default())
+                        let has_where = w.is_some();
+                        let s = format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default());
+                        // "~ enters with a +1/+1 counter on it for each land you control".
+                        let each = if has_where {
+                            self.counted_for_each(n, &counter_name(k))
+                        } else {
+                            None
+                        };
+                        match each {
+                            Some((c1, each)) => {
+                                format!("{{alt:{s}|{subj} enters with {c1} on {it} {each}}}")
+                            }
+                            None => s,
+                        }
                     }
                     // "~ escapes with a +1/+1 counter on it" (CR 702.138c).
                     A::AsEnters(e)

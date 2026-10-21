@@ -231,10 +231,30 @@ impl Renderer<'_> {
                 let extreme = matches!(filter, Filter::And(v) if v.iter().any(|x|
                     matches!(x, Filter::ValueCmp(_, _, b) if matches!(b.as_ref(), Value::Extreme(..)))));
                 let n = if extreme {
-                    self.noun_det(filter, det)
+                    self.noun_det(filter, det.clone())
                 } else {
-                    self.noun_det(&strip_controller(filter), det)
+                    self.noun_det(&strip_controller(filter), det.clone())
                 };
+                // "sacrifice a creature other than ~" says "another creature".
+                if let (Filter::And(v), Value::Const(1)) = (filter, count) {
+                    if v.iter().any(|x| matches!(x, Filter::Other)) && !extreme {
+                        let rest = Filter::and(
+                            v.iter()
+                                .filter(|x| !matches!(x, Filter::Other))
+                                .cloned()
+                                .collect(),
+                        );
+                        let r = self.noun_det(&strip_controller(&rest), det);
+                        let m = self.me();
+                        if !r.contains(['{', '|']) {
+                            return Some((
+                                who.clone(),
+                                format!("sacrifice {{alt:{n}|{r} other than {m}}}"),
+                                false,
+                            ));
+                        }
+                    }
+                }
                 (who.clone(), format!("sacrifice {n}"), false)
             }
             Effect::AddPlayerCounters { who, kind, n } => {
@@ -1717,7 +1737,16 @@ impl Renderer<'_> {
                         t = format!("each of {t}");
                     }
                 }
-                let s = format!("put {c} on {t}{}", w.unwrap_or_default());
+                let has_where = w.is_some();
+                let mut s = format!("put {c} on {t}{}", w.unwrap_or_default());
+                // "put two +1/+1 counters on ~ for each sprout vote".
+                if has_where {
+                    let saved = self.gaps.len();
+                    match self.counted_for_each(n, &counter_name(kind)) {
+                        Some((c1, each)) => s = format!("{{alt:{s}|put {c1} on {t} {each}}}"),
+                        None => self.gaps.truncate(saved),
+                    }
+                }
                 match self.support_n(what, kind, n) {
                     Some(k) => format!("{{alt:support {k}|{s}}}"),
                     None => s,
