@@ -104,7 +104,7 @@ fn ori_counts_what_was_destroyed_wherever_it_went() {
 
 #[test]
 fn elspeth_tirel_ultimate_destroys_your_own_nontoken_nonland_permanents() {
-    cr!("606.3", "701.8a");
+    cr!("701.8a", "608.2h");
     ruling!(
         "Elspeth Tirel",
         "As Elspeth Tirel's last ability resolves, each permanent that isn't a token, a land, or Elspeth Tirel herself is destroyed."
@@ -170,7 +170,7 @@ fn akroan_war_you_control_the_creature_while_the_last_chapter_resolves() {
 
 #[test]
 fn akroan_war_leaving_before_chapter_one_resolves_takes_nothing() {
-    cr!("611.2b", "610.3");
+    cr!("611.2b");
     ruling!(
         "The Akroan War",
         "If The Akroan War leaves the battlefield before its first ability resolves, you won't gain control of the creature at all."
@@ -297,7 +297,7 @@ fn synthetic_destiny_counts_an_exiled_commander() {
 
 #[test]
 fn cast_it_enter_triggers() {
-    cr!("603.4", "707.9", "601.2a");
+    cr!("603.4", "601.2a");
     ruling!(
         "Cresting Mosasaurus",
         "Cresting Mosasaurus's last ability triggers if you cast it from any zone. It doesn't trigger if you put Cresting Mosasaurus onto the battlefield without casting it."

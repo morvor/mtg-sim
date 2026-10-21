@@ -82,7 +82,7 @@ fn graveyard(t: &mut TestGame, p: PlayerId, names: &[&str]) -> Vec<ObjectId> {
 
 #[test]
 fn gouged_zealot_checks_delirium_on_trigger_and_resolution() {
-    cr!("603.4", "702.11b");
+    cr!("603.4", "207.2c");
     ruling!(
         "Gouged Zealot",
         "Gouged Zealot's triggered ability checks whether there are four or more card types among cards in your graveyard to see if it triggers. If you don't, the ability won't trigger at all. The ability will check again as it tries to resolve. If you don't at that time, the ability won't do anything. The specific cards in your graveyard may change between the two checks."
@@ -121,7 +121,7 @@ fn gouged_zealot_checks_delirium_on_trigger_and_resolution() {
 
 #[test]
 fn gouged_zealot_counts_card_types_not_supertypes_or_subtypes() {
-    cr!("205.2a", "205.4a", "702.11b");
+    cr!("205.2a", "205.4a");
     ruling!(
         "Gouged Zealot",
         "The card types that can appear in a graveyard are artifact, battle, creature, enchantment, instant, kindred, land, planeswalker, and sorcery. Legendary, basic, and snow are supertypes, not card types; Cyclops and Berserker are subtypes, not card types."

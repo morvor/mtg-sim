@@ -58,7 +58,7 @@ fn urabrask(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn urabrask_counts_countered_spells_but_not_copies() {
-    cr!("707.10", "707.12", "602.5b");
+    cr!("707.10", "707.12");
     ruling!(
         "Urabrask // The Great Work",
         "Urabrask will count any instant or sorcery spells you’ve cast during the turn, whether those spells resolved, didn’t resolve, were countered, or left the stack some other way. Urabrask won’t count copies of instant and sorcery spells that were created on the stack and not cast."
@@ -261,7 +261,7 @@ fn ashling_copying_a_card_outside_the_stack_doesnt_trigger_but_casting_it_does()
 
 #[test]
 fn mob_verdict_votes_on_resolution_and_vote_triggers_wait() {
-    cr!("701.38a", "701.38d", "603.3");
+    cr!("701.38a", "603.3");
     ruling!(
         "Mob Verdict",
         "Votes are cast during the resolution of Mob Verdict, so any responses to Mob Verdict must be made without knowing the outcome of the vote."
@@ -298,7 +298,7 @@ fn mob_verdict_votes_on_resolution_and_vote_triggers_wait() {
 
 #[test]
 fn bite_of_the_black_rose_affects_all_opponents_the_same() {
-    cr!("701.38a", "701.38d");
+    cr!("701.38a");
     ruling!(
         "Bite of the Black Rose",
         "The effect will be the same for all your opponents, no matter how they voted."
@@ -460,11 +460,16 @@ fn biomancers_familiar_reduces_activated_abilities_to_at_least_one_mana() {
     assert!(can_activate(&mut t, P0, lord));
     activate_resolve(&mut t, P0, lord, 0, &[]);
     assert_eq!(t.counters(lord, counters::LEVEL), 1);
-    // Shivan Dragon's {R} can't be reduced below one mana.
+    // Dragon Engine's {2} is reduced to {1}, not below one mana.
+    supported("Dragon Engine");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Biomancer's Familiar");
-    let d = t.battlefield(P0, "Shivan Dragon");
+    let d = t.battlefield(P0, "Dragon Engine");
     assert!(!can_activate(&mut t, P0, d));
+    t.lands(P0, "Wastes", 1);
+    assert!(can_activate(&mut t, P0, d));
+    activate_resolve(&mut t, P0, d, 0, &[]);
+    assert_eq!(t.pt(d), (2, 3));
     // Kavaron Harrier's attack trigger ("you may pay {2}") isn't reduced: with one land
     // it can't be paid; with two it can.
     supported("Kavaron Harrier");
@@ -515,7 +520,7 @@ fn votes_revealed(g: &mtg_engine::game::Game) -> usize {
 
 #[test]
 fn mob_verdict_votes_stay_secret_until_revealed_together() {
-    cr!("701.38a", "701.38b");
+    cr!("701.38a");
     ruling!(
         "Mob Verdict",
         "Before secret votes are revealed, players may announce how they intend to vote, but they can’t reveal what they actually wrote down until all votes are simultaneously revealed."

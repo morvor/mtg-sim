@@ -178,7 +178,7 @@ fn creature_type_choice_is_made_on_resolution_with_no_chance_to_respond() {
 
 #[test]
 fn sudden_demise_x_on_casting_color_on_resolution() {
-    cr!("601.2b", "608.2d", "105.2a");
+    cr!("601.2b", "608.2d", "105.2b");
     ruling!(
         "Sudden Demise",
         "You choose the value for X as you cast Sudden Demise. You don’t choose the color until it resolves."
@@ -258,7 +258,7 @@ fn celestial_judgment_chooses_on_resolution_any_creature_of_each_power() {
 
 #[test]
 fn expel_the_interlopers_numbers_include_0_and_10() {
-    cr!("107.1a", "608.2d");
+    cr!("608.2d");
     ruling!("Expel the Interlopers", "The numbers you may choose include 0 and 10.");
     supported("Expel the Interlopers");
     for (n, thopter_dies, colossus_dies) in [(0, true, true), (10, false, true)] {
@@ -501,7 +501,7 @@ fn cosmotronic_wave_cant_block_applies_to_creatures_gained_later() {
 
 #[test]
 fn sagittars_volley_hits_every_opponents_flyers_and_needs_its_target() {
-    cr!("608.2b", "702.12b", "802.4a");
+    cr!("608.2b", "702.12b");
     ruling!(
         "Sagittars' Volley",
         "Each creature with flying controlled by any of your opponents is dealt damage, even if that opponent didn’t control the target creature with flying."
@@ -627,7 +627,7 @@ fn winds_of_abandon_counts_a_token_that_ceased_to_exist() {
 
 #[test]
 fn sudden_disappearance_countered_delayed_trigger_leaves_cards_exiled() {
-    cr!("603.7", "603.7c", "701.6b");
+    cr!("603.7", "603.7c", "701.6a");
     ruling!(
         "Sudden Disappearance",
         "If Sudden Disappearance’s delayed triggered ability is countered or otherwise removed from the stack after triggering, the exiled cards will remain in exile indefinitely. The delayed triggered ability will only trigger once."

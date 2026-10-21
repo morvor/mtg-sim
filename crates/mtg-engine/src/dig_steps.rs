@@ -50,13 +50,17 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
                 .into_iter()
                 .filter(|o| !taken.contains(o))
                 .collect();
-            if cards.is_empty() && shuffled_into_library(to) {
-                // "Then shuffle the rest into your library" with no rest: the library is
-                // shuffled anyway (CR 701.24d).
+            if shuffled_into_library(to) {
+                // "Then shuffle the rest into your library": each library cards were
+                // revealed from is shuffled even if none of the rest goes back into it
+                // (CR 701.24d). Libraries that get some of the rest are shuffled as
+                // they're put there.
+                let receiving: Vec<PlayerId> = cards.iter().map(|o| g.obj(*o).owner).collect();
                 let mut owners: Vec<PlayerId> = ctx
                     .var_objects(vars::DUG)
                     .iter()
                     .map(|o| g.obj(*o).owner)
+                    .filter(|p| !receiving.contains(p))
                     .collect();
                 owners.sort_unstable_by_key(|p| p.idx());
                 owners.dedup();
