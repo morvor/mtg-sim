@@ -3738,6 +3738,12 @@ pub struct PlayTerms {
     /// as the permission is given).
     #[serde(default)]
     pub duration_player: Option<PlayerId>,
+    /// "If that spell doesn't target a creature you control, it costs {8} more to cast
+    /// this way." (Mavinda, Students' Advocate): a generic increase (CR 601.2f) for a spell
+    /// cast with the permission that has no target with these qualities (relative to the
+    /// permission's source and player) once its targets are chosen (CR 601.2c).
+    #[serde(default)]
+    pub cost_increase_unless_targets: Option<(u32, Filter)>,
 }
 
 impl PlayTerms {
@@ -3807,6 +3813,9 @@ impl PlayTerms {
         }
         self.snow_as_any_color |= other.snow_as_any_color;
         self.controller_duration |= other.controller_duration;
+        if other.cost_increase_unless_targets.is_some() {
+            self.cost_increase_unless_targets = other.cost_increase_unless_targets.clone();
+        }
         if other.cost_increase_each.is_some() {
             self.cost_increase_each = other.cost_increase_each.clone();
         }

@@ -597,3 +597,32 @@ fn dubious_challenge_opponent_takes_one_exiled_creature_and_you_get_the_rest() {
     assert!(t.on_battlefield(giant_x));
     assert_eq!(t.g.obj(giant_x).controller, P0);
 }
+
+#[test]
+fn mavinda_costs_eight_more_unless_the_spell_targets_your_creature() {
+    cr!("601.2f", "601.2c", "614.1a");
+    assert_supported("Mavinda, Students' Advocate");
+    // Targeting a creature you control: its normal cost.
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let mavinda = t.battlefield(P0, "Mavinda, Students' Advocate");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 1);
+    let growth = t.graveyard(P0, "Giant Growth");
+    t.activate(P0, mavinda, 0, &[Entity::Object(growth)]).unwrap();
+    t.resolve_all();
+    assert!(can_cast(&mut t, P0, growth, &[Entity::Object(bears)]));
+    assert_eq!(t.pt(bears), (5, 5));
+    assert_eq!(t.zone(t.g.current(growth)), Zone::Exile);
+    // Targeting a player: {8} more.
+    for lands in [8, 9] {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, Step::PrecombatMain);
+        let mavinda = t.battlefield(P0, "Mavinda, Students' Advocate");
+        t.lands(P0, "Mountain", lands);
+        let bolt = t.graveyard(P0, "Lightning Bolt");
+        t.activate(P0, mavinda, 0, &[Entity::Object(bolt)]).unwrap();
+        t.resolve_all();
+        assert_eq!(can_cast(&mut t, P0, bolt, &[Entity::Player(P1)]), lands == 9);
+    }
+}

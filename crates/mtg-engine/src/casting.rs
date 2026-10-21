@@ -2062,7 +2062,22 @@ impl Game {
                     let ctx = Ctx::new(c.source, p);
                     self.eval_value(v, &ctx).max(0) as u32
                 });
-                c.terms.cost_increase + each
+                // "If that spell doesn't target a creature you control, it costs {8} more
+                // to cast this way" (its targets are chosen by now, CR 601.2c).
+                let unless = c
+                    .terms
+                    .cost_increase_unless_targets
+                    .as_ref()
+                    .map_or(0, |(n, f)| {
+                        let ctx = Ctx::new(c.source, p);
+                        let targets = Filter::Targets(Box::new(f.clone()));
+                        if self.matches(card, &targets, &ctx) {
+                            0
+                        } else {
+                            *n
+                        }
+                    });
+                c.terms.cost_increase + each + unless
             }
             None => crate::kw::play_permission_terms::cost_increase(self, card),
         };

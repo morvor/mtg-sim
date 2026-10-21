@@ -157,6 +157,32 @@ pub(crate) fn apply(s: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b
 }
 
 fn apply_inner(l: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b: &Builder) -> bool {
+    // "If that spell doesn't target a creature you control, it costs {8} more to cast this
+    // way." (Mavinda, Students' Advocate, CR 601.2f).
+    if let Some((what, more)) = l
+        .strip_prefix("if that spell doesn't target ")
+        .and_then(|r| r.split_once(", it costs {"))
+    {
+        let Some(n) = more
+            .strip_suffix("} more to cast this way")
+            .and_then(|n| n.parse::<u32>().ok())
+        else {
+            return false;
+        };
+        let what = what
+            .strip_prefix("a ")
+            .or_else(|| what.strip_prefix("an "))
+            .unwrap_or(what);
+        let Some((f, _, rest)) = crate::oracle::phrases::parse_object_phrase(what) else {
+            return false;
+        };
+        if !end(rest).trim().is_empty() || !spells || terms.cost_increase_unless_targets.is_some()
+        {
+            return false;
+        }
+        terms.cost_increase_unless_targets = Some((n, f));
+        return true;
+    }
     // "Spells you cast this way cost {2} less to cast."
     if let Some(r) = l
         .strip_prefix("spells you cast this way cost {")
