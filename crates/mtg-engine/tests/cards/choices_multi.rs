@@ -453,3 +453,26 @@ fn dragons_fire_deals_the_revealed_dragons_power_instead() {
     assert_eq!(dragons_fire(false), 3);
     assert_eq!(dragons_fire(true), 5);
 }
+
+#[test]
+fn thelons_curse_pay_for_each_chosen_tapped_creature_to_untap_them() {
+    cr!("118.12", "502.3");
+    compiles("Thelon's Curse");
+    compiles("Dream Tides");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thelon's Curse");
+    let a = t.battlefield(P1, "Phantom Warrior");
+    let b = t.battlefield(P1, "Phantom Warrior");
+    let c = t.battlefield(P1, "Phantom Warrior");
+    for x in [a, b, c] {
+        t.g.tap(x);
+    }
+    let islands = t.lands(P1, "Island", 2);
+    t.answer_choose(P1, &[Entity::Object(a), Entity::Object(b)]);
+    t.answer_yes(P1, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert!(!t.obj_now(a).tapped && !t.obj_now(b).tapped, "paid for both");
+    assert!(t.obj_now(c).tapped, "not chosen");
+    assert!(islands.iter().all(|i| t.obj_now(*i).tapped), "{{U}} for each");
+}
