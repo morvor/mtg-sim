@@ -136,15 +136,24 @@ pub fn rename_uids(s: &str) -> String {
     use std::sync::OnceLock;
     static FIELD: OnceLock<Regex> = OnceLock::new();
     static KEY: OnceLock<Regex> = OnceLock::new();
-    let field = FIELD.get_or_init(|| Regex::new(r"\b(uid|ability): (\d+)").unwrap());
+    // `uid: N`, `ability: N`, `ability_uid: N`, and `(.., ObjectId(n), N)` (abilities of
+    // objects: `activated`, `state_triggers_active`, `power_up_activations`).
+    let field = FIELD.get_or_init(|| {
+        Regex::new(r"\b(uid|ability|ability_uid): (\d+)|(ObjectId\(\d+\)), (\d+)\)").unwrap()
+    });
     let key = KEY.get_or_init(|| Regex::new(r"(\{|, )(\d+): ").unwrap());
     let mut names: HashMap<String, usize> = HashMap::new();
+    let num = |c: &regex::Captures| c.get(2).or(c.get(4)).unwrap().as_str().to_string();
     for c in field.captures_iter(s) {
         let n = names.len();
-        names.entry(c[2].to_string()).or_insert(n);
+        names.entry(num(&c)).or_insert(n);
     }
     let s = field.replace_all(s, |c: &regex::Captures| {
-        format!("{}: u{}", &c[1], names[&c[2]])
+        let k = names[&num(c)];
+        match c.get(1) {
+            Some(f) => format!("{}: u{k}", f.as_str()),
+            None => format!("{}, u{k})", &c[3]),
+        }
     });
     // Keys of `triggers_this_turn` may carry flags in the high bits (see
     // `triggers::turn_keys`): the ability id is renamed, the flags kept.

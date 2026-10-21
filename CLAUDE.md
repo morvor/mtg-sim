@@ -17,7 +17,9 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
   option for every decision, the JSON agent protocol (`docs/AGENT_PROTOCOL.md`),
   `ExternalAgent` (child process) and `Session` (pull-style embedding).
 - `crates/mtg-sim` — CLI simulator (`cargo run --release -p mtg-sim -- --games 100`);
-  `--random-decks` fuzzes the engine with random decks of fully supported cards.
+  `--random-decks` fuzzes the engine with random decks of fully supported cards;
+  `--properties` checks the metamorphic properties of `docs/PROPERTIES.md` (seat
+  symmetry, snapshots, rollback, determinism and replay) over random games.
 - `crates/mtg-tools` — coverage reports (`cr-coverage`, `card-coverage`,
   `rulings-coverage`, `unsupported`).
 
@@ -46,6 +48,7 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 | `oracle/` | Oracle text compiler (normalize → split → parse). `oracle/patterns/` is the **pattern registry** |
 | `card.rs` | `CardDef` from Scryfall, `CardDb`, `card("Name")` |
 | `testing.rs` | `TestGame` harness + `ScriptedAgent` |
+| `properties/` | Metamorphic properties of whole games (seat symmetry, snapshots, rollback, determinism; `docs/PROPERTIES.md`), tested by `tests/properties/` |
 | `agents.rs` | `RandomAgent` |
 | `cards/` | **Hand-written card abilities** for genuine one-offs (`ManualAbility`, one file per card; policy in `cards/mod.rs`) |
 | `kwa/` | **Keyword action registry** (CR 701): one file per action; see also `keyword_actions*.rs` |
@@ -91,7 +94,7 @@ note anything new you run into there.
   `tests/cards/m_<card>.rs`; `mtg-tools manual-check` (also run by `cargo test`) fails on
   stale, now-compilable, duplicate or untested entries. See `src/cards/mod.rs`. The Oracle
   round-trip renderer reports these abilities as "manual" (verified by their tests).
-- **Tests**: add files to `crates/mtg-engine/tests/{cr,keywords,actions,rulings,cards}/`.
+- **Tests**: add files to `crates/mtg-engine/tests/{cr,keywords,actions,rulings,cards,properties}/`.
   Every `.rs` file there is auto-included into that directory's test binary. Name files by
   rule: `tests/cr/r704_state_based_actions.rs`, `tests/keywords/k702_019_trample.rs`,
   `tests/actions/a701_034_proliferate.rs`, `tests/rulings/<card_or_mechanic>.rs`.
@@ -143,6 +146,7 @@ cargo run --release -p mtg-tools -- structure-coverage --write docs/STRUCTURE_CO
 cargo run --release -p mtg-tools -- structure-coverage --card "Fetid Heath" --show-fingerprints
 cargo run --release -p mtg-sim -- --games 200
 cargo run --release -p mtg-sim -- --random-decks --games 1000   # fuzz: random decks; panics/hangs print a repro command
+cargo run --release -p mtg-sim -- --properties --games 200 --jobs 3   # metamorphic properties (docs/PROPERTIES.md)
 ```
 
 Build machines are small (4 cores, ~15 GB RAM) and running out of memory restarts the whole

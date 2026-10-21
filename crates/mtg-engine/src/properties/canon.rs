@@ -86,11 +86,16 @@ impl Canon {
     /// object numbers in descriptions ("Forest #53").
     pub fn text(&self, s: &str) -> String {
         static RE: OnceLock<Regex> = OnceLock::new();
-        let re = RE.get_or_init(|| Regex::new(r"(ObjectId|PlayerId)\((\d+)\)| #(\d+)").unwrap());
+        let re =
+            RE.get_or_init(|| Regex::new(r"(ObjectId|PlayerId)\((\d+)\)|(\w+) #(\d+)").unwrap());
         re.replace_all(s, |c: &regex::Captures| {
-            if let Some(m) = c.get(3) {
+            // "Forest #53" names an object; "effect #8" doesn't.
+            if let (Some(w), Some(m)) = (c.get(3), c.get(4)) {
+                if w.as_str() == "effect" {
+                    return c[0].to_string();
+                }
                 let n: u32 = m.as_str().parse().unwrap_or(0);
-                return format!(" #{}", self.obj(ObjectId(n)));
+                return format!("{} #{}", w.as_str(), self.obj(ObjectId(n)));
             }
             let n: u32 = c[2].parse().unwrap_or(0);
             if &c[1] == "ObjectId" {
