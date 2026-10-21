@@ -3251,10 +3251,13 @@ pub enum CostChange {
 
 /// A rule about announcing or paying the cost of the spell or activated ability whose text
 /// states it (see `payment_rules.rs`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CostRule {
     /// "X can't be 0." (CR 107.3a): the least value that may be announced for X.
     XAtLeast(u32),
+    /// "X can't be greater than the number of players in the game." (CR 107.3a, 601.2b):
+    /// the greatest value that may be announced for X, determined as X is announced.
+    XAtMost(Box<Value>),
     /// "Spend only black mana on X.", "Spend only black and/or red mana on X.", "Spend
     /// only colored mana on X.": only mana of these colors may pay the part of the cost
     /// that X represents (CR 107.3a, 601.2h). It's still generic mana (cost reductions
@@ -3274,6 +3277,15 @@ pub enum CostRule {
     /// cost; none may without a choice (CR 607.5a).
     OnlyChosenColor,
 }
+
+impl PartialEq for CostRule {
+    fn eq(&self, other: &Self) -> bool {
+        // (`Value` has no equality of its own: compared as data.)
+        serde_json::to_string(self).ok() == serde_json::to_string(other).ok()
+    }
+}
+
+impl Eq for CostRule {}
 
 /// Static abilities (CR 604) and what they do.
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -1298,6 +1298,10 @@ impl Renderer<'_> {
                 let n = self.noun(&f, Num::Many);
                 format!("spend only mana produced by {n} to cast ~")
             }
+            CostChange::Rule(CostRule::XAtMost(v)) => {
+                let v = self.value(v);
+                format!("X can't be greater than {v}")
+            }
             CostChange::Rule(r) => cost_rule_text(r),
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
             CostChange::ReduceColored(c, v) => {
@@ -3832,6 +3836,8 @@ pub(crate) fn cost_rule_text(r: &CostRule) -> String {
             }
             s
         }
+        // (Rendered with its value where a renderer is at hand.)
+        CostRule::XAtMost(_) => "X can't be greater than that value".into(),
         CostRule::NoMana => "you can't spend mana to cast ~".into(),
         CostRule::OnlyManaFrom(_) => "spend only mana produced by permanents to cast ~".into(),
         CostRule::OnlyChosenColor => {

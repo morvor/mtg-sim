@@ -1589,6 +1589,8 @@ impl Game {
         // mana on X", "You can't spend mana to cast this spell").
         let cost_rules = crate::payment_rules::spell_rules(&chars);
         let x_min = crate::payment_rules::x_minimum(&cost_rules);
+        // "X can't be greater than ..." (CR 107.3a): determined as X is announced.
+        let x_cap = crate::payment_rules::x_maximum(self, &cost_rules, &Ctx::new(Some(id), p));
         let mut x: i64 = 0;
         if base_cost_has_x {
             let mut max = self.max_mana_available(p) as i64;
@@ -1630,6 +1632,9 @@ impl Game {
                     bound
                 };
             }
+            if let Some(cap) = x_cap {
+                max = max.min(cap);
+            }
             // (A value the alternative cost can't be paid with isn't a legal choice, nor is
             // one the spell's text forbids: "X can't be 0", CR 107.3a.)
             let answer = self.ask(
@@ -1647,7 +1652,7 @@ impl Game {
                 _ => true,
             };
             x = match answer {
-                Answer::Number(n) if n >= x_min && payable(n) => n,
+                Answer::Number(n) if n >= x_min && x_cap.is_none_or(|c| n <= c) && payable(n) => n,
                 // Otherwise the greatest legal value whose total cost could be paid.
                 _ => (x_min..=max)
                     .rev()
@@ -1662,7 +1667,9 @@ impl Game {
         }
         // CR 107.3a, 107.3b: "X can't be 0" leaves no legal value for an X that must be 0
         // (the spell is cast without paying a cost that includes it).
-        if x < x_min && (base_cost_has_x || chars.mana_cost.as_ref().is_some_and(|m| m.has_x())) {
+        if (x < x_min || x_cap.is_some_and(|c| x > c))
+            && (base_cost_has_x || chars.mana_cost.as_ref().is_some_and(|m| m.has_x()))
+        {
             return Err(Illegal("no legal value of X".into()));
         }
         // The spell's cast info records X only if a value was chosen for one of its costs:
@@ -2467,7 +2474,11 @@ impl Game {
             || act.cost.parts.iter().any(|c| cost_part_has_x(c));
         let mut x = 0i64;
         if has_x {
-            let max = crate::activation_costs::x_bound(self, p, act);
+            let mut max = crate::activation_costs::x_bound(self, p, act);
+            let rules = crate::payment_rules::ability_rules(act);
+            if let Some(cap) = crate::payment_rules::x_maximum(self, &rules, &ctx) {
+                max = max.min(cap);
+            }
             // CR 107.3a, 602.2b: the announced value must satisfy a condition on X ("X
             // can't be 0"): the least value that does is the least that may be announced,
             // and the one announced otherwise.
