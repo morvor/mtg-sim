@@ -255,6 +255,11 @@ fn guesses_whether(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     };
     b.it_player = who.clone();
+    // "... whether the top card of your library is the chosen kind. Reveal that card.":
+    // the card the guess was about.
+    if prop.starts_with("the top card of your library ") {
+        b.it = Sel::TopOfLibrary(PlayerRef::You, Value::c(1));
+    }
     let store = |n| Effect::StoreValue {
         var: GUESS,
         value: Value::c(n),
@@ -280,6 +285,19 @@ fn guesses_whether(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "[player] guesses whether [proposition]", priority: 60, parse: guesses_whether } }
+
+/// "Reveal that card." after a guess about the top card of your library: that card, where
+/// it is (as "reveal the top card of your library" does).
+fn reveal_guessed_top_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "reveal that card"
+        || !matches!(&b.it, Sel::TopOfLibrary(PlayerRef::You, Value::Const(1)))
+    {
+        return None;
+    }
+    crate::oracle::effects::parse_sentence("reveal the top card of your library", b)
+}
+
+inventory::submit! { EffectPattern { name: "reveal that card (the top card a guess was about)", priority: 60, parse: reveal_guessed_top_card } }
 
 /// "they guessed wrong", "the player guessed right", "your opponent guessed wrong".
 fn guessed(c: &str) -> Option<Condition> {
@@ -330,7 +348,7 @@ inventory::submit! { EffectPattern { name: "if they guessed right/wrong", priori
 
 /// Whether a spell was cast by the instruction before "If you don't cast a spell this
 /// way".
-const CAST_THIS_WAY: Var = vars::USER + 30525;
+pub const CAST_THIS_WAY: Var = vars::USER + 30525;
 
 /// Puts a record of whether it cast a spell after each [`Effect::CastCard`] in `e`.
 fn record_casts(e: &mut Effect) -> usize {
