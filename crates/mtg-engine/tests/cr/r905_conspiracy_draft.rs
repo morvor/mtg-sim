@@ -303,6 +303,7 @@ fn noted_draft_information_is_used_during_the_game() {
 #[test]
 fn a_conspiracy_draft_game_is_multiplayer_free_for_all() {
     cr!("905.3");
+    interp!("conspiracy-draft-needs-three-players");
     let c = GameConfig::conspiracy_draft_game();
     assert!(c.validate(2).unwrap_err().contains(&SetupError::NotMultiplayer));
     assert_eq!(c.validate(4), Ok(()));

@@ -1162,8 +1162,11 @@ impl Game {
     }
 
     /// Checks an entering object against a filter "as it would exist on the battlefield"
-    /// (CR 614.12). We approximate with its current characteristics plus the
-    /// modifications already made to how it enters, and the player who will control it.
+    /// (CR 614.12), with the player who will control it. When `replace` gathers the
+    /// effects that modify how a permanent enters, this runs inside
+    /// `with_hypothetical_entry`, so the object's characteristics are those it would have
+    /// on the battlefield; the queries over all effects (`applicable_replacements` and the
+    /// like) see its current characteristics.
     fn matches_entering(&self, m: &MoveEv, f: &Filter, ctx: &Ctx) -> bool {
         let view = EnteringView {
             obj: m.obj,
@@ -1571,8 +1574,19 @@ impl Game {
             ) => {
                 // "Damage that would reduce your life total to less than N reduces it to N
                 // instead": a player with less than N life loses life normally.
+                // The life the player gains as part of the same damage event counts
+                // (CR 120.4d): [lose 5, gain 5] doesn't reduce 2 life to less than 1.
                 let floor = self.eval_value(&v, &ctx) as i32;
-                let life = self.player(player).life;
+                let gains: i32 = if from_damage {
+                    self.damage_event_gains
+                        .iter()
+                        .filter(|(p, _)| *p == player)
+                        .map(|(_, n)| *n as i32)
+                        .sum()
+                } else {
+                    0
+                };
+                let life = self.player(player).life + gains;
                 let amount = if life >= floor && life - (amount as i32) < floor {
                     (life - floor) as u32
                 } else {

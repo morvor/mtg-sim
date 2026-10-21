@@ -408,6 +408,14 @@ fn choose(
             }
             v
         });
+        // "up to two basic land cards that share a land type", "up to four creature cards
+        // with different powers": the cards found together must have the relationship
+        // (`target_groups::fit_together`).
+        let picked = if crate::relational::groups_of(&part.filter).is_empty() {
+            picked
+        } else {
+            crate::target_groups::fit_together(g, &part.filter, picked, &pc, min, ctx)
+        };
         chosen.extend(picked);
     }
     chosen

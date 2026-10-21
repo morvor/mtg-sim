@@ -1,0 +1,29 @@
+# Players and multiplayer
+
+Judgment calls about players, teams and the multiplayer variants (CR 800–811, 905).
+Format and kinds: `docs/agents/items/interpretation-register.md`; index:
+`docs/INTERPRETATIONS.md`.
+
+## conspiracy-draft-needs-three-players: A Conspiracy Draft game (like every multiplayer variant) needs more than two players
+- Kind: interpretation
+- Status: provisional
+- Rules: 905.3 "A Conspiracy Draft game is a multiplayer game. The default multiplayer setup is the Free-for-All variant with the attack multiple players option and without the limited range of influence option. See rule 806, “Free-for-All Variant.”" / 100.1b "A multiplayer game is a game that begins with more than two players. See section 8, “Multiplayer Rules.”" / 806.1 "In Free-for-All multiplayer games, a group of players compete as individuals against each other."
+- Question: Is a Conspiracy Draft game between exactly two players valid? 905.3 calls the game multiplayer and 100.1b defines multiplayer as more than two players, but no rule forbids a two-player Conspiracy Draft game outright.
+- Decision: Invalid. `GameConfig::validate` rejects a Conspiracy Draft game (a Free-for-All configuration with `limited`) for two players with `SetupError::NotMultiplayer`, as it does every multiplayer variant (Free-for-All, Grand Melee, Two-Headed Giant, Emperor, Team vs. Team, Alternating Teams).
+- Alternatives: Read 905.3 as describing the usual setup and allow two players: the game would then be an ordinary two-player game with conspiracies (CR 315, 905.4–905.6 still apply), with no attack-multiple-players option to speak of.
+- Why: 905.3 states that the game is a multiplayer game and 100.1b leaves no room for a two-player multiplayer game; the default setup it names (Free-for-All, 806) is a multiplayer variant. The judge audit (`docs/agents/reports/judge-audit-1.md`, cr-04) agreed with medium confidence. Provisional because two-player Conspiracy play is common in practice and a judge could read 905.3 as descriptive.
+- Affects: game setup only (Conspiracy Draft games with two players); no card behaves differently.
+- Code: `crates/mtg-engine/src/multiplayer/setup.rs` (`GameConfig::validate`, `NotMultiplayer`); `crates/mtg-engine/src/casual.rs` (`GameConfig::conspiracy_draft_game`).
+- Tests: `tests/cr/r905_conspiracy_draft.rs` (`a_conspiracy_draft_game_is_multiplayer_free_for_all`).
+
+## attacking-player-is-an-active-player: "The attacking player" is the active player; with shared team turns its controller chooses one
+- Kind: deviation
+- Status: provisional
+- Rules: 506.2 "During the combat phase, the active player is the attacking player; creatures that player controls may attack. ..." / 805.9 "Any ability that refers to the “active player” refers to one specific active player, not to all of the active players. The ability’s controller chooses which one the ability refers to at the time its effect is applied." / 805.10c "Any rule, object, or effect that refers to an “attacking player” refers to one specific attacking player, not to all attacking players. If an ability of a blocking creature refers to an attacking player, or a spell or ability refers to both a blocking creature and an attacking player, then unless otherwise specified, the attacking player it’s referring to is the player who controls the attacking creature that blocking creature is blocking. If a spell or ability could apply to multiple blocking creatures, the appropriate attacking player is individually determined for each of those blocking creatures. If there are multiple attacking players that could be chosen, the controller of the spell or ability chooses one."
+- Question: Card text "the attacking player" compiles to the active player. That is exact in games without shared team turns (506.2). With shared team turns (Two-Headed Giant, 805.10), which attacking player does it mean?
+- Decision: The engine resolves "the attacking player" like "the active player" (805.9): the ability's controller chooses one of the active team's players. That matches 805.10c's last sentence for abilities that don't involve a blocker (Contested Game Ball), but not its blocker rule: for an ability of a blocking creature (Souls of the Faultless) 805.10c fixes the attacking player as the controller of the creature it blocks, with no choice.
+- Alternatives: Implement 805.10c fully: a player reference "the attacking player" relative to a blocking creature (the controller of the attacker it blocks, individually per blocker), falling back to the controller's choice only when several attacking players fit. Plan: do that if a supported card makes it matter; today the difference is only who is chosen.
+- Why: The cards2-combat item compiled "the attacking player" to `PlayerRef::ActivePlayer` (CR 506.2), and the shared-team-turns code already asks the controller to choose among active players (805.9). In Two-Headed Giant the team shares its life total (810.9a), so Souls of the Faultless's life loss lands on the same total whichever teammate is chosen. Provisional because it is a known gap against 805.10c.
+- Affects: Contested Game Ball, Souls of the Faultless, Norn's Decree, Invasion Plans, Karazikar, the Eye Tyrant (cards whose text says "the attacking player"), only in games with shared team turns.
+- Code: `crates/mtg-engine/src/oracle/phrases.rs` (`"the attacking player "` → `PlayerRef::ActivePlayer`); `crates/mtg-engine/src/oracle/patterns/choice_grammar.rs`; the active-player choice of 805.9 in `crates/mtg-engine/src/teams.rs`, `crates/mtg-engine/src/stack.rs` and `crates/mtg-engine/src/eval.rs` (`PlayerRef::ActivePlayer`).
+- Tests: `tests/cr/interp_multiplayer.rs` (`the_attacking_player_is_an_active_player_its_controller_chooses`, `a_blockers_attacking_player_is_still_chosen_among_the_active_players`).

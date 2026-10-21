@@ -111,6 +111,7 @@ fn utrom_scientists_taps_up_to_one_creature_and_stuns_it() {
 #[test]
 fn stalactite_dagger_creates_a_changeling_shapeshifter() {
     cr!("603.6a", "111.1", "702.73a", "604.3");
+    interp!("changeling-cda-only");
     // "When this Equipment enters, create a 1/1 colorless Shapeshifter creature token with
     // changeling."
     supported("Stalactite Dagger");

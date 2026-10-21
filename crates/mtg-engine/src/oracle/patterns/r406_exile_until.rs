@@ -54,6 +54,7 @@ fn exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
         filter = Filter::and(vec![filter, l]);
     }
     b.it = Sel::Var(vars::IT);
+    super::card_flow_exile_until::name_the_exiled_card(b);
     b.named.push((
         THE_REST.into(),
         Sel::All(Filter::and(vec![
