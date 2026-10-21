@@ -212,6 +212,7 @@ fn sudden_demise_x_on_casting_color_on_resolution() {
     // Watchwolf (green and white) and the Bears were dealt 2; the Lions weren't.
     assert_eq!(marked(&t, gold), 2);
     assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(white));
     assert_eq!(marked(&t, white), 0);
 }
 
