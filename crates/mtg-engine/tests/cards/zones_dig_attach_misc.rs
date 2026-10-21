@@ -213,7 +213,7 @@ fn solkanar_returns_under_an_opponents_control() {
 
 #[test]
 fn dead_mans_chest_exiles_cards_equal_to_its_power_from_its_owners_library() {
-    cr!("406.3");
+    cr!("701.13a");
     assert_supported("Dead Man's Chest");
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Hill Giant");
@@ -228,7 +228,7 @@ fn dead_mans_chest_exiles_cards_equal_to_its_power_from_its_owners_library() {
 
 #[test]
 fn cunning_rhetoric_exiles_the_top_card_of_the_attacking_players_library() {
-    cr!("406.3");
+    cr!("701.13a");
     assert_supported("Cunning Rhetoric");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Cunning Rhetoric");

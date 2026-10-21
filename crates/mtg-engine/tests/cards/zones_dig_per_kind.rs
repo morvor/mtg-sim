@@ -212,7 +212,7 @@ fn abundant_harvest_reveals_until_a_card_of_the_chosen_kind() {
 
 #[test]
 fn crabomination_exiles_from_library_graveyard_and_hand() {
-    cr!("406.3");
+    cr!("701.13a");
     assert_supported("Crabomination");
     let mut t = TestGame::new(2);
     library(&mut t, P1, &["Forest", "Island"]);

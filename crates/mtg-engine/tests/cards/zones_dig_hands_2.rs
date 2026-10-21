@@ -50,8 +50,7 @@ fn exile_names(t: &TestGame) -> Vec<String> {
 
 #[test]
 fn scroll_rack_exchanges_cards_from_hand_with_the_top_of_the_library() {
-    cr!("406.3", "401.4");
-    ruling!("Scroll Rack", "If there are not enough cards in the library, you do not lose.");
+    cr!("701.13a", "401.4");
     assert_supported("Scroll Rack");
     let mut t = TestGame::new(2);
     let rack = t.battlefield(P0, "Scroll Rack");
@@ -82,7 +81,8 @@ fn scroll_rack_exchanges_cards_from_hand_with_the_top_of_the_library() {
 
 #[test]
 fn scroll_rack_with_too_few_cards_in_the_library() {
-    cr!("406.3");
+    cr!("701.13a");
+    ruling!("Scroll Rack", "If there are not enough cards in the library, you do not lose.");
     let mut t = TestGame::new(2);
     let rack = t.battlefield(P0, "Scroll Rack");
     t.lands(P0, "Island", 1);
