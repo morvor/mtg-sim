@@ -908,3 +908,27 @@ fn done_all_of_them(block: &str, ctx: &crate::oracle::CompileContext) -> Option<
 }
 
 inventory::submit! { super::AbilityPattern { name: "history 4: then if you've done all four this turn", priority: 90, parse: done_all_of_them } }
+
+/// "if none of them were cast", "if no mana was spent to cast them" (Satoru, the
+/// Infiltrator: "if none of them were cast or no mana was spent to cast them", after "one
+/// or more ... creatures you control enter"): about the objects the ability triggered on.
+/// Mana spent for additional costs or cost increases counts (Satoru rulings).
+fn none_of_them_cast(c: &str) -> Option<Condition> {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains(" enter, if ") || !raw.contains(" of them") && !raw.contains(" cast them") {
+        return None;
+    }
+    let f = match end(c) {
+        "none of them were cast" => Filter::Custom(crate::kw::cast_history::WAS_CAST.into()),
+        "no mana was spent to cast them" => {
+            Filter::Custom(crate::kw::damage_history_4::CAST_WITH_MANA.into())
+        }
+        _ => return None,
+    };
+    Some(Condition::Not(Box::new(Condition::SelNonEmpty(Sel::Matching(
+        Box::new(Sel::TriggerObjects),
+        f,
+    )))))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: none of them were cast / no mana was spent to cast them", priority: 900, parse: none_of_them_cast } }

@@ -1207,3 +1207,26 @@ fn avatar_aang_transforms_once_all_four_bendings_happened_this_turn() {
         }
     }
 }
+
+#[test]
+fn satoru_draws_only_for_creatures_not_cast_with_mana() {
+    cr!("601.2h", "603.4");
+    ruling!(
+        "Satoru, the Infiltrator",
+        "If you cast a creature spell without paying its mana cost but you paid mana for additional costs"
+    );
+    assert_supported("Satoru, the Infiltrator");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Satoru, the Infiltrator");
+    let before = t.hand_size(P0);
+    t.enter(P0, "Hill Giant");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 1, "put onto the battlefield, not cast");
+    t.lands(P0, "Forest", 2);
+    let b = t.hand(P0, "Grizzly Bears");
+    let before = t.hand_size(P0);
+    t.cast_with(P0, b, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before - 1, "cast with mana: no card");
+}

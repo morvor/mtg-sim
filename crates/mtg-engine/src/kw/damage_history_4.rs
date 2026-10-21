@@ -45,6 +45,12 @@ fn entered_face_down(g: &Game, id: ObjectId) -> bool {
     g.obj(id).face_down || turned_up
 }
 
+/// `Filter::Custom`: a spell, or a permanent that was one, that was cast with mana spent
+/// on it (CR 601.2h: any mana, for its mana cost or for additional costs and cost
+/// increases): Satoru, the Infiltrator's "if none of them were cast or no mana was spent
+/// to cast them" is that none of them is such an object (Satoru rulings).
+pub const CAST_WITH_MANA: &str = "history:cast with mana spent on it";
+
 /// The greatest amount of damage one source dealt to one recipient this turn.
 pub fn greatest_damage_by_a_source(g: &Game) -> i64 {
     let mut totals: BTreeMap<(ObjectId, Entity), i64> = BTreeMap::new();
@@ -77,6 +83,12 @@ impl KeywordRules for DamageHistory {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name == CAST_WITH_MANA {
+            return Some(
+                crate::kw::cast_history::object_cast(g, id)
+                    .is_some_and(|c| c.was_cast && !c.mana_spent.is_empty()),
+            );
+        }
         if name == ENTERED_FACE_DOWN {
             return Some(entered_face_down(g, id));
         }
