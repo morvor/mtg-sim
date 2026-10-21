@@ -143,6 +143,12 @@ pub struct Perm {
     pub no_hand: bool,
     /// "from among cards exiled with it": "it" must be the source (see [`effect`]).
     pub linked_it: bool,
+    /// "play a land and cast a spell from among ...": a land and a spell, one of each
+    /// (each its own once-each-turn use).
+    pub land_and_spell: bool,
+    /// The once-each-turn use this permission is (see `kw/once_each_turn_cast.rs`), when
+    /// the ability has several.
+    pub once_slot: Option<&'static str>,
 }
 
 impl Perm {
@@ -568,6 +574,44 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
             None => f,
         });
         return Some((From::Exile, rest));
+    }
+    // "from among cards in your graveyard that were milled this turn" (Raul, Trouble
+    // Shooter), "... that were put there from your library this turn" (Kagha, Shadow
+    // Archdruid), "from among cards in graveyards that were put there from libraries this
+    // turn" (Coram, the Undertaker), "from among cards in your graveyard you've surveilled
+    // this turn" (Eye of Duskmantle): cards in the graveyard qualified by how they got
+    // there this turn (see `kw/graveyard_history.rs`).
+    for (zone, z) in [
+        (" from among cards in your graveyard ", From::Graveyard),
+        (" from among cards in graveyards ", From::AnyGraveyard),
+    ] {
+        let Some(r) = s.strip_prefix(zone) else {
+            continue;
+        };
+        use crate::kw::graveyard_history::*;
+        for (q, name, any_zone) in [
+            (
+                "that were milled this turn",
+                super::zone_move_grammar::MILLED_THIS_TURN,
+                false,
+            ),
+            ("that were put there from your library this turn", PUT_THERE_FROM_LIBRARY, false),
+            ("that were put there from libraries this turn", PUT_THERE_FROM_LIBRARY, true),
+            (
+                "that were put there from anywhere other than the battlefield this turn",
+                PUT_THERE_NOT_FROM_BATTLEFIELD,
+                false,
+            ),
+            ("you've surveilled this turn", SURVEILLED_THIS_TURN, false),
+        ] {
+            if any_zone != (z == From::AnyGraveyard) {
+                continue;
+            }
+            if let Some(x) = r.strip_prefix(q).filter(|x| x.is_empty() || x.starts_with(',')) {
+                p.zone_filter = Some(Filter::Custom(name.into()));
+                return Some((z, x));
+            }
+        }
     }
     // "from among face-up cards your opponents own from exile" (Ashiok, Nightmare Muse).
     if let Some(r) = s.strip_prefix(" from among face-up cards your opponents own from exile") {
@@ -1046,7 +1090,11 @@ pub fn parse(l: &str) -> Option<Perm> {
             None => (true, x.strip_prefix(" or cast ")?),
         };
         let (sf, ssingle, x) = class_phrase(x)?;
-        if lsingle != ssingle || lsingle != or {
+        // "play a land and cast a spell from among ..." (Coram, the Undertaker): one of
+        // each.
+        if lsingle && ssingle && !or {
+            p.land_and_spell = true;
+        } else if lsingle != ssingle || lsingle != or {
             return None;
         }
         // "from among [cards]": the qualities of the lands and the spells.
@@ -1297,6 +1345,7 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
     // A second zone is a static permission's; "any number of" is chosen as the effect
     // resolves.
     if p.once_each_turn
+        || p.land_and_spell
         || p.also_from.is_some()
         || ((p.any_number || p.count.is_some()) && p.duration.is_some())
     {
@@ -1808,7 +1857,9 @@ fn class_permission_from(
 ) -> Option<PlayPermission> {
     // "from among cards you own in exile with croak counters on them".
     let what = match (&p.zone_filter, from) {
-        (Some(f), From::Exile) => Filter::and(vec![f.clone(), what]),
+        (Some(f), From::Exile | From::Graveyard | From::AnyGraveyard) => {
+            Filter::and(vec![f.clone(), what])
+        }
         (Some(_), _) => return None,
         (None, _) => what,
     };
@@ -1875,6 +1926,35 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
     if p.who != Who::You || p.duration.is_some() || p.look || p.any_number || p.count.is_some() {
         return None;
     }
+    // "During each of your turns, you may play a land and cast a spell from among ...":
+    // a permission to play a land and one to cast a spell, each usable once each turn.
+    if p.land_and_spell {
+        let Obj::Class {
+            what: Filter::Or(v),
+            ..
+        } = &p.obj
+        else {
+            return None;
+        };
+        if v.len() != 2 || !p.your_turn || p.once_each_turn {
+            return None;
+        }
+        let mut out = Vec::new();
+        for (i, slot) in [(0, "land"), (1, "spell")] {
+            let mut q = p.clone();
+            q.land_and_spell = false;
+            q.once_each_turn = true;
+            q.once_slot = Some(slot);
+            q.lands = i == 0;
+            q.spells = i == 1;
+            q.obj = Obj::Class {
+                what: v[i].clone(),
+                single: true,
+            };
+            out.extend(to_statics(&q, text, ctx)?);
+        }
+        return Some(out);
+    }
     // "You may cast ~ as though it had flash by tapping three untapped creatures you
     // control with flying in addition to paying its other costs." (CR 601.3c): flash for
     // an additional cost, as "... if you pay {2} more to cast it".
@@ -1911,7 +1991,7 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
         conds.push(Condition::YourTurn);
     }
     if p.once_each_turn {
-        conds.push(once_unused(""));
+        conds.push(once_unused(p.once_slot.unwrap_or("")));
     }
     conds.extend(play_condition);
     let condition = match conds.len() {

@@ -61,6 +61,13 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             rel("{alt:that you discarded this turn|that you cycled or discarded this turn}")
         }
         crate::oracle::patterns::zone_move_grammar::MILLED_THIS_TURN => rel("milled this turn"),
+        crate::kw::graveyard_history::PUT_THERE_FROM_LIBRARY => rel(
+            "{alt:that were put there from your library this turn|that were put there from libraries this turn}",
+        ),
+        crate::kw::graveyard_history::PUT_THERE_NOT_FROM_BATTLEFIELD => {
+            rel("that were put there from anywhere other than the battlefield this turn")
+        }
+        crate::kw::graveyard_history::SURVEILLED_THIS_TURN => rel("you've surveilled this turn"),
         crate::oracle::patterns::zone_move_grammar::DEALT_DAMAGE_THIS_TURN => {
             rel("that dealt damage this turn")
         }

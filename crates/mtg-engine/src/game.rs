@@ -508,6 +508,10 @@ pub struct TurnHistory {
     pub milled: Vec<ObjectId>,
     #[serde(default)]
     pub discarded: Vec<(PlayerId, ObjectId)>,
+    /// Cards put into graveyards by surveilling this turn (CR 701.25a), as the objects
+    /// they became ("cards in your graveyard you've surveilled this turn").
+    #[serde(default)]
+    pub surveilled: Vec<ObjectId>,
     /// Every (blocker, attacker) pair that existed this turn, with the attacker's
     /// controller at the time ("creatures that were blocked by target Wall this turn").
     /// Recorded by `kw/block_history.rs`.

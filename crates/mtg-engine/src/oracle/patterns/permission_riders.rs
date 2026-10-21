@@ -277,7 +277,13 @@ fn apply_inner(l: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b: &Bu
         return false;
     };
     // "pay life equal to its mana value rather than pay its mana cost" (CR 118.9b).
-    if x == "pay life equal to its mana value rather than pay its mana cost" && !either {
+    if matches!(
+        x,
+        "pay life equal to its mana value rather than pay its mana cost"
+            | "you pay life equal to its mana value rather than paying its mana cost"
+            | "pay life equal to its mana value rather than paying its mana cost"
+    ) && !either
+    {
         if !spells || terms.alt_cost.is_some() || !matches!(kind, Filter::Any) {
             return false;
         }
