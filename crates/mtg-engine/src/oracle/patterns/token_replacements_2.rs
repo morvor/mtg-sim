@@ -674,3 +674,107 @@ fn token_enters_attacking_that_player(l: &str, prev: &mut Effect, b: &mut Builde
 }
 
 inventory::submit! { super::FollowupPattern { name: "token replacements 2: the token enters tapped and attacking that player", priority: 45, apply: token_enters_attacking_that_player } }
+
+/// "opponent", "player", "opponent with three or more poison counters": the players a
+/// "for each [players]" counts.
+fn counted_players(s: &str) -> Option<PlayerFilter> {
+    let (base, rest) = if let Some(r) = s.strip_prefix("opponent") {
+        (PlayerFilter::Opponent, r)
+    } else if let Some(r) = s.strip_prefix("player") {
+        (PlayerFilter::Any, r)
+    } else {
+        return None;
+    };
+    let rest = rest.trim();
+    if rest.is_empty() {
+        return Some(base);
+    }
+    let r = rest.strip_prefix("with ")?;
+    let (cmp, n, r) = super::counters_resources_counters::amount_cmp(r)?;
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    if r.trim() != "counters" && r.trim() != "counter" {
+        return None;
+    }
+    Some(PlayerFilter::And(vec![
+        base,
+        PlayerFilter::Counters(kind.as_str().into(), cmp, Box::new(n)),
+    ]))
+}
+
+/// "Then for each opponent with three or more poison counters, you create another one of
+/// those tokens." (Wurmquake): one more token of the same description for each such
+/// player.
+fn another_one_of_those_tokens(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let l = end(&lower);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let Some(r) = l.strip_prefix("for each ") else {
+        return false;
+    };
+    let Some((who, rest)) = r.split_once(", ") else {
+        return false;
+    };
+    if !matches!(
+        rest,
+        "you create another one of those tokens" | "create another one of those tokens"
+    ) {
+        return false;
+    }
+    let Some(players) = counted_players(who) else {
+        return false;
+    };
+    fn last_create(e: &Effect) -> Option<&Effect> {
+        match e {
+            Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } => Some(e),
+            Effect::Seq(v) => v.iter().rev().find_map(last_create),
+            _ => None,
+        }
+    }
+    let Some(one) = last_create(prev).cloned() else {
+        return false;
+    };
+    let one = match one {
+        Effect::CreateToken {
+            spec,
+            controller,
+            tapped,
+            attacking,
+            ..
+        } => Effect::CreateToken {
+            spec,
+            count: Value::c(1),
+            controller,
+            tapped,
+            attacking,
+        },
+        Effect::CreateTokenWithPT {
+            spec,
+            power,
+            toughness,
+            controller,
+            tapped,
+            attacking,
+            ..
+        } => Effect::CreateTokenWithPT {
+            spec,
+            power,
+            toughness,
+            count: Value::c(1),
+            controller,
+            tapped,
+            attacking,
+        },
+        _ => return false,
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::Repeat {
+            times: Value::CountPlayers(players),
+            effect: Box::new(one),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: for each [player], another one of those tokens", priority: 45, apply: another_one_of_those_tokens } }

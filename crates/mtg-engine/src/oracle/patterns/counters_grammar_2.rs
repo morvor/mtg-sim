@@ -864,3 +864,30 @@ fn distribute_untargeted(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "counters grammar 2: distribute counters among objects chosen on resolution", priority: 90, parse: distribute_untargeted } }
+
+/// "Put four time counters on each of those cards that has suspend." (Ecstatic Beauty):
+/// on each of the cards the text just named that has that keyword.
+fn on_each_of_those_that_has(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("put ")?;
+    let (counters, rest) = r.split_once(" on each of those cards that has ")?;
+    let kw = crate::keywords::KeywordKind::from_name(rest.trim())?;
+    let Sel::Var(v) = b.it.clone() else {
+        return None;
+    };
+    let saved = b.targets.len();
+    let e = parse_clause(&format!("put {counters} on ~"), b)?;
+    if b.targets.len() != saved {
+        b.targets.truncate(saved);
+        return None;
+    }
+    let Effect::AddCounters { kind, n, .. } = e else {
+        return None;
+    };
+    Some(Effect::AddCounters {
+        what: Sel::Matching(Box::new(Sel::Var(v)), Filter::HasKeyword(kw)),
+        kind,
+        n,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counters grammar 2: on each of those cards that has [keyword]", priority: 70, parse: on_each_of_those_that_has } }
