@@ -643,9 +643,9 @@ inventory::submit! { FollowupPattern { name: "followups: for each [thing] this w
 // ---------------------------------------------------------------------------
 
 /// Whether an opponent has had you do it yet (0 or 1).
-const HAD: Var = vars::USER + 9651;
+pub const HAD: Var = vars::USER + 9651;
 /// The opponent who had you do it.
-const HAD_BY: Var = vars::USER + 9652;
+pub const HAD_BY: Var = vars::USER + 9652;
 
 /// "Any opponent may have you put that card into your graveyard." (Sin Prodder,
 /// Distant Memories): starting with the next opponent in turn order, each opponent may

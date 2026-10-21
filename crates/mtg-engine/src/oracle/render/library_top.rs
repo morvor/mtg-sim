@@ -19,7 +19,17 @@ impl Renderer<'_> {
             }
             other => {
                 let (v, w) = self.amount(other);
-                format!("the top {v} cards of {p} library{}", w.unwrap_or_default())
+                match w {
+                    // "a number of cards from the top of your library equal to the number
+                    // of counters on it": the same cards, the number said after them.
+                    Some(w) => {
+                        let val = self.value(other);
+                        format!(
+                            "{{alt:the top {v} cards of {p} library{w}|a number of cards from the top of {p} library equal to {val}}}"
+                        )
+                    }
+                    None => format!("the top {v} cards of {p} library"),
+                }
             }
         }
     }

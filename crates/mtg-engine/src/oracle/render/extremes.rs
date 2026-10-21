@@ -158,6 +158,9 @@ impl Renderer<'_> {
         for w in words {
             forms.push(format!("{plain} with the {w} {x}"));
             forms.push(format!("{bare} with the {w} {x} among {n}"));
+            if plain != bare {
+                forms.push(format!("{plain} with the {w} {x} among {n}"));
+            }
             if all_permanents {
                 forms.push(format!(
                     "{bare} with the {w} {x} among {n} on the battlefield"
@@ -175,7 +178,17 @@ impl Renderer<'_> {
             } else {
                 ""
             };
-            return Some(format!("{bare} with the {w} {x} among {n}{field}"));
+            // "a creature or planeswalker they control with the greatest mana value
+            // among creatures and planeswalkers they control": the object's own
+            // qualities may be said in full too.
+            if plain == bare {
+                return Some(format!("{bare} with the {w} {x} among {n}{field}"));
+            }
+            // Or the comparison among the object's own kind left unsaid ("a creature
+            // they control with the greatest power").
+            return Some(format!(
+                "{{alt:{bare} with the {w} {x} among {n}{field}|{plain} with the {w} {x} among {n}{field}|{plain} with the {w} {x}}}"
+            ));
         }
         Some(format!("{{alt:{}}}", forms.join("|")))
     }

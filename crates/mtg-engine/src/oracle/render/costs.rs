@@ -554,11 +554,36 @@ impl Renderer<'_> {
             &a.condition,
             Some(Condition::Compare(Value::X, Cmp::Ge, Value::Const(1)))
         );
-        match a
-            .condition
-            .as_ref()
-            .filter(|_| !solved && !boast && !x_not_zero && remove_all.is_none())
-        {
+        // "Only the player ~ is attacking may activate this ability and only during the
+        // declare attackers step": there is such a player only while ~ attacks one.
+        let by_defender = matches!(&a.activator, Some(PlayerFilter::Ref(r))
+            if matches!(r.as_ref(), PlayerRef::DefendingPlayer))
+            && matches!(&a.condition, Some(Condition::And(v)) if matches!(v.as_slice(),
+                [Condition::Phase(PhaseCond::DeclareAttackers), Condition::SelMatches(Sel::This, Filter::AttackingPlayer(PlayerRel::Any))]));
+        // "Any player may activate this ability but only during their draw step": "your
+        // turn" is the turn of the player activating it (CR 602.5b).
+        let their = match (&a.condition, a.any_player) {
+            (Some(Condition::And(v)), true) => match v.as_slice() {
+                [Condition::YourTurn, Condition::Custom(c)] if c == "activation:draw_step" => {
+                    Some("their draw step")
+                }
+                [Condition::YourTurn, Condition::Custom(c)]
+                    if c == "activation:before_end_step" =>
+                {
+                    Some("their turn before the end step")
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        match a.condition.as_ref().filter(|_| {
+            !solved
+                && !boast
+                && !x_not_zero
+                && remove_all.is_none()
+                && !by_defender
+                && their.is_none()
+        }) {
             // "Activate only during your turn before attackers are declared."
             Some(Condition::YourTurn) => {
                 if let ActivationTiming::CombatWindow(_) = a.timing {
@@ -638,6 +663,10 @@ impl Renderer<'_> {
         if a.any_player && s.ends_with(sorcery_only) {
             s.truncate(s.len() - sorcery_only.len());
             s.push_str(" Any player may activate this ability but only as a sorcery.");
+        } else if let (true, Some(t)) = (a.any_player, their) {
+            s.push_str(&format!(
+                " Any player may activate this ability but only during {t}."
+            ));
         } else if a.any_player {
             s.push_str(" Any player may activate this ability.");
         }
@@ -649,9 +678,19 @@ impl Renderer<'_> {
                 PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::ControllerOf(s) if matches!(s.as_ref(), Sel::AttachedTo)) => {
                     "the controller of the enchanted creature".to_string()
                 }
+                // "Only the player ~ is attacking may activate this ability" (CR 506.2).
+                PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::DefendingPlayer) => {
+                    format!("the player {} is attacking", self.me())
+                }
                 other => self.gap(format!("who may activate: {other:?}")),
             };
-            s.push_str(&format!(" Only {w} may activate this ability."));
+            if by_defender {
+                s.push_str(&format!(
+                    " Only {w} may activate this ability and only during the declare attackers step."
+                ));
+            } else {
+                s.push_str(&format!(" Only {w} may activate this ability."));
+            }
         }
         match (a.cant_be_copied, x_not_zero) {
             (true, true) => s.push_str(" This ability can't be copied and X can't be 0."),

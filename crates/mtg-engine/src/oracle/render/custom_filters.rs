@@ -164,6 +164,18 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             &n[crate::kw::spell_cost_grammar::MANA_COST_IS.len()..]
         ))),
         crate::kw::crew::CREWED_BY_IT_THIS_TURN => rel("crewed by ~ this turn"),
+        // CR 509.1: the creatures the source was declared blocking this combat.
+        crate::kw::combat_history_4::SOURCE_BLOCKED_THIS_COMBAT => rel("~it blocked this combat"),
+        crate::kw::combat_history_4::NOT_DECLARED => {
+            rel("not declared as an attacking or blocking creature this combat")
+        }
+        // "for each creature that player controls": the player each creature is
+        // attacking.
+        crate::kw::combat_history_4::CONTROLLED_BY_ITS_DEFENDER => rel("that player controls"),
+        // The cards still the same objects in exile (CR 400.7).
+        crate::oracle::patterns::referents_values_4::STILL_EXILED_CARD => {
+            rel("{alt:that are still exiled|that is still exiled}")
+        }
         n if n.starts_with("came from:") => match &n["came from:".len()..] {
             "Exile" => rel("from exile"),
             "Graveyard" => rel("from your graveyard"),
@@ -225,6 +237,17 @@ fn custom_clause(name: &str, subj: &str, negated: bool) -> Option<String> {
 impl Renderer<'_> {
     /// A custom quality whose name carries data (a JSON filter or player).
     pub(crate) fn custom_rel_with_data(&mut self, name: &str) -> Option<String> {
+        // "that shares a creature type with each creature tapped this way".
+        if let Some(j) = name.strip_prefix(crate::kw::referents_values_4::SHARES_TYPE_WITH_EACH) {
+            let sel: Sel = serde_json::from_str(j).ok()?;
+            let s = self.sel(&sel, Case::Obj);
+            let s = if s.starts_with("each ") || s.starts_with("all ") {
+                s
+            } else {
+                format!("each of {s}")
+            };
+            return Some(format!("that shares a creature type with {s}"));
+        }
         if let Some(j) = name.strip_prefix("basic_effects:blocked or was blocked by:") {
             let f: Filter = serde_json::from_str(j).ok()?;
             let n = match f {
