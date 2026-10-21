@@ -179,3 +179,70 @@ fn driftgloom_coyote_checks_the_exiled_creatures_power_as_it_last_existed() {
         assert_eq!(t.counters(coyote, "+1/+1"), counters, "{name}: {}", t.dump_log());
     }
 }
+
+#[test]
+fn whispersteel_dagger_allows_one_creature_spell_this_turn_only() {
+    cr!("601.3", "611.2a");
+    // "you may cast a creature spell from that player's graveyard this turn": one spell,
+    // and only this turn.
+    let mut t = TestGame::new(2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let dagger = t.battlefield(P0, "Whispersteel Dagger");
+    t.g.attach(dagger, Entity::Object(bear));
+    let giant = t.graveyard(P1, "Hill Giant");
+    let ogre = t.graveyard(P1, "Gray Ogre");
+    t.attack(&[(bear, Entity::Player(P1))], &[]);
+    t.advance_to(P0, Step::PostcombatMain);
+    t.lands(P0, "Swamp", 7);
+    t.cast(P0, giant).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1, "{}", t.dump_log());
+    assert!(t.cast(P0, ogre).try_go().is_err(), "a second creature spell");
+    // A fresh permission doesn't outlast the turn.
+    let mut t = TestGame::new(2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let dagger = t.battlefield(P0, "Whispersteel Dagger");
+    t.g.attach(dagger, Entity::Object(bear));
+    let giant = t.graveyard(P1, "Hill Giant");
+    t.attack(&[(bear, Entity::Player(P1))], &[]);
+    t.advance_to(P1, Step::PrecombatMain);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Swamp", 4);
+    assert!(t.cast(P0, giant).try_go().is_err(), "{}", t.dump_log());
+}
+
+#[test]
+fn the_great_work_chapter_three_lasts_until_end_of_turn_and_exiles_the_spells() {
+    cr!("714.2b", "611.2a", "614.1a");
+    // "III — Until end of turn, you may cast instant and sorcery spells from any
+    // graveyard. If a spell cast this way would be put into a graveyard, exile it
+    // instead."
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let u = t.battlefield(P0, "Urabrask // The Great Work");
+    assert!(mtg_engine::dfc::transform(&mut t.g, u));
+    let work = t.g.current(u);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.g.add_counters(Entity::Object(work), "lore", 3, None);
+    t.resolve_all();
+    let bolt = t.graveyard(P1, "Lightning Bolt");
+    let mine = t.graveyard(P0, "Lightning Bolt");
+    t.lands(P0, "Mountain", 1);
+    let life = t.life(P1);
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve_all();
+    // Bolt, plus 1 from the returned Urabrask's (front face up) cast trigger.
+    assert_eq!(t.life(P1), life - 3 - 1, "{}", t.dump_log());
+    assert!(t.named_on_battlefield("Urabrask").len() == 1);
+    assert_eq!(t.zone(t.g.current(bolt)), Zone::Exile);
+    // Next turn the permission is gone.
+    t.advance_to(P1, Step::PrecombatMain);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 1);
+    assert!(
+        t.cast(P0, mine).target(Entity::Player(P1)).try_go().is_err(),
+        "{}",
+        t.dump_log()
+    );
+}

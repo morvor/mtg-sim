@@ -153,7 +153,10 @@ indestructible; Elven Farsight draws only if the card was revealed; Ravenous Sli
 counters equal to the dying creature's power; Kindle the Carnage repeats more than once;
 two Blazing Effigies chain (the dies trigger's source counts as a permanent named Blazing
 Effigy, CR 113.7a); Jace, Mirror Mage keeps the card it draws and reveals; Driftgloom
-Coyote checks the exiled creature's power as it last existed. Also checked by reading the
+Coyote checks the exiled creature's power as it last existed; Whispersteel Dagger allows
+one creature spell, only that turn; The Great Work's chapter III permission ends at end of
+turn and exiles the spells cast with it (review). Dralnu's Pet's two kicker abilities are
+covered by `cards2_enter_with_counters.rs`. Also checked by reading the
 AST: Bringer of the Last Gift (graveyards remembered before the sacrifice), Mysterious
 Limousine ("each other card" is other than the one exiled this way), Kaldring (a permanent
 spell cast this way enters tapped too), Nahiri (free only for Equipment spells), Mystic
@@ -178,10 +181,12 @@ AST and plays as the text says (wording only) unless noted:
 - Lethal Exploit: "It gets an additional -1/-1 until end of turn for each modified creature
   you controlled as you cast ~" (rendered as one -X/-X change).
 - Lifestream's Blessing: "you gain twice X life" (the value said again).
-- Dralnu's Pet: "it enters with flying and with X +1/+1 counters on it" (two abilities).
+- Dralnu's Pet: "it enters with flying and with X +1/+1 counters on it" (two abilities;
+  both conditioned on the kicker, tested in `cards2_enter_with_counters.rs`).
 - Urabrask // The Great Work: chapter III's duration placement and "a graveyard";
-  chapter I's "they control".
-- Whispersteel Dagger: "this turn" before the mana-spending term.
+  chapter I's "they control" (the AST's duration is end of turn; tested in play).
+- Whispersteel Dagger: "this turn" before the mana-spending term (the one-spell limit and
+  the turn's end tested in play).
 - Draugr Necromancer: "spells from among cards in exile your opponents own with ice
   counters on them" (quality order).
 - Nashi, Searcher in the Dark; Blex, Vexing Pest // Search for Blex: as in roundtrip-tail-6.
