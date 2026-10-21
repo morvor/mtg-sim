@@ -146,9 +146,33 @@ pub fn rename_uids(s: &str) -> String {
     let s = field.replace_all(s, |c: &regex::Captures| {
         format!("{}: u{}", &c[1], names[&c[2]])
     });
-    key.replace_all(&s, |c: &regex::Captures| match names.get(&c[2]) {
-        Some(k) => format!("{}u{k}: ", &c[1]),
-        None => c[0].to_string(),
+    // Keys of `triggers_this_turn` may carry flags in the high bits (see
+    // `triggers::turn_keys`): the ability id is renamed, the flags kept.
+    let mut names = names;
+    key.replace_all(&s, |c: &regex::Captures| {
+        let Ok(n) = c[2].parse::<u64>() else {
+            return c[0].to_string();
+        };
+        let flags = n & (3 << 62);
+        let base = (n & !(3 << 62)).to_string();
+        let k = match names.get(&base) {
+            Some(k) => *k,
+            None if flags != 0 => {
+                let k = names.len();
+                names.insert(base, k);
+                k
+            }
+            None => return c[0].to_string(),
+        };
+        format!(
+            "{}u{k}{}: ",
+            &c[1],
+            if flags != 0 {
+                format!("+{flags:x}")
+            } else {
+                String::new()
+            }
+        )
     })
     .into_owned()
 }

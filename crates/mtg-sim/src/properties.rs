@@ -2,13 +2,13 @@
 //! (`mtg_engine::properties`, and `mtg_api::replay` for replays) over random games.
 //!
 //! Usage: mtg-sim --properties [--property NAME]... [--games N] [--seed S] [--only G]
-//!                [--players N] [--max-turns N] [--slow SECS]
+//!                [--players N] [--max-turns N] [--slow SECS] [--jobs N]
 //!
 //! NAME is `seat`, `snapshot`, `rollback`, `determinism`, `replay` or `all` (the default).
 //! Each game gets new random decks; without `--players`, games cycle through 2, 2, 3 and
 //! 4 players. A violation or a panic is reported with the command that reproduces it, and
 //! the process exits with status 1 at the end; a game still going after `--slow` seconds
-//! is reported as slow.
+//! is reported as slow. `--jobs N` checks N games at a time.
 
 use crate::decks::random_deck;
 use crate::runner::{install_panic_hook, take_panic};
@@ -54,10 +54,12 @@ fn check(property: &'static str, setup: GameSetup, slow: Duration) -> Outcome {
                     properties::determinism(&setup).map(|s| (s.decisions, s.rollbacks))
                 }
                 _ => {
+                    // Requests carry whole observations, so replayed games are kept
+                    // shorter.
                     let config = GameConfig {
                         seed: setup.seed,
-                        max_turns: setup.max_turns,
-                        max_actions: setup.max_actions * 4,
+                        max_turns: setup.max_turns.min(25),
+                        max_actions: setup.max_actions * 2,
                         ..Default::default()
                     };
                     mtg_api::replay::replay_check(config, setup.decks.clone(), setup.seed, 100_000)
@@ -84,6 +86,7 @@ struct Tally {
     violations: Vec<u64>,
     panics: Vec<u64>,
     slow: Vec<u64>,
+    time: Duration,
 }
 
 pub fn run(args: &[String]) {
@@ -93,6 +96,7 @@ pub fn run(args: &[String]) {
     let mut players: Option<usize> = None;
     let mut max_turns = 40u32;
     let mut slow = 120u64;
+    let mut jobs = 1usize;
     let mut chosen: Vec<&'static str> = Vec::new();
     let mut i = 0;
     let value = |i: usize, what: &str| -> String {
@@ -112,6 +116,7 @@ pub fn run(args: &[String]) {
             "--players" => players = Some(value(i, "--players").parse().expect("--players N")),
             "--max-turns" => max_turns = value(i, "--max-turns").parse().expect("--max-turns N"),
             "--slow" => slow = value(i, "--slow").parse().expect("--slow SECS"),
+            "--jobs" => jobs = value(i, "--jobs").parse().expect("--jobs N"),
             "--property" => {
                 let v = value(i, "--property");
                 if v == "all" {
@@ -140,22 +145,41 @@ pub fn run(args: &[String]) {
         Some(g) => g..g + 1,
         None => 0..games,
     };
-    for gi in range {
-        let s = seed.wrapping_mul(1_000_003).wrapping_add(gi);
-        let n = players.unwrap_or([2, 2, 3, 4][(gi % 4) as usize]);
-        let mut deck_rng = StdRng::seed_from_u64(s ^ 0x5eed_dec5);
-        let decks: Vec<Vec<std::sync::Arc<CardDef>>> =
-            (0..n).map(|_| random_deck(&mut deck_rng).main).collect();
-        let mut setup = GameSetup::new(decks, s);
-        setup.max_turns = max_turns;
-        for &property in &chosen {
+    // Games are checked by `jobs` workers; results are tallied as they come.
+    let games_list: Vec<u64> = range.collect();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let (tx, rx) = mpsc::channel::<(&'static str, u64, u64, usize, Outcome, Duration)>();
+    std::thread::scope(|scope| {
+        for _ in 0..jobs.max(1) {
+            let tx = tx.clone();
+            let (next, games_list, chosen) = (&next, &games_list, &chosen);
+            scope.spawn(move || loop {
+                let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(&gi) = games_list.get(k) else { break };
+                let s = seed.wrapping_mul(1_000_003).wrapping_add(gi);
+                let n = players.unwrap_or([2, 2, 3, 4][(gi % 4) as usize]);
+                let mut deck_rng = StdRng::seed_from_u64(s ^ 0x5eed_dec5);
+                let decks: Vec<Vec<std::sync::Arc<CardDef>>> =
+                    (0..n).map(|_| random_deck(&mut deck_rng).main).collect();
+                let mut setup = GameSetup::new(decks, s);
+                setup.max_turns = max_turns;
+                for &property in chosen {
+                    let t0 = Instant::now();
+                    let out = check(property, setup.clone(), Duration::from_secs(slow));
+                    let _ = tx.send((property, gi, s, n, out, t0.elapsed()));
+                }
+            });
+        }
+        drop(tx);
+        for (property, gi, s, n, out, took) in rx {
             let t = tallies.entry(property).or_default();
             t.games += 1;
+            t.time += took;
             let repro = format!(
                 "mtg-sim --properties --property {property} --seed {seed} --only {gi} \
                  --players {n} --max-turns {max_turns}"
             );
-            match check(property, setup.clone(), Duration::from_secs(slow)) {
+            match out {
                 Outcome::Held(d, rb) => {
                     t.held += 1;
                     t.decisions += d as u64;
@@ -178,13 +202,15 @@ pub fn run(args: &[String]) {
                 }
             }
         }
-    }
+    });
     println!("{:.2?}", start.elapsed());
     let mut failed = false;
     for (p, t) in &tallies {
         println!(
-            "  {p}: {} games, {} held, {} decisions{}; violations {:?}, panics {:?}, slow {:?}",
+            "  {p}: {} games ({:.0?}), {} held, {} decisions{}; violations {:?}, panics {:?}, \
+             slow {:?}",
             t.games,
+            t.time,
             t.held,
             t.decisions,
             if *p == "rollback" {
