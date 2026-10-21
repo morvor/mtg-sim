@@ -196,3 +196,135 @@ fn each_player_may_copy(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "copy spell grammar 2: each other player may copy that spell", priority: 80, parse: each_player_may_copy } }
+
+/// Whether `e` copies the spell an ability triggered on (optionally).
+fn copies_trigger_spell(e: &Effect) -> bool {
+    match e {
+        Effect::CopySpell { what, .. } | Effect::CopySpellExcept { what, .. } => {
+            matches!(what, Sel::TriggerSpell)
+        }
+        Effect::May { effect, .. } => copies_trigger_spell(effect),
+        Effect::Seq(v) => v.last().is_some_and(copies_trigger_spell),
+        _ => false,
+    }
+}
+
+/// "If you do, those spells gain wither." after "you may copy it" (Spinerock Tyrant): the
+/// spell and its copy gain the keyword (CR 702.80).
+fn those_spells_gain(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if !copies_trigger_spell(prev) {
+        return false;
+    }
+    let lower = l.to_lowercase();
+    let Some(kw) = end(&lower)
+        .strip_prefix("if you do, those spells gain ")
+        .or_else(|| end(&lower).strip_prefix("those spells gain "))
+    else {
+        return false;
+    };
+    let Some(mods) = crate::oracle::effects::keyword_mods(kw) else {
+        return false;
+    };
+    let gain = Effect::Modify {
+        what: Sel::Union(vec![Sel::TriggerSpell, Sel::Var(vars::CREATED)]),
+        mods,
+        duration: Duration::Permanent,
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(gain),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "copy spell grammar 2: those spells gain [keyword]", priority: 45, apply: those_spells_gain } }
+
+/// Whether `e` ends with (an optional) copy of a spell.
+fn ends_with_spell_copy(e: &Effect) -> bool {
+    match e {
+        Effect::CopySpell { .. } | Effect::CopySpellExcept { .. } => true,
+        Effect::May { effect, .. } => ends_with_spell_copy(effect),
+        Effect::PayOptional { then, .. } => ends_with_spell_copy(then),
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => ends_with_spell_copy(then),
+        Effect::Seq(v) => v.last().is_some_and(ends_with_spell_copy),
+        _ => false,
+    }
+}
+
+/// "If the copy is a permanent spell, it gains haste." (Mizzix, Replica Rider;
+/// Spider-Verse): the copy gains it only if it's a permanent spell, and so does the token
+/// it becomes (CR 707.10f).
+fn if_the_copy_is_a_permanent_spell(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if !ends_with_spell_copy(prev) {
+        return false;
+    }
+    let lower = l.to_lowercase();
+    let Some(kw) = end(&lower).strip_prefix("if the copy is a permanent spell, it gains ") else {
+        return false;
+    };
+    // "haste", "haste and \"At the beginning of your end step, sacrifice ~.\"".
+    let mods = match crate::oracle::effects::keyword_mods(kw) {
+        Some(m) => m,
+        None => {
+            let Some((masked, quotes)) = super::statics::mask_quotes(end(l.trim())) else {
+                return false;
+            };
+            let Some(list) = masked
+                .to_lowercase()
+                .strip_prefix("if the copy is a permanent spell, it gains ")
+                .map(str::to_string)
+            else {
+                return false;
+            };
+            let Some(abilities) = super::tokens_copies_create::ability_list(
+                &list,
+                &quotes,
+                &[crate::types::CardType::Creature],
+                _b.ctx,
+            ) else {
+                return false;
+            };
+            abilities
+                .into_iter()
+                .map(|a| match &a.kind {
+                    AbilityKind::Keyword(k) => Modification::AddKeyword(k.clone()),
+                    _ => Modification::AddAbility(a),
+                })
+                .collect()
+        }
+    };
+    let gain = Effect::Modify {
+        what: Sel::Matching(Box::new(Sel::Var(vars::CREATED)), Filter::PermanentCard),
+        mods,
+        duration: Duration::Permanent,
+    };
+    // Inside the optional part ("you may pay {1}{U/R}. If you do, copy that spell"), right
+    // after the copy.
+    fn append(e: &mut Effect, gain: Effect) -> bool {
+        match e {
+            Effect::CopySpell { .. } | Effect::CopySpellExcept { .. } => {
+                let old = std::mem::take(e);
+                *e = Effect::seq(vec![old, gain]);
+                true
+            }
+            Effect::May { effect, .. } => append(effect, gain),
+            Effect::PayOptional { then, .. } => append(then, gain),
+            Effect::If { then, .. } => append(then, gain),
+            Effect::Seq(v) => match v.last_mut() {
+                Some(last) if ends_with_spell_copy(last) => append(last, gain),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+    append(prev, gain)
+}
+
+inventory::submit! { FollowupPattern { name: "copy spell grammar 2: if the copy is a permanent spell, it gains", priority: 45, apply: if_the_copy_is_a_permanent_spell } }

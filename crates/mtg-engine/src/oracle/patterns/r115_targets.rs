@@ -104,8 +104,10 @@ fn cast_trigger_text() -> bool {
 /// "change the target of X", "change the targets of X", "change a target of X", "change
 /// any targets of X", "choose new targets for X", each optionally ending "to ~".
 fn change_targets(l: &str, b: &mut Builder) -> Option<Effect> {
-    let heads: [(&str, TargetChange); 6] = [
+    let heads: [(&str, TargetChange); 7] = [
         ("change the target of ", TargetChange::All),
+        // "You may choose a new target for it." (a spell with one target).
+        ("choose a new target for ", TargetChange::ChooseNew),
         ("change the targets of ", TargetChange::All),
         ("change the target or targets of ", TargetChange::All),
         ("change a target of ", TargetChange::One),
@@ -129,6 +131,16 @@ fn change_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         // ... after another sentence about something else ("~ gets +2/+2 until end of
         // turn. You may choose new targets for that spell.").
         ("that spell", _) if b.in_trigger && cast_trigger_text() => Sel::TriggerSpell,
+        // An ability of an instant or sorcery that works on the stack ("Any player may
+        // activate this ability but only if ~ is on the stack", Lightning Storm): the
+        // spell itself.
+        ("it" | "~", _)
+            if b.ctx.is_spell()
+                && !b.in_trigger
+                && crate::oracle::raw_text().to_lowercase().contains(" is on the stack") =>
+        {
+            Sel::This
+        }
         _ => stack_target(what, b)?,
     };
     // "You may choose new targets for target instant or sorcery spell. Then copy that
