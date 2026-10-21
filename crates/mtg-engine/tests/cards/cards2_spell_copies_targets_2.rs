@@ -345,3 +345,28 @@ fn parnesse_lets_an_opponent_copy_a_spell_you_copy() {
     assert_eq!(t.hand_size(P0), h0 + 2);
     assert_eq!(t.hand_size(P1), h1 + 1);
 }
+
+#[test]
+fn tempt_with_mayhem_copies_once_plus_once_per_opponent_who_copied() {
+    cr!("707.10", "101.4");
+    ruling!(
+        "Tempt with Mayhem",
+        "Finally, you copy that spell at least once (hopefully more, if the mayhem was tempting enough)"
+    );
+    supported("Tempt with Mayhem");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Island", 3);
+    t.lands(P0, "Mountain", 3);
+    let div = t.hand(P0, "Divination");
+    let spell = t.cast(P0, div).go();
+    let tm = t.hand(P0, "Tempt with Mayhem");
+    t.cast(P0, tm).target(spell).go();
+    t.answer_yes(P1, true);
+    t.answer_yes(P2, false);
+    let (h0, h1, h2) = (t.hand_size(P0), t.hand_size(P1), t.hand_size(P2));
+    t.resolve_all();
+    // P0: two copies plus the original (six cards); P1: one copy; P2 declined.
+    assert_eq!(t.hand_size(P0), h0 + 6);
+    assert_eq!(t.hand_size(P1), h1 + 2);
+    assert_eq!(t.hand_size(P2), h2);
+}

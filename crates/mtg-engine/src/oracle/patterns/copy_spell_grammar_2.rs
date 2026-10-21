@@ -231,21 +231,52 @@ fn each_player_may_copy(l: &str, b: &mut Builder) -> Option<Effect> {
         ("that spell" | "it", s @ (Sel::TriggerSpell | Sel::Target(_))) => s.clone(),
         _ => return None,
     };
+    let copy = Effect::CopySpell {
+        what: spell,
+        count: Value::c(1),
+        new_targets,
+    };
+    // Each opponent: those who accept are remembered for "for each opponent who copied
+    // the spell this way" (tempting offer).
+    if matches!(players, PlayerRef::Each(PlayerFilter::Opponent)) {
+        return Some(super::each_opponent_may::each_opponent_may_effect(copy, b));
+    }
     Some(Effect::ForEachPlayer {
         who: players,
         effect: Box::new(Effect::AsPlayer {
             who: PlayerRef::Iterated,
             effect: Box::new(Effect::May {
                 who: PlayerRef::You,
-                effect: Box::new(Effect::CopySpell {
-                    what: spell,
-                    count: Value::c(1),
-                    new_targets,
-                }),
+                effect: Box::new(copy),
             }),
         }),
     })
 }
+
+/// "You copy that spell once plus an additional time for each opponent who copied the
+/// spell this way." (Tempt with Mayhem).
+fn copy_once_plus_for_each_opponent(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l)
+        .strip_prefix("you copy that spell once plus an additional time for each opponent who ")?;
+    if !matches!(
+        r,
+        "copied the spell this way" | "copied that spell this way" | "does"
+    ) {
+        return None;
+    }
+    let accepted = super::each_opponent_may::accepted_opponents(b)?;
+    let spell = match &b.it {
+        s @ (Sel::TriggerSpell | Sel::Target(_)) => s.clone(),
+        _ => return None,
+    };
+    Some(Effect::CopySpell {
+        what: spell,
+        count: Value::Sum(vec![Value::c(1), Value::CountSel(Box::new(accepted))]),
+        new_targets: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "copy spell grammar 2: copy that spell once plus an additional time for each opponent who copied", priority: 80, parse: copy_once_plus_for_each_opponent } }
 
 inventory::submit! { EffectPattern { name: "copy spell grammar 2: each other player may copy that spell", priority: 80, parse: each_player_may_copy } }
 
