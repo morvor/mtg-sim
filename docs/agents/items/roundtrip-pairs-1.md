@@ -80,8 +80,8 @@ docs/roundtrip-passing.txt; `roundtrip --check` must pass.
 ## Result
 
 26,756 of 30,413 fully supported cards passed at the start (48eb37a7); 26,901 of 30,413
-pass on the branch before the last merge, and 26,966 of 30,593 after merging the later
-landings (origin's passing list at that merge has 26,756 cards). 115 of the 151 cards in
+pass on the branch before the first merge, and 26,980 of 30,643 after merging the later
+landings (origin's passing list at the last merge has 26,756 cards). 115 of the 151 cards in
 the taken clusters pass.
 
 Renderer (small hooks in the existing files; no new module): the custom qualities of the
