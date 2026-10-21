@@ -115,3 +115,22 @@ fn willie_lumpkin_creatures_entering_later_cant_attack_either() {
     t.advance_to(P1, Step::DeclareAttackers);
     assert!(can_attack(&mut t, hasty));
 }
+
+#[test]
+fn stromgald_spy_reveals_the_defending_players_hand() {
+    cr!("701.20a", "611.2b", "510.1");
+    supported("Stromgald Spy");
+    let mut t = TestGame::new(2);
+    let spy = t.battlefield(P0, "Stromgald Spy");
+    let card = t.hand(P1, "Grizzly Bears");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.attack(&[(spy, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    // It assigned no combat damage.
+    assert_eq!(t.life(P1), 20);
+    assert!(mtg_engine::reveal::is_revealed(&t.g, card));
+    // For as long as the Spy remains on the battlefield.
+    crate::r_s02_common::destroy(&mut t, spy);
+    assert!(!mtg_engine::reveal::is_revealed(&t.g, card));
+}

@@ -118,6 +118,48 @@ fn cant_attack_you_during_their_next_turn(l: &str, b: &mut Builder) -> Option<Ef
 
 inventory::submit! { EffectPattern { name: "durations 4: that player can't attack you during their next turn", priority: 100, parse: cant_attack_you_during_their_next_turn } }
 
+/// "[player] plays with their hand revealed [for a duration]" (Stromgald Spy, Sen
+/// Triplets): a player effect of the resolving spell or ability (CR 701.20; the static
+/// form is `a701_reveal.rs`).
+fn plays_with_hand_revealed(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    // "you may have defending player play with their hand revealed ..." ("you may" is
+    // read by the core grammar).
+    if let Some(r) = l.strip_prefix("have ") {
+        return plays_with_hand_revealed(r, b);
+    }
+    let (d, l) = crate::oracle::effects::duration_suffix(l);
+    let l = l.trim();
+    let subj = l
+        .strip_suffix(" plays with their hand revealed")
+        .or_else(|| l.strip_suffix(" play with their hand revealed"))?;
+    let who = match subj {
+        "that player" | "they" => b.it_player.clone(),
+        "defending player" => PlayerRef::DefendingPlayer,
+        _ => {
+            let phrase = format!("{subj} ");
+            let (r, spec, after) = crate::oracle::phrases::parse_player(&phrase)?;
+            if !after.trim().is_empty() {
+                return None;
+            }
+            match spec {
+                Some(spec) => PlayerRef::Target(b.add_target(spec, subj)),
+                None => r,
+            }
+        }
+    };
+    if matches!(d, Duration::Permanent) {
+        return None;
+    }
+    Some(Effect::AddPlayerEffect {
+        who,
+        effect: PlayerModification::Custom(crate::reveal::PLAYS_WITH_HAND_REVEALED.into()),
+        duration: d,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "durations 4: [player] plays with their hand revealed [duration]", priority: 100, parse: plays_with_hand_revealed } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

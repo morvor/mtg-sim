@@ -985,6 +985,14 @@ impl Renderer<'_> {
             "unspent mana becomes C" => {
                 format!("if {subj} would lose unspent mana, that mana becomes colorless instead")
             }
+            crate::reveal::PLAYS_WITH_HAND_REVEALED => {
+                let verb = if you || subj.ends_with('s') {
+                    "play"
+                } else {
+                    "plays"
+                };
+                format!("{subj} {verb} with {poss} hand revealed")
+            }
             "may look at the top card of their library any time" => {
                 format!("{subj} may look at the top card of {poss} library any time")
             }
