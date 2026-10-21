@@ -422,3 +422,79 @@ fn other_players_dont_see_the_order_of_cards_put_on_the_bottom() {
         );
     }
 }
+
+/// P1's agent: when asked to choose objects, records how P0 and P1 each see the choices
+/// made for the permanents (`ObjectView::choices`), then chooses the first candidate.
+struct ChoiceSpy(std::sync::Arc<std::sync::Mutex<Vec<(PlayerId, Vec<String>)>>>);
+
+impl mtg_engine::decision::Agent for ChoiceSpy {
+    fn decide(
+        &mut self,
+        game: &mtg_engine::game::Game,
+        _player: PlayerId,
+        decision: &Decision,
+    ) -> mtg_engine::decision::Answer {
+        if let Decision::ChooseEntities { candidates, .. } = decision {
+            let mut seen = self.0.lock().unwrap();
+            for v in [P0, P1] {
+                let choices = observe(game, Some(v))
+                    .battlefield
+                    .into_iter()
+                    .flat_map(|o| o.choices)
+                    .collect();
+                seen.push((v, choices));
+            }
+            return mtg_engine::decision::Answer::Entities(vec![candidates[0]]);
+        }
+        mtg_engine::decision::Answer::Default
+    }
+}
+
+#[test]
+fn objects_chosen_secretly_are_hidden_from_the_other_player_until_revealed() {
+    cr!("101.4", "608.2c");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    t.g.set_agent(P1, Box::new(ChoiceSpy(seen.clone())));
+    // "you and target opponent each secretly choose a creature that player controls":
+    // P0 chooses the Giant, then P1 (the spy) chooses.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    let malik = t.enter(P0, "Malik, Grim Manipulator");
+    t.resolve_all();
+    let seen = seen.lock().unwrap().clone();
+    // While P1 chooses, P0 sees its own choice; P1 sees only that P0 chose.
+    assert_eq!(
+        seen,
+        vec![
+            (P0, vec!["P0 chose Hill Giant".to_string()]),
+            (P1, vec!["P0 chose secretly".to_string()]),
+        ]
+    );
+    // Then the choices are revealed: everyone sees both, and both creatures were
+    // sacrificed.
+    let picked = if t.on_battlefield(bears) {
+        "Hill Giant"
+    } else {
+        "Grizzly Bears"
+    };
+    for v in [P0, P1] {
+        let choices = observe(&t.g, Some(v))
+            .battlefield
+            .into_iter()
+            .find(|o| o.id == malik.0)
+            .unwrap()
+            .choices;
+        assert_eq!(
+            choices,
+            vec![
+                "P0 chose Hill Giant".to_string(),
+                format!("P1 chose {picked}"),
+            ]
+        );
+    }
+    assert!(!t.on_battlefield(giant));
+}

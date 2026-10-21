@@ -2400,6 +2400,9 @@ impl Game {
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }
+                // "you and target opponent each secretly choose a creature": not shown to
+                // the other players until revealed.
+                crate::choices::record_secret_objects(self, p, &picked, ctx);
                 picked
             }
             Sel::AtRandom {

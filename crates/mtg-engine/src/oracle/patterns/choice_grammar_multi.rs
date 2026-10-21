@@ -230,7 +230,7 @@ fn choose_two_kinds(l: &str, b: &mut Builder) -> Option<Effect> {
                 who: PlayerRef::You,
                 kind: ChoiceKind::Number {
                     min: n + 1,
-                    max: 1000,
+                    max: crate::choices::MAX_CHOSEN_NUMBER,
                 },
             });
         }
