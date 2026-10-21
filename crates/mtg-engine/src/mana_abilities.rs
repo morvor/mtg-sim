@@ -1181,7 +1181,11 @@ pub fn mana_sources_with(
             if act.timing == ActivationTiming::AsInstant {
                 continue;
             }
-            if o.controller != p && !act.any_player && !act.only_opponents {
+            if let Some(f) = &act.activator {
+                if !g.player_filter_matches(f, p, &Ctx::new(Some(o.id), o.controller)) {
+                    continue;
+                }
+            } else if o.controller != p && !act.any_player && !act.only_opponents {
                 continue;
             }
             if act.only_opponents && !g.are_opponents(o.controller, p) {

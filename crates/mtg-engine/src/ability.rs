@@ -199,6 +199,11 @@ pub struct ActivatedAbility {
     /// source's controller may activate it, and its controller can't.
     #[serde(default)]
     pub only_opponents: bool,
+    /// "Only the controller of the enchanted creature may activate this ability." (CR
+    /// 602.2): the players who may activate it (relative to the source and its
+    /// controller), instead of its controller.
+    #[serde(default)]
+    pub activator: Option<PlayerFilter>,
     /// "Activate only once": how many times the ability may be activated over the
     /// object's existence (CR 400.7: a new object can activate it again).
     #[serde(default)]
@@ -240,6 +245,7 @@ impl ActivatedAbility {
             zone: FunctionZone::Battlefield,
             any_player: false,
             only_opponents: false,
+            activator: None,
             max_total: None,
             own_cost_changes: Vec::new(),
             cant_be_copied: false,

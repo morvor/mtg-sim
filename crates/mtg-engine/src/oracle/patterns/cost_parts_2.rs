@@ -128,6 +128,18 @@ fn pay_for_each(p: &str) -> Option<CostPart> {
 
 inventory::submit! { CostPattern { name: "cost parts: pay {N} for each [thing]", priority: 50, parse: pay_for_each } }
 
+/// "Pay enchanted creature's mana cost" (Merseine): the mana cost of the permanent the
+/// source is attached to, X being 0 (CR 107.3h, see `CostPart::PayManaCostOf`).
+fn pay_attached_mana_cost(p: &str) -> Option<CostPart> {
+    matches!(
+        end(p),
+        "pay enchanted creature's mana cost" | "pay enchanted permanent's mana cost"
+    )
+    .then(|| CostPart::PayManaCostOf(Box::new(Sel::AttachedTo)))
+}
+
+inventory::submit! { CostPattern { name: "cost parts: pay enchanted creature's mana cost", priority: 50, parse: pay_attached_mana_cost } }
+
 /// "Exile a face-down permanent you control face up".
 fn exile_face_down(p: &str) -> Option<CostPart> {
     let r = strip(p, "exile")?.strip_suffix(" face up")?;

@@ -625,6 +625,15 @@ impl Renderer<'_> {
         if a.only_opponents {
             s.push_str(" Only your opponents may activate this ability.");
         }
+        if let Some(f) = &a.activator {
+            let w = match f {
+                PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::ControllerOf(s) if matches!(s.as_ref(), Sel::AttachedTo)) => {
+                    "the controller of the enchanted creature".to_string()
+                }
+                other => self.gap(format!("who may activate: {other:?}")),
+            };
+            s.push_str(&format!(" Only {w} may activate this ability."));
+        }
         match (a.cant_be_copied, x_not_zero) {
             (true, true) => s.push_str(" This ability can't be copied and X can't be 0."),
             (true, false) => s.push_str(" This ability can't be copied."),

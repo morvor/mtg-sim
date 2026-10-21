@@ -2063,7 +2063,12 @@ impl Game {
             Zone::Battlefield | Zone::Stack => o.controller,
             _ => o.owner,
         };
-        if who != p && !act.any_player && !act.only_opponents {
+        // "Only the controller of the enchanted creature may activate this ability."
+        if let Some(f) = &act.activator {
+            if !self.player_filter_matches(f, p, &Ctx::new(Some(src), who)) {
+                return false;
+            }
+        } else if who != p && !act.any_player && !act.only_opponents {
             return false;
         }
         // "Only your opponents may activate this ability" (CR 602.2).
