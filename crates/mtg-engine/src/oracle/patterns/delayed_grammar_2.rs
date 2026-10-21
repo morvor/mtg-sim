@@ -228,3 +228,108 @@ fn trailing_when(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar 2: [instruction] when that token dies", priority: 990, parse: trailing_when } }
+
+// ---------------------------------------------------------------------------------------
+// "At the beginning of the next end step, if you haven't cast it, return it ..."
+// ---------------------------------------------------------------------------------------
+
+/// The object the delayed instruction acts on (a captured variable).
+fn instruction_object(e: &Effect) -> Option<Sel> {
+    match e {
+        Effect::Move { what, .. } => match what {
+            Sel::Var(_) => Some(what.clone()),
+            _ => None,
+        },
+        Effect::Seq(v) => v.first().and_then(instruction_object),
+        _ => None,
+    }
+}
+
+/// Adds `cond` as an intervening "if" clause (CR 603.4) to the delayed ability `e` ends
+/// with: checked as its event occurs and again as it resolves.
+fn with_intervening_if(e: &mut Effect, cond_of: &dyn Fn(&Sel) -> Condition) -> bool {
+    match e {
+        Effect::Seq(v) => v.last_mut().is_some_and(|x| with_intervening_if(x, cond_of)),
+        Effect::DelayedTrigger {
+            trigger,
+            body,
+            once: true,
+        } => {
+            let Some(obj @ Sel::Var(_)) = instruction_object(&body.effect) else {
+                return false;
+            };
+            let cond = cond_of(&obj);
+            let t = std::mem::replace(trigger, TriggerCond::PlayerLoses);
+            *trigger = TriggerCond::Where {
+                trigger: Box::new(t),
+                cond: cond.clone(),
+            };
+            let eff = std::mem::take(&mut body.effect);
+            body.effect = Effect::If {
+                cond,
+                then: Box::new(eff),
+                otherwise: Box::new(Effect::Noop),
+            };
+            true
+        }
+        _ => false,
+    }
+}
+
+/// "At the beginning of the next end step, if you haven't cast the card, return it to its
+/// owner's hand.", "..., if any of those cards remain exiled, return them to ...", "...,
+/// if you haven't played it, put it into its owner's graveyard.": the cards were exiled
+/// with a permission to play them; casting or playing one moves it out of exile, after
+/// which it's a new object (CR 400.7). So "if you haven't cast it" is "if it remains
+/// exiled" (see the interpretation `delayed-if-not-played-means-still-exiled`).
+fn delayed_if_still_exiled(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("at the beginning of ")?;
+    let (delay, rest) = r.split_once(", if ")?;
+    let (cond, instruction) = [
+        "any of those cards remain exiled, ",
+        "you haven't cast the card, ",
+        "you haven't cast it, ",
+        "you haven't played it, ",
+        "you haven't played the card, ",
+    ]
+    .into_iter()
+    .find_map(|c| rest.strip_prefix(c).map(|i| (c, i)))?;
+    // "it" for a single card, "them" for several.
+    let plural = cond.starts_with("any of those cards");
+    if plural != (instruction.contains(" them ") || instruction.ends_with(" them")) {
+        return None;
+    }
+    let mut e =
+        super::delayed_grammar::delayed_instruction(&format!("at the beginning of {delay}, {instruction}"), b)?;
+    let still_exiled = |obj: &Sel| match obj {
+        Sel::Var(v) => Condition::Custom(
+            format!("{}{v}", crate::kw::delayed_conditions::STILL_EXILED).into(),
+        ),
+        _ => Condition::Never,
+    };
+    with_intervening_if(&mut e, &still_exiled).then_some(e)
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 2: at the beginning of the next end step, if you haven't cast it, ...", priority: 985, parse: delayed_if_still_exiled } }
+
+/// "At the beginning of your next upkeep, put any of those cards you didn't play into your
+/// graveyard." (Three Wishes): a card played from exile left it and is a new object
+/// (CR 400.7), which the delayed ability doesn't affect (CR 603.7c): those still exiled.
+fn delayed_cards_you_didnt_play(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.starts_with("at the beginning of ") {
+        return None;
+    }
+    let rewritten = l.replacen(
+        "put any of those cards you didn't play into ",
+        "put those cards into ",
+        1,
+    );
+    if rewritten == l {
+        return None;
+    }
+    super::delayed_grammar::delayed_instruction(&rewritten, b)
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 2: put any of those cards you didn't play into your graveyard", priority: 985, parse: delayed_cards_you_didnt_play } }

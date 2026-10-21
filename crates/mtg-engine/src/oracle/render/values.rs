@@ -697,6 +697,10 @@ impl Renderer<'_> {
             return s;
         }
         match c {
+            // "if you haven't cast the card" (`kw/delayed_conditions.rs`).
+            Condition::Custom(n) if n.starts_with(crate::kw::delayed_conditions::STILL_EXILED) => {
+                "{alt:you haven't cast it|it remains exiled|you haven't played it|any of those cards remain exiled}".into()
+            }
             Condition::Always => self.gap("Condition::Always"),
             Condition::Never => self.gap("Condition::Never"),
             // CR 702.62b: a card is suspended if it's in exile, has suspend, and has a
