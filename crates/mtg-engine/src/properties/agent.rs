@@ -129,7 +129,8 @@ pub fn full_text(g: &Game) -> String {
 /// goes (a delayed trigger as it triggers, a Clue's ability as it's investigated), so two
 /// runs of the same game in one process number them differently; they're compared up to
 /// renaming, like objects. Renamed: `uid: N` and `ability: N` fields, and map keys that
-/// are ability ids (`activations_this_turn: {N: 1}`).
+/// are ability ids (`activations_this_turn: {N: 1}`). Also renamed: `key: N` fields, which
+/// identify a replacement effect by a mix of its object and ability ids.
 pub fn rename_uids(s: &str) -> String {
     use regex::Regex;
     use std::collections::HashMap;
@@ -139,7 +140,7 @@ pub fn rename_uids(s: &str) -> String {
     // `uid: N`, `ability: N`, `ability_uid: N`, and `(.., ObjectId(n), N)` (abilities of
     // objects: `activated`, `state_triggers_active`, `power_up_activations`).
     let field = FIELD.get_or_init(|| {
-        Regex::new(r"\b(uid|ability|ability_uid): (\d+)|(ObjectId\(\d+\)), (\d+)\)").unwrap()
+        Regex::new(r"\b(uid|ability|ability_uid|key): (\d+)|(ObjectId\(\d+\)), (\d+)\)").unwrap()
     });
     let key = KEY.get_or_init(|| Regex::new(r"(\{|, )(\d+): ").unwrap());
     let mut names: HashMap<String, usize> = HashMap::new();
