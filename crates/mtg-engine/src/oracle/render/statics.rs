@@ -905,9 +905,10 @@ impl Renderer<'_> {
         self.default_head = Some("spell");
         let n = self.noun(f, Num::Many);
         (self.alt_and, self.plural_alts, self.default_head) = saved;
-        // "Dragon spells and artifact spells": each kind of spell said in full.
+        // "Dragon spells and artifact spells": each kind of spell said in full, where the
+        // kinds said together don't all say "spells" ("Dragon spells and artifacts").
         if let Filter::Or(v) = f {
-            if v.len() > 1 && v.iter().all(Self::is_type_like) {
+            if v.len() > 1 && v.iter().all(Self::is_type_like) && n.contains("spell") {
                 let parts: Vec<String> = v.iter().map(|x| self.spell_noun_plural(x)).collect();
                 let each = join_list(&parts, "and");
                 if each != n {
@@ -2775,22 +2776,7 @@ impl Renderer<'_> {
                     A::EnterUntapped => format!("{subj} enters untapped"),
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
-                        let has_where = w.is_some();
-                        let s = format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default());
-                        // "~ enters with a +1/+1 counter on it for each land you control".
-                        let each = if has_where {
-                            self.counted_for_each(n, &counter_name(k))
-                        } else {
-                            None
-                        };
-                        match each {
-                            Some((c1, each)) => {
-                                // "on him" (the object itself).
-                                let on = if subj.starts_with('~') { "~it" } else { it };
-                                format!("{{alt:{s}|{subj} enters with {c1} on {on} {each}}}")
-                            }
-                            None => s,
-                        }
+                        format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default())
                     }
                     // "~ escapes with a +1/+1 counter on it" (CR 702.138c).
                     A::AsEnters(e)
