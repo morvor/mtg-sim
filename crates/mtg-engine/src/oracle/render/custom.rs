@@ -615,6 +615,15 @@ impl Renderer<'_> {
     /// A custom trigger event ("~ mutates", "you unlock this door").
     pub(crate) fn custom_trigger(&mut self, name: &str) -> String {
         match name {
+            crate::kw::trigger_events::FINAL_CHAPTER_TRIGGERS => {
+                "the final chapter ability of a Saga you control triggers".into()
+            }
+            crate::kw::teamwork::SELF_TAPPED_FOR_TEAMWORK => {
+                format!("{} becomes tapped to pay a teamwork cost", self.me())
+            }
+            crate::kw::trigger_events::ENTERS_ATTACHED_TO_CREATURE => {
+                format!("{} enters attached to a creature", self.me())
+            }
             "visit" => "visit —".into(),
             crate::kw::damage_prevented_trigger::DAMAGE_TO_YOU_PREVENTED => {
                 "whenever damage that would be dealt to you is prevented".into()
@@ -751,15 +760,32 @@ impl Renderer<'_> {
                     },
                 }
             }
-            n if n.starts_with("entering doesn't cause abilities to trigger:") => {
-                let types: Vec<String> = n["entering doesn't cause abilities to trigger:".len()..]
+            n if n.starts_with(crate::kw::torpor::DOESNT_TRIGGER) => {
+                let mut it = n[crate::kw::torpor::DOESNT_TRIGGER.len()..].split(';');
+                let events = it.next().unwrap_or("");
+                let types: Vec<String> = it
+                    .next()
+                    .unwrap_or("")
                     .split(',')
+                    .filter(|t| !t.is_empty())
                     .map(|t| plural(t))
                     .collect();
-                format!(
-                    "{} entering don't cause abilities to trigger",
+                let subject = if types.is_empty() {
+                    "permanents".to_string()
+                } else {
                     join_list(&types, "and")
-                )
+                };
+                let verb = if events == "enter,die" {
+                    "entering or dying"
+                } else {
+                    "entering"
+                };
+                let whose = if it.next() == Some("opponents") {
+                    "abilities of permanents your opponents control"
+                } else {
+                    "abilities"
+                };
+                format!("{subject} {verb} don't cause {whose} to trigger")
             }
             n if n.starts_with("blockable as though no landwalk:") => {
                 let k = &n["blockable as though no landwalk:".len()..];
@@ -890,6 +916,9 @@ impl Renderer<'_> {
             crate::kw::game_rules::ENCHANTED_ONLY_MANA_OR_LOYALTY => {
                 "enchanted player can't activate abilities that aren't mana abilities or loyalty abilities".into()
             }
+            crate::kw::durations_4::POWER_UP_CANT_BE_ACTIVATED => {
+                "power-up abilities can't be activated".into()
+            }
             crate::block_choice::ATTACKING_PLAYER_CHOOSES_BLOCKS => {
                 "the attacking player chooses how each creature blocks each combat".into()
             }
@@ -980,6 +1009,14 @@ impl Renderer<'_> {
             }
             "unspent mana becomes C" => {
                 format!("if {subj} would lose unspent mana, that mana becomes colorless instead")
+            }
+            crate::reveal::PLAYS_WITH_HAND_REVEALED => {
+                let verb = if you || subj.ends_with('s') {
+                    "play"
+                } else {
+                    "plays"
+                };
+                format!("{subj} {verb} with {poss} hand revealed")
             }
             "may look at the top card of their library any time" => {
                 format!("{subj} may look at the top card of {poss} library any time")

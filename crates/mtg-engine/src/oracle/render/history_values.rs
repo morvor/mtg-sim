@@ -121,7 +121,7 @@ impl Renderer<'_> {
                 format!("the number of {n} sacrificed this turn")
             }
             (TriggerCond::TokenCreated(f), Tally::Events) => {
-                let (f, _) = without(f, &Filter::ControlledBy(PlayerRel::You));
+                let (f, _) = without(f, &Filter::OwnedBy(PlayerRel::You));
                 let n = self.many(&f, "tokens");
                 format!("the number of {n} you created this turn")
             }

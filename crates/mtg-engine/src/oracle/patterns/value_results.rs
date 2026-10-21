@@ -426,7 +426,9 @@ fn object_history(r: &str) -> Option<(Value, String)> {
         (" you attacked with", TriggerCond::Attacks, you()),
         (" you've sacrificed", TriggerCond::YouSacrifice, None),
         (" sacrificed", TriggerCond::Sacrificed, None),
-        (" you created", TriggerCond::TokenCreated, you()),
+        // The player who creates a token is its owner (CR 111.2): "tokens you created"
+        // counts them even if another player controls them now.
+        (" you created", TriggerCond::TokenCreated, yours()),
     ];
     for (m, mk, extra) in markers {
         let Some(i) = r.find(m) else { continue };
