@@ -121,6 +121,13 @@ pub struct GameConfig {
     /// drawn in the opening hand.
     #[serde(default)]
     pub top_of_library: Vec<Vec<SmolStr>>,
+    /// For property tests (see `properties.rs`): each player's randomness (library
+    /// shuffles, random discards and reveals from their hand) comes from a stream of its
+    /// own, seeded by the key at the player's seat, instead of the game's single stream
+    /// drawn in seat order. Two games seating the same decks differently then shuffle each
+    /// deck alike. `None` (the default) uses the game's stream for everything.
+    #[serde(default)]
+    pub player_rng_keys: Option<Vec<u64>>,
 }
 
 impl Default for GameConfig {
@@ -151,6 +158,7 @@ impl Default for GameConfig {
             planechase: false,
             archenemy: false,
             top_of_library: vec![],
+            player_rng_keys: None,
         }
     }
 }
@@ -622,6 +630,9 @@ pub struct Game {
     pub last_turn_history: TurnHistory,
     pub result: Option<GameResult>,
     pub rng: ChaCha8Rng,
+    /// Per-player streams when [`GameConfig::player_rng_keys`] is set (see
+    /// [`Game::rng_for`]); empty otherwise.
+    pub player_rngs: Vec<ChaCha8Rng>,
     pub agents: Agents,
     /// Events emitted since the last trigger check.
     pub events: Vec<Event>,
@@ -794,6 +805,12 @@ impl Game {
         }
         let mut g = Game {
             rng: ChaCha8Rng::seed_from_u64(config.seed),
+            player_rngs: config
+                .player_rng_keys
+                .iter()
+                .flatten()
+                .map(|k| ChaCha8Rng::seed_from_u64(*k))
+                .collect(),
             players: (0..n)
                 .map(|i| {
                     Player::new(
@@ -1396,10 +1413,20 @@ impl Game {
     // Randomness
     // ------------------------------------------------------------------
 
+    /// The randomness for something player `p` does (shuffling their library, a random
+    /// card of their hand): their own stream when the game has per-player streams
+    /// ([`GameConfig::player_rng_keys`]), otherwise the game's.
+    pub fn rng_for(&mut self, p: PlayerId) -> &mut ChaCha8Rng {
+        match self.player_rngs.get_mut(p.idx()) {
+            Some(r) => r,
+            None => &mut self.rng,
+        }
+    }
+
     pub fn shuffle_library(&mut self, p: PlayerId) {
         use rand::seq::SliceRandom;
         let mut lib = std::mem::take(&mut self.players[p.idx()].library);
-        lib.shuffle(&mut self.rng);
+        lib.shuffle(self.rng_for(p));
         self.players[p.idx()].library = lib;
         // CR 401.6: a revealed top card stops being revealed.
         crate::zones::library_shuffled(self, p);

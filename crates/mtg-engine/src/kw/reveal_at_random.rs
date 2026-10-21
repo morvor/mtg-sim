@@ -52,7 +52,7 @@ impl KeywordRules for RevealAtRandom {
                 continue;
             }
             use rand::Rng;
-            let card = hand[g.rng.gen_range(0..hand.len())];
+            let card = hand[g.rng_for(p).gen_range(0..hand.len())];
             crate::reveal::reveal_in(g, p, &[card], Some(ctx));
             revealed.push(Entity::Object(card));
         }

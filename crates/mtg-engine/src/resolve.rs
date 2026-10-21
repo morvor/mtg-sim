@@ -1444,7 +1444,7 @@ impl Game {
                     let pick = if *random {
                         use rand::seq::SliceRandom;
                         let mut h = hand.clone();
-                        h.shuffle(&mut g.rng);
+                        h.shuffle(g.rng_for(p));
                         h.into_iter().take(k as usize).collect()
                     } else {
                         g.ask_objects(p, rctx.source, "Choose cards to discard", hand, k, k)

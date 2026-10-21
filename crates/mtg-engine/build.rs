@@ -56,7 +56,14 @@ fn main() {
         &out.join("oracle_pattern_mods.rs"),
         "pub ",
     );
-    for t in ["cr", "keywords", "rulings", "cards", "actions"] {
+    for t in [
+        "cr",
+        "keywords",
+        "rulings",
+        "cards",
+        "actions",
+        "properties",
+    ] {
         gen(
             &root.join("tests").join(t),
             &["main"],

@@ -116,6 +116,7 @@ pub mod planechase;
 pub mod player_control;
 pub mod prevention;
 pub mod prohibitions;
+pub mod properties;
 pub mod radiation;
 pub mod relational;
 pub mod repeat_process;
