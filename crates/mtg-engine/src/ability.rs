@@ -1224,6 +1224,9 @@ pub enum PlayerFilter {
     /// player with the highest number", "each player who didn't choose the lowest
     /// number"; see `choices.rs`).
     ChoseNumber(Cmp, Box<Value>),
+    /// One of the players chosen for the source by "choose two players" ("one of the
+    /// chosen players").
+    ChosenPlayers,
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,
@@ -4929,6 +4932,8 @@ pub enum ChoiceKind {
     /// vigilance, and lifelink": that many different ones of the listed words, in order
     /// (kept as the chosen list, see `object::Choices::list`).
     Distinct(u8, Vec<String>),
+    /// "choose two players": that many different players (`object::Choices::players`).
+    Players(u8),
 }
 
 /// Keyword actions (CR 701) that aren't expressible as simple effect sequences.

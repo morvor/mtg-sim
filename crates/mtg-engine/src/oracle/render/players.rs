@@ -1360,6 +1360,7 @@ impl Renderer<'_> {
             }
             PlayerFilter::MaxSpeed => "with max speed".into(),
             PlayerFilter::Chose(w) => format!("who chose {w}"),
+            PlayerFilter::ChosenPlayers => "who is one of the chosen players".into(),
             PlayerFilter::ChoseNumber(c, v) => {
                 let v = self.value(v);
                 format!("who chose a number {}", nouns::cmp_phrase(*c, &v))

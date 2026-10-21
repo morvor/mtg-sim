@@ -156,6 +156,31 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             g.objects[src.0 as usize].choices.text =
                 words.get(i).or(words.first()).map(SmolStr::new);
         }
+        ChoiceKind::Players(n) => {
+            let cands: Vec<Entity> = g
+                .players_in_game()
+                .into_iter()
+                .filter(|q| crate::multiplayer::range::player_in_range(g, p, *q))
+                .map(Entity::Player)
+                .collect();
+            let n = (*n as usize).min(cands.len()) as u32;
+            let mut picked: Vec<PlayerId> = g
+                .ask_entities(p, Some(src), "Choose players", cands.clone(), n, n)
+                .into_iter()
+                .filter_map(|e| e.player())
+                .collect();
+            picked.sort_by_key(|q| q.0);
+            picked.dedup();
+            // An invalid answer: the first players.
+            if picked.len() != n as usize {
+                picked = cands
+                    .iter()
+                    .take(n as usize)
+                    .filter_map(|e| e.player())
+                    .collect();
+            }
+            g.objects[src.0 as usize].choices.players = picked;
+        }
         ChoiceKind::Distinct(n, words) => {
             let mut left = words.clone();
             let mut chosen: Vec<SmolStr> = Vec::new();
@@ -244,6 +269,7 @@ fn copy_choice(kind: &ChoiceKind, made: &crate::object::Choices, to: &mut crate:
         ChoiceKind::Opponent | ChoiceKind::Player => to.player = made.player,
         ChoiceKind::OddOrEven | ChoiceKind::Word(_) => to.text = made.text.clone(),
         ChoiceKind::Distinct(..) => to.text = made.text.clone(),
+        ChoiceKind::Players(_) => to.players = made.players.clone(),
     }
 }
 
@@ -558,6 +584,9 @@ pub fn describe(c: &crate::object::Choices) -> Vec<String> {
         out.push(n.to_string());
     }
     if let Some(p) = c.player {
+        out.push(format!("{p}"));
+    }
+    for p in &c.players {
         out.push(format!("{p}"));
     }
     out

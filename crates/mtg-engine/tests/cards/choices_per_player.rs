@@ -149,3 +149,84 @@ fn prisoners_dilemma_deals_damage_by_what_the_opponents_secretly_chose() {
     assert_eq!(dilemma(1, 1), (12, 12), "each chose snitch: 8 each");
     assert_eq!(dilemma(0, 1), (8, 20), "otherwise: 12 to who chose silence");
 }
+
+/// Chooses `a` and `b` for the next "choose two players".
+fn choose_two(t: &mut TestGame, p: PlayerId, a: PlayerId, b: PlayerId) {
+    t.answer_choose(p, &[Entity::Player(a), Entity::Player(b)]);
+}
+
+#[test]
+fn sower_of_discord_damage_to_one_chosen_player_makes_the_other_lose_life() {
+    cr!("607.2d", "119.3");
+    ruling!("Sower of Discord", "You can be one of those players");
+    ruling!(
+        "Sower of Discord",
+        "causes the second player to lose life. This isn"
+    );
+    compiles("Sower of Discord");
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    choose_two(&mut t, P0, P1, P2);
+    t.enter(P0, "Sower of Discord");
+    t.settle();
+    t.lands(P0, "Mountain", 2);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 17, 17));
+    let shock = t.hand(P0, "Shock");
+    t.cast(P0, shock).target(Entity::Player(P0)).go();
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (18, 17, 17), "P0 wasn't chosen");
+}
+
+/// P1 or P0 casts Lightning Bolt at `target` with Bitter Feud(s) choosing P1 and P2.
+fn feud(feuds: usize, caster: PlayerId, target: Entity) -> TestGame {
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    for _ in 0..feuds {
+        choose_two(&mut t, P0, P1, P2);
+        t.enter(P0, "Bitter Feud");
+    }
+    t.settle();
+    t.lands(caster, "Mountain", 1);
+    let bolt = t.hand(caster, "Lightning Bolt");
+    t.cast(caster, bolt).target(target).go();
+    t.resolve_all();
+    t
+}
+
+#[test]
+fn bitter_feud_doubles_damage_from_one_chosen_player_to_the_other() {
+    cr!("614.1a", "120.3");
+    ruling!(
+        "Bitter Feud",
+        "applies to damage dealt by any source controlled by one of the chosen players"
+    );
+    compiles("Bitter Feud");
+    assert_eq!(feud(1, P1, Entity::Player(P2)).life(P2), 14, "doubled");
+    assert_eq!(feud(1, P1, Entity::Player(P0)).life(P0), 17, "P0 isn't chosen");
+    assert_eq!(feud(1, P0, Entity::Player(P1)).life(P1), 17, "P0's source");
+    assert_eq!(feud(1, P1, Entity::Player(P1)).life(P1), 17, "not the other player");
+}
+
+#[test]
+fn bitter_feud_doubles_damage_to_the_other_players_permanents_and_stacks() {
+    cr!("614.1a", "616.1");
+    ruling!(
+        "Bitter Feud",
+        "two Bitter Feuds will end up multiplying the damage by four"
+    );
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    let giant = t.battlefield(P2, "Indomitable Ancients"); // 2/10
+    choose_two(&mut t, P0, P1, P2);
+    t.enter(P0, "Bitter Feud");
+    t.settle();
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(giant).go();
+    t.resolve_all();
+    assert_eq!(t.g.obj(giant).damage, 6);
+    assert_eq!(feud(2, P1, Entity::Player(P2)).life(P2), 8, "3 x 4");
+}

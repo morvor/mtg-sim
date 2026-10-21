@@ -1474,6 +1474,7 @@ impl Renderer<'_> {
             }
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
             PlayerFilter::Chose(w) => format!("chose {w}"),
+            PlayerFilter::ChosenPlayers => "{alt:is|are} one of the chosen players".into(),
             PlayerFilter::ChoseNumber(c, v) => {
                 let v = self.value(v);
                 format!("chose a number {}", cmp_phrase(*c, &v))

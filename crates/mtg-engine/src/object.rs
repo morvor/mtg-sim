@@ -407,6 +407,10 @@ pub struct Choices {
     /// type"; "choose two abilities from among ..." + "each of the chosen abilities").
     #[serde(default)]
     pub list: Vec<SmolStr>,
+    /// The players chosen for this object by a choice of several players ("choose two
+    /// players").
+    #[serde(default)]
+    pub players: Vec<PlayerId>,
 }
 
 /// A game object. Objects in zones are referenced by id; when an object changes zones

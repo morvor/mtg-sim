@@ -336,3 +336,133 @@ fn player_filter_about_choices(f: &PlayerFilter) -> bool {
 pub(crate) fn choice_run_key(c: &Condition) -> Option<String> {
     about_choices(c).then(|| "player choices".to_string())
 }
+
+// ---------------------------------------------------------------------------
+// "choose two players": the chosen players
+// ---------------------------------------------------------------------------
+
+/// "choose two players".
+fn choose_players(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("choose ")?;
+    let (n, r) = parse_number(r)?;
+    let Value::Const(n @ 2..=4) = n else {
+        return None;
+    };
+    (r.trim() == "players").then_some(Effect::Choose {
+        who: PlayerRef::You,
+        kind: ChoiceKind::Players(n as u8),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "choose two players", priority: 120, parse: choose_players } }
+
+/// "damage is dealt to one of the chosen players" (Sower of Discord): "that player" is the
+/// player dealt damage.
+fn damage_dealt_to_chosen(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let t = t.strip_prefix("whenever ").unwrap_or(t);
+    if t != "damage is dealt to one of the chosen players" {
+        return None;
+    }
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::PlayerDealtDamage {
+                who: PlayerRel::Any,
+                combat_only: false,
+            }),
+            cond: Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::ChosenPlayers),
+        },
+        Sel::None,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { super::TriggerPattern { name: "damage is dealt to one of the chosen players", priority: 60, parse: damage_dealt_to_chosen } }
+
+/// "the other chosen player": the chosen players other than the one the triggering event
+/// is about.
+fn other_chosen_player() -> PlayerRef {
+    PlayerRef::Each(PlayerFilter::And(vec![
+        PlayerFilter::ChosenPlayers,
+        PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+            PlayerRef::TriggerPlayer,
+        )))),
+    ]))
+}
+
+/// "the other chosen player also loses that much life".
+fn other_chosen_loses(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("the other chosen player ")?;
+    let r = r.strip_prefix("also ").unwrap_or(r);
+    let pred = super::player_subjects::as_you(r)?;
+    let targets = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_clause(&format!("you {pred}"), b) else {
+        b.targets.truncate(targets);
+        return None;
+    };
+    Some(Effect::ForEachPlayer {
+        who: other_chosen_player(),
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(e),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "the other chosen player [instruction]", priority: 120, parse: other_chosen_loses } }
+
+/// "If a source controlled by one of the chosen players would deal damage to the other
+/// chosen player or a permanent that player controls, that source deals double that
+/// damage to that player or permanent instead." (Bitter Feud)
+fn chosen_players_double_damage(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    if end(l)
+        != "if a source controlled by one of the chosen players would deal damage to the other chosen player or a permanent that player controls, that source deals double that damage to that player or permanent instead"
+    {
+        return None;
+    }
+    let chosen = PlayerFilter::ChosenPlayers;
+    let source_controller = PlayerRef::ControllerOf(Box::new(Sel::TriggerOtherObject));
+    // The source's controller is one of the chosen players and the recipient (a player,
+    // or a permanent's controller) is the other one.
+    let other_than = |r: PlayerRef| {
+        PlayerFilter::And(vec![
+            chosen.clone(),
+            PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(r)))),
+        ])
+    };
+    let to_player = Condition::And(vec![
+        Condition::PlayerMatches(PlayerRef::TriggerPlayer, chosen.clone()),
+        Condition::PlayerMatches(source_controller.clone(), other_than(PlayerRef::TriggerPlayer)),
+    ]);
+    let recipient_controller = PlayerRef::ControllerOf(Box::new(Sel::TriggerObject));
+    let to_permanent = Condition::And(vec![
+        Condition::SelNonEmpty(Sel::TriggerObject),
+        Condition::PlayerMatches(recipient_controller.clone(), chosen.clone()),
+        Condition::PlayerMatches(source_controller, other_than(recipient_controller)),
+    ]);
+    let event = ReplacementEvent::Where {
+        event: Box::new(ReplacementEvent::Damage {
+            source: Filter::Any,
+            to_players: Some(PlayerFilter::Any),
+            to_objects: Some(Filter::Permanent),
+            combat_only: false,
+        }),
+        cond: Condition::Or(vec![to_player, to_permanent]),
+    };
+    let effect = StaticEffect::Replacement(ReplacementDef {
+        event,
+        action: ReplacementAction::Multiply(2),
+        self_replacement: false,
+        optional: false,
+    });
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(effect)),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "Bitter Feud: double damage between the chosen players", priority: 60, parse: chosen_players_double_damage } }
