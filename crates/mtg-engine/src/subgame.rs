@@ -127,8 +127,9 @@ pub fn begin(g: &mut Game) -> Subgame {
     for id in moved {
         g.objects[id.0 as usize].zone = Zone::Nowhere;
     }
-    // CR 729.2: randomly determine which player goes first (no player chooses).
-    let players: Vec<PlayerId> = g.players_in_game();
+    // CR 729.2: randomly determine which player goes first (no player chooses). The
+    // players are taken in APNAP order (CR 101.4), so the chance doesn't depend on seats.
+    let players: Vec<PlayerId> = g.apnap();
     let first = players[g.random_range(0, players.len() as u32 - 1) as usize];
     let seed: u64 = g.rng.gen();
     let config = GameConfig {
@@ -232,6 +233,11 @@ pub fn finish(g: &mut Game, sub: Subgame) -> Option<GameResult> {
         if sub.is_live(*s) && matches!(sub.obj(*s).zone, Zone::Outside(_)) {
             continue;
         }
+        // A card outside the subgame that left it with its owner (CR 800.4a) was never
+        // brought into it: the main-game card stays where it is.
+        if sub.current(*s) == *s && sub.obj(*s).zone == Zone::Nowhere {
+            continue;
+        }
         brought.push(sub.current(*s));
         if g.is_live(*m) {
             let owner = g.obj(*m).owner;
@@ -296,6 +302,14 @@ pub fn finish(g: &mut Game, sub: Subgame) -> Option<GameResult> {
             }
         }
     }
+    // The cards return simultaneously: their new objects are made in APNAP order
+    // (CR 101.4, 613.7m), not in the order of the seats.
+    let order = g.apnap();
+    let rank = |p: &PlayerId| order.iter().position(|q| q == p).unwrap_or(order.len());
+    to_command.sort_by_key(|(p, _, _)| rank(p));
+    commanders_elsewhere.sort_by_key(|(p, _)| rank(p));
+    to_library.sort_by_key(|(p, _)| rank(p));
+    to_decks.sort_by_key(|(p, _)| rank(p));
     for (owner, card, is_commander) in to_command {
         let id = g.create_card_object(card, owner, Zone::Command);
         g.objects[id.0 as usize].is_commander = is_commander;
