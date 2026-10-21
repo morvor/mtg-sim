@@ -9,6 +9,11 @@ use crate::replacement::ReplEvent;
 use crate::types::*;
 use std::collections::BTreeMap;
 
+/// The excess damage the second creature of the latest fight was dealt by the first
+/// ("When excess damage is dealt to the creature an opponent controls this way", Rhino's
+/// Rampage).
+pub const FIGHT_EXCESS_TO_SECOND: crate::ability::Var = crate::ability::vars::USER + 41004;
+
 /// The most damage `obj` can be dealt before any more is excess damage (CR 120.4a,
 /// 120.10). `deathtouch`: some source dealing the damage to it has deathtouch, making
 /// any amount greater than 1 excess for a creature. With several of creature,

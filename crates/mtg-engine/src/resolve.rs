@@ -570,6 +570,7 @@ impl Game {
                 if let (Some(a), Some(b)) = (a, b) {
                     let pa = self.obj(a).power().max(0) as u32;
                     let pb = self.obj(b).power().max(0) as u32;
+                    let before = self.events.len();
                     if a == b {
                         // CR 701.14c: a creature that fights itself deals damage to itself
                         // equal to twice its power.
@@ -580,6 +581,17 @@ impl Game {
                             false,
                         );
                     }
+                    // "When excess damage is dealt to the creature an opponent controls this
+                    // way" (CR 120.10): the excess damage the second creature was dealt.
+                    let excess_to_b: i64 = self.events[before.min(self.events.len())..]
+                        .iter()
+                        .map(|e| match e {
+                            Event::ExcessDamage { obj, amount, .. } if *obj == b => *amount as i64,
+                            _ => 0,
+                        })
+                        .sum();
+                    ctx.nums
+                        .insert(crate::excess_damage::FIGHT_EXCESS_TO_SECOND, excess_to_b);
                     // "Whenever a creature you control fights" (each creature that fought).
                     let mut fought = vec![a];
                     if b != a {

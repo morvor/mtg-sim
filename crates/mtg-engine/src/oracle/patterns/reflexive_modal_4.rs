@@ -159,6 +159,73 @@ fn when_excess_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "reflexive modal 4: when it deals excess damage this way", priority: 100, parse: when_excess_this_way } }
 
+/// "It fights target creature an opponent controls. When excess damage is dealt to the
+/// creature an opponent controls this way, destroy up to one target ..." (Rhino's
+/// Rampage): a reflexive triggered ability that triggers if the second creature of the
+/// fight was dealt excess damage (CR 120.10, 603.12).
+fn when_excess_to_fought(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("when excess damage is dealt to ") else {
+        return false;
+    };
+    let Some((who, rest)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    let Effect::Fight {
+        b: Sel::Target(k), ..
+    } = last_fight(prev)
+    else {
+        return false;
+    };
+    let Some(spec) = b.targets.get(*k as usize) else {
+        return false;
+    };
+    // "the creature an opponent controls": the second fighter's target description.
+    let Some(noun) = who.strip_prefix("the ") else {
+        return false;
+    };
+    if spec.text.trim_start_matches("target ") != noun {
+        return false;
+    }
+    let Some(e) = crate::oracle::effects::parse_clause(&format!("when you do, {rest}"), b) else {
+        return false;
+    };
+    let Effect::If {
+        cond: Condition::PrevHappened,
+        then,
+        otherwise,
+    } = e
+    else {
+        return false;
+    };
+    if !matches!(*then, Effect::Reflexive { .. }) {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::Compare(
+                Value::Var(crate::excess_damage::FIGHT_EXCESS_TO_SECOND),
+                Cmp::Gt,
+                Value::c(0),
+            ),
+            then,
+            otherwise,
+        },
+    ]);
+    true
+}
+
+/// The last fight of an effect.
+fn last_fight(e: &Effect) -> &Effect {
+    match e {
+        Effect::Seq(v) => v.last().map_or(e, last_fight),
+        _ => e,
+    }
+}
+
+inventory::submit! { super::FollowupPattern { name: "reflexive modal 4: when excess damage is dealt to the second fighter this way", priority: 100, apply: when_excess_to_fought } }
+
 /// The value grammar's atom "the excess damage dealt this way" (see
 /// [`when_excess_this_way`]).
 pub fn excess_atom(s: &str) -> Option<(Value, String)> {
@@ -292,6 +359,7 @@ mod tests {
             ("Creature", "When ~ enters or dies, you may exile another creature card from your graveyard. When you do, put a +1/+1 counter on each creature you control other than ~ that shares a creature type with the exiled card."),
             ("Creature", "Whenever ~ deals combat damage to a player, you may collect evidence X. When you do, ~ deals X damage to each creature and planeswalker that player controls."),
             ("Sorcery", "~ deals 7 damage to target creature or planeswalker. When it deals excess damage this way, destroy target artifact or enchantment an opponent controls with mana value less than or equal to that amount of excess damage."),
+            ("Sorcery", "Target creature you control gets +1/+0 until end of turn. It fights target creature an opponent controls. When excess damage is dealt to the creature an opponent controls this way, destroy up to one target noncreature artifact with mana value 3 or less."),
             ("Legendary Creature", "At the beginning of your first main phase, choose one that hasn't been chosen and you lose 2 life —\n• Draw a card.\n• Put a +1/+1 counter on ~.\n• Add {R}.\n• Exile ~, then return him to the battlefield under an opponent's control."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");

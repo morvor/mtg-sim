@@ -244,8 +244,8 @@ fn unleash(victim: &str) -> (TestGame, ObjectId, ObjectId) {
     let stone = t.battlefield(P1, "Mind Stone");
     let wurm = t.battlefield(P1, "Wurmcoil Engine");
     let spell = t.hand(P0, "Unleash the Inferno");
-    t.answer_targets(P0, &[Entity::Object(stone)]);
     t.cast(P0, spell).target(Entity::Object(v)).go();
+    t.answer_targets(P0, &[Entity::Object(stone)]);
     t.resolve_all();
     (t, stone, wurm)
 }
@@ -271,5 +271,32 @@ fn unleash_the_inferno_excess_damage_destroys_an_artifact_up_to_the_excess() {
     assert!(!last.contains(&Entity::Object(wurm)));
     // 7 damage to a 0/8: no excess, no reflexive ability.
     let (t, stone, _) = unleash("Wall of Stone");
+    assert!(t.on_battlefield(stone));
+}
+
+fn rampage(victim: &str) -> (TestGame, ObjectId) {
+    supported("Rhino's Rampage");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let v = t.battlefield(P1, victim);
+    let stone = t.battlefield(P1, "Mind Stone");
+    let spell = t.hand(P0, "Rhino's Rampage");
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(giant), Entity::Object(v)])
+        .go();
+    t.answer_targets(P0, &[Entity::Object(stone)]);
+    t.resolve_all();
+    (t, stone)
+}
+
+#[test]
+fn rhinos_rampage_excess_fight_damage_destroys_an_artifact() {
+    cr!("120.10", "701.14a", "603.12");
+    // 4 damage to a 2/2: excess.
+    let (t, stone) = rampage("Grizzly Bears");
+    assert!(!t.on_battlefield(stone));
+    // 4 damage to a 0/8: none.
+    let (t, stone) = rampage("Wall of Stone");
     assert!(t.on_battlefield(stone));
 }
