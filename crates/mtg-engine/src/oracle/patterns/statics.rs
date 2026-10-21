@@ -115,6 +115,17 @@ pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
             return with_name != crate::oracle::normalize(q, &anonymous);
         }
     }
+    // A quote nested in a quote ("Enchanted Forest has '{1}, {T}, Sacrifice this land:
+    // ...'", Old-Growth Troll): its self-references are the object it's granted to.
+    for q in quoted_segments(&raw) {
+        let doubled = super::tokens_copies_create::nested_quotes_doubled(q);
+        for iq in quoted_segments(&doubled) {
+            let with_name = crate::oracle::normalize(iq, ctx);
+            if bare(&with_name) == bare(normalized) {
+                return with_name != crate::oracle::normalize(iq, &anonymous);
+            }
+        }
+    }
     true
 }
 

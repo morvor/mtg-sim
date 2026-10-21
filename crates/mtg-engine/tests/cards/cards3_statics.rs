@@ -364,3 +364,36 @@ fn harold_and_bob_return_as_an_aura_on_a_forest_with_only_the_granted_ability() 
     assert_eq!(o.attached_to, Some(Entity::Object(forest)));
     assert_eq!(t.g.obj(forest).chars.abilities.len(), before + 1);
 }
+
+#[test]
+fn old_growth_troll_returns_as_an_aura_whose_forest_can_make_a_troll() {
+    cr!("303.4f", "613.1f");
+    supported("Old-Growth Troll");
+    let mut t = TestGame::new(2);
+    let troll = t.battlefield(P0, "Old-Growth Troll");
+    let forest = t.battlefield(P0, "Forest");
+    t.battlefield(P0, "Mountain");
+    t.g.destroy(troll, None);
+    t.settle();
+    t.resolve_all();
+    let aura = t.named_on_battlefield("Old-Growth Troll");
+    assert_eq!(aura.len(), 1);
+    assert!(!t.g.obj(aura[0]).is_creature());
+    assert_eq!(t.g.obj(aura[0]).attached_to, Some(Entity::Object(forest)));
+    t.set_step(P0, Step::PrecombatMain);
+    // The Forest's own mana ability, "{T}: Add {G}{G}", then the Troll-making ability.
+    t.activate(P0, forest, 2, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Forest"));
+    let tokens: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.chars.has_subtype("Warrior") && o.chars.has_subtype("Troll"))
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(tokens.len(), 1);
+    assert!(t.g.obj(tokens[0]).tapped);
+    assert_eq!(t.pt(tokens[0]), (4, 4));
+    // The Aura, attached to nothing, is put into the graveyard.
+    assert!(t.in_graveyard(P0, "Old-Growth Troll"));
+}
