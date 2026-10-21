@@ -56,6 +56,9 @@ pub fn own_count_atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = super::notes_hidden_4::noted_atom(s) {
         return Some(v);
     }
+    if let Some(v) = super::reflexive_modal_4::excess_atom(s) {
+        return Some(v);
+    }
     if !PER_PLAYER.with(|c| c.get()) {
         // One player's draw: "~ deals damage to the player equal to the number of cards
         // they drew this way" (Malignant Growth), the cards the latest draw instruction

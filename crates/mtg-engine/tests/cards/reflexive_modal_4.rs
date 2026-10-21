@@ -233,3 +233,43 @@ fn incinerator_of_the_guilty_collects_evidence_x_and_deals_x() {
         .collect();
     assert_eq!(maxes, vec![6]);
 }
+
+fn unleash(victim: &str) -> (TestGame, ObjectId, ObjectId) {
+    supported("Unleash the Inferno");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Swamp", 1);
+    let v = t.battlefield(P1, victim);
+    let stone = t.battlefield(P1, "Mind Stone");
+    let wurm = t.battlefield(P1, "Wurmcoil Engine");
+    let spell = t.hand(P0, "Unleash the Inferno");
+    t.answer_targets(P0, &[Entity::Object(stone)]);
+    t.cast(P0, spell).target(Entity::Object(v)).go();
+    t.resolve_all();
+    (t, stone, wurm)
+}
+
+#[test]
+fn unleash_the_inferno_excess_damage_destroys_an_artifact_up_to_the_excess() {
+    cr!("120.10", "603.12");
+    // 7 damage to a 2/2: 5 excess.
+    let (t, stone, wurm) = unleash("Grizzly Bears");
+    assert!(!t.on_battlefield(stone));
+    assert!(t.on_battlefield(wurm));
+    let cands: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    // The reflexive ability's target (the last target choice).
+    let last = cands.last().expect("a target choice");
+    assert!(last.contains(&Entity::Object(stone)));
+    assert!(!last.contains(&Entity::Object(wurm)));
+    // 7 damage to a 0/8: no excess, no reflexive ability.
+    let (t, stone, _) = unleash("Wall of Stone");
+    assert!(t.on_battlefield(stone));
+}

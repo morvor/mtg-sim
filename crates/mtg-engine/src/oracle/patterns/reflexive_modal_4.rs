@@ -127,6 +127,46 @@ fn collect_evidence_x(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "reflexive modal 4: collect evidence X (X chosen)", priority: 100, parse: collect_evidence_x } }
 
+/// "When it deals excess damage this way, destroy target artifact or enchantment an
+/// opponent controls with mana value less than or equal to that amount of excess damage."
+/// (Unleash the Inferno): a reflexive triggered ability that triggers if the damage
+/// instruction dealt excess damage (CR 120.10, 603.12); "that amount of excess damage" is
+/// the excess (`vars::EXCESS`).
+fn when_excess_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("when it deals excess damage this way, ")?;
+    let r = r.replace(
+        "that amount of excess damage",
+        "the excess damage dealt this way",
+    );
+    let e = crate::oracle::effects::parse_clause(&format!("when you do, {r}"), b)?;
+    let Effect::If {
+        cond: Condition::PrevHappened,
+        then,
+        otherwise,
+    } = e
+    else {
+        return None;
+    };
+    if !matches!(*then, Effect::Reflexive { .. }) {
+        return None;
+    }
+    Some(Effect::If {
+        cond: Condition::Compare(Value::Var(vars::EXCESS), Cmp::Gt, Value::c(0)),
+        then,
+        otherwise,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "reflexive modal 4: when it deals excess damage this way", priority: 100, parse: when_excess_this_way } }
+
+/// The value grammar's atom "the excess damage dealt this way" (see
+/// [`when_excess_this_way`]).
+pub fn excess_atom(s: &str) -> Option<(Value, String)> {
+    let r = s.strip_prefix("the excess damage dealt this way")?;
+    (r.is_empty() || r.starts_with([' ', ',', '.']))
+        .then(|| (Value::Var(vars::EXCESS), r.to_string()))
+}
+
 /// "choose up to that many" (after paying a cost several times): at most X modes.
 fn up_to_that_many(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
     (h == "choose up to that many").then(|| ModalHeader {
@@ -251,6 +291,7 @@ mod tests {
             ("Creature", "When ~ enters or dies, exile another card from a graveyard. When you do, choose one —\n• Remove X counters from target permanent, where X is the mana value of the exiled card.\n• Target creature an opponent controls gets -X/-X until end of turn, where X is the mana value of the exiled card."),
             ("Creature", "When ~ enters or dies, you may exile another creature card from your graveyard. When you do, put a +1/+1 counter on each creature you control other than ~ that shares a creature type with the exiled card."),
             ("Creature", "Whenever ~ deals combat damage to a player, you may collect evidence X. When you do, ~ deals X damage to each creature and planeswalker that player controls."),
+            ("Sorcery", "~ deals 7 damage to target creature or planeswalker. When it deals excess damage this way, destroy target artifact or enchantment an opponent controls with mana value less than or equal to that amount of excess damage."),
             ("Legendary Creature", "At the beginning of your first main phase, choose one that hasn't been chosen and you lose 2 life —\n• Draw a card.\n• Put a +1/+1 counter on ~.\n• Add {R}.\n• Exile ~, then return him to the battlefield under an opponent's control."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
