@@ -195,3 +195,17 @@ fn creature_fights(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "whenever a creature you control fights", priority: 100, parse: creature_fights } }
+
+/// "Whenever damage that would be dealt to you is prevented" (Selfless Squire,
+/// `kw/damage_prevented_trigger.rs`).
+fn damage_to_you_prevented(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(t) == crate::kw::damage_prevented_trigger::DAMAGE_TO_YOU_PREVENTED).then(|| {
+        (
+            TriggerCond::Custom(crate::kw::damage_prevented_trigger::DAMAGE_TO_YOU_PREVENTED.into()),
+            Sel::None,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "whenever damage that would be dealt to you is prevented", priority: 100, parse: damage_to_you_prevented } }

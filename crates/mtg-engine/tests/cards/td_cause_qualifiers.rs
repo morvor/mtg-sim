@@ -122,3 +122,35 @@ fn font_of_agonies_counts_life_paid_not_life_lost() {
     t.resolve_all();
     assert_eq!(t.counters(font, "blood"), 4);
 }
+
+#[test]
+fn selfless_squire_grows_by_the_damage_prevented_to_you() {
+    cr!("615.13", "603.2");
+    ruling!(
+        "Selfless Squire",
+        "Any effect that uses the word \"prevent\" will cause it to trigger."
+    );
+    supported("Selfless Squire");
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    let squire = t.enter(P0, "Selfless Squire");
+    t.resolve_all();
+    let bolt = t.hand(P1, "Lightning Bolt");
+    mana(&mut t, P1);
+    t.cast_with(P1, bolt, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.counters(squire, "+1/+1"), 3);
+    // Damage prevented to a creature doesn't count.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let hands = t.hand(P0, "Mending Hands");
+    mana(&mut t, P0);
+    t.cast_with(P0, hands, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    let bolt = t.hand(P1, "Lightning Bolt");
+    mana(&mut t, P1);
+    t.cast_with(P1, bolt, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.counters(squire, "+1/+1"), 3);
+}

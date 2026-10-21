@@ -383,6 +383,10 @@ fn has_event_amount(t: &TriggerCond) -> bool {
         | TriggerCond::Batched { .. } => true,
         // "Whenever you pay life, put that many blood counters on ~": the life paid.
         TriggerCond::PlayerAction { name, .. } => name == crate::life_totals::PAID_LIFE,
+        // "put that many +1/+1 counters on ~": the damage prevented.
+        TriggerCond::Custom(name) => {
+            name == crate::kw::damage_prevented_trigger::DAMAGE_TO_YOU_PREVENTED
+        }
         TriggerCond::Where { trigger, .. }
         | TriggerCond::FirstTimeEachTurn(trigger)
         | TriggerCond::Noncombat(trigger) => has_event_amount(trigger),
