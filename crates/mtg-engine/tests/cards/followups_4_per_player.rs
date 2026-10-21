@@ -279,3 +279,23 @@ fn clash_of_elements_otherwise_it_goes_to_the_bottom() {
     assert_eq!(t.g.current(giant), bottom);
     assert_eq!(t.life(P1), 20);
 }
+
+#[test]
+fn blim_each_player_loses_life_and_discards_per_permanent_they_control_but_dont_own() {
+    cr!("608.2e");
+    supported("Blim, Comedic Genius");
+    let mut t = TestGame::new(2);
+    let blim = t.battlefield(P0, "Blim, Comedic Genius");
+    let orni = t.battlefield(P0, "Ornithopter");
+    let card = t.hand(P1, "Lightning Bolt");
+    t.hand(P0, "Shock");
+    t.answer_targets(P0, &[Entity::Object(orni)]);
+    t.answer_choose(P1, &[Entity::Object(card)]);
+    t.attack(&[(blim, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(orni).controller, P1);
+    assert_eq!(t.life(P1), 20 - 4 - 1);
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    assert_eq!(t.life(P0), 20);
+    assert!(t.in_hand(P0, "Shock"));
+}

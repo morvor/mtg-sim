@@ -1264,6 +1264,56 @@ fn other_players_choice_followups(l: &str, prev: &mut Effect, b: &mut Builder) -
 
 inventory::submit! { FollowupPattern { name: "followups 4: if they do / didn't, after another player's optional instruction", priority: 20, apply: other_players_choice_followups } }
 
+/// "each player loses life and discards cards equal to the number of permanents they
+/// control but don't own" (Blim, Comedic Genius): both amounts are that player's number;
+/// each instruction is performed by all the players before the next (CR 608.2e).
+fn loses_life_and_discards_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (head, value) = l.split_once(" loses life and discards cards equal to ")?;
+    if !matches!(head, "each player" | "each opponent") {
+        return None;
+    }
+    let e = parse_clause(&format!("{head} loses life equal to {value}"), b)?;
+    let Effect::ForEachPlayer { who, effect } = e else {
+        return None;
+    };
+    let Effect::AsPlayer {
+        who: PlayerRef::Iterated,
+        effect: inner,
+    } = *effect
+    else {
+        return None;
+    };
+    let Effect::LoseLife {
+        who: PlayerRef::You,
+        n,
+    } = *inner
+    else {
+        return None;
+    };
+    Some(Effect::ForEachPlayer {
+        who,
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(Effect::seq(vec![
+                Effect::LoseLife {
+                    who: PlayerRef::You,
+                    n: n.clone(),
+                },
+                Effect::Discard {
+                    who: PlayerRef::You,
+                    n,
+                    random: false,
+                    filter: Filter::Any,
+                },
+            ])),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "followups 4: each player loses life and discards cards equal to", priority: 120, parse: loses_life_and_discards_equal_to } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1286,6 +1336,7 @@ mod tests {
             ("Sorcery", "Each opponent exiles a creature with the greatest power among creatures that player controls.\nSpell mastery — If there are two or more instant and/or sorcery cards in your graveyard, ~ deals damage to each opponent equal to the power of the creature they exiled."),
             ("Creature", "When ~ enters, for each opponent, exile up to one target creature that player controls and that player gains life equal to its power."),
             ("Sorcery", "Choose target nonland permanent. Its owner may put it on top of their library. If they do, ~ deals 2 damage to them. If they didn't put the card on top of their library, they put it on the bottom."),
+            ("Legendary Creature", "Whenever ~ deals combat damage to a player, that player gains control of target permanent you control. Then each player loses life and discards cards equal to the number of permanents they control but don't own."),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
