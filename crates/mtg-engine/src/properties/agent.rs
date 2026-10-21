@@ -35,6 +35,8 @@ pub struct Recorder {
     /// Actions started at priority so far; the game is kept for the first 30 and every
     /// fifth after that (each check copies and prints the whole game).
     actions_started: u64,
+    /// The number of objects the game had at the latest decision (to notice a restart).
+    objects_seen: usize,
     pub rollbacks_checked: u64,
     pub violations: Vec<String>,
 }
@@ -56,6 +58,7 @@ impl Recorder {
             full_hashes: self.full_hashes,
             full_text_turn: self.full_text_turn,
             last_turn: self.last_turn,
+            objects_seen: self.objects_seen,
             check_rollbacks: self.check_rollbacks,
             ..Default::default()
         }
@@ -304,6 +307,13 @@ impl Agent for PropertyAgent {
 
     fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
         let mut rec = self.recorder.lock().unwrap_or_else(|e| e.into_inner());
+        // A restarted game (CR 727) has objects of its own: fewer than the game had.
+        if g.subgames.depth == 0 {
+            if g.objects.len() < rec.objects_seen {
+                rec.canon = rec.canon.for_new_game(g);
+            }
+            rec.objects_seen = g.objects.len();
+        }
         // A subgame has objects of its own (CR 729).
         let main = rec
             .canon
