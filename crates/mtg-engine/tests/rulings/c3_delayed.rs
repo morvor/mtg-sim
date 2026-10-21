@@ -166,3 +166,25 @@ fn rescue_from_the_underworld_a_sacrificed_token_doesnt_return() {
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
     assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 0);
 }
+
+#[test]
+fn great_train_heist_treasure_for_combat_damage_to_that_player_this_turn() {
+    cr!("603.7b", "603.7c", "702.172a");
+    supported("Great Train Heist");
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 6);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    let c = t.hand(P0, "Great Train Heist");
+    t.cast(P0, c).modes(&[2]).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    t.attack(&[(a, Entity::Player(P1)), (b, Entity::Player(P2))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P2), 17);
+    // Only the damage to the chosen opponent.
+    let treasures = crate::r_s01_common::with_subtype(&t, P0, "Treasure");
+    assert_eq!(treasures.len(), 1);
+    assert!(t.obj_now(treasures[0]).tapped);
+}

@@ -22,6 +22,11 @@
 //! beginning of your next upkeep." (Rescue from the Underworld): "the sacrificed card" is
 //! the card the sacrifice cost put into a public zone (CR 400.7j: a token sacrificed
 //! returns nothing; one put into another public zone instead returns from there).
+//!
+//! "this turn" triggers about the chosen player: "Choose target opponent. Whenever a
+//! creature you control deals combat damage to that player this turn, create a tapped
+//! Treasure token." (Great Train Heist; CR 603.7b, 603.7c: the player the creating effect
+//! chose).
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -208,3 +213,34 @@ fn and_the_sacrificed_card(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar 3: return [object] and the sacrificed card", priority: 100, parse: and_the_sacrificed_card } }
+
+fn this_turn_damage_to_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("whenever ")?;
+    let (cond, eff) = r.split_once(" this turn, ")?;
+    let subj = cond.strip_suffix(" deals combat damage to that player")?;
+    let PlayerRef::Target(_) = b.it_player else {
+        return None;
+    };
+    let chosen = b.it_player.clone();
+    let (t, it, _) = crate::oracle::triggers::parse_trigger_condition(&format!(
+        "whenever {subj} deals combat damage to a player"
+    ))?;
+    if !matches!(t, TriggerCond::DealsDamage { .. }) {
+        return None;
+    }
+    let trigger = TriggerCond::Where {
+        trigger: Box::new(t),
+        cond: Condition::PlayerMatches(
+            PlayerRef::TriggerPlayer,
+            PlayerFilter::Ref(Box::new(chosen)),
+        ),
+    };
+    let body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, PlayerRef::TriggerPlayer)?;
+    Some(Effect::DelayedTrigger {
+        trigger: TriggerCond::ThisTurn(Box::new(trigger)),
+        body: Box::new(body),
+        once: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 3: whenever ... deals combat damage to that player this turn", priority: 100, parse: this_turn_damage_to_that_player } }
