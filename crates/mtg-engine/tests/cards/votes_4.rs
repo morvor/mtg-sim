@@ -94,3 +94,39 @@ fn davros_each_opponent_who_lost_three_life_faces_a_villainous_choice() {
         .collect();
     assert_eq!(faced, vec![P1, P3]);
 }
+
+#[test]
+fn seize_the_spotlight_fame_steals_and_untaps_fortune_draws() {
+    cr!("101.4", "608.2c");
+    supported("Seize the Spotlight");
+    let mut t = TestGame::new(4);
+    t.lands(P0, "Mountain", 3);
+    let spell = t.hand(P0, "Seize the Spotlight");
+    let b1 = t.battlefield(P1, "Grizzly Bears");
+    let b3 = t.battlefield(P3, "Hill Giant");
+    t.g.objects[b1.0 as usize].tapped = true;
+    t.g.objects[b3.0 as usize].tapped = true;
+    // P1 and P3 choose fame, P2 fortune.
+    t.answer(P1, DecisionKind::Option, Answer::Index(0));
+    t.answer(P2, DecisionKind::Option, Answer::Index(1));
+    t.answer(P3, DecisionKind::Option, Answer::Index(0));
+    t.answer_choose(P0, &[Entity::Object(b1)]);
+    t.answer_choose(P0, &[Entity::Object(b3)]);
+    let hand = t.hand_size(P0);
+    t.cast(P0, spell).go();
+    t.resolve();
+    for c in [b1, b3] {
+        let o = t.obj_now(c);
+        assert_eq!(o.controller, P0);
+        assert!(!o.tapped);
+        assert!(o.has_keyword(keywords::KeywordKind::Haste));
+    }
+    // One fortune: one card and one Treasure.
+    assert_eq!(t.hand_size(P0), hand - 1 + 1);
+    let treasures =
+        t.g.battlefield
+            .iter()
+            .filter(|o| t.obj_now(**o).chars.name.starts_with("Treasure"))
+            .count();
+    assert_eq!(treasures, 1);
+}

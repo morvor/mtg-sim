@@ -17,6 +17,9 @@ use crate::oracle::phrases::end;
 
 /// The greatest number among players, determined before any of them acts.
 const MOST: Var = vars::USER + 41010;
+/// The objects chosen by "gain control of a [creature] of your choice ...", over all its
+/// performances in the resolution.
+const GAINED: Var = vars::USER + 41012;
 /// The player chosen among those tied for a superlative.
 const TIED_CHOSEN: Var = vars::USER + 41011;
 
@@ -346,6 +349,56 @@ fn you_and_players_each(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "choices 4: you and [those players] each", priority: 120, parse: you_and_players_each } }
 
+/// "gain control of a creature of your choice that player controls until end of turn"
+/// (Midnight Crusader Shuttle), "gain control of a creature that player controls until end
+/// of turn" (Seize the Spotlight): you choose one of the objects as the instruction is
+/// performed (not a target), then gain control of it.
+fn gain_control_of_a_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l
+        .strip_prefix("you gain control of ")
+        .or_else(|| l.strip_prefix("gain control of "))?;
+    let (article, r) = r.split_once(' ')?;
+    if !matches!(article, "a" | "an") {
+        return None;
+    }
+    let (noun, r) = r.split_once(' ')?;
+    let r = r.strip_prefix("of your choice ").unwrap_or(r);
+    let (player, dur) = r.split_once(" controls")?;
+    if player.contains(" of ") || player.is_empty() {
+        return None;
+    }
+    let choose = parse_clause(&format!("choose {article} {noun} {player} controls"), b)?;
+    if !format!("{choose:?}").contains("Choose {") {
+        return None;
+    }
+    let gain = parse_clause(&format!("gain control of it{dur}"), b)?;
+    if !matches!(gain, Effect::GainControl { .. }) {
+        return None;
+    }
+    // Done for each of several players ("for each player who chose fame, ..."), "those
+    // creatures" later are all the creatures chosen this way.
+    let Sel::Var(chosen) = b.it else {
+        return None;
+    };
+    b.it = Sel::Var(GAINED);
+    for (_, sel) in b.named.iter_mut() {
+        if matches!(sel, Sel::Var(v) if *v == chosen) {
+            *sel = Sel::Var(GAINED);
+        }
+    }
+    Some(Effect::seq(vec![
+        choose,
+        gain,
+        Effect::Store {
+            var: GAINED,
+            sel: Sel::Union(vec![Sel::Var(GAINED), Sel::Var(chosen)]),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: gain control of a [creature] of your choice [player] controls", priority: 120, parse: gain_control_of_a_chosen } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -360,6 +413,7 @@ mod tests {
             ("Enchantment — Aura Curse", "Enchant player\nAt the beginning of enchanted player's upkeep, any number of target players other than that player each draw cards equal to the number of Curses attached to that player."),
             ("Legendary Creature", "Whenever one or more Devils you control attack one or more players, you and those players each draw a card, then discard a card at random."),
             ("Legendary Creature", "Whenever one or more creatures an opponent controls deal combat damage to one or more of your opponents, you and the controller of those creatures each draw a card."),
+            ("Artifact — Vehicle", "Midnight Entity — Whenever ~ attacks, defending player faces a villainous choice — That player sacrifices a creature of their choice, or you gain control of a creature of your choice that player controls until end of turn. If you gain control of a creature this way, tap it, and it's attacking that player."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
