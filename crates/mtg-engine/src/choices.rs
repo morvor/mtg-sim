@@ -366,6 +366,7 @@ pub fn pick_at_random(
         .into_iter()
         .filter(|o| !g.entering.contains(o))
         .collect();
+    g.sort_objects_apnap(&mut cands);
     cands.shuffle(&mut g.rng);
     cands.truncate(n);
     cands

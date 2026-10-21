@@ -33,3 +33,33 @@ fn a_required_attack_the_engine_declares_goes_to_the_next_player_in_turn_order()
     let a = c.attackers.iter().find(|a| a.id == juggernaut).expect("it attacks");
     assert_eq!(a.target, Some(Entity::Player(P2)));
 }
+
+#[test]
+fn choices_at_random_take_the_players_in_apnap_order() {
+    // Found by seat symmetry: "target opponent chosen at random" shuffled the candidates
+    // as listed, in seat order, so the same random draw picked a different player
+    // depending on where the players sat.
+    cr!("101.4");
+    let mut t = TestGame::new(3);
+    t.set_step(P1, Step::PrecombatMain);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P2, "Grizzly Bears");
+    let mut v = vec![
+        Entity::Object(a),
+        Entity::Player(P0),
+        Entity::Object(b),
+        Entity::Player(P1),
+        Entity::Player(P2),
+    ];
+    t.g.sort_apnap(&mut v);
+    assert_eq!(
+        v,
+        vec![
+            Entity::Player(P1),
+            Entity::Player(P2),
+            Entity::Player(P0),
+            Entity::Object(b),
+            Entity::Object(a),
+        ]
+    );
+}

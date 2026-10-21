@@ -115,7 +115,7 @@ impl Canon {
     pub fn text(&self, s: &str) -> String {
         static RE: OnceLock<Regex> = OnceLock::new();
         let re = RE.get_or_init(|| {
-            Regex::new(r"(ObjectId|PlayerId)\((\d+)\)|(\w+) #(\d+)|\bP(\d+)\b").unwrap()
+            Regex::new(r"(ObjectId|PlayerId)\((\d+)\)|(\S+) #(\d+)|\bP(\d+)\b").unwrap()
         });
         re.replace_all(s, |c: &regex::Captures| {
             // A player in a prompt ("attacking P2").
@@ -125,7 +125,7 @@ impl Canon {
             }
             // "Forest #53" names an object; "effect #8" doesn't.
             if let (Some(w), Some(m)) = (c.get(3), c.get(4)) {
-                if w.as_str() == "effect" {
+                if w.as_str().ends_with("effect") {
                     return c[0].to_string();
                 }
                 let n: u32 = m.as_str().parse().unwrap_or(0);

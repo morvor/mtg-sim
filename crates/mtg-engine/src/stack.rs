@@ -928,6 +928,7 @@ impl Game {
                 // "target ... chosen at random": nobody chooses.
                 use rand::seq::SliceRandom;
                 let mut v = cands.clone();
+                self.sort_apnap(&mut v);
                 v.shuffle(&mut self.rng);
                 v.truncate(max as usize);
                 v
