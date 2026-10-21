@@ -151,7 +151,8 @@ player's results from another's.
   through this code record it per player anyway (`RECORD_THAT_MANY`,
   `kw/hand_graveyard_actions.rs`), and the other per-player numbers seen in the card pool
   (the outer X of "each player ... X") hold the same value for every player, so no card
-  test found shows the difference.
+  test found shows the difference. The re-run (2026-10-21) found it **killed** by tests
+  added since by other work.
 - `simultaneous.rs:249:17: replace && with || in records_decision`: **(b) not killed**.
   It turns "if ..., [action]" inside an "each player" body into a choice attached to the
   next instruction; the actions still happen in the same order for each player, and only
@@ -171,6 +172,8 @@ player's results from another's.
   unplannable branch) together instead of in turn. With the cards tested, the planned and
   the in-turn performance produce the same results; a test needs a card where one player's
   part depends on what an earlier player's part already did, chosen by a third player.
+  The re-run (2026-10-21) found `plannable -> true` **killed** by tests added since by
+  other work; the `&&`/`||` one still survives.
 - `simultaneous.rs:664:46: replace match guard plannable(g, e, ctx, p) with false in plan`
   (sacrificing chosen objects, "sacrifices the rest", in turn instead of together):
   **(b) not killed**. Simultaneous sacrifice is observable with a "whenever another
@@ -179,7 +182,8 @@ player's results from another's.
   effects instead of this path (Cataclysm is `KeepAndSacrificeRest`, Balance is
   unsupported); the behavior itself is now pinned for Cataclysm by
   `tests/cr/r608_002f_each_player_sacrifices_together.rs` (Blood Artist sees the death of
-  the opponent's creature sacrificed with it).
+  the opponent's creature sacrificed with it). The re-run (2026-10-21) found it
+  **killed** by tests added since by other work.
 - `simultaneous.rs:628:38: replace == with != in plan` (link the moved permanents to the
   effect's source when they enter the battlefield, CR 607.1d): **(b) not killed**: no card
   puts a permanent onto the battlefield with an "each player" move whose abilities refer to
@@ -248,12 +252,15 @@ Run 2026-10-14, 23 of 228 mutants (round-robin 0/10), 28 minutes.
 - `mana.rs:586:9: replace <impl PartialEq for ManaRider>::eq -> bool with false`: **(a)
   equivalent**. Nothing compares mana units that carry a rider (the pool removes spent
   mana by index), so the equality of riders is never consulted.
-- `mana.rs:937:24: replace -= with += in PoolSolver<'_>::solve` (undo the life a Phyrexian
-  symbol tentatively paid when the rest of the cost can't be paid that way): **(b) missing
-  test**. With the mutant the abandoned life stayed counted, so a later, valid way of
-  paying exceeded the life total and the spell couldn't be cast. Killed by
+- `mana.rs:937:24: replace -= with += in PoolSolver<'_>::solve` (undo the count of
+  Phyrexian symbols paid with life when a way of paying that tried life for one is
+  abandoned): **(b) missing test**. The first test written,
   `tests/cr/r107_004f_phyrexian_payment_backtracking.rs` ({B/G}{G/P}{G/P} from {G}{B}
-  with 3 life).
+  with 3 life), pins the life undone on the line before and passed with the mutant (found
+  by the re-run). The count is what Compleated reads (CR 702.150a): with the mutant the
+  abandoned way's symbol stayed counted, and the planeswalker entered with two loyalty
+  counters fewer for each. Killed by the second test in that file (the same cost on a
+  compleated planeswalker with five loyalty enters with three).
 
 ### eval.rs
 
@@ -363,9 +370,12 @@ so on refer to); the field is only read by abilities whose wording refers to it.
   "whenever one or more creatures you control attack" comes from each attacker's
   `object`, which Angelic Guardian's test checks).
 - `triggers.rs:1204:29: delete field object` (BlocksOrBecomesBlocked, the attacking
-  creature that became blocked): **(b) missing test**. Killed by
+  creature that became blocked): **(b) missing test**. The first tests,
   `tests/cr/r509_003_blocks_or_becomes_blocked_it.rs` (Raging Gorilla gets +2/-2 when it
-  blocks and when it becomes blocked).
+  blocks and when it becomes blocked), passed with the mutant (found by the re-run): its
+  "it" is the source itself. Killed by the Gift of the Woods tests added to that file
+  ("whenever enchanted creature blocks or becomes blocked, it gets +0/+3": "it" is the
+  creature the trigger recorded).
 - `triggers.rs:1934:25: delete match arm TriggerCond::CastSpell{..} | ... in
   player_event`: **(b) missing test**. "Their first spell each turn" stopped being per
   player: a second opponent's first spell no longer triggered once someone else had cast
