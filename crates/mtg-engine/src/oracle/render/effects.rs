@@ -1358,6 +1358,38 @@ impl Renderer<'_> {
                 let n = self.noun_det(&Filter::and(rest), det);
                 format!("{subj} exiles {n} from their {zone}")
             }
+            // "Target opponent exiles a creature they control.": the player chooses the
+            // permanent they exile (CR 701.13a).
+            Effect::Exile {
+                what:
+                    Sel::Choose {
+                        chooser: PlayerRef::Target(t),
+                        filter: Filter::And(v),
+                        count,
+                        up_to: false,
+                        store: None,
+                    },
+                face_down: false,
+                ..
+            } if v
+                .iter()
+                .any(|f| matches!(f, Filter::ControlledBy(PlayerRel::Target(o)) if o == t))
+                && v.iter().all(|f| {
+                    !matches!(f, Filter::InZone(_) | Filter::OwnedBy(_) | Filter::ControlledBy(_))
+                        || matches!(f, Filter::InZone(ZoneKind::Battlefield))
+                        || matches!(f, Filter::ControlledBy(PlayerRel::Target(o)) if o == t)
+                }) =>
+            {
+                let rest: Vec<Filter> = v
+                    .iter()
+                    .filter(|f| !matches!(f, Filter::ControlledBy(_) | Filter::InZone(_)))
+                    .cloned()
+                    .collect();
+                let subj = self.player(&PlayerRef::Target(*t), Case::Subj);
+                let det = self.det_for(count);
+                let n = self.noun_det(&Filter::and(rest), det);
+                format!("{subj} exiles {n} they control")
+            }
             // "Each opponent exiles a card from their hand": each one chooses among their
             // own cards.
             Effect::Exile {
@@ -2488,9 +2520,12 @@ impl Renderer<'_> {
                 if *abilities {
                     format!("{a}. When you spend this mana to cast {f} or activate an ability, {b}")
                 } else if *additional {
-                    format!("{a}. If that mana is spent to cast {f}, {b}")
+                    // Mana spent "on" a spell is spent to cast it (CR 601.2h).
+                    format!("{a}. If that mana is spent {{alt:to cast|on}} {f}, {b}")
                 } else {
-                    format!("{a}. When that mana is spent to cast {f}, {b}")
+                    format!(
+                        "{a}. When {{alt:that mana is spent|you spend this mana}} to cast {f}, {b}"
+                    )
                 }
             }
             Effect::PersistentMana(e) => {
@@ -2637,6 +2672,24 @@ impl Renderer<'_> {
                     format!("{} the rest into {p} library", if you { "shuffle" } else { "shuffles" })
                 } else {
                     let r = self.destination_phrase(rest_to, true, true);
+                    // The cards revealed from your library are yours (a card goes only to
+                    // its owner's library, CR 400.3): "on the bottom of your library".
+                    let yours = match rest_to.position {
+                        LibraryPosition::Bottom if you && rest_to.position_choice.is_empty() => {
+                            Some("on the bottom of your library {opt:in any order}")
+                        }
+                        LibraryPosition::BottomRandom
+                            if you && rest_to.position_choice.is_empty() =>
+                        {
+                            Some("on the bottom of your library in a random order")
+                        }
+                        _ => None,
+                    }
+                    .filter(|_| rest_to.zone == ZoneKind::Library);
+                    let r = match yours {
+                        Some(y) => format!("{{alt:{r}|{y}}}"),
+                        None => r,
+                    };
                     format!("the rest {r}")
                 };
                 // Another player reveals: that player puts the cards (the second sentence
@@ -2985,7 +3038,12 @@ impl Renderer<'_> {
                 let verb = self.permission_verb();
                 // A permission for an exiled card lasts as long as it's that object (CR
                 // 400.7): "for as long as it remains exiled".
-                let d = if matches!(duration, Duration::Permanent)
+                // "You may play that card until you exile another card with ~" (the
+                // permission ends then; as it leaves exile at the latest, CR 400.7).
+                let until_another = self.play_terms.as_ref().is_some_and(|t| t.until_another);
+                let d = if matches!(duration, Duration::Permanent) && until_another {
+                    String::new()
+                } else if matches!(duration, Duration::Permanent)
                     && self.after_exile
                     && self.any_turn_permission
                 {
@@ -2996,6 +3054,12 @@ impl Renderer<'_> {
                 } else {
                     d
                 };
+                // "You may cast that card this turn without paying its mana cost": the
+                // duration before or after the way it's cast.
+                if !f.is_empty() && !d.is_empty() && !d.contains('{') {
+                    let f = f.trim_start();
+                    return format!("{p} may {verb} {w} {{alt:{d} {f}|{f} {d}}}");
+                }
                 join_words(&[format!("{p} may {verb} {w}{f}"), d])
             }
             Effect::PreventDamage {
@@ -3294,6 +3358,41 @@ impl Renderer<'_> {
                         ) =>
                     {
                         "can't be countered".to_string()
+                    }
+                    // "the next spell you cast this turn costs {1} less to cast": the
+                    // spell's own cost reduction (CR 601.2f).
+                    [Modification::AddAbility(a)]
+                        if matches!(
+                            &a.kind,
+                            AbilityKind::Static(st)
+                                if st.condition.is_none()
+                                    && matches!(
+                                        &st.effect,
+                                        StaticEffect::CostModifier(CostModifier {
+                                            applies_to: CostTarget::ThisSpell,
+                                            who: PlayerRel::You,
+                                            change: CostChange::ReduceGeneric(Value::Const(_))
+                                                | CostChange::IncreaseGeneric(Value::Const(_)),
+                                        })
+                                    )
+                        ) =>
+                    {
+                        let AbilityKind::Static(StaticAbility {
+                            effect: StaticEffect::CostModifier(cm),
+                            ..
+                        }) = &a.kind
+                        else {
+                            return self.gap("next spell cost");
+                        };
+                        match &cm.change {
+                            CostChange::ReduceGeneric(Value::Const(n)) => {
+                                format!("costs {{{n}}} less to cast")
+                            }
+                            CostChange::IncreaseGeneric(Value::Const(n)) => {
+                                format!("costs {{{n}}} more to cast")
+                            }
+                            _ => return self.gap("next spell cost"),
+                        }
                     }
                     // "The next noncreature spell you cast this turn has affinity for
                     // artifacts."
@@ -4325,6 +4424,119 @@ impl Renderer<'_> {
                     continue;
                 }
             }
+            // "Creatures your opponents control block this turn if able, and you choose how
+            // those creatures block.": the second restriction is about the blocks the
+            // first one requires, for as long.
+            if let (
+                Some(Effect::AddRestriction {
+                    restriction: Restriction::MustBlock(_),
+                    duration: d1,
+                }),
+                Some(Effect::AddRestriction {
+                    restriction: r2 @ Restriction::Custom(n),
+                    duration: d2,
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if format!("{d1:?}") == format!("{d2:?}")
+                    && n == "combat: controller chooses how opponents' creatures block"
+                {
+                    let a = self.effect(&v[i]);
+                    let b = self.restriction(r2);
+                    parts.push(format!("{a}, and {b}"));
+                    i += 2;
+                    continue;
+                }
+            }
+            // "Target opponent exiles a creature they control and their graveyard.": the
+            // player exiles the cards in their graveyard too.
+            if let (
+                Some(
+                    first @ Effect::Exile {
+                        what:
+                            Sel::Choose {
+                                chooser: PlayerRef::Target(t),
+                                ..
+                            },
+                        ..
+                    },
+                ),
+                Some(Effect::Exile {
+                    what: Sel::All(Filter::And(g)),
+                    face_down: false,
+                    ..
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if let [Filter::InZone(ZoneKind::Graveyard), Filter::OwnedByPlayer(o)] =
+                    g.as_slice()
+                {
+                    let a = self.effect(first);
+                    if matches!(o.as_ref(), PlayerRef::Target(x) if x == t)
+                        && a.ends_with(" they control")
+                    {
+                        parts.push(format!("{a} and their graveyard"));
+                    } else {
+                        parts.push(a);
+                        let b = self.effect(&v[i + 1]);
+                        parts.push(b);
+                    }
+                    i += 2;
+                    continue;
+                }
+            }
+            // "it enters with an additional +1/+1 counter on it and gains hexproof until
+            // your next turn": the spell's permanent, named once.
+            if let (
+                Some(Effect::AddReplacement { def, .. }),
+                Some(Effect::Modify {
+                    what: Sel::TriggerSpell,
+                    ..
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if matches!(&def.event, ReplacementEvent::EntersBattlefield(Filter::In(s)) if matches!(s.as_ref(), Sel::TriggerSpell))
+                {
+                    let a = self.effect(&v[i]);
+                    let b = self.effect(&v[i + 1]);
+                    match b.strip_prefix("it ") {
+                        Some(r) => parts.push(format!("{a} and {{opt:it}} {r}")),
+                        None => {
+                            parts.push(a);
+                            parts.push(b);
+                        }
+                    }
+                    i += 2;
+                    continue;
+                }
+            }
+            // "That creature can't be blocked this turn and has base power and toughness
+            // 1/1 until end of turn."
+            if let (
+                Some(Effect::AddRestriction {
+                    restriction: Restriction::CantBeBlocked(Filter::In(r)),
+                    ..
+                }),
+                Some(Effect::Modify { what, .. }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if same_sel(r, what) {
+                    let a = self.effect(&v[i]);
+                    let b = self.effect(&v[i + 1]);
+                    match ["~it ", "it ", "they "]
+                        .iter()
+                        .find_map(|p| b.strip_prefix(p))
+                    {
+                        Some(r) => parts.push(format!("{a} and {{opt:it}} {r}")),
+                        None => {
+                            parts.push(a);
+                            parts.push(b);
+                        }
+                    }
+                    i += 2;
+                    continue;
+                }
+            }
             // "~ gets +1/+0 until end of turn and can't be blocked this turn."
             if let (Some(Effect::Modify { .. }), Some(Effect::AddRestriction { .. })) =
                 (v.get(i), v.get(i + 1))
@@ -4659,6 +4871,31 @@ impl Renderer<'_> {
             let t = self.effect(then);
             if t.contains("after this phase") {
                 return t.replace("after this phase", "after this main phase");
+            }
+        }
+        // "When a creature is put onto the battlefield this way, it deals damage ...": a
+        // reflexive trigger for the card the instruction put there (CR 603.12).
+        if let (
+            true,
+            Condition::SelNonEmpty(Sel::Matching(x, Filter::And(f))),
+            Effect::Reflexive { body },
+        ) = (else_empty, cond, then)
+        {
+            if matches!(x.as_ref(), Sel::Var(v) if *v == vars::IT)
+                && f.iter()
+                    .any(|y| matches!(y, Filter::InZone(ZoneKind::Battlefield)))
+            {
+                let kind: Vec<Filter> = f
+                    .iter()
+                    .filter(|y| !matches!(y, Filter::InZone(_)))
+                    .cloned()
+                    .collect();
+                let n = self.noun_det(&Filter::and(kind), Det::A);
+                let b = self.in_event_scope(|r| r.body(body));
+                return format!(
+                    "when {n} is put onto the battlefield this way, {}",
+                    lower_first(&b)
+                );
             }
         }
         match cond {
@@ -5398,9 +5635,14 @@ impl Renderer<'_> {
                 let a = self.sel(a, Case::Obj);
                 s.push_str(&format!(" attached to {a}"));
             }
-            for (k, n) in &to.with_counters {
-                let (c, _) = self.counted(n, &counter_name(k));
-                s.push_str(&format!(" with {c} on it"));
+            // "with a hexproof counter and an indestructible counter on it".
+            let cs: Vec<String> = to
+                .with_counters
+                .iter()
+                .map(|(k, n)| self.counted(n, &counter_name(k)).0)
+                .collect();
+            if !cs.is_empty() {
+                s.push_str(&format!(" with {} on it", join_list(&cs, "and")));
             }
             if !to.with_mods.is_empty() {
                 let vp = self.mods_vp(&to.with_mods, true);

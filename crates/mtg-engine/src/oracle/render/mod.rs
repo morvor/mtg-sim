@@ -228,6 +228,30 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
             out.lines.push(format!("Gift {what}"));
             continue;
         }
+        // "~ is also a Cleric, Rogue, Warrior, and Wizard.": subtypes a CDA adds to the
+        // object's own (CR 604.3a), in every zone.
+        if let AbilityKind::Static(s) = &a.kind {
+            if let (
+                true,
+                None,
+                StaticEffect::Continuous {
+                    affected: Filter::Source,
+                    mods,
+                },
+            ) = (s.is_cda, &s.condition, &s.effect)
+            {
+                if let [Modification::AddSubtypes(v)] = mods.as_slice() {
+                    let w: Vec<String> = v.iter().map(|x| x.to_string()).collect();
+                    if !w.is_empty() {
+                        out.lines.push(format!(
+                            "~ is also {}.",
+                            with_article(&join_list(&w, "and"))
+                        ));
+                        continue;
+                    }
+                }
+            }
+        }
         // "Equip {10}. This ability costs {X} less to activate, where X is ...".
         if let Some(line) = abilities.get(i + 1).and_then(|next| {
             r.keyword_with_own_cost(a, next)

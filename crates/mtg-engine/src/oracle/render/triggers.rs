@@ -164,13 +164,26 @@ impl Renderer<'_> {
                 _ => false,
             }
         }
+        // "Whenever an opponent attacks", "Whenever ~ deals damage to an opponent": the
+        // event's player is an opponent ("that opponent").
+        fn opponent_event(t: &TriggerCond) -> bool {
+            match t {
+                TriggerCond::PlayerAttacks(PlayerRel::Opponent) => true,
+                TriggerCond::DealsDamage {
+                    to: DamageRecipient::Player(PlayerRel::Opponent),
+                    ..
+                } => true,
+                TriggerCond::Batched { trigger, .. } => opponent_event(trigger),
+                _ => false,
+            }
+        }
         if player_targeted(&t.trigger) {
             self.trigger_player = Some("{alt:that spell's controller|that player}");
         } else if targeted(&t.trigger) {
             // The event's player controls the spell or ability that targeted (CR 115.1).
             self.trigger_player =
                 Some("{alt:that spell's controller|that spell or ability's controller}");
-        } else if matches!(t.trigger, TriggerCond::PlayerAttacks(PlayerRel::Opponent)) {
+        } else if opponent_event(&t.trigger) {
             self.trigger_player = Some(super::players::OPPONENT_EVENT);
         }
         let trig = self.trigger_text(&t.trigger);
@@ -1096,6 +1109,26 @@ impl Renderer<'_> {
                     .unwrap_or(Filter::Any);
                 let n = self.noun_det(&f, Det::A);
                 Ev::new("you", format!("reveal {n} this way"))
+            }
+            // "Whenever one or more creatures attack you": attacking you, not a
+            // planeswalker or battle (the attacked permanent, CR 506.3, 508.1b).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::And(cs),
+            } if matches!(trigger.as_ref(), TriggerCond::Attacks(_))
+                && matches!(
+                    cs.as_slice(),
+                    [
+                        Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::You),
+                        Condition::Not(n),
+                    ] if matches!(n.as_ref(), Condition::SelNonEmpty(Sel::TriggerOtherObject))
+                ) =>
+            {
+                let TriggerCond::Attacks(f) = trigger.as_ref() else {
+                    return Ev::new("", self.gap("attacks you"));
+                };
+                let o = self.noun_det(f, det.clone());
+                Ev::new(o, "attacks you")
             }
             // "Whenever you draw your second card each turn".
             TriggerCond::Where { trigger, cond }

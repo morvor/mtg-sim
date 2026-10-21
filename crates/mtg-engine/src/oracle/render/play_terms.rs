@@ -203,6 +203,14 @@ impl Renderer<'_> {
                 ". If {alt:that spell|that card|it|a spell cast this way} would be put {alt:into a graveyard|into your graveyard}, exile it instead",
             );
         }
+        // "If that spell would be put into a graveyard, put it on the bottom of its
+        // owner's library instead."
+        if let Some(d) = &terms.graveyard_instead {
+            let dest = self.destination_phrase(d, false, false);
+            s.push_str(&format!(
+                ". If {{alt:that spell|a spell cast this way}} would be put into a graveyard, put it {dest} instead"
+            ));
+        }
         s
     }
 

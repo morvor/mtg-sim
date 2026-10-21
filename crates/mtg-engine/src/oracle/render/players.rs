@@ -954,6 +954,20 @@ impl Renderer<'_> {
                         }
                     }
                 }
+                // "your hand, graveyard, and all permanents you own": a list of zones of
+                // the same player, the owner said once or for each.
+                if parts.len() > 2 {
+                    let orig = parts.clone();
+                    for i in 1..parts.len() {
+                        let one_zone = orig[i]
+                            .strip_prefix("your ")
+                            .filter(|x| !x.contains(' '))
+                            .map(str::to_string);
+                        if let (true, Some(z)) = (orig[i - 1].starts_with("your "), one_zone) {
+                            parts[i] = format!("{{opt:your}} {z}");
+                        }
+                    }
+                }
                 // "each opponent and each creature and planeswalker they control".
                 if parts.first().is_some_and(|p| p == "each opponent") {
                     for p in parts.iter_mut().skip(1) {

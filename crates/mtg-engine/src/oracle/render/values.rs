@@ -46,6 +46,18 @@ impl Renderer<'_> {
                     format!("the number of {n}")
                 }
             }
+            // "the number of cards revealed this way": the cards a reveal instruction
+            // revealed (a hand, the cards revealed until one was found, or the cards
+            // chosen to reveal), as `value_results::this_way_sel` reads them.
+            Value::CountSel(s)
+                if matches!(s.as_ref(), Sel::Matching(u, _) if is_revealed_this_way(u)) =>
+            {
+                let Sel::Matching(_, f) = s.as_ref() else {
+                    return self.gap("revealed this way");
+                };
+                let n = self.noun(f, Num::Many);
+                format!("the number of {n} revealed this way")
+            }
             Value::CountSel(s) if self.this_way_of(s).is_some() => {
                 let n = self.noun(&Filter::In(Box::new((**s).clone())), Num::Many);
                 format!("the number of {n}")
@@ -1179,6 +1191,23 @@ impl Renderer<'_> {
                 "you control a Ring-bearer".into()
             };
         }
+        // "if your team controls another Warrior": you or a teammate (CR 102.4).
+        if let Filter::And(v) = f {
+            let team = |x: &Filter| {
+                matches!(x, Filter::Or(o) if matches!(o.as_slice(),
+                    [Filter::ControlledBy(PlayerRel::You), Filter::ControlledBy(PlayerRel::Teammate)]))
+            };
+            if v.iter().filter(|x| team(x)).count() == 1 && f.zone().is_none() {
+                let rest = Filter::and(v.iter().filter(|x| !team(x)).cloned().collect());
+                return if negated {
+                    let n = self.noun(&rest, Num::Many);
+                    format!("your team controls no {n}")
+                } else {
+                    let n = self.noun_det(&rest, Det::A);
+                    format!("your team controls {n}")
+                };
+            }
+        }
         let (ctrl, rest) = split_controller(f);
         // "you control the creature with the greatest power or tied for the greatest
         // power": one of yours has power at least the greatest among all creatures.
@@ -1573,6 +1602,28 @@ impl Renderer<'_> {
         }
         if let Some(s) = self.attempt(|r| r.events_compare(a, cmp, b, false)) {
             return s;
+        }
+        // "if no mana was spent to cast it" (none of the amount, CR 601.2h).
+        if let (Value::Custom(n), Cmp::Eq, Value::Const(0)) = (a, cmp, b) {
+            if n == "opus:mana spent to cast that spell" {
+                return "no mana was spent to cast {alt:it|that spell}".into();
+            }
+        }
+        // "your life total is less than or equal to half your starting life total": twice
+        // the one compared with the other (exact halves, no rounding).
+        if let (Value::Mul(k, x), Value::StartingLife) = (a, b) {
+            let rel = match cmp {
+                Cmp::Le => Some("less than or equal to"),
+                Cmp::Lt => Some("less than"),
+                Cmp::Ge => Some("greater than or equal to"),
+                Cmp::Gt => Some("greater than"),
+                _ => None,
+            };
+            if let (Value::Const(2), Some(rel)) = (k.as_ref(), rel) {
+                let xs = self.value(x);
+                let bs = self.value(b);
+                return format!("{xs} is {rel} half {bs}");
+            }
         }
         if let Some(s) = self.this_turn_compare(a, cmp, b) {
             return s;
@@ -2075,4 +2126,20 @@ fn two_zone_count(v: &[Value]) -> Option<(Filter, Vec<ZoneKind>)> {
         return None;
     }
     Some((Filter::and(ra), vec![za, zb]))
+}
+
+/// The cards "revealed this way" (see `value_results::this_way_sel`): those a reveal
+/// instruction left in [`vars::DUG`], the cards revealed one at a time that it didn't
+/// ([`vars::REVEALED`]), and the cards revealed from a hand.
+fn is_revealed_this_way(s: &Sel) -> bool {
+    let Sel::Union(v) = s else { return false };
+    match v.as_slice() {
+        [Sel::Var(a), Sel::Matching(b, Filter::Not(n)), Sel::Var(c)] => {
+            *a == vars::DUG
+                && matches!(b.as_ref(), Sel::Var(x) if *x == vars::REVEALED)
+                && matches!(n.as_ref(), Filter::In(d) if matches!(d.as_ref(), Sel::Var(x) if *x == vars::DUG))
+                && *c == crate::kw::reveal_from_hand::REVEALED
+        }
+        _ => false,
+    }
 }

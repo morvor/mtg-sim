@@ -696,7 +696,9 @@ fn a_mana_spent_enters_with(block: &str, ctx: &CompileContext) -> Option<Vec<Abi
             self_replacement: false,
             optional: false,
         },
-        duration: Duration::EndOfTurn,
+        // Until it applies, once: to the permanent that spell becomes (another object
+        // later, CR 400.7), as "When you spend this mana ..., it enters with ..." is.
+        duration: Duration::Permanent,
         uses: Some(1),
     });
     let abilities = crate::oracle::parse_ability(head, ctx)?;

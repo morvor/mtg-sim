@@ -2838,7 +2838,20 @@ impl Renderer<'_> {
                         let t = self.replacement_then(action, "");
                         format!("{{opt:that player skips that draw and}} {t}")
                     }
+                    // "If you would draw a card, you may skip that draw instead."
+                    ReplacementAction::Instead(e) if matches!(e.as_ref(), Effect::Noop) => {
+                        "skip that draw instead".to_string()
+                    }
                     _ => self.replacement_then(action, ""),
+                };
+                // "If you would draw a card, you may put a study counter on ~ instead" /
+                // "... you may instead choose land or nonland and ...": the player whose
+                // draw it is chooses whether to apply it (CR 614.1, 616.1).
+                let then = match then.strip_suffix(" instead") {
+                    Some(body) if def.optional && w == "you" && !then.contains(" may ") => {
+                        format!("{{alt:you may {then}|you may instead {body}}}")
+                    }
+                    _ => then,
                 };
                 let except = if !except {
                     String::new()
@@ -3364,6 +3377,17 @@ impl Renderer<'_> {
                 format!("{subj} {t}")
             }
             Effect::Seq(v)
+                if v.iter()
+                    .filter(|x| matches!(x, Effect::EnterWithCounters { .. }))
+                    .count()
+                    > 1
+                    && v.iter()
+                        .all(|x| matches!(x, Effect::EnterWithCounters { .. })) =>
+            {
+                let t = self.as_enters_vp(e);
+                format!("{subj} {t}")
+            }
+            Effect::Seq(v)
                 if v.iter().all(|x| {
                     matches!(x, Effect::EnterTapped | Effect::EnterWithCounters { .. })
                 }) =>
@@ -3414,7 +3438,29 @@ impl Renderer<'_> {
                 format!("enters with {}", join_list(&k, "and"))
             }
             Effect::Seq(v) => {
-                let mut parts: Vec<String> = v.iter().map(|x| self.as_enters_vp(x)).collect();
+                // "enters with two +1/+1 counters and a lifelink counter on it": the
+                // counters it enters with, one list.
+                let mut parts: Vec<String> = Vec::new();
+                let mut counters: Vec<String> = Vec::new();
+                for x in v {
+                    if !counters.is_empty() && !matches!(x, Effect::EnterWithCounters { .. }) {
+                        let c = join_list(&std::mem::take(&mut counters), "and");
+                        parts.push(format!("enters with {c} on it"));
+                    }
+                    if let Effect::EnterWithCounters { kind, n } = x {
+                        let (c, w) = self.counted(n, &counter_name(kind));
+                        match w {
+                            None => counters.push(c),
+                            Some(w) => parts.push(format!("enters with {c} on it{w}")),
+                        }
+                        continue;
+                    }
+                    parts.push(self.as_enters_vp(x));
+                }
+                if !counters.is_empty() {
+                    let c = join_list(&counters, "and");
+                    parts.push(format!("enters with {c} on it"));
+                }
                 // "enters with two +1/+1 counters on it and with haste": one verb.
                 for i in (1..parts.len()).rev() {
                     if parts[i].starts_with("enters with ") && parts[i - 1].starts_with("enters ") {

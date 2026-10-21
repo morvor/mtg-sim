@@ -314,11 +314,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               the verb is said once for both groups of cards.",
     },
     Equivalence {
-        pattern: r"\b(?:all )?other cards revealed this way\b|\bthe rest of the revealed cards\b",
+        pattern: r"\b(?:all )?other cards (?:revealed this way|from among them)\b|\bthe rest of the revealed cards\b",
         replacement: "the rest",
         why: "Anaphora: after an instruction that takes some of the cards revealed, \
               \"all other cards revealed this way\" and \"the rest of the revealed \
-              cards\" are the rest of them.",
+              cards\" are the rest of them (\"cards revealed this way\" is first made \
+              \"cards from among them\", see `where_x_rewrites`).",
     },
     Equivalence {
         pattern: r"\b(?:is|are) put into your graveyard from the battlefield\b",
@@ -386,6 +387,30 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "A static ability's condition (\"~ doesn't untap during your untap step if it \
               has a depletion counter on it\") applies whenever it's true, as \"as long as\" \
               says (CR 604.1).",
+    },
+    Equivalence {
+        pattern: r"\b(defending player\b[^.;\n]*?)\bdefending player's\b",
+        replacement: "${1}their",
+        why: "A pronoun for the player the sentence already named: \"defending player loses \
+              1 life for each card in their graveyard\" is defending player's graveyard.",
+    },
+    Equivalence {
+        pattern: r"\b(defending player\b[^.;\n]*?)\bdefending player controls\b",
+        replacement: "${1}they control",
+        why: "A pronoun for the player the sentence already named: \"... to defending \
+              player equal to the number of artifacts they control\".",
+    },
+    Equivalence {
+        pattern: r"\beach of your opponents\b",
+        replacement: "each opponent",
+        why: "\"Each of your opponents\" is each opponent: a player's opponents are the \
+              players not on their team (CR 102.2, 102.3).",
+    },
+    Equivalence {
+        pattern: r"\bone or more of your opponents\b",
+        replacement: "one or more opponents",
+        why: "\"One or more of your opponents\" is one or more opponents (CR 102.2, \
+              102.3).",
     },
     Equivalence {
         pattern: r"\b(opponents?) you have\b",
