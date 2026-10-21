@@ -576,3 +576,45 @@ fn p_that_trigger_noun(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "combat 4: that [type] (the attacking trigger creature)", priority: 95, parse: p_that_trigger_noun } }
+
+/// Whether the last instruction of `e` is a delayed triggered ability that triggers at a
+/// step of a combat phase ("at the beginning of that player's next declare attackers
+/// step").
+fn delayed_at_combat_step(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.last().is_some_and(delayed_at_combat_step),
+        Effect::DelayedTrigger { trigger, .. } => {
+            let s = serde_json::to_string(trigger).unwrap_or_default();
+            [
+                "\"BeginningOfCombat\"",
+                "\"DeclareAttackers\"",
+                "\"DeclareBlockers\"",
+                "\"CombatDamage\"",
+            ]
+            .iter()
+            .any(|w| s.contains(w))
+                && !["\"End\"", "\"Upkeep\"", "\"Draw\"", "Main\"", "\"EndOfCombat\""]
+                    .iter()
+                    .any(|w| s.contains(w))
+        }
+        _ => false,
+    }
+}
+
+/// "Return it to the battlefield ... tapped and attacking at the beginning of that
+/// player's next declare attackers step. It can't be blocked that combat." (Noctis, Heir
+/// Apparent): "that combat" is the combat of the step the delayed ability triggers in, so
+/// the sentence continues the delayed ability with "this combat".
+fn f_that_combat_after_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l.trim());
+    if !l.contains(" that combat") || !delayed_at_combat_step(prev) {
+        return false;
+    }
+    let rewritten = l.replace(" that combat", " this combat");
+    super::followup_patterns()
+        .iter()
+        .filter(|p| p.name != "combat 4: that combat after a delayed combat-step ability")
+        .any(|p| (p.apply)(&rewritten, prev, b))
+}
+
+inventory::submit! { FollowupPattern { name: "combat 4: that combat after a delayed combat-step ability", priority: 45, apply: f_that_combat_after_delayed } }
