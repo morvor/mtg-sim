@@ -143,7 +143,24 @@ fn parse_triggered_at(
                             (Some(sel @ Sel::AttachedTo), Sel::This) => body_it = Some(sel.clone()),
                             // "Whenever you cast an instant or sorcery spell, if ~ has fewer
                             // than three charge counters on it, put a charge counter on it."
-                            (Some(Sel::This), _) => body_it = Some(Sel::This),
+                            // "..., if ~ has loyalty counters on it, you may move a
+                            // loyalty counter from ~ onto that planeswalker": "that
+                            // [noun]" is still the trigger's object.
+                            (Some(Sel::This), _)
+                                if !(matches!(it, Sel::TriggerObject)
+                                    && [
+                                        "creature",
+                                        "planeswalker",
+                                        "permanent",
+                                        "artifact",
+                                        "enchantment",
+                                        "land",
+                                    ]
+                                    .iter()
+                                    .any(|n| eff.contains(&format!(" that {n}")))) =>
+                            {
+                                body_it = Some(Sel::This)
+                            }
                             _ => {}
                         }
                         Some(cond)

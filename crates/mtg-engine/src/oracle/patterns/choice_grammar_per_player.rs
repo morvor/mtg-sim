@@ -18,8 +18,8 @@ use smol_str::SmolStr;
 
 /// Words that make "choose ... or ..." something other than a choice among words.
 const NOT_WORDS: [&str; 22] = [
-    "one", "two", "three", "four", "both", "more", "any", "all", "each", "up", "target", "a",
-    "an", "the", "left", "right", "odd", "even", "x", "new", "that", "this",
+    "one", "two", "three", "four", "both", "more", "any", "all", "each", "up", "target", "a", "an",
+    "the", "left", "right", "odd", "even", "x", "new", "that", "this",
 ];
 
 /// One listed word: one or two lowercase words of letters (or a number).
@@ -75,6 +75,20 @@ pub fn word_choice(words: Vec<String>) -> ChoiceKind {
         .all(|w| crate::types::is_creature_type(w) || crate::types::is_land_type(w))
     {
         return ChoiceKind::OneOf(subtypes);
+    }
+    // "choose white Citizen, blue Camarid, ...": a color and a creature type together
+    // (Sarpadian Empires, Vol. VII).
+    let pairs: Option<Vec<String>> = words
+        .iter()
+        .map(|w| {
+            let (c, t) = w.split_once(' ')?;
+            crate::types::Color::from_word(c)?;
+            let t = cap(t);
+            crate::types::is_creature_type(&t).then(|| format!("{c} {t}"))
+        })
+        .collect();
+    if let Some(pairs) = pairs {
+        return ChoiceKind::OneOf(pairs);
     }
     let typed = words.iter().any(|w| {
         crate::types::Color::from_word(w).is_some()
@@ -191,10 +205,7 @@ fn only_choices(e: &Effect) -> bool {
 /// "As ~ enters, each player chooses war or peace.", "As ~ enters, secretly choose an
 /// opponent.": choices made as the permanent enters (CR 614.12a), by any players, that
 /// the etb grammar (`etb_choices.rs`) doesn't word.
-fn as_enters_choices(
-    block: &str,
-    ctx: &crate::oracle::CompileContext,
-) -> Option<Vec<Ability>> {
+fn as_enters_choices(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
     if !ctx.is_permanent() || block.contains('\n') {
         return None;
     }
@@ -234,7 +245,11 @@ fn replace_json(
         return to.clone();
     }
     match v {
-        J::Array(a) => J::Array(a.into_iter().map(|x| replace_json(x, from, to, n)).collect()),
+        J::Array(a) => J::Array(
+            a.into_iter()
+                .map(|x| replace_json(x, from, to, n))
+                .collect(),
+        ),
         J::Object(m) => J::Object(
             m.into_iter()
                 .map(|(k, x)| (k, replace_json(x, from, to, n)))
@@ -250,7 +265,11 @@ fn replace_json(
 fn each_player_who_chose(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (phrase, who, filter) = [
-        ("each opponent who ", PlayerRef::EachOpponent, PlayerFilter::Opponent),
+        (
+            "each opponent who ",
+            PlayerRef::EachOpponent,
+            PlayerFilter::Opponent,
+        ),
         ("each player who ", PlayerRef::EachPlayer, PlayerFilter::Any),
     ]
     .into_iter()
@@ -438,7 +457,10 @@ fn chosen_players_double_damage(
     };
     let to_player = Condition::And(vec![
         Condition::PlayerMatches(PlayerRef::TriggerPlayer, chosen.clone()),
-        Condition::PlayerMatches(source_controller.clone(), other_than(PlayerRef::TriggerPlayer)),
+        Condition::PlayerMatches(
+            source_controller.clone(),
+            other_than(PlayerRef::TriggerPlayer),
+        ),
     ]);
     let recipient_controller = PlayerRef::ControllerOf(Box::new(Sel::TriggerObject));
     let to_permanent = Condition::And(vec![
@@ -589,7 +611,6 @@ fn each_unless_its(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "exile each permanent unless it's [qualities]", priority: 120, parse: each_unless_its } }
 
-
 /// Whether `e` chooses among card type words with a qualified one ("artifact, creature,
 /// land, or non-Aura enchantment").
 fn chooses_type_words(e: &Effect) -> bool {
@@ -616,7 +637,11 @@ fn type_word_filters(v: serde_json::Value, n: &mut usize) -> serde_json::Value {
     }
     match v {
         J::Array(a) => J::Array(a.into_iter().map(|x| type_word_filters(x, n)).collect()),
-        J::Object(m) => J::Object(m.into_iter().map(|(k, x)| (k, type_word_filters(x, n))).collect()),
+        J::Object(m) => J::Object(
+            m.into_iter()
+                .map(|(k, x)| (k, type_word_filters(x, n)))
+                .collect(),
+        ),
         x => x,
     }
 }
@@ -657,7 +682,9 @@ inventory::submit! { super::FollowupPattern { name: "of that type (a chosen card
 /// player puts it on the bottom of their library." (Conundrum Sphinx): each player
 /// reveals their top card and moves it by their own chosen name.
 fn revealed_has_the_name_they_chose(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    let Some(rest) = end(l).strip_prefix("if the card a player revealed has the name they chose, that player ") else {
+    let Some(rest) =
+        end(l).strip_prefix("if the card a player revealed has the name they chose, that player ")
+    else {
         return false;
     };
     const REVEAL: &str = "parley:each player reveals the top card of their library";
@@ -674,9 +701,7 @@ fn revealed_has_the_name_they_chose(l: &str, prev: &mut Effect, b: &mut Builder)
     let Some(pred) = super::player_subjects::as_you(rest) else {
         return false;
     };
-    let text = format!(
-        "reveal the top card of your library. if it has the chosen name, {pred}"
-    );
+    let text = format!("reveal the top card of your library. if it has the chosen name, {pred}");
     let targets = b.targets.len();
     let Some(e) = crate::oracle::effects::parse_effect_text(&text, b) else {
         b.targets.truncate(targets);
@@ -729,7 +754,10 @@ fn if_it_doesnt_that_player(l: &str, prev: &mut Effect, b: &mut Builder) -> bool
         Effect::Seq(v) => v.last_mut(),
         other => Some(other),
     };
-    let Some(Effect::If { cond, otherwise, .. }) = iff else {
+    let Some(Effect::If {
+        cond, otherwise, ..
+    }) = iff
+    else {
         return false;
     };
     if !matches!(**otherwise, Effect::Noop)

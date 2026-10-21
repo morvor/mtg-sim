@@ -702,6 +702,7 @@ impl Game {
                     self,
                     new_id,
                     copy_effect,
+                    m.etb.copy_of,
                     &m.etb.copy_extras,
                     &mut counters_to_add,
                 );

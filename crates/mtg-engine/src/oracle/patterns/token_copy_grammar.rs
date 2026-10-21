@@ -563,6 +563,13 @@ fn create_aura_attached(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let (to, tail) = if let Some(t) = to_s.strip_prefix('~') {
         (Sel::This, t)
+    } else if let Some(t) = ["it", "that creature", "that permanent"]
+        .iter()
+        .find_map(|p| to_s.strip_prefix(p))
+        .filter(|_| matches!(b.it, Sel::Var(_) | Sel::Target(_) | Sel::TriggerObject))
+    {
+        // "for each of up to X target creatures, create ... attached to that creature".
+        (b.it.clone(), t)
     } else {
         let (spec, tail) = parse_target(to_s)?;
         let text = to_s[..to_s.len() - tail.len()].trim().to_string();
@@ -900,13 +907,20 @@ fn create_join_combat(l: &str, b: &mut Builder) -> Option<Effect> {
         });
     }
     let (base, blocked) = l.split_once(" that's blocking ")?;
+    // "create a token that's a copy of that creature and that's blocking that creature"
+    // (Mirror Match).
+    let base = base.strip_suffix(" and").unwrap_or(base);
     let e = crate::oracle::effects::parse_clause(base, b);
     let Some(e) = e.filter(|e| creates_attacking(e, false)) else {
         restore(b);
         return None;
     };
     let (attacker, tail) = if let Some(t) = blocked.strip_prefix("that creature") {
-        if !b.in_trigger || super::oracle_hardening_referents::is_no_referent(&b.it) {
+        // In a trigger, or for each of several creatures ("for each creature attacking
+        // you ..., create a token ... that's blocking that creature").
+        if !(b.in_trigger || matches!(b.it, Sel::Var(_)))
+            || super::oracle_hardening_referents::is_no_referent(&b.it)
+        {
             restore(b);
             return None;
         }
