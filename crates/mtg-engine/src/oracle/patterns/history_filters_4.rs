@@ -23,7 +23,13 @@ const WINDOWS: &[(&str, &str)] = &[
     (" this combat", " this combat"),
     (" since your last turn ended", " since your last turn"),
     (" this game", " this game"),
+    (" during their controller's last turn", CONTROLLERS_LAST_TURN),
+    (" during its controller's last turn", CONTROLLERS_LAST_TURN),
 ];
+
+/// The window "during [the object's] controller's last turn" (Halls of Mist), read as
+/// "during your last turn" and then made about the tested object's controller.
+const CONTROLLERS_LAST_TURN: &str = " during your last turn\u{1}";
 
 /// Whether `rest` ends the clause.
 fn clause_end(rest: &str) -> bool {
@@ -100,10 +106,46 @@ fn object_predicate(pred: &str, window: &str, so_far: &Filter) -> Option<Conditi
         };
         Condition::Compare(v, Cmp::Ge, Value::Const(1))
     } else {
-        history_condition(&format!("~ {p}{window}"))?
+        history_condition(&format!("~ {p}{}", window.trim_end_matches('\u{1}')))?
     };
     let cond = about(cond, &Sel::Var(vars::TESTED))?;
+    let cond = if window == CONTROLLERS_LAST_TURN {
+        controllers_last_turn(cond)?
+    } else {
+        cond
+    };
     identity(cond, so_far)
+}
+
+/// The condition with "your last turn" as the tested object's controller's last turn.
+fn controllers_last_turn(cond: Condition) -> Option<Condition> {
+    let mut json = serde_json::to_value(&cond).ok()?;
+    let whose = serde_json::to_value(PlayerRef::ControllerOf(Box::new(Sel::Var(
+        vars::TESTED,
+    ))))
+    .ok()?;
+    let mut n = 0;
+    fn walk(v: &mut serde_json::Value, whose: &serde_json::Value, n: &mut usize) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, x) in m.iter_mut() {
+                    if k == "PlayersLastTurn" {
+                        *x = whose.clone();
+                        *n += 1;
+                    } else {
+                        walk(x, whose, n);
+                    }
+                }
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, whose, n)),
+            _ => {}
+        }
+    }
+    walk(&mut json, &whose, &mut n);
+    if n == 0 {
+        return None;
+    }
+    serde_json::from_value(json).ok()
 }
 
 /// The condition with each trigger condition that judges the object as it was before the
@@ -373,3 +415,100 @@ pub fn player_history(pred_and_window: &str) -> Option<PlayerFilter> {
         pred, window,
     )?)))
 }
+
+/// "controlled by a player who was dealt combat damage by three or more Pirates this
+/// turn" (Admiral Beckett Brass), "controlled by an opponent who lost life this turn".
+fn controlled_by_who<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let (base, r) = if let Some(r) = t.strip_prefix("controlled by a player") {
+        (PlayerFilter::Any, r)
+    } else if let Some(r) = t.strip_prefix("controlled by an opponent") {
+        (PlayerFilter::Opponent, r)
+    } else {
+        return None;
+    };
+    if !r.starts_with(" who ") {
+        return None;
+    }
+    let (q, rest) = player_qualifier(r)?;
+    Some((
+        Filter::ControllerMatches(Box::new(PlayerFilter::And(vec![base, q]))),
+        rest,
+    ))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "history 4: controlled by a player who [did something] this turn", priority: 900, parse: controlled_by_who } }
+
+/// A player qualifier of a static ability's subject: the history qualifiers, and "who
+/// attacked you or a planeswalker you control this turn" (CR 508.6: declared attackers
+/// attacking you or a planeswalker you control).
+fn subject_qualifier(q: &str) -> Option<PlayerFilter> {
+    for (w, planeswalkers) in [
+        ("who attacked you or a planeswalker you control this turn", true),
+        ("who attacked you this turn", false),
+    ] {
+        if q == w {
+            return Some(PlayerFilter::AttackRelation {
+                attacking: true,
+                other: Box::new(PlayerFilter::You),
+                past: true,
+                planeswalkers,
+            });
+        }
+    }
+    let (f, rest) = player_qualifier(q)?;
+    rest.trim().is_empty().then_some(f)
+}
+
+/// "Each opponent who attacked you or a planeswalker you control this turn can't cast
+/// spells." (Sandswirl Wanderglyph), "Each opponent who lost life this turn can't gain
+/// life.": the restriction of "each opponent can't ..." for those opponents only.
+fn each_who_cant(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let l = crate::oracle::phrases::end(l).trim();
+    let (subj, base) = if let Some(r) = l.strip_prefix("each opponent ") {
+        ("each opponent", r)
+    } else if let Some(r) = l.strip_prefix("each player ") {
+        ("each player", r)
+    } else {
+        return None;
+    };
+    if !base.starts_with("who ") {
+        return None;
+    }
+    let i = base.find(" can't ")?;
+    let q = subject_qualifier(&base[..i])?;
+    let plain = format!("{subj}{}.", &base[i..]);
+    let abilities = crate::oracle::statics::parse_static(&plain, ctx)?;
+    let base_json = serde_json::to_value(if subj == "each opponent" {
+        PlayerFilter::Opponent
+    } else {
+        PlayerFilter::Any
+    })
+    .ok()?;
+    let mut out = Vec::new();
+    for a in abilities {
+        let mut d = (*a).clone();
+        let AbilityKind::Static(s) = &mut d.kind else {
+            return None;
+        };
+        let StaticEffect::Restriction(r) = &s.effect else {
+            return None;
+        };
+        // The restricted players: "who" of the restriction, made those who did it.
+        let mut json = serde_json::to_value(r).ok()?;
+        let who = json.as_object_mut()?.values_mut().next()?.get_mut("who")?;
+        if *who != base_json {
+            return None;
+        }
+        *who = serde_json::to_value(PlayerFilter::And(vec![
+            serde_json::from_value(base_json.clone()).ok()?,
+            q.clone(),
+        ]))
+        .ok()?;
+        s.effect = StaticEffect::Restriction(serde_json::from_value(json).ok()?);
+        d.text = text.to_string();
+        out.push(std::sync::Arc::new(d));
+    }
+    Some(out)
+}
+
+inventory::submit! { super::StaticPattern { name: "history 4: each opponent who [did something] this turn can't ...", priority: 900, parse: each_who_cant } }

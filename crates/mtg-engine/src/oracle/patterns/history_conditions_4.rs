@@ -262,3 +262,96 @@ fn first_spell_free(
 }
 
 inventory::submit! { super::AbilityPattern { name: "history 4: if ~ is the first spell you've cast this game, you may cast it without paying its mana cost", priority: 80, parse: first_spell_free } }
+
+// ---------------------------------------------------------------------------
+// The first time something happened to an object this turn
+// ---------------------------------------------------------------------------
+
+/// "it's the first time that creature has become tapped this turn" (Captain America,
+/// Living Legend): the event about that object is the only one of its kind this turn.
+/// Becoming tapped is one event per tapping (CR 701.26a).
+pub fn first_time_referent(
+    c: &str,
+    b: &mut crate::oracle::effects::Builder,
+) -> Option<Condition> {
+    let r = c.strip_prefix("it's the first time ")?;
+    let (who, verb) = r
+        .strip_suffix(" has become tapped this turn")
+        .map(|w| (w, "became tapped"))?;
+    let before = b.targets.len();
+    let saved = b.it.clone();
+    let got = crate::oracle::effects::object_ref(who, b);
+    b.it = saved;
+    let (sel, rest) = got?;
+    if b.targets.len() != before
+        || !rest.trim().is_empty()
+        || super::oracle_hardening_referents::is_no_referent(&sel)
+    {
+        b.targets.truncate(before);
+        return None;
+    }
+    let cond = history_condition(&format!("~ {verb} this turn"))?;
+    let Condition::Compare(v, Cmp::Ge, Value::Const(1)) = cond else {
+        return None;
+    };
+    let once = Condition::Compare(v, Cmp::Eq, Value::Const(1));
+    if matches!(sel, Sel::This) {
+        return Some(once);
+    }
+    super::history_conditions::about(once, &sel)
+}
+
+// ---------------------------------------------------------------------------
+// Damage totals
+// ---------------------------------------------------------------------------
+
+/// "red sources you controlled dealt 4 or more noncombat damage this turn" (Ojer Axonil,
+/// Deepest Might): the total of the damage all such sources dealt this turn (CR 120).
+fn sources_dealt_total(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let (subj, r) = c.split_once(" dealt ")?;
+    if !subj.contains("sources") || subj.starts_with("a ") || subj.starts_with("one ") {
+        return None;
+    }
+    let r = r.strip_suffix(" this turn")?;
+    let (n, kind) = crate::oracle::phrases::parse_number(r)?;
+    let Value::Const(n) = n else { return None };
+    let kind = kind.strip_prefix("or more ")?;
+    if !matches!(kind, "damage" | "combat damage" | "noncombat damage") {
+        return None;
+    }
+    let one = subj
+        .replacen("sources", "source", 1)
+        .replace(" you controlled", " you control");
+    let (cond, _, _) =
+        crate::oracle::triggers::parse_trigger_condition(&format!("whenever a {one} deals {kind}"))?;
+    // Counted event by event, not by batch.
+    let cond = match cond {
+        TriggerCond::Batched { trigger, .. } => *trigger,
+        c => c,
+    };
+    let json = serde_json::to_string(&cond).ok()?;
+    if !json.contains("DealsDamage") || json.contains("Batched") || json.contains("Custom") {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::EventsThisTurn(Box::new(cond), Tally::Amount),
+        Cmp::Ge,
+        Value::Const(n),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: [sources] dealt N or more damage this turn", priority: 900, parse: sources_dealt_total } }
+
+/// "you were dealt damage this turn by a red instant or sorcery spell" (Suffocation): the
+/// window before the source.
+fn dealt_damage_this_turn_by(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let (head, by) = c.split_once(" damage this turn by ")?;
+    if !head.contains(" dealt") {
+        return None;
+    }
+    history_condition(&format!("{head} damage by {by} this turn"))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: [player] was dealt damage this turn by [source]", priority: 900, parse: dealt_damage_this_turn_by } }

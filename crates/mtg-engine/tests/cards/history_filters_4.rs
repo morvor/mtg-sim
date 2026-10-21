@@ -518,3 +518,162 @@ fn tangled_colony_makes_a_rat_for_each_damage_dealt_to_it_this_turn() {
     assert!(!t.on_battlefield(tc));
     assert_eq!(count_named(&t, P0, "Rat"), 4);
 }
+
+// --- batch 4: cast for warp, first time tapped, controller's history, totals ----------
+
+fn has_kw(t: &TestGame, id: ObjectId, k: mtg_engine::keywords::KeywordKind) -> bool {
+    let id = t.g.current(id);
+    t.g.obj(id).chars.has_keyword(k)
+}
+
+#[test]
+fn full_bore_grants_trample_and_haste_only_to_a_creature_cast_for_its_warp_cost() {
+    cr!("702.185a", "608.2c");
+    assert_supported("Full Bore");
+    use mtg_engine::keywords::KeywordKind;
+    use mtg_engine::object::CastMethod;
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 3);
+    let c = t.hand(P0, "Bygone Colossus");
+    t.cast(P0, c)
+        .method(CastMethod::Keyword(KeywordKind::Warp))
+        .go();
+    t.resolve_all();
+    let colossus = t.named_on_battlefield("Bygone Colossus")[0];
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    for target in [colossus, bears] {
+        t.lands(P0, "Mountain", 1);
+        let fb = t.hand(P0, "Full Bore");
+        t.cast_with(P0, fb, &[Entity::Object(target)]).unwrap();
+        t.resolve_all();
+    }
+    assert!(has_kw(&t, colossus, KeywordKind::Trample));
+    assert!(has_kw(&t, colossus, KeywordKind::Haste));
+    assert!(!has_kw(&t, bears, KeywordKind::Trample));
+    assert_eq!(t.pt(bears), (5, 4));
+}
+
+#[test]
+fn captain_america_untaps_a_creature_only_the_first_time_it_becomes_tapped() {
+    cr!("603.4", "701.26a");
+    assert_supported("Captain America, Living Legend");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Captain America, Living Legend");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.tap(bears);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(!t.obj_now(bears).tapped, "the first time: untapped");
+    t.g.tap(bears);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(t.obj_now(bears).tapped, "the second time stays tapped");
+}
+
+#[test]
+fn admiral_beckett_brass_takes_from_a_player_dealt_combat_damage_by_three_pirates() {
+    cr!("510.2", "115.1");
+    assert_supported("Admiral Beckett Brass");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Admiral Beckett Brass");
+    let pirates: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Fathom Fleet Captain")).collect();
+    let mine = t.battlefield(P1, "Hill Giant");
+    let other = t.battlefield(P2, "Hill Giant");
+    // Two Pirates hit P2, three hit P1.
+    for p in &pirates {
+        t.g.deal_damage(*p, Entity::Player(P1), 1, true);
+    }
+    for p in &pirates[..2] {
+        t.g.deal_damage(*p, Entity::Player(P2), 1, true);
+    }
+    t.g.flush_events();
+    t.answer_targets(P0, &[Entity::Object(mine)]);
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let c = offered(&t, P0);
+    assert!(c.contains(&Entity::Object(mine)));
+    assert!(!c.contains(&Entity::Object(other)), "only two Pirates hit P2");
+    assert_eq!(t.obj_now(mine).controller, P0);
+}
+
+#[test]
+fn halls_of_mist_stops_creatures_that_attacked_during_their_controllers_last_turn() {
+    cr!("508.1c");
+    assert_supported("Halls of Mist");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(a, Entity::Player(P1))], &[]);
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::PrecombatMain);
+    // (After P1's upkeep: no cumulative upkeep to pay.)
+    t.battlefield(P1, "Halls of Mist");
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    assert!(!t.g.can_attack(a), "it attacked during P0's last turn");
+    assert!(t.g.can_attack(b));
+}
+
+#[test]
+fn temple_of_power_transforms_after_four_noncombat_damage_from_red_sources() {
+    cr!("120.2", "602.5b");
+    assert_supported("Ojer Axonil, Deepest Might // Temple of Power");
+    let mut t = TestGame::new(2);
+    let temple = t.battlefield(P0, "Ojer Axonil, Deepest Might // Temple of Power");
+    mtg_engine::dfc::transform(&mut t.g, temple);
+    t.g.recompute();
+    t.lands(P0, "Mountain", 3);
+    let red = t.battlefield(P0, "Raging Goblin");
+    let theirs = t.battlefield(P1, "Raging Goblin");
+    let green = t.battlefield(P0, "Grizzly Bears");
+    t.g.deal_damage(theirs, Entity::Player(P1), 4, false);
+    t.g.deal_damage(green, Entity::Player(P1), 4, false);
+    t.g.deal_damage(red, Entity::Player(P1), 2, true);
+    t.g.deal_damage(red, Entity::Player(P1), 3, false);
+    t.g.flush_events();
+    assert!(t.activate(P0, temple, 1, &[]).is_err(), "3 noncombat damage from your red sources");
+    t.g.deal_damage(red, Entity::Player(P1), 1, false);
+    t.g.flush_events();
+    t.activate(P0, temple, 1, &[]).unwrap();
+}
+
+#[test]
+fn suffocation_can_be_cast_only_after_a_red_instant_or_sorcery_dealt_you_damage() {
+    cr!("601.3", "120.2");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    let s = t.hand(P0, "Suffocation");
+    let green = t.battlefield(P1, "Grizzly Bears");
+    t.g.deal_damage(green, Entity::Player(P0), 2, false);
+    t.g.flush_events();
+    assert!(t.cast_with(P0, s, &[]).is_err(), "not a red instant or sorcery");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Mountain", 1);
+    let shock = t.hand(P1, "Shock");
+    t.cast_with(P1, shock, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    t.cast_with(P0, s, &[]).unwrap();
+}
+
+#[test]
+fn sandswirl_wanderglyph_stops_opponents_who_attacked_you_or_your_planeswalkers() {
+    cr!("508.6", "601.3");
+    assert_supported("Unstable Glyphbridge // Sandswirl Wanderglyph");
+    let mut t = TestGame::new(3);
+    let g = t.battlefield(P0, "Unstable Glyphbridge // Sandswirl Wanderglyph");
+    mtg_engine::dfc::transform(&mut t.g, g);
+    t.g.recompute();
+    let pw = t.battlefield(P0, "Jace Beleren");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(&[(a, Entity::Object(pw))], &[]);
+    t.advance_to(P1, Step::PostcombatMain);
+    t.lands(P1, "Mountain", 1);
+    t.lands(P2, "Mountain", 1);
+    let s1 = t.hand(P1, "Shock");
+    assert!(t.cast_with(P1, s1, &[Entity::Player(P2)]).is_err());
+    let s2 = t.hand(P2, "Shock");
+    t.cast_with(P2, s2, &[Entity::Player(P1)]).unwrap();
+}

@@ -1029,6 +1029,7 @@ pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Opt
         .or_else(|| their_last_turn(c, Some(b)))
         .or_else(|| source_to_referent(c, b))
         .or_else(|| nth_time_counters(c, b))
+        .or_else(|| super::history_conditions_4::first_time_referent(c, b))
         .or_else(|| phase_condition(c))
         .or_else(|| resolved_ordinal(c))
         .or_else(|| nth_spell(c, b))
@@ -1400,6 +1401,15 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
             Filter::Custom(ch::CAST_THIS_TURN.into()),
         ));
     }
+    // "was cast for its warp cost" (an alternative cost, CR 118.9).
+    if let Some(k) = rest
+        .strip_prefix("was cast for its ")
+        .and_then(|r| r.strip_suffix(" cost"))
+    {
+        let kind = crate::keywords::KeywordKind::from_name(k)?;
+        let f = Filter::Custom(format!("{}{kind:?}", ch::CAST_FOR).into());
+        return Some(status(&w, Condition::SelMatches(Sel::This, f.clone()), f));
+    }
     for (p, neg) in [
         ("was cast", false),
         ("were cast", false),
@@ -1416,15 +1426,6 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
             };
             return Some(if neg { not(cond) } else { cond });
         }
-    }
-    // "was cast for its warp cost" (an alternative cost, CR 118.9).
-    if let Some(k) = rest
-        .strip_prefix("was cast for its ")
-        .and_then(|r| r.strip_suffix(" cost"))
-    {
-        let kind = crate::keywords::KeywordKind::from_name(k)?;
-        let f = Filter::Custom(format!("{}{kind:?}", ch::CAST_FOR).into());
-        return Some(status(&w, Condition::SelMatches(Sel::This, f.clone()), f));
     }
     if matches!(rest, "was kicked" | "were kicked") {
         return Some(status(
