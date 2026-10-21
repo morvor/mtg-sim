@@ -1305,7 +1305,7 @@ impl Game {
             }
         }
         let (chosen, all_illegal) = self.recheck_targets(id, &body, &ctx);
-        if all_illegal {
+        if all_illegal && !crate::kw::resolves_despite_illegal_targets(self, id, &body) {
             // CR 608.2b: doesn't resolve.
             self.remove_from_stack(id);
             self.state_triggers_active.remove(&(src, uid));

@@ -425,6 +425,13 @@ pub trait KeywordRules: Sync + Send {
     fn state_based_actions(&self, g: &mut Game) -> bool {
         false
     }
+    /// Whether the resolving ability `stack_obj` (whose body is `body`) resolves even
+    /// though all its targets have become illegal (an exception to CR 608.2b: "this
+    /// ability still resolves if its target becomes illegal"); its illegal targets are
+    /// still left out as it resolves.
+    fn resolves_despite_illegal_targets(&self, g: &Game, stack_obj: ObjectId, body: &Body) -> bool {
+        false
+    }
     /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         None
@@ -1133,6 +1140,14 @@ pub fn on_event(g: &mut Game, ev: &Event) {
 /// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
 pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
     registry().iter().any(|r| r.keeps_unattached_aura(g, aura))
+}
+
+/// Whether an ability resolves although all its targets are illegal (see
+/// [`KeywordRules::resolves_despite_illegal_targets`]).
+pub fn resolves_despite_illegal_targets(g: &Game, stack_obj: ObjectId, body: &Body) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.resolves_despite_illegal_targets(g, stack_obj, body))
 }
 
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
