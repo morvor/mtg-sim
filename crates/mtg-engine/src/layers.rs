@@ -329,7 +329,13 @@ impl Game {
                 if !self.is_live(*t) {
                     continue;
                 }
-                let mut v = (**values).clone();
+                // A flipped permanent copying a flip card has its alternative
+                // characteristics (CR 707.3, 110.5c).
+                let mut v = if self.objects[t.0 as usize].flipped {
+                    crate::flip::flipped_copy_values(values).unwrap_or_else(|| (**values).clone())
+                } else {
+                    (**values).clone()
+                };
                 v.abilities = v
                     .abilities
                     .iter()

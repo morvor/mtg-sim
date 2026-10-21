@@ -96,6 +96,12 @@ reviewer reported, and remaining gaps.
 >    - Exemptions (docs/cr-exemptions, docs/rulings-exemptions): only for content with no
 >      game behavior (history, presentation, policy); otherwise write the test.
 >      `cargo run --release -q -p mtg-tools -- rulings-coverage --check` must pass.
+>    - Judgment calls: every new reading of an ambiguous or silent rule, deviation from the
+>      CR, or policy for a player's choice (including new defaults for `Answer::Default`) has
+>      an entry in `docs/interpretations/` (or cites an existing one) and the tests that pin
+>      it cite it with `interp!("<id>")`; a call a reasonable judge could make the other way
+>      is marked provisional and named in the report. `docs/INTERPRETATIONS.md` is current
+>      (`cargo run --release -q -p mtg-tools -- interpretations --check`).
 >    - Engine: correct per the CR text; general (no card-name special cases); no
 >      todo!/unimplemented!/panics on reachable paths; no #[ignore], deleted or weakened
 >      tests; shared-core edits minimal.
