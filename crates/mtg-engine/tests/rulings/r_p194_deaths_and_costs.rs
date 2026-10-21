@@ -3,6 +3,7 @@
 //! (CR 118.7a), cost increases apply first (CR 601.2f), the mana value doesn't change
 //! (CR 202.3); and effects that count creatures that died this turn.
 
+use crate::r_p189_common::triggers_of;
 use crate::r_p194_common::*;
 use crate::r_p216_common::sacrifice;
 use crate::r_s01_common::{attack_with, supported, with_subtype};
@@ -393,7 +394,7 @@ fn flesh_allergy_sacrificing_its_own_target_makes_it_fizzle() {
 
 #[test]
 fn season_of_loss_sacrifices_are_chosen_in_turn_order_then_simultaneous() {
-    cr!("101.4", "608.2e");
+    cr!("101.4", "608.2e", "603.10a");
     ruling!(
         "Season of Loss",
         "When you're following the instructions from the first mode, first the player whose turn it is chooses which creature they're going to sacrifice, then each other player in turn order does the same. Players will know the choices of previous players when making their choices. Then all chosen creatures are sacrificed by their controllers simultaneously. Repeat this process for each additional time the first mode was chosen."
@@ -446,6 +447,19 @@ fn season_of_loss_sacrifices_are_chosen_in_turn_order_then_simultaneous() {
         let want = t.g.obj(first[i]).chars.name.as_str();
         assert_eq!(names[0], want, "{p:?}: {names:?}");
     }
+    // The chosen creatures are sacrificed at once: the active player's Blood Artist,
+    // chosen first in turn order, still sees the other two die with it (CR 603.10a).
+    let mut t = TestGame::new(3);
+    let artist = t.battlefield(P0, "Blood Artist");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P2, "Grizzly Bears");
+    let s = t.hand(P0, "Season of Loss");
+    mana(&mut t, P0, ManaType::B, 5);
+    t.cast(P0, s).modes(&[0]).go();
+    t.resolve();
+    t.settle();
+    assert!(!t.on_battlefield(artist));
+    assert_eq!(triggers_of(&t, artist), 3);
 }
 
 #[test]

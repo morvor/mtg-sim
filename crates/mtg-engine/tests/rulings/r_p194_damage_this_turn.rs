@@ -301,6 +301,10 @@ fn ellyn_counts_tokens_you_created_that_another_player_controls_now() {
     // turn" still counts a token another player has gained control of (as Thalisse's
     // ruling says), in every card with this wording.
     cr!("111.2", "608.2h");
+    ruling!(
+        "Ellyn Harbreeze, Busybody",
+        "It doesn't matter if those tokens are still on the battlefield or under your control."
+    );
     supported("Ellyn Harbreeze, Busybody");
     let mut t = TestGame::new(2);
     let ellyn = t.battlefield(P0, "Ellyn Harbreeze, Busybody");
