@@ -2448,7 +2448,7 @@ fn p_shuffle(l: &str, _b: &mut Builder) -> Option<Effect> {
 pub fn is_mana_effect(e: &Effect) -> bool {
     match e {
         Effect::AddMana { .. } => true,
-        Effect::PersistentMana(inner) => is_mana_effect(inner),
+        Effect::PersistentMana(inner) | Effect::CombatMana(inner) => is_mana_effect(inner),
         // "Each player adds {B}{R}{G}" (Yurlok of Scorch Thrash).
         Effect::ForEachPlayer { effect, .. } => {
             matches!(**effect, Effect::AddMana { .. })

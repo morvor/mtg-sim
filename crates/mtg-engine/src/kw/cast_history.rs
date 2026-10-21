@@ -48,6 +48,16 @@ pub const CAST_BY_THEN: &str = "cast history:cast no later than:";
 /// type of mana), `source subtype:<Treasure>` or `source type:<Creature>`.
 pub const SPENT: &str = "cast history:spent:";
 
+/// `Filter::Custom`: the spell (or the permanent it became) was cast using mana produced by
+/// the source (one or more of the mana spent on it came from that object: "Whenever you
+/// cast a permanent spell using mana produced by ~").
+pub const USING_SOURCE_MANA: &str = "cast history:using mana produced by source";
+
+/// The `whose` of [`SPENT`] for the permanent a replacement effect is applied to as it
+/// enters: the spell it was, if it was cast ("enter with an additional +1/+1 counter on
+/// them for each mana from a Treasure spent to cast them").
+pub const ENTERING: &str = "entering";
+
 /// The `Value::Custom` name for an amount of mana spent.
 pub fn spent(whose: &str, what: &str) -> String {
     format!("{SPENT}{whose}:{what}")
@@ -101,6 +111,9 @@ fn payment<'a>(g: &'a Game, whose: &str, ctx: &'a Ctx) -> Option<&'a CastInfo> {
             })?;
             object_cast(g, id).filter(|c| c.was_cast)
         }
+        // Only the entering permanent's own spell: one that wasn't cast had no mana spent
+        // on it, whatever the replacement effect's source had.
+        ENTERING => ctx.cast.as_ref().filter(|c| c.was_cast),
         "this ability" => {
             let a = ctx.stack_obj?;
             g.try_obj(a)?.stack.as_deref().map(|si| &si.cast)
@@ -186,6 +199,11 @@ impl KeywordRules for CastHistory {
             });
         }
         let cast = object_cast(g, id).filter(|c| c.was_cast);
+        if name == USING_SOURCE_MANA {
+            return Some(cast.is_some_and(|c| {
+                ctx.source.is_some_and(|s| c.mana_sources.contains(&s))
+            }));
+        }
         if name == WAS_CAST {
             return Some(cast.is_some());
         }

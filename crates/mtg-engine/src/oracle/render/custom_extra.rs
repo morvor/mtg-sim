@@ -19,6 +19,8 @@ pub(crate) struct ExtraState {
     pub paid_costs: Vec<(String, String, &'static str)>,
     /// X in the ability being rendered is the amount paid by "pay any amount of ...".
     pub x_paid: bool,
+    /// That amount is of {E} (an X in a cost reads "{1} for each {E} paid this way").
+    pub x_energy: bool,
     /// The card pays any amount of life as it enters: its chosen number is that life.
     pub life_paid: bool,
     /// How X reads after "pay any amount" when it was redefined ("twice that many").
@@ -128,6 +130,7 @@ impl Renderer<'_> {
             let (head, may) = name.rsplit_once(':')?;
             let (_, kind) = head.rsplit_once(':')?;
             self.extra.x_paid = true;
+            self.extra.x_energy = kind == "{e}";
             let may = if may == "may" { "you may " } else { "" };
             return Some(format!("{may}pay any amount of {}", paid_kind(kind)));
         }
@@ -170,6 +173,14 @@ impl Renderer<'_> {
         if let Some((noun, done)) = self.paid_cost(name) {
             return Some(format!("the number of {} {done} this way", plural(&noun)));
         }
+        // CR 106.4: the mana of one type in your mana pool.
+        if let Some(t) = name.strip_prefix(crate::kw::unspent_mana_value::UNSPENT_MANA_OF_TYPE) {
+            let t = crate::mana::ManaType::from_letter_str(t)?;
+            let c = t.color().map_or("colorless", |c| c.word());
+            return Some(format!(
+                "the {{alt:number|amount}} of unspent {c} mana you have"
+            ));
+        }
         if let Some(d) = name.strip_prefix("dungeon completed:") {
             return Some(format!(
                 "the number of times you've completed {}",
@@ -192,9 +203,13 @@ impl Renderer<'_> {
             crate::kwa::ring::TIMES_TEMPTED => {
                 "the number of times the Ring has tempted you this game".into()
             }
+            // CR 107.14: the energy counters removed from you this turn.
+            crate::kw::energy_paid::ENERGY_PAID_OR_LOST_THIS_TURN => {
+                "the number of {E} you've paid or lost this turn".into()
+            }
             // CR 106.4: the mana in your mana pool.
             crate::kw::unspent_mana_value::UNSPENT_MANA_YOU_HAVE => {
-                "the amount of unspent mana you have".into()
+                "the {alt:amount|number} of unspent mana you have".into()
             }
             "noncombat damage dealt this turn to:opponents" => {
                 "the total amount of noncombat damage dealt to your opponents this turn".into()
@@ -233,6 +248,28 @@ impl Renderer<'_> {
 
     /// A custom number compared with a number, as cards word it.
     pub(crate) fn custom_compare_extra(&mut self, name: &str, cmp: Cmp, n: i32) -> Option<String> {
+        // "you have six or more unspent mana", "you've paid or lost four or more {E} this
+        // turn".
+        let min = match cmp {
+            Cmp::Ge => Some(n),
+            Cmp::Gt => Some(n + 1),
+            _ => None,
+        };
+        if let Some(min) = min {
+            let w = number_word(min);
+            if name == crate::kw::unspent_mana_value::UNSPENT_MANA_YOU_HAVE {
+                return Some(format!("you have {w} or more unspent mana"));
+            }
+            if let Some(t) = name.strip_prefix(crate::kw::unspent_mana_value::UNSPENT_MANA_OF_TYPE)
+            {
+                let t = crate::mana::ManaType::from_letter_str(t)?;
+                let c = t.color().map_or("colorless", |c| c.word());
+                return Some(format!("you have {w} or more unspent {c} mana"));
+            }
+            if name == crate::kw::energy_paid::ENERGY_PAID_OR_LOST_THIS_TURN {
+                return Some(format!("you've paid or lost {w} or more {{E}} this turn"));
+            }
+        }
         let d = name.strip_prefix("dungeon completed:")?;
         let d = dungeon_name(d);
         match (cmp, n) {

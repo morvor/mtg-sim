@@ -33,6 +33,7 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         }
         // "each Equipment attached to it", "it" being each object the effect is about.
         "attached_to_affected" => rel("attached to it"),
+        crate::kw::cast_history::USING_SOURCE_MANA => rel("using mana produced by ~"),
         crate::battle::ATTACKED_A_BATTLE_THIS_TURN => rel("that attacked a battle this turn"),
         crate::kw::blocked_this_turn::BLOCKED_BY_REFERENT => {
             rel("{alt:that were blocked by {alt:it|that creature} this turn|that was blocked by {alt:it|that creature} this turn}")

@@ -135,14 +135,59 @@ inventory::submit! { EffectPattern { name: "mana: add an amount of mana", priori
 /// "Until end of turn, you don't lose this mana as steps and phases end." after a
 /// sentence that adds mana (CR 106.4).
 fn f_dont_lose_this_mana(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    if l != "until end of turn, you don't lose this mana as steps and phases end"
-        || !super::mana_restrictions::contains_add_mana(prev)
-        || matches!(prev, Effect::PersistentMana(_))
+    if !super::mana_restrictions::contains_add_mana(prev)
+        || matches!(prev, Effect::PersistentMana(_) | Effect::CombatMana(_))
     {
         return false;
     }
-    *prev = Effect::PersistentMana(Box::new(prev.clone()));
+    // "they don't lose this mana" (Shizuko, Caller of Autumn): the player the previous
+    // sentence gave the mana to, not you.
+    let you = adds_to_you(prev);
+    match l {
+        "until end of turn, you don't lose this mana as steps and phases end" if you => {
+            *prev = Effect::PersistentMana(Box::new(prev.clone()))
+        }
+        "until end of turn, they don't lose this mana as steps and phases end"
+            if adds_to_other(prev) =>
+        {
+            *prev = Effect::PersistentMana(Box::new(prev.clone()))
+        }
+        // As firebending's mana (CR 702.189a).
+        "until end of combat, you don't lose this mana as steps end" if you => {
+            *prev = Effect::CombatMana(Box::new(prev.clone()))
+        }
+        _ => return false,
+    }
     true
+}
+
+/// The players every AddMana in `e` gives mana to.
+fn mana_recipients(e: &Effect, out: &mut Vec<PlayerRef>) {
+    match e {
+        Effect::AddMana { who, .. } => out.push(who.clone()),
+        Effect::Seq(v) => v.iter().for_each(|x| mana_recipients(x, out)),
+        Effect::ChooseOne { options, .. } => options.iter().for_each(|(_, x)| mana_recipients(x, out)),
+        Effect::If { then, otherwise, .. } => {
+            mana_recipients(then, out);
+            mana_recipients(otherwise, out);
+        }
+        Effect::May { effect, .. } => mana_recipients(effect, out),
+        Effect::AddManaWithSpentTrigger { add, .. } => mana_recipients(add, out),
+        _ => {}
+    }
+}
+
+fn adds_to_you(e: &Effect) -> bool {
+    let mut v = Vec::new();
+    mana_recipients(e, &mut v);
+    !v.is_empty() && v.iter().all(|p| matches!(p, PlayerRef::You))
+}
+
+/// Every AddMana gives the mana to a player the text calls "that player" ("they").
+fn adds_to_other(e: &Effect) -> bool {
+    let mut v = Vec::new();
+    mana_recipients(e, &mut v);
+    !v.is_empty() && v.iter().all(|p| matches!(p, PlayerRef::TriggerPlayer | PlayerRef::Iterated))
 }
 
 inventory::submit! { FollowupPattern { name: "mana: you don't lose this mana", priority: 50, apply: f_dont_lose_this_mana } }

@@ -2465,18 +2465,35 @@ impl Renderer<'_> {
                 } else {
                     format!("{f} spell")
                 };
-                let b = self.in_event_scope(|r| r.body(body));
+                // "that spell can't be countered" (Boseiju, Who Shelters All).
+                let uncounterable = matches!(&body.effect, Effect::Modify {
+                    what: Sel::TriggerSpell,
+                    mods,
+                    ..
+                } if matches!(mods.as_slice(), [Modification::AddAbility(x)]
+                    if format!("{:?}", x.kind) == format!("{:?}", crate::oracle::patterns::restriction_grammar::cant_be_countered_ability().kind)));
+                let b = if uncounterable && body.targets.is_empty() {
+                    "that spell can't be countered".to_string()
+                } else {
+                    self.in_event_scope(|r| r.body(body))
+                };
                 if *abilities {
                     format!("{a}. When you spend this mana to cast {f} or activate an ability, {b}")
                 } else if *additional {
-                    format!("{a}. If that mana is spent to cast {f}, {b}")
+                    format!("{a}. If {{opt:any of}} that mana is spent {{alt:on|to cast}} {f}, {b}")
                 } else {
                     format!("{a}. When that mana is spent to cast {f}, {b}")
                 }
             }
             Effect::PersistentMana(e) => {
                 let a = self.effect(e);
-                format!("{a}. Until end of turn, you don't lose this mana as steps and phases end")
+                // "they don't lose this mana" when another player adds it (Shizuko).
+                let who = if adds_for_you(e) { "you" } else { "{alt:they|that player}" };
+                format!("{a}. Until end of turn, {who} don't lose this mana as steps and phases end")
+            }
+            Effect::CombatMana(e) => {
+                let a = self.effect(e);
+                format!("{a}. Until end of combat, you don't lose this mana as steps end")
             }
             Effect::SetClassLevel { level } => format!("~'s level becomes {level}"),
             Effect::ActivateManaAbilities { who, filter } => {
@@ -6950,6 +6967,12 @@ impl Renderer<'_> {
             ManaProduction::Amount(t, v) => {
                 let sym = mana_symbol(*t);
                 match v {
+                    // "add six {R}" (Avatar Roku): many of one symbol said as a number.
+                    Value::Const(k) if *k > 3 => format!(
+                        "{{alt:{}|{} {sym}}}",
+                        sym.repeat(*k as usize),
+                        number_word(*k)
+                    ),
                     Value::Const(k) if *k > 0 => sym.repeat(*k as usize),
                     Value::Count(f) => {
                         let n = self.for_each_noun(f);
@@ -7104,6 +7127,22 @@ impl Renderer<'_> {
                 }
             }
             M::CostWithColorless => "to pay a cost that contains {C}".into(),
+            M::TurnFaceUp(None) => {
+                "to turn {alt:permanents|a permanent|creatures|a creature} face up".into()
+            }
+            M::TurnFaceUp(Some(crate::mana::FaceUpWay::Morph)) => "to pay a morph cost".into(),
+            M::TurnFaceUp(Some(crate::mana::FaceUpWay::Disguise)) => {
+                "to pay a disguise cost".into()
+            }
+            M::TurnFaceUp(Some(crate::mana::FaceUpWay::Manifest)) => {
+                "to pay a mana cost to turn a manifested creature face up".into()
+            }
+            M::TurnFaceUp(Some(crate::mana::FaceUpWay::Cloak)) => {
+                "to pay a mana cost to turn a cloaked creature face up".into()
+            }
+            M::Purpose(crate::mana::SpendPurpose::TurnFaceUp(_)) => {
+                "to turn permanents face up".into()
+            }
             // "This mana can't be spent to cast spells from your hand."
             M::NotCastSpell(f) => {
                 let saved = self.default_head.replace("spell");
@@ -7978,4 +8017,17 @@ fn same_life_amount(a: &Effect, b: &Effect) -> bool {
             na,
             Value::Const(_) | Value::X | Value::Prev | Value::EventAmount
         )
+}
+
+/// Whether every AddMana in `e` gives the mana to "you".
+fn adds_for_you(e: &Effect) -> bool {
+    match e {
+        Effect::AddMana { who, .. } => matches!(who, PlayerRef::You),
+        Effect::Seq(v) => v.iter().all(adds_for_you),
+        Effect::ChooseOne { options, .. } => options.iter().all(|(_, x)| adds_for_you(x)),
+        Effect::If { then, .. } => adds_for_you(then),
+        Effect::May { effect, .. } => adds_for_you(effect),
+        Effect::AddManaWithSpentTrigger { add, .. } => adds_for_you(add),
+        _ => true,
+    }
 }

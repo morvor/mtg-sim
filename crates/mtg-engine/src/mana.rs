@@ -419,6 +419,22 @@ pub enum ManaRestriction {
     Purpose(SpendPurpose),
     /// "... or pay a cost that contains {C}": the mana cost being paid has a {C} symbol.
     CostWithColorless,
+    /// "Spend this mana only to turn permanents face up" (any way: a morph or disguise
+    /// cost, or the mana cost of a manifested or cloaked permanent, CR 116.2b), or only
+    /// one way ("pay a morph cost", "pay a mana cost to turn a manifested creature face
+    /// up"): the cost being paid is that special action's ([`SpendPurpose::TurnFaceUp`]).
+    TurnFaceUp(Option<FaceUpWay>),
+}
+
+/// How a face-down permanent is turned face up by the special action (CR 116.2b): for its
+/// morph (or megamorph, CR 702.37b) cost, its disguise cost (CR 702.168d), or the mana
+/// cost of a manifested (CR 701.40b) or cloaked (CR 701.58b) creature card.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub enum FaceUpWay {
+    Morph,
+    Disguise,
+    Manifest,
+    Cloak,
 }
 
 /// What a cost is paid for, beyond casting a spell or activating an ability, for spending
@@ -431,6 +447,8 @@ pub enum SpendPurpose {
     Keyword(crate::keywords::KeywordKind),
     /// Unlocking a door of a Room (CR 709.5e).
     UnlockDoor,
+    /// Turning a face-down permanent face up (CR 116.2b).
+    TurnFaceUp(FaceUpWay),
 }
 
 /// A filter inside a [`ManaRestriction`], compared structurally.
@@ -578,6 +596,10 @@ impl ManaRestriction {
             ManaRestriction::NotCastSpell(_) => !ctx.is_spell,
             ManaRestriction::Purpose(p) => ctx.purpose == Some(*p),
             ManaRestriction::CostWithColorless => ctx.cost_has_colorless,
+            ManaRestriction::TurnFaceUp(way) => match ctx.purpose {
+                Some(SpendPurpose::TurnFaceUp(w)) => way.is_none_or(|x| x == w),
+                _ => false,
+            },
         }
     }
 

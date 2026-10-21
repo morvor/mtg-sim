@@ -2638,6 +2638,31 @@ pub enum StepKind {
     Turn,
 }
 
+/// A change to the mana a permanent is tapped for ([`ReplacementAction::ManaChange`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManaChange {
+    /// It applies only when the permanent is tapped for at least this much mana ("is
+    /// tapped for two or more mana"); 0 for any.
+    pub min_amount: u32,
+    /// The mana that changes: all of it (`None`), or only mana of these types ("instead of
+    /// white mana"; "instead of any other color": the colored mana).
+    pub only: Option<Vec<crate::mana::ManaType>>,
+    /// What that mana becomes.
+    pub to: ManaChangeTo,
+    /// "instead of any other type and amount": the permanent produces this many mana in
+    /// place of all it would produce. `None`: each changed mana stays one mana.
+    pub amount: Option<u32>,
+}
+
+/// What [`ManaChange`] turns the mana into.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ManaChangeTo {
+    Type(crate::mana::ManaType),
+    /// "mana of a color of your choice": the player tapping the permanent chooses a color
+    /// each time it applies.
+    ColorOfChoice,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ReplacementAction {
     /// Enters tapped (CR 614.1c).
@@ -2732,6 +2757,11 @@ pub enum ReplacementAction {
     /// "[A permanent tapped for mana] produces [type] instead of any other type"
     /// (CR 106.12b): each mana it would produce is of that type; the amount is unchanged.
     ManaTypeInstead(crate::mana::ManaType),
+    /// Other changes to the mana a permanent tapped for mana produces (CR 106.12b; see
+    /// `mana_change.rs`): "If a land is tapped for two or more mana, it produces {C}
+    /// instead of any other type and amount.", "it produces mana of a color of your choice
+    /// instead of any other type", "it produces colorless mana instead of white mana".
+    ManaChange(ManaChange),
     /// Prevent part of each damage event (CR 615.1a), evaluated for that event
     /// (`Value::EventAmount` is the damage): "prevent half that damage, rounded up",
     /// "prevent all but 1 of that damage", "you may prevent X of that damage, where X is
@@ -4777,6 +4807,11 @@ pub enum Effect {
     /// (CR 500.4): the mana the inner effect adds stays in its pool until the turn's cleanup
     /// step ends (the effect ends in CR 514.2).
     PersistentMana(Box<Effect>),
+    /// "[Add mana]. Until end of combat, you don't lose this mana as steps end." (Avatar
+    /// Roku, Firebender; as firebending's mana, CR 702.189a): the mana the inner effect adds
+    /// doesn't empty from its pool as the steps of combat end; it's lost as the combat
+    /// phase's end of combat step ends (CR 500.4).
+    CombatMana(Box<Effect>),
     /// "This Class's level becomes N" (a class level bar's activated ability, CR 107.16a,
     /// 716.2a).
     SetClassLevel {

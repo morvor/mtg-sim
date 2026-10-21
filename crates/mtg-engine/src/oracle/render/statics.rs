@@ -2641,6 +2641,7 @@ impl Renderer<'_> {
                     | A::PreventAndThen(..)
                     | A::LifeFloor(_)
                     | A::ManaTypeInstead(_)
+                    | A::ManaChange(_)
                     | A::RevealAndMoveInstead(_)
                     | A::Then(..)) => {
                         let then = self.replacement_then(other, "it");
@@ -3057,6 +3058,13 @@ impl Renderer<'_> {
                     }
                     None => format!("{} is tapped", self.noun_det(f, Det::A)),
                 };
+                // "If a land is tapped for two or more mana, it produces {C} instead of
+                // any other type and amount."
+                // The amount is part of the event: "tapped for two or more mana".
+                if let A::ManaChange(c) = action {
+                    let s = self.mana_change(c);
+                    return format!("if {n} for {s}");
+                }
                 let then = match action {
                     A::Multiply(2) => "it produces twice as much of that mana instead".to_string(),
                     A::Multiply(3) => {
@@ -3493,6 +3501,10 @@ impl Renderer<'_> {
                 format!("{it} loses life only down to {v}")
             }
             A::ManaTypeInstead(t) => format!("it produces {} instead", mana_symbol(*t)),
+            A::ManaChange(c) => {
+                let s = self.mana_change(c);
+                s.split_once(", ").map_or(s.clone(), |(_, t)| t.to_string())
+            }
             // Enters-the-battlefield replacements are worded with their event
             // (`as_enters`); here they have no event to go with.
             A::EnterTapped
@@ -3916,5 +3928,48 @@ fn cast_from_zone_only(f: &Filter) -> Filter {
         Filter::And(v) => Filter::And(v.iter().map(cast_from_zone_only).collect()),
         Filter::Not(x) => Filter::Not(Box::new(cast_from_zone_only(x))),
         other => other.clone(),
+    }
+}
+
+impl Renderer<'_> {
+    /// "[two or more ]mana, it produces {C} instead of any other type and amount" (after
+    /// "if [a permanent] is tapped for ").
+    pub(crate) fn mana_change(&mut self, c: &crate::ability::ManaChange) -> String {
+        use crate::ability::ManaChangeTo;
+        use crate::mana::ManaType;
+        let amount = if c.min_amount >= 2 {
+            format!("{} or more mana", number_word(c.min_amount as i32))
+        } else {
+            "mana".to_string()
+        };
+        let one = if c.amount == Some(1) { "one " } else { "" };
+        let to = match c.to {
+            ManaChangeTo::Type(ManaType::C) if c.amount == Some(1) => {
+                "{alt:{C}|one colorless mana}".to_string()
+            }
+            ManaChangeTo::Type(ManaType::C) => "{alt:colorless mana|{C}}".to_string(),
+            ManaChangeTo::Type(t) => mana_symbol(t),
+            ManaChangeTo::ColorOfChoice => format!("{one}mana of a color of your choice"),
+        };
+        let colored = [
+            ManaType::W,
+            ManaType::U,
+            ManaType::B,
+            ManaType::R,
+            ManaType::G,
+        ];
+        let of = match (&c.amount, &c.only) {
+            (Some(_), _) => "any other type and amount".to_string(),
+            (None, None) => "any other type".to_string(),
+            (None, Some(v)) if v.as_slice() == colored => "any other color".to_string(),
+            (None, Some(v)) => {
+                let words: Vec<String> = v
+                    .iter()
+                    .map(|t| t.color().map_or("colorless", |c| c.word()).to_string())
+                    .collect();
+                format!("{} mana", join_list(&words, "or"))
+            }
+        };
+        format!("{amount}, it produces {to} instead of {of}")
     }
 }

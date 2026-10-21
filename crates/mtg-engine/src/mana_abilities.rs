@@ -209,7 +209,9 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
         }
         Effect::If { then, .. } => production_units(g, then, ctx),
         Effect::AddManaWithSpentTrigger { add, .. } => production_units(g, add, ctx),
-        Effect::PersistentMana(inner) => production_units(g, inner, ctx),
+        Effect::PersistentMana(inner) | Effect::CombatMana(inner) => {
+            production_units(g, inner, ctx)
+        }
         _ => None,
     }
 }
@@ -383,6 +385,10 @@ fn produce_mana_replacements(
     // produces colorless mana instead of any other type.").
     for inst in &g.replacements {
         if let (ReplacementEvent::ProduceMana(f), Some(s)) = (&inst.def.event, inst.source) {
+            // Locked onto specific objects ("If target Plains is tapped for mana").
+            if inst.objects.as_ref().is_some_and(|o| !o.contains(&perm)) {
+                continue;
+            }
             if g.matches(perm, f, &Ctx::new(Some(s), inst.controller)) {
                 v.push((inst.timestamp, s, inst.controller, inst.def.clone()));
             }
@@ -410,6 +416,7 @@ fn apply_mana_replacement(d: &ReplacementDef, types: &[ManaType]) -> Vec<ManaTyp
         },
         // "Plains produce {R} ... instead of any other type": the same amount.
         ReplacementAction::ManaTypeInstead(t) => vec![*t; types.len()],
+        ReplacementAction::ManaChange(c) => crate::mana_change::apply_any(c, types),
         _ => types.to_vec(),
     }
 }
@@ -488,6 +495,7 @@ fn replaced_units(g: &Game, perm: ObjectId, units: Vec<Vec<ManaType>>) -> Vec<Ve
                     ReplacementAction::ManaTypeInstead(t) => {
                         units.iter().map(|_| vec![*t]).collect()
                     }
+                    ReplacementAction::ManaChange(c) => crate::mana_change::apply_units(c, units),
                     _ => units,
                 });
             if !out.contains(&units) {
@@ -722,6 +730,7 @@ pub fn lose_unspent_mana(g: &mut Game, who: &PlayerRef, to: Option<&PlayerRef>, 
     let mut lost: Vec<Mana> = Vec::new();
     for p in players {
         let m = std::mem::take(&mut g.players[p.idx()].mana_pool.mana);
+        g.dirty |= !m.is_empty();
         // "A player losing unspent mana causes that player to lose that much life."
         if !m.is_empty() && crate::kw::mana_grammar::mana_burn(g, p) {
             g.lose_life(p, m.len() as u32);
@@ -846,11 +855,14 @@ pub fn empty_pool(g: &mut Game, p: PlayerId) {
                 m.ty = *t;
             }
         }
+        g.dirty = true;
         return;
     }
     let before = pool.mana.len();
     pool.mana.retain(|m| stays(m) || kept.contains(&m.ty));
     let lost = before - pool.mana.len();
+    // Statics may count unspent mana (see `kw/unspent_mana_value.rs`).
+    g.dirty |= lost > 0;
     // "A player losing unspent mana causes that player to lose that much life."
     if lost > 0 && crate::kw::mana_grammar::mana_burn(g, p) {
         g.lose_life(p, lost as u32);
@@ -870,6 +882,23 @@ pub fn resolve_persistent_mana(g: &mut Game, inner: &Effect, ctx: &mut Ctx) {
             .min(pl.mana_pool.mana.len());
         for m in &mut pl.mana_pool.mana[from..] {
             m.persistent = true;
+        }
+    }
+}
+
+/// Resolves `Effect::CombatMana`: the mana the inner effect adds stays in its pool as the
+/// steps of combat end, until the end of combat step ends (as firebending's, CR 702.189a).
+pub fn resolve_combat_mana(g: &mut Game, inner: &Effect, ctx: &mut Ctx) {
+    let before: Vec<usize> = g.players.iter().map(|p| p.mana_pool.mana.len()).collect();
+    g.exec(inner, ctx);
+    for (i, pl) in g.players.iter_mut().enumerate() {
+        let from = before
+            .get(i)
+            .copied()
+            .unwrap_or(0)
+            .min(pl.mana_pool.mana.len());
+        for m in &mut pl.mana_pool.mana[from..] {
+            m.until_end_of_combat = true;
         }
     }
 }
@@ -921,7 +950,13 @@ fn add_mana_with(
                 }
             };
             let (_, _, d) = reps.remove(i);
-            produced = apply_mana_replacement(&d, &produced);
+            produced = match &d.action {
+                // A change with a choice of color asks the player tapping it.
+                ReplacementAction::ManaChange(c) => {
+                    crate::mana_change::apply(g, p, ctx, c, &produced)
+                }
+                _ => apply_mana_replacement(&d, &produced),
+            };
             // The remaining replacements keep their places in the preferred order.
             preferred.retain(|x| *x != i);
             for x in preferred.iter_mut() {
@@ -1027,7 +1062,7 @@ fn effect_restriction(e: &Effect) -> Option<&ManaRestriction> {
         }
         Effect::If { then, .. } => effect_restriction(then),
         Effect::AddManaWithSpentTrigger { add, .. } => effect_restriction(add),
-        Effect::PersistentMana(inner) => effect_restriction(inner),
+        Effect::PersistentMana(inner) | Effect::CombatMana(inner) => effect_restriction(inner),
         _ => None,
     }
 }
@@ -1130,7 +1165,7 @@ fn triggered_mana_units(
                 match e {
                     Effect::AddMana { who, .. } => Some(who),
                     Effect::Seq(v) => v.iter().find_map(recipient),
-                    Effect::PersistentMana(inner) => recipient(inner),
+                    Effect::PersistentMana(inner) | Effect::CombatMana(inner) => recipient(inner),
                     _ => None,
                 }
             }
@@ -2253,6 +2288,7 @@ pub fn pay_mana(
     let mut sources = Vec::new();
     for i in idxs {
         let m = g.players[p.idx()].mana_pool.mana.remove(i);
+        g.dirty = true;
         spent.push(m.ty);
         snow += m.snow as u32;
         sources.extend(m.source);
