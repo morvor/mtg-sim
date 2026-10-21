@@ -17,7 +17,8 @@ use crate::ability::*;
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 
-/// The zones of cards that aren't on the battlefield (or the stack).
+/// The zones of cards that aren't on the battlefield, but the stack (for "all cards that
+/// aren't on the battlefield, spells, and permanents", whose spells are any on the stack).
 const OFF_BATTLEFIELD: [ZoneKind; 5] = [
     ZoneKind::Hand,
     ZoneKind::Library,
@@ -127,7 +128,10 @@ fn chosen_quality_static(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
             Filter::Card,
             Filter::OwnedBy(PlayerRel::You),
         ]);
-        alts.extend(in_zones(&cards, &OFF_BATTLEFIELD));
+        alts.extend(in_zones(
+            &cards,
+            &super::statics_other_zones::NOT_ON_BATTLEFIELD,
+        ));
     }
     let affected = if alts.len() == 1 {
         alts.pop()?

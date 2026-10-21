@@ -1866,7 +1866,7 @@ impl Game {
         // pay part of it other than with mana (the X part first, as for reductions).
         let generic = |c: &Cost| c.mana.as_ref().map_or(0, |m| m.generic_amount());
         let before = generic(&total);
-        crate::kw::pay_mana_otherwise(self, p, id, &mut total)?;
+        let relied_on = crate::kw::pay_mana_otherwise(self, p, id, &mut total)?;
         x_left = x_left.saturating_sub(before.saturating_sub(generic(&total)));
         // 601.2g–h: activate mana abilities and pay.
         let spend = SpendContext {
@@ -1914,6 +1914,22 @@ impl Game {
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx);
         ctx.cost_of = None;
         let paid = paid?;
+        // CR 601.2g–h: mana abilities are activated before the total cost is paid. If one
+        // of them removed what gave the spell convoke (sacrificing Dazzling Theater), the
+        // spell doesn't have it when the cost is paid: that payment can't be made.
+        if !relied_on.is_empty() {
+            // Abilities static abilities gave the spell as it was cast are lost if those no
+            // longer apply (its source was sacrificed).
+            crate::next_spell::recheck_static_cast_grants(self, id);
+            if let Some(k) = relied_on
+                .iter()
+                .find(|k| !self.obj(id).chars.has_keyword(**k))
+            {
+                return Err(Illegal(format!(
+                    "the spell no longer has {k:?} when its total cost is paid"
+                )));
+            }
+        }
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             // With any mana another player already spent on it (assist, CR 702.132a).
             si.cast.mana_spent.extend(paid.mana_spent.iter().cloned());

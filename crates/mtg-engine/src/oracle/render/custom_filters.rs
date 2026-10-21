@@ -31,6 +31,9 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE => {
             rel("{alt:attached to a creature|that's attached to a creature|that are attached to a creature}")
         }
+        // "other creatures that spell could target": a legal target for the triggering
+        // spell's one target (CR 115.4, 707.10c).
+        crate::copy_rules::TRIGGER_SPELL_COULD_TARGET => rel("that spell could target"),
         // "each Equipment attached to it", "it" being each object the effect is about.
         "attached_to_affected" => rel("attached to it"),
         crate::battle::ATTACKED_A_BATTLE_THIS_TURN => rel("that attacked a battle this turn"),

@@ -226,6 +226,14 @@ impl Renderer<'_> {
                         format!("shuffle the rest {d}")
                     };
                 }
+                // "Put that card into your hand and all other cards revealed this way on
+                // the bottom of your library": the rest of the cards revealed.
+                if self
+                    .this_way_of(&Sel::Var(vars::DUG))
+                    .is_some_and(|(v, _, _)| v == "revealed")
+                {
+                    return format!("put {{alt:the rest|all other cards revealed this way}} {d}");
+                }
                 format!("put the rest {d}")
             }
             DigStep::Until {

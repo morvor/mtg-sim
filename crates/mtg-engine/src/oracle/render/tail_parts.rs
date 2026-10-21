@@ -377,6 +377,8 @@ fn note_this_way(e: &Effect, out: &mut Vec<(Var, &'static str, Option<CardType>)
         // "Reveal the top two cards of your library. Put all cards of the chosen type
         // revealed this way into your hand".
         Effect::Dig { reveal: true, .. } => set(out, vars::DUG, Some(("revealed", None))),
+        // The cards revealed until one was found ("all other cards revealed this way").
+        Effect::RevealUntil { .. } => set(out, vars::DUG, Some(("revealed", None))),
         Effect::Destroy { what, .. } => {
             set(out, vars::IT, Some(("destroyed", ty(what))));
             set(
