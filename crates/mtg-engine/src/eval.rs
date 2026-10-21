@@ -519,6 +519,19 @@ impl Game {
                 .get(&crate::teams::ACTIVE_PLAYER_VAR)
                 .and_then(|v| v.iter().find_map(|e| e.player()))
                 .map_or_else(|| vec![self.turn.active], |p| vec![p]),
+            // CR 506.2, 805.10c: the attacking player chosen as the effect began to apply,
+            // or the one the ability's blocking creature determines.
+            PlayerRef::AttackingPlayer => ctx
+                .vars
+                .get(&crate::teams::ATTACKING_PLAYER_VAR)
+                .and_then(|v| v.iter().find_map(|e| e.player()))
+                .or_else(|| {
+                    crate::teams::attacking_player_candidates(self, ctx)
+                        .first()
+                        .copied()
+                })
+                .into_iter()
+                .collect(),
             PlayerRef::DefendingPlayer => self.defending_player_for(ctx).into_iter().collect(),
             PlayerRef::ChosenPlayer(v) | PlayerRef::Var(v) => ctx
                 .vars

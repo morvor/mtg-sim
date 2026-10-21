@@ -1125,6 +1125,12 @@ pub enum PlayerRef {
     TriggerPlayer,
     /// The active player.
     ActivePlayer,
+    /// "The attacking player": the active player (CR 506.2). With shared team turns, one
+    /// specific attacking player: for an ability of a blocking creature, or one that refers
+    /// to a blocking creature, the controller of the attacking creature that blocking
+    /// creature is blocking; otherwise (or if that leaves several) the one the ability's
+    /// controller chooses (CR 805.10c). See `teams::attacking_player_candidates`.
+    AttackingPlayer,
     /// The defending player (CR 508.5).
     DefendingPlayer,
     /// A player chosen during resolution by the controller.

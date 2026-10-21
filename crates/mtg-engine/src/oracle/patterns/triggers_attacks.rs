@@ -56,7 +56,8 @@ fn player_attacked(r: &str) -> Option<Parsed> {
     // "That player": the one the subject doesn't name.
     let it_player = match (attacker, it_player) {
         (PlayerRel::You, _) => PlayerRef::TriggerPlayer,
-        (_, "you") | (_, "enchanted player") => PlayerRef::ActivePlayer,
+        // The attacking player (CR 506.2, 805.10c).
+        (_, "you") | (_, "enchanted player") => PlayerRef::AttackingPlayer,
         _ => PlayerRef::Iterated,
     };
     if matches!(attacker, PlayerRel::You) && matches!(defender, PlayerFilter::You) {
