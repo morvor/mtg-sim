@@ -130,3 +130,39 @@ fn unstable_shapeshifter_copying_voice_of_all_never_chose_a_color() {
     t.resolve_all();
     assert!(!t.on_battlefield(shifter));
 }
+
+#[test]
+fn vesuvan_doppelgangers_chosen_color_isnt_linked_to_quirion_elves_mana_ability() {
+    cr!("607.5a", "707.9a");
+    cr_example!("607.5a", "Vesuvan Doppelganger");
+    supported("Vesuvan Doppelganger");
+    supported("Quirion Elves");
+    let mut t = TestGame::new(2);
+    choose_color(&mut t, P1, Color::Red);
+    let voice = t.enter(P1, "Voice of All");
+    let elves = t.battlefield(P1, "Quirion Elves");
+    t.lands(P0, "Island", 5);
+    // The Doppelganger enters as a copy of Voice of All; its controller chooses blue.
+    let dopp = t.hand(P0, "Vesuvan Doppelganger");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(voice)]);
+    choose_color(&mut t, P0, Color::Blue);
+    t.cast(P0, dopp).go();
+    t.resolve();
+    let dopp = t.g.current(dopp);
+    assert_eq!(t.obj(dopp).chars.name.as_str(), "Voice of All");
+    let blue = t.hand(P1, "Unsummon");
+    assert!(t.g.protected_from(dopp, blue));
+    // Later, at the beginning of its controller's upkeep, it copies Quirion Elves.
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(elves)]);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.obj_now(dopp).chars.name.as_str(), "Quirion Elves");
+    // A color was chosen for the Doppelganger, but not for the ability linked to the
+    // copied mana ability: "{T}: Add one mana of the chosen color" produces no mana.
+    activate_text(&mut t, P0, dopp, "chosen color", &[]);
+    assert!(t.g.player(P0).mana_pool.mana.is_empty());
+    assert!(t.obj_now(dopp).tapped);
+}
