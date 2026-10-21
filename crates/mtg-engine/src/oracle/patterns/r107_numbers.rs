@@ -89,7 +89,8 @@ fn bind_x(e: &Effect, x: &Value) -> Option<Effect> {
         .map(|j| j.matches("\"X\"").count())
         .unwrap_or(0);
     let xj = serde_json::to_string(x).unwrap_or_default();
-    let per_each = xj.contains("Iterated") || xj.contains(&format!("{{\"Var\":{}}}", vars::AFFECTED));
+    let per_each =
+        xj.contains("Iterated") || xj.contains(&format!("{{\"Var\":{}}}", vars::AFFECTED));
     if uses < 2 || x.as_const().is_some() || per_each {
         return substitute_x(e, x);
     }
@@ -182,12 +183,43 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(saved.0);
         b.it = saved.1;
         b.it_player = saved.2;
-        let (x, tail) = read?;
-        if !end(&tail).is_empty() {
+        let x = match read {
+            Some((x, tail)) if end(&tail).is_empty() => Some(x),
+            _ => None,
+        };
+        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+        if let Some(x) = x {
+            if let Some(e) = where_x_is_parts(&clause, v, b, it.clone()) {
+                if !format!("{e:?}").contains(&format!("{:?}", nonnegative(x))) {
+                    return Some(e);
+                }
+            }
+        }
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        b.it_player = saved.2;
+        // X used as the spell resolves: the value recorded as it became cast
+        // (`referents_values_4::as_cast_snapshot`).
+        let snap = super::referents_values_4::as_cast_snapshot(value_s, b)?;
+        let first_target = b.targets.len();
+        let before = (b.it.clone(), b.it_player.clone());
+        let Some(e) = where_x_is_value_inner(&clause, snap, b, it, false) else {
+            b.targets.truncate(first_target);
+            (b.it, b.it_player) = before;
+            return None;
+        };
+        // Not for the number of targets or a division chosen as the spell is cast (CR
+        // 601.2c-d): the value is recorded only once it has become cast (CR 601.2i).
+        let in_targets = b.targets[first_target.min(b.targets.len())..]
+            .iter()
+            .any(|t| serde_json::to_string(t).is_ok_and(|j| j.contains("rv4:as cast")));
+        let divided = serde_json::to_string(&e).is_ok_and(|j| j.contains("DealDividedDamage"));
+        if in_targets || divided {
+            b.targets.truncate(first_target);
+            (b.it, b.it_player) = before;
             return None;
         }
-        let e = where_x_is_parts(&clause, v, b, it)?;
-        return (!format!("{e:?}").contains(&format!("{:?}", nonnegative(x)))).then_some(e);
+        return Some(e);
     }
     where_x_is_parts(&clause, value_s, b, it)
 }
@@ -202,9 +234,13 @@ pub fn where_x_is_parts(clause: &str, value_s: &str, b: &mut Builder, it: Sel) -
     // division of damage or counters among them are chosen (CR 601.2c-d, 602.2b); the
     // value isn't remembered for its resolution, so the X may only be used for those.
     let value_s = end(value_s);
-    let as_cast = [" as you cast ~", " as you cast this spell", " as you activate this ability"]
-        .iter()
-        .find_map(|p| value_s.strip_suffix(p));
+    let as_cast = [
+        " as you cast ~",
+        " as you cast this spell",
+        " as you activate this ability",
+    ]
+    .iter()
+    .find_map(|p| value_s.strip_suffix(p));
     let owned;
     let value_s = match as_cast {
         Some(v) => {
@@ -269,8 +305,7 @@ fn where_x_is_clause_first(
         return None;
     }
     let x = nonnegative(v);
-    let mentions_x =
-        |j: Result<String, serde_json::Error>| j.is_ok_and(|j| j.contains("\"X\""));
+    let mentions_x = |j: Result<String, serde_json::Error>| j.is_ok_and(|j| j.contains("\"X\""));
     let clause_targets = first_target..b.targets.len();
     if targets_only
         && (mentions_x(serde_json::to_string(&e))
@@ -323,7 +358,8 @@ fn where_x_is_value_inner(
     }
     let x = nonnegative(v);
     if targets_only {
-        let mentions_x = |j: Result<String, serde_json::Error>| j.is_ok_and(|j| j.contains("\"X\""));
+        let mentions_x =
+            |j: Result<String, serde_json::Error>| j.is_ok_and(|j| j.contains("\"X\""));
         if mentions_x(serde_json::to_string(&e))
             || !b.targets[first_target..]
                 .iter()
@@ -624,9 +660,8 @@ fn round_each_time(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     if !body.to_lowercase().contains("half ") {
         return None;
     }
-    let mut abilities = super::value_grammar::with_half_rounding(up, || {
-        crate::oracle::parse_ability(body, ctx)
-    })?;
+    let mut abilities =
+        super::value_grammar::with_half_rounding(up, || crate::oracle::parse_ability(body, ctx))?;
     for a in &mut abilities {
         std::sync::Arc::make_mut(a).text = block.to_string();
     }

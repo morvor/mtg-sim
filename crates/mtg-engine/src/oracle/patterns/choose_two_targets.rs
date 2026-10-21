@@ -38,6 +38,19 @@ fn choose_two_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let both = Sel::Union(slots.iter().map(|(s, _)| Sel::Target(*s)).collect());
     let kind = |noun: &str| noun.split(' ').next().unwrap_or("").to_string();
+    // "Choose target creature you control and target Equipment. Gain control of that
+    // Equipment ... Attach it to the chosen creature." (Stolen Uniform): when the two are
+    // of different kinds, the kind alone names each.
+    if kind(&slots[0].1) != kind(&slots[1].1) {
+        for (slot, noun) in &slots {
+            let k = kind(noun);
+            for p in [format!("that {k}"), format!("the chosen {k}")] {
+                if !b.named.iter().any(|(n, _)| *n == p) {
+                    b.named.push((p, Sel::Target(*slot)));
+                }
+            }
+        }
+    }
     if kind(&slots[0].1) == kind(&slots[1].1) {
         let plural = format!("{}s", kind(&slots[0].1));
         for p in [format!("those {plural}"), format!("the chosen {plural}")] {

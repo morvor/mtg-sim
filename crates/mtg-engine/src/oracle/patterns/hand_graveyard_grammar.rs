@@ -102,8 +102,14 @@ fn quantity(s: &str) -> Option<(Qty, &str)> {
 
 fn zone_word(s: &str) -> Option<(Vec<ZoneKind>, &str)> {
     for (p, z) in [
-        ("hands and graveyards", vec![ZoneKind::Hand, ZoneKind::Graveyard]),
-        ("hand and graveyard", vec![ZoneKind::Hand, ZoneKind::Graveyard]),
+        (
+            "hands and graveyards",
+            vec![ZoneKind::Hand, ZoneKind::Graveyard],
+        ),
+        (
+            "hand and graveyard",
+            vec![ZoneKind::Hand, ZoneKind::Graveyard],
+        ),
         ("hands", vec![ZoneKind::Hand]),
         ("hand", vec![ZoneKind::Hand]),
         ("graveyards", vec![ZoneKind::Graveyard]),
@@ -139,7 +145,11 @@ fn owner_phrase<'a>(
 ) -> Option<(Option<Filter>, Option<PlayerRef>, &'a str)> {
     use super::value_grammar::owned_by;
     if let Some(r) = s.strip_prefix("your ") {
-        return Some((Some(Filter::OwnedBy(PlayerRel::You)), Some(PlayerRef::You), r));
+        return Some((
+            Some(Filter::OwnedBy(PlayerRel::You)),
+            Some(PlayerRef::You),
+            r,
+        ));
     }
     for p in ["their ", "his or her "] {
         if let Some(r) = s.strip_prefix(p) {
@@ -176,7 +186,9 @@ fn owner_phrase<'a>(
             return Some((None, None, r));
         }
     }
-    if zone_word(s).is_some_and(|(z, _)| z == vec![ZoneKind::Graveyard] && s.starts_with("graveyards")) {
+    if zone_word(s)
+        .is_some_and(|(z, _)| z == vec![ZoneKind::Graveyard] && s.starts_with("graveyards"))
+    {
         return Some((None, None, s));
     }
     // "that player's", "target opponent's", "defending player's", "its owner's".
@@ -241,9 +253,7 @@ fn zone_phrase<'a>(
     subject: Option<&PlayerRef>,
 ) -> Option<(Vec<ZoneKind>, Option<Filter>, Option<PlayerRef>, &'a str)> {
     let s = s.trim_start();
-    let r = s
-        .strip_prefix("from ")
-        .or_else(|| s.strip_prefix("in "))?;
+    let r = s.strip_prefix("from ").or_else(|| s.strip_prefix("in "))?;
     let saved = (b.targets.len(), b.it_player.clone());
     let Some((owner, who, r)) = owner_phrase(r, b, subject) else {
         b.targets.truncate(saved.0);
@@ -293,7 +303,11 @@ fn split_zone(f: Filter) -> (Filter, Option<ZoneKind>, Option<Filter>) {
 /// hand", "all creature cards of that type", "up to two target ..." is not (targets are
 /// parsed by the target grammar). `subject` is the player performing the action (for
 /// "their").
-pub fn cards<'a>(s: &'a str, b: &mut Builder, subject: Option<&PlayerRef>) -> Option<(Cards, String)> {
+pub fn cards<'a>(
+    s: &'a str,
+    b: &mut Builder,
+    subject: Option<&PlayerRef>,
+) -> Option<(Cards, String)> {
     let s = s.trim_start();
     // "cards equal to [value] from ...".
     let (qty, r, owned_rest);
@@ -330,8 +344,8 @@ pub fn cards<'a>(s: &'a str, b: &mut Builder, subject: Option<&PlayerRef>) -> Op
             .strip_prefix("from ")
             .or_else(|| t.strip_prefix("in "))
             .unwrap_or("");
-        per_owner = !matches!(qty, Qty::All)
-            && (t.starts_with("each ") || t.starts_with("all players' "));
+        per_owner =
+            !matches!(qty, Qty::All) && (t.starts_with("each ") || t.starts_with("all players' "));
         if let Some((zones, of, who, r2)) = zone_phrase(&rest, b, subject) {
             any_owner = of.is_none();
             owner_f = of;
@@ -378,11 +392,7 @@ pub fn cards<'a>(s: &'a str, b: &mut Builder, subject: Option<&PlayerRef>) -> Op
 
 /// The player performing an action and the rest of the clause after the verb, which must
 /// be one of `verbs` (imperative/first person) or its third-person form.
-fn subject_verb<'a>(
-    l: &'a str,
-    b: &mut Builder,
-    verb: &str,
-) -> Option<(PlayerRef, bool, String)> {
+fn subject_verb<'a>(l: &'a str, b: &mut Builder, verb: &str) -> Option<(PlayerRef, bool, String)> {
     if let Some(r) = l.strip_prefix(&format!("{verb} ")) {
         return Some((PlayerRef::You, false, r.to_string()));
     }
@@ -430,10 +440,9 @@ fn selection(c: &Cards, chooser: PlayerRef) -> Sel {
         Qty::All => return Sel::All(c.filter.clone()),
         Qty::Exactly(v) => (v.clone(), false),
         Qty::UpTo(v) => (v.clone(), true),
-        Qty::AnyNumber | Qty::OneOrMore => (
-            Value::CountSel(Box::new(Sel::All(c.filter.clone()))),
-            true,
-        ),
+        Qty::AnyNumber | Qty::OneOrMore => {
+            (Value::CountSel(Box::new(Sel::All(c.filter.clone()))), true)
+        }
     };
     Sel::Choose {
         chooser,
@@ -546,7 +555,9 @@ fn p_discard(l: &str, b: &mut Builder) -> Option<Effect> {
         // Only an exact number of cards is discarded at random.
         _ if random => return None,
         // The whole hand (even a hand of no cards is discarded).
-        Qty::All if matches!(adj, Filter::Any | Filter::Card) => Effect::DiscardHand { who: who.clone() },
+        Qty::All if matches!(adj, Filter::Any | Filter::Card) => {
+            Effect::DiscardHand { who: who.clone() }
+        }
         // CR 701.9a: all of them; the player chooses none.
         Qty::All => Effect::Discard {
             who: who.clone(),
@@ -695,7 +706,11 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: reveal cards
 
 /// The destination after the cards: "on top of your library", "on the bottom of their
 /// library in any order", "into your hand", "into that player's graveyard".
-fn destination<'a>(s: &'a str, b: &mut Builder, subject: &PlayerRef) -> Option<(Destination, &'a str)> {
+fn destination<'a>(
+    s: &'a str,
+    b: &mut Builder,
+    subject: &PlayerRef,
+) -> Option<(Destination, &'a str)> {
     destination_of(s, b, subject, false)
 }
 
@@ -719,14 +734,22 @@ fn destination_of<'a>(
     } else {
         return None;
     };
-    let implied = ["its owner's ", "their owner's ", "their owners' ", "its owners' "]
-        .iter()
-        .find_map(|p| r.strip_prefix(p))
-        .or_else(|| {
-            owner_implied
-                .then(|| r.strip_prefix("their ").or_else(|| r.strip_prefix("his or her ")))
-                .flatten()
-        });
+    let implied = [
+        "its owner's ",
+        "their owner's ",
+        "their owners' ",
+        "its owners' ",
+    ]
+    .iter()
+    .find_map(|p| r.strip_prefix(p))
+    .or_else(|| {
+        owner_implied
+            .then(|| {
+                r.strip_prefix("their ")
+                    .or_else(|| r.strip_prefix("his or her "))
+            })
+            .flatten()
+    });
     let r = match implied {
         Some(r) => r,
         None => owner_phrase(r, b, Some(subject))?.2,
@@ -1109,7 +1132,15 @@ fn p_either_or(l: &str, b: &mut Builder) -> Option<Effect> {
         let (x, y) = (&l[..at], &l[at + 4..]);
         let first = x.split(' ').next()?;
         let second = y.split(' ').next()?;
-        let verbs = ["sacrifice", "discard", "exile", "return", "reveal", "tap", "put"];
+        let verbs = [
+            "sacrifice",
+            "discard",
+            "exile",
+            "return",
+            "reveal",
+            "tap",
+            "put",
+        ];
         if !verbs.contains(&first) || !verbs.contains(&second) {
             continue;
         }
@@ -1155,7 +1186,25 @@ fn ends_with_exile(e: &Effect) -> bool {
 /// are recorded as this grammar's affected cards, then the sentence is read.
 fn f_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
-    if !l.contains(" exiled this way") || acted(b) || !ends_with_exile(prev) {
+    if !l.contains(" exiled this way") || acted(b) {
+        return false;
+    }
+    // "Exile all creatures. Each player may put any number of creature cards from their
+    // hand onto the battlefield. Then put all cards exiled this way into their owners'
+    // hands." (Worlds Within Worlds): the exile two sentences back, when nothing since
+    // exiled anything; the cards are recorded right after it.
+    let earlier = match &*prev {
+        Effect::Seq(v) if !ends_with_exile(prev) => {
+            v.iter().rposition(ends_with_exile).filter(|i| {
+                v[i + 1..].iter().all(|e| {
+                    serde_json::to_string(e)
+                        .is_ok_and(|j| !j.contains("Exile") && !j.contains("\"Var\""))
+                })
+            })
+        }
+        _ => None,
+    };
+    if !ends_with_exile(prev) && earlier.is_none() {
         return false;
     }
     b.named.push((ACTED.to_string(), Sel::Var(AFFECTED)));
@@ -1166,15 +1215,17 @@ fn f_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         (b.it, b.it_player) = (saved.1, saved.2);
         return false;
     };
+    let store = Effect::Store {
+        var: AFFECTED,
+        sel: Sel::Var(vars::IT),
+    };
+    if let (Some(i), Effect::Seq(v)) = (earlier, &mut *prev) {
+        v.insert(i + 1, store);
+        v.push(e);
+        return true;
+    }
     let old = std::mem::take(prev);
-    *prev = Effect::seq(vec![
-        old,
-        Effect::Store {
-            var: AFFECTED,
-            sel: Sel::Var(vars::IT),
-        },
-        e,
-    ]);
+    *prev = Effect::seq(vec![old, store, e]);
     true
 }
 
@@ -1289,9 +1340,13 @@ fn p_shuffle_object(l: &str, b: &mut Builder) -> Option<Effect> {
             library: PlayerRef::OwnerOf(Box::new(sel)),
         });
     };
-    let ok = ["into its owner's library", "into their owner's library", "into their owners' libraries"]
-        .iter()
-        .any(|p| rest.trim() == *p);
+    let ok = [
+        "into its owner's library",
+        "into their owner's library",
+        "into their owners' libraries",
+    ]
+    .iter()
+    .any(|p| rest.trim() == *p);
     if !ok || matches!(what, Sel::Choose { .. }) {
         b.targets.truncate(saved.0);
         (b.it, b.it_player) = (saved.1, saved.2);
@@ -1410,7 +1465,10 @@ fn s_zone_keyword_grant(
             .strip_prefix("a ")
             .or_else(|| rel.strip_prefix("an "))
             .unwrap_or(rel);
-        let norm = rel.replace(", and/or ", ", ").replace(" and/or ", ", ").replace(", or ", ", ");
+        let norm = rel
+            .replace(", and/or ", ", ")
+            .replace(" and/or ", ", ")
+            .replace(", or ", ", ");
         let mut alts = Vec::new();
         for w in norm.split(", ") {
             let (f, _, t) = parse_object_phrase(w.trim())?;
@@ -1467,7 +1525,10 @@ inventory::submit! { super::StaticPattern { name: "hand/graveyard grammar: cards
 /// graveyards". Returns the cards in it.
 fn whole_zone<'a>(s: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     let s = s.trim_start();
-    for p in ["any number of target players' ", "any number of target opponents' "] {
+    for p in [
+        "any number of target players' ",
+        "any number of target opponents' ",
+    ] {
         if let Some(r) = s.strip_prefix(p) {
             let (zones, rest) = zone_word(r)?;
             let [zone] = zones[..] else { return None };
@@ -1493,7 +1554,13 @@ fn whole_zone<'a>(s: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
     }
     let saved = (b.targets.len(), b.it_player.clone());
     let (owner, rest) = match s.strip_prefix("all ").or_else(|| s.strip_prefix("each ")) {
-        Some(r) if r.starts_with("graveyards") || r.starts_with("hands") || r.starts_with("graveyard") => (None, r),
+        Some(r)
+            if r.starts_with("graveyards")
+                || r.starts_with("hands")
+                || r.starts_with("graveyard") =>
+        {
+            (None, r)
+        }
         _ if s.starts_with("graveyards") || s.starts_with("hands") => (None, s),
         _ => match owner_phrase(s, b, None) {
             Some((Some(o), _, r)) => (Some(o), r),
@@ -1635,8 +1702,15 @@ fn p_draw_then_of_them(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let draw = crate::oracle::effects::parse_simple(first, b)
-        .filter(|e| matches!(e, Effect::Draw { who: PlayerRef::You, .. }));
+    let draw = crate::oracle::effects::parse_simple(first, b).filter(|e| {
+        matches!(
+            e,
+            Effect::Draw {
+                who: PlayerRef::You,
+                ..
+            }
+        )
+    });
     let Some(draw) = draw else {
         b.targets.truncate(saved.0);
         (b.it, b.it_player) = (saved.1, saved.2);
@@ -1673,7 +1747,8 @@ fn f_otherwise_may_put_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     else {
         return false;
     };
-    if rest_to.zone != ZoneKind::Library || !matches!(rest_to.position, LibraryPosition::FromTop(0)) {
+    if rest_to.zone != ZoneKind::Library || !matches!(rest_to.position, LibraryPosition::FromTop(0))
+    {
         return false;
     }
     let Some((to, tail)) = destination(r, b, &PlayerRef::You) else {
@@ -1723,7 +1798,8 @@ fn clause_with_value(clause: &str, v: &Value, b: &mut Builder) -> Option<Effect>
         return None;
     }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let e = crate::oracle::patterns::value_grammar::with_x_defined(true, || parse_clause(clause, b));
+    let e =
+        crate::oracle::patterns::value_grammar::with_x_defined(true, || parse_clause(clause, b));
     let Some(e) = e else {
         b.targets.truncate(saved.0);
         (b.it, b.it_player) = (saved.1, saved.2);
@@ -1787,7 +1863,10 @@ fn targets_in_target_players_graveyard<'a>(s: &'a str, b: &mut Builder) -> Optio
             return None;
         }
         let it = b.it.clone();
-        let player = b.add_target(TargetSpec::player(pf, p.trim_start().trim_start_matches("from ")), "target player");
+        let player = b.add_target(
+            TargetSpec::player(pf, p.trim_start().trim_start_matches("from ")),
+            "target player",
+        );
         spec.what = TargetKind::Object(Filter::and(vec![
             f.clone(),
             Filter::OwnedBy(PlayerRel::Target(player)),
@@ -1845,7 +1924,11 @@ fn card_qualifiers(f: Filter, rest: &str) -> Option<(Filter, &str)> {
             return None;
         }
         let g = match g {
-            Filter::And(v) => Filter::and(v.into_iter().filter(|x| !matches!(x, Filter::Card)).collect()),
+            Filter::And(v) => Filter::and(
+                v.into_iter()
+                    .filter(|x| !matches!(x, Filter::Card))
+                    .collect(),
+            ),
             g => g,
         };
         return Some((Filter::and(vec![f, g]), tail));
@@ -1887,10 +1970,7 @@ fn p_distribute(l: &str, b: &mut Builder) -> Option<Effect> {
     if !l.starts_with("put one of ") {
         return None;
     }
-    let items: Vec<&str> = l
-        .split(", and ")
-        .flat_map(|x| x.split(", "))
-        .collect();
+    let items: Vec<&str> = l.split(", and ").flat_map(|x| x.split(", ")).collect();
     if items.len() < 2 {
         return None;
     }
@@ -1985,7 +2065,13 @@ fn f_play_distributed_exile(l: &str, prev: &mut Effect, _b: &mut Builder) -> boo
         return false;
     };
     let Some(i) = v.iter().position(|e| {
-        matches!(e, Effect::Exile { what: Sel::Var(PICK), .. })
+        matches!(
+            e,
+            Effect::Exile {
+                what: Sel::Var(PICK),
+                ..
+            }
+        )
     }) else {
         return false;
     };
@@ -2074,7 +2160,25 @@ fn p_comma_list_then(l: &str, b: &mut Builder) -> Option<Effect> {
     for p in parts.iter().chain(std::iter::once(&last)) {
         let first = p.split(' ').next().unwrap_or("");
         // Imperative instructions only (no subject to carry over).
-        if !["draw", "untap", "discard", "tap", "scry", "mill", "surveil", "put", "exile", "return", "sacrifice", "shuffle", "create", "gain", "lose"].contains(&first) {
+        if ![
+            "draw",
+            "untap",
+            "discard",
+            "tap",
+            "scry",
+            "mill",
+            "surveil",
+            "put",
+            "exile",
+            "return",
+            "sacrifice",
+            "shuffle",
+            "create",
+            "gain",
+            "lose",
+        ]
+        .contains(&first)
+        {
             b.targets.truncate(saved.0);
             (b.it, b.it_player) = (saved.1, saved.2);
             return None;
@@ -2142,13 +2246,23 @@ pub fn count_phrase(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some(v);
     }
     for (p, f) in [
-        ("cards in the hand of the opponent with the most cards in hand", PlayerFilter::Opponent),
-        ("cards in the hand of the player with the most cards in hand", PlayerFilter::Any),
+        (
+            "cards in the hand of the opponent with the most cards in hand",
+            PlayerFilter::Opponent,
+        ),
+        (
+            "cards in the hand of the player with the most cards in hand",
+            PlayerFilter::Any,
+        ),
     ] {
         if let Some(rest) = r.strip_prefix(p) {
             if word_end(rest) {
                 return Some((
-                    Value::OverPlayers(AggOp::Max, f, Box::new(Value::HandSize(PlayerRef::Iterated))),
+                    Value::OverPlayers(
+                        AggOp::Max,
+                        f,
+                        Box::new(Value::HandSize(PlayerRef::Iterated)),
+                    ),
                     rest.to_string(),
                 ));
             }
@@ -2192,7 +2306,9 @@ fn c_single_graveyard(c: &str) -> Option<Condition> {
     } else {
         let r = end(c).strip_prefix("there are ")?;
         let (n, r) = parse_number(r)?;
-        let r = r.trim_start().strip_prefix("or more cards in a single graveyard")?;
+        let r = r
+            .trim_start()
+            .strip_prefix("or more cards in a single graveyard")?;
         if !r.trim().is_empty() {
             return None;
         }
@@ -2222,8 +2338,14 @@ fn p_put_there_this_turn(l: &str, b: &mut Builder) -> Option<Effect> {
         (" that were put there this turn", ""),
         (" that was put there from anywhere this turn", ""),
         (" that were put there from anywhere this turn", ""),
-        (" that was put there from the battlefield this turn", "battlefield"),
-        (" that were put there from the battlefield this turn", "battlefield"),
+        (
+            " that was put there from the battlefield this turn",
+            "battlefield",
+        ),
+        (
+            " that were put there from the battlefield this turn",
+            "battlefield",
+        ),
     ]
     .iter()
     .find_map(|(p, from)| l.contains(p).then(|| (l.replacen(p, "", 1), *from)))?;
@@ -2244,7 +2366,10 @@ fn p_put_there_this_turn(l: &str, b: &mut Builder) -> Option<Effect> {
         Effect::Seq(v) => v.first_mut(),
         e => Some(e),
     };
-    if let Some(Effect::Exile { what: Sel::All(f), .. }) = exile {
+    if let Some(Effect::Exile {
+        what: Sel::All(f), ..
+    }) = exile
+    {
         if in_gy(f) {
             *f = Filter::and(vec![f.clone(), custom.clone()]);
             patched += 1;
@@ -2285,10 +2410,13 @@ fn s_activated_abilities_of_graveyard_cards(
     if !known {
         return None;
     }
-    let name = format!("{ACTIVATED_ABILITIES_OF_GRAVEYARD}{scope}:{}", match crate::types::CardType::from_word(kind) {
-        Some(_) => kind.to_string(),
-        None => kind_title(kind),
-    });
+    let name = format!(
+        "{ACTIVATED_ABILITIES_OF_GRAVEYARD}{scope}:{}",
+        match crate::types::CardType::from_word(kind) {
+            Some(_) => kind.to_string(),
+            None => kind_title(kind),
+        }
+    );
     let st = StaticAbility::new(StaticEffect::Continuous {
         affected: Filter::Source,
         mods: vec![Modification::Custom {
@@ -2332,7 +2460,10 @@ fn p_half_x(l: &str, b: &mut Builder) -> Option<Effect> {
     // Every X is halved (an X that isn't "half X" isn't read here).
     let words: Vec<&str> = body.split(|c: char| !c.is_alphanumeric()).collect();
     let xs = words.iter().filter(|w| **w == "x").count();
-    let halves = words.windows(2).filter(|w| w[0] == "half" && w[1] == "x").count();
+    let halves = words
+        .windows(2)
+        .filter(|w| w[0] == "half" && w[1] == "x")
+        .count();
     if xs != halves {
         return None;
     }
@@ -2362,7 +2493,8 @@ inventory::submit! { super::FollowupPattern { name: "hand/graveyard grammar: rou
 /// difference.": the number is determined once (CR 121.2).
 fn p_draw_hand_difference(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("if ")?;
-    let who = r.strip_suffix(" has more cards in hand than you, draw cards equal to the difference")?;
+    let who =
+        r.strip_suffix(" has more cards in hand than you, draw cards equal to the difference")?;
     if !who.starts_with("target ") {
         return None;
     }
@@ -2437,7 +2569,10 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: exile cards 
 fn p_gain_and_draw_equal(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("you gain life and draw cards equal to ")?;
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let e = parse_clause(&format!("you gain life equal to {r} and draw cards equal to {r}"), b);
+    let e = parse_clause(
+        &format!("you gain life equal to {r} and draw cards equal to {r}"),
+        b,
+    );
     if e.is_none() {
         b.targets.truncate(saved.0);
         (b.it, b.it_player) = (saved.1, saved.2);
@@ -2453,7 +2588,9 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: gain life an
 /// "you" aren't read this way.
 fn p_each_of_that_players_opponents(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("each of that player's opponents ")?;
-    if r.split(|c: char| !c.is_alphanumeric()).any(|w| w == "you" || w == "your") {
+    if r.split(|c: char| !c.is_alphanumeric())
+        .any(|w| w == "you" || w == "your")
+    {
         return None;
     }
     use super::oracle_hardening_referents::is_no_player_referent;
@@ -2540,7 +2677,11 @@ fn c_more_life_than(c: &str) -> Option<Condition> {
     Some(Condition::Compare(
         Value::LifeTotal(PlayerRef::You),
         Cmp::Gt,
-        Value::OverPlayers(op, PlayerFilter::Opponent, Box::new(Value::LifeTotal(PlayerRef::Iterated))),
+        Value::OverPlayers(
+            op,
+            PlayerFilter::Opponent,
+            Box::new(Value::LifeTotal(PlayerRef::Iterated)),
+        ),
     ))
 }
 
@@ -2564,7 +2705,12 @@ fn p_owner_shuffles_then(l: &str, b: &mut Builder) -> Option<Effect> {
             return None;
         }
         let (what, tail) = crate::oracle::effects::object_ref(obj, b)?;
-        if !tail.trim().is_empty() || matches!(what, Sel::All(_) | Sel::Players(_) | Sel::None | Sel::Choose { .. }) {
+        if !tail.trim().is_empty()
+            || matches!(
+                what,
+                Sel::All(_) | Sel::Players(_) | Sel::None | Sel::Choose { .. }
+            )
+        {
             return None;
         }
         let owner = PlayerRef::OwnerOf(Box::new(what.clone()));
@@ -2593,7 +2739,12 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: the owner of
 fn p_unless_you_discard(l: &str, b: &mut Builder) -> Option<Effect> {
     let (eff, cost) = end(l).split_once(" unless you discard ")?;
     let (cost, _) = crate::oracle::costs::parse_cost(&format!("discard {cost}"))?;
-    if !cost.parts.iter().all(|p| matches!(p, CostPart::Discard { .. })) || cost.mana.is_some() {
+    if !cost
+        .parts
+        .iter()
+        .all(|p| matches!(p, CostPart::Discard { .. }))
+        || cost.mana.is_some()
+    {
         return None;
     }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
@@ -2616,15 +2767,15 @@ inventory::submit! { EffectPattern { name: "hand/graveyard grammar: [instruction
 /// a condition whose card description contains a comma (the condition ends at "card, ").
 fn p_if_its_a_listed_card(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let r = l.strip_prefix("if it's a ").or_else(|| l.strip_prefix("if it's an "))?;
+    let r = l
+        .strip_prefix("if it's a ")
+        .or_else(|| l.strip_prefix("if it's an "))?;
     let (desc, rest) = r.split_once(" card, ")?;
     if !desc.contains(", ") {
         return None;
     }
-    let cond = super::conditions_referents::parse_condition_with(
-        &format!("it's a {desc} card"),
-        b,
-    )?;
+    let cond =
+        super::conditions_referents::parse_condition_with(&format!("it's a {desc} card"), b)?;
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let Some(then) = crate::oracle::effects::parse_sentence(rest, b) else {
         b.targets.truncate(saved.0);
@@ -2717,8 +2868,22 @@ fn p_you_verb(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("you ")?;
     let verb = r.split(' ').next()?;
     if ![
-        "return", "put", "exile", "sacrifice", "search", "shuffle", "reveal", "look", "create",
-        "destroy", "tap", "untap", "mill", "scry", "surveil", "investigate",
+        "return",
+        "put",
+        "exile",
+        "sacrifice",
+        "search",
+        "shuffle",
+        "reveal",
+        "look",
+        "create",
+        "destroy",
+        "tap",
+        "untap",
+        "mill",
+        "scry",
+        "surveil",
+        "investigate",
     ]
     .contains(&verb)
     {
@@ -2773,9 +2938,12 @@ fn p_if_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
             let r = r.strip_suffix(" equal to the difference")?;
             let words: Vec<&str> = r.split(' ').collect();
             let clause = format!("{} x {}", words.first()?, words.get(1..)?.join(" "));
-            clause_with_value(&clause, &diff, b).map(|e| (Condition::Compare(count, Cmp::Lt, Value::Const(n)), e))
+            clause_with_value(&clause, &diff, b)
+                .map(|e| (Condition::Compare(count, Cmp::Lt, Value::Const(n)), e))
         }
-        None => parse_clause(rest, b).map(|e| (Condition::Compare(count, Cmp::Ge, Value::Const(1)), e)),
+        None => {
+            parse_clause(rest, b).map(|e| (Condition::Compare(count, Cmp::Ge, Value::Const(1)), e))
+        }
     };
     let Some((cond, then)) = parsed else {
         b.targets.truncate(saved.0);
@@ -2815,7 +2983,9 @@ fn p_bottom_card(l: &str, b: &mut Builder) -> Option<Effect> {
                     Filter::Card,
                     Filter::InZone(ZoneKind::Graveyard),
                     owner,
-                    Filter::Custom(SmolStr::new(crate::kw::hand_graveyard_actions::BOTTOM_OF_GRAVEYARD)),
+                    Filter::Custom(SmolStr::new(
+                        crate::kw::hand_graveyard_actions::BOTTOM_OF_GRAVEYARD,
+                    )),
                 ])),
                 face_down: false,
                 link: false,
@@ -2829,7 +2999,10 @@ fn p_bottom_card(l: &str, b: &mut Builder) -> Option<Effect> {
         if !rest.trim().is_empty() {
             return fail(b);
         }
-        let n = Value::Diff(Box::new(Value::LibrarySize(who.clone())), Box::new(Value::Const(1)));
+        let n = Value::Diff(
+            Box::new(Value::LibrarySize(who.clone())),
+            Box::new(Value::Const(1)),
+        );
         return Some(Effect::Exile {
             what: Sel::TopOfLibrary(who, n),
             face_down: false,
@@ -2908,7 +3081,9 @@ fn p_exile_self_from_graveyard(l: &str, _b: &mut Builder) -> Option<Effect> {
     }
     Some(Effect::Exile {
         what: Sel::All(Filter::and(vec![
-            Filter::Custom(SmolStr::new(crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT)),
+            Filter::Custom(SmolStr::new(
+                crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT,
+            )),
             Filter::InZone(ZoneKind::Graveyard),
             Filter::OwnedBy(PlayerRel::You),
         ])),
@@ -2938,7 +3113,9 @@ fn p_if_condition_with_commas(l: &str, b: &mut Builder) -> Option<Effect> {
         let split = at + i;
         at = split + 2;
         let (c, rest) = (&r[..split], &r[split + 2..]);
-        let Some(cond) = condition(c, b) else { continue };
+        let Some(cond) = condition(c, b) else {
+            continue;
+        };
         if format!("{:?}", Some(&cond)) == head {
             continue;
         }
@@ -2969,7 +3146,10 @@ fn p_up_to_one_target_player(l: &str, b: &mut Builder) -> Option<Effect> {
     let (r, who) = if let Some(r) = l.strip_prefix("up to one target player ") {
         (r, "target player")
     } else {
-        (l.strip_prefix("up to one target opponent ")?, "target opponent")
+        (
+            l.strip_prefix("up to one target opponent ")?,
+            "target opponent",
+        )
     };
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let Some(e) = parse_clause(&format!("{who} {r}"), b) else {
@@ -3022,7 +3202,9 @@ fn p_if_top_card_of_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
         if !extra.trim().is_empty() {
             return None;
         }
-        let kind = kind.strip_prefix("a ").or_else(|| kind.strip_prefix("an "))?;
+        let kind = kind
+            .strip_prefix("a ")
+            .or_else(|| kind.strip_prefix("an "))?;
         let (f, _, tail) = parse_object_phrase(kind)?;
         if !tail.trim().is_empty() || !has_card_head(&f) {
             return None;
@@ -3031,7 +3213,9 @@ fn p_if_top_card_of_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
             Filter::Card,
             Filter::InZone(ZoneKind::Graveyard),
             super::value_grammar::owned_by(&who),
-            Filter::Custom(SmolStr::new(crate::kw::hand_graveyard_actions::TOP_OF_GRAVEYARD)),
+            Filter::Custom(SmolStr::new(
+                crate::kw::hand_graveyard_actions::TOP_OF_GRAVEYARD,
+            )),
         ]);
         b.it = Sel::Var(CHOSEN);
         b.it_player = who;
@@ -3082,7 +3266,9 @@ mod grammar {
             toughness: None,
         };
         let r = compile(text, &ctx);
-        r.unsupported.is_empty().then(|| format!("{:?}", r.abilities))
+        r.unsupported
+            .is_empty()
+            .then(|| format!("{:?}", r.abilities))
     }
 
     #[test]
@@ -3132,13 +3318,22 @@ mod grammar {
             // Another player's hand isn't something you discard from.
             ("Sorcery", "Discard all cards in target player's hand."),
             // Revealing from someone else's hand isn't the revealing player's choice.
-            ("Sorcery", "Reveal any number of cards in target opponent's hand."),
+            (
+                "Sorcery",
+                "Reveal any number of cards in target opponent's hand.",
+            ),
             // "For every" with an unknown thing.
             ("Creature", "~ gets +1/+1 for every seven blorps."),
             // The text after the first comma isn't part of the condition.
-            ("Sorcery", "If you have 5 or less life, you can't lose life this turn, draw a card."),
+            (
+                "Sorcery",
+                "If you have 5 or less life, you can't lose life this turn, draw a card.",
+            ),
             // The cards must all come from one graveyard.
-            ("Sorcery", "Put two cards from a single graveyard on the bottom of their owner's library."),
+            (
+                "Sorcery",
+                "Put two cards from a single graveyard on the bottom of their owner's library.",
+            ),
             // A number of cards discarded at random that nobody chose.
             ("Sorcery", "Discard any number of cards at random."),
         ] {
@@ -3148,7 +3343,11 @@ mod grammar {
 
     #[test]
     fn only_half_x_is_halved() {
-        let e = compiled("Sorcery", "You gain X life and draw half X cards, rounded down.").unwrap();
+        let e = compiled(
+            "Sorcery",
+            "You gain X life and draw half X cards, rounded down.",
+        )
+        .unwrap();
         assert!(e.contains("GainLife { who: You, n: X }"), "{e}");
         assert!(e.contains("Div(X, 2, false)"), "{e}");
     }
@@ -3178,13 +3377,20 @@ mod grammar {
             "Each player discards all the cards in their hand, then draws that many cards.",
         )
         .unwrap();
-        assert!(e.contains("record that many for the iterated player"), "{e}");
+        assert!(
+            e.contains("record that many for the iterated player"),
+            "{e}"
+        );
         assert!(e.contains("Custom(\"that many\")"), "{e}");
     }
 
     #[test]
     fn the_player_is_chosen_before_cards_in_their_graveyard() {
-        let e = compiled("Sorcery", "Exile X target cards from target player's graveyard.").unwrap();
+        let e = compiled(
+            "Sorcery",
+            "Exile X target cards from target player's graveyard.",
+        )
+        .unwrap();
         // The player's slot comes first and the cards are owned by it.
         let player = e.find("Player(Any)").unwrap();
         let cards = e.find("OwnedBy(Target(0))").unwrap();

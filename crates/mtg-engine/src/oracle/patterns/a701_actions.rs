@@ -119,7 +119,12 @@ fn explore(l: &str, b: &mut Builder) -> Option<Effect> {
         ", then it explores again" => Value::c(2),
         r => times(r)?,
     };
-    Some(keyword_action(KeywordAction::Explore, PlayerRef::You, what, n))
+    Some(keyword_action(
+        KeywordAction::Explore,
+        PlayerRef::You,
+        what,
+        n,
+    ))
 }
 
 /// "[permanent] connives[ N]", "you may have [it] connive" (CR 701.50).
@@ -131,7 +136,12 @@ fn connive(l: &str, b: &mut Builder) -> Option<Effect> {
             "connive" => Value::c(1),
             r => just_number(r.strip_prefix("connive ")?)?,
         };
-        return Some(keyword_action(KeywordAction::Connive, PlayerRef::You, what, n));
+        return Some(keyword_action(
+            KeywordAction::Connive,
+            PlayerRef::You,
+            what,
+            n,
+        ));
     }
     let (what, rest) = object_verb(l, "connive", b)?;
     let n = if rest.is_empty() {
@@ -139,14 +149,24 @@ fn connive(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         just_number(&rest)?
     };
-    Some(keyword_action(KeywordAction::Connive, PlayerRef::You, what, n))
+    Some(keyword_action(
+        KeywordAction::Connive,
+        PlayerRef::You,
+        what,
+        n,
+    ))
 }
 
 /// "[permanent] endures N" (CR 701.63).
 fn endure(l: &str, b: &mut Builder) -> Option<Effect> {
     let (what, rest) = object_verb(l, "endure", b)?;
     let n = just_number(&rest)?;
-    Some(keyword_action(KeywordAction::Endure, PlayerRef::You, what, n))
+    Some(keyword_action(
+        KeywordAction::Endure,
+        PlayerRef::You,
+        what,
+        n,
+    ))
 }
 
 /// "[player] [verb] N" / "[verb]" for actions performed by a player with a number (or
@@ -278,7 +298,11 @@ fn with_action_referent(l: &str, b: &mut Builder) -> Option<Effect> {
     // found for you (the ability's controller) before any other player acts, so it's
     // remembered first.
     let ring = matches!(&sel, Sel::All(_));
-    b.it = if ring { Sel::Var(RING_BEARER_NOW) } else { sel.clone() };
+    b.it = if ring {
+        Sel::Var(RING_BEARER_NOW)
+    } else {
+        sel.clone()
+    };
     let e = crate::oracle::effects::parse_clause(&text, b);
     b.it = saved;
     let e = e?;
@@ -456,10 +480,14 @@ fn manifest_cloak(l: &str, b: &mut Builder) -> Option<Effect> {
             Some((n, r)) if r.trim_start().starts_with("cards") => (n, r.trim_start()),
             _ => (Value::c(1), r),
         };
-        let r = r.strip_prefix("cards ").or_else(|| r.strip_prefix("card "))?;
+        let r = r
+            .strip_prefix("cards ")
+            .or_else(|| r.strip_prefix("card "))?;
         matches!(r, "of your library" | "of their library").then_some(n)
     };
-    let e = if let Some(r) = rest.strip_prefix("dread").filter(|_| verb == KeywordAction::Manifest)
+    let e = if let Some(r) = rest
+        .strip_prefix("dread")
+        .filter(|_| verb == KeywordAction::Manifest)
     {
         keyword_action(KeywordAction::ManifestDread, who, Sel::None, times(r)?)
     } else if let Some(n) = top(&rest) {
@@ -619,6 +647,7 @@ fn support(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         max: n,
         distinct_from: vec![],
         divide: None,
+        divide_up_to: false,
         chosen_by_opponent: false,
         text: if spell {
             "up to N target creatures".into()

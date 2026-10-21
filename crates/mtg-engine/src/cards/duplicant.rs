@@ -42,18 +42,22 @@ inventory::submit! { ManualAbility {
     reason: "power, toughness and creature types of the last creature card exiled with it: unique last-exiled tracking",
 } }
 
-/// The last creature card exiled with `src` that's still in exile.
+/// The last creature card exiled with `src` that's still in exile: the one with the
+/// latest timestamp (CR 613.7d). Cards exiled at the same time get their timestamps in the
+/// order the exiling player chose (CR 712.21b: the two cards of a melded permanent).
 fn last_creature_card(g: &Game, src: ObjectId) -> Option<ObjectId> {
     g.obj(src)
         .linked
         .values()
         .flatten()
         .copied()
-        .filter(|o| {
+        .enumerate()
+        .filter(|(_, o)| {
             let ob = g.obj(*o);
             ob.next.is_none() && ob.zone == Zone::Exile && ob.chars.card_types.contains(CardType::Creature)
         })
-        .last()
+        .max_by_key(|(i, o)| (g.obj(*o).timestamp, *i))
+        .map(|(_, o)| o)
 }
 
 struct Rules;

@@ -267,6 +267,17 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             ReplacementAction::PreventAndThen(n.clone(), Box::new(lock_targets(e, ctx)))
         }
         ReplacementAction::Redirect(sel) => ReplacementAction::Redirect(lock_to(sel)),
+        // "They enter as copies of the chosen creature" (Mystic Reflection): the target
+        // is locked in as the effect is created.
+        ReplacementAction::EnterAsCopy {
+            filter,
+            optional,
+            tapped,
+        } => ReplacementAction::EnterAsCopy {
+            filter: lf(filter),
+            optional: *optional,
+            tapped: *tapped,
+        },
         ReplacementAction::RedirectNext(sel, n) => {
             ReplacementAction::RedirectNext(lock_to(sel), n.clone())
         }

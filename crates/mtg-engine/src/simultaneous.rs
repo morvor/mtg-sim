@@ -75,8 +75,32 @@ pub fn for_each_player(g: &mut Game, players: Vec<PlayerId>, body: &Effect, ctx:
 /// Performs `body` for each of `objects`, bound to `var` ([`Effect::ForEach`]).
 pub fn for_each_object(g: &mut Game, objects: Vec<Entity>, var: Var, body: &Effect, ctx: &mut Ctx) {
     let items = objects.into_iter().map(|e| Item::Object(var, e)).collect();
-    let frames = Frames::new(g, items, None, ctx);
+    let mut frames = Frames::new(g, items, None, ctx);
+    // "For each attacking creature, its owner puts it on their choice of ...": the player
+    // who makes each object's choice does so in APNAP order (CR 101.4; Aetherspouts), not
+    // its controller.
+    if let Some(who) = deciding_player(body) {
+        let order = g.pregame_order_or_apnap();
+        let pos = |p: PlayerId| order.iter().position(|x| *x == p).unwrap_or(usize::MAX);
+        frames.frames.sort_by_cached_key(|f| match f.item {
+            Item::Object(v, e) => {
+                let mut c = ctx.clone();
+                c.vars.insert(v, vec![e]);
+                g.eval_player(who, &c).map_or(usize::MAX, pos)
+            }
+            Item::Player(p) => pos(p),
+        });
+    }
     run(g, frames, body, ctx);
+}
+
+/// The player named as making the choice in a "for each object" body that starts with
+/// one ("its owner chooses ...", "its owner puts it on their choice of ...").
+fn deciding_player(body: &Effect) -> Option<&PlayerRef> {
+    match body {
+        Effect::ChooseOne { who, .. } | Effect::AsPlayer { who, .. } => Some(who),
+        _ => None,
+    }
 }
 
 /// What an instruction is performed for.
@@ -1431,6 +1455,7 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
                 .cloned()
                 .collect();
             let mut damaged: Vec<Entity> = Vec::new();
+            let mut players: Vec<Entity> = Vec::new();
             let mut total = 0i64;
             for ev in &mine {
                 if let Event::Damage {
@@ -1442,16 +1467,19 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
                 {
                     if srcs.contains(source) {
                         total += *amount as i64;
-                        if let Entity::Object(o) = target {
-                            if *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
-                                damaged.push(Entity::Object(*o));
-                            }
+                        let list = match target {
+                            Entity::Object(_) => &mut damaged,
+                            Entity::Player(_) => &mut players,
+                        };
+                        if *amount > 0 && !list.contains(target) {
+                            list.push(*target);
                         }
                     }
                 }
             }
             ctx.prev_affected = damaged.clone();
             ctx.set_var(vars::DAMAGED, damaged);
+            ctx.set_var(vars::DAMAGED_PLAYERS, players);
             ctx.prev_value = total;
             ctx.nums
                 .insert(vars::EXCESS, crate::excess_damage::excess_in(&mine));

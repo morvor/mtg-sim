@@ -88,18 +88,42 @@ pub fn note_object_last(prev: Option<&str>, sentence: &str, b: &mut Builder) {
     // "That creature" / "that spell" / "that scheme" still means the object the trigger
     // condition named.
     const NOT_OBJECTS: &[&str] = &[
-        "player", "player's", "much", "many", "opponent", "opponent's", "way", "mana",
-        "amount", "damage", "life", "number", "turn", "step", "phase", "combat", "time",
-        "color", "type", "name", "choice", "mode", "counter", "counters",
+        "player",
+        "player's",
+        "much",
+        "many",
+        "opponent",
+        "opponent's",
+        "way",
+        "mana",
+        "amount",
+        "damage",
+        "life",
+        "number",
+        "turn",
+        "step",
+        "phase",
+        "combat",
+        "time",
+        "color",
+        "type",
+        "name",
+        "choice",
+        "mode",
+        "counter",
+        "counters",
     ];
     let words: Vec<&str> = next.split_whitespace().collect();
-    let names_trigger_object = words.windows(2).any(|w| {
-        w[0] == "that"
-            && !NOT_OBJECTS.contains(&w[1].trim_end_matches([',', '.', ';']))
-    }) || next.contains("the copy");
+    let names_trigger_object = words
+        .windows(2)
+        .any(|w| w[0] == "that" && !NOT_OBJECTS.contains(&w[1].trim_end_matches([',', '.', ';'])))
+        || next.contains("the copy");
     if names_self_last
         && !names_trigger_object
-        && matches!(b.it, Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell)
+        && matches!(
+            b.it,
+            Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell | Sel::TriggerObjects
+        )
     {
         b.it = Sel::This;
     }
@@ -174,14 +198,31 @@ pub struct Introduced(Option<Sel>);
 /// Elf).
 pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) {
     let introduced = matches!(b.it, Sel::Var(v) if v == vars::CREATED || v == INTRODUCED);
-    if !(matches!(b.it, Sel::This) || is_no_referent(&b.it) || introduced) {
+    // "Whenever one or more creatures ... deal combat damage to a player, create a ...
+    // token. Put ... counters on it": a plural trigger object is "them", never "it".
+    let plural_trigger = matches!(b.it, Sel::TriggerObjects);
+    if !(matches!(b.it, Sel::This) || is_no_referent(&b.it) || introduced || plural_trigger) {
         return;
     }
     let mut creates = 0;
     count_creates(e, &mut creates);
     let last = last_instruction_mut(e);
+    if plural_trigger
+        && !matches!(
+            last,
+            Effect::CreateToken { .. }
+                | Effect::CreateTokenWithPT { .. }
+                | Effect::CreateTokenCopy { .. }
+        )
+    {
+        return;
+    }
     match last {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } if creates == 1 => {
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenWithPT { .. }
+        | Effect::CreateTokenCopy { .. }
+            if creates == 1 =>
+        {
             b.it = Sel::Var(vars::CREATED);
         }
         // "You may sacrifice a creature. If you do, you gain life equal to its power.":
@@ -190,7 +231,11 @@ pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) 
             who: PlayerRef::You,
             count: Value::Const(1),
             ..
-        } if !introduced && !crate::oracle::raw_text().to_lowercase().contains("that card") => {
+        } if !introduced
+            && !crate::oracle::raw_text()
+                .to_lowercase()
+                .contains("that card") =>
+        {
             // ("Return that card": the card in the graveyard, which this doesn't track.)
             b.it = Sel::Var(vars::SACRIFICED);
         }
@@ -289,8 +334,19 @@ pub fn note_player_mention(text: &str, b: &mut Builder) {
     if is_no_referent(&b.it) {
         return;
     }
-    let owner = l.contains("its owner");
-    let controller = l.contains("its controller");
+    // "Target creature's owner shuffles it into their library. Then that player ...",
+    // "The owner of target artifact or creature ...": the player the subject names.
+    let target_owner = l.starts_with("the owner of target ")
+        || (l.starts_with("target ")
+            && l.split_once("'s owner ")
+                .is_some_and(|(x, _)| x.split(' ').count() <= 4));
+    let target_controller = l.starts_with("the controller of target ")
+        || (l.starts_with("target ")
+            && l.split_once("'s controller ")
+                .is_some_and(|(x, _)| x.split(' ').count() <= 4));
+    let owner = l.contains("its owner") || (target_owner && matches!(b.it, Sel::Target(_)));
+    let controller =
+        l.contains("its controller") || (target_controller && matches!(b.it, Sel::Target(_)));
     // Neither, or both (ambiguous).
     if owner == controller {
         return;
@@ -335,7 +391,9 @@ fn count_creates(e: &Effect, n: &mut usize) {
             count_creates(then, n);
             count_creates(otherwise, n);
         }
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => *n += 1,
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenWithPT { .. }
+        | Effect::CreateTokenCopy { .. } => *n += 1,
         _ => {}
     }
 }

@@ -545,9 +545,19 @@ impl Game {
             } else {
                 (0, 0)
             };
+            // Its abilities, types and colors: what the continuous effects on it add up
+            // to (see the distinct effects below).
+            let mut abilities: Vec<&str> =
+                o.chars.abilities.iter().map(|a| a.text.as_str()).collect();
+            abilities.sort_unstable();
             format!(
-                "{}|{}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}",
+                "{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}",
                 o.chars.name,
+                abilities,
+                o.chars.card_types,
+                o.chars.subtypes,
+                o.chars.supertypes,
+                o.chars.colors,
                 o.controller.0,
                 o.tapped,
                 o.damage,
@@ -568,9 +578,29 @@ impl Game {
         self.turn.number.hash(&mut h);
         format!("{:?}", self.turn.step).hash(&mut h);
         self.turn.priority.map(|p| p.0).hash(&mut h);
-        // Effects that pile up each time around.
+        // Effects that pile up each time around. Identical continuous effects count once:
+        // an effect created again each time around that only overrides the same earlier
+        // effects ("{0}: This creature gains flying" answered by "{0}: Target creature
+        // loses flying") returns the game to an earlier state (CR 732.3); what the effects
+        // add up to is part of each object's fingerprint.
+        let distinct_effects: std::collections::BTreeSet<String> = self
+            .effects
+            .iter()
+            .map(|e| {
+                format!(
+                    "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}",
+                    e.source,
+                    e.controller.0,
+                    e.duration,
+                    e.affected,
+                    e.mods,
+                    e.layer1,
+                    e.created_turn
+                )
+            })
+            .collect();
         (
-            self.effects.len(),
+            distinct_effects,
             self.rule_effects.len(),
             self.player_effects.len(),
             self.replacements.len(),
