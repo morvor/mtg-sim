@@ -27,6 +27,9 @@ fn martyr_of_spores_reveals_only_green_cards() {
         .expect("activate Martyr of Spores");
     let revealed: Vec<ObjectId> = t.g.reveals.revealed.iter().map(|r| r.card).collect();
     assert_eq!(revealed, vec![elves]);
+    assert!(mtg_engine::reveal::is_revealed(&t.g, elves));
     t.resolve_all();
     assert_eq!(t.pt(bears), (3, 3));
+    // It stops being revealed once the ability has left the stack.
+    assert!(!mtg_engine::reveal::is_revealed(&t.g, elves));
 }
