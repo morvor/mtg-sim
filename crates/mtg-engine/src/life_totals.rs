@@ -206,3 +206,32 @@ pub fn cost_life_gain_possible(
         _ => true,
     }
 }
+
+/// The life each player gains as part of a damage event (CR 120.4d), given the event's
+/// replaced damage (`finals`) and the prevention effects' instructions that happen right
+/// after it (CR 615.5): lifelink (CR 120.3f, 702.15b) and "you gain life equal to the
+/// damage prevented this way". A life floor looks at the whole event.
+pub fn damage_event_gains(
+    g: &Game,
+    finals: &[crate::replacement::ReplEvent],
+    followups: &[(crate::eval::Ctx, crate::ability::Effect)],
+) -> Vec<(PlayerId, u32)> {
+    let mut out = Vec::new();
+    for e in finals {
+        if let crate::replacement::ReplEvent::Damage { source, amount, .. } = e {
+            let src = g.obj(*source);
+            if *amount > 0 && src.has_keyword(crate::keywords::KeywordKind::Lifelink) {
+                out.push((src.controller, *amount));
+            }
+        }
+    }
+    for (ctx, e) in followups {
+        if let crate::ability::Effect::GainLife { who, n } = e {
+            let k = g.eval_value(n, ctx).max(0) as u32;
+            for p in g.eval_players(who, ctx) {
+                out.push((p, k));
+            }
+        }
+    }
+    out
+}

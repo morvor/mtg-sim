@@ -87,6 +87,7 @@ fn the_player_who_creates_a_token_owns_and_controls_it() {
 #[test]
 fn a_token_has_only_the_characteristics_its_creator_defines() {
     cr!("111.3");
+    cr_example!("111.3", "Jade Mage");
     ruling!(
         "Spitting Image",
         "if that creature is itself a token, the original characteristics of that token"
@@ -131,6 +132,7 @@ fn a_token_has_only_the_characteristics_its_creator_defines() {
 #[test]
 fn an_unnamed_tokens_name_is_its_subtypes_plus_token() {
     cr!("111.4");
+    cr_example!("111.4", "not Human Token or Doomed Dissenter Token");
     let mut t = TestGame::new(2);
     // "Create two 1/1 white Soldier creature tokens": each is named Soldier Token.
     let soldiers = run_text(&mut t, P0, "Create two 1/1 white Soldier creature tokens.");
@@ -212,6 +214,7 @@ fn changing_a_tokens_name_doesnt_change_its_subtypes_and_vice_versa() {
 #[test]
 fn a_named_legendary_token_has_the_given_name() {
     cr!("111.4", "111.9");
+    cr_example!("111.4", "neither \"Hamster\" nor \"Token\" are part of its name");
     let mut t = TestGame::new(2);
     let minsc = t.hand(P0, "Minsc, Beloved Ranger");
     t.lands(P0, "Mountain", 1);
@@ -437,6 +440,7 @@ fn a_token_in_a_graveyard_cant_be_moved_to_another_zone() {
 #[test]
 fn a_token_by_card_name_uses_the_oracle_card() {
     cr!("111.11");
+    cr_example!("111.11", "Disa the Restless");
     ruling!(
         "Disa the Restless",
         "creates a token that's a copy of the card Tarmogoyf in the Oracle card reference"

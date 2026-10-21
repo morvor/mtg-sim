@@ -249,6 +249,7 @@ fn damage_to_a_battle_removes_defense_counters() {
 #[test]
 fn damage_is_modified_then_processed_into_results_then_the_event_occurs() {
     cr!("120.4", "120.4b", "120.4c", "120.4d");
+    cr_example!("120.4d", "Boon Reflection");
     // The example of CR 120.4d: a 3/3 with wither and lifelink attacks and is blocked by a
     // 2/2; the next 2 damage to the blocker is prevented; Boon Reflection doubles life
     // gained.
@@ -386,6 +387,7 @@ fn excess_damage_is_split_off_before_prevention_and_other_replacements() {
 #[test]
 fn damage_doesnt_destroy_state_based_actions_do() {
     cr!("120.5");
+    cr_example!("120.5", "Neither Lightning Bolt nor the damage dealt by Lightning Bolt destroyed");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Mountain", 1);

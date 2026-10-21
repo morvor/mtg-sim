@@ -156,6 +156,7 @@ fn abilities_affect_their_object_other_objects_and_players() {
 #[test]
 fn an_ability_can_be_detrimental() {
     cr!("113.2a");
+    cr_example!("113.2a", "This creature can't block");
     let mut t = TestGame::new(2);
     // Hulking Goblin: "This creature can't block."
     let goblin = t.battlefield(P0, "Hulking Goblin");
@@ -569,6 +570,7 @@ fn an_ability_with_a_cost_payable_only_from_hand_functions_from_hand() {
 #[test]
 fn an_ability_moving_its_object_out_of_a_zone_functions_only_there() {
     cr!("113.6m");
+    cr_example!("113.6m", "Reassembling Skeleton");
     let mut t = TestGame::new(2);
     // Reassembling Skeleton: "{1}{B}: Return this card from your graveyard to the
     // battlefield tapped."
@@ -863,6 +865,7 @@ fn an_object_that_cant_have_an_ability_doesnt_get_it() {
 #[test]
 fn setting_a_characteristic_or_a_quality_isnt_granting_an_ability() {
     cr!("113.12");
+    cr_example!("113.12", "Muraganda Petroglyphs");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Muraganda Petroglyphs");
     // Enchanted creature has flying: an ability, so no bonus.
