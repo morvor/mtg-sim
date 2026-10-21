@@ -25,7 +25,7 @@ pub(crate) fn custom_rel_more(name: &str) -> Option<CustomQuality> {
         // "When you cast an Equipment spell this way": cast with the permission the
         // ability or its source gave.
         crate::permissions::PLAYED_THIS_WAY => Rel("this way".into()),
-        _ => return None,
+        _ => return super::named_qualities::custom_rel_named(name),
     })
 }
 
@@ -59,7 +59,7 @@ impl super::Renderer<'_> {
         Some(match name {
             // Each player in turn may pay any amount of mana (any amount can be 0).
             crate::kw::join_forces::PAY_ANY_AMOUNT => "you may pay any amount of mana".into(),
-            _ => return None,
+            other => return self.named_effect(other),
         })
     }
 }
