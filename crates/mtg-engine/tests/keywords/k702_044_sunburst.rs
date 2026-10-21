@@ -164,6 +164,7 @@ fn mana_spent_on_additional_costs_counts() {
 #[test]
 fn modular_sunburst_sets_the_number_of_counters() {
     cr!("702.44c", "702.43a");
+    cr_example!("702.44c", "for each color of mana spent to cast it");
     ruling!(
         "Arcbound Wanderer",
         "The sunburst ability sets the number for the modular ability."
