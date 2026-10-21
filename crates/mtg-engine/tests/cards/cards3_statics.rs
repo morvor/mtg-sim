@@ -311,3 +311,33 @@ fn spark_rupture_turns_planeswalkers_into_creatures_sized_by_loyalty() {
     t.settle();
     assert_eq!(t.pt(pw), (2, 2));
 }
+
+#[test]
+fn bello_animates_big_non_equipment_artifacts_and_non_aura_enchantments_on_your_turn() {
+    cr!("205.1b", "613.1d");
+    supported("Bello, Bard of the Brambles");
+    use mtg_engine::keywords::KeywordKind;
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bello, Bard of the Brambles");
+    let lotus = t.battlefield(P0, "Gilded Lotus");
+    let sphere = t.battlefield(P0, "Sphere of Safety");
+    let skull = t.battlefield(P0, "Batterskull");
+    let ring = t.battlefield(P0, "Sol Ring");
+    let theirs = t.battlefield(P1, "Gilded Lotus");
+    t.set_step(P0, Step::PrecombatMain);
+    t.g.recompute();
+    for o in [lotus, sphere] {
+        assert!(t.g.obj(o).is_creature());
+        assert_eq!(t.pt(o), (4, 4));
+        assert!(t.g.obj(o).chars.has_subtype("Elemental"));
+        assert!(t.g.obj(o).has_keyword(KeywordKind::Indestructible));
+        assert!(t.g.obj(o).has_keyword(KeywordKind::Haste));
+    }
+    for o in [skull, ring, theirs] {
+        assert!(!t.g.obj(o).is_creature(), "{:?}", t.g.obj(o).chars.name);
+    }
+    // Not during an opponent's turn.
+    t.advance_to(P1, Step::Upkeep);
+    t.g.recompute();
+    assert!(!t.g.obj(lotus).is_creature());
+}
