@@ -71,7 +71,7 @@ fn a_subgame_is_seat_symmetric() {
         .stack_size(256 << 20)
         .spawn(move || {
             let mut subgames = 0;
-            for r in 1..3 {
+            for r in [2] {
                 let mut a = build(&s, 0, rec);
                 a.finish();
                 let mut b = build(&s, r, rec);

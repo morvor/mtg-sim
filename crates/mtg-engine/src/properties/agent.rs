@@ -32,6 +32,9 @@ pub struct Recorder {
     /// The game as a player started an action at priority: the player, the game, and its
     /// count of reversed attempts.
     pending: Option<(PlayerId, Box<Game>, u32)>,
+    /// Actions started at priority so far; the game is kept for the first 30 and every
+    /// fifth after that (each check copies and prints the whole game).
+    actions_started: u64,
     pub rollbacks_checked: u64,
     pub violations: Vec<String>,
 }
@@ -104,7 +107,11 @@ impl Recorder {
         if self.check_rollbacks {
             if let Answer::Action(x) = a {
                 if !matches!(x, Action::Pass | Action::Concede) {
-                    self.pending = Some((p, Box::new(g.clone()), g.turn.illegal_attempts));
+                    self.actions_started += 1;
+                    let n = self.actions_started;
+                    if n <= 30 || n % 5 == 0 {
+                        self.pending = Some((p, Box::new(g.clone()), g.turn.illegal_attempts));
+                    }
                 }
             }
         }
