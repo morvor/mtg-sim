@@ -1,6 +1,6 @@
 //! A choice between costs (CR 118.3, 601.2h):
 //!
-//! * a cost part "[cost A] or [cost B]" ([`CostPart::OneOf`]): "Ward—Discard a card or pay
+//! * a cost "[cost A] or [cost B]" ([`CostPart::OneOf`]): "Ward—Discard a card or pay
 //!   {2}." (the player whose spell or ability would be countered chooses which to pay as
 //!   the ward ability resolves, CR 702.21a), "you may discard a card or pay {1}" in an
 //!   effect;
@@ -10,7 +10,7 @@
 //!   (reductions, "equip abilities you activate cost {1} less") apply to whichever is
 //!   paid.
 
-use super::{AbilityPattern, CostPattern};
+use super::AbilityPattern;
 use crate::oracle::effects::Builder;
 use crate::ability::*;
 use crate::keywords::KeywordKind;
@@ -37,7 +37,9 @@ fn side(s: &str) -> Option<Cost> {
 /// "[cost A] or [cost B]" (lowercase), each a whole cost starting with its verb.
 pub(crate) fn one_of(p: &str) -> Option<Vec<Cost>> {
     let p = crate::oracle::phrases::end(p.trim());
-    if !VERBS.iter().any(|v| p.starts_with(v)) {
+    // Two costs, not a list of three or more ("sacrifice a creature, discard a card, or
+    // pay 4 life" is offered by `costs_casting_additional`).
+    if !VERBS.iter().any(|v| p.starts_with(v)) || p.contains(", ") {
         return None;
     }
     let i = p
@@ -48,11 +50,24 @@ pub(crate) fn one_of(p: &str) -> Option<Vec<Cost>> {
     Some(vec![side(a)?, side(b)?])
 }
 
-fn one_of_part(p: &str) -> Option<CostPart> {
-    one_of(p).map(CostPart::OneOf)
+/// "Ward—Discard a card or pay {2}.": the ward cost is a choice of two (made by the player
+/// paying it as the ward ability resolves).
+fn ward_choice(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let rest = text.strip_prefix("Ward—")?;
+    if rest.contains('\n') || rest.contains('(') {
+        return None;
+    }
+    let costs = one_of(&rest.to_lowercase())?;
+    let kw = crate::keywords::Keyword {
+        cost: Some(Cost::free().with(CostPart::OneOf(costs))),
+        text: Some(smol_str::SmolStr::new(text)),
+        ..crate::keywords::Keyword::new(KeywordKind::Ward)
+    };
+    Some(vec![AbilityDef::new(AbilityKind::Keyword(kw), text)])
 }
 
-inventory::submit! { CostPattern { name: "cost choices: [cost] or [cost]", priority: 90, parse: one_of_part } }
+inventory::submit! { AbilityPattern { name: "cost choices: Ward—[cost] or [cost]", priority: 55, parse: ward_choice } }
 
 /// "you may discard a card or pay {2}", "you may sacrifice a Food or pay {1}{W}": an
 /// optional cost paid as the ability resolves (CR 118.12), either one; "you may sacrifice
