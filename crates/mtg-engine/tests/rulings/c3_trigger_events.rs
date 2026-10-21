@@ -217,7 +217,7 @@ fn millennium_calendar_counts_permanents_untapped_in_your_untap_step() {
 
 #[test]
 fn ninth_doctor_additional_upkeep_after_the_upkeep() {
-    cr!("502.3", "500.8");
+    cr!("502.3", "500.9");
     ruling!(
         "The Ninth Doctor",
         "The additional upkeep is taken after that step, not after the untap step."
