@@ -31,6 +31,11 @@
 //! permanent it put onto the battlefield ([`Effect::NoteLinked`]); the linked abilities
 //! refer to that object, which the source loses track of once it changes zones
 //! (CR 400.7).
+//!
+//! Playing a card exiled with ~ (CR 607.2a, 305.1, 601.2): "Whenever a player plays a
+//! card exiled with ~" (Prowl, Stoic Strategist), "When you play a card exiled with ~"
+//! (Voltaic Visionary): a land played or a spell cast that was a card exiled with the
+//! source.
 
 use super::{AbilityPattern, EffectPattern, TriggerPattern};
 use crate::ability::*;
@@ -369,6 +374,35 @@ fn put_creature_event(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: the creature put onto the battlefield with ~ dies", priority: 100, parse: put_creature_event } }
+
+/// "[a player / you] play(s) a card exiled with ~".
+fn plays_card_exiled_with(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let who = if t == "a player plays a card exiled with ~" {
+        PlayerRel::Any
+    } else if t == "you play a card exiled with ~" {
+        PlayerRel::You
+    } else {
+        return None;
+    };
+    let exiled = || Filter::Custom(crate::kw::trigger_events::WAS_EXILED_WITH_SOURCE.into());
+    Some((
+        TriggerCond::AnyOf(vec![
+            TriggerCond::LandPlayed {
+                who,
+                filter: Filter::and(vec![Filter::Type(crate::types::CardType::Land), exiled()]),
+            },
+            TriggerCond::CastSpell {
+                who,
+                filter: Filter::and(vec![Filter::Spell, exiled()]),
+            },
+        ]),
+        Sel::TriggerObject,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: a player plays a card exiled with ~", priority: 100, parse: plays_card_exiled_with } }
 
 #[cfg(test)]
 mod tests {

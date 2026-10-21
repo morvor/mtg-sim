@@ -36,6 +36,9 @@ pub const DURING_YOUR_UNTAP_STEP: &str = "event time:during your untap step";
 /// `Filter::Custom`: an object the source's linked abilities noted, as it last existed
 /// (the creature put onto the battlefield with ~, as it dies: CR 603.10a, 607.2a).
 pub const NOTED_AS_IT_LAST_EXISTED: &str = "linked:noted, as it last existed";
+/// `Filter::Custom`: the object (a spell cast or a land played) was a card exiled with
+/// the source (CR 607.2a): "Whenever a player plays a card exiled with ~".
+pub const WAS_EXILED_WITH_SOURCE: &str = "linked:was a card exiled with ~";
 /// `Filter::Custom`: the spell or ability that caused the trigger event.
 pub const THE_CAUSE: &str = "event cause:the spell or ability";
 
@@ -70,6 +73,12 @@ impl KeywordRules for TriggerEvents {
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
         match name {
             THE_CAUSE => Some(g.resolving == Some(id)),
+            WAS_EXILED_WITH_SOURCE => Some(
+                _ctx.source.zip(g.obj(id).prev).is_some_and(|(s, p)| {
+                    g.obj(p).zone == crate::object::Zone::Exile
+                        && g.obj(s).linked.values().any(|v| v.contains(&p))
+                }),
+            ),
             NOTED_AS_IT_LAST_EXISTED => Some(
                 crate::linked_notes::noted(g, _ctx).contains(&crate::types::Entity::Object(id)),
             ),

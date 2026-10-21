@@ -314,3 +314,69 @@ fn havengul_mystery_transforms_back_when_its_creature_leaves() {
     t.resolve_all();
     assert_eq!(t.obj_now(lab).chars.name.as_str(), "Havengul Laboratory");
 }
+
+#[test]
+fn voltaic_visionary_transforms_when_you_play_the_exiled_card() {
+    cr!("607.2a", "305.1");
+    ruling!(
+        "Voltaic Visionary",
+        "Playing a card this way follows all the normal timing rules for that card."
+    );
+    supported("Voltaic Visionary");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let v = t.battlefield(P0, "Voltaic Visionary");
+    let top = t.library_top(P0, "Forest");
+    t.activate(P0, v, 0, &[]).expect("activate");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    let exiled = t.g.current(top);
+    assert_eq!(t.zone(exiled), mtg_engine::object::Zone::Exile);
+    t.play_land(P0, exiled).expect("play the exiled land");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(v).chars.name.as_str(), "Volt-Charged Berserker");
+}
+
+#[test]
+fn voltaic_visionary_not_for_other_cards() {
+    cr!("607.2a");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let v = t.battlefield(P0, "Voltaic Visionary");
+    let island = t.hand(P0, "Island");
+    t.play_land(P0, island).expect("play");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.obj_now(v).chars.name.as_str(), "Voltaic Visionary");
+}
+
+#[test]
+fn prowl_draws_and_converts_when_the_exiled_card_is_played() {
+    cr!("607.2a", "601.2");
+    ruling!(
+        "Prowl, Stoic Strategist",
+        "Players must pay all costs and follow all normal timing rules to play cards they own that were exiled by Prowl, Stoic Strategist."
+    );
+    supported("Prowl, Stoic Strategist");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let prowl = t.battlefield(P0, "Prowl, Stoic Strategist");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.obj_mut(bears).tapped = true;
+    t.library_top(P0, "Island");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.attack(&[(prowl, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    let exiled = t.g.current(bears);
+    assert_eq!(t.zone(exiled), mtg_engine::object::Zone::Exile);
+    // P1 casts it on their turn.
+    let hand = t.hand_size(P0);
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Forest", 2);
+    t.cast(P1, exiled).go();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.obj_now(prowl).chars.name.as_str(), "Prowl, Pursuit Vehicle");
+}
