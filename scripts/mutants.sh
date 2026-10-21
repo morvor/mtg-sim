@@ -4,6 +4,7 @@
 #   scripts/mutants.sh sba layers ...            # sample run, one file at a time
 #   RERUN=1 scripts/mutants.sh sba               # re-run only the last run's missed/timeout
 #                                                # mutants, into <stem>-rerun
+#   RERUN=1 ONLY='mana.rs:1019' scripts/mutants.sh mana   # only the survivors matching
 #   SAMPLE=1 scripts/mutants.sh trigger_timing   # every mutant instead of a 1-in-N sample
 #
 # Each file stem names crates/mtg-engine/src/<stem>.rs. Mutants run in a persistent copy of
@@ -46,10 +47,10 @@ for stem in "$@"; do
     # a neighbouring identical mutation).
     cat "$prev/missed.txt" "$prev/timeout.txt" 2>/dev/null >"$OUT/$stem.survivors"
     (cd "$MS" && cargo mutants --list --json --diff -f "$file") >"$OUT/$stem.list.json"
-    nf=0
+    names=()
     while IFS= read -r name; do
-      nf=$((nf + 1))
-      args+=(-F "^$(printf '%s' "$name" | sed 's/[][\\.^$*+?(){}|]/\\&/g')\$")
+      # ONLY=<regex>: re-run just the survivors whose name matches.
+      [[ -z "${ONLY:-}" || "$name" =~ $ONLY ]] && names+=("$name")
     done < <(python3 - "$OUT/$stem.survivors" "$OUT/$stem.list.json" "$prev/diff" <<'PY'
 import difflib, json, os, re, sys
 pat = re.compile(r"^(.*?):(\d+):(\d+): (.*)$")
@@ -79,11 +80,48 @@ for line in open(sys.argv[1]).read().splitlines():
     print(f"{best[0]}:{best[1]}:{best[2]}: {best[3]}")
 PY
     )
-    if ((nf == 0)); then
+    if ((${#names[@]} == 0)); then
       echo "== $stem: no survivors to re-run"
       continue
     fi
-    args+=(--baseline skip)
+    # cargo-mutants 27.1 applies neither -F nor -E to "delete field" mutants (it would
+    # test every one of them), so each survivor is applied and tested here, the way
+    # cargo-mutants does it: build (unviable if that fails), then the mtg-engine tests
+    # (missed if they pass, timeout after 300 s, caught otherwise).
+    mo=$dest/mutants.out
+    # A full re-run starts afresh; with ONLY, the other survivors' results are kept.
+    [[ -z "${ONLY:-}" ]] && rm -rf "$dest"
+    mkdir -p "$mo"
+    touch "$mo"/{caught,missed,timeout,unviable}.txt
+    echo "== $stem: re-running ${#names[@]} survivors"
+    for name in "${names[@]}"; do
+      python3 - "$OUT/$stem.list.json" "$name" >"$OUT/cur.diff" <<'PY'
+import json, sys
+print(next(m["diff"] for m in json.load(open(sys.argv[1])) if m["name"] == sys.argv[2]), end="")
+PY
+      cp "$MS/$file" "$OUT/cur.orig"
+      if ! patch -s "$MS/$file" <"$OUT/cur.diff"; then
+        cp "$OUT/cur.orig" "$MS/$file"
+        echo "$name" >>"$mo/unviable.txt"
+        echo "UNVIABLE (patch failed) $name"
+        continue
+      fi
+      outcome=$(flock "$LOCK" env CARGO_PROFILE_DEV_DEBUG=false bash -c '
+        cd "$1" || exit
+        timeout -k 10 900 cargo test -p mtg-engine --no-run >/dev/null 2>&1 || { echo unviable; exit; }
+        timeout -k 10 300 cargo test -p mtg-engine >/dev/null 2>&1
+        case $? in 0) echo missed ;; 124 | 137) echo timeout ;; *) echo caught ;; esac' _ "$MS")
+      cp "$OUT/cur.orig" "$MS/$file"
+      for o in caught missed timeout unviable; do
+        grep -vxF -- "$name" "$mo/$o.txt" >"$mo/$o.tmp" || true
+        mv "$mo/$o.tmp" "$mo/$o.txt"
+      done
+      echo "$name" >>"$mo/$outcome.txt"
+      echo "${outcome^^} $name"
+    done
+    c() { wc -l <"$mo/$1.txt"; }
+    echo "== $stem: caught $(c caught) missed $(c missed) timeout $(c timeout) unviable $(c unviable)"
+    continue
   elif ((k > 1)); then
     args+=(--shard "0/$k" --sharding round-robin)
   fi

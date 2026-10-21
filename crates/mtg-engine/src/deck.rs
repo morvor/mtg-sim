@@ -280,6 +280,18 @@ pub fn check_limited(deck: &[Arc<CardDef>], pool: &[Arc<CardDef>]) -> Vec<DeckPr
         if is_free_limited_basic(c) {
             continue;
         }
+        // A card's own "a deck can have up to N cards named ~" limits a limited deck too
+        // (CR 113.6n); there's no four-card limit in limited play.
+        if let Some(Some(max)) = copies_ability(c) {
+            if n > max {
+                problems.push(DeckProblem::TooManyCopies {
+                    name: name.to_string(),
+                    have: n,
+                    max,
+                });
+                continue;
+            }
+        }
         let have = available.get(name).map_or(0, |x| x.0);
         if n > have {
             problems.push(DeckProblem::NotInPool {

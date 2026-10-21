@@ -116,8 +116,18 @@ pub fn prune(g: &mut Game) {
     g.reveals.revealed = keep;
 }
 
+/// `PlayerModification::Custom` name: the player plays with their hand revealed, by an
+/// effect of a resolved spell or ability ("defending player plays with their hand revealed
+/// for as long as ~ remains on the battlefield", Stromgald Spy).
+pub const PLAYS_WITH_HAND_REVEALED: &str = "plays with their hand revealed";
+
 /// Whether an effect makes `p` play with their hand revealed (Telepathy).
 pub fn hand_revealed(g: &Game, p: PlayerId) -> bool {
+    if g.player(p).has_mod(
+        |m| matches!(m, crate::ability::PlayerModification::Custom(n) if n == PLAYS_WITH_HAND_REVEALED),
+    ) {
+        return true;
+    }
     g.statics.customs.iter().any(|(src, ctl, name)| {
         let Some(who) = name.strip_prefix(HANDS_REVEALED) else {
             return false;

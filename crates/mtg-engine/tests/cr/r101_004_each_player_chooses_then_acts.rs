@@ -18,6 +18,10 @@ fn creature_type(name: &str) -> usize {
 #[test]
 fn grave_sifter_each_player_returns_cards_of_the_type_they_chose() {
     cr!("101.4", "608.2e");
+    ruling!(
+        "Grave Sifter",
+        "The creature type each player chooses applies only to that player."
+    );
     // "When this creature enters, each player chooses a creature type and returns any
     // number of cards of that type from their graveyard to their hand."
     let mut t = TestGame::new(2);

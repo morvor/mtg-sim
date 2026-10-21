@@ -71,9 +71,30 @@ pub fn plan_gain_control(
     Some(Grant {
         objs,
         to: p,
-        duration: duration.clone(),
+        // "for as long as they're the monarch": the player as the effect begins.
+        duration: bind_duration_players(g, duration, ctx),
         changed,
     })
+}
+
+/// A "for as long as [player condition]" duration with the players it names fixed as the
+/// effect begins ("for as long as they're the monarch": that player, CR 611.2b).
+fn bind_duration_players(g: &Game, d: &Duration, ctx: &Ctx) -> Duration {
+    let Duration::WhileCondition(Condition::PlayerMatches(r, f)) = d else {
+        return d.clone();
+    };
+    if !matches!(
+        r,
+        PlayerRef::TriggerPlayer | PlayerRef::Target(_) | PlayerRef::Iterated
+    ) {
+        return d.clone();
+    }
+    match g.eval_player(r, ctx) {
+        Some(p) => {
+            Duration::WhileCondition(Condition::PlayerMatches(PlayerRef::Player(p), f.clone()))
+        }
+        None => d.clone(),
+    }
 }
 
 /// Creates the control-changing effect of a planned change (CR 613.1b). The caller

@@ -1934,6 +1934,7 @@ impl Game {
             // With any mana another player already spent on it (assist, CR 702.132a).
             si.cast.mana_spent.extend(paid.mana_spent.iter().cloned());
             si.cast.cost_objects = paid.objects.clone();
+            si.cast.life_paid += paid.life;
         }
         // "The sacrificed creature" (resolution reads the spell's saved context).
         if !paid.sacrificed.is_empty() {
@@ -2866,6 +2867,11 @@ impl Game {
         }
         // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
         crate::zones::record_cost_moved(self, &paid, &mut ctx.vars);
+        // What was paid to activate it (Phyrexian life is recorded as the mana is paid).
+        if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+            si.cast.life_paid += paid.life;
+            si.cast.loyalty_removed = paid.loyalty_removed;
+        }
         self.saved_ctx.insert(id, ctx.clone());
         self.record_activation(p, src, a.uid);
         // CR 702.29c: discarding a card to pay a cycling ability's cost is cycling it.
@@ -3615,6 +3621,7 @@ impl Game {
                 if !self.may_pay_life_for_cost(p, n, ctx) || !self.pay_life(p, n) {
                     return bad("can't pay life");
                 }
+                paid.life += n;
             }
             CostPart::Loyalty(n) => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
@@ -3625,15 +3632,17 @@ impl Game {
                         *n as u32,
                         crate::event_causes::CounterPut::cost(p, Some(s)),
                     );
-                } else if *n < 0
-                    && self.remove_counters_by(
+                } else if *n < 0 {
+                    let removed = self.remove_counters_by(
                         Entity::Object(s),
                         counters::LOYALTY,
                         (-*n) as u32,
                         Some(p),
-                    ) < (-*n) as u32
-                {
-                    return bad("not enough loyalty");
+                    );
+                    if removed < (-*n) as u32 {
+                        return bad("not enough loyalty");
+                    }
+                    paid.loyalty_removed += removed;
                 }
             }
             CostPart::SacrificeSelf => {
@@ -4260,6 +4269,10 @@ pub struct PaidCost {
     /// The permanents among `objects` that a "tap an untapped [permanent]" cost tapped
     /// ("the creature tapped this way").
     pub tapped: Vec<ObjectId>,
+    /// The life a life payment cost paid (CR 119.4).
+    pub life: u32,
+    /// The loyalty counters a loyalty cost removed (CR 606.4).
+    pub loyalty_removed: u32,
 }
 
 /// Adds one cost to another.

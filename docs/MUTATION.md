@@ -24,9 +24,10 @@ cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
   --shard 0/10 --sharding round-robin -o target/mutants/<stem>
 ```
 
-- `target/mutsrc` is a copy of the worktree (without `target/` and `.git`) refreshed before
-  each file, so one incremental build serves every mutant and an interrupted run never
-  leaves a mutation in the real tree. `--in-place` there also means one mutant at a time.
+- `target/mutsrc` is a copy of the committed tree (`git archive HEAD`, so commit the tests
+  first; uncommitted changes aren't measured) refreshed before each file, so one
+  incremental build serves every mutant and an interrupted run never leaves a mutation in
+  the real tree. `--in-place` there also means one mutant at a time.
 - A whole run over the 15 files would be about 5,200 mutants at roughly two minutes each
   (an incremental build of the engine and its seven test binaries takes ~50 s, the full
   `mtg-engine` suite ~105 s), i.e. a week. So each file is **sampled**: round-robin shard
@@ -37,9 +38,14 @@ cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
 - The re-run after adding tests (`RERUN=1`) finds each survivor again in the file's
   current mutant list (same function and mutation whose diff, the mutated line with the
   lines around it as saved in the earlier run's `mutants.out/diff/`, matches best; then
-  the same column and the nearest line, since merges move lines) and tests exactly those
-  (`-F '^<name>$'`). Matching by line distance alone picked a neighbouring identical
-  mutation once code had moved by more than the distance between them.
+  the same column and the nearest line, since merges move lines) and tests exactly those.
+  Matching by line distance alone picked a neighbouring identical
+  mutation once code had moved by more than the distance between them. cargo-mutants
+  27.1 applies neither `-F` nor `-E` to "delete field" mutants (it selected every one of
+  them, 163 for triggers.rs), so the re-run applies each survivor's diff to
+  `target/mutsrc` itself and runs the same build and `cargo test -p mtg-engine` (300 s
+  timeout), recording caught/missed/timeout/unviable in `target/mutants/<stem>-rerun/`.
+  `ONLY=<regex>` re-runs just the matching survivors, keeping the others' results.
 
 Kill rate = (caught + timeout) / (caught + missed + timeout); unviable mutants (that do
 not compile) are excluded.
@@ -58,20 +64,26 @@ Each surviving mutant is classified as
 | File | Mutants (all) | Sampled | Caught | Missed | Timeout | Unviable | Kill rate | After new tests |
 |---|---|---|---|---|---|---|---|---|
 | sba.rs | 154 | 16 (1/10) | 14 | 2 | 0 | 0 | 87.5% | 87.5% (both survivors equivalent) |
-| trigger_timing.rs | 17 | 17 (all) | 14 | 2 | 0 | 1 | 87.5% | TBD |
-| permissions.rs | 169 | 17 (1/10) | 10 | 4 | 0 | 3 | 71.4% | TBD |
-| simultaneous.rs | 171 | 18 (1/10) | 6 | 12 | 0 | 0 | 33.3% | TBD |
-| turn.rs | 234 | 24 (1/10) | 21 | 2 | 0 | 1 | 91.3% | TBD |
-| mana.rs | 228 | 23 (1/10) | 15 | 6 | 0 | 2 | 71.4% | TBD |
+| trigger_timing.rs | 17 | 17 (all) | 14 | 2 | 0 | 1 | 87.5% | 93.8% (15/16) |
+| permissions.rs | 169 | 17 (1/10) | 10 | 4 | 0 | 3 | 71.4% | 78.6% (11/14) |
+| simultaneous.rs | 171 | 18 (1/10) | 6 | 12 | 0 | 0 | 33.3% | 55.6% (10/18) |
+| turn.rs | 234 | 24 (1/10) | 21 | 2 | 0 | 1 | 91.3% | 95.7% (22/23) |
+| mana.rs | 228 | 23 (1/10) | 15 | 6 | 0 | 2 | 71.4% | 81.0% (17/21) |
 | eval.rs | 268 | 27 (1/10) | 25 | 0 | 0 | 2 | 100% | 100% |
-| stack.rs | 361 | 37 (1/10) | 33 | 3 | 0 | 1 | 91.7% | TBD |
-| replacement.rs | 361 | 37 (1/10) | 28 | 6 | 0 | 3 | 82.4% | TBD |
-| triggers.rs | 474 | 48 (1/10) | 32 | 16 | 0 | 0 | 66.7% | TBD |
-| resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | TBD |
-| actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | TBD |
+| stack.rs | 361 | 37 (1/10) | 33 | 3 | 0 | 1 | 91.7% | 94.4% (34/36) |
+| replacement.rs | 361 | 37 (1/10) | 28 | 6 | 0 | 3 | 82.4% | 82.4% (28/34; its two tests' mutants are equivalent now) |
+| triggers.rs | 474 | 48 (1/10) | 32 | 16 | 0 | 0 | 66.7% | 75.0% (36/48) |
+| resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | 86.7% (26/30) |
+| actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | 85.7% (no new tests: no killable survivor found) |
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
-| casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | TBD |
-| combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | TBD |
+| casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | 96.4% (80/83) |
+| combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | 93.8% (76/81) |
+| **all 15** | 5,281 | 551 | 423 | 93 | 4 | 31 | **82.1%** | **88.3%** (459/520) |
+
+"After new tests" re-tests the first run's survivors (`RERUN=1`, 2026-10-21, on the tree
+with all the new tests): each survivor now caught counts as caught. Some were killed by
+tests other work added in the meantime (noted in their entries); five whose tests were
+written for them turned out to be equivalent in today's code and are re-triaged below.
 
 ### sba.rs
 
@@ -139,16 +151,25 @@ the "each player" machinery is exercised by many card tests, but few of them dis
 player's results from another's.
 
 - `simultaneous.rs:100:31: replace || with && in run` (stop performing the body's
-  instructions once the game is over): **(b) missing test**. Killed by
-  `tests/cr/r104_001_game_ends_during_each_player.rs` (Laboratory Maniac wins the game
-  while each player draws for Burning Inquiry; nobody discards afterwards, CR 104.1).
+  instructions once the game is over): **(a) equivalent**, found by the re-run (the test
+  written for it, `tests/cr/r104_001_game_ends_during_each_player.rs`: Laboratory Maniac
+  wins the game while each player draws for Burning Inquiry and nobody discards
+  afterwards, CR 104.1, passes with the mutant). `Game::exec` performs nothing once the
+  game has ended or is restarting, so the instructions after the one that ended it do
+  nothing whether or not the loop stops; the test stays as the CR 104.1 check. The
+  planned instructions (`perform_plans`: sacrifices, discards, moves chosen by every
+  player and performed together) don't go through `Game::exec`, but a second test added in
+  review (Lore Broker, "each player draws a card, then discards a card": a chosen discard
+  after the winning draw) also passes with the mutant, so the claim holds for the cards
+  tried.
 - `simultaneous.rs:224:20: replace == with != in updates_number::reads`: **(b) missing
   test, not killed**. The mutant makes every instruction that stores a number count as one
   whose number is shared by all players. The cards whose per-player "that many" goes
   through this code record it per player anyway (`RECORD_THAT_MANY`,
   `kw/hand_graveyard_actions.rs`), and the other per-player numbers seen in the card pool
   (the outer X of "each player ... X") hold the same value for every player, so no card
-  test found shows the difference.
+  test found shows the difference. The re-run (2026-10-21) found it **killed** by tests
+  added since by other work.
 - `simultaneous.rs:249:17: replace && with || in records_decision`: **(b) not killed**.
   It turns "if ..., [action]" inside an "each player" body into a choice attached to the
   next instruction; the actions still happen in the same order for each player, and only
@@ -168,6 +189,8 @@ player's results from another's.
   unplannable branch) together instead of in turn. With the cards tested, the planned and
   the in-turn performance produce the same results; a test needs a card where one player's
   part depends on what an earlier player's part already did, chosen by a third player.
+  The re-run (2026-10-21) found `plannable -> true` **killed** by tests added since by
+  other work; the `&&`/`||` one still survives.
 - `simultaneous.rs:664:46: replace match guard plannable(g, e, ctx, p) with false in plan`
   (sacrificing chosen objects, "sacrifices the rest", in turn instead of together):
   **(b) not killed**. Simultaneous sacrifice is observable with a "whenever another
@@ -176,7 +199,8 @@ player's results from another's.
   effects instead of this path (Cataclysm is `KeepAndSacrificeRest`, Balance is
   unsupported); the behavior itself is now pinned for Cataclysm by
   `tests/cr/r608_002f_each_player_sacrifices_together.rs` (Blood Artist sees the death of
-  the opponent's creature sacrificed with it).
+  the opponent's creature sacrificed with it). The re-run (2026-10-21) found it
+  **killed** by tests added since by other work.
 - `simultaneous.rs:628:38: replace == with != in plan` (link the moved permanents to the
   effect's source when they enter the battlefield, CR 607.1d): **(b) not killed**: no card
   puts a permanent onto the battlefield with an "each player" move whose abilities refer to
@@ -210,12 +234,20 @@ Run 2026-10-14, 24 of 234 mutants (round-robin 0/10), 31 minutes.
   proposing illegal actions kept priority forever and the game stalled. Killed by
   `tests/cr/r733_002_repeated_illegal_actions.rs` (the third illegal attempt in a row
   passes priority).
-- `turn.rs:725:17: replace || with && in Game::current_phase_end`: **(b) missing test**. A
-  step of another phase no longer started a new phase unless it was a main phase, so
-  "after this main phase, there is an additional combat phase" cast in the postcombat main
-  phase put the combat after the ending phase. Killed by
-  `tests/cr/r500_008_combat_after_the_postcombat_main_phase.rs` (Relentless Assault in the
-  postcombat main phase).
+- `turn.rs:725:17: replace || with && in Game::current_phase_end` (`|| s.is_main() ||
+  matches!(s, Untap | BeginningOfCombat)` becomes `|| s.is_main() && matches!(..)`, so
+  only a change of phase or a step earlier than the one before it ends the current
+  phase): **(a) equivalent**, found by the re-run (the test written for it,
+  `tests/cr/r500_008_combat_after_the_postcombat_main_phase.rs`, Relentless Assault in the
+  postcombat main phase, passes with the mutant and stays as the CR 500.8 check). The
+  first step of a phase (a main phase, untap, beginning of combat) that follows a step of
+  the same phase is either earlier in the turn's order than that step (an additional combat
+  phase after this one: beginning of combat after end of combat), which `*s < prev`
+  catches, or the same step again, which would need an additional main phase directly
+  after a main phase, or an additional beginning phase directly after an untap step. No
+  effect adds those: additional main phases come after an additional combat phase
+  ("followed by an additional main phase"), and additional beginning phases come after a
+  main phase (Sphinx of the Second Sun).
 
 ### mana.rs
 
@@ -237,12 +269,15 @@ Run 2026-10-14, 23 of 228 mutants (round-robin 0/10), 28 minutes.
 - `mana.rs:586:9: replace <impl PartialEq for ManaRider>::eq -> bool with false`: **(a)
   equivalent**. Nothing compares mana units that carry a rider (the pool removes spent
   mana by index), so the equality of riders is never consulted.
-- `mana.rs:937:24: replace -= with += in PoolSolver<'_>::solve` (undo the life a Phyrexian
-  symbol tentatively paid when the rest of the cost can't be paid that way): **(b) missing
-  test**. With the mutant the abandoned life stayed counted, so a later, valid way of
-  paying exceeded the life total and the spell couldn't be cast. Killed by
+- `mana.rs:937:24: replace -= with += in PoolSolver<'_>::solve` (undo the count of
+  Phyrexian symbols paid with life when a way of paying that tried life for one is
+  abandoned): **(b) missing test**. The first test written,
   `tests/cr/r107_004f_phyrexian_payment_backtracking.rs` ({B/G}{G/P}{G/P} from {G}{B}
-  with 3 life).
+  with 3 life), pins the life undone on the line before and passed with the mutant (found
+  by the re-run). The count is what Compleated reads (CR 702.150a): with the mutant the
+  abandoned way's symbol stayed counted, and the planeswalker entered with two loyalty
+  counters fewer for each. Killed by the second test in that file (the same cost on a
+  compleated planeswalker with five loyalty enters with three).
 
 ### eval.rs
 
@@ -253,10 +288,16 @@ caught.
 
 Run 2026-10-14, 37 of 361 mutants (round-robin 0/10), 55 minutes.
 
-- `stack.rs:599:62: replace && with || in Game::is_legal_target` ("target spell" also
-  accepted any battlefield object the filter matches): **(b) missing test**. Killed by
-  `tests/cr/r115_001_target_spell_is_on_the_stack.rs` (Counterspell can't target
-  Grizzly Bears on the battlefield).
+- `stack.rs:599:62: replace && with || in Game::is_legal_target` (for "target spell",
+  `ob.zone == Battlefield && filter_allows_permanent(f)` becomes `||`): **(a)
+  equivalent**, found by the re-run. The test written for it,
+  `tests/cr/r115_001_target_spell_is_on_the_stack.rs` (Counterspell can't target Grizzly
+  Bears on the battlefield; Unsubstantiate, "target spell or creature", can't target a
+  creature card in a graveyard), passes with the mutant: the compiled spell filters include
+  `Filter::Spell` for their spell part, and the candidates for "target spell" are the
+  objects on the stack plus, only when the filter allows permanents, the permanents, for
+  which both conditions agree. An answer naming anything else isn't a candidate, and a
+  target that changes zones is a new object (CR 400.7).
 - `stack.rs:740:13: replace || with && in Game::player_untargetable`: **(a) equivalent
   (dead path)**. It changes how `Restriction::PlayerCantBeTargeted` from static abilities
   and from resolved effects combine, but no compiled card or engine code creates that
@@ -291,15 +332,25 @@ Run 2026-10-14, 37 of 361 mutants (round-robin 0/10), 54 minutes.
   is "deals half that damage" (amount minus (amount minus half)), and both branches give
   half.
 - `replacement.rs:1786:9: replace <impl View for EnteringView>::controller_override ->
-  Option<PlayerId> with None`: **(b) missing test**. "Creatures your opponents control
-  enter tapped" was checked against the card's owner instead of the player it enters under
-  (CR 614.12). Killed by `tests/cr/r614_012_enters_under_another_players_control.rs`
-  (Reanimate on a creature card in the opponent's graveyard, Authority of the Consuls).
-- `replacement.rs:1875:5: replace event_amount -> Option<u32> with None`: **(b) missing
-  test**. Damage a replacement reduced to 0 stayed an event, so a later "deals that much
-  damage plus 2" turned it back into damage (CR 120.8: 0 damage isn't dealt). Killed by
-  `tests/cr/r120_008_zero_damage_isnt_dealt.rs` (Benevolent Unicorn and Torbran on Spark
-  Jolt, in both orders).
+  Option<PlayerId> with None`: **(a) equivalent now**, found by the re-run. When it was
+  found, "Creatures your opponents control enter tapped" was checked against the card's
+  owner instead of the player it enters under (CR 614.12), and
+  `tests/cr/r614_012_enters_under_another_players_control.rs` (Reanimate on a creature
+  card in the opponent's graveyard, Authority of the Consuls) was written for it. Since
+  then the effects that modify how a permanent enters are gathered inside
+  `with_hypothetical_entry`, with the object on the battlefield under the player it
+  enters under, so the test passes with the mutant. The override still covers the other
+  replacement effects checked against the entering object in its old zone, but no card
+  has one whose filter names the entering permanent's controller ("If a creature an
+  opponent controls would enter ..." doesn't exist).
+- `replacement.rs:1875:5: replace event_amount -> Option<u32> with None`: **(a)
+  equivalent now**, found by the re-run. When it was found, damage a replacement reduced
+  to 0 stayed an event that a later "deals that much damage plus 2" turned back into
+  damage (CR 120.8), and `tests/cr/r120_008_zero_damage_isnt_dealt.rs` (Benevolent Unicorn
+  and Torbran on Spark Jolt, in both orders) was written for it. Since then
+  `repl_event_matches` itself refuses a damage event of 0 for every damage replacement, so
+  the test passes with the mutant (and stays as the CR 120.8 check); the other amounts this
+  drops (0 life, 0 counters, 0 tokens) do nothing when performed.
 
 ### triggers.rs
 
@@ -327,7 +378,8 @@ so on refer to); the field is only read by abilities whose wording refers to it.
   the next end step" created during that step doesn't fire in it, except in a cleanup step
   that's followed by another, CR 514.3a): **(b) not killed**. The check only matters for a
   delayed trigger created between a step's beginning and the trigger check for it; no
-  card creates one there.
+  card creates one there. The re-run (2026-10-21) found it **killed** by tests added
+  since by other work.
 - `triggers.rs:1088:21` (Attacks: `objects`, all the attackers), `1272:25`
   (IsDealtDamage: `other`, the source), `1528:25` (SpellCopied: `object`; `spell` holds the
   same copy), `1606:25` (TokenCreated: `player`), `1650:25` (TappedForManaOfType:
@@ -336,9 +388,12 @@ so on refer to); the field is only read by abilities whose wording refers to it.
   "whenever one or more creatures you control attack" comes from each attacker's
   `object`, which Angelic Guardian's test checks).
 - `triggers.rs:1204:29: delete field object` (BlocksOrBecomesBlocked, the attacking
-  creature that became blocked): **(b) missing test**. Killed by
+  creature that became blocked): **(b) missing test**. The first tests,
   `tests/cr/r509_003_blocks_or_becomes_blocked_it.rs` (Raging Gorilla gets +2/-2 when it
-  blocks and when it becomes blocked).
+  blocks and when it becomes blocked), passed with the mutant (found by the re-run): its
+  "it" is the source itself. Killed by the Gift of the Woods tests added to that file
+  ("whenever enchanted creature blocks or becomes blocked, it gets +0/+3": "it" is the
+  creature the trigger recorded).
 - `triggers.rs:1934:25: delete match arm TriggerCond::CastSpell{..} | ... in
   player_event`: **(b) missing test**. "Their first spell each turn" stopped being per
   player: a second opponent's first spell no longer triggered once someone else had cast
@@ -494,9 +549,13 @@ Run 2026-10-21, 88 of 876 mutants (round-robin 0/10), 3 hours (the unmutated sui
 takes ~175 s). Tests for the (b) survivors were checked to fail with their mutant applied
 to the worktree and to pass without it.
 
-- `combat.rs:136:9: replace CombatState::attacked_alone -> bool with false`: **(a)
-  equivalent (dead code)**. The function has no caller (exalted and "attacks alone"
-  triggers use `TriggerCond::AttacksAlone` on the declaration event).
+- `combat.rs:136:9: replace CombatState::attacked_alone -> bool with false`: **(b)
+  missing test** (first triaged as dead code). No engine code calls it (exalted and
+  "attacks alone" triggers use `TriggerCond::AttacksAlone` on the declaration event), but
+  it's public API that `tests/cr/r506_combat_phase.rs` (`attacks_alone_and_attacking_alone`)
+  called only to check that it's false, which the mutant satisfies. Killed by the
+  assertions added there in review (Rogue Kavu declared alone attacked alone, the Bears
+  didn't).
 - `combat.rs:314:34: replace match guard self.obj(o).is(CardType::Battle) with false in
   Game::can_attack_target`: **(b) missing test**. An attack on a battle wasn't treated as
   an attack on its protector, so "~ can't attack unless defending player controls an
@@ -556,13 +615,11 @@ to the worktree and to pass without it.
 
 ## Status (2026-10-21)
 
-All 15 files have been sampled: 520 viable mutants (plus 31 unviable), 423 caught, 4
-timeouts, 93 missed: a kill rate of **82.1%** before the new tests. The casting.rs and
-combat.rs survivors are triaged and have tests. Remaining:
-
-1. Re-run the survivors of every file with new tests (`RERUN=1 scripts/mutants.sh
-   trigger_timing permissions simultaneous turn mana stack replacement triggers resolve
-   casting combat`, about 6 hours at ~4 minutes a mutant) and fill in the "After new tests"
-   column and the overall kill rate after. Each new test was written against its mutant's
-   code and checked to pass on the unmutated engine (the casting.rs and combat.rs ones
-   also to fail with their mutant applied); the re-run is what confirms the kill.
+Done. All 15 core files are sampled (551 of 5,281 mutants, 520 viable): 427 killed
+before the new tests (**82.1%**), 459 after (**88.3%**), counting the first run's
+survivors that the re-run found caught (and `combat.rs:136`, killed by a test added in
+review and checked by hand). The 61 survivors left are each triaged above:
+equivalent (a), or behavior no card in the pool reaches yet (b, "not killed", with what a
+test would need). One engine bug was found and fixed (multi-player search moves,
+simultaneous.rs). Re-running a file later: `scripts/mutants.sh <stem>` for a new sample,
+`RERUN=1 scripts/mutants.sh <stem>` for the survivors.

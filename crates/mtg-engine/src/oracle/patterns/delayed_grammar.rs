@@ -1224,7 +1224,11 @@ pub(crate) fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     // "a creature card from its owner's graveyard" (another object's owner, which the zone
     // grammar reads as any graveyard); "return ~ from exile" (the card the source became,
     // which isn't tracked into the delayed ability).
-    if eff.contains(" from its owner's ") || eff.contains("~ from exile") {
+    // (`delayed_grammar_3.rs` reads "return a creature card from its owner's graveyard".)
+    if (eff.contains(" from its owner's ")
+        && !super::delayed_grammar_3::reads_from_its_owners_graveyard(eff))
+        || eff.contains("~ from exile")
+    {
         return None;
     }
     let (cond, this_turn) = match cond.strip_suffix(" this turn") {

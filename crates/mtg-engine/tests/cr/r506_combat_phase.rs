@@ -516,6 +516,8 @@ fn attacks_alone_and_attacking_alone() {
     let ctx = mtg_engine::eval::Ctx::new(None, P0);
     assert!(t.g.matches(kavu, &Filter::AttackingAlone, &ctx));
     assert!(!t.g.matches(bears, &Filter::AttackingAlone, &ctx));
+    assert!(t.g.combat.as_ref().unwrap().attacked_alone(kavu));
+    assert!(!t.g.combat.as_ref().unwrap().attacked_alone(bears));
 
     // With another attacker, it doesn't attack alone.
     let mut t = TestGame::new(2);
