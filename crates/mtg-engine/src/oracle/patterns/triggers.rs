@@ -679,7 +679,17 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
             "~" => (Filter::Source, Sel::This),
             "a card" => (Filter::Any, Sel::TriggerObject),
             "another card" => (Filter::Other, Sel::TriggerObject),
-            _ => return None,
+            // "you cycle a card named ~", "a player cycles a land card".
+            t => {
+                let np = t.strip_prefix("a ").or_else(|| t.strip_prefix("an "))?;
+                let (f, false, r) = parse_object_phrase(np)? else {
+                    return None;
+                };
+                if !r.trim().is_empty() {
+                    return None;
+                }
+                (f, Sel::TriggerObject)
+            }
         };
         return Some((TriggerCond::Cycled { who, filter }, it, tp()));
     }

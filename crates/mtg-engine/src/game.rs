@@ -516,6 +516,10 @@ pub struct TurnHistory {
     pub milled: Vec<ObjectId>,
     #[serde(default)]
     pub discarded: Vec<(PlayerId, ObjectId)>,
+    /// Cards put into graveyards by surveilling this turn (CR 701.25a), as the objects
+    /// they became ("cards in your graveyard you've surveilled this turn").
+    #[serde(default)]
+    pub surveilled: Vec<ObjectId>,
     /// Every (blocker, attacker) pair that existed this turn, with the attacker's
     /// controller at the time ("creatures that were blocked by target Wall this turn").
     /// Recorded by `kw/block_history.rs`.
@@ -649,6 +653,10 @@ pub struct Game {
     /// The events of the latest turns before this one, for "last turn", "during your last
     /// turn" and "since your last turn" (see `history_query.rs`).
     pub past_turns: Vec<crate::history_query::PastTurn>,
+    /// Each player's state as this turn began (`turn_start.rs`).
+    pub turn_start: crate::turn_start::TurnStart,
+    /// The events of earlier turns kept for "this game" queries (`turn_start.rs`).
+    pub game_events: Vec<Event>,
     /// While positive, the events of the instructions being performed form one batch
     /// (see [`Game::end_event_batch`]).
     pub batch_hold: u32,
@@ -807,6 +815,10 @@ pub struct Game {
     /// paying {1} rather than paying its mana cost", CR 608.2g, 118.9). Set and restored
     /// around that effect only (see `permissions::with_resolution_terms`).
     pub resolution_alt_cost: Option<Cost>,
+    /// Likewise, an additional cost those spells are cast with ("you may cast target
+    /// instant or sorcery card from your graveyard by paying {R}{R} in addition to its
+    /// other costs", CR 601.2b, 601.2f).
+    pub resolution_extra_cost: Option<Cost>,
 }
 
 impl Game {
@@ -865,6 +877,8 @@ impl Game {
             turn_events: vec![],
             excess_ahead: vec![],
             past_turns: vec![],
+            turn_start: Default::default(),
+            game_events: vec![],
             batch_hold: 0,
             log: vec![],
             logging: false,
@@ -933,6 +947,7 @@ impl Game {
             observer: None,
             timing: Default::default(),
             resolution_alt_cost: None,
+            resolution_extra_cost: None,
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

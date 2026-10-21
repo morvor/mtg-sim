@@ -121,6 +121,9 @@ impl Renderer<'_> {
                 "{opt:you're} casting a spell with emerge".into()
             }
             "end_step:1" => "it's the first end step of the turn".into(),
+            crate::kw::has_another_activated_ability::HAS_ANOTHER_ACTIVATED_ABILITY => {
+                format!("{} has another activated ability", self.me())
+            }
             "upkeep:1" => "it's the first upkeep step of the turn".into(),
             crate::search_rules::YOU_SEARCHED_THIS_WAY => "you search your library this way".into(),
             "you_were_the_starting_player" => "you were the starting player".into(),

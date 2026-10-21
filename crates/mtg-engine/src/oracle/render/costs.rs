@@ -386,7 +386,12 @@ impl Renderer<'_> {
     pub(crate) fn cost_as_payment(&mut self, c: &Cost) -> String {
         let mut parts: Vec<String> = Vec::new();
         if let Some(m) = &c.mana {
-            parts.push(format!("pay {m}"));
+            // "pays {1} for each {E} paid this way" (Aether Spike): X is the energy paid.
+            if self.extra.x_paid && self.extra.x_energy && m.to_string() == "{X}" {
+                parts.push("pay {alt:{X}|{1} for each {E} paid this way}".into());
+            } else {
+                parts.push(format!("pay {m}"));
+            }
         }
         for p in &c.parts {
             match p {

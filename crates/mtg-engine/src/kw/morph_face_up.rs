@@ -69,6 +69,15 @@ fn effects_could_change_abilities(g: &Game) -> bool {
 /// if it wouldn't have a morph cost face up, e.g. because of an effect that would apply to
 /// it, it can't be turned face up this way).
 pub(crate) fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
+    face_up_cost_and_way(g, id).map(|(m, c, _)| (m, c))
+}
+
+/// [`face_up_cost`], with the way it turns the permanent face up (its morph or its
+/// disguise cost), for mana that may be spent only on one of them (CR 106.6).
+pub(crate) fn face_up_cost_and_way(
+    g: &Game,
+    id: ObjectId,
+) -> Option<(bool, Cost, crate::mana::FaceUpWay)> {
     let o = g.obj(id);
     if !o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) || o.card.is_none() {
         return None;
@@ -102,7 +111,12 @@ pub(crate) fn face_up_cost(g: &Game, id: ObjectId) -> Option<(bool, Cost)> {
             .len();
         m.reduce_generic(n as u32);
     }
-    Some((megamorph, cost))
+    let way = if kind == KeywordKind::Disguise {
+        crate::mana::FaceUpWay::Disguise
+    } else {
+        crate::mana::FaceUpWay::Morph
+    };
+    Some((megamorph, cost, way))
 }
 
 impl KeywordRules for MorphFaceUp {
@@ -141,7 +155,7 @@ impl KeywordRules for MorphFaceUp {
             return None;
         };
         let obj = *obj;
-        let Some((megamorph, mut cost)) = face_up_cost(g, obj) else {
+        let Some((megamorph, mut cost, way)) = face_up_cost_and_way(g, obj) else {
             return Some(Err(Illegal("nothing to turn face up".into())));
         };
         if g.obj(obj).controller != p {
@@ -166,7 +180,9 @@ impl KeywordRules for MorphFaceUp {
             chosen_x = Some(x as i32);
         }
         let ctx = Ctx::new(Some(obj), p);
-        if !g.pay_cost(p, &cost, Some(obj), &ctx) {
+        // Mana that may be spent only to turn permanents face up pays it (CR 106.6).
+        let purpose = Some(crate::mana::SpendPurpose::TurnFaceUp(way));
+        if !crate::special_actions::pay_for(g, p, &cost, Some(obj), &ctx, purpose) {
             return Some(Err(Illegal("can't pay the cost to turn it face up".into())));
         }
         // CR 702.37f: other abilities of the permanent that refer to X use the value

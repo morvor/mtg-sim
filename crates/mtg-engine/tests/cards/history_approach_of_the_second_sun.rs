@@ -1,4 +1,5 @@
-//! Approach of the Second Sun (hand-written, `src/cards/approach_of_the_second_sun.rs`).
+//! Approach of the Second Sun, compiled: "you've cast another spell named ~ this game" is a
+//! history query over the whole game (`HistoryWindow::ThisGame`, `turn_start.rs`).
 
 use mtg_engine::testing::*;
 use mtg_engine::*;
@@ -101,4 +102,67 @@ fn with_fewer_than_seven_cards_it_goes_on_the_bottom() {
     assert_eq!(lib.len(), 4);
     // The bottom card is the first in the list.
     assert_eq!(t.g.obj(lib[0]).chars.name.as_str(), "Approach of the Second Sun");
+}
+
+#[test]
+fn the_first_one_may_have_been_cast_in_an_earlier_turn() {
+    cr!("104.2b");
+    let mut t = TestGame::new(2);
+    cast_approach(&mut t);
+    assert_eq!(t.life(P0), 27);
+    t.set_step(P0, mtg_engine::turn::Step::End);
+    t.advance_to(P1, mtg_engine::turn::Step::PrecombatMain);
+    t.set_step(P1, mtg_engine::turn::Step::End);
+    t.advance_to(P0, mtg_engine::turn::Step::PrecombatMain);
+    for l in t.g.permanents_controlled_by(P0) {
+        t.g.objects[l.0 as usize].tapped = false;
+    }
+    let a = t.hand(P0, "Approach of the Second Sun");
+    t.cast(P0, a).go();
+    t.resolve();
+    assert_eq!(t.g.result, Some(GameResult::Win(vec![P0])));
+}
+
+#[test]
+fn a_copy_isnt_cast_so_it_counts_as_neither() {
+    cr!("707.10");
+    ruling!("Approach of the Second Sun", "A copy of a spell isn't cast, so it won't count");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 7);
+    t.lands(P0, "Island", 2);
+    let a = t.hand(P0, "Approach of the Second Sun");
+    let spell = t.cast(P0, a).go();
+    let twin = t.hand(P0, "Twincast");
+    t.cast(P0, twin).target(spell).go();
+    // Twincast, then the copy (not cast from your hand: no win), then the original (the
+    // copy wasn't another spell cast: no win).
+    t.resolve_all();
+    assert!(t.g.result.is_none());
+    assert_eq!(t.life(P0), 34);
+}
+
+#[test]
+fn the_same_card_cast_again_is_another_spell() {
+    cr!("400.7", "104.2b");
+    ruling!("Approach of the Second Sun", "casting the same Approach of the Second Sun card on a later turn");
+    let mut t = TestGame::new(2);
+    let a = cast_approach(&mut t);
+    // The very card, back from the library.
+    let in_library = t.g.current(a);
+    assert!(matches!(t.zone(in_library), mtg_engine::object::Zone::Library(_)));
+    let again = t
+        .g
+        .move_object(
+            in_library,
+            mtg_engine::object::Zone::Hand(P0),
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        )
+        .unwrap();
+    for l in t.g.permanents_controlled_by(P0) {
+        t.g.objects[l.0 as usize].tapped = false;
+    }
+    t.cast(P0, again).go();
+    t.resolve();
+    assert_eq!(t.g.result, Some(GameResult::Win(vec![P0])));
 }

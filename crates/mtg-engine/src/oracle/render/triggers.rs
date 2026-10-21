@@ -278,6 +278,24 @@ impl Renderer<'_> {
             let n = self.noun(&f, Num::One);
             return format!("whenever you tap an untapped {n}");
         }
+        // "Whenever a basic land is tapped for mana of the chosen color" (Gauntlet of Power).
+        if let TriggerCond::Where {
+            trigger,
+            cond: Condition::Custom(c),
+        } = t
+        {
+            if let (
+                TriggerCond::TappedForMana {
+                    who: PlayerRel::Any,
+                    filter,
+                },
+                crate::kw::mana_produced_chosen_color::PRODUCED_CHOSEN_COLOR,
+            ) = (trigger.as_ref(), c.as_str())
+            {
+                let n = self.noun_det(filter, Det::A);
+                return format!("whenever {n} is tapped for mana of the chosen color");
+            }
+        }
         if let TriggerCond::Batched { trigger, .. } = t {
             if let Some(f) = you_tapped(trigger) {
                 let n = self.noun(&f, Num::Many);
@@ -1702,6 +1720,17 @@ impl Renderer<'_> {
                     return Ev::new(
                         "",
                         format!("{{alt:{a} is tapped for mana|you tap {n} for mana}}"),
+                    );
+                }
+                // "Whenever a player taps a Mountain, Forest, or Plains for mana".
+                if matches!(who, PlayerRel::Any)
+                    && matches!(filter, Filter::Or(v) if v.iter().all(|x| matches!(x, Filter::Subtype(_))))
+                {
+                    let a = obj(self, filter);
+                    let n = self.noun_det(filter, Det::A);
+                    return Ev::new(
+                        "",
+                        format!("{{alt:{a} is tapped for mana|a player taps {n} for mana}}"),
                     );
                 }
                 if matches!(who, PlayerRel::Any) {

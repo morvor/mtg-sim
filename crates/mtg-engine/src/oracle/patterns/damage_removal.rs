@@ -864,7 +864,12 @@ fn p_exile_instead(l: &str, b: &mut Builder) -> Option<Effect> {
             Filter::creature(),
             Filter::DealtDamageThisTurnBy(Box::new(Sel::This)),
         ]),
-        _ => return None,
+        // "the creature an opponent controls": a target named again (Unnatural
+        // Aggression).
+        w => match super::replacements_4::target_named_again(w, b) {
+            Some((sel, rest)) if rest.is_empty() => Filter::In(Box::new(sel)),
+            _ => return None,
+        },
     };
     // "Dies" means put into a graveyard from the battlefield (CR 700.4).
     Some(Effect::AddReplacement {

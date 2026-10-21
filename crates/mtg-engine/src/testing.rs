@@ -37,6 +37,9 @@ pub enum DecisionKind {
     Priority,
     Targets,
     Entities,
+    /// An `Entities` answer naming cards before they move (see
+    /// `TestGame::answer_choose_moved`).
+    EntitiesMoved,
     YesNo,
     Option,
     Modes,
@@ -99,18 +102,42 @@ impl Agent for ScriptedAgent {
         "scripted"
     }
 
-    fn decide(&mut self, _g: &Game, p: PlayerId, d: &Decision) -> Answer {
+    fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
         let mut s = self.script.lock().unwrap();
         s.asked.push((p, d.clone()));
         let k = kind_of(d);
         // The answers queued for this agent's player: a player controlling another player
         // makes that player's decisions (CR 723.5).
         let q = &mut s.queues[self.player.idx()];
-        if let Some(i) = q
-            .iter()
-            .position(|(kind, _)| *kind == k || *kind == DecisionKind::Any)
-        {
-            let (_, a) = q.remove(i).unwrap();
+        if let Some(i) = q.iter().position(|(kind, _)| {
+            *kind == k
+                || *kind == DecisionKind::Any
+                || (*kind == DecisionKind::EntitiesMoved && k == DecisionKind::Entities)
+        }) {
+            let (kind, a) = q.remove(i).unwrap();
+            // Opted in with `answer_choose_moved`: a card scripted before it moved (a new
+            // object, CR 400.7) means the object it is now, when that is a candidate.
+            // Other answers are passed on as written, so a stale id stays illegal.
+            if let (
+                DecisionKind::EntitiesMoved,
+                Answer::Entities(es),
+                Decision::ChooseEntities { candidates, .. },
+            ) = (kind, &a, d)
+            {
+                let es = es
+                    .iter()
+                    .map(|e| match e {
+                        Entity::Object(o)
+                            if !candidates.contains(e)
+                                && candidates.contains(&Entity::Object(g.current(*o))) =>
+                        {
+                            Entity::Object(g.current(*o))
+                        }
+                        e => *e,
+                    })
+                    .collect();
+                return Answer::Entities(es);
+            }
             return a;
         }
         match d {
@@ -340,6 +367,16 @@ impl TestGame {
         self.answer(
             p,
             DecisionKind::Entities,
+            Answer::Entities(entities.to_vec()),
+        )
+    }
+    /// Like `answer_choose`, naming cards as they are now that the effect will have moved
+    /// before the choice (cards exiled from a library, then chosen among): each is
+    /// answered as the object it has become (CR 400.7) when that object is a candidate.
+    pub fn answer_choose_moved(&mut self, p: PlayerId, entities: &[Entity]) -> &mut Self {
+        self.answer(
+            p,
+            DecisionKind::EntitiesMoved,
             Answer::Entities(entities.to_vec()),
         )
     }

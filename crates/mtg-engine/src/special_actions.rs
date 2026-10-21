@@ -415,7 +415,14 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
                     return None;
                 }
             }
-            if !pay(g, p, &cost, Some(obj), &Ctx::new(Some(obj), p)) {
+            // Mana that may be spent only to turn permanents face up pays it (CR 106.6).
+            let way = if g.obj(obj).choices.text.as_deref() == Some("Cloak") {
+                crate::mana::FaceUpWay::Cloak
+            } else {
+                crate::mana::FaceUpWay::Manifest
+            };
+            let purpose = Some(crate::mana::SpendPurpose::TurnFaceUp(way));
+            if !pay_for(g, p, &cost, Some(obj), &Ctx::new(Some(obj), p), purpose) {
                 return bad("can't pay the cost");
             }
             crate::facedown::turn_face_up(g, obj, true);

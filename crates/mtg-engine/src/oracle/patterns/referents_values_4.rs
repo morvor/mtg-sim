@@ -1680,18 +1680,52 @@ fn reworded_ability(
     let rewritten = format!("{}{to}{}", &block[..i], &block[i + from.len()..]);
     let v = crate::oracle::parse_ability(&rewritten, ctx)?;
     let text = crate::oracle::strip_ability_word(block.trim());
-    Some(
-        v.into_iter()
-            .map(|a| {
-                let mut d = (*a).clone();
-                d.text = text.to_string();
-                std::sync::Arc::new(d)
-            })
-            .collect(),
-    )
+    v.into_iter()
+        .map(|a| {
+            let mut d = (*a).clone();
+            d.text = text.to_string();
+            if cost_tap {
+                d = tapped_this_way_target(d)?;
+            }
+            Some(std::sync::Arc::new(d))
+        })
+        .collect()
 }
 
 inventory::submit! { super::AbilityPattern { name: "referents 4: reworded abilities (if it didn't die, tokens created with it, the creature tapped this way)", priority: 50, parse: reworded_ability } }
+
+/// "Target creature other than the creature tapped this way" (Veteran's Voice, whose cost
+/// taps the enchanted creature): as the target is chosen, before the cost is paid (CR
+/// 601.2c, 601.2h), that's the enchanted creature; as the ability resolves, it's the
+/// creature the cost tapped ([`vars::TAPPED`]), even if the Aura has moved since (CR
+/// 608.2b).
+fn tapped_this_way_target(d: crate::ability::AbilityDef) -> Option<crate::ability::AbilityDef> {
+    let mut json = serde_json::to_value(&d).ok()?;
+    let from = serde_json::to_value(Filter::not(Filter::AttachedToSource)).ok()?;
+    let to = serde_json::to_value(Filter::and(vec![
+        Filter::AsChosen(Box::new(Filter::not(Filter::AttachedToSource))),
+        Filter::not(Filter::In(Box::new(Sel::Var(vars::TAPPED)))),
+    ]))
+    .ok()?;
+    fn walk(v: &mut serde_json::Value, from: &serde_json::Value, to: &serde_json::Value, n: &mut usize) {
+        if *v == *from {
+            *v = to.clone();
+            *n += 1;
+            return;
+        }
+        match v {
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, from, to, n)),
+            serde_json::Value::Object(m) => m.values_mut().for_each(|x| walk(x, from, to, n)),
+            _ => {}
+        }
+    }
+    let mut n = 0;
+    walk(&mut json, &from, &to, &mut n);
+    if n != 1 {
+        return None;
+    }
+    serde_json::from_value(json).ok()
+}
 
 /// The cards in graveyards before an instruction, for "that weren't put there this way".
 pub const PUT_THERE: Var = vars::USER + 14_016;

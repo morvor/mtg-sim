@@ -1705,6 +1705,9 @@ impl Game {
             Effect::PersistentMana(inner) => {
                 crate::mana_abilities::resolve_persistent_mana(self, inner, ctx);
             }
+            Effect::CombatMana(inner) => {
+                crate::mana_abilities::resolve_combat_mana(self, inner, ctx);
+            }
             Effect::SetClassLevel { level } => {
                 if let Some(s) = ctx.source.filter(|s| self.is_live(*s)) {
                     crate::classes::set_level(self, s, *level);
@@ -2248,6 +2251,9 @@ impl Game {
                 crate::permissions::with_resolution_terms(self, terms, |g| g.exec(effect, ctx));
                 for g in self.play_grants.iter_mut().skip(before) {
                     g.terms.merge(terms);
+                    if terms.controller_duration {
+                        g.terms.duration_player = Some(ctx.controller);
+                    }
                 }
                 crate::permissions::given(self, before);
             }
@@ -3180,7 +3186,8 @@ impl Game {
         let f = match &d.event {
             ReplacementEvent::Destroy(f)
             | ReplacementEvent::Dies(f)
-            | ReplacementEvent::EntersBattlefield(f) => f,
+            | ReplacementEvent::EntersBattlefield(f)
+            | ReplacementEvent::ProduceMana(f) => f,
             ReplacementEvent::ZoneChange { filter, .. } => filter,
             _ => return None,
         };
@@ -3533,7 +3540,12 @@ impl Game {
         out
     }
 
-    fn choose_mana_color(&mut self, p: PlayerId, ctx: &Ctx, opts: &[ManaType]) -> ManaType {
+    pub(crate) fn choose_mana_color(
+        &mut self,
+        p: PlayerId,
+        ctx: &Ctx,
+        opts: &[ManaType],
+    ) -> ManaType {
         if opts.len() == 1 {
             return opts[0];
         }
@@ -3596,7 +3608,8 @@ fn unlock_replacement_def(d: &ReplacementDef) -> ReplacementDef {
     match &mut d.event {
         ReplacementEvent::Destroy(f)
         | ReplacementEvent::Dies(f)
-        | ReplacementEvent::EntersBattlefield(f) => *f = unlock(f),
+        | ReplacementEvent::EntersBattlefield(f)
+        | ReplacementEvent::ProduceMana(f) => *f = unlock(f),
         ReplacementEvent::ZoneChange { filter, .. } => *filter = unlock(filter),
         ReplacementEvent::Where { event, .. } => {
             let inner = ReplacementDef {

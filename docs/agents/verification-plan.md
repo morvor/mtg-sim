@@ -54,6 +54,13 @@ worktree.
 Already landed from round 2: `cards2-followups`, `cards2-statics-characteristics`, `cards2-combat`, `cards2-filters-conditions`, `cards2-referents-values` and `changeling-cda-only`. During the pause, rulings P219, P113 and P079 landed, as did mutation results for layers.rs and casting.rs: 14 of the 15 files, 81.8% caught overall, with combat.rs still to run.
 Also landed: `roundtrip-tail-5`, `every-card-fuzz-2` and the three gap-residual items.
 
+### Queue changes (Oct 21 evening)
+
+- **structure:** `property-tests-2` moves here from the mutation worker, which is still busy with its survivor re-run. The structure worker landed `cards3-costs-mana-replacements` and is free.
+- **cards-2:** `cards3-manual-defs` now that the dexterity cards are deferred, and `cards4-plan` (items/cards4-plan.md), which plans round 4 for the texts the landed round-3 items left unsupported. cards-1 keeps `cards3-followups-choices` and `cards3-game-rules-dice`.
+- **mutation:** after the survivor re-run lands, rulings batches P064 and P185.
+- **rulings-1:** P126, P176, P141, P142, P111. **rulings-2:** P194, P193, P046. Next in the pool: P063 P147 P186 P089 P006 ...
+
 ## The judge audit (E)
 
 **Result (Oct 14).** The judge agreed with all 225 questions from 58 tests. See reports/judge-audit-1.md: method, limits, and two calls for the interpretation register.
@@ -97,9 +104,24 @@ The user reviewed the four provisional entries:
 
 Item `register-decisions-1` (items/register-decisions-1.md) applies them. It goes to rulings-2, next after cr-examples-2.
 
+Later on Oct 21 the user accepted the three provisional entries added since then:
+- `range-combat-trigger-events`;
+- `illegal-action-reversal-restores-libraries`;
+- `end-of-combat-on-your-next-turn-without-combat`.
+
+The coordinator marks them decided. The 733.1 deviation also gets a scan test over every fully supported card, so a newly supported card that could reach the deviation fails the test.
+
+## Other decisions (Oct 21)
+
+- **Dexterity cards** (Chaos Orb, Falling Star): deferred (docs/DEFERRED.md). `cards3-manual-defs` goes ahead without them. It goes to cards-2, after `cards3-history-conditions`.
+- **The verified count:** leave it as it is for now and verify later (see "Later"). The `structure-tests` stream stays stopped.
+
 ## Later
 
 - **Loops and loop detection** (user, Oct 21). Once the rules work is settled, discuss how loops are recognized and handled: CR 104.4b and the 732 shortcut rules, recognizing growing loops early instead of at the action limit, and automating loops. A UI would need automated loops.
+- **Raising the verified count** (user, Oct 21: leave it as it is for now, verify later). About 10,000 cards pass the round trip and the fuzz sweep but have exactly one structure that no test exercises. Mostly these are structures no other card shares: `structure-tests-2` verified about 3 cards per test. Options for when we pick it up:
+  1. Test whole shapes: about 3,000 tests.
+  2. Compositional coverage: every AST component and combination, at depth about 1, is exercised by some test. This was the recommendation.
 
 ## Resuming (coordinator)
 

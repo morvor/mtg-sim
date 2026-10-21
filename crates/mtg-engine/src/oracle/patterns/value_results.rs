@@ -48,6 +48,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// A whole value phrase ("the amount of damage dealt to you this turn"). Tried before the
 /// value grammar's own readings.
 pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // A player's state as the turn began (`history_conditions_4`).
+    if let Some(v) = super::history_conditions_4::value_atom(s, b) {
+        return Some(v);
+    }
     // Values as the spell became cast (`referents_values_4`).
     if let Some(v) = super::referents_values_4::atom(s, b) {
         return Some(v);
@@ -279,6 +283,11 @@ fn history_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             if let Some(v) = player_action(x, Filter::Any, card, b) {
                 return Some(v);
             }
+            if card && x.starts_with("target ") {
+                if let Some(v) = target_player_action(x, b) {
+                    return Some(v);
+                }
+            }
         }
     }
     if let Some(v) = object_history(r) {
@@ -304,6 +313,27 @@ fn is_spell_filter(f: &Filter) -> bool {
 /// "cards" or "spells".
 fn player_action(x: &str, f: Filter, card: bool, b: &Builder) -> Option<(Value, String)> {
     let (who, r) = player_perfect(x, b)?;
+    action_after(who, r, f, card)
+}
+
+/// "cards target opponent discarded this turn": the target, then the action.
+fn target_player_action(x: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let saved = (b.targets.len(), b.it_player.clone());
+    let found = target_player(x, b).and_then(|(who, r)| {
+        let r = r
+            .strip_prefix(" has ")
+            .or_else(|| r.strip_prefix(" "))?;
+        action_after(who, r, Filter::Any, true)
+    });
+    if found.is_none() {
+        b.targets.truncate(saved.0);
+        b.it_player = saved.1;
+    }
+    found
+}
+
+/// The action after the player in [`player_action`].
+fn action_after(who: PlayerRel, r: &str, f: Filter, card: bool) -> Option<(Value, String)> {
     let (cond, r) = if card {
         if let Some(r) = r.strip_prefix("drawn").or_else(|| r.strip_prefix("drew")) {
             (TriggerCond::Draws { who }, r)
@@ -357,8 +387,15 @@ fn object_history(r: &str) -> Option<(Value, String)> {
     let you = || Some(Filter::ControlledBy(PlayerRel::You));
     let yours = || Some(Filter::OwnedBy(PlayerRel::You));
     // CR 700.4: "dies" means is put into a graveyard from the battlefield.
-    let markers: [(&str, fn(Filter) -> TriggerCond, Option<Filter>); 12] = [
+    let markers: [(&str, fn(Filter) -> TriggerCond, Option<Filter>); 14] = [
         (" that died under your control", TriggerCond::Dies, you()),
+        // As it left: under your control (CR 603.10a).
+        (
+            " that left the battlefield under your control",
+            TriggerCond::LeavesBattlefield,
+            you(),
+        ),
+        (" that left the battlefield", TriggerCond::LeavesBattlefield, None),
         (" that died", TriggerCond::Dies, None),
         (
             " that were put into your graveyard from the battlefield",
@@ -1089,10 +1126,15 @@ fn damage_to_objects(x: &str, b: &Builder) -> Option<(Value, String)> {
     let (obj, z) = if let Some(z) = y.strip_prefix("~") {
         (Filter::Source, z)
     } else if let Some(z) = y.strip_prefix("it") {
-        if super::oracle_hardening_referents::is_no_referent(&b.it) || matches!(b.it, Sel::This) {
+        if super::oracle_hardening_referents::is_no_referent(&b.it) {
             return None;
         }
-        (Filter::In(Box::new(b.it.clone())), z)
+        // "When ~ dies, ... the amount of damage dealt to it this turn": ~ itself.
+        if matches!(b.it, Sel::This) {
+            (Filter::Source, z)
+        } else {
+            (Filter::In(Box::new(b.it.clone())), z)
+        }
     } else {
         return None;
     };

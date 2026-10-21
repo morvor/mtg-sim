@@ -68,6 +68,7 @@ pub fn window_events<'a>(g: &'a Game, w: &HistoryWindow, ctx: &Ctx) -> Vec<&'a E
                 .map_or(0, |i| i + 1);
             all[start..].to_vec()
         }
+        HistoryWindow::ThisGame => g.game_events.iter().chain(this_turn(g)).collect(),
         HistoryWindow::LastTurn => g
             .past_turns
             .last()

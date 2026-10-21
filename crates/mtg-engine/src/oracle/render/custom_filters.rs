@@ -36,6 +36,13 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::copy_rules::TRIGGER_SPELL_COULD_TARGET => rel("that spell could target"),
         // "each Equipment attached to it", "it" being each object the effect is about.
         "attached_to_affected" => rel("attached to it"),
+        crate::kw::cast_history::USING_SOURCE_MANA => rel("using mana produced by ~"),
+        crate::kw::damage_shares_a_color::SHARES_COLOR_WITH_PRODUCED_MANA => {
+            rel("that shares a color with the mana that land produced")
+        }
+        crate::kw::your_commander_terms::SHARES_TYPE_WITH_YOUR_COMMANDER => {
+            rel("that shares a creature type with your commander")
+        }
         crate::battle::ATTACKED_A_BATTLE_THIS_TURN => rel("that attacked a battle this turn"),
         crate::kw::blocked_this_turn::BLOCKED_BY_REFERENT => {
             rel("{alt:that were blocked by {alt:it|that creature} this turn|that was blocked by {alt:it|that creature} this turn}")
@@ -64,6 +71,14 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             rel("{alt:that you discarded this turn|that you cycled or discarded this turn}")
         }
         crate::oracle::patterns::zone_move_grammar::MILLED_THIS_TURN => rel("milled this turn"),
+        crate::kw::graveyard_history::PUT_THERE_FROM_LIBRARY => rel(
+            "{alt:that were put there from your library this turn|that were put there from libraries this turn}",
+        ),
+        crate::kw::graveyard_history::PUT_THERE_NOT_FROM_BATTLEFIELD => {
+            rel("that were put there from anywhere other than the battlefield this turn")
+        }
+        crate::kw::graveyard_history::SURVEILLED_THIS_TURN => rel("you've surveilled this turn"),
+        crate::kw::graveyard_history::PUT_THERE_THIS_TURN => rel("this turn"),
         crate::oracle::patterns::zone_move_grammar::DEALT_DAMAGE_THIS_TURN => {
             rel("that dealt damage this turn")
         }
