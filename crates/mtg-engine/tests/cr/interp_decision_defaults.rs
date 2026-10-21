@@ -439,3 +439,51 @@ fn the_test_harness_answers_unscripted_decisions_with_fixed_defaults() {
         Answer::Default
     );
 }
+
+#[test]
+fn default_convoke_taps_creatures_only_for_what_mana_cant_pay() {
+    cr!("702.51a");
+    interp!("default-cost-helpers");
+    // Stoke the Flames ({2}{R}{R}, convoke) with four Mountains: no creature is tapped.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 4);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    let stoke = t.hand(P0, "Stoke the Flames");
+    default(&mut t, P0, DecisionKind::Entities);
+    t.cast(P0, stoke).target(Entity::Player(P1)).go();
+    assert!(!t.obj_now(a).tapped && !t.obj_now(b).tapped);
+    // With two Mountains, the two creatures pay the generic part.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    let stoke = t.hand(P0, "Stoke the Flames");
+    default(&mut t, P0, DecisionKind::Entities);
+    t.cast(P0, stoke).target(Entity::Player(P1)).go();
+    assert!(t.obj_now(a).tapped && t.obj_now(b).tapped);
+    t.resolve();
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn random_results_come_from_the_games_seed() {
+    cr!("701.24a");
+    interp!("seeded-randomness");
+    let order = |seed: u64| {
+        let mut t = pregame(
+            GameConfig {
+                seed,
+                ..GameConfig::default()
+            },
+            vec![fillers(10), fillers(10)],
+        );
+        // Give the cards distinct identities by their object ids.
+        t.g.shuffle_library(P0);
+        t.g.player(P0).library.clone()
+    };
+    assert_eq!(order(7), order(7), "the same seed, the same shuffle");
+    assert!((0..8).map(order).collect::<std::collections::BTreeSet<_>>().len() > 1);
+}

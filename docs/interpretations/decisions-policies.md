@@ -47,12 +47,24 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Status: decided
 - Rules: 601.2b "If the spell is modal, the player announces the mode choice (see rule 700.2). ... If the spell has alternative or additional costs that will be paid as it’s being cast ..., the player announces their intentions to pay any or all of those costs ..." / 601.2c "The player announces their choice of an appropriate object or player for each target the spell requires. ..." / 700.2a "The controller of a modal spell or activated ability chooses the mode(s) as part of casting that spell or activating that ability. If one of the modes would be illegal (due to an inability to choose legal targets, for example), that mode can’t be chosen. ..." / 616.1 "If two or more replacement and/or prevention effects are attempting to modify the way an event affects an object or player, the affected object’s controller (or its owner if it has no controller) or the affected player chooses one to apply, ..."
 - Question: Which objects, option, targets, modes, casting method or replacement effect does a player choose when the agent doesn't say?
-- Decision: The first legal ones in the order the engine lists them: `ChooseEntities` takes the first `min` candidates; `ChooseOption` takes option 0; `ChooseTargets` takes the first `min` candidates (at least one when targets are required); `ChooseModes` takes the first available modes up to the minimum (at least one, skipping modes that can't be combined); `ChooseCastingMethod` takes the first way to cast that could be begun; `ChooseReplacement` applies the first listed effect.
+- Decision: The first legal ones in the order the engine lists them: `ChooseEntities` takes the first `min` candidates; `ChooseOption` takes option 0; `ChooseTargets` takes the first `min` candidates (at least one when targets are required); `ChooseModes` takes the first available modes up to the minimum (at least one, skipping modes that can't be combined); `ChooseCastingMethod` takes the first way to cast that could be begun; `ChooseReplacement` applies the first listed effect. A few choices have defaults of their own, documented where they're made: costs paid with permanents or cards (`default-cost-helpers`); friend or foe (the controller and their teammates are friends, `kw/friend_or_foe.rs`); a party (a largest one, `game_terms.rs`); "search for any number of cards with that name" (all of them, `kw/search_same_name.rs`); a coin flip one may keep or reflip (keep a winning flip, `dice.rs`); "you may choose not to untap" while a "remains tapped" effect applies (stay tapped, `untap_choice.rs`); the starting player's chooser (their own seat or team, `start.rs`).
 - Alternatives: Random legal choices (games would vary with the seed rather than with the agent), or heuristics (strategy, which belongs in agents).
 - Why: Deterministic, always legal, and with "the minimum" the least commitment the rules allow.
 - Affects: every such decision.
 - Code: `crates/mtg-engine/src/game.rs` (`ask_entities`, `ask_option`); `crates/mtg-engine/src/stack.rs` (modes, targets); `crates/mtg-engine/src/casting.rs` (`ChooseCastingMethod`); `crates/mtg-engine/src/replacement.rs` (`ChooseReplacement`).
 - Tests: `tests/cr/interp_decision_defaults.rs` (`default_choices_take_the_first_listed_candidates`, `default_targets_and_modes_are_the_first_legal_ones`, `default_modes_are_the_first_available_ones`, `the_default_way_to_cast_is_the_first_that_can_be_begun`, `the_default_replacement_effect_is_the_first_listed`).
+
+## default-cost-helpers: Costs paid with permanents or cards (convoke, delve, improvise, crew, ...) use them only as needed by default
+- Kind: policy
+- Status: decided
+- Rules: 702.51a "Convoke is a static ability that functions while the spell with convoke is on the stack. “Convoke” means “For each colored mana in this spell’s total cost, you may tap an untapped creature of that color you control rather than pay that mana. For each generic mana in this spell’s total cost, you may tap an untapped creature you control rather than pay that mana.”" / 702.66a "Delve is a static ability that functions while the spell with delve is on the stack. “Delve” means “For each generic mana in this spell’s total cost, you may exile a card from your graveyard rather than pay that mana.”" / 702.126a "Improvise is a static ability that functions while the spell with improvise is on the stack. “Improvise” means “For each generic mana in this spell’s total cost, you may tap an untapped artifact you control rather than pay that mana.”"
+- Question: Which creatures, artifacts or graveyard cards does a player use for convoke, improvise, delve, crew ("tap any number of creatures with total power N or greater"), emerge, offering, harmonize, waterbending or assist when the agent doesn't say?
+- Decision: As little as possible: none if the mana can be paid otherwise; else the fewest that make the rest payable (convoke and improvise prefer creatures and artifacts without mana abilities; delve takes the cards at the bottom of the graveyard; crew taps the most powerful creatures until the total is reached; emerge, offering and harmonize use the permanent that reduces the cost most; assist asks a teammate who could pay, who pays as much as they can, and an opponent pays nothing).
+- Alternatives: Use the alternative resources first (keep mana open): strategy.
+- Why: The least commitment that pays the cost, like `automatic-mana-payment`.
+- Affects: spells and abilities with those keywords.
+- Code: `crates/mtg-engine/src/kw/convoke.rs`, `kw/delve.rs`, `kw/improvise.rs`, `kw/crew.rs` (`pay_total_power`), `kw/emerge.rs`, `kw/offering.rs`, `kw/harmonize.rs`, `kw/assist.rs`, `kwa/bending.rs` (each `default_choice` or equivalent).
+- Tests: `tests/cr/interp_decision_defaults.rs` (`default_convoke_taps_creatures_only_for_what_mana_cant_pay`).
 
 ## default-optional-costs-declined: Optional additional costs aren't paid by default
 - Kind: policy
@@ -185,3 +197,15 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Affects: all agents.
 - Code: `crates/mtg-engine/src/decision.rs` (`Agent`); `crates/mtg-api/src/view.rs` (`observe`); `crates/mtg-api/src/events.rs`; `crates/mtg-api/src/describe.rs`.
 - Tests: `crates/mtg-api/tests/hidden_info.rs` (`opponents_hand_and_libraries_are_hidden`, `face_down_permanents_are_seen_only_by_their_controller`, `requests_and_events_dont_leak_hidden_cards`, `every_players_mana_pool_is_public`).
+
+## seeded-randomness: Random results come from a pseudorandom generator seeded per game
+- Kind: policy
+- Status: decided
+- Rules: 701.24a "To shuffle a library or a face-down pile of cards, randomize the cards within it so that no player knows their order." / 705.1 "Some cards refer to flipping a coin. A coin used in a flip must be a two-sided object with easily distinguished sides and equal likelihood that either side lands face up. ..."
+- Question: Shuffles, coin flips, die rolls and random choices must be random. How does the engine randomize?
+- Decision: Every game has one ChaCha8 generator seeded from `GameConfig::seed`; all random results (shuffles, flips, rolls, "at random" choices, the starting player) come from it, so a game replays exactly from its seed and its agents' answers. No player (agent) can predict results without reading the generator's state, which in-process agents could do (see `hidden-information`).
+- Alternatives: An unseeded (system) random source: no replays or reproducible fuzz failures.
+- Why: Reproducibility: mtg-sim prints a repro command with the seed for every failure.
+- Affects: every random event.
+- Code: `crates/mtg-engine/src/game.rs` (`Game::rng`, `shuffle_library`, `GameConfig::seed`); `crates/mtg-engine/src/dice.rs`.
+- Tests: `tests/cr/interp_decision_defaults.rs` (`random_results_come_from_the_games_seed`).
