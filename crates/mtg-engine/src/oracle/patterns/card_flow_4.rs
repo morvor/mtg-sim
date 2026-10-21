@@ -112,3 +112,50 @@ fn look_at_hand_and_exile_face_down(l: &str, b: &mut Builder) -> Option<Effect> 
 }
 
 inventory::submit! { EffectPattern { name: "card flow 4: look at target opponent's hand and exile those cards face down", priority: 90, parse: look_at_hand_and_exile_face_down } }
+
+/// Adds `extra` to what the move moves (`Move { what: All(...) }`).
+fn narrow_move(e: &mut Effect, extra: Filter) -> bool {
+    match e {
+        Effect::Move {
+            what: Sel::All(f), ..
+        } => {
+            *f = Filter::and(vec![f.clone(), extra]);
+            true
+        }
+        _ => false,
+    }
+}
+
+/// "When that token leaves the battlefield, return all cards exiled with ~ except ~ to the
+/// battlefield tapped under their owners' control." (Mechtitan Core): the cards its
+/// abilities exiled (CR 607.2a) other than the card that was ~ (it exiled itself to pay
+/// the cost). "Exile it, then return all other permanent cards exiled with ~ to the
+/// battlefield ..." (Mirror of Life Trapping): other than the card just exiled.
+fn return_exiled_with_except(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (text, extra) = if let Some((head, tail)) = l.split_once(" exiled with ~ except ~ ") {
+        if !head.starts_with("return all ") {
+            return None;
+        }
+        (
+            format!("{head} exiled with ~ {tail}"),
+            Filter::not(Filter::Custom(
+                crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT.into(),
+            )),
+        )
+    } else if let Some(r) = l.strip_prefix("return all other ") {
+        if !r.contains(" exiled with ~ ") || matches!(b.it, Sel::This) {
+            return None;
+        }
+        (
+            format!("return all {r}"),
+            Filter::not(Filter::In(Box::new(Sel::Var(vars::IT)))),
+        )
+    } else {
+        return None;
+    };
+    let mut e = crate::oracle::effects::parse_clause(&text, b)?;
+    narrow_move(&mut e, extra).then_some(e)
+}
+
+inventory::submit! { EffectPattern { name: "card flow 4: return all cards exiled with ~ except ~ / all other cards exiled with ~", priority: 90, parse: return_exiled_with_except } }

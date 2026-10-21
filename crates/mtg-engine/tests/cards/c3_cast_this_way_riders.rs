@@ -452,3 +452,58 @@ fn conduit_of_worlds_casts_the_card_only_before_any_spell_and_then_no_more() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 0);
 }
+
+#[test]
+fn mechtitan_core_returns_the_other_exiled_cards_when_the_token_leaves() {
+    cr!("607.2a", "603.7");
+    assert_supported("Mechtitan Core");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let core = t.battlefield(P0, "Mechtitan Core");
+    let thopters: Vec<ObjectId> = (0..4).map(|_| t.battlefield(P0, "Ornithopter")).collect();
+    t.lands(P0, "Wastes", 5);
+    t.activate(P0, core, 0, &[]).expect("activate Mechtitan Core");
+    t.resolve_all();
+    let titan = t.named_on_battlefield("Mechtitan");
+    assert_eq!(titan.len(), 1, "{}", t.dump_log());
+    for o in &thopters {
+        assert_eq!(t.zone(t.g.current(*o)), Zone::Exile);
+    }
+    t.g.destroy(titan[0], None);
+    t.settle();
+    t.resolve_all();
+    for o in &thopters {
+        let x = t.g.current(*o);
+        assert!(t.on_battlefield(x), "{}", t.dump_log());
+        assert!(t.obj_now(x).tapped);
+    }
+    // Not the Core.
+    assert_eq!(t.zone(t.g.current(core)), Zone::Exile);
+}
+
+#[test]
+fn mirror_of_life_trapping_returns_the_other_exiled_permanent_cards() {
+    cr!("607.2a", "603.4");
+    assert_supported("Mirror of Life Trapping");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Mirror of Life Trapping");
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Mountain", 4);
+    let bears = t.hand(P0, "Grizzly Bears");
+    let giant = t.hand(P0, "Hill Giant");
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    let bears_x = t.g.current(bears);
+    assert_eq!(t.zone(bears_x), Zone::Exile, "{}", t.dump_log());
+    // A creature put onto the battlefield without being cast: no trigger.
+    t.battlefield(P1, "Gray Ogre");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Gray Ogre").len(), 1);
+    // The Giant is exiled; the Bears come back.
+    t.cast(P0, giant).go();
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(giant)), Zone::Exile);
+    assert!(t.on_battlefield(t.g.current(bears)));
+}
