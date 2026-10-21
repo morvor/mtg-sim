@@ -555,11 +555,30 @@ impl Renderer<'_> {
             if matches!(r.as_ref(), PlayerRef::DefendingPlayer))
             && matches!(&a.condition, Some(Condition::And(v)) if matches!(v.as_slice(),
                 [Condition::Phase(PhaseCond::DeclareAttackers), Condition::SelMatches(Sel::This, Filter::AttackingPlayer(PlayerRel::Any))]));
-        match a
-            .condition
-            .as_ref()
-            .filter(|_| !solved && !boast && !x_not_zero && remove_all.is_none() && !by_defender)
-        {
+        // "Any player may activate this ability but only during their draw step": "your
+        // turn" is the turn of the player activating it (CR 602.5b).
+        let their = match (&a.condition, a.any_player) {
+            (Some(Condition::And(v)), true) => match v.as_slice() {
+                [Condition::YourTurn, Condition::Custom(c)] if c == "activation:draw_step" => {
+                    Some("their draw step")
+                }
+                [Condition::YourTurn, Condition::Custom(c)]
+                    if c == "activation:before_end_step" =>
+                {
+                    Some("their turn before the end step")
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        match a.condition.as_ref().filter(|_| {
+            !solved
+                && !boast
+                && !x_not_zero
+                && remove_all.is_none()
+                && !by_defender
+                && their.is_none()
+        }) {
             // "Activate only during your turn before attackers are declared."
             Some(Condition::YourTurn) => {
                 if let ActivationTiming::CombatWindow(_) = a.timing {
@@ -639,6 +658,10 @@ impl Renderer<'_> {
         if a.any_player && s.ends_with(sorcery_only) {
             s.truncate(s.len() - sorcery_only.len());
             s.push_str(" Any player may activate this ability but only as a sorcery.");
+        } else if let (true, Some(t)) = (a.any_player, their) {
+            s.push_str(&format!(
+                " Any player may activate this ability but only during {t}."
+            ));
         } else if a.any_player {
             s.push_str(" Any player may activate this ability.");
         }

@@ -15,6 +15,81 @@ impl Renderer<'_> {
             .or_else(|| self.any_player_may(v, i).map(|s| (2, s)))
             .or_else(|| self.unpreventable_damage(v, i).map(|s| (2, s)))
             .or_else(|| self.any_player_may_have(v, i).map(|s| (3, s)))
+            .or_else(|| self.any_opponent_may_have_you(v, i))
+    }
+
+    /// "Any opponent may have you put that card into your graveyard. If a player does, ~
+    /// deals damage to that player equal to that card's mana value. Otherwise, put that
+    /// card into your hand.": each opponent in turn order may, until one does
+    /// (`followup_grammar`); a flag remembers whether one did, and who.
+    fn any_opponent_may_have_you(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
+        use crate::oracle::patterns::followup_grammar::{HAD, HAD_BY};
+        let (
+            Effect::StoreValue {
+                var: HAD,
+                value: Value::Const(0),
+            },
+            Some(Effect::Store {
+                var: HAD_BY,
+                sel: Sel::None,
+            }),
+            Some(Effect::InTurnOrder {
+                first: TurnOrderStart::NextOpponent,
+                who: PlayerFilter::Opponent,
+                effect,
+                ..
+            }),
+        ) = (&v[i], v.get(i + 1), v.get(i + 2))
+        else {
+            return None;
+        };
+        let Effect::If {
+            cond: Condition::Compare(Value::Var(HAD), Cmp::Eq, Value::Const(0)),
+            then: may,
+            otherwise,
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        let Effect::May {
+            who: PlayerRef::Iterated,
+            effect: body,
+        } = may.as_ref()
+        else {
+            return None;
+        };
+        let Effect::Seq(steps) = body.as_ref() else {
+            return None;
+        };
+        let [act, Effect::StoreValue { var: HAD, .. }, Effect::Store { var: HAD_BY, .. }] =
+            steps.as_slice()
+        else {
+            return None;
+        };
+        if !matches!(otherwise.as_ref(), Effect::Noop) {
+            return None;
+        }
+        let a = self.effect(act);
+        let mut parts = vec![format!("any opponent may have you {a}")];
+        let mut n = 3;
+        while let Some(Effect::If {
+            cond: Condition::Compare(Value::Var(HAD), Cmp::Eq, Value::Const(k)),
+            then,
+            otherwise,
+        }) = v.get(i + n)
+        {
+            if !matches!(otherwise.as_ref(), Effect::Noop) {
+                break;
+            }
+            let t = self.effect(then);
+            parts.push(match k {
+                1 => format!("If a player does, {t}"),
+                0 => format!("{{alt:Otherwise|If no player does}}, {t}"),
+                _ => break,
+            });
+            n += 1;
+        }
+        Some((n, parts.join(". ")))
     }
 
     /// "Any player may have ~ deal 5 damage to them. If no one does, target player draws
@@ -25,12 +100,9 @@ impl Renderer<'_> {
                 var,
                 value: Value::Const(0),
             },
-            Some(Effect::ForEachPlayer {
-                who: PlayerRef::EachPlayer,
-                effect,
-            }),
+            Some(Effect::ForEachPlayer { who, effect }),
             Some(Effect::If {
-                cond: Condition::Compare(Value::Var(flag), Cmp::Eq, Value::Const(0)),
+                cond: Condition::Compare(Value::Var(flag), Cmp::Eq, Value::Const(k)),
                 then,
                 otherwise,
             }),
@@ -38,9 +110,20 @@ impl Renderer<'_> {
         else {
             return None;
         };
-        if flag != var || !matches!(otherwise.as_ref(), Effect::Noop) {
+        if flag != var || !matches!(otherwise.as_ref(), Effect::Noop) || *k > 1 {
             return None;
         }
+        // "Any opponent may have it deal 4 damage to them. If a player does, ..."
+        let who = match who {
+            PlayerRef::EachPlayer => "player",
+            PlayerRef::EachOpponent => "opponent",
+            _ => return None,
+        };
+        let did = if *k == 1 {
+            "If a player does"
+        } else {
+            "If no one does"
+        };
         let Effect::AsPlayer {
             who: PlayerRef::Iterated,
             effect: inner,
@@ -71,7 +154,7 @@ impl Renderer<'_> {
         let a = self.effect(act);
         let a = a.replacen(" deals ", " deal ", 1);
         let t = self.effect(then);
-        Some(format!("any player may have {a}. If no one does, {t}"))
+        Some(format!("any {who} may have {a}. {did}, {t}"))
     }
 
     /// "~ deals 5 damage to target creature. The damage can't be prevented.": a rule that
