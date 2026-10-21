@@ -35,8 +35,11 @@ cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
 - `--timeout 300` bounds a mutant's test run (the unmutated suite takes ~105 s), so a
   mutant that makes the engine loop counts as `timeout`, which is a detection.
 - The re-run after adding tests (`RERUN=1`) finds each survivor again in the file's
-  current mutant list (same function and mutation, same column, nearest line, since
-  merges move lines) and tests exactly those (`-F '^<name>$'`).
+  current mutant list (same function and mutation whose diff, the mutated line with the
+  lines around it as saved in the earlier run's `mutants.out/diff/`, matches best; then
+  the same column and the nearest line, since merges move lines) and tests exactly those
+  (`-F '^<name>$'`). Matching by line distance alone picked a neighbouring identical
+  mutation once code had moved by more than the distance between them.
 
 Kill rate = (caught + timeout) / (caught + missed + timeout); unviable mutants (that do
 not compile) are excluded.
@@ -67,8 +70,8 @@ Each surviving mutant is classified as
 | resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | TBD |
 | actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | TBD |
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
-| casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | TBD (survivor tests not written yet) |
-| combat.rs | 831 | not run yet | | | | | | |
+| casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | TBD |
+| combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | TBD |
 
 ### sba.rs
 
@@ -429,45 +432,137 @@ Run 2026-10-14, 43 of 423 mutants (round-robin 0/10), 72 minutes. One mutant (`7
 
 ### casting.rs
 
-Run 2026-10-14/15, 85 of 841 mutants (round-robin 0/10), about 3 hours. Survivors are
-triaged; tests for the (b) ones haven't been written yet (the run was paused).
+Run 2026-10-14/15, 85 of 841 mutants (round-robin 0/10), about 3 hours. Tests for the
+(b) survivors were written on 2026-10-21; each was checked to fail with its mutant
+applied to the worktree and to pass without it.
 
-- `casting.rs:511:18: replace && with || in Game::permission_allows_with` (any nonland card
-  passes the commander-in-the-command-zone permission): **(b) not killed, needs a closer
-  look**. No test failed although the mutant lets every nonland card through this
-  permission check, so the tested callers must reject cards outside the hand on another
-  path first; the next step is a test that reaches this check with a card in a graveyard
-  or library and no permission (CR 601.3).
-- `casting.rs:884:61: replace && with || in Game::can_begin_cast` ("X can't be 0" with an
-  alternative cost that has X only in its mana or only in its other parts): **(b) not
-  killed**.
+- `casting.rs:511:18: replace && with || in Game::permission_allows_with` ("a commander
+  in the command zone may be cast" becomes "any nonland card the player may be permitted
+  to cast passes the permission check"): **(a) equivalent**, not an engine bug. Every
+  caller (casting from outside the hand in `permitted_cast_options`, and the keywords'
+  own cast options: evoke, dash, morph, disguise, prototype, ...) only reaches the check
+  for a card in `permitted_cards`, and for those the check is redundant: when an
+  effect's permission may cover the card, `cast_options` rebuilds the ways to cast it from
+  the card's own permissions plus `permissions::attach`, which keeps a way only if
+  `permissions::allowing` finds a permission for the characteristics it would have
+  (CR 601.3e). Without such a permission the only cards outside the hand in
+  `permitted_cards` are castable commanders and prepared copies, which pass the check
+  either way. Casting a graveyard or library card with no permission is refused before
+  that (it isn't in `permitted_cards`), so the mutant can't let one through.
+- `casting.rs:884:61: replace && with || in Game::can_begin_cast` ("X can't be 0" with
+  an alternative cost that has X in its other parts only): **(b) missing test**. The
+  mutant made such a spell uncastable for that cost. Light Up the Night (the one real card
+  with that shape) isn't supported yet, so the test compiles the same shape from oracle
+  text: `tests/cr/r107_003a_alternative_cost_with_x_in_another_part.rs` ("Flashback—{R},
+  Pay X life." is offered as a legal action and cast with X = 2).
 - `casting.rs:957:21: replace && with || in Game::flash_permitted` (a "next spell" effect
-  that doesn't give flash still gave it when its filter matched): **(b) not killed**; a
-  test needs a next-spell cost effect without flash and a spell cast at instant speed.
-- `casting.rs:2142:21: replace + with - in Game::can_activate` (upper bound of X for a
-  loyalty ability with X): **(b) not killed**.
+  that doesn't give flash still gave it when its filter matched): **(b) missing test**.
+  Killed by `tests/cr/r601_003_next_spell_effect_without_flash.rs` (after Insist, Grizzly
+  Bears can't be cast while Lightning Bolt is on the stack).
+- `casting.rs:2142:21: replace + with - in Game::can_activate` (the bound for the search
+  for a value of X that satisfies an activated ability's condition subtracts the source's
+  loyalty counters instead of adding them): **(b) missing test**. For a planeswalker's {X}
+  ability with "X can't be 0" and less mana than loyalty the subtraction underflows (a
+  panic). Killed by `tests/cr/r602_002b_x_cant_be_zero_ability_of_a_planeswalker.rs` (a
+  planeswalker compiled from oracle text, three loyalty, one Island).
 - `casting.rs:2309:24: replace * with + in Game::ability_total_cost_and_x` (the generic
-  mana {X}{X} stands for, before cost reductions): **(b) not killed**; needs an activated
-  ability with {X} and a cost reduction.
-- `casting.rs:2713:51: replace && with || in Game::any_color_mana` ("this spell" cost
-  modifiers also applied to abilities): **(b) not killed**.
+  mana {X} stands for): **(b) missing test**. "Spend only black mana on X" then covered
+  part of a cost increase too. Killed by
+  `tests/cr/r107_003_x_spend_restriction_with_cost_increase.rs` (Crypt Rats with X = 1
+  under Suppression Field, paid with {B}{R}{R}).
+- `casting.rs:2713:51: replace && with || in Game::any_color_mana`: **(a) equivalent
+  (dead path)**. The arm is for `SpendAsAnyColor` applying to "this spell"; no compiled
+  card produces it (the patterns in `spend_mana_as_though.rs` and
+  `r613_abilities_of_objects.rs` make only `Spells` and `Abilities`; the cards that say "to
+  cast this spell" are digital-only conjured cards, out of scope).
 - `casting.rs:2960:43: delete - in Game::cost_part_payable` (a "−N" loyalty cost counted as
-  payable with less than N loyalty): **(b) not killed**. The cost still can't be paid when
-  it's actually paid, which is why no test noticed; a test should check that the ability
-  isn't offered as a legal action (CR 606.6).
-- `casting.rs:3663:41: replace && with || in Game::pay_cost_part` (a reveal-from-hand cost
-  could offer the card that's the source): **(b) not killed**.
+  payable with less than N loyalty): **(b) missing test**. The cost still couldn't be
+  paid, but the ability was offered as a legal action. Killed by
+  `tests/cr/r606_006_negative_loyalty_cost_isnt_offered.rs` (Liliana of the Veil with
+  three loyalty: +1 and −2 offered, −6 not).
+- `casting.rs:3663:41: replace && with || in Game::pay_cost_part` (the cards offered to
+  pay a reveal-from-hand cost included cards without the cost's quality): **(b) missing
+  test**. Killed by `tests/cr/r118_003_reveal_cost_cards_must_match.rs` (Martyr of
+  Spores with X = 1: P0's answer naming Shock doesn't pay "reveal X green cards"; Llanowar
+  Elves is revealed).
 - `casting.rs:3903:9: delete match arm CostPart::Loyalty(_) in cost_part_has_x`: **(a)
   equivalent**. The arm returns `false`, as the catch-all arm does.
 
-## Status (2026-10-15)
+### combat.rs
 
-Paused at the coordinator's request after casting.rs. Remaining work:
+Run 2026-10-21, 88 of 876 mutants (round-robin 0/10), 3 hours (the unmutated suite now
+takes ~175 s). Tests for the (b) survivors were checked to fail with their mutant applied
+to the worktree and to pass without it.
 
-1. Run combat.rs (`scripts/mutants.sh combat`, about 3 hours).
-2. Write tests for the casting.rs (b) survivors above.
-3. Re-run the survivors of every file with new tests (`RERUN=1 scripts/mutants.sh
+- `combat.rs:136:9: replace CombatState::attacked_alone -> bool with false`: **(a)
+  equivalent (dead code)**. The function has no caller (exalted and "attacks alone"
+  triggers use `TriggerCond::AttacksAlone` on the declaration event).
+- `combat.rs:314:34: replace match guard self.obj(o).is(CardType::Battle) with false in
+  Game::can_attack_target`: **(b) missing test**. An attack on a battle wasn't treated as
+  an attack on its protector, so "~ can't attack unless defending player controls an
+  Island" didn't stop it. Killed by
+  `tests/cr/r508_005_defending_player_condition_attacking_a_battle.rs` (Sea Monster and
+  P0's Invasion of Segovia protected by P1).
+- `combat.rs:645:12: delete ! in attacking_players`: **(a) equivalent**. The combat state
+  made at the beginning of combat always lists the attacking players (the active player,
+  plus teammates with shared team turns), so the fallback for an empty list, which the
+  mutant returns instead, is only reached by a combat state created by declaring attackers
+  without a beginning of combat step, which the turn structure never does.
+- `combat.rs:1073:14: replace > with == in best_attack` and `combat.rs:1808:14: replace >
+  with == in best_blocks` (when there are too many possible declarations to search, more
+  than 100,000, the greedy declaration that obeys the requirements is never kept): **(b)
+  missing tests**. Declaring no attackers (or blockers) was then accepted against
+  seventeen "attacks/blocks each combat if able" requirements. Killed by
+  `tests/cr/r508_001d_509_001c_requirements_with_many_creatures.rs` (Grand Melee with
+  seventeen Grizzly Bears attacking, and blocking).
+- `combat.rs:1370:9: replace || with && in make_attacking` (a creature controlled by a
+  player who isn't attacking could be made an attacking creature, CR 506.3b): **(b) not
+  killed**. The only caller is Tahngarth, First Mate, which first gives control of it to
+  the attacking player; no card makes a creature of a non-attacking player attacking.
+- `combat.rs:1764:59: replace + with * in best_blocks` (the size of the search for the
+  best block declaration counted without the "doesn't block" choice): **(a) equivalent**.
+  It only makes the exhaustive search run where the greedy one would have; the exhaustive
+  search finds a declaration obeying at least as many requirements, and both are only used
+  to judge the declaration a player made.
+- `combat.rs:2429:31: replace + with * in TrampleShape::valid` (for trample over
+  planeswalkers, damage to the planeswalker's controller checked against the damage to the
+  planeswalker instead): **(b) missing test**. An assignment of nothing to the planeswalker
+  and the rest to its controller was accepted. Killed by
+  `tests/keywords/k702_019c_trample_over_planeswalkers_skipping_the_planeswalker.rs`
+  (Thrasta attacking Jace Beleren, blocked by Hill Giant, assignment 3/0/4).
+- `combat.rs:2471:17: replace && with || in divide_freely` (an answer dividing a
+  creature's damage among banding blockers was accepted with the right total but too few
+  amounts): **(b) missing test**. Killed by
+  `tests/keywords/k702_022j_banding_assignment_answers.rs` (Hill Giant blocked by
+  Benalish Hero and Grizzly Bears; P1's answer `[3]` gets the default, both die).
+- `combat.rs:2863:9: delete match arm 1 in block_attacker_of_choice`: **(a) equivalent**.
+  With one attacking creature to choose from, the player is asked to choose it, and any
+  answer other than that creature gets it anyway; only the pointless question differs.
+- `combat.rs:3054:44: replace || with && in combat_timing_ok` ("after combat" was never
+  reached): **(b) missing test**. Killed by `tests/cr/r506_008d_cast_only_after_combat.rs`
+  (Glyph of Reincarnation can't be cast in the precombat main phase and can in the
+  postcombat main phase).
+- `combat.rs:3188:49: replace == with != in combat_trigger_matches` (the attackers
+  recorded by "whenever [a player or permanent] is attacked" are those attacking something
+  else): **(b) not killed**. No compiled card reads those attackers: the Curses of
+  Commander 2017 find "each opponent attacking that player" from the combat itself
+  (`kw/attacking_that_player.rs`), and "whenever one or more creatures attack you" cards
+  compile to other triggers.
+- `combat.rs:3245:29: replace && with || in combat_trigger_matches` ("whenever [a player]
+  attacks [another player]" triggered when either player matched): **(b) missing test**.
+  Killed by `tests/cr/r508_003e_player_attacks_you_trigger.rs` (Jolene, the Plunder Queen:
+  only an attack on one of its controller's opponents makes a Treasure; the file also
+  covers Emberwilde Captain, which compiles to a different trigger).
+
+## Status (2026-10-21)
+
+All 15 files have been sampled: 520 viable mutants (plus 31 unviable), 423 caught, 4
+timeouts, 93 missed: a kill rate of **82.1%** before the new tests. The casting.rs and
+combat.rs survivors are triaged and have tests. Remaining:
+
+1. Re-run the survivors of every file with new tests (`RERUN=1 scripts/mutants.sh
    trigger_timing permissions simultaneous turn mana stack replacement triggers resolve
-   casting combat`) and fill in the "After new tests" column. Each new test above was
-   written against its mutant's code and checked to pass on the unmutated engine; the
-   re-run is what confirms the kill.
+   casting combat`, about 6 hours at ~4 minutes a mutant) and fill in the "After new tests"
+   column and the overall kill rate after. Each new test was written against its mutant's
+   code and checked to pass on the unmutated engine (the casting.rs and combat.rs ones
+   also to fail with their mutant applied); the re-run is what confirms the kill.
