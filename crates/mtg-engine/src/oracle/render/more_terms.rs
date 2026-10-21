@@ -14,7 +14,7 @@ pub(super) fn event_amount_words(t: &TriggerCond) -> Option<&'static str> {
             source: Filter::Source | Filter::AttachedToSource,
             to: DamageRecipient::Player(_),
             ..
-        } => Some("the amount of damage it dealt to that player"),
+        } => Some("{alt:the amount of damage it dealt to that player|the amount of damage dealt}"),
         TriggerCond::Batched {
             trigger,
             per: BatchPer::Player,

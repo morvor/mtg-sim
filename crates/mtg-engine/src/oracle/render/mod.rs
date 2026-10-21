@@ -12,12 +12,16 @@
 
 mod ability_cost_terms;
 mod activation_triggers;
+mod behold_terms;
 mod block_pairs;
+mod cast_from_among;
 mod cast_history_terms;
 mod chosen_from_targets;
+mod chosen_numbers;
 pub mod compare;
 mod condition_terms;
 mod copy_exceptions;
+mod cost_amounts;
 mod costs;
 mod counter_replacements;
 mod custom;
@@ -38,8 +42,13 @@ mod joined_lines;
 mod keywords;
 mod library_top;
 mod more_terms;
+mod named_effects;
+mod named_qualities;
+mod named_replacements;
+mod named_statics;
 mod next_time;
 mod nouns;
+mod object_counts;
 mod once_each_turn;
 mod opt_in;
 mod outcomes;
@@ -47,6 +56,8 @@ mod play_terms;
 mod players;
 mod remembered_groups;
 mod replacement_terms;
+mod same_is_true;
+mod same_name_search;
 mod spell_cost_terms;
 mod statics;
 mod tail_filters;
@@ -76,6 +87,10 @@ pub struct FaceInfo {
     /// cost reveals (Dragons of Tarkir), for "if you revealed a Dragon card or controlled
     /// a Dragon as you cast this spell".
     pub reveal_card: Option<crate::ability::Filter>,
+    /// What an additional cost "behold a [quality]" beholds (CR 701.4a), for "if you
+    /// revealed a Dragon card or chose a Dragon as you cast ~" and "the power of the
+    /// creature you chose or the card you revealed".
+    pub behold: Option<crate::ability::Filter>,
     /// The face has spree (CR 702.172): its modes are written "+ [cost] — [effect]".
     pub spree: bool,
     /// The face has tiered (CR 702.183): its modes are written "• [cost] — [effect]"
@@ -92,6 +107,7 @@ impl FaceInfo {
             enchant: None,
             meld: None,
             reveal_card: None,
+            behold: None,
             spree: face.chars.abilities.iter().any(|a| {
                 matches!(&a.kind, AbilityKind::Keyword(k)
                     if k.kind == crate::keywords::KeywordKind::Spree)
@@ -103,6 +119,7 @@ impl FaceInfo {
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
         info.reveal_card = reveal_card(&face.chars.abilities);
+        info.behold = behold_terms::beheld(&face.chars.abilities);
         info
     }
     fn has_subtype(&self, s: &str) -> bool {
@@ -170,6 +187,11 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
         if let Some((n, merged)) = off_battlefield_group(&abilities[i..]) {
             let line = r.ability(&merged);
             let line = line.replacen(" you own ", " you own that aren't on the battlefield ", 1);
+            out.lines.push(line);
+            skip = n - 1;
+            continue;
+        }
+        if let Some((n, line)) = r.same_is_true_group(&abilities[i..]) {
             out.lines.push(line);
             skip = n - 1;
             continue;

@@ -97,12 +97,11 @@ impl KeywordRules for Daybound {
         if !is_daybound(kw) {
             return None;
         }
+        // An effect modifying how the permanent enters (CR 614.12): a permanent entering
+        // as a copy of a permanent with daybound has it too (CR 707.9; the CR 712.13a
+        // example).
         let mut s = StaticAbility::new(StaticEffect::Replacement(ReplacementDef {
-            event: ReplacementEvent::ZoneChange {
-                filter: Filter::Source,
-                from: None,
-                to: Some(ZoneKind::Battlefield),
-            },
+            event: ReplacementEvent::EntersBattlefield(Filter::Source),
             action: ReplacementAction::EnterTransformed,
             self_replacement: false,
             optional: false,
