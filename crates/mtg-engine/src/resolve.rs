@@ -2936,12 +2936,32 @@ impl Game {
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
         if let Some(pf) = restriction_player_filter(&mut r) {
-            if let PlayerFilter::Ref(who) = pf {
-                let ps = self.eval_players(who, ctx);
-                *pf = PlayerFilter::Or(ps.into_iter().map(PlayerFilter::Is).collect());
-            }
+            self.bind_player_refs(pf, ctx);
         }
         r
+    }
+
+    /// Locks the referenced players of a restriction's player filter ("target player",
+    /// "the other chosen player"), except those about the affected object ("its
+    /// controller" for each creature the requirement applies to).
+    fn bind_player_refs(&self, pf: &mut PlayerFilter, ctx: &Ctx) {
+        match pf {
+            PlayerFilter::Ref(who) => {
+                let about_affected = serde_json::to_string(&**who)
+                    .is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::AFFECTED)));
+                if !about_affected {
+                    let ps = self.eval_players(who, ctx);
+                    *pf = PlayerFilter::Or(ps.into_iter().map(PlayerFilter::Is).collect());
+                }
+            }
+            PlayerFilter::And(v) | PlayerFilter::Or(v) => {
+                for x in v {
+                    self.bind_player_refs(x, ctx);
+                }
+            }
+            PlayerFilter::Not(x) => self.bind_player_refs(x, ctx),
+            _ => {}
+        }
     }
 
     /// "Creatures other than [specific objects]" (Intimidation Bolt: "other creatures

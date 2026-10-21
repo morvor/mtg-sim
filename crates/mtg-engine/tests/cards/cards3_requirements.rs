@@ -241,3 +241,37 @@ fn immortal_obligation_creature_attacks_others_while_it_has_a_duty_counter() {
     t.g.dirty = true;
     assert!(legal_blocks(&mut t, &[(giant, mine)]));
 }
+
+#[test]
+fn the_brothers_war_chapter_two_each_chosen_players_creatures_attack_the_other() {
+    cr!("508.1d");
+    supported("The Brothers' War");
+    let mut card = crate::basic_effects_common::oracle_card(
+        "Brothers Test",
+        "Sorcery",
+        "Choose two target players. Until your next turn, each creature they control attacks the other chosen player each combat if able.",
+    );
+    card.faces[0].chars.mana_cost = Some(mtg_engine::mana::ManaCost::generic(0));
+    let mut t = TestGame::with_config(
+        3,
+        GameConfig {
+            attack_multiple_players: true,
+            ..Default::default()
+        },
+    );
+    let c = t.custom(P0, card, mtg_engine::object::Zone::Hand(P0));
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P2, "Hill Giant");
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, c)
+        .targets(&[Entity::Player(P1), Entity::Player(P2)])
+        .go();
+    t.resolve_all();
+    to_combat(&mut t, P1);
+    assert!(!legal_attack(&mut t, &[]));
+    assert!(!legal_attack(&mut t, &[(bears, Entity::Player(P0))]));
+    assert!(legal_attack(&mut t, &[(bears, Entity::Player(P2))]));
+    to_combat(&mut t, P2);
+    assert!(!legal_attack(&mut t, &[(giant, Entity::Player(P0))]));
+    assert!(legal_attack(&mut t, &[(giant, Entity::Player(P1))]));
+}

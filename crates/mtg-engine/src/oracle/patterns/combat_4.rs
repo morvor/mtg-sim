@@ -1183,3 +1183,44 @@ fn p_for_as_long_as_it_has_counter(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "combat 4: for as long as that creature has a [kind] counter on it, it [restrictions]", priority: 90, parse: p_for_as_long_as_it_has_counter } }
+
+/// "Choose two target players. Until your next turn, each creature they control attacks the
+/// other chosen player each combat if able." (The Brothers' War): a requirement for each
+/// such creature to attack the chosen player who doesn't control it (CR 508.1d).
+fn p_attacks_the_other_chosen_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (duration, body) = match l.strip_prefix("until your next turn, ") {
+        Some(r) => (Duration::UntilYourNextTurn, r),
+        None => match l.strip_suffix(" this turn") {
+            Some(r) => (Duration::EndOfTurn, r),
+            None => return None,
+        },
+    };
+    if body != "each creature they control attacks the other chosen player each combat if able" {
+        return None;
+    }
+    // The two players the text chose as targets.
+    let slot = b.targets.iter().position(|t| {
+        matches!(t.what, TargetKind::Player(_)) && matches!(t.max, Value::Const(2))
+    })? as u8;
+    if b.targets.len() != 1 {
+        return None;
+    }
+    let chosen = PlayerRef::Target(slot);
+    let its_controller = PlayerRef::ControllerOf(Box::new(Sel::Var(vars::AFFECTED)));
+    Some(Effect::AddRestriction {
+        restriction: Restriction::MustAttackPlayer {
+            attackers: Filter::and(vec![
+                Filter::Type(crate::types::CardType::Creature),
+                Filter::ControlledBy(PlayerRel::Target(slot)),
+            ]),
+            defender: PlayerFilter::And(vec![
+                PlayerFilter::Ref(Box::new(chosen)),
+                PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(its_controller)))),
+            ]),
+        },
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: each creature they control attacks the other chosen player each combat if able", priority: 90, parse: p_attacks_the_other_chosen_player } }

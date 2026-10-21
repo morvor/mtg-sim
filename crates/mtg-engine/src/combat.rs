@@ -861,7 +861,9 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
                 defender,
             } = &r
             {
-                let ctx = Ctx::new(s, c);
+                let mut ctx = Ctx::new(s, c);
+                // "... attacks the other chosen player": relative to the creature.
+                ctx.set_var(vars::AFFECTED, vec![Entity::Object(id)]);
                 if g.restriction_applies(id, attackers, &ctx, &locked) {
                     for p in g.players_in_game() {
                         if g.player_filter_matches(defender, p, &ctx) {
