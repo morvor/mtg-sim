@@ -602,6 +602,9 @@ impl Renderer<'_> {
             crate::kw::trigger_events::FINAL_CHAPTER_TRIGGERS => {
                 "the final chapter ability of a Saga you control triggers".into()
             }
+            crate::kw::teamwork::SELF_TAPPED_FOR_TEAMWORK => {
+                format!("{} becomes tapped to pay a teamwork cost", self.me())
+            }
             crate::kw::trigger_events::ENTERS_ATTACHED_TO_CREATURE => {
                 format!("{} enters attached to a creature", self.me())
             }

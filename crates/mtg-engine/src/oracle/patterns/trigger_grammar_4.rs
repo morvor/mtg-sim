@@ -611,6 +611,32 @@ fn enters_attached_to_creature(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)>
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: ~ enters attached to a creature", priority: 100, parse: enters_attached_to_creature } }
 
+/// "~ becomes tapped to pay a teamwork cost" (Agent Maria Hill), "you cast a spell using
+/// teamwork" (Virtual Assistant): CR 702.194a-b.
+fn teamwork_events(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    match end(t) {
+        "~ becomes tapped to pay a teamwork cost" => Some((
+            TriggerCond::Custom(crate::kw::teamwork::SELF_TAPPED_FOR_TEAMWORK.into()),
+            Sel::This,
+            PlayerRef::You,
+        )),
+        "you cast a spell using teamwork" => Some((
+            TriggerCond::CastSpell {
+                who: PlayerRel::You,
+                filter: Filter::and(vec![
+                    Filter::Spell,
+                    Filter::CastWithCost(crate::kw::teamwork::TEAMWORK.into()),
+                ]),
+            },
+            Sel::TriggerSpell,
+            PlayerRef::You,
+        )),
+        _ => None,
+    }
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: teamwork events", priority: 100, parse: teamwork_events } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

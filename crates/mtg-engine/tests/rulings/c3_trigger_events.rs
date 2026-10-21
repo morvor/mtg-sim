@@ -561,3 +561,38 @@ fn infinite_reflection_enters_attached_to_a_creature() {
     assert_eq!(t.obj_now(bears).chars.name.as_str(), "Hill Giant");
     assert_eq!(t.obj_now(giant).chars.name.as_str(), "Hill Giant");
 }
+
+#[test]
+fn teamwork_triggers_virtual_assistant_and_maria_hill() {
+    cr!("702.194a", "702.194b");
+    supported("Agent Maria Hill");
+    supported("Virtual Assistant");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 8);
+    t.library_top(P0, "Island");
+    let hill = t.battlefield(P0, "Agent Maria Hill");
+    t.battlefield(P0, "Virtual Assistant");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let power = t.pt(hill).0;
+    assert!(power >= 2);
+    let hand = t.hand_size(P0);
+    // Repulsor Blast (teamwork 2) cast using teamwork, tapping Agent Maria Hill.
+    t.answer_choose(P0, &[Entity::Object(hill)]);
+    let c = t.hand(P0, "Repulsor Blast");
+    t.cast(P0, c).kicked(true).target(wurm).go();
+    assert!(t.obj_now(hill).tapped);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(hill, "+1/+1"), 1);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(crate::r_s01_common::with_subtype(&t, P0, "Robot").len(), 1);
+    // Without teamwork: neither triggers.
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let c = t.hand(P0, "Repulsor Blast");
+    t.cast(P0, c).kicked(false).target(wurm).go();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(hill, "+1/+1"), 1);
+    assert_eq!(crate::r_s01_common::with_subtype(&t, P0, "Robot").len(), 1);
+}
