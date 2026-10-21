@@ -227,3 +227,71 @@ fn expedited_inheritance_ends_after_their_next_turn() {
     assert_eq!(t.zone(forest_x), Zone::Exile);
     assert!(t.play_land(P1, forest_x).is_err());
 }
+
+#[test]
+fn ian_malcolm_the_active_player_casts_a_card_they_dont_own_exiled_with_it() {
+    cr!("607.2a", "601.3", "118.14");
+    ruling!(
+        "Ian Malcolm, Chaotician",
+        "Players must follow all applicable timing rules for casting spells with the permission granted by Ian Malcolm, Chaotician's last ability."
+    );
+    assert_supported("Ian Malcolm, Chaotician");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Ian Malcolm, Chaotician");
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    // P0 draws two cards this turn: the second one makes P0 exile the top card.
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    t.g.draw_cards(P0, 2);
+    t.g.flush_events();
+    t.resolve_all();
+    let bolt_x = t.g.current(bolt);
+    assert_eq!(t.zone(bolt_x), Zone::Exile, "{}", t.dump_log());
+    // P0 owns it: not P0.
+    t.lands(P0, "Mountain", 1);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.g.turn.priority = Some(P0);
+    assert!(t.cast_with(P0, bolt_x, &[Entity::Player(P1)]).is_err());
+    t.clear_answers();
+    // During P1's turn, P1 may cast it, paying with a Forest (mana of any type).
+    t.lands(P1, "Forest", 1);
+    t.advance_to(P1, Step::PrecombatMain);
+    t.cast_with(P1, bolt_x, &[Entity::Player(P0)])
+        .expect("P1 casts the Bolt exiled with Ian Malcolm");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
+fn ian_malcolm_only_the_active_player_casts_them() {
+    cr!("601.3");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Ian Malcolm, Chaotician");
+    // P0's Shock and P1's Bolt and Lava Spike end up exiled with Ian Malcolm.
+    let shock = t.library_top(P0, "Shock");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    t.g.draw_cards(P0, 2);
+    let bolt = t.library_top(P1, "Lightning Bolt");
+    t.library_top(P1, "Island");
+    t.library_top(P1, "Island");
+    t.g.draw_cards(P1, 2);
+    t.g.flush_events();
+    t.resolve_all();
+    let shock_x = t.g.current(shock);
+    let bolt_x = t.g.current(bolt);
+    assert_eq!(t.zone(shock_x), Zone::Exile);
+    assert_eq!(t.zone(bolt_x), Zone::Exile);
+    t.lands(P0, "Mountain", 2);
+    t.lands(P1, "Mountain", 2);
+    // During P0's turn, P1 can't cast P0's Shock.
+    t.g.turn.priority = Some(P1);
+    assert!(t.cast_with(P1, shock_x, &[Entity::Player(P0)]).is_err());
+    t.clear_answers();
+    // P0 casts P1's Bolt.
+    t.cast_with(P0, bolt_x, &[Entity::Player(P1)]).expect("P0 casts it");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}

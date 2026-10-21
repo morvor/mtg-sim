@@ -54,6 +54,9 @@ pub enum Who {
     /// exiled this way": each player, for the cards they exiled (from their own library or
     /// hand: the cards they own).
     EachPlayer,
+    /// "During each player's turn, that player may ...": the active player (a static
+    /// permission, CR 601.3).
+    Active,
 }
 
 /// What the permission is for.
@@ -143,6 +146,11 @@ pub struct Perm {
     pub no_hand: bool,
     /// "from among cards exiled with it": "it" must be the source (see [`effect`]).
     pub linked_it: bool,
+    /// The permission is the active player's (see [`Who::Active`]).
+    pub active_player: bool,
+    /// "the cards they don't own exiled with ~": not owned by the player who gets the
+    /// permission (the active player).
+    pub not_theirs: bool,
     /// "play a land and cast a spell from among ...": a land and a spell, one of each
     /// (each its own once-each-turn use).
     pub land_and_spell: bool,
@@ -325,6 +333,7 @@ fn strip_subject(s: &str) -> Option<(Who, &str)> {
         ("they may ", Who::They),
         ("each player may ", Who::EachPlayer),
         ("players may ", Who::EachPlayer),
+        ("during each player's turn, that player may ", Who::Active),
         ("that creature's controller may ", Who::CreaturesController),
     ] {
         if let Some(r) = s.strip_prefix(w) {
@@ -655,10 +664,16 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
             " from among cards exiled with it",
             From::Linked { owned: false },
         ),
+        // (Ian Malcolm, Chaotician: see `not_theirs`.)
+        (
+            " from among the cards they don't own exiled with ~",
+            From::Linked { owned: false },
+        ),
     ] {
         if let Some(r) = s.strip_prefix(p_) {
             if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
                 p.linked_it |= p_.ends_with(" with it");
+                p.not_theirs |= p_.contains(" they don't own ");
                 return Some((z, r));
             }
         }
@@ -1381,7 +1396,7 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
         Who::OwnerOfIt => PlayerRef::OwnerOf(Box::new(it.clone())),
         Who::They => p.who_ref.clone()?,
         Who::CreaturesController => PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
-        Who::EachPlayer => return None,
+        Who::EachPlayer | Who::Active => return None,
     };
     let mut terms = p.terms_with_condition(ctx)?;
     if p.who != Who::You && !p.dur_grantee {
@@ -1951,6 +1966,40 @@ fn class_permission_from(
 
 /// The permission as static abilities (`text` is the ability's text).
 pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    // "During each player's turn, that player may cast a spell from among the cards they
+    // don't own exiled with ~" (Ian Malcolm, Chaotician), "... may play a land or cast a
+    // spell from among cards exiled with ~" (Share the Spoils): the active player's
+    // permission, one card each turn.
+    if p.who == Who::Active {
+        let Obj::Class { what, single: true } = &p.obj else {
+            return None;
+        };
+        if !matches!(p.from, Some(From::Linked { owned: false }))
+            || p.once_each_turn
+            || p.your_turn
+            || p.land_and_spell
+        {
+            return None;
+        }
+        let mut q = p.clone();
+        q.who = Who::You;
+        q.once_each_turn = true;
+        if p.not_theirs {
+            q.obj = Obj::Class {
+                what: Filter::and(vec![
+                    what.clone(),
+                    Filter::not(Filter::OwnedBy(PlayerRel::Active)),
+                ]),
+                single: true,
+            };
+        }
+        q.active_player = true;
+        q.not_theirs = false;
+        return to_statics(&q, text, ctx);
+    }
+    if p.not_theirs {
+        return None;
+    }
     if p.who != Who::You || p.duration.is_some() || p.look || p.any_number || p.count.is_some() {
         return None;
     }
@@ -2137,6 +2186,10 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
         perms
             .into_iter()
             .map(|pp| {
+                let mut pp = pp;
+                if p.active_player {
+                    pp.who = PlayerRel::Active;
+                }
                 let mut s = StaticAbility::new(StaticEffect::PlayPermission(pp.clone()));
                 s.zone = fzone(&pp);
                 s.condition = condition.clone();
