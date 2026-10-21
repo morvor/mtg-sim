@@ -350,6 +350,12 @@ pub const DID: Var = vars::USER + 9650;
 /// instruction that can fail to do anything, or a draw (some cards drawn).
 fn done_cond(e: &Effect) -> Option<Condition> {
     match e {
+        // "Put a +1/+1 counter on each creature you control" can always be done, even to no
+        // creatures: whoever accepted did it (CR 118.12; the tempting offer rulings count
+        // the opponents who accepted).
+        Effect::AddCounters {
+            what: Sel::All(_), ..
+        } => None,
         Effect::Discard { .. }
         | Effect::Sacrifice { .. }
         | Effect::SacrificeObjects { .. }
