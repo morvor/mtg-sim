@@ -160,6 +160,7 @@ fn deathtouch_damage_assigned_by_another_attacker_counts_as_lethal() {
 #[test]
 fn lethal_damage_ignores_effects_that_would_prevent_it() {
     cr!("702.19b");
+    cr_example!("702.19b", "protection from green");
     assert_supported("Vodalian Zombie");
     let mut t = TestGame::new(2);
     let maw = t.battlefield(P0, "Colossal Dreadmaw");
@@ -173,6 +174,16 @@ fn lethal_damage_ignores_effects_that_would_prevent_it() {
     assert!(t.on_battlefield(zombie));
     assert_eq!(t.obj_now(zombie).damage, 0);
     assert_eq!(t.life(P1), 16);
+    // The rest may be divided as the attacking player chooses: 5 to the blocker, 1 to
+    // the player.
+    let mut t = TestGame::new(2);
+    let maw = t.battlefield(P0, "Colossal Dreadmaw");
+    let zombie = t.battlefield(P1, "Vodalian Zombie");
+    assign_damage(&mut t, P0, &[5, 1]);
+    attack_with(&mut t, &[(maw, Entity::Player(P1))]);
+    block_and_finish(&mut t, P1, &[(zombie, maw)]);
+    assert!(t.on_battlefield(zombie));
+    assert_eq!(t.life(P1), 19);
 }
 
 #[test]

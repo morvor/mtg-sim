@@ -262,6 +262,19 @@ pub trait KeywordRules: Sync + Send {
     fn activation_allowed(&self, g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> bool {
         true
     }
+    /// Whether the ability `a` of `src` could still be activated (as a mana ability, CR
+    /// 605.3a) once `p` has begun to activate the ability `during` (source, uid): checked
+    /// when deciding whether `during` could be activated and paid for.
+    fn activation_allowed_during(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        during: (ObjectId, u64),
+    ) -> bool {
+        true
+    }
     /// Changes a keyword's rules make to the total cost of activating the ability `a` of
     /// `src` (CR 601.2f, 602.2b), after cost-modifying effects: e.g. a power-up ability's
     /// cost is reduced by its permanent's mana cost the turn it entered (CR 702.193a).
@@ -1029,6 +1042,18 @@ pub fn activation_allowed(g: &Game, p: PlayerId, src: ObjectId, a: &Ability) -> 
     registry()
         .iter()
         .all(|r| r.activation_allowed(g, p, src, a))
+}
+
+pub fn activation_allowed_during(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+    a: &Ability,
+    during: (ObjectId, u64),
+) -> bool {
+    registry()
+        .iter()
+        .all(|r| r.activation_allowed_during(g, p, src, a, during))
 }
 
 pub fn attack_declaration_ok(g: &Game, decl: &[(ObjectId, Entity)]) -> bool {

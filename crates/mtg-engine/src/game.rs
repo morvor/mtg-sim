@@ -121,6 +121,13 @@ pub struct GameConfig {
     /// drawn in the opening hand.
     #[serde(default)]
     pub top_of_library: Vec<Vec<SmolStr>>,
+    /// For property tests (see `properties.rs`): each player's randomness (library
+    /// shuffles, random discards and reveals from their hand) comes from a stream of its
+    /// own, seeded by the key at the player's seat, instead of the game's single stream
+    /// drawn in seat order. Two games seating the same decks differently then shuffle each
+    /// deck alike. `None` (the default) uses the game's stream for everything.
+    #[serde(default)]
+    pub player_rng_keys: Option<Vec<u64>>,
 }
 
 impl Default for GameConfig {
@@ -151,6 +158,7 @@ impl Default for GameConfig {
             planechase: false,
             archenemy: false,
             top_of_library: vec![],
+            player_rng_keys: None,
         }
     }
 }
@@ -626,6 +634,9 @@ pub struct Game {
     pub last_turn_history: TurnHistory,
     pub result: Option<GameResult>,
     pub rng: ChaCha8Rng,
+    /// Per-player streams when [`GameConfig::player_rng_keys`] is set (see
+    /// [`Game::rng_for`]); empty otherwise.
+    pub player_rngs: Vec<ChaCha8Rng>,
     pub agents: Agents,
     /// Events emitted since the last trigger check.
     pub events: Vec<Event>,
@@ -782,6 +793,8 @@ pub struct Game {
     pub cards: crate::cards::CardState,
     /// Players and objects abilities noted for their linked abilities (CR 607.1).
     pub linked_notes: crate::linked_notes::LinkedNotes,
+    /// The links handed out to abilities resolving effects give (CR 607.5).
+    pub fresh_links: crate::ability_grants::FreshLinks,
     /// Every event, for observers outside the engine (off unless enabled).
     pub event_feed: crate::event_feed::EventFeed,
     /// Watches every event as it's processed, with the game as it is then (see
@@ -812,6 +825,12 @@ impl Game {
         }
         let mut g = Game {
             rng: ChaCha8Rng::seed_from_u64(config.seed),
+            player_rngs: config
+                .player_rng_keys
+                .iter()
+                .flatten()
+                .map(|k| ChaCha8Rng::seed_from_u64(*k))
+                .collect(),
             players: (0..n)
                 .map(|i| {
                     Player::new(
@@ -909,6 +928,7 @@ impl Game {
             planechase: Default::default(),
             cards: Default::default(),
             linked_notes: Default::default(),
+            fresh_links: Default::default(),
             event_feed: Default::default(),
             observer: None,
             timing: Default::default(),
@@ -1022,13 +1042,14 @@ impl Game {
         self.turn.active
     }
 
-    /// Opponents of a player (CR 102.3): in team games, players not on their team.
+    /// Opponents of a player (CR 102.3): in team games, players not on their team. In
+    /// APNAP order (CR 101.4), so that what's done for each opponent in turn, or a default
+    /// choice among them, doesn't depend on where the players sit.
     pub fn opponents(&self, p: PlayerId) -> Vec<PlayerId> {
         let team = self.player(p).team;
-        self.players
-            .iter()
-            .filter(|q| q.in_game() && q.team != team)
-            .map(|q| q.id)
+        self.apnap()
+            .into_iter()
+            .filter(|q| self.player(*q).team != team)
             .collect()
     }
 
@@ -1418,10 +1439,20 @@ impl Game {
     // Randomness
     // ------------------------------------------------------------------
 
+    /// The randomness for something player `p` does (shuffling their library, a random
+    /// card of their hand): their own stream when the game has per-player streams
+    /// ([`GameConfig::player_rng_keys`]), otherwise the game's.
+    pub fn rng_for(&mut self, p: PlayerId) -> &mut ChaCha8Rng {
+        match self.player_rngs.get_mut(p.idx()) {
+            Some(r) => r,
+            None => &mut self.rng,
+        }
+    }
+
     pub fn shuffle_library(&mut self, p: PlayerId) {
         use rand::seq::SliceRandom;
         let mut lib = std::mem::take(&mut self.players[p.idx()].library);
-        lib.shuffle(&mut self.rng);
+        lib.shuffle(self.rng_for(p));
         self.players[p.idx()].library = lib;
         // CR 401.6: a revealed top card stops being revealed.
         crate::zones::library_shuffled(self, p);
@@ -1480,9 +1511,15 @@ impl Game {
         // CR 603.10f: abilities that trigger when a player loses the game look back in
         // time, before the player's objects leave the game (CR 800.4a).
         self.flush_events();
-        self.after_player_leaves(p);
+        // Players losing at the same time leave together, once all have lost.
+        if self.losing_simultaneously {
+            self.end.leaving.push(p);
+        } else {
+            self.after_player_leaves(p);
+        }
         self.on_player_lost(p);
         if !self.losing_simultaneously {
+            self.finish_leaving();
             self.check_game_over();
         }
     }

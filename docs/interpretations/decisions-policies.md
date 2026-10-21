@@ -209,3 +209,27 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Affects: every random event.
 - Code: `crates/mtg-engine/src/game.rs` (`Game::rng`, `shuffle_library`, `GameConfig::seed`); `crates/mtg-engine/src/dice.rs`.
 - Tests: `tests/cr/interp_decision_defaults.rs` (`random_results_come_from_the_games_seed`).
+
+## ability-ids-depend-on-the-process: Ability ids in requests come from a process-wide counter; answers name options by their place
+- Kind: policy
+- Status: decided
+- Rules: none directly (the agent interface). Abilities have identities because of rules such as 602.5c "If an object acquires an activated ability with a restriction on its use from another object, that restriction applies only to that ability as acquired from that object. It doesn’t apply to other, identically worded abilities." and 607.1 "An object may have two abilities printed on it such that one of them causes actions to be taken or objects or players to be affected and the other one directly refers to those actions, objects, or players. If so, these two abilities are linked: ..."
+- Question: The rules don't number abilities; the engine does, to tell them apart (activation limits, linked abilities, removing one ability). Must the numbers be the same every time a game is played?
+- Decision: No. Ability ids come from one counter the whole process shares (`ability::next_ability_uid`) and are handed out as abilities are first needed: compiled card abilities (cached for every game), abilities effects give, delayed triggers, tokens' abilities. So the ids in agent-protocol requests (`action.ability`) differ between processes, and even between two plays of one game in one process, unless everything before them happened the same way. Answers refer to options by `index`, which doesn't depend on the ids, so a game replays from its answers; replays and the property checks compare ids up to a consistent renaming. The links of abilities effects give, which are also numbers, are numbered per game (`ability_grants::FreshLinks`).
+- Alternatives: Allocate ability ids per game: the same requests in every process, but the caches of compiled and derived abilities, shared by all games, would have to be reworked to renumber per game.
+- Why: Agents never need to send an id back, so stable ids would buy only easier comparison of requests across processes, which renaming already gives.
+- Affects: games with external agents (mtg-api requests and transcripts), replays, the determinism and snapshot properties.
+- Code: `crates/mtg-engine/src/ability.rs` (`next_ability_uid`); `crates/mtg-api/src/replay.rs` (`AbilityRenaming`); `crates/mtg-engine/src/properties/agent.rs` (`rename_uids`).
+- Tests: `tests/cr/interp_ability_ids.rs` (`the_same_game_numbers_a_gained_ability_differently_but_lists_it_in_the_same_place`).
+
+## unbounded-number-ceiling: "Choose a number" with no upper limit goes up to 1,000,000
+- Kind: deviation
+- Status: decided
+- Rules: 107.1 "The only numbers the Magic game uses are integers." / 107.1a "You can’t choose a fractional number, deal fractional damage, gain fractional life, and so on. ..." / Menacing Ogre ruling: "You have to choose zero or a positive number. You can’t choose a negative number."
+- Question: "Choose a number" (Void, Menacing Ogre), "a number 0 or greater" (Wheel of Misfortune), "a number greater than 0" (Mindblaze), "hides at least one item" (Goblin Game) set no upper limit. What range does the number decision offer?
+- Decision: From the least number the text allows to `choices::MAX_CHOSEN_NUMBER` (1,000,000), shown to agents as the decision's `max` (mtg-api `number` spec). An answer outside the range is invalid and the least number is chosen (`default-numbers`). The same ceiling bounds life bids (`bidding.rs`) and "any number of counters" moved.
+- Alternatives: No maximum at all (the protocol can express it: a `number` spec without `max`), which needs every arithmetic path that a chosen number reaches (life totals, damage, counters, all 32-bit) to saturate; the former ceiling of 1000, which a player could want to exceed (losing more life than 1000 is never needed, but numbers are also compared and matched against mana values and card counts).
+- Why: A million is beyond every life total, library, card count or mana value of a real game (outside the un-cards not supported), so no choice a player could want is excluded, while the engine's 32-bit game arithmetic stays exact.
+- Affects: Void, Menacing Ogre, Wheel of Misfortune, Mindblaze, Goblin Game, "As ~ enters, choose a number", bidding (Illicit Auction, Pain's Reward, ...), "move any number of counters".
+- Code: `crates/mtg-engine/src/choices.rs` (`MAX_CHOSEN_NUMBER`); `crates/mtg-engine/src/oracle/patterns/choice_grammar_secret_numbers.rs`, `choice_grammar_multi.rs`, `etb_choices.rs`, `r122_move_counters.rs`; `crates/mtg-engine/src/bidding.rs`.
+- Tests: `tests/cards/choices_number_ceiling.rs`.

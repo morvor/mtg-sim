@@ -931,7 +931,7 @@ fn plan(
             let cards = if *random {
                 use rand::seq::SliceRandom;
                 let mut h = hand;
-                h.shuffle(&mut g.rng);
+                h.shuffle(g.rng_for(q));
                 h.into_iter().take(k as usize).collect()
             } else {
                 g.ask_objects(q, ctx.source, "Choose cards to discard", hand, k, k)
