@@ -692,6 +692,75 @@ fn exile_batches_either(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: one or more [A] or a spell or ability exiles one or more [B]", priority: 100, parse: exile_batches_either } }
 
+/// "... deal(s) [combat] damage to a player or battle" (Zurgo and Ojutai): the damage
+/// event to a player, or to a battle (CR 310.6, 120.3).
+fn damage_to_player_or_battle(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let r = t.strip_suffix(" damage to a player or battle")?;
+    let (c, it, p) = parse_trigger_condition(&format!("whenever {r} damage to a player"))?;
+    fn widen(c: TriggerCond) -> Option<TriggerCond> {
+        match c {
+            // Once for each player or battle dealt damage (Zurgo and Ojutai's rulings).
+            TriggerCond::Batched { trigger, .. } => Some(TriggerCond::Batched {
+                trigger: Box::new(widen(*trigger)?),
+                per: BatchPer::Recipient,
+            }),
+            TriggerCond::DealsDamage {
+                source,
+                to: DamageRecipient::Player(PlayerRel::Any),
+                combat_only,
+            } => Some(TriggerCond::AnyOf(vec![
+                TriggerCond::DealsDamage {
+                    source: source.clone(),
+                    to: DamageRecipient::Player(PlayerRel::Any),
+                    combat_only,
+                },
+                TriggerCond::DealsDamage {
+                    source,
+                    to: DamageRecipient::Object(Filter::Type(crate::types::CardType::Battle)),
+                    combat_only,
+                },
+            ])),
+            _ => None,
+        }
+    }
+    Some((widen(c)?, it, p))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: deal damage to a player or battle", priority: 100, parse: damage_to_player_or_battle } }
+
+/// "You may return one of those Dragons to its owner's hand." in an ability that triggers
+/// on one or more creatures dealing damage: one of the creatures of the batch (the
+/// trigger's objects, of that kind).
+fn return_one_of_those(l: &str, b: &mut Builder) -> Option<Effect> {
+    // ("you may" is read by the core grammar.)
+    let r = end(l).strip_prefix("return one of those ")?;
+    let noun = r.strip_suffix(" to its owner's hand")?;
+    if !b.in_trigger {
+        return None;
+    }
+    let (f, plural, tail) = parse_object_phrase(noun)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some(Effect::Move {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                f,
+                Filter::In(Box::new(Sel::TriggerObjects)),
+                Filter::InZone(ZoneKind::Battlefield),
+            ]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        to: Destination::zone(ZoneKind::Hand),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "trigger grammar 4: you may return one of those [creatures] to its owner's hand", priority: 100, parse: return_one_of_those } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

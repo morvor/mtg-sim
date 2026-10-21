@@ -642,3 +642,46 @@ fn ranar_creates_a_spirit_when_your_spell_exiles_permanents() {
     t.resolve_all();
     assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 1);
 }
+
+#[test]
+fn zurgo_and_ojutai_once_per_player_or_battle_dealt_damage() {
+    cr!("603.2c", "510.2");
+    ruling!(
+        "Zurgo and Ojutai",
+        "The triggered ability will trigger once for each player or battle dealt combat damage by Dragons you control, no matter how many Dragons were involved."
+    );
+    supported("Zurgo and Ojutai");
+    // Two Dragons attacking one player: once.
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    let z = t.battlefield(P0, "Zurgo and Ojutai");
+    let s = t.battlefield(P0, "Shivan Dragon");
+    for _ in 0..6 {
+        t.library_top(P0, "Island");
+    }
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    // The card from the top three (the default), then the Dragon to return.
+    t.answer(P0, DecisionKind::Entities, Answer::Default);
+    t.answer_choose(P0, &[Entity::Object(s)]);
+    t.attack(&[(z, Entity::Player(P1)), (s, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    // One card from the top three, and Shivan Dragon returned to hand.
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert!(t.in_hand(P0, "Shivan Dragon"));
+    // Two players dealt damage: twice.
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    let z = t.battlefield(P0, "Zurgo and Ojutai");
+    let s = t.battlefield(P0, "Shivan Dragon");
+    for _ in 0..6 {
+        t.library_top(P0, "Island");
+    }
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, false);
+    t.answer_yes(P0, false);
+    t.attack(&[(z, Entity::Player(P1)), (s, Entity::Player(P2))], &[]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert!(!t.in_hand(P0, "Shivan Dragon"));
+}

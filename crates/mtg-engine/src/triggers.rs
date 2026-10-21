@@ -371,6 +371,10 @@ impl Game {
             let key = |i: &EventInfo| match per {
                 BatchPer::Batch => None,
                 BatchPer::Player | BatchPer::AnyPlayer => i.player.map(|p| Entity::Player(p)),
+                BatchPer::Recipient => i
+                    .object
+                    .map(Entity::Object)
+                    .or(i.player.map(Entity::Player)),
                 BatchPer::Object => i.object.map(Entity::Object),
                 BatchPer::Other => i.other.map(Entity::Object),
             };
@@ -432,7 +436,11 @@ impl Game {
                 for i in &g {
                     // An event about several objects at once (the creatures attacking a
                     // player) contributes all of them.
-                    let own = match i.object.or(i.other) {
+                    let own = match if matches!(per, BatchPer::Recipient) {
+                        i.other
+                    } else {
+                        i.object.or(i.other)
+                    } {
                         Some(o) => vec![o],
                         None => i.objects.clone(),
                     };

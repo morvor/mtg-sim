@@ -44,6 +44,10 @@ pub fn triggered_by_batch(g: &mut Game, batch: &[Event]) -> Vec<PendingTrigger> 
         let key = |i: &EventInfo| match per {
             BatchPer::Batch => None,
             BatchPer::Player | BatchPer::AnyPlayer => i.player.map(Entity::Player),
+            BatchPer::Recipient => i
+                .object
+                .map(Entity::Object)
+                .or(i.player.map(Entity::Player)),
             BatchPer::Object => i.object.map(Entity::Object),
             BatchPer::Other => i.other.map(Entity::Object),
         };
