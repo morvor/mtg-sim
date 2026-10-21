@@ -3,7 +3,9 @@
 //! * "you've controlled ~ continuously since the beginning of your most recent turn"
 //!   (Rocket Launcher; see `kw/control_since_your_turn.rs`);
 //! * "you're attacking two or more opponents" (Nemesis Phoenix): the opponents you're
-//!   attacking this combat.
+//!   attacking this combat;
+//! * "there were three or more card types among the sacrificed permanents" (Baba Lysaga,
+//!   Night Witch): the permanents the cost sacrificed, as they last existed.
 
 use super::ConditionPattern;
 use crate::ability::*;
@@ -39,3 +41,19 @@ fn attacking_opponents(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "activation conditions: you're attacking N or more opponents", priority: 100, parse: attacking_opponents } }
+
+/// "there were three or more card types among the sacrificed permanents".
+fn types_among_sacrificed(c: &str) -> Option<Condition> {
+    let r = end(c).strip_prefix("there were ")?;
+    let (cmp, n, rest) = super::statics_conditions::amount_cmp(r)?;
+    if rest.trim() != "card types among the sacrificed permanents" {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::DistinctAmong(Among::CardTypes, Box::new(Sel::Var(vars::SACRIFICED))),
+        cmp,
+        n,
+    ))
+}
+
+inventory::submit! { ConditionPattern { name: "activation conditions: there were N or more card types among the sacrificed permanents", priority: 100, parse: types_among_sacrificed } }

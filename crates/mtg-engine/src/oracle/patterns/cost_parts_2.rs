@@ -14,7 +14,7 @@
 //!   exile is face up, CR 406.3; a face-down permanent leaving the battlefield is revealed,
 //!   CR 708.9).
 
-use super::CostPattern;
+use super::{AbilityPattern, CostPattern};
 use crate::ability::*;
 use crate::oracle::costs::{counter_kind, parse_cost_part};
 use crate::oracle::phrases::*;
@@ -159,6 +159,36 @@ fn exile_face_down(p: &str) -> Option<CostPart> {
 }
 
 inventory::submit! { CostPattern { name: "cost parts: exile a face-down permanent face up", priority: 50, parse: exile_face_down } }
+
+/// "Sacrifice ~ and any number of other non-Eldrazi creatures: Create a 3/2 ... token for
+/// each creature sacrificed this way." (Emrakul's Evangel): the other permanents are the
+/// ability's X (CR 107.3), and "creatures sacrificed this way" are all the sacrificed
+/// permanents, the source among them (its ruling) — not just the X others.
+fn sacrifice_self_and_any_number(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let (cost, effect) = crate::oracle::split_cost(block.trim())?;
+    let lower = cost.to_lowercase();
+    let i = lower.find("sacrifice ~ and any number of other ")?;
+    if super::value_grammar::cost_has_x(&lower) {
+        return None;
+    }
+    let rewritten = format!(
+        "{}Sacrifice ~ and X other {}",
+        &cost[..i],
+        &cost[i + "sacrifice ~ and any number of other ".len()..]
+    );
+    let mut abilities = crate::oracle::parse_ability(&format!("{rewritten}: {effect}"), ctx)?;
+    let [a] = abilities.as_mut_slice() else {
+        return None;
+    };
+    let a = std::sync::Arc::make_mut(a);
+    if !matches!(a.kind, AbilityKind::Activated(_)) {
+        return None;
+    }
+    a.text = block.trim().to_string();
+    Some(abilities)
+}
+
+inventory::submit! { AbilityPattern { name: "cost parts: sacrifice ~ and any number of other [objects]", priority: 60, parse: sacrifice_self_and_any_number } }
 
 #[cfg(test)]
 mod tests {

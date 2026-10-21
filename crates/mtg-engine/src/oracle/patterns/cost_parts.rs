@@ -555,6 +555,9 @@ pub fn amount_as_x(cost: &str) -> Option<(String, Option<Condition>)> {
         // "Tap any number of untapped creatures you control with total power 10 or
         // greater" (Mossbridge Troll).
         ("tap", "any number of "),
+        // "Sacrifice up to three permanents" (Baba Lysaga): X, at most three.
+        ("sacrifice", "up to two "),
+        ("sacrifice", "up to three "),
     ] {
         let pat = format!("{verb} {phrase}");
         let Some(i) = lower.find(&pat) else {
@@ -565,6 +568,8 @@ pub fn amount_as_x(cost: &str) -> Option<(String, Option<Condition>)> {
         let cond = match phrase {
             "one or more " => Some(Condition::Compare(Value::X, Cmp::Ge, Value::c(1))),
             "any number of " => None,
+            "up to two " => Some(Condition::Compare(Value::X, Cmp::Le, Value::c(2))),
+            "up to three " => Some(Condition::Compare(Value::X, Cmp::Le, Value::c(3))),
             _ => {
                 // "all [kind] counters from ~" (only the source's own counters).
                 let part = after.split(',').next().unwrap_or(after);
