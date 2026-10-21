@@ -179,12 +179,14 @@ fn caduceus_indestructible_applies_before_state_based_actions() {
     set_life(&mut t, P0, 28);
     let bears = t.battlefield(P0, "Grizzly Bears");
     attach_new(&mut t, P0, "Caduceus, Staff of Hermes", bears);
-    let giant = t.battlefield(P1, "Hill Giant");
+    // Ancient Brontodon (9/9) blocks: 9 damage is lethal even to the 7/7 Bears, which
+    // survive only by indestructible.
+    let dino = t.battlefield(P1, "Ancient Brontodon");
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
-    block_and_finish(&mut t, P1, &[(giant, bears)]);
+    block_and_finish(&mut t, P1, &[(dino, bears)]);
     assert_eq!(t.life(P0), 30);
     assert!(t.on_battlefield(bears));
-    assert_eq!(t.obj_now(bears).damage, 3);
+    assert_eq!(t.obj_now(bears).damage, 9);
     assert_eq!(t.pt(bears), (7, 7));
 }
 

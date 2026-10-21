@@ -31,7 +31,7 @@ fn jitte_pump(t: &mut TestGame, jitte: ObjectId) {
 
 #[test]
 fn jitte_pump_mode_goes_to_the_creature_equipped_on_resolution() {
-    cr!("608.2h", "301.5a", "602.5d");
+    cr!("608.2h", "301.5a");
     ruling!(
         "Umezawa's Jitte",
         "If the Jitte is moved after the \"+2/+2\" mode is announced but before it resolves, the bonus is given to the creature that is equipped when the ability resolves."

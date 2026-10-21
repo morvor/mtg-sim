@@ -111,7 +111,7 @@ fn dissection_tools_sacrificing_the_target_leaves_the_equipment_where_it_was() {
 
 #[test]
 fn robe_of_stars_phased_out_in_response_isnt_moved() {
-    cr!("702.26d", "702.26b", "608.2b");
+    cr!("702.26g", "702.26b", "608.2b");
     ruling!(
         "Robe of Stars",
         "Notably, this means you cannot equip Robe of Stars to another creature while it is phased out. If you activate the Astral Projection ability of an attached Robe of Stars in response to the equip ability, Robe of Stars will be phased out before the equip ability resolves and will not be moved."
@@ -432,15 +432,17 @@ fn halvar_targets_illegal_or_already_attached_nothing_happens() {
             _ => assert!(on(&t, eq, bears)),
         }
     }
-    // Already attached to the target creature: it stays (no new timestamp needed to
-    // observe; it's simply still attached).
+    // Already attached to the target creature: nothing happens.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Halvar, God of Battle // Sword of the Realms");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let eq = attach_new(&mut t, P0, "Bonesplitter", bears);
     halvar_trigger(&mut t, eq, bears);
+    let ts = t.obj_now(eq).timestamp;
     t.resolve_all();
     assert!(on(&t, eq, bears));
+    // Not reattached (CR 701.3b): no new timestamp.
+    assert_eq!(t.obj_now(eq).timestamp, ts);
     assert_eq!(t.pt(bears), (4, 2));
 }
 
