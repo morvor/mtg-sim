@@ -4048,6 +4048,7 @@ Cloud Sprite
 Cloud of Darkness
 Cloud of Faeries
 Cloud's Limit Break
+Cloud, Midgar Mercenary
 Cloudblazer
 Cloudbound Moogle
 Cloudchaser Eagle
@@ -6752,6 +6753,7 @@ Elephant Guide
 Elephant-Mandrill
 Elephant-Rat
 Elesh Norn, Grand Cenobite
+Elesh Norn, Mother of Machines
 Elf Replica
 Elfhame Druid
 Elfhame Palace
@@ -8030,6 +8032,7 @@ Fires of Yavimaya
 Firescreamer
 Fireshrieker
 Fireslinger
+Firesong and Sunspeaker
 Firestorm
 Firestorm Hellkite
 Firewake Sliver
@@ -10757,6 +10760,7 @@ Hissing Iguanar
 Hissing Miasma
 Hissing Quagmire
 Historian of Zhalfir
+Historian's Boon
 History of Benalia
 Hit // Run
 Hit-Monkey
@@ -11078,6 +11082,7 @@ Hurly-Burly
 Hurr Jackal
 Hurricane
 Hush
+Hushbringer
 Hushwing Gryff
 Hushwood Verge
 Hussar Patrol
@@ -12183,6 +12188,7 @@ Kami of the Tended Garden
 Kami of the Waning Moon
 Kami's Flare
 Kang Prime
+Kang the Conqueror
 Kang, Temporal Tyrant
 Kangee's Lieutenant
 Kangee, Aerie Keeper
@@ -15859,6 +15865,7 @@ Oathsworn Vampire
 Ob Nixilis Reignited
 Ob Nixilis of the Black Oath
 Ob Nixilis's Cruelty
+Ob Nixilis, Captive Kingpin
 Ob Nixilis, Unshackled
 Ob Nixilis, the Fallen
 Ob Nixilis, the Hate-Twisted
@@ -16453,6 +16460,7 @@ Panic Spellbomb
 Panicked Altisaur
 Panicked Bystander // Cackling Culprit
 Panoptic Mirror
+Panoptic Projektor
 Panther Pounce
 Panther Robot
 Panther Warriors
@@ -17463,6 +17471,7 @@ Psychic Symbiont
 Psychic Trance
 Psychic Vortex
 Psychic Whorl
+Psychogenic Probe
 Psychomancer
 Psychosis Crawler
 Psychotic Episode
@@ -19290,6 +19299,7 @@ Sacred Cat
 Sacred Excavation
 Sacred Fire
 Sacred Foundry
+Sacred Ground
 Sacred Knight
 Sacred Mesa
 Sacred Nectar
@@ -22674,6 +22684,7 @@ Surge of Righteousness
 Surge of Strength
 Surge of Thoughtweft
 Surge of Zeal
+Surge to Victory
 Surgehacker Mech
 Surgespanner
 Surgical Precision
@@ -23512,6 +23523,7 @@ The Lost and the Damned
 The Magic Mirror
 The Mana Rig
 The Mary Janes
+The Masamune
 The Master, Mesmerist
 The Master, Multiplied
 The Masters of Evil
@@ -26073,6 +26085,7 @@ Way of the Cryomancer
 Way of the Deathbringer
 Way of the Healer
 Way of the Mentor
+Way of the Mind Sculptor
 Way of the Necromancer
 Way of the Paradox
 Way of the Pyromancer
@@ -26268,6 +26281,7 @@ Wickerbough Elder
 Wickerfolk Indomitable
 Wickerfolk Thresher
 Wickersmith's Tools
+Widespread Panic
 Widespread Thieving
 Widow's Bite
 Wielding the Green Dragon
