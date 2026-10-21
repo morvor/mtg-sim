@@ -449,3 +449,29 @@ fn foreshadow_names_the_card_on_resolution() {
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn jesters_scepter_cards_are_seen_only_by_its_controller() {
+    cr!("406.3");
+    ruling!(
+        "Jester's Scepter",
+        "You can see the cards that are exiled with Jester’s Scepter, but no one else can."
+    );
+    // (Only the Scepter's first ability is exercised: its second isn't supported yet.)
+    let mut t = TestGame::new(2);
+    stack_library(
+        &mut t,
+        P1,
+        &["Grizzly Bears", "Island", "Hill Giant", "Shock", "Forest"],
+    );
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    crate::r_s05_common::enter(&mut t, P0, "Jester's Scepter");
+    t.resolve_all();
+    let exiled = exiled_of(&t, P1);
+    assert_eq!(exiled.len(), 5);
+    for c in exiled {
+        assert!(face_down(&t, c));
+        assert!(mtg_engine::facedown::can_look_at(&t.g, P0, c));
+        assert!(!mtg_engine::facedown::can_look_at(&t.g, P1, c));
+    }
+}
