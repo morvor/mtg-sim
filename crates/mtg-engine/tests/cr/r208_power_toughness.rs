@@ -66,6 +66,7 @@ fn power_is_combat_damage_dealt_and_toughness_the_damage_that_destroys() {
 #[test]
 fn star_power_and_toughness_are_defined_by_a_characteristic_defining_ability() {
     cr!("208.2", "208.2a");
+    cr_example!("208.2a", "Lost Order of Jarkeld");
     ruling!(
         "Awakened Amalgam",
         "The ability that defines Awakened Amalgam’s power and toughness works in all zones"

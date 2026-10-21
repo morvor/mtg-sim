@@ -182,6 +182,7 @@ fn an_additional_upkeep_step_comes_directly_after_this_step() {
 #[test]
 fn upkeep_steps_added_after_combat_get_beginning_phases_of_their_own() {
     cr!("500.10", "500.8");
+    cr_example!("500.10", "Obeka");
     ruling!(
         "Obeka, Splitter of Seconds",
         "the untap and draw steps will be skipped"

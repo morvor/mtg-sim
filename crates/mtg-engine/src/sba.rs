@@ -503,6 +503,17 @@ impl Game {
                 });
             }
         }
+        // CR 704.3, 400.6: a loss that a replacement effect replaces is replaced with the
+        // game as it is, before the other state-based actions move anything ("instead exile
+        // this creature"); an object both would move moves as its controller chooses.
+        let (replaced, losers): (Vec<PlayerId>, Vec<PlayerId>) = losers
+            .into_iter()
+            .partition(|p| self.loss_would_be_replaced(*p));
+        if !replaced.is_empty() {
+            self.zones.sba_moves = moves.clone();
+            self.lose_game_simultaneously(&replaced);
+            self.zones.sba_moves.clear();
+        }
         if !moves.is_empty() {
             let sac_ids: Vec<(ObjectId, PlayerId)> = sacrifice
                 .iter()
@@ -542,7 +553,6 @@ impl Game {
 
         // Players who lose at the same time lose simultaneously (CR 104.4a, 704.3); "can't
         // lose" effects apply (CR 101.2).
-        let losers: Vec<PlayerId> = losers.into_iter().collect();
         self.lose_game_simultaneously(&losers);
         self.recompute();
         true
