@@ -233,5 +233,10 @@ pub fn damage_event_gains(
             }
         }
     }
+    // A player who can't gain life gains none as part of the event, so it
+    // doesn't keep their life total from going below a floor. Replacement effects that
+    // would modify the gain itself (Boon Reflection) aren't applied here: they apply
+    // when the gain happens, so the floor sees the unmodified amount.
+    out.retain(|(p, n)| *n > 0 && g.player(*p).in_game() && !g.cant_gain_life(*p));
     out
 }

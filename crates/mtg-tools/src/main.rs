@@ -133,6 +133,20 @@ pub fn example_exemptions() -> Vec<(String, String, String, usize)> {
     out
 }
 
+/// Whether rule `id` is within `[lo, hi]` in document order, a bound including the rules
+/// under it: "611" includes 611.1 and 611.2c, "702.19" includes 702.19a..702.19z.
+fn rule_in_range(id: &str, lo: &str, hi: &str) -> bool {
+    let key = mtg_data::rules::rule_sort_key;
+    let under = |b: &str| {
+        id == b
+            || id.strip_prefix(b).is_some_and(|rest| {
+                rest.starts_with('.') && !b.contains('.')
+                    || rest.starts_with(|c: char| c.is_ascii_lowercase())
+            })
+    };
+    (key(id) >= key(lo) || under(lo)) && (key(id) <= key(hi) || under(hi))
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ExampleStatus {
     Covered,
@@ -388,16 +402,9 @@ fn cr_coverage(args: &[String]) {
     }
     if examples_mode {
         // Print every example (in the range, if given) with its rule and status.
-        let key = |id: &str| mtg_data::rules::rule_sort_key(id);
         let in_range = |id: &str| match &range {
             None => true,
-            Some((lo, hi)) => {
-                let (k, kb) = (
-                    key(id),
-                    key(id.trim_end_matches(|c: char| c.is_ascii_lowercase())),
-                );
-                (k >= key(lo) || kb >= key(lo)) && (k <= key(hi) || kb <= key(hi))
-            }
+            Some((lo, hi)) => rule_in_range(id, lo, hi),
         };
         let (mut n, mut cov, mut exm, mut open) = (0, 0, 0, 0);
         for (id, text, st, note) in &exc.examples {
@@ -440,14 +447,7 @@ fn cr_coverage(args: &[String]) {
     if let Some((lo, hi)) = &range {
         // Print the status of every rule whose id is within [lo, hi] (inclusive, by document
         // order prefix: "702.19" includes 702.19a..702.19z).
-        let key = |id: &str| mtg_data::rules::rule_sort_key(id);
-        let (klo, khi) = (key(lo), key(hi));
-        let in_range = |id: &str| {
-            let k = key(id);
-            let base = id.trim_end_matches(|c: char| c.is_ascii_lowercase());
-            let kb = key(base);
-            (k >= klo || kb >= klo) && (k <= khi || kb <= khi)
-        };
+        let in_range = |id: &str| rule_in_range(id, lo, hi);
         let mut n = 0;
         let mut unc = 0;
         for r in &numbered {

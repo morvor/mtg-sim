@@ -32,3 +32,27 @@ fn prevention_that_gains_life_is_applied_before_a_life_floor_looks_at_the_event(
     assert_eq!(t.life(P1), 2);
     assert!(!t.has_lost(P1));
 }
+
+#[test]
+fn life_a_player_cant_gain_doesnt_keep_a_life_floor_from_applying() {
+    cr!("120.4d", "119.7");
+    // As in the Worship / Awe Strike example, but the defending player can't gain life
+    // (Erebos, God of the Dead: "Your opponents can't gain life."): the damage event is
+    // [lose 5 life] with no gain, which would reduce 2 life below 1, so Worship applies.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Erebos, God of the Dead");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Worship");
+    t.g.players[P1.idx()].life = 2;
+    let a = put(&mut t, P0, vanilla("Big One", "{4}{G}", 5, 5));
+    let b = put(&mut t, P0, vanilla("Big Two", "{4}{G}", 5, 5));
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P1, "Plains", 1);
+    let strike = t.hand(P1, "Awe Strike");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, strike).target(a).go();
+    t.resolve();
+    t.attack(&[(a, Entity::Player(P1)), (b, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 1);
+    assert!(!t.has_lost(P1));
+}

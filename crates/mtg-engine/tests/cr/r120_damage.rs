@@ -263,16 +263,7 @@ fn damage_is_modified_then_processed_into_results_then_the_event_occurs() {
             .build(),
         Zone::Battlefield,
     );
-    let boon = CB::new("Boon Reflection")
-        .enchantment()
-        .ability(stat(StaticEffect::Replacement(ReplacementDef {
-            event: ReplacementEvent::GainLife(PlayerFilter::You),
-            action: ReplacementAction::Multiply(2),
-            self_replacement: false,
-            optional: false,
-        })))
-        .build();
-    t.custom(P0, boon, Zone::Battlefield);
+    t.battlefield(P0, "Boon Reflection");
     let blocker = t.custom(
         P1,
         CB::new("Stout Guard")
