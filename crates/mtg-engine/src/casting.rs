@@ -2305,7 +2305,8 @@ impl Game {
             pay_ctx.x_defined = true;
         }
         pay_ctx.ability_uid = a.uid;
-        let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
+        let mut cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
+        crate::kw::activation_payable_otherwise(self, p, src, a, &mut cost);
         let chars = o.chars.clone();
         self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
             // CR 118.9: or an alternative cost it could be activated for.
@@ -2687,6 +2688,9 @@ impl Game {
             self.ability_total_cost_and_x(p, src, a, act, Some(id), x as u32, alt.as_ref());
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
         crate::cost_rules::choose_payment_ways_for(self, p, Some(src), Some(id), &mut cost);
+        // Paying part of it other than with mana ("you may tap an untapped creature you
+        // control rather than pay that mana").
+        crate::kw::pay_activation_otherwise(self, p, src, a, &mut cost);
         // CR 602.1e: a modification of how the activation cost may be paid applies to the
         // total cost.
         let spend = SpendContext {

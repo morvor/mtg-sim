@@ -481,6 +481,38 @@ pub trait KeywordRules: Sync + Send {
     fn attacks_without_tapping(&self, g: &Game, attacker: ObjectId) -> bool {
         false
     }
+    /// `obj` is adapting: returns true if it adapts as though it had no +1/+1 counters on
+    /// it (CR 701.46a), using up the effect that says so ("the next time ... adapts").
+    fn adapts_ignoring_counters(&self, g: &mut Game, obj: ObjectId) -> bool {
+        false
+    }
+    /// Additional times `p` may activate loyalty abilities of the planeswalker `src` this
+    /// turn (CR 606.3), on top of the usual once.
+    fn extra_loyalty_activations(&self, g: &Game, p: PlayerId, src: ObjectId) -> u32 {
+        0
+    }
+    /// For the check whether `p` could activate the ability `a` of `src`: takes out of
+    /// `cost` what this implementation's rule lets them pay other than with mana.
+    fn activation_payable_otherwise(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        cost: &mut Cost,
+    ) {
+    }
+    /// As `p` pays the total cost of activating `a` of `src` (CR 602.2b, 601.2h): pays part
+    /// of it other than with mana, taking what was paid out of `cost`.
+    fn pay_activation_otherwise(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        cost: &mut Cost,
+    ) {
+    }
     /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         None
@@ -1189,6 +1221,50 @@ pub fn on_event(g: &mut Game, ev: &Event) {
 /// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
 pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
     registry().iter().any(|r| r.keeps_unattached_aura(g, aura))
+}
+
+/// See [`KeywordRules::adapts_ignoring_counters`] (every implementation is asked, so each
+/// effect that applies is used up).
+pub fn adapts_ignoring_counters(g: &mut Game, obj: ObjectId) -> bool {
+    let mut any = false;
+    for k in registry() {
+        any |= k.adapts_ignoring_counters(g, obj);
+    }
+    any
+}
+
+/// See [`KeywordRules::extra_loyalty_activations`].
+pub fn extra_loyalty_activations(g: &Game, p: PlayerId, src: ObjectId) -> u32 {
+    registry()
+        .iter()
+        .map(|k| k.extra_loyalty_activations(g, p, src))
+        .sum()
+}
+
+/// See [`KeywordRules::activation_payable_otherwise`].
+pub fn activation_payable_otherwise(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+    a: &Ability,
+    cost: &mut Cost,
+) {
+    for k in registry() {
+        k.activation_payable_otherwise(g, p, src, a, cost);
+    }
+}
+
+/// See [`KeywordRules::pay_activation_otherwise`].
+pub fn pay_activation_otherwise(
+    g: &mut Game,
+    p: PlayerId,
+    src: ObjectId,
+    a: &Ability,
+    cost: &mut Cost,
+) {
+    for k in registry() {
+        k.pay_activation_otherwise(g, p, src, a, cost);
+    }
 }
 
 /// See [`KeywordRules::cant_be_attacked`].
