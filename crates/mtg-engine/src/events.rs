@@ -73,6 +73,9 @@ pub struct LookbackSnapshot {
     /// effect of a permanent leaving at the same time still applies to abilities that
     /// trigger on that event).
     pub additional_triggers: Vec<(ObjectId, PlayerId, crate::ability::StaticEffect)>,
+    /// The "[permanents] dying don't cause abilities to trigger" effects that applied
+    /// (`kw/torpor.rs`; a creature dying at the same time as Hushbringer).
+    pub trigger_suppressions: Vec<(ObjectId, PlayerId, smol_str::SmolStr)>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -217,7 +217,9 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             kind,
         } => ReplacementEvent::PutCounters {
             on_objects: on_objects.as_ref().map(lf),
-            on_players: on_players.clone(),
+            // "That player can't get counters for as long as ...": the player as the effect
+            // is created.
+            on_players: on_players.as_ref().map(|p| lock_players(g, p, ctx)),
             kind: kind.clone(),
         },
         ReplacementEvent::PutCountersMatching {

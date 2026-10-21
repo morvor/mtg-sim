@@ -12,6 +12,22 @@ const CREWED_BY_SUBTYPE: &str = "crew:crewed it this turn, a creature of subtype
 impl Renderer<'_> {
     /// The condition (or its negation), if this module words it.
     pub(crate) fn custom_condition_terms(&mut self, name: &str, negated: bool) -> Option<String> {
+        // What was paid to activate the ability whose activation triggered.
+        {
+            use crate::kw::trigger_modifiers as tm;
+            let paid = if name == tm::SACRIFICED_TO_ACTIVATE {
+                Some("one or more permanents were sacrificed".to_string())
+            } else if name == tm::LIFE_PAID_TO_ACTIVATE {
+                Some("life was paid".to_string())
+            } else {
+                name.strip_prefix(tm::LOYALTY_REMOVED_TO_ACTIVATE)
+                    .and_then(|n| n.parse::<i32>().ok())
+                    .map(|n| format!("you removed {} or more loyalty counters", number_word(n)))
+            };
+            if let (Some(p), false) = (paid, negated) {
+                return Some(format!("{p} to activate it"));
+            }
+        }
         let known = [
             gc::SOURCE_DEALT_DAMAGE,
             gc::SOURCE_DEALT_COMBAT_DAMAGE,
