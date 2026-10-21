@@ -74,3 +74,44 @@ fn tyrant_of_discord_keeps_sacrificing_until_a_land() {
     tyrant(&mut t);
     assert_eq!(lands.iter().filter(|o| t.on_battlefield(**o)).count(), 2);
 }
+
+fn claim_jumper(opponent_lands: usize) -> (TestGame, usize) {
+    supported("Claim Jumper");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Plains", 3);
+    t.lands(P1, "Forest", opponent_lands);
+    t.lands(P2, "Forest", 4);
+    let a = t.library_top(P0, "Plains");
+    let b = t.library_top(P0, "Plains");
+    let cj = t.hand(P0, "Claim Jumper");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(a)]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(b)]);
+    t.cast(P0, cj).go();
+    t.resolve_all();
+    let lands =
+        t.g.battlefield
+            .iter()
+            .filter(|o| {
+                let o = t.obj_now(**o);
+                o.controller == P0 && o.chars.card_types.contains(types::CardType::Land)
+            })
+            .count();
+    (t, lands)
+}
+
+#[test]
+fn claim_jumper_repeats_once_if_still_behind() {
+    cr!("608.2c");
+    ruling!(
+        "Claim Jumper",
+        "but there's still an opponent who controls more lands than you, so you repeat the process once"
+    );
+    // 3 lands against 5: one Plains (4 < 5), then another.
+    let (_, lands) = claim_jumper(5);
+    assert_eq!(lands, 5);
+    // 3 lands against 4: one Plains (4 = 4), and no repeat.
+    let (_, lands) = claim_jumper(4);
+    assert_eq!(lands, 4);
+}

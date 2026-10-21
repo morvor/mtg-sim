@@ -748,6 +748,92 @@ fn for_each_exiled_in_process(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
 
 inventory::submit! { FollowupPattern { name: "followups 4: for each card exiled this way, after a repeated process", priority: 120, apply: for_each_exiled_in_process } }
 
+/// Whether the player chose to do the optional instruction in any pass of a process
+/// repeated once (Claim Jumper: "If you search your library this way, shuffle").
+const DID_IN_PROCESS: Var = vars::USER + 41002;
+
+/// "Then if an opponent controls more lands than you, repeat this process once." (Claim
+/// Jumper): the instructions of the previous sentence happen again, with new choices, if
+/// the condition is true then (CR 608.2c).
+fn repeat_once_if(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let Some(r) = l.strip_prefix("if ") else {
+        return false;
+    };
+    let Some(c) = r.strip_suffix(", repeat this process once") else {
+        return false;
+    };
+    if matches!(prev, Effect::Noop) {
+        return false;
+    }
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+        return false;
+    };
+    let did = || Effect::If {
+        cond: Condition::PrevHappened,
+        then: Box::new(Effect::StoreValue {
+            var: DID_IN_PROCESS,
+            value: Value::c(1),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    let once = prev.clone();
+    let first = std::mem::take(prev);
+    let optional = matches!(last_instruction(&first), Effect::May { .. });
+    let mut v = vec![];
+    if optional {
+        v.push(Effect::StoreValue {
+            var: DID_IN_PROCESS,
+            value: Value::c(0),
+        });
+    }
+    v.push(first);
+    if optional {
+        v.push(did());
+    }
+    let again = if optional {
+        Effect::seq(vec![once, did()])
+    } else {
+        once
+    };
+    v.push(Effect::If {
+        cond,
+        then: Box::new(again),
+        otherwise: Box::new(Effect::Noop),
+    });
+    *prev = Effect::seq(v);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: then if [condition], repeat this process once", priority: 120, apply: repeat_once_if } }
+
+/// "If you search your library this way, shuffle." after an optional search repeated once:
+/// if you searched in either pass.
+fn if_you_searched_in_the_process(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "if you search your library this way, shuffle" {
+        return false;
+    }
+    let d = format!("{prev:?}");
+    if !d.contains(&format!("var: {DID_IN_PROCESS}")) || !d.contains("Search {") {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::Compare(Value::Var(DID_IN_PROCESS), Cmp::Ge, Value::c(1)),
+            then: Box::new(Effect::Shuffle {
+                who: PlayerRef::You,
+            }),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: if you search your library this way, shuffle (after a repeated search)", priority: 120, apply: if_you_searched_in_the_process } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
