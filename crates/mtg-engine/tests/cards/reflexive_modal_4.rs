@@ -300,3 +300,35 @@ fn rhinos_rampage_excess_fight_damage_destroys_an_artifact() {
     let (t, stone) = rampage("Wall of Stone");
     assert!(t.on_battlefield(stone));
 }
+
+#[test]
+fn immard_removing_a_counter_lets_you_choose_a_mode() {
+    cr!("603.12", "700.2");
+    supported("Immard, the Stormcleaver");
+    let mut t = TestGame::new(2);
+    let im = t.battlefield(P0, "Immard, the Stormcleaver");
+    t.g.add_counters(Entity::Object(im), "charge", 1, None);
+    // Remove a counter, then 4 damage to P1.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.attack(&[(im, Entity::Player(P1))], &[]);
+    assert_eq!(t.counters(im, "charge"), 0);
+    let power = t.pt(im).0 as i32;
+    assert_eq!(t.life(P1), 20 - 4 - power);
+}
+
+#[test]
+fn immard_putting_a_counter_doesnt_trigger_the_reflexive_ability() {
+    cr!("603.12");
+    let mut t = TestGame::new(2);
+    let im = t.battlefield(P0, "Immard, the Stormcleaver");
+    t.g.add_counters(Entity::Object(im), "charge", 1, None);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.attack(&[(im, Entity::Player(P1))], &[]);
+    assert_eq!(t.counters(im, "charge"), 2);
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseModes { .. })));
+}

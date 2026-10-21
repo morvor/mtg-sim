@@ -205,7 +205,7 @@ pub fn parse_trigger_body(
     // "you may pay {G} up to three times. When you pay this cost one or more times, choose
     // up to that many —" (`patterns::reflexive_modal_4`).
     if let Some(body) =
-        super::patterns::reflexive_modal_4::paid_times_modal(t, ctx, &it, &it_player)
+        super::patterns::reflexive_modal_4::reflexive_modal_bodies(t, ctx, &it, &it_player)
     {
         return Some(body);
     }

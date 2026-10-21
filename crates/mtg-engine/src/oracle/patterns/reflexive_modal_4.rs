@@ -246,6 +246,89 @@ fn up_to_that_many(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
 
 inventory::submit! { ModalHeaderPattern { name: "reflexive modal 4: choose up to that many", priority: 100, parse: up_to_that_many } }
 
+/// Triggered ability bodies with a modal reflexive ability on a result of the first
+/// instruction (see [`paid_times_modal`], [`removed_counter_modal`]).
+pub fn reflexive_modal_bodies(
+    t: &str,
+    ctx: &CompileContext,
+    it: &Sel,
+    it_player: &PlayerRef,
+) -> Option<Body> {
+    paid_times_modal(t, ctx, it, it_player).or_else(|| removed_counter_modal(t, ctx, it, it_player))
+}
+
+/// Puts `reflexive` after the counter-removing option of a choice between instructions.
+fn after_removal(e: &mut Effect, reflexive: &Effect) -> bool {
+    match e {
+        Effect::ChooseOne { options, .. } => {
+            let mut found = false;
+            for (_, o) in options.iter_mut() {
+                if matches!(o, Effect::RemoveCounters { .. }) {
+                    let removal = std::mem::take(o);
+                    *o = Effect::seq(vec![removal, reflexive.clone()]);
+                    found = true;
+                }
+            }
+            found
+        }
+        Effect::RemoveCounters { .. } => {
+            let removal = std::mem::take(e);
+            *e = Effect::seq(vec![removal, reflexive.clone()]);
+            true
+        }
+        Effect::Seq(v) => v.iter_mut().any(|x| after_removal(x, reflexive)),
+        Effect::If {
+            then, otherwise, ..
+        } => {
+            let a = after_removal(then, reflexive);
+            let b = after_removal(otherwise, reflexive);
+            a || b
+        }
+        _ => false,
+    }
+}
+
+/// "put a charge counter on it or remove one from it. When you remove a counter this way,
+/// choose one —" (Immard, the Stormcleaver): a modal reflexive ability that triggers only
+/// if a counter was removed (CR 603.12).
+pub fn removed_counter_modal(
+    t: &str,
+    ctx: &CompileContext,
+    it: &Sel,
+    it_player: &PlayerRef,
+) -> Option<Body> {
+    let (head, rest) = t.split_once('\n')?;
+    let lower = head.to_lowercase();
+    let p = ". when you remove a counter this way, choose ";
+    let i = lower.find(p)?;
+    let (first, header) = (&head[..i + 1], &head[i + p.len() - "choose ".len()..]);
+    let mut b = Builder::new(ctx);
+    b.in_trigger = true;
+    b.it = it.clone();
+    b.it_player = it_player.clone();
+    let mut effect = parse_effect_text(first, &mut b)?;
+    let modal = parse_modal(&format!("{header}\n{rest}"), ctx, Some((it, it_player)))?;
+    let reflexive = Effect::If {
+        cond: Condition::PrevHappened,
+        then: Box::new(Effect::Reflexive {
+            body: Box::new(Body {
+                targets: vec![],
+                effect: Effect::Noop,
+                modal: Some(modal),
+            }),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    if !after_removal(&mut effect, &reflexive) {
+        return None;
+    }
+    Some(Body {
+        targets: b.targets,
+        effect,
+        modal: None,
+    })
+}
+
 /// "you may pay {G} up to three times. When you pay this cost one or more times, choose
 /// up to that many —" (Tranquil Frillback), "you may pay {1} up to three times. When you
 /// do, choose up to that many —" (Hawkeye, Master Marksman): a modal reflexive ability
@@ -360,6 +443,7 @@ mod tests {
             ("Creature", "Whenever ~ deals combat damage to a player, you may collect evidence X. When you do, ~ deals X damage to each creature and planeswalker that player controls."),
             ("Sorcery", "~ deals 7 damage to target creature or planeswalker. When it deals excess damage this way, destroy target artifact or enchantment an opponent controls with mana value less than or equal to that amount of excess damage."),
             ("Sorcery", "Target creature you control gets +1/+0 until end of turn. It fights target creature an opponent controls. When excess damage is dealt to the creature an opponent controls this way, destroy up to one target noncreature artifact with mana value 3 or less."),
+            ("Legendary Creature", "Whenever ~ enters or attacks, put a charge counter on it or remove one from it. When you remove a counter this way, choose one —\n• ~ deals 4 damage to any target.\n• ~ gains lifelink and indestructible until end of turn."),
             ("Legendary Creature", "At the beginning of your first main phase, choose one that hasn't been chosen and you lose 2 life —\n• Draw a card.\n• Put a +1/+1 counter on ~.\n• Add {R}.\n• Exile ~, then return him to the battlefield under an opponent's control."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
