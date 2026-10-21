@@ -226,3 +226,25 @@ fn olorins_searing_light_without_spell_mastery_only_exiles() {
     assert!(t.in_exile("Serra Angel"));
     assert_eq!(t.life(P1), 20);
 }
+
+#[test]
+fn luminate_primordial_each_opponent_gains_life_equal_to_its_exiled_creatures_power() {
+    cr!("115.1", "608.2h");
+    ruling!(
+        "Luminate Primordial",
+        "use the power of the creature that opponent controlled as it last existed on the battlefield"
+    );
+    supported("Luminate Primordial");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Plains", 7);
+    let angel = t.battlefield(P1, "Serra Angel");
+    let giant = t.battlefield(P2, "Hill Giant");
+    let lp = t.hand(P0, "Luminate Primordial");
+    t.cast(P0, lp).go();
+    t.answer_targets(P0, &[Entity::Object(angel)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.resolve_all();
+    assert!(t.in_exile("Serra Angel"));
+    assert!(t.in_exile("Hill Giant"));
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 24, 23));
+}

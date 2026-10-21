@@ -1117,6 +1117,59 @@ fn if_you_searched_in_the_process(l: &str, prev: &mut Effect, _b: &mut Builder) 
 
 inventory::submit! { FollowupPattern { name: "followups 4: if you search your library this way, shuffle (after a repeated search)", priority: 120, apply: if_you_searched_in_the_process } }
 
+/// The objects a per-opponent exile exiled, as they last existed, and the one iterated.
+const EXILED_EACH: Var = vars::USER + 41007;
+const EXILED_ONE: Var = vars::USER + 41008;
+
+/// "For each opponent, exile up to one target creature that player controls and that
+/// player gains life equal to its power." (Luminate Primordial): each exiled creature's
+/// controller, as it last existed on the battlefield, gains life equal to its power then
+/// (Luminate Primordial rulings).
+fn per_opponent_exile_and_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.starts_with("for each opponent, exile ") {
+        return None;
+    }
+    let (first, second) = l.split_once(" and that player ")?;
+    let gains = match second {
+        "gains life equal to its power" => true,
+        "loses life equal to its power" => false,
+        _ => return None,
+    };
+    let e = parse_clause(first, b)?;
+    if !matches!(
+        e,
+        Effect::Exile {
+            what: Sel::Target(_),
+            ..
+        }
+    ) {
+        return None;
+    }
+    let one = Sel::Var(EXILED_ONE);
+    let who = PlayerRef::ControllerOf(Box::new(one.clone()));
+    let n = Value::PowerOf(Box::new(one));
+    let life = if gains {
+        Effect::GainLife { who, n }
+    } else {
+        Effect::LoseLife { who, n }
+    };
+    Some(Effect::seq(vec![
+        e,
+        Effect::Store {
+            var: EXILED_EACH,
+            sel: Sel::Before(Box::new(Sel::Var(vars::IT))),
+        },
+        Effect::ForEach {
+            sel: Sel::Var(EXILED_EACH),
+            var: EXILED_ONE,
+            effect: Box::new(life),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "followups 4: for each opponent, exile ... and that player gains life equal to its power", priority: 120, parse: per_opponent_exile_and_that_player } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1137,6 +1190,7 @@ mod tests {
             ("Sorcery", "Exile all creatures. Each player creates a 0/0 green and blue Fractal creature token and puts a number of +1/+1 counters on it equal to the total power of creatures they controlled that were exiled this way."),
             ("Sorcery", "Return all creatures to their owners' hands. For each opponent who controlled a creature returned this way, you create two 1/1 blue Faerie creature tokens with flying and \"This token can block only creatures with flying.\""),
             ("Sorcery", "Each opponent exiles a creature with the greatest power among creatures that player controls.\nSpell mastery — If there are two or more instant and/or sorcery cards in your graveyard, ~ deals damage to each opponent equal to the power of the creature they exiled."),
+            ("Creature", "When ~ enters, for each opponent, exile up to one target creature that player controls and that player gains life equal to its power."),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
