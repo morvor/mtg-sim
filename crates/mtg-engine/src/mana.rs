@@ -510,6 +510,11 @@ pub struct SpendContext {
     /// How the payer may spend mana as though it were mana of another type
     /// ([`SpendRules`], CR 609.4b).
     pub rules: SpendRules,
+    /// When checking whether an ability could be activated: that ability (source, uid).
+    /// The mana abilities that could pay for it are those that could be activated once
+    /// its activation has begun (CR 602.2, 605.3a; see `KeywordRules::
+    /// activation_allowed_during`).
+    pub beginning: Option<(ObjectId, u64)>,
 }
 
 /// Ways a payer may spend mana as though it were mana of another type (CR 609.4b): "You

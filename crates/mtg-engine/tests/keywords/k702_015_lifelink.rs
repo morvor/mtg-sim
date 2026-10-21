@@ -127,6 +127,7 @@ fn lifelink_works_from_any_zone() {
 #[test]
 fn each_lifelink_source_is_a_separate_life_gain_event() {
     cr!("702.15e", "119.9");
+    cr_example!("702.15e", "two creatures with lifelink");
     ruling!(
         "Ajani's Pridemate",
         "Each creature with lifelink dealing combat damage causes a separate life-gaining event."
