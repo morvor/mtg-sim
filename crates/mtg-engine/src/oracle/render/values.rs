@@ -1889,6 +1889,13 @@ impl Renderer<'_> {
                 let s = self.step_name(*s);
                 format!("until your next {s}")
             }
+            Duration::UntilEndOfCombatOnYourNextTurn => {
+                "until end of combat on your next turn".into()
+            }
+            Duration::UntilNextStep(s) => {
+                let s = self.step_name(*s);
+                format!("until the next {s}")
+            }
             Duration::UntilPlaneswalk { away_from_plane } => {
                 if *away_from_plane {
                     "until a player planeswalks away from a plane".into()

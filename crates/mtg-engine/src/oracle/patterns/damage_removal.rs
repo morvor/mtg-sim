@@ -931,6 +931,32 @@ fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("exile ")?;
     let (r, until) = if let Some(r) = r.strip_suffix(" until ~ leaves the battlefield") {
         (r, UntilEvent::SourceLeavesBattlefield)
+    } else if let Some((r, other)) = r
+        .strip_suffix(" leaves the battlefield")
+        .and_then(|x| x.split_once(" until target "))
+    {
+        // "Exile target creature ... until target enchantment you control leaves the
+        // battlefield" (Calix, Destiny's Hand): the other target, as the effect begins.
+        // The exiled object is named (and targeted) first.
+        let n = b.targets.len();
+        let (what, tail) = object_ref(r, b)?;
+        if !end(&tail).is_empty() || !matches!(what, Sel::Target(_)) {
+            b.targets.truncate(n);
+            return None;
+        }
+        let (o, tail) = object_ref(&format!("target {other}"), b)?;
+        let Sel::Target(slot) = o else {
+            b.targets.truncate(n);
+            return None;
+        };
+        if !end(&tail).is_empty() {
+            b.targets.truncate(n);
+            return None;
+        }
+        return Some(Effect::ExileUntil {
+            what,
+            until: UntilEvent::TargetLeavesBattlefield(slot),
+        });
     } else {
         let r = r.strip_suffix(" until an opponent becomes the monarch")?;
         (r, UntilEvent::OpponentBecomesMonarch)

@@ -995,6 +995,11 @@ impl Game {
 
     /// Removes continuous effects whose duration matches.
     pub fn expire_effects(&mut self, pred: impl Fn(&Duration) -> bool) {
+        // "Until end of combat on your next turn" ends with the first combat phase of that
+        // turn, or with the turn.
+        if pred(&Duration::EndOfCombat) || pred(&Duration::EndOfTurn) {
+            crate::next_turn::expire_end_of_combat_on_next_turn(self);
+        }
         self.effects.retain(|e| !pred(&e.duration));
         self.rule_effects.retain(|e| !pred(&e.duration));
         self.player_effects.retain(|e| !pred(&e.duration));
@@ -1076,7 +1081,9 @@ impl Game {
         let ts = step.trigger_step();
         let actives = self.active_players();
         let until = |d: &Duration, c: PlayerId| {
-            matches!(d, Duration::UntilYourNextStep(s) if *s == ts) && actives.contains(&c)
+            (matches!(d, Duration::UntilYourNextStep(s) if *s == ts) && actives.contains(&c))
+                // "until the next end step": any player's.
+                || matches!(d, Duration::UntilNextStep(s) if *s == ts)
         };
         self.effects.retain(|e| !until(&e.duration, e.controller));
         self.rule_effects

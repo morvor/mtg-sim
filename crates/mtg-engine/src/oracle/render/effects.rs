@@ -3041,7 +3041,13 @@ impl Renderer<'_> {
             }
             Effect::ExileUntil { what, until } => {
                 let w = self.sel(what, Case::Obj);
-                let u = until_event(until);
+                let u = match until {
+                    UntilEvent::TargetLeavesBattlefield(o) => {
+                        let o = self.sel(&Sel::Target(*o), Case::Subj);
+                        format!("{o} leaves the battlefield")
+                    }
+                    _ => until_event(until),
+                };
                 format!("exile {w} until {u}")
             }
             Effect::PhaseOutUntil { what, until } => {
@@ -7559,6 +7565,7 @@ fn until_event(u: &UntilEvent) -> String {
     match u {
         UntilEvent::SourceLeavesBattlefield => "~ leaves the battlefield".into(),
         UntilEvent::OpponentBecomesMonarch => "an opponent becomes the monarch".into(),
+        UntilEvent::TargetLeavesBattlefield(_) => "that permanent leaves the battlefield".into(),
     }
 }
 

@@ -127,3 +127,21 @@ fn start(g: &mut Game, due: impl Fn(&Game, &Scheduled) -> bool) {
     }
     g.dirty = true;
 }
+
+/// "Until end of combat on your next turn" (Brazen Cannonade): as a combat phase or a turn
+/// of the effect's controller ends, effects created in an earlier turn end. A turn
+/// without a combat phase ends them as it ends (see the interpretation
+/// `end-of-combat-on-your-next-turn-without-combat`).
+pub fn expire_end_of_combat_on_next_turn(g: &mut Game) {
+    let turn = g.turn.number;
+    let actives = g.active_players();
+    let ends = |d: &Duration, c: PlayerId, created: u32| {
+        matches!(d, Duration::UntilEndOfCombatOnYourNextTurn)
+            && actives.contains(&c)
+            && created < turn
+    };
+    g.play_grants
+        .retain(|x| !ends(&x.duration, x.player, x.turn));
+    g.effects
+        .retain(|x| !ends(&x.duration, x.controller, x.created_turn));
+}

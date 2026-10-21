@@ -1135,6 +1135,11 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
             " until your next end step",
             Duration::UntilYourNextStep(TriggerStep::End),
         ),
+        // CR 500.4: until the next end step (of any turn) begins.
+        (
+            " until the next end step",
+            Duration::UntilNextStep(TriggerStep::End),
+        ),
         (" until end of combat", Duration::EndOfCombat),
         (
             " until the end of your next turn",

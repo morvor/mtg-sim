@@ -2043,6 +2043,12 @@ pub enum Duration {
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),
+    /// "until end of combat on your next turn": until the first combat phase of the
+    /// controller's next turn ends, or that turn ends if it has none (see
+    /// `next_turn::expire_end_of_combat_on_next_turn`).
+    UntilEndOfCombatOnYourNextTurn,
+    /// "until the next end step": until the next end step (of any turn) begins (CR 500.4).
+    UntilNextStep(TriggerStep),
     /// "until a player planeswalks" (CR 901.11); with `away_from_plane`, "until a player
     /// planeswalks away from a plane" (planeswalking away from only a phenomenon doesn't
     /// end it).
@@ -4879,6 +4885,9 @@ pub enum UntilEvent {
     /// "until an opponent becomes the monarch" (an opponent of the effect's controller,
     /// CR 725): it ends when one does, not merely because an opponent is the monarch.
     OpponentBecomesMonarch,
+    /// "until [target enchantment you control] leaves the battlefield": the object chosen
+    /// as the target in that slot, as the effect begins (CR 610.3).
+    TargetLeavesBattlefield(u8),
 }
 
 impl Effect {
