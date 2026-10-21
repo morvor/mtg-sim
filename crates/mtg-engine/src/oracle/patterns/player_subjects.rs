@@ -762,11 +762,20 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
             let orig = plural_to_singular(pred);
             let e = instruction(pred, orig.as_deref(), b)?;
             with_outer_x(e, |e| {
+                // "you and target opponent each choose a creature that player controls":
+                // the objects both players chose ("those creatures").
+                let theirs = match &e {
+                    Effect::Store { var, sel } => Effect::Store {
+                        var: *var,
+                        sel: Sel::Union(vec![Sel::Var(*var), sel.clone()]),
+                    },
+                    _ => e.clone(),
+                };
                 Effect::seq(vec![
-                    e.clone(),
+                    e,
                     Effect::AsPlayer {
                         who: other,
-                        effect: Box::new(e),
+                        effect: Box::new(theirs),
                     },
                 ])
             })

@@ -264,7 +264,7 @@ fn choices_view(g: &Game, viewer: Viewer, o: &GameObject) -> Vec<String> {
             if visible {
                 format!(
                     "{who} chose {}",
-                    mtg_engine::choices::describe(c).join(", ")
+                    mtg_engine::choices::describe_in(g, c).join(", ")
                 )
             } else {
                 format!("{who} chose secretly")

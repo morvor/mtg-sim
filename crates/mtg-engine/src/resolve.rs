@@ -1548,7 +1548,7 @@ impl Game {
                     let pick = if *random {
                         use rand::seq::SliceRandom;
                         let mut h = hand.clone();
-                        h.shuffle(&mut g.rng);
+                        h.shuffle(g.rng_for(p));
                         h.into_iter().take(k as usize).collect()
                     } else {
                         g.ask_objects(p, rctx.source, "Choose cards to discard", hand, k, k)
@@ -2427,6 +2427,9 @@ impl Game {
                 if let Some(v) = store {
                     ctx.vars.insert(*v, picked.clone());
                 }
+                // "you and target opponent each secretly choose a creature": not shown to
+                // the other players until revealed.
+                crate::choices::record_secret_objects(self, p, &picked, ctx);
                 picked
             }
             Sel::AtRandom {

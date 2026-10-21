@@ -98,6 +98,7 @@ fn restart_game(g: &mut Game, req: RestartRequest) {
     new.agents = g.agents.clone();
     new.observer = g.observer.clone();
     new.rng = g.rng.clone();
+    new.player_rngs = g.player_rngs.clone();
     new.logging = g.logging;
     new.log = std::mem::take(&mut g.log);
     new.start.sticker_sheets = std::mem::take(&mut g.start.sticker_sheets);

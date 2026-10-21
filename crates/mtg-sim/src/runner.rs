@@ -31,7 +31,7 @@ pub fn install_panic_hook() {
     }));
 }
 
-fn take_panic() -> Option<String> {
+pub fn take_panic() -> Option<String> {
     let mut v = LAST_PANIC.lock().unwrap_or_else(|e| e.into_inner());
     let me = std::thread::current().id();
     let i = v.iter().position(|(t, _)| *t == me)?;
@@ -60,6 +60,9 @@ pub enum AgentSpec {
     Passive,
     /// An external program speaking the JSON protocol.
     Command(String),
+    /// The answers a seat gave in a transcript (`--transcript`), replayed: every request
+    /// must be the recorded one (docs/PROPERTIES.md).
+    Replay(String),
 }
 
 impl AgentSpec {
@@ -67,9 +70,12 @@ impl AgentSpec {
         match s {
             "random" => AgentSpec::Random,
             "passive" => AgentSpec::Passive,
-            _ => match s.strip_prefix("cmd:") {
-                Some(c) if !c.trim().is_empty() => AgentSpec::Command(c.to_string()),
-                _ => panic!("unknown agent {s:?} (random, passive or cmd:COMMAND)"),
+            _ => match (s.strip_prefix("cmd:"), s.strip_prefix("replay:")) {
+                (Some(c), _) if !c.trim().is_empty() => AgentSpec::Command(c.to_string()),
+                (_, Some(f)) if !f.trim().is_empty() => AgentSpec::Replay(f.to_string()),
+                _ => panic!(
+                    "unknown agent {s:?} (random, passive, cmd:COMMAND or replay:TRANSCRIPT)"
+                ),
             },
         }
     }
@@ -146,6 +152,8 @@ pub fn play(
             let ledger: Arc<Mutex<Ledger>> = Arc::default();
             let mut game: Option<Game> = None;
             let mut connections: Vec<(PlayerId, ChildTransport)> = Vec::new();
+            let mut replays: Vec<(PlayerId, mtg_api::replay::ReplayTransport)> = Vec::new();
+            let divergences: mtg_api::replay::Divergences = Arc::default();
             let r = panic::catch_unwind(AssertUnwindSafe(|| {
                 let agents: Vec<Box<dyn Agent>> = (0..decks.len())
                     .map(|p| {
@@ -180,6 +188,19 @@ pub fn play(
                                 connections.push((seat, conn));
                                 Box::new(agent)
                             }
+                            AgentSpec::Replay(path) => {
+                                let text = std::fs::read_to_string(&path)
+                                    .unwrap_or_else(|e| panic!("can't read {path}: {e}"));
+                                let t = mtg_api::replay::Transcript::parse(&text);
+                                let options = ProtocolOptions {
+                                    auto_pass: external.auto_pass,
+                                    ..Default::default()
+                                };
+                                let (agent, handle) =
+                                    mtg_api::replay::replay_agent(seat, &t, options, &divergences);
+                                replays.push((seat, handle));
+                                Box::new(agent)
+                            }
                         }
                     })
                     .collect();
@@ -188,7 +209,7 @@ pub fn play(
                     decks.iter().map(|d| d.main.clone()).collect(),
                     agents,
                 ));
-                if !connections.is_empty() {
+                if !connections.is_empty() || !replays.is_empty() {
                     mtg_api::prepare_game(g);
                 }
                 // Sideboards stay outside the game (a companion may be revealed from them).
@@ -238,6 +259,21 @@ pub fn play(
                     mtg_api::Transport::game_over(&mut conn, &mtg_api::GameOver::new(g, seat));
                 }
                 conn.shut_down();
+            }
+            // A replayed seat must have been asked exactly the recorded requests.
+            if let Some(g) = game.as_ref() {
+                for (seat, t) in &replays {
+                    t.check_end(&mtg_api::GameOver::new(g, *seat));
+                }
+            }
+            for d in divergences.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+                violations2
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push(Violation {
+                        turn: game.as_ref().map_or(0, |g| g.turn.number),
+                        what: format!("replay: {d}"),
+                    });
             }
             let turn = game.as_ref().map_or(0, |g| g.turn.number);
             let log: Vec<String> = game.as_ref().map_or(Vec::new(), |g| {

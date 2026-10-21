@@ -30,7 +30,7 @@ pub const HIGH_BIDDER: Var = vars::USER + 30521;
 pub const HIGH_BID: Var = vars::USER + 30522;
 
 /// The highest bid a player may make (no real limit: a bid isn't a payment).
-const MAX_BID: i64 = 1_000_000;
+const MAX_BID: i64 = crate::choices::MAX_CHOSEN_NUMBER as i64;
 
 /// Runs the bidding among `bidders` (you first), with the opening bid `start` (`None`:
 /// any number you choose).

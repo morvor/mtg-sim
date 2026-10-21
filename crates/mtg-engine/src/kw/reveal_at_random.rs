@@ -85,11 +85,11 @@ impl KeywordRules for RevealAtRandom {
             }
             if n == 1 {
                 use rand::Rng;
-                let card = hand[g.rng.gen_range(0..hand.len())];
+                let card = hand[g.rng_for(p).gen_range(0..hand.len())];
                 hand = vec![card];
             } else {
                 use rand::seq::SliceRandom;
-                hand.shuffle(&mut g.rng);
+                hand.shuffle(g.rng_for(p));
                 hand.truncate(n);
             }
             crate::reveal::reveal_in(g, p, &hand, Some(ctx));

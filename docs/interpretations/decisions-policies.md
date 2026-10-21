@@ -209,3 +209,15 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Affects: every random event.
 - Code: `crates/mtg-engine/src/game.rs` (`Game::rng`, `shuffle_library`, `GameConfig::seed`); `crates/mtg-engine/src/dice.rs`.
 - Tests: `tests/cr/interp_decision_defaults.rs` (`random_results_come_from_the_games_seed`).
+
+## unbounded-number-ceiling: "Choose a number" with no upper limit goes up to 1,000,000
+- Kind: deviation
+- Status: decided
+- Rules: 107.1 "The only numbers the Magic game uses are integers." / 107.1a "You can’t choose a fractional number, deal fractional damage, gain fractional life, and so on. ..." / Menacing Ogre ruling: "You have to choose zero or a positive number. You can’t choose a negative number."
+- Question: "Choose a number" (Void, Menacing Ogre), "a number 0 or greater" (Wheel of Misfortune), "a number greater than 0" (Mindblaze), "hides at least one item" (Goblin Game) set no upper limit. What range does the number decision offer?
+- Decision: From the least number the text allows to `choices::MAX_CHOSEN_NUMBER` (1,000,000), shown to agents as the decision's `max` (mtg-api `number` spec). An answer outside the range is invalid and the least number is chosen (`default-numbers`). The same ceiling bounds life bids (`bidding.rs`) and "any number of counters" moved.
+- Alternatives: No maximum at all (the protocol can express it: a `number` spec without `max`), which needs every arithmetic path that a chosen number reaches (life totals, damage, counters, all 32-bit) to saturate; the former ceiling of 1000, which a player could want to exceed (losing more life than 1000 is never needed, but numbers are also compared and matched against mana values and card counts).
+- Why: A million is beyond every life total, library, card count or mana value of a real game (outside the un-cards not supported), so no choice a player could want is excluded, while the engine's 32-bit game arithmetic stays exact.
+- Affects: Void, Menacing Ogre, Wheel of Misfortune, Mindblaze, Goblin Game, "As ~ enters, choose a number", bidding (Illicit Auction, Pain's Reward, ...), "move any number of counters".
+- Code: `crates/mtg-engine/src/choices.rs` (`MAX_CHOSEN_NUMBER`); `crates/mtg-engine/src/oracle/patterns/choice_grammar_secret_numbers.rs`, `choice_grammar_multi.rs`, `etb_choices.rs`, `r122_move_counters.rs`; `crates/mtg-engine/src/bidding.rs`.
+- Tests: `tests/cards/choices_number_ceiling.rs`.
