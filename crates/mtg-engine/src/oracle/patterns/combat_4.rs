@@ -1236,3 +1236,42 @@ fn s_not_declared<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "combat 4: not declared as an attacking or blocking creature this combat", priority: 100, parse: s_not_declared } }
+
+/// "you attack enchanted opponent or a planeswalker they control or when they attack you
+/// or a planeswalker you control" (Tenuous Truce): attacks between the Aura's controller
+/// and the enchanted player, either way (see `kw::combat_history_4`).
+fn t_attacks_between_you_and_enchanted(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    use crate::kw::combat_history_4::{ENCHANTED_ATTACKS_YOU, YOU_ATTACK_ENCHANTED};
+    let r = r
+        .strip_prefix("when ")
+        .or_else(|| r.strip_prefix("whenever "))
+        .unwrap_or(r);
+    let one = |s: &str| -> Option<TriggerCond> {
+        match s {
+            "you attack enchanted opponent or a planeswalker they control"
+            | "you attack enchanted player or a planeswalker they control" => {
+                Some(TriggerCond::Custom(YOU_ATTACK_ENCHANTED.into()))
+            }
+            "enchanted opponent attacks you or a planeswalker you control"
+            | "enchanted player attacks you or a planeswalker you control" => {
+                Some(TriggerCond::Custom(ENCHANTED_ATTACKS_YOU.into()))
+            }
+            _ => None,
+        }
+    };
+    let trigger = match r.split_once(" or when they attack ") {
+        Some((a, b)) if b == "you or a planeswalker you control" => {
+            TriggerCond::AnyOf(vec![one(a)?, TriggerCond::Custom(ENCHANTED_ATTACKS_YOU.into())])
+        }
+        Some(_) => return None,
+        None => one(r)?,
+    };
+    if !matches!(&trigger, TriggerCond::AnyOf(_))
+        && !matches!(&trigger, TriggerCond::Custom(_))
+    {
+        return None;
+    }
+    Some((trigger, Sel::None, PlayerRef::TriggerPlayer))
+}
+
+inventory::submit! { super::TriggerPattern { name: "combat 4: you attack enchanted opponent / they attack you", priority: 90, parse: t_attacks_between_you_and_enchanted } }

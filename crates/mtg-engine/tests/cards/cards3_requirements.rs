@@ -309,3 +309,40 @@ fn hollow_warrior_attacks_by_tapping_a_creature_not_attacking() {
     assert!(t.g.obj(bears).tapped);
     assert!(!t.g.obj(angel).tapped);
 }
+
+#[test]
+fn tenuous_truce_ends_when_either_side_attacks_the_other() {
+    cr!("508.3a");
+    supported("Tenuous Truce");
+    let mk = || {
+        let mut t = TestGame::with_config(
+            3,
+            GameConfig {
+                attack_multiple_players: true,
+                ..Default::default()
+            },
+        );
+        let truce = t.battlefield(P0, "Tenuous Truce");
+        t.g.attach(truce, Entity::Player(P1));
+        (t, truce)
+    };
+    // A third player attacking P0 doesn't end it.
+    let (mut t, truce) = mk();
+    let other = t.battlefield(P2, "Grizzly Bears");
+    declare(&mut t, P2, &[(other, Entity::Player(P0))]);
+    t.resolve_all();
+    assert!(t.on_battlefield(truce));
+    // The enchanted player attacking P0 does.
+    let (mut t, truce) = mk();
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    declare(&mut t, P1, &[(theirs, Entity::Player(P0))]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(truce));
+    // P0 attacking the enchanted player's planeswalker does too.
+    let (mut t, truce) = mk();
+    let pw = t.battlefield(P1, "Ajani Goldmane");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    declare(&mut t, P0, &[(mine, Entity::Object(pw))]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(truce));
+}

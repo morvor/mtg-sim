@@ -33,6 +33,11 @@ pub const BEING_DECLARED: Var = vars::USER + 13375;
 /// `Filter::Custom`: not one of the creatures being declared as attackers or blockers
 /// this combat (nor one declared earlier this combat).
 pub const NOT_DECLARED: &str = "combat4:not declared as an attacking or blocking creature";
+/// `TriggerCond::Custom`: "you attack enchanted opponent or a planeswalker they control".
+pub const YOU_ATTACK_ENCHANTED: &str = "combat4:you attack enchanted player or their planeswalker";
+/// `TriggerCond::Custom`: "[enchanted opponent] attack(s) you or a planeswalker you
+/// control".
+pub const ENCHANTED_ATTACKS_YOU: &str = "combat4:enchanted player attacks you or your planeswalker";
 /// While an attack tax is determined: what the creature would attack.
 pub const ATTACK_TARGET: Var = vars::USER + 13373;
 
@@ -92,6 +97,55 @@ impl KeywordRules for CombatHistory4 {
             crate::combat::reselect_attack_target(g, a, Entity::Player(player));
         }
         true
+    }
+
+    /// "When you attack enchanted opponent or a planeswalker they control or when they
+    /// attack you or a planeswalker you control" (Tenuous Truce): attackers are declared
+    /// (CR 508.3a) attacking that player or a planeswalker of theirs.
+    fn custom_trigger(
+        &self,
+        g: &Game,
+        name: &str,
+        src: ObjectId,
+        ctl: PlayerId,
+        ev: &crate::events::Event,
+    ) -> Option<Vec<crate::object::EventInfo>> {
+        let you_attack = match name {
+            YOU_ATTACK_ENCHANTED => true,
+            ENCHANTED_ATTACKS_YOU => false,
+            _ => return None,
+        };
+        let crate::events::Event::AttackersDeclared {
+            player, attackers, ..
+        } = ev
+        else {
+            return Some(vec![]);
+        };
+        let Some(Entity::Player(enchanted)) = g.obj(src).attached_to else {
+            return Some(vec![]);
+        };
+        let (attacker, defender) = if you_attack {
+            (ctl, enchanted)
+        } else {
+            (enchanted, ctl)
+        };
+        if *player != attacker {
+            return Some(vec![]);
+        }
+        let hit = attackers.iter().any(|(_, t)| match t {
+            Entity::Player(p) => *p == defender,
+            Entity::Object(o) => {
+                g.obj(*o).is(CardType::Planeswalker) && g.obj(*o).controller == defender
+            }
+        });
+        Some(if hit {
+            vec![crate::object::EventInfo {
+                player: Some(defender),
+                ..Default::default()
+            }]
+        } else {
+            vec![]
+        })
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
