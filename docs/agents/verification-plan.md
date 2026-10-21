@@ -79,6 +79,10 @@ Waiting:
 - rulings-2: P193, P046;
 - compile: the rest of its round-trip items.
 
+### The 733.1 entry (user, Oct 21 evening)
+
+The scan test written for `illegal-action-reversal-restores-libraries` found that 16 supported cards do reach 733.1's library exceptions, through replacement effects. When the user accepted the entry, the claim was that none could. The user chose to fix it: item `reversal-library-exceptions` (items/reversal-library-exceptions.md). It goes to the structure worker after `property-tests-2`, once the hold ends.
+
 ## The judge audit (E)
 
 **Result (Oct 14).** The judge agreed with all 225 questions from 58 tests. See reports/judge-audit-1.md: method, limits, and two calls for the interpretation register.
