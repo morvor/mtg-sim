@@ -536,6 +536,29 @@ impl Renderer<'_> {
         {
             return "{alt:it|that permanent or player}".into();
         }
+        // "~ deals 7 damage divided as you choose among one, two, or three targets. ...
+        // instead ~ deals 7 damage to each of those permanents and/or players."
+        if self.targets.get(idx).is_some_and(|t| t.divide.is_some()) && !matches!(case, Case::Poss)
+        {
+            return "{alt:it|them|each of those permanents and/or players|each of them}".into();
+        }
+        // "Target creature you control fights target creature an opponent controls. If
+        // the creature an opponent controls would die this turn, ...": one of several
+        // targets named again by its words.
+        if !matches!(case, Case::Poss) && self.targets.len() >= 2 {
+            if let Some(words) = self
+                .targets
+                .get(idx)
+                .and_then(|t| t.text.strip_prefix("target "))
+                .filter(|w| {
+                    (w.ends_with(" control") || w.ends_with(" controls"))
+                        && !w.contains(['{', '|'])
+                        && !w.contains(" or ")
+                })
+            {
+                return format!("{{alt:it|the {words}}}");
+            }
+        }
         match case {
             Case::Poss => "its".into(),
             _ => "it".into(),
@@ -718,6 +741,15 @@ impl Renderer<'_> {
                 };
                 let x = (**x).clone();
                 self.sel(&x, case)
+            }
+            // "Sacrifice those tokens at end of combat": the tokens created, those you
+            // still control (a player sacrifices only permanents they control, CR
+            // 701.21a).
+            Sel::All(Filter::And(v))
+                if matches!(v.as_slice(), [Filter::In(c), Filter::ControlledBy(PlayerRel::You)]
+                    if matches!(c.as_ref(), Sel::Var(x) if *x == vars::CREATED)) =>
+            {
+                decline("{alt:those tokens|the tokens|that token|the token}".into(), case)
             }
             // The cards exiled with this object that are still in exile: "the exiled card"
             // (an object that exiles one card, as with imprint) or "each card exiled with
@@ -951,6 +983,20 @@ impl Renderer<'_> {
                                 format!("{{alt:your {x} and your {y}|your {x} and {y}}}"),
                                 case,
                             );
+                        }
+                    }
+                }
+                // "your hand, graveyard, and all permanents you own": a list of zones of
+                // the same player, the owner said once or for each.
+                if parts.len() > 2 {
+                    let orig = parts.clone();
+                    for i in 1..parts.len() {
+                        let one_zone = orig[i]
+                            .strip_prefix("your ")
+                            .filter(|x| !x.contains(' '))
+                            .map(str::to_string);
+                        if let (true, Some(z)) = (orig[i - 1].starts_with("your "), one_zone) {
+                            parts[i] = format!("{{opt:your}} {z}");
                         }
                     }
                 }

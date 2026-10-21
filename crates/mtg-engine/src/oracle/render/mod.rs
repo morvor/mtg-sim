@@ -37,6 +37,7 @@ mod events_happened;
 mod extremes;
 mod flashback_reduction;
 mod graveyard_this_way;
+mod guesses;
 mod history_values;
 mod joined_lines;
 mod keywords;
@@ -49,6 +50,7 @@ mod named_statics;
 mod next_time;
 mod nouns;
 mod object_counts;
+mod off_battlefield;
 mod once_each_turn;
 mod opt_in;
 mod outcomes;
@@ -63,6 +65,7 @@ mod statics;
 mod tail_filters;
 mod tail_parts;
 mod this_turn;
+mod token_copies;
 mod trigger_causes;
 mod triggers;
 mod values;
@@ -227,6 +230,30 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
             }
             out.lines.push(format!("Gift {what}"));
             continue;
+        }
+        // "~ is also a Cleric, Rogue, Warrior, and Wizard.": subtypes a CDA adds to the
+        // object's own (CR 604.3a), in every zone.
+        if let AbilityKind::Static(s) = &a.kind {
+            if let (
+                true,
+                None,
+                StaticEffect::Continuous {
+                    affected: Filter::Source,
+                    mods,
+                },
+            ) = (s.is_cda, &s.condition, &s.effect)
+            {
+                if let [Modification::AddSubtypes(v)] = mods.as_slice() {
+                    let w: Vec<String> = v.iter().map(|x| x.to_string()).collect();
+                    if !w.is_empty() {
+                        out.lines.push(format!(
+                            "~ is also {}.",
+                            with_article(&join_list(&w, "and"))
+                        ));
+                        continue;
+                    }
+                }
+            }
         }
         // "Equip {10}. This ability costs {X} less to activate, where X is ...".
         if let Some(line) = abilities.get(i + 1).and_then(|next| {
@@ -872,6 +899,12 @@ pub struct Renderer<'a> {
     pub(crate) x_for_each: Option<String>,
     /// The trigger condition names an opponent ("a land an opponent controls enters").
     pub(crate) trigger_names_opponent: bool,
+    /// The objects the triggered ability's intervening "if" says exist ("if you control
+    /// one or more other creatures that spell could target"): "those creatures" later.
+    pub(crate) intervening_exists: Option<Filter>,
+    /// Rendering a static ability: a choice it refers to was made by another ability of
+    /// the object, possibly more than once ("the last chosen color").
+    pub(crate) in_static: bool,
     /// The keyword an activated ability is introduced by ("Boast — ...").
     pub(crate) keyword_ability: Option<crate::keywords::KeywordKind>,
     /// The head noun of what the cost sacrificed ("the sacrificed artifact").
@@ -1033,6 +1066,8 @@ impl<'a> Renderer<'a> {
             chosen_one: Vec::new(),
             x_for_each: None,
             trigger_names_opponent: false,
+            intervening_exists: None,
+            in_static: false,
             keyword_ability: None,
             plural_vars: Vec::new(),
             play_terms: None,
@@ -1151,6 +1186,7 @@ impl<'a> Renderer<'a> {
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
         self.extra.x_paid = false;
+        self.extra.x_energy = false;
         self.var_defs.clear();
         self.outer_vars.clear();
         self.it_done = None;
@@ -1161,6 +1197,7 @@ impl<'a> Renderer<'a> {
         self.stored_values.clear();
         self.stored_this_way.clear();
         self.trigger_player = None;
+        self.intervening_exists = None;
         self.revealed_hand = false;
         self.chosen_up_to_one.clear();
         self.chosen_one.clear();
@@ -1202,7 +1239,9 @@ impl<'a> Renderer<'a> {
                     &mut self.grants_to_equipment,
                     statics::grants_to_equipment(s),
                 );
+                let saved_static = std::mem::replace(&mut self.in_static, true);
                 let t = self.static_ability(s);
+                self.in_static = saved_static;
                 self.grants_to_equipment = saved;
                 t
             }

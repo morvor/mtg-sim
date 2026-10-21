@@ -445,8 +445,9 @@ impl Renderer<'_> {
                 number_word(min)
             ),
             "max_mana_spent_of_one_color" => format!(
-                "at least {} mana of the same color was spent to cast it",
-                number_word(min)
+                "at least {} mana of the same color was spent to cast {}",
+                number_word(min),
+                self.me()
             ),
             _ => return None,
         })
@@ -527,11 +528,13 @@ impl Renderer<'_> {
             "turn:this dealt damage to an opponent" => {
                 format!("{} dealt damage to an opponent this turn", me(self))
             }
+            // A spell's own cost: the spell isn't cast until its costs are paid (CR
+            // 601.2i), so "a spell" cast this turn is another one.
             "spell_costs:cast_another_spell_this_turn" => {
-                "you've cast another spell this turn".into()
+                "you've cast {alt:another|a} spell this turn".into()
             }
             "spell_costs:cast_another_instant_or_sorcery_this_turn" => {
-                "you've cast another instant or sorcery spell this turn".into()
+                "you've cast {alt:another|an} instant or sorcery spell this turn".into()
             }
             "dethrone:it's attacking the player with the most life" => {
                 "it's attacking the player with the most life or tied for most life".into()
@@ -941,6 +944,18 @@ impl Renderer<'_> {
                     "doesn't"
                 };
                 format!("{subj} {dont} lose unspent {color} mana as steps and phases end")
+            }
+            // "If you would lose unspent mana, that mana becomes red instead." (CR 614.1a).
+            n if you
+                && n.strip_prefix(crate::mana_abilities::UNSPENT_MANA_BECOMES)
+                    .is_some_and(|t| t.len() == 2 && t.starts_with(' ')) =>
+            {
+                let t = crate::mana::ManaType::from_letter_str(&n[n.len() - 1..]);
+                let what = match t.and_then(|t| t.color()) {
+                    Some(c) => c.word(),
+                    None => "colorless",
+                };
+                format!("if you would lose unspent mana, that mana becomes {what} instead")
             }
             // Mana burn (CR 500.5 as it once was): each player affected loses life.
             crate::kw::mana_grammar::MANA_BURN if matches!(subj, "players" | "each player") => {

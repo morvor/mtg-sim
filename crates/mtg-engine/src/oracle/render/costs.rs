@@ -52,8 +52,8 @@ impl Renderer<'_> {
         if parts.is_empty() {
             return "{0}".into();
         }
-        // "Sacrifice a black creature, a red creature, and a green creature": consecutive
-        // sacrifices are one instruction.
+        // "Sacrifice a black creature, a red creature, and a green creature", "Sacrifice ~
+        // and another green creature": consecutive sacrifices are one instruction.
         let mut merged: Vec<String> = Vec::new();
         let mut run: Vec<String> = Vec::new();
         let flush = |run: &mut Vec<String>, merged: &mut Vec<String>| {
@@ -66,7 +66,9 @@ impl Renderer<'_> {
         };
         for p in parts {
             match p.strip_prefix("Sacrifice ") {
-                Some(what) if !what.starts_with('~') && !what.contains(['{', '|']) => {
+                Some(what)
+                    if (what == "~" || !what.starts_with('~')) && !what.contains(['{', '|']) =>
+                {
                     run.push(what.to_string())
                 }
                 _ => {
@@ -384,7 +386,12 @@ impl Renderer<'_> {
     pub(crate) fn cost_as_payment(&mut self, c: &Cost) -> String {
         let mut parts: Vec<String> = Vec::new();
         if let Some(m) = &c.mana {
-            parts.push(format!("pay {m}"));
+            // "pays {1} for each {E} paid this way" (Aether Spike): X is the energy paid.
+            if self.extra.x_paid && self.extra.x_energy && m.to_string() == "{X}" {
+                parts.push("pay {alt:{X}|{1} for each {E} paid this way}".into());
+            } else {
+                parts.push(format!("pay {m}"));
+            }
         }
         for p in &c.parts {
             match p {

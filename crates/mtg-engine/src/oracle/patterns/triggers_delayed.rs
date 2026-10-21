@@ -345,6 +345,9 @@ pub fn capture(e: &Effect) -> Option<(Vec<Effect>, Effect)> {
                 };
                 store(var, eff, used)
             }
+            // An ability the instruction creates or grants: its own object and targets
+            // (CR 113.7, 111.3).
+            J::Object(m) if m.contains_key("uid") && m.contains_key("kind") => J::Object(m),
             J::Object(m) => {
                 if m.len() == 1 {
                     if let Some(J::Number(n)) = m.get("Target") {
