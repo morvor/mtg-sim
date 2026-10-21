@@ -2835,6 +2835,14 @@ pub enum Restriction {
     },
     /// "can attack as though it didn't have defender" (overrides CR 702.3b).
     AttackDespiteDefender(Filter),
+    /// "~ can attack players who attacked you during their last turn as though it didn't
+    /// have defender" (Weathered Sentinels; overrides CR 702.3b for some players): it can
+    /// attack a player for whom `players` holds, evaluated with that player as the
+    /// iterated player ([`PlayerRef::Iterated`]); not planeswalkers or battles.
+    AttackPlayersDespiteDefender {
+        attackers: Filter,
+        players: Box<Condition>,
+    },
     /// "[attackers] can attack as though they had haste" (CR 302.6, 508.1a with 609.4):
     /// they may attack though their controller hasn't controlled them continuously since
     /// their most recent turn began. With `defender`, only those players and planeswalkers

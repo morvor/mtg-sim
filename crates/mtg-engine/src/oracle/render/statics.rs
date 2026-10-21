@@ -1973,6 +1973,11 @@ impl Renderer<'_> {
                 "{} can attack as though it didn't have defender",
                 subj(self, f)
             ),
+            Restriction::AttackPlayersDespiteDefender { attackers, players } => format!(
+                "{} can attack players for whom {} as though it didn't have defender",
+                subj(self, attackers),
+                self.condition(players)
+            ),
             Restriction::AttackAsThoughHaste {
                 attackers,
                 defender,

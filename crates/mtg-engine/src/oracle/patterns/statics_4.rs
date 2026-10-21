@@ -387,3 +387,37 @@ fn f_cards_exiled_this_way_gain_suspend(l: &str, prev: &mut Effect, _b: &mut Bui
 }
 
 inventory::submit! { FollowupPattern { name: "statics 4: cards exiled this way that don't have suspend gain suspend", priority: 60, apply: f_cards_exiled_this_way_gain_suspend } }
+
+/// "~ can attack players who attacked you during their last turn as though it didn't have
+/// defender" (Weathered Sentinels): CR 702.3b doesn't stop it from attacking those
+/// players. "players who [did it]" is read as the condition "a player [did it]" about each
+/// player in turn.
+fn s_attack_players_despite_defender(
+    block: &str,
+    _norm: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let lower = text.to_lowercase();
+    let who = end(&lower)
+        .strip_prefix("~ can attack players who ")?
+        .strip_suffix(" as though it didn't have defender")?;
+    let cond = crate::oracle::statics::parse_condition(&format!("a player {who}"), ctx)?;
+    // "a player [did it]" over all players: the comparison of each one's own value.
+    let Condition::Compare(Value::OverPlayers(AggOp::Max, PlayerFilter::Any, v), cmp, n) = cond
+    else {
+        return None;
+    };
+    if !matches!(cmp, Cmp::Ge | Cmp::Gt) {
+        return None;
+    }
+    let st = StaticAbility::new(StaticEffect::Restriction(
+        Restriction::AttackPlayersDespiteDefender {
+            attackers: Filter::Source,
+            players: Box::new(Condition::Compare(*v, cmp, n)),
+        },
+    ));
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+inventory::submit! { super::StaticPattern { name: "statics 4: ~ can attack players who [did it] as though it didn't have defender", priority: 90, parse: s_attack_players_despite_defender } }

@@ -284,7 +284,8 @@ impl Game {
         // CR 702.3b, unless an effect lets it attack as though it didn't have defender.
         if o.has_keyword(KeywordKind::Defender)
             && !self.restricted_obj(id, |r| match r {
-                Restriction::AttackDespiteDefender(f) => Some(f),
+                Restriction::AttackDespiteDefender(f)
+                | Restriction::AttackPlayersDespiteDefender { attackers: f, .. } => Some(f),
                 _ => None,
             })
         {
@@ -293,6 +294,25 @@ impl Game {
         !self.restricted_obj(id, |r| match r {
             Restriction::CantAttack(f) | Restriction::CantAttackOrBlock(f) => Some(f),
             _ => None,
+        })
+    }
+
+    /// Whether an "attack players who ... as though it didn't have defender" restriction
+    /// lets the creature `id` attack `target` (a player it covers).
+    fn defender_may_attack_player(&self, id: ObjectId, target: Entity) -> bool {
+        let Entity::Player(p) = target else {
+            return false;
+        };
+        self.all_restrictions().iter().any(|(s, c, r, locked)| {
+            let Restriction::AttackPlayersDespiteDefender { attackers, players } = r else {
+                return false;
+            };
+            let mut ctx = Ctx::new(*s, *c);
+            if !self.restriction_applies(id, attackers, &ctx, locked) {
+                return false;
+            }
+            ctx.iter_player = Some(p);
+            self.eval_cond(players, &ctx)
         })
     }
 
@@ -325,6 +345,17 @@ impl Game {
             if !crate::seats::attack_allowed(self, o.controller, p, is_battle) {
                 return false;
             }
+        }
+        // "can attack players who ... as though it didn't have defender": only those
+        // players, unless it can attack as though it didn't have defender at all.
+        if o.has_keyword(KeywordKind::Defender)
+            && !self.restricted_obj(id, |r| match r {
+                Restriction::AttackDespiteDefender(f) => Some(f),
+                _ => None,
+            })
+            && !self.defender_may_attack_player(id, target)
+        {
+            return false;
         }
         // "can't attack a player it has already attacked this turn" (CR 508.6).
         if let Entity::Player(p) = target {

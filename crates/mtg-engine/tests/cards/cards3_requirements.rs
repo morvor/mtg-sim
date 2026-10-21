@@ -370,3 +370,24 @@ fn fight_or_flight_only_the_chosen_pile_can_attack() {
     assert!(!legal_attack(&mut t, &[(bears, p0)]));
     assert!(legal_attack(&mut t, &[(giant, p0), (lions, p0)]));
 }
+
+#[test]
+fn weathered_sentinels_can_attack_only_players_who_attacked_you_last_turn() {
+    cr!("702.3b");
+    supported("Weathered Sentinels");
+    let mut t = TestGame::new(3);
+    let sentinels = t.battlefield(P0, "Weathered Sentinels");
+    let goblin = t.battlefield(P1, "Goblin Piker");
+    t.set_step(P0, Step::PrecombatMain);
+    t.g.recompute();
+    // Nobody attacked P0 yet: defender stops it.
+    assert!(!t.g.can_attack_target(sentinels, Entity::Player(P1)));
+    assert!(!t.g.can_attack_target(sentinels, Entity::Player(P2)));
+    t.advance_to(P1, Step::PrecombatMain);
+    t.attack(&[(goblin, Entity::Player(P0))], &[]);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert!(t.g.can_attack(sentinels));
+    assert!(t.g.can_attack_target(sentinels, Entity::Player(P1)));
+    // P2 didn't attack P0 during their last turn.
+    assert!(!t.g.can_attack_target(sentinels, Entity::Player(P2)));
+}
