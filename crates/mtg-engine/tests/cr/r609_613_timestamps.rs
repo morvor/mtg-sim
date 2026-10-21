@@ -328,6 +328,7 @@ fn enchanted_creature_is_white_gets_white_bonus() {
     // CR 613.9 example: "White creatures get +1/+1" and "Enchanted creature is white":
     // the creature gets +1/+1 regardless of its previous color.
     cr!("613.9");
+    cr_example!("613.9", "Enchanted creature is white");
     let mut t = TestGame::new(2);
     let c = t.custom(
         P0,

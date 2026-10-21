@@ -1485,6 +1485,9 @@ impl Game {
                             .count() as i64;
                     }
                 }
+                if !colors.is_colorless() {
+                    n += crate::game_terms::devotion_bonus(self, ctx.controller);
+                }
                 n
             }
             Value::Domain => {
