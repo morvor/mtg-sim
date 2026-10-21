@@ -8,7 +8,7 @@
 //! it, as the core grammar reads "[instruction] for as long as [condition]"; a second
 //! predicate of the same subject ("... and can't attack or block") is about it.
 
-use super::EffectPattern;
+use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::{parse_sentence, Builder};
 use crate::oracle::phrases::end;
@@ -238,6 +238,43 @@ fn for_as_long_as_theyre_the_monarch(l: &str, b: &mut Builder) -> Option<Effect>
 }
 
 inventory::submit! { EffectPattern { name: "durations 4: for as long as they're the monarch", priority: 100, parse: for_as_long_as_theyre_the_monarch } }
+
+/// "Power-up abilities can't be activated this turn" (Kang the Conqueror's "During that
+/// turn, ..." of its extra turn): a rule effect for the turn (`kw/durations_4.rs`).
+fn power_up_cant_be_activated(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let (d, r) = crate::oracle::effects::duration_suffix(end(l));
+    if r.trim() != "power-up abilities can't be activated" || !matches!(d, Duration::EndOfTurn) {
+        return None;
+    }
+    Some(Effect::AddRestriction {
+        restriction: Restriction::Custom(crate::kw::durations_4::POWER_UP_CANT_BE_ACTIVATED.into()),
+        duration: d,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "durations 4: power-up abilities can't be activated this turn", priority: 100, parse: power_up_cant_be_activated } }
+
+/// "Take an extra turn after this one. During that turn, [rule]." (Kang the Conqueror):
+/// the rule effect is created as that turn begins and lasts for it (as "this turn").
+fn during_that_extra_turn(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    use super::misc_game_rules_turns::{attach_to_extra_turn, ends_with_one_extra_turn};
+    if !ends_with_one_extra_turn(prev) {
+        return false;
+    }
+    let Some(r) = end(s).strip_prefix("during that turn, ") else {
+        return false;
+    };
+    let Some(e) = parse_sentence(&format!("{r} this turn"), b) else {
+        return false;
+    };
+    // Only a rule for that turn.
+    if !matches!(&e, Effect::AddRestriction { duration: Duration::EndOfTurn, .. }) {
+        return false;
+    }
+    attach_to_extra_turn(prev, e)
+}
+
+inventory::submit! { FollowupPattern { name: "durations 4: during that (extra) turn, [rule]", priority: 61, apply: during_that_extra_turn } }
 
 #[cfg(test)]
 mod tests {

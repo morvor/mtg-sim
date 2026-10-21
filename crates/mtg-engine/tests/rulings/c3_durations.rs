@@ -203,3 +203,30 @@ fn garland_keeps_the_creature_for_as_long_as_they_are_the_monarch() {
     t.g.recompute();
     assert_eq!(t.obj_now(bears).controller, P1);
 }
+
+#[test]
+fn kang_power_up_abilities_cant_be_activated_during_the_extra_turn() {
+    cr!("500.7", "702.193a", "602.5");
+    supported("Kang the Conqueror");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let kang = t.battlefield(P0, "Kang the Conqueror");
+    t.lands(P0, "Island", 8);
+    t.activate(P0, kang, 0, &[]).expect("power-up");
+    t.resolve_all();
+    assert_eq!(t.counters(kang, "+1/+1"), 1);
+    let turn = t.g.turn.number;
+    // Brawn ({1}{G/U}): "Power-up — {4}{G/U}: Put a +1/+1 counter on Brawn for each card
+    // in your hand."
+    let brawn = t.battlefield(P0, "Brawn, Amadeus Cho");
+    t.lands(P0, "Forest", 5);
+    t.set_step(P0, Step::End);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(t.g.turn.number, turn + 1);
+    assert_eq!(t.g.turn.active, P0);
+    assert!(!crate::r_s02_common::can_activate(&mut t, P0, brawn));
+    // The turn after (P1's) and then P0's next: it can.
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert!(crate::r_s02_common::can_activate(&mut t, P0, brawn));
+}

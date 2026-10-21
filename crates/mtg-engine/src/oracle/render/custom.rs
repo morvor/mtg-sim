@@ -906,6 +906,9 @@ impl Renderer<'_> {
             crate::kw::game_rules::ENCHANTED_ONLY_MANA_OR_LOYALTY => {
                 "enchanted player can't activate abilities that aren't mana abilities or loyalty abilities".into()
             }
+            crate::kw::durations_4::POWER_UP_CANT_BE_ACTIVATED => {
+                "power-up abilities can't be activated".into()
+            }
             crate::block_choice::ATTACKING_PLAYER_CHOOSES_BLOCKS => {
                 "the attacking player chooses how each creature blocks each combat".into()
             }
