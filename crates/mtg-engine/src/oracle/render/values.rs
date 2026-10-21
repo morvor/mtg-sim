@@ -703,6 +703,12 @@ impl Renderer<'_> {
             {
                 "it isn't being declared as an attacker".into()
             }
+            // "a spell or ability an opponent controls causes ..." (`kw/tap_causes.rs`).
+            Condition::Custom(n)
+                if n == crate::oracle::patterns::trigger_grammar_causes::CAUSED_BY_OPPONENT =>
+            {
+                "a spell or ability an opponent controls caused it".into()
+            }
             // "if you haven't cast the card" (`kw/delayed_conditions.rs`).
             Condition::Custom(n) if n.starts_with(crate::kw::delayed_conditions::STILL_EXILED) => {
                 "{alt:you haven't cast it|it remains exiled|you haven't played it|any of those cards remain exiled}".into()

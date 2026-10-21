@@ -60,3 +60,49 @@ fn not_declared_attacking(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { ConditionPattern { name: "trigger causes: it isn't being declared as an attacker", priority: 100, parse: not_declared_attacking } }
+
+/// `Condition::Custom`: the trigger event was caused by a spell or ability an opponent of
+/// the ability's controller controls (`EventInfo::caused_by`, `kw/tap_causes.rs`).
+pub const CAUSED_BY_OPPONENT: &str = "event cause: a spell or ability an opponent controls";
+
+/// Adds `cond` to the trigger event `t` (inside a batch, to each event of it).
+fn qualified(t: TriggerCond, cond: Condition) -> TriggerCond {
+    match t {
+        TriggerCond::Batched { trigger, per } => TriggerCond::Batched {
+            trigger: Box::new(qualified(*trigger, cond)),
+            per,
+        },
+        other => TriggerCond::Where {
+            trigger: Box::new(other),
+            cond,
+        },
+    }
+}
+
+/// "a spell or ability an opponent controls causes you to discard a card / cards"
+/// (Spiritual Focus, Pure Intentions): the discard events record the controller of the
+/// spell or ability whose effect made the player discard (`Event::Discarded::by`); a card
+/// discarded to pay a cost or by a game rule wasn't (Pure Intentions's rulings: "only the
+/// controller of the spell or ability matters").
+fn caused_by_opponent(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(t).strip_prefix("a spell or ability an opponent controls causes you to discard ")?;
+    if !matches!(r, "a card" | "cards" | "one or more cards") {
+        return None;
+    }
+    let what = if r == "cards" { "one or more cards" } else { r };
+    let (base, it, p) =
+        crate::oracle::triggers::parse_trigger_condition(&format!("whenever you discard {what}"))?;
+    if !matches!(
+        &base,
+        TriggerCond::Discards { .. } | TriggerCond::Batched { .. }
+    ) {
+        return None;
+    }
+    Some((
+        qualified(base, Condition::Custom(CAUSED_BY_OPPONENT.into())),
+        it,
+        p,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger causes: a spell or ability an opponent controls causes you to discard", priority: 100, parse: caused_by_opponent } }

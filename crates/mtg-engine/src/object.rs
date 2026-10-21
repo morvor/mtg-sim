@@ -333,6 +333,11 @@ pub struct EventInfo {
     /// (CR 508.1f; "if it isn't being declared as an attacker").
     #[serde(default)]
     pub attack_declaration: bool,
+    /// The controller of the spell or ability that caused the event, when the event
+    /// records it ("whenever a spell or ability an opponent controls causes you to discard
+    /// a card").
+    #[serde(default)]
+    pub caused_by: Option<PlayerId>,
 }
 
 /// The kind of object on the stack.
