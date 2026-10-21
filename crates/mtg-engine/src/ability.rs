@@ -199,6 +199,11 @@ pub struct ActivatedAbility {
     /// source's controller may activate it, and its controller can't.
     #[serde(default)]
     pub only_opponents: bool,
+    /// "Only the controller of the enchanted creature may activate this ability." (CR
+    /// 602.2): the players who may activate it (relative to the source and its
+    /// controller), instead of its controller.
+    #[serde(default)]
+    pub activator: Option<PlayerFilter>,
     /// "Activate only once": how many times the ability may be activated over the
     /// object's existence (CR 400.7: a new object can activate it again).
     #[serde(default)]
@@ -240,6 +245,7 @@ impl ActivatedAbility {
             zone: FunctionZone::Battlefield,
             any_player: false,
             only_opponents: false,
+            activator: None,
             max_total: None,
             own_cost_changes: Vec::new(),
             cant_be_copied: false,
@@ -503,6 +509,16 @@ pub enum CostPart {
         filter: Filter,
         count: Value,
     },
+    /// "Reveal ~ from your hand": the card with the ability, which functions in its
+    /// owner's hand (CR 113.6, 701.20a).
+    RevealSelf,
+    /// "Remove X counters from an artifact or creature you control": counters (of `kind`,
+    /// or of any kinds) all from one permanent the player chooses (CR 118.3).
+    RemoveCountersFromOne {
+        kind: Option<CounterKind>,
+        filter: Filter,
+        count: Value,
+    },
     ExertSelf,
     /// "Collect evidence N" (CR 701.59).
     CollectEvidence(u32),
@@ -526,6 +542,9 @@ pub enum CostPart {
         cost: Box<Cost>,
         times: Value,
     },
+    /// "Discard a card or pay {2}": one of these costs, which the player chooses as the
+    /// cost is paid among those they can pay (CR 118.3, 601.2h; a ward cost, CR 702.21a).
+    OneOf(Vec<Cost>),
 }
 
 // ---------------------------------------------------------------------------
@@ -789,6 +808,18 @@ pub enum TargetGroup {
     /// Their total of a value is at most the value ("with total mana value 6 or less",
     /// "with total mana value X or less", "with total power 10 or less").
     TotalAtMost(TotalStat, Box<Value>),
+    /// All have a name in common ("two nonland cards with the same name", CR 201.2a).
+    SameName,
+    /// There's a color all of them have ("two cards from your hand that share a color",
+    /// CR 105.2).
+    ShareColor,
+    /// Their total of a value is at least the value ("with total mana value 8 or
+    /// greater", "with total power 10 or greater"). Unlike the other relationships, a part
+    /// of such a group needn't have it.
+    TotalAtLeast(TotalStat, Box<Value>),
+    /// There are at least this many card types among them ("with four or more card types
+    /// among them", CR 205.2a). A part of such a group needn't have it.
+    CardTypesAmong(Box<Value>),
 }
 
 /// A step of a dig: cards looked at, revealed, milled or exiled from the top of a library
@@ -2648,6 +2679,13 @@ pub enum ReplacementAction {
     /// ...". Unlike [`ReplacementAction::PreventAmount`] in a one-shot effect, it isn't a
     /// shield that is used up.
     PreventPortion(Value),
+    /// The action, and then an instruction performed right after the modified event, with
+    /// the object the event was about as "it" (`vars::IT`): "exile it instead. When you
+    /// do, create a 2/2 green Wolf creature token" (a reflexive triggered ability each time
+    /// the effect applies, CR 603.12, 614.6), "exile it instead. Return it to the
+    /// battlefield ... at the beginning of the next end step" (a delayed triggered
+    /// ability for each object, CR 603.7).
+    Then(Box<ReplacementAction>, Box<Effect>),
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.
@@ -3271,10 +3309,13 @@ pub enum CostChange {
 
 /// A rule about announcing or paying the cost of the spell or activated ability whose text
 /// states it (see `payment_rules.rs`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CostRule {
     /// "X can't be 0." (CR 107.3a): the least value that may be announced for X.
     XAtLeast(u32),
+    /// "X can't be greater than the number of players in the game." (CR 107.3a, 601.2b):
+    /// the greatest value that may be announced for X, determined as X is announced.
+    XAtMost(Box<Value>),
     /// "Spend only black mana on X.", "Spend only black and/or red mana on X.", "Spend
     /// only colored mana on X.": only mana of these colors may pay the part of the cost
     /// that X represents (CR 107.3a, 601.2h). It's still generic mana (cost reductions
@@ -3294,6 +3335,15 @@ pub enum CostRule {
     /// cost; none may without a choice (CR 607.5a).
     OnlyChosenColor,
 }
+
+impl PartialEq for CostRule {
+    fn eq(&self, other: &Self) -> bool {
+        // (`Value` has no equality of its own: compared as data.)
+        serde_json::to_string(self).ok() == serde_json::to_string(other).ok()
+    }
+}
+
+impl Eq for CostRule {}
 
 /// Static abilities (CR 604) and what they do.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -4442,6 +4492,14 @@ pub enum Effect {
     },
     Regenerate {
         what: Sel,
+    },
+    /// Regeneration with what happens when a shield this creates is used: "When it
+    /// regenerates this way, put a -1/-1 counter on it." (a reflexive triggered ability),
+    /// "You gain control of that creature if it regenerates this way." (part of the
+    /// regeneration). The regenerated permanent is `vars::IT` (CR 701.19a).
+    RegenerateWith {
+        what: Sel,
+        then: Box<Effect>,
     },
     /// Attach the source (or selection) to a target (CR 701.3).
     Attach {

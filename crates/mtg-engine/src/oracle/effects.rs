@@ -614,6 +614,11 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             return Some(e);
         }
     }
+    // "You may discard a card or pay {2}": an optional cost that is a choice of two (see
+    // `patterns::cost_choices_2`).
+    if let Some(e) = super::patterns::cost_choices_2::may_pay_either(l, b) {
+        return Some(e);
+    }
     if let Some(r) = l.strip_prefix("you may ") {
         let e = parse_clause(r, b)?;
         return Some(Effect::May {

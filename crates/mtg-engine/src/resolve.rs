@@ -1203,29 +1203,8 @@ impl Game {
                     }
                 }
             }
-            Effect::Regenerate { what } => {
-                for o in self.resolve_objects(what, ctx) {
-                    // CR 701.19: a regeneration shield for this turn.
-                    let id = self.new_effect_id();
-                    let ts = self.new_timestamp();
-                    self.replacements.push(ReplacementInstance {
-                        id,
-                        source: ctx.source,
-                        controller: ctx.controller,
-                        timestamp: ts,
-                        duration: Duration::EndOfTurn,
-                        def: ReplacementDef {
-                            event: ReplacementEvent::Destroy(Filter::Any),
-                            action: ReplacementAction::Regenerate,
-                            self_replacement: false,
-                            optional: false,
-                        },
-                        uses: Some(1),
-                        objects: Some(vec![o]),
-                        remaining: None,
-                    });
-                }
-            }
+            Effect::Regenerate { what } => self.regenerate(what, None, ctx),
+            Effect::RegenerateWith { what, then } => self.regenerate(what, Some(then), ctx),
             Effect::Attach { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
                 // "Attach ~ to a creature you control. If you do, ...": whether anything
@@ -3542,4 +3521,38 @@ pub(crate) fn performed_by(mut body: Body, p: PlayerId) -> Body {
         }
     }
     body
+}
+
+impl Game {
+    /// CR 701.19a: a regeneration shield for this turn on each object, with the rider
+    /// `then` performed when it's used ("When it regenerates this way, ...").
+    fn regenerate(&mut self, what: &Sel, then: Option<&Effect>, ctx: &mut Ctx) {
+        for o in self.resolve_objects(what, ctx) {
+            if let Some(e) = then {
+                // (Riders of shields that have worn off are forgotten.)
+                let live: Vec<u32> = self.replacements.iter().map(|r| r.id).collect();
+                self.regeneration_riders.retain(|r| live.contains(&r.0));
+                let id = self.next_effect_id;
+                self.regeneration_riders.push((id, ctx.clone(), e.clone()));
+            }
+            let id = self.new_effect_id();
+            let ts = self.new_timestamp();
+            self.replacements.push(ReplacementInstance {
+                id,
+                source: ctx.source,
+                controller: ctx.controller,
+                timestamp: ts,
+                duration: Duration::EndOfTurn,
+                def: ReplacementDef {
+                    event: ReplacementEvent::Destroy(Filter::Any),
+                    action: ReplacementAction::Regenerate,
+                    self_replacement: false,
+                    optional: false,
+                },
+                uses: Some(1),
+                objects: Some(vec![o]),
+                remaining: None,
+            });
+        }
+    }
 }

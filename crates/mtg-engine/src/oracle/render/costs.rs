@@ -291,6 +291,34 @@ impl Renderer<'_> {
                 let (c, w) = self.counted(count, &noun);
                 format!("reveal {c} from your hand{}", w.unwrap_or_default())
             }
+            CostPart::OneOf(costs) => {
+                let items: Vec<String> = costs.iter().map(|c| self.cost(c)).collect();
+                let mut s = items.join(" or ");
+                // "pay {2}" rather than a bare "{2}" in a list of costs.
+                for c in costs {
+                    if c.parts.is_empty() {
+                        if let Some(m) = &c.mana {
+                            let m = m.to_string();
+                            s = s.replacen(&m, &format!("pay {m}"), 1);
+                        }
+                    }
+                }
+                s
+            }
+            CostPart::RevealSelf => "reveal ~ from your hand".into(),
+            CostPart::RemoveCountersFromOne {
+                kind,
+                filter,
+                count,
+            } => {
+                let noun = match kind {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let (c, w) = self.counted(count, &noun);
+                let f = self.noun_det(filter, nouns::Det::A);
+                format!("remove {c} from {f}{}", w.unwrap_or_default())
+            }
             CostPart::ExertSelf => "exert ~".into(),
             CostPart::CollectEvidence(n) => format!("collect evidence {n}"),
             CostPart::Forage => "forage".into(),
@@ -608,6 +636,15 @@ impl Renderer<'_> {
         }
         if a.only_opponents {
             s.push_str(" Only your opponents may activate this ability.");
+        }
+        if let Some(f) = &a.activator {
+            let w = match f {
+                PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::ControllerOf(s) if matches!(s.as_ref(), Sel::AttachedTo)) => {
+                    "the controller of the enchanted creature".to_string()
+                }
+                other => self.gap(format!("who may activate: {other:?}")),
+            };
+            s.push_str(&format!(" Only {w} may activate this ability."));
         }
         match (a.cant_be_copied, x_not_zero) {
             (true, true) => s.push_str(" This ability can't be copied and X can't be 0."),
