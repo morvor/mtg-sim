@@ -91,6 +91,25 @@ fn object_predicate(pred: &str, window: &str, so_far: &Filter) -> Option<Conditi
             p = p.replace(&format!("from {who}"), "from a library");
         }
     }
+    // "~" in the predicate is the card itself, not the object being tested: "each
+    // creature that dealt damage to ~ this turn" (Giant Albatross).
+    if p.contains('~') {
+        let combat = match p.as_str() {
+            "dealt damage to ~" => false,
+            "dealt combat damage to ~" => true,
+            _ => return None,
+        };
+        let t = TriggerCond::DealsDamage {
+            source: Filter::In(Box::new(Sel::Var(vars::TESTED))),
+            to: DamageRecipient::Object(Filter::Source),
+            combat_only: combat,
+        };
+        let v = match window {
+            " this turn" => Value::EventsThisTurn(Box::new(t), Tally::Events),
+            _ => return None,
+        };
+        return Some(Condition::Compare(v, Cmp::Ge, Value::Const(1)));
+    }
     // "was discarded": a player discarded it (the card in its new zone).
     let cond = if matches!(p.as_str(), "was discarded" | "were discarded") {
         if !in_graveyard {

@@ -1121,3 +1121,22 @@ fn oblivious_bookworm_skips_the_discard_after_a_morph_entered_face_down() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), before + 1, "drew, and no discard");
 }
+
+#[test]
+fn giant_albatross_destroys_the_creatures_that_dealt_damage_to_it() {
+    cr!("603.10a", "120.3");
+    assert_supported("Giant Albatross");
+    let mut t = TestGame::new(2);
+    let albatross = t.battlefield(P0, "Giant Albatross");
+    t.lands(P0, "Island", 2);
+    let hitter = t.battlefield(P1, "Hill Giant");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, false);
+    t.g.deal_damage(hitter, Entity::Object(albatross), 3, false);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(!t.on_battlefield(albatross));
+    assert!(!t.on_battlefield(hitter), "it dealt damage to the Albatross");
+    assert!(t.on_battlefield(other));
+}
