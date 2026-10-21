@@ -1383,7 +1383,25 @@ impl Game {
                 c.cast = m.etb.cast.clone();
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 let n = self.eval_value(&v, &c).max(0) as u32;
-                if n > 0 {
+                if k.as_str() == crate::ability::EACH_KIND_ON_SOURCE {
+                    // "For each kind of counter on ~, each other Dinosaur you control
+                    // enters with a counter of that kind on it" (Blue, Loyal Raptor): that
+                    // many of each kind on the source as the permanent enters.
+                    if let Some(src) = cand.source.filter(|s| self.is_live(*s)) {
+                        let kinds: Vec<CounterKind> = self
+                            .obj(src)
+                            .counters
+                            .iter()
+                            .filter(|(_, n)| **n > 0)
+                            .map(|(k, _)| k.clone())
+                            .collect();
+                        for kind in kinds {
+                            if n > 0 {
+                                m.etb.counters.push((kind, n));
+                            }
+                        }
+                    }
+                } else if n > 0 {
                     m.etb.counters.push((k, n));
                 }
                 vec![ReplEvent::Move(m)]

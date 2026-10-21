@@ -141,3 +141,19 @@ fn dark_intimations_gives_the_bolas_planeswalker_an_additional_loyalty_counter()
     assert!(t.in_exile("Dark Intimations"));
     let _ = di;
 }
+
+#[test]
+fn blue_loyal_raptor_gives_entering_dinosaurs_one_counter_of_each_kind_it_has() {
+    cr!("614.1c", "122.6");
+    supported("Blue, Loyal Raptor");
+    let mut t = TestGame::new(2);
+    let blue = t.battlefield(P0, "Blue, Loyal Raptor");
+    t.g.add_counters(Entity::Object(blue), "+1/+1", 2, None);
+    t.g.add_counters(Entity::Object(blue), "flying", 1, None);
+    let dino = t.enter(P0, "Ripjaw Raptor");
+    assert_eq!(t.counters(dino, "+1/+1"), 1);
+    assert_eq!(t.counters(dino, "flying"), 1);
+    // Not a Dinosaur: nothing.
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+}

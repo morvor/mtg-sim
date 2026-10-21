@@ -1101,6 +1101,10 @@ pub enum SeatSide {
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
 pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
+/// The counter kind of a [`ReplacementAction::EnterWithCounters`] that stands for each kind
+/// of counter on the replacement effect's source ("For each kind of counter on ~, each
+/// other Dinosaur you control enters with a counter of that kind on it").
+pub const EACH_KIND_ON_SOURCE: &str = "each-kind-on-source";
 
 /// Refers to one or more players.
 #[derive(Clone, Debug, Serialize, Deserialize)]

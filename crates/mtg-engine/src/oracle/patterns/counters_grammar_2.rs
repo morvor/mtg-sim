@@ -891,3 +891,45 @@ fn on_each_of_those_that_has(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "counters grammar 2: on each of those cards that has [keyword]", priority: 70, parse: on_each_of_those_that_has } }
+
+/// "For each kind of counter on ~, each other Dinosaur you control enters with a counter
+/// of that kind on it." (Blue, Loyal Raptor): a counter of each kind on ~ as each of
+/// those permanents enters (CR 614.1c, 122.6).
+fn each_kind_enters_with(
+    l: &str,
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("for each kind of counter on ~, ")?;
+    let subj = r.strip_suffix(" enters with a counter of that kind on it")?;
+    let one = subj.strip_prefix("each other ")?;
+    let (f, plural, tail) = parse_object_phrase(one)?;
+    if plural || !end(tail).is_empty() || !ctx.is_permanent() {
+        return None;
+    }
+    let f = match f {
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|x| !matches!(x, Filter::Permanent))
+                .chain([Filter::Other])
+                .collect(),
+        ),
+        f => Filter::and(vec![f, Filter::Other]),
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+            ReplacementDef {
+                event: ReplacementEvent::EntersBattlefield(f),
+                action: ReplacementAction::EnterWithCounters(
+                    EACH_KIND_ON_SOURCE.into(),
+                    Value::c(1),
+                ),
+                self_replacement: false,
+                optional: false,
+            },
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "counters grammar 2: for each kind of counter on ~, others enter with one", priority: 90, parse: each_kind_enters_with } }
