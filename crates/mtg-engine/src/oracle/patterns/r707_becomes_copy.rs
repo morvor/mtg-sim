@@ -160,3 +160,58 @@ fn other_than(f: Filter, of: &Sel) -> Filter {
 }
 
 inventory::submit! { EffectPattern { name: "r707 becomes a copy of", priority: 80, parse: becomes_copy } }
+
+/// "As this artifact enters, you may have it become a copy of any creature on the
+/// battlefield until end of turn, except it has haste." (Cursed Mirror): a copy effect
+/// that begins as it enters (CR 614.1c, 707.2) and ends at end of turn.
+fn as_enters_become_copy_until(
+    block: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let r = end(&lower).strip_prefix("as ~ enters, you may have it become a copy of ")?;
+    let r = r
+        .strip_prefix("any ")
+        .map_or(r.to_string(), |x| format!("a {x}"));
+    if !r.contains(" until end of turn") {
+        return None;
+    }
+    let mut b = Builder::new(ctx);
+    b.it = Sel::This;
+    let e = becomes_copy(&format!("~ becomes a copy of {r}"), &mut b)?;
+    if !b.targets.is_empty()
+        || !matches!(
+            &e,
+            Effect::BecomeCopy {
+                what: Sel::This,
+                duration: Duration::EndOfTurn,
+                ..
+            } | Effect::BecomeCopyExcept {
+                what: Sel::This,
+                duration: Duration::EndOfTurn,
+                ..
+            }
+        )
+    {
+        return None;
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+            ReplacementDef {
+                event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                action: ReplacementAction::AsEnters(Box::new(Effect::May {
+                    who: PlayerRef::You,
+                    effect: Box::new(e),
+                })),
+                self_replacement: true,
+                optional: false,
+            },
+        ))),
+        block,
+    )])
+}
+
+inventory::submit! { super::AbilityPattern { name: "r707 as ~ enters, it becomes a copy until end of turn", priority: 60, parse: as_enters_become_copy_until } }

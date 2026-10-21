@@ -197,3 +197,41 @@ fn sakashima_the_impostor_keeps_its_name_and_can_return_to_hand() {
     t.resolve_all();
     assert!(t.in_hand(P0, "Sakashima the Impostor"));
 }
+
+#[test]
+fn cursed_mirror_enters_as_a_hasty_copy_until_end_of_turn() {
+    cr!("707.2", "614.1c", "614.12");
+    ruling!(
+        "Cursed Mirror",
+        "Any enters-the-battlefield abilities of the copied creature will trigger when Cursed Mirror enters the battlefield."
+    );
+    ruling!(
+        "Cursed Mirror",
+        "While it is copying a creature, Cursed Mirror does not have \"{T}: Add {R}\""
+    );
+    supported("Cursed Mirror");
+    let mut t = TestGame::new(2);
+    let ev = t.battlefield(P0, "Elvish Visionary");
+    t.lands(P0, "Mountain", 3);
+    let m = t.hand(P0, "Cursed Mirror");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(ev)]);
+    let hand = t.hand_size(P0);
+    t.cast(P0, m).go();
+    t.resolve_all();
+    let copies = t.named_on_battlefield("Elvish Visionary");
+    assert_eq!(copies.len(), 2);
+    let mirror = copies.into_iter().find(|o| *o != ev).unwrap();
+    // Cast (-1), then the copied enters ability drew a card.
+    assert_eq!(t.hand_size(P0), hand - 1 + 1);
+    let o = t.obj_now(mirror);
+    assert!(o.has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    assert_eq!(t.pt(mirror), (1, 1));
+    t.advance_to(P1, Step::Upkeep);
+    let o = t.obj_now(mirror);
+    assert_eq!(o.chars.name, "Cursed Mirror");
+    assert!(!o
+        .chars
+        .card_types
+        .contains(mtg_engine::types::CardType::Creature));
+}
