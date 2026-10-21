@@ -330,7 +330,7 @@ fn struggle_for_project_purity_enclave_counts_declared_attackers() {
 
 #[test]
 fn struggle_for_project_purity_without_a_choice_has_neither_ability() {
-    cr!("607.2a", "707.2");
+    cr!("707.2");
     ruling!(
         "Struggle for Project Purity",
         "If you somehow control Struggle for Project Purity and no choice was made for it (perhaps because another permanent on the battlefield became a copy of it), it has neither of the two triggered abilities."
@@ -430,7 +430,7 @@ fn mirror_mockery_token_isnt_attacking_and_is_exiled_anyway() {
 
 #[test]
 fn goblin_kaboomist_land_mines_keep_their_ability() {
-    cr!("111.4", "113.7");
+    cr!("111.1", "113.7a");
     ruling!(
         "Goblin Kaboomist",
         "The Land Mine tokens have the ability even if Goblin Kaboomist blows himself up or otherwise leaves the battlefield."
@@ -494,7 +494,7 @@ fn sarkhan_planeswalkers_stop_being_planeswalkers_but_keep_loyalty() {
 
 #[test]
 fn stalking_leonin_without_a_chosen_opponent_cant_activate() {
-    cr!("607.2a", "707.2", "602.1");
+    cr!("707.2", "602.1");
     ruling!(
         "Stalking Leonin",
         "If you didn't choose an opponent when Stalking Leonin entered the battlefield, you can't pay the cost to activate its last ability."

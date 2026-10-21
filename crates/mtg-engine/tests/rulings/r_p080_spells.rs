@@ -358,7 +358,7 @@ fn fire_at_will_divides_its_damage_as_it_is_cast() {
 
 #[test]
 fn turn_the_tables_redirects_to_a_creature_removed_from_combat() {
-    cr!("614.1a", "506.4", "615.5");
+    cr!("614.1a", "506.4");
     ruling!(
         "Turn the Tables",
         "If the targeted creature has been removed from combat but is still on the battlefield, the damage will be redirected."
