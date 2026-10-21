@@ -536,6 +536,29 @@ impl Renderer<'_> {
         {
             return "{alt:it|that permanent or player}".into();
         }
+        // "~ deals 7 damage divided as you choose among one, two, or three targets. ...
+        // instead ~ deals 7 damage to each of those permanents and/or players."
+        if self.targets.get(idx).is_some_and(|t| t.divide.is_some()) && !matches!(case, Case::Poss)
+        {
+            return "{alt:it|them|each of those permanents and/or players|each of them}".into();
+        }
+        // "Target creature you control fights target creature an opponent controls. If
+        // the creature an opponent controls would die this turn, ...": one of several
+        // targets named again by its words.
+        if !matches!(case, Case::Poss) && self.targets.len() >= 2 {
+            if let Some(words) = self
+                .targets
+                .get(idx)
+                .and_then(|t| t.text.strip_prefix("target "))
+                .filter(|w| {
+                    (w.ends_with(" control") || w.ends_with(" controls"))
+                        && !w.contains(['{', '|'])
+                        && !w.contains(" or ")
+                })
+            {
+                return format!("{{alt:it|the {words}}}");
+            }
+        }
         match case {
             Case::Poss => "its".into(),
             _ => "it".into(),

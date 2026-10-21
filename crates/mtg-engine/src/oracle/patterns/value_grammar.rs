@@ -1253,6 +1253,10 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "mana from a Treasure spent to cast ~" (see `mana_4`).
+    if let Some(v) = super::mana_4::count_phrase(r, b) {
+        return Some(v);
+    }
     // "counters removed this way": an amount chosen for the cost (see `cost_parts`).
     if let Some(v) = super::cost_parts::paid_this_way_prefix(r) {
         return Some(v);

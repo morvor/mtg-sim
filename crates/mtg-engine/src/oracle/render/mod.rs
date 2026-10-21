@@ -1187,6 +1187,7 @@ impl<'a> Renderer<'a> {
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
         self.extra.x_paid = false;
+        self.extra.x_energy = false;
         self.var_defs.clear();
         self.outer_vars.clear();
         self.it_done = None;

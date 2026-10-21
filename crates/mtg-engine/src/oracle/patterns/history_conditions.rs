@@ -1487,9 +1487,15 @@ fn payment_whose(r: &str, b: &mut Option<&mut Builder>) -> Option<(&'static str,
     }
 }
 
+/// [`payment_whose`]'s key alone ("cast ~" → `self`), for other grammar files.
+pub(crate) fn payment_key(r: &str, b: Option<&mut Builder>) -> Option<&'static str> {
+    let mut b = b;
+    payment_whose(r, &mut b).map(|(k, _)| k)
+}
+
 /// An amount of the mana spent on a spell or ability (the existing values for the total
 /// spent on the source's own spell and on the triggering spell).
-fn spent_value(key: &str, what: &str) -> Value {
+pub(crate) fn spent_value(key: &str, what: &str) -> Value {
     match (key, what) {
         ("self", "total") => Value::ManaSpent,
         ("that spell", "total") => Value::Custom(crate::kw::opus::MANA_SPENT_ON_THAT_SPELL.into()),

@@ -248,6 +248,10 @@ fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Opti
             None => each,
         };
         let v = match each {
+            // "mana from a Treasure spent to cast them" (see `mana_4`).
+            _ if super::mana_4::entering_mana_from(each).is_some() => {
+                super::mana_4::entering_mana_from(each)?
+            }
             // This turn's history (see `value_results`).
             _ if super::value_results::whole_history_count(each).is_some() => {
                 super::value_results::whole_history_count(each)?

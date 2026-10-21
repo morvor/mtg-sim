@@ -96,6 +96,7 @@ pub mod life_totals;
 pub mod linked_notes;
 pub mod mana;
 pub mod mana_abilities;
+pub mod mana_change;
 pub mod mana_value;
 pub mod match_play;
 pub mod merge;

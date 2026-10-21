@@ -2199,6 +2199,8 @@ impl Game {
         for m in mana {
             self.players[p.idx()].mana_pool.add(m);
         }
+        // Statics may count unspent mana (CR 106.4; see `kw/unspent_mana_value.rs`).
+        self.dirty = true;
         self.emit(Event::ManaAdded { player: p, source });
         // CR 106.12a: "tapped for mana" is reported once the whole mana ability has
         // resolved, with all the mana it produced (see `Game::activate_ability`).
