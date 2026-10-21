@@ -476,3 +476,41 @@ fn stangg_twin_gets_copies_of_stanggs_auras_and_equipment() {
     assert_eq!(t.named_on_battlefield("Holy Strength").len(), 1);
     assert_eq!(t.named_on_battlefield("Bonesplitter").len(), 1);
 }
+
+#[test]
+fn three_dog_copies_the_sacrificed_aura_onto_each_other_attacker() {
+    cr!("603.12", "303.4f", "707.2");
+    ruling!(
+        "Three Dog, Galaxy News DJ",
+        "Since Three Dog's reflexive triggered ability doesn't target, Aura tokens created by that ability will be attached to attacking creatures you control with shroud."
+    );
+    supported("Three Dog, Galaxy News DJ");
+    let mut t = TestGame::new(2);
+    let dog = t.battlefield(P0, "Three Dog, Galaxy News DJ");
+    let aura = t.battlefield(P0, "Holy Strength");
+    assert!(t.g.attach(aura, Entity::Object(dog)));
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.lands(P0, "Plains", 2);
+    t.answer_yes(P0, true);
+    t.attack(
+        &[
+            (dog, Entity::Player(P1)),
+            (bears, Entity::Player(P1)),
+            (elves, Entity::Player(P1)),
+        ],
+        &[],
+    );
+    let strengths = t.named_on_battlefield("Holy Strength");
+    assert_eq!(strengths.len(), 2);
+    assert!(strengths.iter().all(|o| t.obj_now(*o).is_token()));
+    let on: Vec<_> = strengths
+        .iter()
+        .map(|o| t.obj_now(*o).attached_to)
+        .collect();
+    assert!(on.contains(&Some(Entity::Object(bears))));
+    assert!(on.contains(&Some(Entity::Object(elves))));
+    assert!(t.in_graveyard(P0, "Holy Strength"));
+    // Dog 1, Bears 3, Elves 2.
+    assert_eq!(t.life(P1), 14);
+}

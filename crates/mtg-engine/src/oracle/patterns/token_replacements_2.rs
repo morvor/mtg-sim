@@ -1190,3 +1190,93 @@ fn sacrifice_all_tokens_created_this_way(l: &str, prev: &mut Effect, b: &mut Bui
 }
 
 inventory::submit! { super::FollowupPattern { name: "token replacements 2: sacrifice all tokens created this way", priority: 90, apply: sacrifice_all_tokens_created_this_way } }
+
+/// "When you sacrifice an Aura this way, ..." after "you may pay {2} and sacrifice an Aura
+/// attached to ~" (Three Dog, Galaxy News DJ): a reflexive triggered ability that triggers
+/// if the optional cost was paid (CR 603.12); "that Aura" is the sacrificed permanent.
+fn when_you_sacrifice_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(r) = end(&lower).strip_prefix("when you sacrifice ") else {
+        return false;
+    };
+    let Some((noun, eff)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    let Some(noun) = noun.strip_prefix("a ").or_else(|| noun.strip_prefix("an ")) else {
+        return false;
+    };
+    let Effect::PayOptional { cost, then, .. } = prev else {
+        return false;
+    };
+    if !cost
+        .parts
+        .iter()
+        .any(|p| matches!(p, CostPart::Sacrifice { .. }))
+        || !matches!(**then, Effect::Noop)
+    {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.it = Sel::Var(vars::SACRIFICED);
+    sub.it_player = b.it_player.clone();
+    sub.sentences = 1;
+    sub.named
+        .push((format!("that {noun}"), Sel::Var(vars::SACRIFICED)));
+    let Some(effect) = crate::oracle::effects::parse_effect_text(eff, &mut sub) else {
+        return false;
+    };
+    **then = Effect::Reflexive {
+        body: Box::new(Body {
+            targets: sub.targets,
+            effect,
+            modal: None,
+        }),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: when you sacrifice a [permanent] this way (reflexive)", priority: 46, apply: when_you_sacrifice_this_way } }
+
+/// The creatures "for each [creature], create a token that's a copy of [it] attached to
+/// that creature" goes through.
+const EACH_TO_ATTACH: Var = vars::USER + 5111;
+
+/// "for each other attacking creature you control, create a token that's a copy of that
+/// Aura attached to that creature" (Three Dog, Galaxy News DJ).
+fn for_each_creature_copy_attached(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("for each ")?;
+    let (noun, create) = r.split_once(", create a token that's a copy of ")?;
+    let copied_text = create.strip_suffix(" attached to that creature")?;
+    if noun.contains(" attached to ") {
+        return None;
+    }
+    let (f, false, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let (of, tail) = super::tokens_copies_copy::copied_object(copied_text, b)?;
+    if !end(&tail).is_empty() {
+        return None;
+    }
+    Some(Effect::ForEach {
+        sel: Sel::All(Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)])),
+        var: EACH_TO_ATTACH,
+        effect: Box::new(Effect::TokensEnterAttached {
+            to: Sel::Var(EACH_TO_ATTACH),
+            effect: Box::new(Effect::CreateTokenCopy {
+                of,
+                count: Value::c(1),
+                controller: PlayerRef::You,
+                tapped: false,
+                attacking: false,
+                mods: vec![],
+            }),
+        }),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "token replacements 2: for each creature, a copy attached to that creature", priority: 90, parse: for_each_creature_copy_attached } }
