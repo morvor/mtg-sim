@@ -121,3 +121,41 @@ fn onakke_taxes_only_attacks_on_planeswalkers() {
     assert_eq!(to_pw.mana.map(|m| m.mana_value()), Some(1));
     assert!(required_attack_cost(&t.g, bears, Entity::Player(P1)).is_none());
 }
+
+#[test]
+fn tidal_flats_blockers_of_an_unpaid_attacker_gain_first_strike() {
+    cr!("509.1g", "510.4");
+    supported("Tidal Flats");
+    let mut t = TestGame::new(2);
+    let flats = t.battlefield(P0, "Tidal Flats");
+    t.lands(P0, "Island", 2);
+    let lions = t.battlefield(P0, "Savannah Lions");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P1, "Forest", 1);
+    declare(&mut t, P1, &[(bears, Entity::Player(P0))]);
+    declare_blocks(&mut t, P0, &[(lions, bears)]);
+    t.answer_yes(P1, false);
+    t.activate(P0, flats, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.g.obj(lions).has_keyword(mtg_engine::keywords::KeywordKind::FirstStrike));
+    t.advance_to(P1, Step::EndOfCombat);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.on_battlefield(lions));
+}
+
+#[test]
+fn tidal_flats_paying_keeps_the_blockers_as_they_are() {
+    cr!("509.1g");
+    let mut t = TestGame::new(2);
+    let flats = t.battlefield(P0, "Tidal Flats");
+    t.lands(P0, "Island", 2);
+    let lions = t.battlefield(P0, "Savannah Lions");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P1, "Forest", 1);
+    declare(&mut t, P1, &[(bears, Entity::Player(P0))]);
+    declare_blocks(&mut t, P0, &[(lions, bears)]);
+    t.answer_yes(P1, true);
+    t.activate(P0, flats, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(!t.g.obj(lions).has_keyword(mtg_engine::keywords::KeywordKind::FirstStrike));
+}

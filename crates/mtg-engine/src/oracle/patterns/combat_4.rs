@@ -674,3 +674,95 @@ fn p_now_attacking(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "combat 4: those creatures are now attacking that player", priority: 90, parse: p_now_attacking } }
+
+/// "For each attacking creature without flying, its controller may pay {1}. If that player
+/// doesn't, creatures you control blocking that creature gain first strike until end of
+/// turn." (Tidal Flats): for each of those creatures, what happens if its controller
+/// didn't pay; "that creature" is the creature, "blocking that creature" the creatures
+/// blocking it as the effect happens (CR 509.1g).
+fn f_if_that_player_doesnt(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l.trim());
+    let Some(rest) = l
+        .strip_prefix("if that player doesn't, ")
+        .or_else(|| l.strip_prefix("if they don't, "))
+    else {
+        return false;
+    };
+    let Effect::ForEach { var, effect, .. } = prev else {
+        return false;
+    };
+    let var = *var;
+    let pays = matches!(&**effect, Effect::AsPlayer { who: PlayerRef::ControllerOf(s), effect: inner }
+        if matches!(**s, Sel::Var(v) if v == var)
+            && matches!(&**inner, Effect::PayOptional { then, otherwise, .. }
+                if matches!(**then, Effect::Noop) && matches!(**otherwise, Effect::Noop)));
+    if !pays {
+        return false;
+    }
+    let blocking = rest.contains(" blocking that creature");
+    let text = rest.replace(" blocking that creature", " blocking ~");
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    b.it = Sel::Var(var);
+    b.it_player = PlayerRef::ControllerOf(Box::new(Sel::Var(var)));
+    let parsed = crate::oracle::effects::parse_clause(&text, b);
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+        b.it_player = saved.2.clone();
+    };
+    let Some(e) = parsed.filter(|_| b.targets.len() == saved.0) else {
+        restore(b);
+        return false;
+    };
+    let e = if blocking {
+        let relation = serde_json::to_value(Filter::BlockRelation {
+            rel: BlockRel::Blocking,
+            other: Box::new(Sel::Var(var)),
+            when: BlockWhen::Now,
+        })
+        .unwrap_or_default();
+        let mut v = serde_json::to_value(&e).unwrap_or_default();
+        let mut n = 0;
+        fn walk(v: &mut serde_json::Value, to: &serde_json::Value, n: &mut u32) {
+            if *v == serde_json::Value::String("BlockingSource".into()) {
+                *v = to.clone();
+                *n += 1;
+                return;
+            }
+            match v {
+                serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, to, n)),
+                serde_json::Value::Object(o) => o.values_mut().for_each(|x| walk(x, to, n)),
+                _ => {}
+            }
+        }
+        walk(&mut v, &relation, &mut n);
+        let s = v.to_string();
+        let Ok(e2) = serde_json::from_value::<Effect>(v) else {
+            restore(b);
+            return false;
+        };
+        if n != 1 || s.contains("\"Source\"") || s.contains("This") {
+            restore(b);
+            return false;
+        }
+        e2
+    } else {
+        e
+    };
+    restore(b);
+    let Effect::ForEach { effect, .. } = prev else {
+        return false;
+    };
+    let pay = std::mem::take(&mut **effect);
+    **effect = Effect::seq(vec![
+        pay,
+        Effect::If {
+            cond: Condition::Not(Box::new(Condition::PrevHappened)),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "combat 4: for each ..., its controller may pay. if that player doesn't, ...", priority: 60, apply: f_if_that_player_doesnt } }
