@@ -293,7 +293,7 @@ inventory::submit! { EffectPattern { name: "choices 4: target players other than
 
 /// A verb phrase in the third person singular: "draw a card, then discard a card at
 /// random" → "draws a card, then discards a card at random".
-fn third_person(pred: &str) -> String {
+pub(super) fn third_person(pred: &str) -> String {
     pred.split(", then ")
         .map(|part| {
             let (verb, rest) = part.split_once(' ').unwrap_or((part, ""));

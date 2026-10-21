@@ -1170,6 +1170,100 @@ fn per_opponent_exile_and_that_player(l: &str, b: &mut Builder) -> Option<Effect
 
 inventory::submit! { EffectPattern { name: "followups 4: for each opponent, exile ... and that player gains life equal to its power", priority: 120, parse: per_opponent_exile_and_that_player } }
 
+/// The player another player's optional instruction ("Its owner may put it on top of
+/// their library") is given to, when `prev` ends with it.
+fn optional_for_other_player(prev: &Effect) -> Option<PlayerRef> {
+    let last = match prev {
+        Effect::Seq(v) => v.iter().rev().find(|e| !matches!(e, Effect::If { .. }))?,
+        e => e,
+    };
+    match last {
+        Effect::AsPlayer { who, effect } if matches!(**effect, Effect::May { .. }) => {
+            (!matches!(who, PlayerRef::You)).then(|| who.clone())
+        }
+        _ => None,
+    }
+}
+
+/// "Its owner may put it on top of their library. If they do, ~ deals 2 damage to them. If
+/// they didn't put the card on top of their library, they put it on the bottom." (Clash of
+/// Elements): "they" and "them" are the player who was given the choice (CR 118.12).
+fn other_players_choice_followups(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(who) = optional_for_other_player(prev) else {
+        return false;
+    };
+    let (did, rest) = if let Some(r) = l.strip_prefix("if they do, ") {
+        (true, r.to_string())
+    } else if let Some(r) = l.strip_prefix("if they don't, ") {
+        (false, r.to_string())
+    } else if let Some(r) = l.strip_prefix("if they didn't ") {
+        // "If they didn't put the card on top of their library, ...": what they declined.
+        let Some((what, r)) = r.split_once(", ") else {
+            return false;
+        };
+        if !what.starts_with("put ") {
+            return false;
+        }
+        (false, r.to_string())
+    } else {
+        return false;
+    };
+    let clause = if let Some(r) = rest.strip_prefix("they ") {
+        let r = if r.ends_with(" on the bottom") {
+            format!("{r} of their library")
+        } else {
+            r.to_string()
+        };
+        format!("that player {}", super::choices_4::third_person(&r))
+    } else {
+        // "deals 2 damage to them": the player.
+        match rest.strip_suffix(" damage to them") {
+            Some(h) => format!("{h} damage to that player"),
+            None => return false,
+        }
+    };
+    let saved = std::mem::replace(&mut b.it_player, who);
+    let e = parse_clause(&clause, b);
+    b.it_player = saved;
+    let Some(e) = e else {
+        return false;
+    };
+    // "If they don't" after "If they do": the other branch of that condition.
+    if !did {
+        if let Effect::Seq(v) = prev {
+            if let Some(Effect::If {
+                cond: Condition::PrevHappened,
+                otherwise,
+                ..
+            }) = v.last_mut()
+            {
+                if matches!(**otherwise, Effect::Noop) {
+                    **otherwise = e;
+                    return true;
+                }
+            }
+        }
+    }
+    let cond = if did {
+        Condition::PrevHappened
+    } else {
+        Condition::Not(Box::new(Condition::PrevHappened))
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond,
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: if they do / didn't, after another player's optional instruction", priority: 20, apply: other_players_choice_followups } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1191,6 +1285,7 @@ mod tests {
             ("Sorcery", "Return all creatures to their owners' hands. For each opponent who controlled a creature returned this way, you create two 1/1 blue Faerie creature tokens with flying and \"This token can block only creatures with flying.\""),
             ("Sorcery", "Each opponent exiles a creature with the greatest power among creatures that player controls.\nSpell mastery — If there are two or more instant and/or sorcery cards in your graveyard, ~ deals damage to each opponent equal to the power of the creature they exiled."),
             ("Creature", "When ~ enters, for each opponent, exile up to one target creature that player controls and that player gains life equal to its power."),
+            ("Sorcery", "Choose target nonland permanent. Its owner may put it on top of their library. If they do, ~ deals 2 damage to them. If they didn't put the card on top of their library, they put it on the bottom."),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");

@@ -248,3 +248,34 @@ fn luminate_primordial_each_opponent_gains_life_equal_to_its_exiled_creatures_po
     assert!(t.in_exile("Hill Giant"));
     assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 24, 23));
 }
+
+fn clash(owner_says_yes: bool) -> (TestGame, ObjectId) {
+    supported("Clash of Elements");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Island", 1);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let spell = t.hand(P0, "Clash of Elements");
+    t.answer_yes(P1, owner_says_yes);
+    t.cast(P0, spell).target(Entity::Object(giant)).go();
+    t.resolve_all();
+    (t, giant)
+}
+
+#[test]
+fn clash_of_elements_owner_puts_it_on_top_and_is_dealt_damage() {
+    cr!("118.12");
+    let (t, giant) = clash(true);
+    let top = *t.g.player(P1).library.last().expect("library");
+    assert_eq!(t.g.current(giant), top);
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn clash_of_elements_otherwise_it_goes_to_the_bottom() {
+    cr!("118.12");
+    let (t, giant) = clash(false);
+    let bottom = *t.g.player(P1).library.first().expect("library");
+    assert_eq!(t.g.current(giant), bottom);
+    assert_eq!(t.life(P1), 20);
+}
