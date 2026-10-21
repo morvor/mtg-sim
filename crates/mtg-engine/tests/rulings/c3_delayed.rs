@@ -188,3 +188,28 @@ fn great_train_heist_treasure_for_combat_damage_to_that_player_this_turn() {
     assert_eq!(treasures.len(), 1);
     assert!(t.obj_now(treasures[0]).tapped);
 }
+
+#[test]
+fn surge_to_victory_copies_the_exiled_card_for_each_combat_damage_trigger() {
+    cr!("603.7b", "603.7c", "707.12");
+    ruling!(
+        "Surge to Victory",
+        "You cast the copies while the delayed triggered ability of Surge to Victory is resolving."
+    );
+    supported("Surge to Victory");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    cast_new(&mut t, P0, "Surge to Victory", &[Entity::Object(bolt)]);
+    t.resolve_all();
+    assert!(t.in_exile("Lightning Bolt"));
+    assert_eq!(t.pt(bears), (3, 2));
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    // 3 combat damage, then the copy of Lightning Bolt.
+    assert_eq!(t.life(P1), 14);
+    assert!(t.in_exile("Lightning Bolt"));
+}

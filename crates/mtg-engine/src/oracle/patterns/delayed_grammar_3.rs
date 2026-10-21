@@ -27,6 +27,11 @@
 //! creature you control deals combat damage to that player this turn, create a tapped
 //! Treasure token." (Great Train Heist; CR 603.7b, 603.7c: the player the creating effect
 //! chose).
+//!
+//! "Exile target instant or sorcery card from your graveyard. [...] Whenever a creature you
+//! control deals combat damage to a player this turn, copy the exiled card. You may cast
+//! the copy without paying its mana cost." (Surge to Victory; CR 603.7c, 707.12): the
+//! card the first instruction exiled, captured as it's exiled.
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -244,3 +249,90 @@ fn this_turn_damage_to_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar 3: whenever ... deals combat damage to that player this turn", priority: 100, parse: this_turn_damage_to_that_player } }
+
+/// The card exiled by the creating spell's first instruction (see
+/// [`copy_the_exiled_card_this_turn`]).
+const EXILED_CARD: Var = vars::USER + 13_102;
+
+/// Whether the ability's first instruction exiled its target card ("Exile target instant
+/// or sorcery card from your graveyard."): its first target is a card in a graveyard.
+fn first_target_is_a_graveyard_card(b: &Builder) -> bool {
+    b.targets
+        .first()
+        .is_some_and(|t| t.text.starts_with("target ") && t.text.contains(" card from "))
+}
+
+fn copy_the_exiled_card_this_turn(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let s = end(s);
+    let Some(r) = s.strip_prefix("whenever ") else {
+        return false;
+    };
+    let Some((cond, eff)) = r.split_once(" this turn, ") else {
+        return false;
+    };
+    if eff != "copy the exiled card" || !first_target_is_a_graveyard_card(b) {
+        return false;
+    }
+    let Some((t, _, _)) =
+        crate::oracle::triggers::parse_trigger_condition(&format!("whenever {cond}"))
+    else {
+        return false;
+    };
+    // A copy of the card in exile (CR 707.12), recorded as "the copy".
+    let body = Body {
+        targets: vec![],
+        effect: Effect::CopyCard {
+            what: Sel::Var(EXILED_CARD),
+            named: None,
+        },
+        modal: None,
+    };
+    // The exiled card: what the exile instruction moved ("it"; the instructions in
+    // between don't change it).
+    let note = Effect::Store {
+        var: EXILED_CARD,
+        sel: Sel::Var(vars::IT),
+    };
+    let delayed = Effect::DelayedTrigger {
+        trigger: TriggerCond::ThisTurn(Box::new(t)),
+        body: Box::new(body),
+        once: false,
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::Seq(vec![old, note, delayed]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "delayed grammar 3: whenever ... this turn, copy the exiled card", priority: 40, apply: copy_the_exiled_card_this_turn } }
+
+/// "You may cast the copy without paying its mana cost." after that trigger: part of its
+/// effect.
+fn cast_the_copy_after_this_turn_copy(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let s = end(s);
+    if !s.starts_with("you may cast the copy") {
+        return false;
+    }
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    let Some(Effect::DelayedTrigger { body, once: false, .. }) = v.last_mut() else {
+        return false;
+    };
+    let copies_exiled = serde_json::to_string(&body.effect)
+        .is_ok_and(|j| j.contains(&format!("{{\"Var\":{EXILED_CARD}}}")));
+    if !copies_exiled {
+        return false;
+    }
+    let mut b2 = Builder::new(b.ctx);
+    let Some(cast) = crate::oracle::effects::parse_sentence(s, &mut b2) else {
+        return false;
+    };
+    if !b2.targets.is_empty() {
+        return false;
+    }
+    let first = std::mem::take(&mut body.effect);
+    body.effect = Effect::seq(vec![first, cast]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "delayed grammar 3: you may cast the copy (of the exiled card, this turn)", priority: 40, apply: cast_the_copy_after_this_turn_copy } }
