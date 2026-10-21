@@ -153,6 +153,18 @@ fn normalize_subject(cond: &str) -> String {
 /// general delayed trigger grammar, with the stated duration.
 pub(crate) fn delayed_with_duration(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
+    // "When you cast a spell with the chosen name for the first time this turn, draw two
+    // cards." (Medomai's Prophecy): the first such event this turn — none if one happened
+    // earlier this turn — until the turn ends.
+    if let Some(r) = l.strip_prefix("when ") {
+        let (cond, eff) = r.split_once(" for the first time this turn, ")?;
+        if cond.contains(',') {
+            return None;
+        }
+        let text = format!("whenever {cond} for the first time each turn this turn, {eff}");
+        let e = super::triggers_delayed::this_turn_trigger(&text, b)?;
+        return Some(e);
+    }
     let (lasts, r) = if let Some(r) = l.strip_prefix("until end of turn, whenever ") {
         (Lasts::ThisTurn, r)
     } else if let Some(r) = l.strip_prefix("until your next turn, whenever ") {

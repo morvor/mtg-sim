@@ -120,7 +120,13 @@ fn parse_counters_put(r: &str) -> Option<Parsed> {
             false,
         )
     };
-    let (kind, rest) = crate::oracle::costs::counter_kind(x)?;
+    // "a counter is put on a creature you control" (Hollowmurk Siege): of any kind.
+    let (kind, rest) = if x.starts_with("counter is put on ") || x.starts_with("counters are put on ") {
+        (None, x)
+    } else {
+        let (k, r) = crate::oracle::costs::counter_kind(x)?;
+        (Some(k), r)
+    };
     let rest = if plural {
         rest.strip_prefix("counters are put on ")?
     } else {
@@ -156,7 +162,7 @@ fn parse_counters_put(r: &str) -> Option<Parsed> {
     Some((
         TriggerCond::CountersPut {
             filter: subj.filter,
-            kind: Some(kind),
+            kind,
             each: !plural,
         },
         it,

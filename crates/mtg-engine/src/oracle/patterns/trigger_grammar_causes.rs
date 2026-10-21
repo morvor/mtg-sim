@@ -128,3 +128,15 @@ fn each_of_your_main_phases(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "at the beginning of each of your main phases", priority: 100, parse: each_of_your_main_phases } }
+
+/// "Whenever one or more of your opponents are attacked" (Party Dude): a player attacks one
+/// or more of your opponents — once for each attack, however many of them it attacks
+/// (CR 508.3e).
+fn your_opponents_are_attacked(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    if end(t) != "one or more of your opponents are attacked" {
+        return None;
+    }
+    crate::oracle::triggers::parse_trigger_condition("whenever a player attacks one or more of your opponents")
+}
+
+inventory::submit! { TriggerPattern { name: "one or more of your opponents are attacked", priority: 100, parse: your_opponents_are_attacked } }
