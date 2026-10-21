@@ -94,3 +94,40 @@ fn bark_knuckle_boxer_triggers_as_divination_brings_the_total_to_five() {
     // Only once: the fourth mana is spent only once in a turn.
     assert_eq!(t.stack_len(), 0);
 }
+
+#[test]
+fn altar_of_the_pantheon_counts_before_purphoros_type_changing_effect() {
+    cr!("700.5", "613.1d");
+    cr_example!("700.5a", "Altar of the Pantheon");
+    supported("Altar of the Pantheon");
+    supported("Purphoros, God of the Forge");
+    supported("Seismic Assault");
+    let mut t = TestGame::new(2);
+    let purphoros = t.battlefield(P0, "Purphoros, God of the Forge");
+    // Seismic Assault costs {R}{R}{R}: devotion to red is four.
+    t.battlefield(P0, "Seismic Assault");
+    t.recompute();
+    assert!(!t.obj_now(purphoros).is_creature());
+    // With Altar of the Pantheon, it's five, and Purphoros is a creature.
+    let altar = t.battlefield(P0, "Altar of the Pantheon");
+    t.recompute();
+    assert!(t.obj_now(purphoros).is_creature());
+    assert_eq!(t.pt(purphoros), (6, 5));
+    // An opponent's Altar doesn't increase P0's devotion.
+    let mut t2 = TestGame::new(2);
+    let p2 = t2.battlefield(P0, "Purphoros, God of the Forge");
+    t2.battlefield(P0, "Seismic Assault");
+    let other_altar = t2.battlefield(P1, "Altar of the Pantheon");
+    t2.recompute();
+    assert!(!t2.obj_now(p2).is_creature());
+    // Without a God, a Demigod, or a legendary enchantment, its mana ability gains no life.
+    t2.activate(P1, other_altar, 0, &[]).unwrap();
+    t2.resolve_all();
+    assert_eq!(t2.life(P1), 20);
+    assert_eq!(t2.g.player(P1).mana_pool.total(), 1);
+    // The Altar's mana ability: P0 controls a God, so P0 gains 1 life.
+    t.activate(P0, altar, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 1);
+}

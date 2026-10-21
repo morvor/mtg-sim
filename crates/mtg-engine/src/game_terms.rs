@@ -327,3 +327,26 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<b
         _ => None,
     }
 }
+
+// ---------------------------------------------------------------------------
+// Devotion (CR 700.5)
+// ---------------------------------------------------------------------------
+
+/// `StaticEffect::Custom` name: "Your devotion to each color and each combination of
+/// colors is increased by one" (Altar of the Pantheon). It isn't a continuous effect that
+/// changes characteristics, so it's counted whenever devotion is (CR 700.5a: before a
+/// type-changing effect that depends on devotion is applied).
+pub const DEVOTION_INCREASED: &str = "devotion increased by one";
+
+/// How much `p`'s devotion to any color or combination of colors is increased by the
+/// permanents they control.
+pub fn devotion_bonus(g: &Game, p: PlayerId) -> i64 {
+    g.permanents()
+        .filter(|o| o.controller == p && !g.entering.contains(&o.id))
+        .flat_map(|o| o.chars.abilities.iter())
+        .filter(|a| {
+            matches!(&a.kind, AbilityKind::Static(s)
+                if matches!(&s.effect, StaticEffect::Custom(n) if n == DEVOTION_INCREASED))
+        })
+        .count() as i64
+}
