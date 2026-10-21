@@ -248,3 +248,34 @@ fn teferi_phased_out_creatures_stay_out_until_after_your_next_turn() {
     t.advance_to(P1, Step::Upkeep);
     assert!(!t.g.obj(t.g.current(bears)).phased_out);
 }
+
+#[test]
+fn viral_spawning_has_flashback_only_while_an_opponent_is_corrupted() {
+    cr!("113.6b", "702.34a");
+    supported("Viral Spawning");
+    use mtg_engine::object::CastMethod;
+    use mtg_engine::keywords::KeywordKind;
+    let mut t = TestGame::new(2);
+    let spawn = t.graveyard(P0, "Viral Spawning");
+    t.lands(P0, "Forest", 3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.g.recompute();
+    assert!(t
+        .cast(P0, spawn)
+        .method(CastMethod::Keyword(KeywordKind::Flashback))
+        .try_go()
+        .is_err());
+    t.g.player_mut(P1).counters.insert("poison".into(), 3);
+    t.g.recompute();
+    t.cast(P0, spawn)
+        .method(CastMethod::Keyword(KeywordKind::Flashback))
+        .go();
+    t.resolve_all();
+    assert_eq!(
+        t.g.permanents()
+            .filter(|o| o.controller == P0 && o.chars.has_subtype("Beast"))
+            .count(),
+        1
+    );
+    assert!(t.in_exile("Viral Spawning"));
+}

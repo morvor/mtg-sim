@@ -187,3 +187,73 @@ fn f_they_cant_phase_in(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "statics 4: they can't phase in (the permanents phased out)", priority: 60, apply: f_they_cant_phase_in } }
+
+/// "As long as ~ is in your graveyard, it has flashback {2}{G}.", "Corrupted — As long as an
+/// opponent has three or more poison counters and ~ is in your graveyard, it has flashback
+/// {N}{G}." (Viral Spawning): a static ability that functions in the graveyard (CR 113.6b)
+/// granting the card a keyword that works there.
+fn s_in_graveyard_has_keyword(
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    // A permanent card's statics are read by the static grammar; an instant's or
+    // sorcery's lines are spell abilities unless a pattern says otherwise.
+    if !ctx.is_spell() {
+        return None;
+    }
+    let lower = text.trim().to_lowercase();
+    let l = end(&lower);
+    let r = l.strip_prefix("as long as ")?;
+    let (cond, granted) = r.split_once(", it has ")?;
+    let other = if cond == "~ is in your graveyard" {
+        None
+    } else {
+        Some(cond.strip_suffix(" and ~ is in your graveyard")?)
+    };
+    // The keyword as written (its cost's mana symbols are case-sensitive).
+    let at = text.to_lowercase().rfind(", it has ")?;
+    let granted_text = text[at + ", it has ".len()..].trim().trim_end_matches('.');
+    if granted_text.to_lowercase() != granted {
+        return None;
+    }
+    let kws: Vec<Keyword> = crate::oracle::keywords::parse_keyword_line(granted_text, ctx)?
+        .into_iter()
+        .map(|a| match &a.kind {
+            AbilityKind::Keyword(k) => Some(k.clone()),
+            _ => None,
+        })
+        .collect::<Option<_>>()?;
+    let [kw] = &kws[..] else { return None };
+    // Keywords that work from the graveyard and need their cost written out.
+    if !matches!(
+        kw.kind,
+        KeywordKind::Flashback | KeywordKind::Unearth | KeywordKind::Embalm | KeywordKind::Eternalize
+    ) || kw.cost.is_none()
+    {
+        return None;
+    }
+    let in_graveyard = Condition::SelMatches(
+        Sel::This,
+        Filter::and(vec![
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+            Filter::Custom(crate::zones::STILL_THERE.into()),
+        ]),
+    );
+    let condition = match other {
+        None => in_graveyard,
+        Some(c) => Condition::And(vec![
+            crate::oracle::statics::parse_condition(c, ctx)?,
+            in_graveyard,
+        ]),
+    };
+    let mut st = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: vec![Modification::AddKeyword(kw.clone())],
+    });
+    st.condition = Some(condition);
+    st.zone = FunctionZone::Graveyard;
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "statics 4: as long as ~ is in your graveyard, it has [keyword] (instants and sorceries)", priority: 90, parse: s_in_graveyard_has_keyword } }
