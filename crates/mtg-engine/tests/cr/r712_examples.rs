@@ -285,3 +285,87 @@ fn leyline_of_the_void_or_wheel_of_sun_and_moon_moves_both_cards_of_chittering_h
     outcomes.sort();
     assert_eq!(outcomes, vec![(0, 2), (2, 0)]);
 }
+
+const BIRD_ADMIRER: &str = "Bird Admirer // Wing Shredder";
+const KYLEM: &str = "Invasion of Kylem // Valor's Reach Tag Team";
+
+/// The situation of the CR 712.13a example: P0 controls Mycosynth Lattice and (if
+/// `march`) March of the Machines, and a Clone that is a copy of Bird Admirer; it's
+/// night. P0 casts Mystic Reflection targeting the Clone, then Invasion of Kylem.
+/// Returns the game, the Clone and the Invasion card.
+fn mystic_reflection_on_a_clone(march: bool) -> (TestGame, ObjectId, ObjectId) {
+    use mtg_engine::mana::ManaType;
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let admirer = t.battlefield(P1, BIRD_ADMIRER);
+    // "You may have Clone enter as a copy of any creature on the battlefield."
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(admirer)]);
+    let clone = t.enter(P0, "Clone");
+    let clone = t.g.current(clone);
+    assert_eq!(t.obj(clone).chars.name, "Bird Admirer");
+    // Mycosynth Lattice: "All permanents are artifacts in addition to their other types."
+    // March of the Machines: "Each noncreature artifact is an artifact creature with power
+    // and toughness each equal to its mana value."
+    t.battlefield(P0, "Mycosynth Lattice");
+    if march {
+        t.battlefield(P0, "March of the Machines");
+    }
+    t.settle();
+    // It becomes night: the real Bird Admirer transforms; the Clone isn't represented by
+    // a double-faced card and can't.
+    t.g.set_day(false);
+    t.settle();
+    assert_eq!(t.obj_now(admirer).chars.name, "Wing Shredder");
+    assert_eq!(t.obj(clone).face, FaceState::Front);
+    assert_eq!(t.obj(clone).chars.name, "Bird Admirer");
+    // (Mana in the pool: with Mycosynth Lattice and March of the Machines, lands would be
+    // 0/0 creatures.)
+    add_mana(&mut t, P0, ManaType::U, 1);
+    add_mana(&mut t, P0, ManaType::R, 1);
+    add_mana(&mut t, P0, ManaType::W, 1);
+    add_mana(&mut t, P0, ManaType::C, 3);
+    // Mystic Reflection: "Choose target nonlegendary creature. The next time one or more
+    // creatures or planeswalkers enter this turn, they enter as copies of the chosen
+    // creature."
+    let mr = t.hand(P0, "Mystic Reflection");
+    t.cast(P0, mr).target(clone).go();
+    t.resolve_all();
+    // Invasion of Kylem: a Siege battle whose back face is a sorcery.
+    let kylem = t.hand(P0, KYLEM);
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.cast(P0, kylem).go();
+    t.resolve_all();
+    (t, clone, kylem)
+}
+
+#[test]
+fn invasion_of_kylem_entering_as_a_night_copy_of_bird_admirer_goes_to_the_graveyard() {
+    cr!("712.13a", "702.145b", "614.12", "707.9");
+    cr_example!("712.13a", "Mystic Reflection");
+    for name in [
+        BIRD_ADMIRER,
+        KYLEM,
+        "Mystic Reflection",
+        "Mycosynth Lattice",
+        "March of the Machines",
+        "Clone",
+    ] {
+        supported(name);
+    }
+    let (t, clone, kylem) = mystic_reflection_on_a_clone(true);
+    // Entering as a creature, it would enter as a copy of Bird Admirer, with daybound;
+    // at night it would enter transformed, but its back face is a sorcery: it's put into
+    // its owner's graveyard instead.
+    assert_eq!(t.zone(kylem), Zone::Graveyard(P0));
+    assert_eq!(t.named_on_battlefield("Bird Admirer"), vec![clone]);
+    assert!(t.named_on_battlefield("Invasion of Kylem").is_empty());
+    assert!(t.named_on_battlefield("Valor's Reach Tag Team").is_empty());
+    // Without March of the Machines it isn't a creature as it enters: Mystic Reflection
+    // doesn't apply, and it enters as a battle.
+    let (t, _, kylem) = mystic_reflection_on_a_clone(false);
+    assert_eq!(t.zone(kylem), Zone::Battlefield);
+    let kylem = t.g.current(kylem);
+    assert_eq!(t.obj(kylem).chars.name, "Invasion of Kylem");
+    assert!(t.obj(kylem).chars.is(CardType::Battle));
+}
