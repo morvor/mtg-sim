@@ -269,3 +269,241 @@ fn puts_onto_battlefield(e: &Effect) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "combat 4: when you put a card onto the battlefield this way", priority: 60, apply: f_when_put_onto_battlefield_this_way } }
+
+// ---------------------------------------------------------------------------
+// "That combat": the additional combat phase just added (CR 500.8)
+// ---------------------------------------------------------------------------
+
+/// Whether `e` is an instruction adding one combat phase ("there is an additional combat
+/// phase ..."), whose combat phase "that combat" names.
+fn adds_one_combat(e: &Effect) -> bool {
+    match e {
+        Effect::AddTurnParts { parts, n, .. } => {
+            matches!(n, Value::Const(1)) && parts.first() == Some(&TurnPart::CombatPhase)
+        }
+        Effect::Custom(name) => name.starts_with("combat4:after:"),
+        _ => false,
+    }
+}
+
+/// The sequence of instructions ending in the one that adds the combat phase: the effect
+/// itself, or the branch of a condition ("if it's your main phase, ..."); `None` if the
+/// effect's last instruction doesn't add one.
+fn added_combat_branch(e: &mut Effect) -> Option<&mut Effect> {
+    enum Where {
+        Here,
+        Then,
+        Last,
+    }
+    let w = match &*e {
+        Effect::If { .. } => Where::Then,
+        Effect::Seq(v) if v.last().is_some_and(|x| matches!(x, Effect::If { .. })) => Where::Last,
+        Effect::Seq(v) if v.iter().any(adds_one_combat) => Where::Here,
+        other if adds_one_combat(other) => Where::Here,
+        _ => return None,
+    };
+    match w {
+        Where::Here => Some(e),
+        Where::Then => match e {
+            Effect::If { then, .. } => added_combat_branch(then),
+            _ => None,
+        },
+        Where::Last => match e {
+            Effect::Seq(v) => added_combat_branch(v.last_mut()?),
+            _ => None,
+        },
+    }
+}
+
+/// Whether `e` only creates rule-modifying effects lasting until end of combat (or of
+/// the turn): restrictions and requirements.
+fn restrictions_only(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => !v.is_empty() && v.iter().all(restrictions_only),
+        Effect::AddRestriction { duration, .. } => {
+            matches!(duration, Duration::EndOfCombat | Duration::EndOfTurn)
+        }
+        _ => false,
+    }
+}
+
+/// "Only land creatures can attack during that combat phase." (Bumi, Unleashed), "Each of
+/// those creatures attacks that combat if able. They can't attack you or planeswalkers you
+/// control that combat." (Illusionist's Gambit), "At the beginning of that combat, untap
+/// all creatures you control." (Moraug, Fury of Akoum) after an instruction adding an
+/// additional combat phase: effects that apply during that combat phase only, and a
+/// triggered ability at its beginning (CR 603.7).
+fn f_that_combat(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l.trim());
+    if !l.contains("that combat") {
+        return false;
+    }
+    if added_combat_branch(prev).is_none() {
+        return false;
+    }
+    let effect = if let Some(text) = l.strip_prefix("at the beginning of that combat, ") {
+        let Some(body) = super::r600_triggers::reflexive_body(text, b) else {
+            return false;
+        };
+        Effect::Reflexive {
+            body: Box::new(body),
+        }
+    } else {
+        let rewritten = l
+            .replace("during that combat phase", "this combat")
+            .replace(" that combat", " this combat");
+        if rewritten.contains("that combat") {
+            return false;
+        }
+        let n = b.targets.len();
+        let parsed = crate::oracle::effects::parse_sentence(&rewritten, b);
+        let Some(e) = parsed.filter(|e| restrictions_only(e) && b.targets.len() == n) else {
+            b.targets.truncate(n);
+            return false;
+        };
+        e
+    };
+    let during = Effect::DuringNext {
+        who: PlayerRef::ActivePlayer,
+        part: NextTurnPart::AddedCombatPhase,
+        effect: Box::new(effect),
+    };
+    let branch = added_combat_branch(prev).expect("checked");
+    let old = std::mem::take(branch);
+    *branch = match old {
+        Effect::Seq(mut v) => {
+            v.push(during);
+            Effect::Seq(v)
+        }
+        other => Effect::Seq(vec![other, during]),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "combat 4: during that combat phase / at the beginning of that combat", priority: 40, apply: f_that_combat } }
+
+/// "Only land creatures can attack this combat", "Only the chosen creatures can attack this
+/// turn": no other creature can attack (CR 508.1c).
+fn p_only_can_attack(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("only ")?;
+    let (np, duration) = if let Some(x) = r.strip_suffix(" can attack this combat") {
+        (x, Duration::EndOfCombat)
+    } else if let Some(x) = r.strip_suffix(" can attack this turn") {
+        (x, Duration::EndOfTurn)
+    } else {
+        return None;
+    };
+    let f = match np {
+        // "Choose two target creatures. ... Only the chosen creatures can attack ..."
+        // (Last Night Together): the creatures the first sentence chose.
+        "the chosen creatures" | "the chosen creature"
+            if b.chosen_creature.is_none()
+                && !b.targets.is_empty()
+                && crate::oracle::raw_text()
+                    .to_lowercase()
+                    .starts_with("choose two target creatures.") =>
+        {
+            Filter::In(Box::new(Sel::Target(0)))
+        }
+        "the chosen creatures" | "those creatures" | "the chosen creature" | "that creature" => {
+            let (sel, rest) = object_ref(np, b)?;
+            if !rest.trim().is_empty() || is_no_referent(&sel) || matches!(sel, Sel::This) {
+                return None;
+            }
+            Filter::In(Box::new(sel))
+        }
+        _ => {
+            let (f, plural) = super::statics::whole_object_phrase(np)?;
+            if !plural
+                || serde_json::to_string(&f)
+                    .unwrap_or_default()
+                    .contains("Source")
+            {
+                return None;
+            }
+            f
+        }
+    };
+    Some(Effect::AddRestriction {
+        restriction: Restriction::CantAttack(Filter::not(f)),
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: only [creatures] can attack", priority: 90, parse: p_only_can_attack } }
+
+/// "After the second main phase this turn, there's an additional combat phase followed by
+/// an additional main phase." (World at War), "After the first combat phase this turn,
+/// there's an additional combat phase." (Swinging Ship): the phases are added after that
+/// phase of the turn (CR 500.8).
+fn p_after_nth_phase(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("after the ")?;
+    let (nth, r) = [("first ", 1), ("second ", 2), ("third ", 3)]
+        .iter()
+        .find_map(|(w, n)| r.strip_prefix(w).map(|x| (*n, x)))?;
+    let (main, r) = if let Some(x) = r.strip_prefix("main phase this turn, ") {
+        (true, x)
+    } else if let Some(x) = r.strip_prefix("combat phase this turn, ") {
+        (false, x)
+    } else {
+        return None;
+    };
+    let r = r
+        .strip_prefix("there's ")
+        .or_else(|| r.strip_prefix("there is "))?;
+    let parts = match r {
+        "an additional combat phase" => vec![TurnPart::CombatPhase],
+        "an additional combat phase followed by an additional main phase" => {
+            vec![TurnPart::CombatPhase, TurnPart::MainPhase]
+        }
+        _ => return None,
+    };
+    Some(Effect::Custom(
+        crate::kw::added_combat_phases::after_nth(main, nth, &parts)?.into(),
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: after the nth phase this turn, there's an additional combat phase", priority: 90, parse: p_after_nth_phase } }
+
+/// "there is an additional combat phase after this phase followed by an additional main
+/// phase" (All-Out Assault): the phase named after "after this phase".
+fn p_additional_after_this_followed_by(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (head, tail) = l.split_once(" after this phase followed by ")?;
+    if !head.ends_with("additional combat phase") || tail != "an additional main phase" {
+        return None;
+    }
+    crate::oracle::effects::parse_clause(
+        &format!("{head} followed by an additional main phase after this phase"),
+        b,
+    )
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: an additional combat phase after this phase followed by a main phase", priority: 90, parse: p_additional_after_this_followed_by } }
+
+/// "there's an additional combat phase after this phase" (Moraug, Fury of Akoum).
+fn p_theres_additional(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("there's an additional ")?;
+    crate::oracle::effects::parse_clause(&format!("there is an additional {r}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: there's an additional phase", priority: 90, parse: p_theres_additional } }
+
+/// "When you next attack this turn, untap each creature you control." (All-Out Assault): a
+/// delayed triggered ability that triggers the next time you attack this turn (CR 603.7,
+/// 508.1).
+fn p_when_you_next_attack(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let text = l.strip_prefix("when you next attack this turn, ")?;
+    let body = super::r600_triggers::reflexive_body(text, b)?;
+    Some(Effect::DelayedTrigger {
+        trigger: TriggerCond::ThisTurn(Box::new(TriggerCond::PlayerAttacks(PlayerRel::You))),
+        body: Box::new(body),
+        once: true,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: when you next attack this turn", priority: 90, parse: p_when_you_next_attack } }

@@ -1956,8 +1956,17 @@ impl Game {
             } => {
                 // CR 500.10a: "you get" adds nothing to another player's turn.
                 let gets = who.as_ref().map(|w| self.eval_players(w, ctx));
+                ctx.nums
+                    .remove(&crate::kw::added_combat_phases::ADDED_COMBAT);
                 if gets.is_none_or(|ps| ps.iter().any(|p| self.is_active_player(*p))) {
                     let n = self.eval_value(n, ctx).max(0) as usize;
+                    // "That combat": the one combat phase added (CR 500.8).
+                    if n == 1 && parts.first() == Some(&TurnPart::CombatPhase) {
+                        let k =
+                            crate::kw::added_combat_phases::added_after_current(self, *after_phase);
+                        ctx.nums
+                            .insert(crate::kw::added_combat_phases::ADDED_COMBAT, k as i64);
+                    }
                     for _ in 0..n {
                         self.add_turn_parts(parts, *after_phase);
                     }

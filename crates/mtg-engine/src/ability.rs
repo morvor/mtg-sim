@@ -2140,6 +2140,11 @@ pub enum NextTurnPart {
     /// "during [player]'s next combat phase": the first combat phase of a turn of that
     /// player that begins after the effect is created.
     CombatPhase,
+    /// "during that combat phase", "at the beginning of that combat": the additional combat
+    /// phase the instruction before added to this turn (see `kw::added_combat_phases`).
+    /// Nothing waits if it added none; the effect is dropped if that combat phase doesn't
+    /// begin this turn.
+    AddedCombatPhase,
 }
 
 /// A phase or step an effect adds to a turn (CR 500.8–500.10).
