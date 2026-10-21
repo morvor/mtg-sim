@@ -374,3 +374,147 @@ fn hope_of_ghirapur_targets_a_player_it_dealt_combat_damage_to() {
     t.activate(P0, hope, 0, &[Entity::Player(P1)]).unwrap();
     assert_eq!(offered(&t, P0), vec![Entity::Player(P1)]);
 }
+
+// --- more history conditions (`history_conditions_4.rs`) -------------------------------
+
+#[test]
+fn ludevic_lets_the_player_draw_if_a_player_other_than_you_lost_life() {
+    cr!("603.4");
+    assert_supported("Ludevic, Necro-Alchemist");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ludevic, Necro-Alchemist");
+    t.set_step(P1, Step::PrecombatMain);
+    t.g.lose_life(P0, 2);
+    t.g.flush_events();
+    t.answer_yes(P1, true);
+    let before = t.hand_size(P1);
+    t.advance_to(P1, Step::End);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), before, "only you lost life");
+    // Next turn (P0's): P1 loses life.
+    t.advance_to(P0, Step::PrecombatMain);
+    t.g.lose_life(P1, 1);
+    t.g.flush_events();
+    t.answer_yes(P0, true);
+    let before = t.hand_size(P0);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 1);
+}
+
+#[test]
+fn gimli_is_indestructible_after_two_of_your_creatures_died_this_turn() {
+    cr!("700.4", "702.12b");
+    assert_supported("Gimli, Mournful Avenger");
+    let mut t = TestGame::new(2);
+    let gimli = t.battlefield(P0, "Gimli, Mournful Avenger");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.g.destroy(a, None);
+    t.g.destroy(theirs, None);
+    t.resolve_all();
+    let b = t.battlefield(P0, "Llanowar Elves");
+    t.g.destroy(b, None);
+    t.resolve_all();
+    t.g.destroy(gimli, None);
+    t.resolve_all();
+    assert!(t.on_battlefield(gimli), "two of your creatures died");
+}
+
+#[test]
+fn gimli_isnt_indestructible_after_one_of_your_creatures_died() {
+    cr!("700.4");
+    let mut t = TestGame::new(2);
+    let gimli = t.battlefield(P0, "Gimli, Mournful Avenger");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.g.destroy(a, None);
+    t.g.destroy(theirs, None);
+    t.resolve_all();
+    t.g.destroy(gimli, None);
+    t.resolve_all();
+    assert!(!t.on_battlefield(gimli), "an opponent's creature doesn't count");
+}
+
+#[test]
+fn masters_manufactory_needs_it_or_another_artifact_to_have_entered_under_your_control() {
+    cr!("602.5b", "603.6a");
+    assert_supported("Master's Guide-Mural // Master's Manufactory");
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Master's Guide-Mural // Master's Manufactory");
+    mtg_engine::dfc::transform(&mut t.g, m);
+    t.g.recompute();
+    assert!(t.activate(P0, m, 0, &[]).is_err(), "nothing entered this turn");
+    t.enter(P1, "Ornithopter");
+    t.g.flush_events();
+    assert!(t.activate(P0, m, 0, &[]).is_err(), "not under your control");
+    t.enter(P0, "Ornithopter");
+    t.g.flush_events();
+    t.activate(P0, m, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(count_named(&t, P0, "Golem"), 1);
+}
+
+#[test]
+fn sea_troll_regenerates_only_after_blocking_or_being_blocked_by_a_blue_creature() {
+    cr!("509.1", "602.5b");
+    assert_supported("Sea Troll");
+    let mut t = TestGame::new(2);
+    let troll = t.battlefield(P0, "Sea Troll");
+    t.lands(P0, "Island", 2);
+    assert!(t.activate(P0, troll, 0, &[]).is_err());
+    t.clear_answers();
+    let blue = t.battlefield(P1, "Coral Merfolk");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(troll, Entity::Player(P1))], &[(blue, troll)]);
+    t.activate(P0, troll, 0, &[]).unwrap();
+}
+
+#[test]
+fn sea_troll_cant_regenerate_after_blocking_a_creature_that_isnt_blue() {
+    cr!("509.1", "602.5b");
+    let mut t = TestGame::new(2);
+    let troll = t.battlefield(P0, "Sea Troll");
+    t.lands(P0, "Island", 2);
+    let green = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(&[(green, Entity::Player(P0))], &[(troll, green)]);
+    assert!(t.activate(P0, troll, 0, &[]).is_err());
+}
+
+#[test]
+fn dream_salvage_draws_for_each_card_the_opponent_discarded_this_turn() {
+    cr!("701.9a");
+    assert_supported("Dream Salvage");
+    let mut t = TestGame::new(3);
+    for n in ["Grizzly Bears", "Hill Giant"] {
+        let c = t.hand(P1, n);
+        t.g.discard(P1, c, None);
+    }
+    let c = t.hand(P2, "Grizzly Bears");
+    t.g.discard(P2, c, None);
+    t.g.flush_events();
+    t.lands(P0, "Island", 1);
+    let ds = t.hand(P0, "Dream Salvage");
+    let before = t.hand_size(P0);
+    t.cast_with(P0, ds, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before - 1 + 2);
+}
+
+#[test]
+fn tangled_colony_makes_a_rat_for_each_damage_dealt_to_it_this_turn() {
+    cr!("120.3", "603.10a");
+    assert_supported("Tangled Colony");
+    let mut t = TestGame::new(2);
+    let tc = t.battlefield(P0, "Tangled Colony");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.deal_damage(giant, Entity::Object(tc), 1, false);
+    t.g.flush_events();
+    t.resolve_all();
+    t.g.deal_damage(giant, Entity::Object(tc), 3, false);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(!t.on_battlefield(tc));
+    assert_eq!(count_named(&t, P0, "Rat"), 4);
+}

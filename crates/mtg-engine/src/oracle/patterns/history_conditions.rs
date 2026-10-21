@@ -155,6 +155,7 @@ const PASSIVE: &[(&str, &str)] = &[
     ("were returned", "is returned"),
     ("was turned face up", "is turned face up"),
     ("became tapped", "becomes tapped"),
+    ("blocked or was blocked by", "blocks or becomes blocked by"),
     ("was removed", "is removed"),
     ("were removed", "is removed"),
 ];
@@ -626,7 +627,7 @@ fn object_clause(c: &str) -> Option<Clause> {
             Some(x) => format!("another {x}"),
             None => np_s,
         };
-        let subj = if np_s == "~" || np_s.starts_with("another ") {
+        let subj = if np_s == "~" || np_s.starts_with("~ ") || np_s.starts_with("another ") {
             np_s
         } else {
             format!("{} {np_s}", article(&np_s))
@@ -659,7 +660,9 @@ fn control_qualifier(np: String, present: String) -> (String, String) {
             (" under your control", "you control"),
             (" under a player's control", ""),
         ] {
-            if present == format!("{verb}{q}") && np != "~" {
+            // "~ entered the battlefield under your control": "~ you control enters" (read
+            // about "a permanent you control", see `trigger_of`).
+            if present == format!("{verb}{q}") && (np != "~" || !ctl.is_empty()) {
                 let np2 = if ctl.is_empty() {
                     np.clone()
                 } else {
@@ -863,14 +866,19 @@ fn clause_or_joined(c: &str, w: &Option<HistoryWindow>) -> Option<Condition> {
     for (sep, all) in [(" or ", false), (" and ", true)] {
         for (i, _) in c.match_indices(sep) {
             let (x, y) = (&c[..i], &c[i + sep.len()..]);
-            // Two subjects, one predicate: "~ and at least two other creatures attacked".
-            if all {
+            // Two subjects, one predicate: "~ and at least two other creatures attacked",
+            // "~ or another artifact entered the battlefield under your control".
+            if all || !x.contains(' ') {
                 if let Some(cy) = object_clause(y) {
                     if let Some(cx) = object_clause(&format!("{x} {}", cy.pred)) {
                         if let (Some(a), Some(b)) =
                             (clause_condition(cx, w), clause_condition(cy, w))
                         {
-                            return Some(Condition::And(vec![a, b]));
+                            return Some(if all {
+                                Condition::And(vec![a, b])
+                            } else {
+                                Condition::Or(vec![a, b])
+                            });
                         }
                     }
                 }

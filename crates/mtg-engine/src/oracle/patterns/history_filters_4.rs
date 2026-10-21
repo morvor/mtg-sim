@@ -280,3 +280,15 @@ pub fn as_you_past(cond: &str) -> Option<String> {
     history_condition(&format!("you {cond}"))?;
     Some(cond.to_string())
 }
+
+/// A player's history clause after its subject ("lost life this turn"), as a filter of
+/// players who did it.
+pub fn player_history(pred_and_window: &str) -> Option<PlayerFilter> {
+    let (pred, window, rest) = windowed(pred_and_window)
+        .into_iter()
+        .find(|(p, _, r)| !p.is_empty() && r.trim().is_empty())?;
+    let _ = rest;
+    Some(PlayerFilter::History(Box::new(player_predicate(
+        pred, window,
+    )?)))
+}
