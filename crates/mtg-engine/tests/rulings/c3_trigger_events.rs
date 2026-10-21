@@ -640,5 +640,5 @@ fn ranar_creates_a_spirit_when_your_spell_exiles_permanents() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     cast_new(&mut t, P0, "Swords to Plowshares", &[Entity::Object(bears)]);
     t.resolve_all();
-    assert_eq!(crate::r_s01_common::with_subtype(&t, P0, "Spirit").len(), 1);
+    assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 1);
 }
