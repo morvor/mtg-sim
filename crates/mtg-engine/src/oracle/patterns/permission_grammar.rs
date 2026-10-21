@@ -44,6 +44,12 @@ pub enum Who {
     You,
     /// "its owner", "the exiled card's owner", "their owner".
     OwnerOfIt,
+    /// "they", "that player": the player the text last named (`Builder::it_player`, see
+    /// [`Perm::who_ref`]).
+    They,
+    /// "that creature's controller": the controller of the creature the triggered ability
+    /// is about.
+    CreaturesController,
 }
 
 /// What the permission is for.
@@ -123,6 +129,8 @@ pub struct Perm {
     pub count: Option<u32>,
     /// "cast target ..." with "you may" already read as the choice to do it.
     pub subjectless: bool,
+    /// The player "they" means (filled in where the text is parsed).
+    pub who_ref: Option<PlayerRef>,
 }
 
 impl Perm {
@@ -284,6 +292,8 @@ fn strip_subject(s: &str) -> Option<(Who, &str)> {
         ("its owner may ", Who::OwnerOfIt),
         ("their owner may ", Who::OwnerOfIt),
         ("the exiled card's owner may ", Who::OwnerOfIt),
+        ("they may ", Who::They),
+        ("that creature's controller may ", Who::CreaturesController),
     ] {
         if let Some(r) = s.strip_prefix(w) {
             return Some((who, r));
@@ -769,6 +779,10 @@ fn strip_spend(s: &str, p: &mut Perm) -> String {
                 "you may spend mana as though it were mana of any color to cast ",
                 false,
             ),
+            (
+                "they may spend mana as though it were mana of any color to cast ",
+                false,
+            ),
             ("mana of any type can be spent to cast ", true),
             (
                 "you may spend mana as though it were mana of any type to cast ",
@@ -1201,6 +1215,8 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
     let who = match p.who {
         Who::You => PlayerRef::You,
         Who::OwnerOfIt => PlayerRef::OwnerOf(Box::new(it.clone())),
+        Who::They => p.who_ref.clone()?,
+        Who::CreaturesController => PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
     };
     let mut terms = p.terms_with_condition(ctx)?;
     // "Until your next turn, you may cast sorcery spells as though they had flash."
@@ -1848,9 +1864,20 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     } else {
         (None, l)
     };
-    let Some(p) = parse(rest) else {
+    let Some(mut p) = parse(rest) else {
         return false;
     };
+    if p.who == Who::They {
+        if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+            || matches!(b.it_player, PlayerRef::You)
+        {
+            return false;
+        }
+        p.who_ref = Some(b.it_player.clone());
+    }
+    if p.who == Who::CreaturesController && !b.in_trigger {
+        return false;
+    }
     let zone = referent_zone(Some(prev), b);
     if !matches!(p.obj, Obj::Referent { .. }) && p.from != Some(From::AmongReferent) {
         return false;

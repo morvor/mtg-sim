@@ -248,3 +248,25 @@ fn tinybones_the_pickpocket_casts_target_card_from_that_players_graveyard() {
     assert_eq!(g.len(), 1);
     assert_eq!(t.obj_now(g[0]).controller, P0);
 }
+
+#[test]
+fn curse_of_hospitality_the_creatures_controller_may_play_the_card() {
+    cr!("601.3", "609.4b");
+    assert_supported(&["Curse of Hospitality"]);
+    let mut t = TestGame::new(2);
+    let curse = t.battlefield(P0, "Curse of Hospitality");
+    t.g.attach(curse, Entity::Player(P1));
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.library_top(P1, "Craw Wurm");
+    t.attack(&[(bear, Entity::Player(P1))], &[]);
+    t.advance_to(P0, Step::PostcombatMain);
+    let wurm = t.g.current(wurm);
+    assert_eq!(t.zone(wurm), Zone::Exile);
+    // {4}{G}{G} paid with red mana as though it were green.
+    t.lands(P0, "Mountain", 6);
+    t.cast(P0, wurm).go();
+    t.resolve_all();
+    let w = t.named_on_battlefield("Craw Wurm");
+    assert_eq!(w.len(), 1);
+    assert_eq!(t.obj_now(w[0]).controller, P0);
+}
