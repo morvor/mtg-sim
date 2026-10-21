@@ -20,6 +20,7 @@ fn assert_supported(names: &[&str]) {
 #[test]
 fn coax_takes_an_eldrazi_from_outside_the_game_or_face_up_exile() {
     cr!("400.11b", "108.3b", "701.20a");
+    interp!("outside-the-game-is-the-sideboard");
     assert_supported(&["Coax from the Blind Eternities"]);
     // From outside the game.
     let mut t = TestGame::new(2);

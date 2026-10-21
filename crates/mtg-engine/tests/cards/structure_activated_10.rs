@@ -878,6 +878,7 @@ fn icatian_infantry_gains_banding_until_end_of_turn() {
 #[test]
 fn birthing_boughs_makes_a_changeling_shapeshifter() {
     cr!("602.2", "111.1", "702.73a", "700.8a", "604.3a", "613.1d", "613.1f");
+    interp!("changeling-cda-only");
     // "{4}, {T}: Create a 2/2 colorless Shapeshifter creature token with changeling."
     supported("Birthing Boughs");
     let mut t = TestGame::new(2);

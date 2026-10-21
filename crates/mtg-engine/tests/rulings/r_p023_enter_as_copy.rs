@@ -72,6 +72,7 @@ fn gigantoplasm_copying_a_token() {
 #[test]
 fn gigantoplasm_copying_another_gigantoplasm() {
     cr!("707.3", "707.9b");
+    interp!("copy-exception-ability-stacks");
     ruling!(
         "Gigantoplasm",
         "If the chosen creature is copying something else (for example, if the chosen creature is another Gigantoplasm), then Gigantoplasm enters the battlefield as whatever the chosen creature was copying (plus any abilities it gained as part of the copy process, if applicable)."

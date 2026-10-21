@@ -306,7 +306,7 @@ fn a_default_division_splits_evenly_with_the_remainder_first() {
 
 #[test]
 fn a_default_card_name_names_nothing() {
-    cr!("201.3");
+    cr!("201.4");
     interp!("default-card-name");
     // Pithing Needle names nothing: every activated ability can still be activated.
     let mut t = TestGame::new(2);
@@ -402,4 +402,40 @@ fn the_default_replacement_effect_is_the_first_listed() {
     } else {
         assert_eq!(zone, mtg_engine::object::Zone::Library(P0), "{options:?}");
     }
+}
+
+#[test]
+fn the_test_harness_answers_unscripted_decisions_with_fixed_defaults() {
+    cr!("117.3d");
+    interp!("test-harness-defaults");
+    // TestGame's ScriptedAgent, with nothing queued: pass priority, keep the hand, attack
+    // and block with nothing, and leave everything else to the engine's default.
+    let mut t = TestGame::new(2);
+    let ask = |t: &mut TestGame, d: Decision| t.g.ask(P0, d);
+    assert_eq!(
+        ask(&mut t, Decision::Priority { actions: vec![] }),
+        Answer::Action(Action::Pass)
+    );
+    assert_eq!(
+        ask(&mut t, Decision::Mulligan { mulligans_taken: 0 }),
+        Answer::Bool(false)
+    );
+    assert_eq!(
+        ask(&mut t, Decision::DeclareAttackers { options: vec![] }),
+        Answer::Attackers(vec![])
+    );
+    assert_eq!(
+        ask(&mut t, Decision::DeclareBlockers { options: vec![] }),
+        Answer::Blockers(vec![])
+    );
+    assert_eq!(
+        ask(
+            &mut t,
+            Decision::YesNo {
+                source: None,
+                prompt: "?".into()
+            }
+        ),
+        Answer::Default
+    );
 }

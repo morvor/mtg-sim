@@ -301,7 +301,8 @@ pub fn render_index(entries: &[Entry]) -> String {
          knowingly differs from the Comprehensive Rules) or a **policy** (the rules leave it \
          to a player or to procedure and the engine decides). **Provisional** entries are \
          calls a reasonable judge could make the other way; they await review. Tests that pin \
-         an entry cite it with `interp!(\"<id>\")`.\n\n",
+         an entry cite it with `interp!(\"<id>\")`. What the engine doesn't support at all \
+         is a scope decision, listed in `docs/DEFERRED.md` instead.\n\n",
     );
     let mut counts: BTreeMap<(&str, &str), usize> = BTreeMap::new();
     for e in entries {
