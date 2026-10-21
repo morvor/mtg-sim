@@ -1230,3 +1230,22 @@ fn satoru_draws_only_for_creatures_not_cast_with_mana() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), before - 1, "cast with mana: no card");
 }
+
+#[test]
+fn sasaya_flips_with_seven_land_cards_in_hand() {
+    cr!("710.2", "701.20a");
+    let mut t = TestGame::new(2);
+    let sasaya = t.battlefield(P0, "Sasaya, Orochi Ascendant // Sasaya's Essence");
+    t.g.players[P0.idx()].hand.clear();
+    for _ in 0..6 {
+        t.hand(P0, "Forest");
+    }
+    t.hand(P0, "Grizzly Bears");
+    t.activate(P0, sasaya, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(sasaya).chars.name.as_str(), "Sasaya, Orochi Ascendant", "six lands");
+    t.hand(P0, "Forest");
+    t.activate(P0, sasaya, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(sasaya).chars.name.as_str(), "Sasaya's Essence");
+}

@@ -932,3 +932,40 @@ fn none_of_them_cast(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "history 4: none of them were cast / no mana was spent to cast them", priority: 900, parse: none_of_them_cast } }
+
+/// "you have seven or more land cards in your hand" (Sasaya, Orochi Ascendant): cards of a
+/// kind in your hand.
+fn cards_of_a_kind_in_hand(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let r = c.strip_prefix("you have ")?;
+    let (n, r) = crate::oracle::phrases::parse_number(r)?;
+    let Value::Const(_) = n else { return None };
+    let (cmp, np) = if let Some(x) = r.strip_prefix("or more ") {
+        (Cmp::Ge, x)
+    } else if let Some(x) = r.strip_prefix("or fewer ") {
+        (Cmp::Le, x)
+    } else {
+        return None;
+    };
+    let np = np.strip_suffix(" in your hand")?;
+    if !np.ends_with(" cards") || np == "cards" {
+        return None;
+    }
+    let (f, true, tail) = crate::oracle::phrases::parse_object_phrase(np)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![
+            f,
+            Filter::InZone(ZoneKind::Hand),
+            Filter::OwnedBy(PlayerRel::You),
+        ])),
+        cmp,
+        n,
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: you have N or more [kind] cards in your hand", priority: 900, parse: cards_of_a_kind_in_hand } }
