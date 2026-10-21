@@ -101,3 +101,141 @@ fn prisoners_dilemma_choices_stay_secret_until_all_are_made_then_are_revealed() 
     assert!(ch.secret.is_empty(), "revealed once both chose");
     assert!(t.dump_log().contains("reveals their choice"));
 }
+
+#[test]
+fn stalking_leonin_exiles_an_attacker_only_if_the_secret_opponent_controls_it() {
+    cr!("608.2c");
+    compiles("Stalking Leonin");
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let leonin = t.enter(P0, "Stalking Leonin");
+    t.resolve_all();
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    t.advance_to(P2, Step::BeginningOfCombat);
+    t.answer(
+        P2,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P0))]),
+    );
+    t.advance_to(P2, Step::DeclareAttackers);
+    t.activate(P0, leonin, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+}
+
+#[test]
+fn stalking_leonin_does_nothing_to_an_attacker_of_another_opponent() {
+    cr!("608.2c");
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let leonin = t.enter(P0, "Stalking Leonin");
+    t.resolve_all();
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P1, Step::BeginningOfCombat);
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P0))]),
+    );
+    t.advance_to(P1, Step::DeclareAttackers);
+    t.activate(P0, leonin, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears), "P1 isn't the chosen player");
+    assert!(t.g.obj(leonin).choices.secret.is_empty(), "but it was revealed");
+}
+
+#[test]
+fn emissary_of_grudges_redirects_a_spell_of_the_chosen_player_that_targets_you() {
+    cr!("115.7");
+    ruling!(
+        "Emissary of Grudges",
+        "You can choose new targets as long as at least one of those targets is you"
+    );
+    compiles("Emissary of Grudges");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    let emissary = t.enter(P0, "Emissary of Grudges");
+    t.settle();
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let spell = t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    // The new target: P1 themself.
+    t.activate(P0, emissary, 0, &[Entity::Object(spell)]).unwrap();
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn a_killer_among_us_bonus_only_for_a_token_of_the_secretly_chosen_type() {
+    cr!("608.2c", "607.2d");
+    ruling!(
+        "A Killer Among Us",
+        "Only a token of the chosen type will get the bonuses"
+    );
+    compiles("A Killer Among Us");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Option, Answer::Index(2)); // Goblin
+    let killer = t.enter(P0, "A Killer Among Us");
+    t.resolve_all();
+    assert_eq!(t.g.obj(killer).choices.secret, vec![P0]);
+    let token = |t: &TestGame, ty: &str| {
+        t.g.battlefield
+            .iter()
+            .copied()
+            .find(|id| t.g.obj(*id).chars.has_subtype(ty))
+            .unwrap()
+    };
+    let (goblin, human) = (token(&t, "Goblin"), token(&t, "Human"));
+    for id in [goblin, human] {
+        t.g.objects[id.0 as usize].summoning_sick = false;
+    }
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![
+            (goblin, Entity::Player(P1)),
+            (human, Entity::Player(P1)),
+        ]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.activate(P0, killer, 0, &[Entity::Object(goblin)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(goblin, "+1/+1"), 3);
+    assert!(t.obj_now(goblin).chars.has_keyword(mtg_engine::keywords::KeywordKind::Deathtouch));
+}
+
+#[test]
+fn a_killer_among_us_wrong_type_gets_nothing() {
+    cr!("608.2c");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Option, Answer::Index(2)); // Goblin
+    let killer = t.enter(P0, "A Killer Among Us");
+    t.resolve_all();
+    let human = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .find(|id| t.g.obj(*id).chars.has_subtype("Human"))
+        .unwrap();
+    t.g.objects[human.0 as usize].summoning_sick = false;
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(human, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.activate(P0, killer, 0, &[Entity::Object(human)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(human, "+1/+1"), 0);
+    assert!(!t.on_battlefield(killer), "sacrificed as a cost");
+}

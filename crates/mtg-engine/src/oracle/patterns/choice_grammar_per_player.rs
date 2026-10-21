@@ -60,6 +60,20 @@ pub fn word_choice(words: Vec<String>) -> ChoiceKind {
             return ChoiceKind::Number { min, max };
         }
     }
+    // Creature and land types are capitalized: "secretly choose Human, Merfolk, or Goblin".
+    let cap = |w: &str| {
+        let mut c = w.chars();
+        c.next()
+            .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+            .unwrap_or_default()
+    };
+    let subtypes: Vec<String> = words.iter().map(|w| cap(w)).collect();
+    if subtypes
+        .iter()
+        .all(|w| crate::types::is_creature_type(w) || crate::types::is_land_type(w))
+    {
+        return ChoiceKind::OneOf(subtypes);
+    }
     let typed = words.iter().any(|w| {
         crate::types::Color::from_word(w).is_some()
             || crate::types::CardType::from_word(w).is_some()
